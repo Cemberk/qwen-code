@@ -84,8 +84,6 @@ const TRACKED_ENV = [
   'EDITOR',
   'PYTHONSTARTUP',
   'BROWSER',
-  'QWEN_CDP_MCP_COMMAND',
-  'QWEN_SERVE_CDP_TUNNEL_OVER_WS',
   'NODE_COMPILE_CACHE',
   'NODE_DISABLE_COMPILE_CACHE',
   'NODE_EXTRA_CA_CERTS',
@@ -104,7 +102,6 @@ const TRACKED_ENV = [
   'QWEN_CODE_PENDING_COMPILE_CACHE',
   'QWEN_CODE_TRUSTED_FOLDERS_PATH',
   'QWEN_RUNTIME_DIR',
-  'QWEN_SERVE_MAX_WORKSPACES',
   'QWEN_SERVER_TOKEN',
   'qwen_server_token',
   'ld_library_path',
@@ -586,34 +583,6 @@ describe('update download source environment', () => {
         QWEN_UPDATE_BASE_URL: trustedUrl,
       });
       expect(snapshot.effectiveEnv['QWEN_UPDATE_BASE_URL']).toBe(trustedUrl);
-    },
-  );
-});
-
-describe('daemon registration capacity environment', () => {
-  it.each([undefined, '32'])(
-    'keeps project files from overriding operator capacity %s',
-    (inherited) => {
-      const workspace = makeWorkspace();
-      fs.writeFileSync(
-        path.join(workspace, '.env'),
-        'QWEN_SERVE_MAX_WORKSPACES=256\n',
-      );
-      const settings = testSettings({
-        env: { QWEN_SERVE_MAX_WORKSPACES: '2' },
-      });
-      if (inherited !== undefined)
-        process.env['QWEN_SERVE_MAX_WORKSPACES'] = inherited;
-      loadEnvironment(settings, workspace);
-      expect(process.env['QWEN_SERVE_MAX_WORKSPACES']).toBe(inherited);
-      reloadEnvironment(settings, workspace);
-      expect(process.env['QWEN_SERVE_MAX_WORKSPACES']).toBe(inherited);
-      const snapshot = buildRuntimeEnvironment(settings, workspace, {
-        QWEN_SERVE_MAX_WORKSPACES: inherited,
-      });
-      expect(snapshot.effectiveEnv['QWEN_SERVE_MAX_WORKSPACES']).toBe(
-        inherited,
-      );
     },
   );
 });
@@ -1117,9 +1086,7 @@ describe('loadEnvironment', () => {
   // merges `$XDG_CONFIG_HOME/git/config` with `~/.gitconfig` (bypassing the
   // GIT_CONFIG_* blocks); $VISUAL/$EDITOR are git's editor fallback and the
   // CLI's own editor launch; CPython executes PYTHONSTARTUP at interactive
-  // startup; the CLI execs $BROWSER via openBrowserSecurely; the daemon
-  // spawns QWEN_CDP_MCP_COMMAND as the browser-automation MCP adapter and
-  // QWEN_SERVE_CDP_TUNNEL_OVER_WS switches that tunnel surface on.
+  // startup; the CLI execs $BROWSER via openBrowserSecurely.
   it('never applies the round-4 exec-redirect keys from project .env or settings.env, including reload', () => {
     resetEnvironmentTrackingForTesting();
     const workspace = makeWorkspace();
@@ -1138,8 +1105,6 @@ describe('loadEnvironment', () => {
     );
     const settings = testSettings({
       env: {
-        QWEN_CDP_MCP_COMMAND: '/workspace-a/evil-adapter',
-        QWEN_SERVE_CDP_TUNNEL_OVER_WS: '1',
         RUNTIME_SETTINGS_ONLY: 'from-settings',
       },
     });
@@ -1151,8 +1116,6 @@ describe('loadEnvironment', () => {
       expect(env['PYTHONSTARTUP']).toBeUndefined();
       expect(env['XDG_CONFIG_HOME']).toBeUndefined();
       expect(env['BROWSER']).toBeUndefined();
-      expect(env['QWEN_CDP_MCP_COMMAND']).toBeUndefined();
-      expect(env['QWEN_SERVE_CDP_TUNNEL_OVER_WS']).toBeUndefined();
     };
 
     loadEnvironment(settings, workspace);
@@ -1562,56 +1525,6 @@ describe('loadEnvironment', () => {
 
     expect(process.env['QWEN_CLI_ENTRY']).toBeUndefined();
     expect(process.env['NODE_EXTRA_CA_CERTS']).toBeUndefined();
-  });
-
-  // The review prebuild opt-in is an operator decision (PR #10423 R12-1):
-  // prebuildRequested()'s read-time provenance check consults a per-process
-  // registry an inherited value never enters, so the only closure is here —
-  // the key must not reach process.env from repository content at all.
-  // User-level files stay exempt (operator opt-in), like the keys above;
-  // CI's workflow sets a real step env, which this load never touches.
-  it('never applies the review prebuild opt-in from a project .env', () => {
-    const saved = process.env['QWEN_REVIEW_PREBUILD'];
-    delete process.env['QWEN_REVIEW_PREBUILD'];
-    try {
-      const workspace = makeWorkspace();
-      fs.writeFileSync(
-        path.join(workspace, '.env'),
-        'QWEN_REVIEW_PREBUILD=1\n',
-      );
-      loadEnvironment(testSettings({}), workspace);
-      expect(process.env['QWEN_REVIEW_PREBUILD']).toBeUndefined();
-    } finally {
-      if (saved === undefined) {
-        delete process.env['QWEN_REVIEW_PREBUILD'];
-      } else {
-        process.env['QWEN_REVIEW_PREBUILD'] = saved;
-      }
-    }
-  });
-
-  // The automatic-review marker is the same operator-decision class as the
-  // prebuild opt-in above: it selects the reduced docs-nav review profile,
-  // so a project .env must not opt its own review into the one-reviewer
-  // path. The read-time check (automaticReviewRequested) is the other tier.
-  it('never applies the review automatic marker from a project .env', () => {
-    const saved = process.env['QWEN_REVIEW_AUTOMATIC'];
-    delete process.env['QWEN_REVIEW_AUTOMATIC'];
-    try {
-      const workspace = makeWorkspace();
-      fs.writeFileSync(
-        path.join(workspace, '.env'),
-        'QWEN_REVIEW_AUTOMATIC=true\n',
-      );
-      loadEnvironment(testSettings({}), workspace);
-      expect(process.env['QWEN_REVIEW_AUTOMATIC']).toBeUndefined();
-    } finally {
-      if (saved === undefined) {
-        delete process.env['QWEN_REVIEW_AUTOMATIC'];
-      } else {
-        process.env['QWEN_REVIEW_AUTOMATIC'] = saved;
-      }
-    }
   });
 
   // Windows env lookup is case-insensitive, so exact-case membership would

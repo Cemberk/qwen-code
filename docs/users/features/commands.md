@@ -18,26 +18,22 @@ Slash commands are used to manage Qwen Code sessions, interface, and basic behav
 
 These commands help you save, restore, and summarize work progress.
 
-| Command          | Description                                                              | Usage Examples                                                |
-| ---------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------- |
-| `/init`          | Analyze current directory and create initial context file                | `/init`                                                       |
-| `/summary`       | Generate project summary based on conversation history                   | `/summary` or `/summary docs/my-summary.md`                   |
-| `/compress`      | Replace chat history with summary to save Tokens                         | `/compress` or `/summarize`                                   |
-| `/compress-fast` | Fast compression without AI — strips old tool outputs and thinking parts | `/compress-fast`                                              |
-| `/resume`        | Resume a previous conversation session                                   | `/resume` or `/continue`                                      |
-| `/recap`         | Generate a one-line session recap now                                    | `/recap`                                                      |
-| `/restore`       | Revert project files to the checkpoint before a tool call ran            | `/restore` (list) or `/restore <ID>`                          |
-| `/delete`        | Delete a previous session                                                | `/delete`                                                     |
-| `/branch`        | Fork the current conversation into a new session                         | `/branch`                                                     |
-| `/fork`          | Spawn a background agent that inherits the full conversation             | `/fork <directive>`                                           |
-| `/rewind`        | Rewind conversation to a previous turn                                   | `/rewind` or `/rollback`                                      |
-| `/export`        | Export session history to file                                           | `/export html`, `/export md`, `/export json`, `/export jsonl` |
-| `/rename`        | Rename or tag the current session                                        | `/rename My Feature` or `/tag`                                |
-| `/commit`        | Create a git commit with an AI-drafted message                           | `/commit` or `/commit only stage the parser changes`          |
-
-> [!note]
->
-> Opening an HTML export loads the renderer and stylesheet for that exact Qwen Code version from `unpkg.com`. If the version has not been published or either asset cannot be reached, the file shows a load error. Markdown, JSON, and JSONL exports remain self-contained.
+| Command          | Description                                                              | Usage Examples                                       |
+| ---------------- | ------------------------------------------------------------------------ | ---------------------------------------------------- |
+| `/init`          | Analyze current directory and create initial context file                | `/init`                                              |
+| `/summary`       | Generate project summary based on conversation history                   | `/summary` or `/summary docs/my-summary.md`          |
+| `/compress`      | Replace chat history with summary to save Tokens                         | `/compress` or `/summarize`                          |
+| `/compress-fast` | Fast compression without AI — strips old tool outputs and thinking parts | `/compress-fast`                                     |
+| `/resume`        | Resume a previous conversation session                                   | `/resume` or `/continue`                             |
+| `/recap`         | Generate a one-line session recap now                                    | `/recap`                                             |
+| `/restore`       | Revert project files to the checkpoint before a tool call ran            | `/restore` (list) or `/restore <ID>`                 |
+| `/delete`        | Delete a previous session                                                | `/delete`                                            |
+| `/branch`        | Fork the current conversation into a new session                         | `/branch`                                            |
+| `/fork`          | Spawn a background agent that inherits the full conversation             | `/fork <directive>`                                  |
+| `/rewind`        | Rewind conversation to a previous turn                                   | `/rewind` or `/rollback`                             |
+| `/export`        | Export session history to file                                           | `/export md`, `/export json`, `/export jsonl`        |
+| `/rename`        | Rename or tag the current session                                        | `/rename My Feature` or `/tag`                       |
+| `/commit`        | Create a git commit with an AI-drafted message                           | `/commit` or `/commit only stage the parser changes` |
 
 > [!note]
 >
@@ -58,10 +54,8 @@ Commands for adjusting interface appearance and work environment.
 | → `detail`           | Show per-item context usage breakdown                                                                                                                                             | `/context detail`                                                                 |
 | `/history`           | Control history display preferences and visibility                                                                                                                                | `/history collapse-on-resume`, `/history expand-on-resume`, `/history expand-now` |
 | `/diff`              | Open an interactive diff viewer showing uncommitted changes and per-turn diffs. Use ←/→ to switch between current git diff and individual conversation turns, ↑/↓ to browse files | `/diff`                                                                           |
-| `/log`               | Open a commit history viewer for the workspace (Web Shell only)                                                                                                                   | `/log`                                                                            |
 | `/theme`             | Change Qwen Code visual theme                                                                                                                                                     | `/theme`                                                                          |
 | `/vim`               | Turn input area Vim editing mode on/off                                                                                                                                           | `/vim`                                                                            |
-| `/voice`             | Toggle voice dictation input                                                                                                                                                      | `/voice`, `/voice hold`, `/voice tap`, `/voice off`, `/voice status`              |
 | `/directory`         | Manage multi-directory support workspace                                                                                                                                          | `/dir add ./src,./tests`, `/dir show`                                             |
 | `/cd`                | Move this session to a new working directory                                                                                                                                      | `/cd ../other-project`                                                            |
 | `/editor`            | Open dialog to select supported editor                                                                                                                                            | `/editor`                                                                         |
@@ -101,10 +95,8 @@ Commands for managing AI tools and models.
 | → `auto-edit`         | Auto-approve edits (trusted environment)                                                         | `/approval-mode auto-edit`                                                                                |
 | → `auto`              | Classifier-evaluated approval (autonomous)                                                       | `/approval-mode auto`                                                                                     |
 | → `yolo`              | Auto-approve everything (quick prototyping)                                                      | `/approval-mode yolo`                                                                                     |
-| `/peers`              | Review held peer messages; manage trusted controllers                                            | `/peers`, `/peers accept <id>`, `/peers deny all`, `/peers controllers`, `/peers revoke <id>`             |
 | `/model`              | Switch model used in current session                                                             | `/model`, `/model <model-id>` (switch immediately)                                                        |
 | `/model --fast`       | Set a lighter model for prompt suggestions                                                       | `/model --fast qwen3-coder-flash`                                                                         |
-| `/model --voice`      | Set the model used for voice transcription                                                       | `/model --voice <model-id>`                                                                               |
 | `/model --vision`     | Set the vision-bridge model used to transcribe images for a text-only main model                 | `/model --vision <model-id>`                                                                              |
 | `/model --compaction` | Set the model used for chat compression                                                          | `/model --compaction <model-id>`, `/model --compaction clear`                                             |
 | `/model --image`      | Set an image-generation-capable model for the built-in image generation tool                     | `/model --image <model-id>`                                                                               |
@@ -150,16 +142,13 @@ Commands for managing AI tools and models.
 
 These commands invoke bundled skills that provide specialized workflows.
 
-| Command       | Description                                                   | Usage Examples                                                            |
-| ------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `/review`     | Multi-agent code review (12 parallel agents at high effort)   | `/review`, `/review 123`, `/review 123 --comment`, `/review --effort low` |
-| `/coordinate` | Coordinate read-only workers and one optional worktree writer | `/coordinate investigate and fix the authentication regression`           |
-| `/loop`       | Run a prompt on a recurring schedule                          | `/loop 5m check the build`                                                |
-| `/goal-draft` | Turn a fuzzy intention into a verifiable `/goal` objective    | `/goal-draft make the auth tests pass`                                    |
-| `/simplify`   | Review recent changes and apply safe cleanup edits directly   | `/simplify`, `/simplify focus on duplication`                             |
-| `/qc-helper`  | Answer questions about Qwen Code usage and configuration      | `/qc-helper how do I configure MCP?`                                      |
-
-See [Code Review](./code-review.md) for full `/review` documentation.
+| Command       | Description                                                   | Usage Examples                                                  |
+| ------------- | ------------------------------------------------------------- | --------------------------------------------------------------- |
+| `/coordinate` | Coordinate read-only workers and one optional worktree writer | `/coordinate investigate and fix the authentication regression` |
+| `/loop`       | Run a prompt on a recurring schedule                          | `/loop 5m check the build`                                      |
+| `/goal-draft` | Turn a fuzzy intention into a verifiable `/goal` objective    | `/goal-draft make the auth tests pass`                          |
+| `/simplify`   | Review recent changes and apply safe cleanup edits directly   | `/simplify`, `/simplify focus on duplication`                   |
+| `/qc-helper`  | Answer questions about Qwen Code usage and configuration      | `/qc-helper how do I configure MCP?`                            |
 
 ### 1.6 Side Question (`/btw`)
 
@@ -395,59 +384,6 @@ In headless (`--prompt`) or non-interactive contexts, `/diff` prints a plain-tex
    +3  -2  README.md
 ```
 
-**Web Shell:** In the Web Shell UI (`qwen serve`), `/diff` opens a graphical diff dialog. A tab bar at the top lets you switch between the **Changes** view and the **History** view (`/log`).
-
-#### History Viewer (`/log`) — Web Shell only
-
-The `/log` command opens a commit history browser for the current workspace. It is available only in the Web Shell UI; the CLI/TUI does not have this command.
-
-**How it works:**
-
-`/log` opens a dialog listing commits in reverse chronological order (newest first). Each row shows:
-
-- Short SHA (monospace, with a copy button for the full SHA)
-- Commit subject (single line)
-- Author name and relative time (e.g. "2h ago")
-- Branch/tag ref labels, when present
-- A merge icon (⎇) for merge commits
-
-Click a commit row to expand its details on demand:
-
-- Full commit message body
-- File change statistics (files changed, lines added/removed, per-file breakdown)
-
-Use **Load more** at the bottom to fetch the next page of commits (50 per page).
-
-**Example:**
-
-```
-┌─ History ──────────────────────────── 50 commits ─ ✕ ┐
-│                                                       │
-│  a1b2c3d  feat(cli): add --json flag        2h ago   │
-│           wenshao                                    │
-│                                                       │
-│  e4f5g6h  fix(core): handle null config     5h ago   │
-│           dev · main  v1.2.0                         │
-│                                                       │
-│ ▼ 789abcd  refactor: simplify parser        1d ago   │
-│   ┌─────────────────────────────────────────────┐    │
-│   │  Broke the monolithic parse() into smaller  │    │
-│   │  functions for readability.                 │    │
-│   │                                             │    │
-│   │  3 files · +45 −12                          │    │
-│   │   +30 −8   src/parser.ts                    │    │
-│   │   +10 −2   src/utils.ts                     │    │
-│   │   +5  −2   test/parser.test.ts              │    │
-│   └─────────────────────────────────────────────┘    │
-│                                                       │
-│              [ Load more ]                            │
-└───────────────────────────────────────────────────────┘
-```
-
-> [!note]
->
-> `/log` requires a git repository workspace. If the workspace is not a git repository or has no commits, the dialog shows a placeholder message.
-
 ### 1.10 Information, Settings, and Help
 
 Commands for obtaining information and performing system settings.
@@ -472,7 +408,6 @@ Commands for obtaining information and performing system settings.
 | → `cpu-profile`  | Record a CPU profile for Chrome DevTools analysis                                                                              | `/doctor cpu-profile [--duration <seconds>]`                                        |
 | → `rollback`     | Roll back the standalone CLI binary to the previous version (standalone installs only; for conversation history use `/rewind`) | `/doctor rollback`                                                                  |
 | `/docs`          | Open full Qwen Code documentation in browser                                                                                   | `/docs`                                                                             |
-| `/ide`           | Manage IDE integration                                                                                                         | `/ide status`, `/ide install`, `/ide enable`, `/ide disable`                        |
 | `/insight`       | Generate programming insights from chat history                                                                                | `/insight`                                                                          |
 | `/setup-github`  | Set up GitHub Actions                                                                                                          | `/setup-github`                                                                     |
 | `/bug`           | Submit issue about Qwen Code                                                                                                   | `/bug Button click unresponsive`                                                    |
@@ -505,10 +440,6 @@ Use `/auth` inside a Qwen Code session to configure authentication. Use `/doctor
 | --------- | ---------------------------------------------------------------------- |
 | `/auth`   | Configure authentication interactively (aliases: `/connect`, `/login`) |
 | `/doctor` | Show authentication and environment checks                             |
-
-> [!note]
->
-> The standalone `qwen auth` CLI command has been removed. Legacy invocations such as `qwen auth status` print a removal notice with migration guidance. See the [Authentication](../configuration/auth) page for full details.
 
 ## 2. @ Commands (Introducing Files)
 
@@ -716,11 +647,10 @@ These commands are run from the shell as `qwen <subcommand>` before starting an 
 
 ### Session Management
 
-| Command                     | Description                                 | Usage Examples                                                                   |
-| --------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------- |
-| `qwen sessions list`        | List recent conversation sessions           | `qwen sessions list`, `qwen sessions list --json --limit 50`                     |
-| `qwen sessions ps`          | List interactive sessions running right now | `qwen sessions ps`, `qwen sessions ps --json`                                    |
-| `qwen sessions controllers` | Manage trusted controller tokens            | `qwen sessions controllers add --label <name>`, `qwen sessions controllers list` |
+| Command              | Description                                 | Usage Examples                                               |
+| -------------------- | ------------------------------------------- | ------------------------------------------------------------ |
+| `qwen sessions list` | List recent conversation sessions           | `qwen sessions list`, `qwen sessions list --json --limit 50` |
+| `qwen sessions ps`   | List interactive sessions running right now | `qwen sessions ps`, `qwen sessions ps --json`                |
 
 #### `qwen sessions list`
 
@@ -781,18 +711,13 @@ is not shown.
 A table with columns: NAME, KIND, PID, AGE, DIRECTORY.
 
 KIND says what registered the session — `tui` for someone at a terminal,
-`external` for a program that is not a Qwen Code session at all (a voice
-front-end, a relay), and `headless` or `serve` for a session another
-program drives. Several `serve` or `headless` rows can share one PID: a
-`qwen --acp` child hosts all its sessions in one process — `serve` when
-the daemon spawned it, `headless` when a client is driving it directly —
-and each of them registers separately. It is a self-report, like NAME and DIRECTORY: every field
+and `headless` for a session another program drives. Several `headless`
+rows can share one PID: a `qwen --acp` process hosts all its sessions in
+one process, and each of them registers separately. It is a self-report, like NAME and DIRECTORY: every field
 here was written by the process it describes, and nothing about what a
 session is allowed to do depends on it. An Agent View record marked
 `managed` uses `managed` for KIND and `-` for PID and AGE. It remains a
-separate row when the same session also has a live registry record. See
-[Cross-Session Protocol](./cross-session-protocol.md) for the record
-format and for how to register a program of your own.
+separate row when the same session also has a live registry record.
 
 **JSON output (`--json`):**
 
@@ -801,7 +726,7 @@ keep their existing shape:
 
 ```
 schemaVersion, pid, procStart, pidNs, sessionId, cwd, name, startedAt,
-qwenVersion, kind, ipcPath (when peer messaging is available)
+qwenVersion, kind
 ```
 
 A managed record contains only source-backed data:
@@ -830,267 +755,3 @@ qwen sessions ps
 # raw-data note above); pipe through a sanitizer if the path is untrusted.
 qwen sessions ps --json | jq -r .cwd
 ```
-
-## 6. Messaging Another Running Session
-
-Two interactive sessions on the same machine can send each other
-messages. The feature is **on by default**: a session is discoverable by
-the other sessions of the same user on the machine, and what they send
-it goes through the review rules below before its model sees any of it.
-To keep a session invisible and unreachable, turn it off in
-`settings.json` and restart:
-
-```json
-{ "agents": { "crossSessionMessaging": false } }
-```
-
-With it on, the model in one session can discover the others with
-`list_agents` — each appears under `sessions` with the `name` that
-`qwen sessions ps --json` records (the table view may truncate long
-names) — and address one with `send_message` using
-that name as `to`. When two sessions share a name, `list_agents` shows
-each with a short `[ref]` and the send must include it (`name [ref]`); a
-bare name that could mean either is refused rather than guessed.
-`list_agents` also reports the session's own name under `self`, and
-`to: "*"` still means "my Agent Team teammates" and never reaches other
-sessions.
-
-A message arrives in the other session marked as coming from another
-session, not from its user, and carries none of your authority there:
-the receiving session acts on it only within its own permission settings.
-Its user can choose what happens to incoming messages with
-`agents.crossSessionInbound` (`accept`, `hold`, or `refuse`). When unset,
-a message is delivered only when both sessions are in the same review
-class: both still review each action (default or plan mode), or both
-are in a mode that applies some actions without per-action review
-(auto-edit, auto, or yolo). A message from a session in the other class,
-or from a sender that does not say which class it is in, is held for
-review — in both directions. A session that reviews each action holds a
-message from one that does not, because that message was written by a
-model nobody was watching, and the per-action prompts guard actions, not
-what the session is being talked into. Held messages are listed and
-released with `/peers` in the receiving session, and a message held
-only because the modes differed is released on its own once they agree.
-
-A repository can make sessions opened in it more cautious, never less:
-a workspace `.qwen/settings.json` may set `agents.crossSessionInbound`
-to `hold` or `refuse`, or `agents.crossSessionMessaging` to `false`, and
-that value wins over a looser one in your user settings. A workspace
-value that would loosen an operator-set one (`accept`, or `true` for the
-switch when a user or system scope set it to `false`) is ignored with a
-warning; a workspace `true` where nothing else set the switch merely
-repeats the default and is dropped silently. A value the CLI does not
-recognize holds every message whenever it is the effective value.
-System settings override all of this, as they do for every setting.
-
-A hold does not wait forever. A message nobody decides on expires after
-`agents.crossSessionHeldExpiry` — `1m`, `5m`, `10m`, or `never`, five
-minutes by default — and the sending session is told that no decision
-came. Shortening the setting applies to messages already waiting.
-
-If the session cannot bind its inbox — the runtime directory is missing,
-owned by another user, or read-only, as it can be inside a container —
-it first tries a private directory under the temp directory, and only
-if that fails too does it start without one. When that happens the
-session says so at startup, and `/peers` repeats the reason and what to
-change (usually `XDG_RUNTIME_DIR` or `TMPDIR`).
-
-Two sessions can also resolve the same inbox address, because the address
-is keyed by process id and process ids repeat across containers that share
-a runtime directory. The session starting second takes a neighbouring
-address instead of taking over the one in use, so neither becomes
-unreachable. Peers are unaffected: they read a session's address from the
-session registry rather than deriving it.
-
-The `send_message` call only confirms the message was handed to the other
-session. What became of it arrives later as a receipt: if it was held,
-declined, refused, dropped, expired, or misaddressed (the address changed
-hands — list the agents again) — or released after a hold — a notice
-appears in the sending session's transcript (`Message to <name>: …`).
-Declined, refused and dropped are three different answers: declined means
-someone reviewed the message and said no, refused means that session's
-`agents.crossSessionInbound` is `refuse` and nobody saw it at all, and
-dropped means its inbox turned the message away before any of that (see
-below). The first drop is answered at once and the rest are folded into a
-receipt every few seconds, each naming the messages it stands for, so a
-run of them costs a handful of lines rather than one line each. The model that
-sent it is not told; if the other session replies, the reply arrives as a
-cross-session message.
-
-### Flood protection
-
-A session accepts up to 30 messages at once from one sender and then one
-every two seconds, and up to 32 at once from all senders together and
-then one a second. The second limit exists because a sender names itself:
-rotating that name gets a fresh allowance from the first limit but not
-from the second. It is barely above the first because every accepted
-message draws a receipt, and a session can only have so many of those
-going out at once. A message from another session that repeats that
-sender's previous message word for word within 30 seconds is also turned
-away — a model looping on one sentence mints a fresh message id every
-time, so the text is what catches it. Messages from a script the session
-started and from a trusted controller are exempt from the repeat check,
-because a hook reporting the same line twice is reporting two facts and a
-person saying "continue" twice means it twice; both are still subject to
-the rate limits. Finally, a message that is accepted but cannot be queued
-because the session already has 50 waiting is turned away too.
-
-A message turned away this way is never held, never shown to the model,
-and leaves no record, so the sender can try again later and land. The
-receiving session says so in its transcript at most once a minute per
-sender, with a count of what that line stands for. The sending session
-gets one receipt naming every message the burst cost it, and its
-transcript says to fold what still matters into one later message rather
-than re-sending.
-
-The sending side does not wait to find out. Each session tracks what it
-has sent to each address and refuses a send that the receiver would
-drop, so the model is told to batch before the message is written rather
-than after — and the receiver never spends a connection on a message it
-was going to turn away.
-
-### Inbox authentication and scripted injection
-
-Each session's inbox requires a per-session token: a connection must
-present it on its first line before any message is read, and sessions
-exchange tokens automatically through the same registry records they
-discover each other by. Sessions from a build without token support can
-receive from a newer one, but their sends to it are dropped.
-
-A session exports its own inbox address and a token to child processes as
-`QWEN_CODE_MESSAGING_SOCKET` and `QWEN_CODE_MESSAGING_TOKEN`, so a script
-or hook the session runs can send a message back into it. This is a
-second, _child_ token that is never published anywhere: only processes
-the session started can hold it, so a message that arrives with it is
-recognized as the session's own rather than as another session's.
-
-```bash
-{ printf '%s\n' \
-    '{"msgV":1,"type":"auth","token":"'"$QWEN_CODE_MESSAGING_TOKEN"'"}' \
-    '{"msgV":1,"msgId":"'"$(uuidgen)"'","type":"user","priority":"next","message":{"role":"user","content":"build finished"}}'; \
-} | socat - UNIX-CONNECT:"$QWEN_CODE_MESSAGING_SOCKET"
-```
-
-Give every injection a fresh `msgId`. The receiving gate remembers the
-ids it has already settled, so a hook that reuses one is delivered the
-first time and silently deduplicated on every run after that. Repeating
-the same _text_ is fine — the repeat check above does not apply to a
-session's own processes — but the rate limits do apply, so a hook in a
-loop is dropped like any other flood.
-
-An injected message still goes through the inbound gate and is marked as
-not coming from the user, but the gate knows it came from the session's
-own process: under the mode-parity default it is delivered without review
-(a peer in the same position would be held), while an explicit
-`agents.crossSessionInbound` of `hold` or `refuse` applies to it as to
-anything else. The model sees it as
-`<cross_session_message from="own process" origin="own-process">` with a
-notice that it came from a script or hook the session ran, not from the
-user.
-
-### Trusted controllers
-
-The rule above holds a message from any sender that does not say which
-review class it is in, and a program that is not a Qwen Code session has
-none to say. That is the right default for a stranger, but not for a
-program you chose: a voice front-end, a dictation bridge, an automation
-daemon relaying your own instructions would have every message parked,
-and approving each one by hand defeats the point.
-
-You grant such a program delivery by minting it a token:
-
-```bash
-qwen sessions controllers add --label voice-bridge
-```
-
-The token is printed once and is not stored anywhere: the file under
-your Qwen home keeps only its SHA-256 hash, so nothing that later reads
-that file can present the token. Put it in the controller's own
-configuration when the command prints it.
-
-A controller presents the token the way any other sender does — as the
-first line of the connection — and takes the socket path from the
-session registry (`qwen sessions ps --json` prints one record per live
-session, `ipcPath` being the address):
-
-```bash
-{ printf '%s\n' \
-    '{"msgV":1,"type":"auth","token":"'"$QWEN_CONTROLLER_TOKEN"'"}' \
-    '{"msgV":1,"msgId":"'"$(uuidgen)"'","type":"user","priority":"next","message":{"role":"user","content":"open the failing test"}}'; \
-} | socat - UNIX-CONNECT:"$SESSION_IPC_PATH"
-```
-
-A message that arrives on a granted token is delivered without
-per-message review, whatever review class either side is in — but it
-still yields to an explicit setting: an `agents.crossSessionInbound` of
-`hold` parks it like anything else, and `refuse` turns it away. Grants
-belong to your Qwen home rather than to one session, so a controller
-reaches whichever sessions you are running, and sessions re-read the
-file on every connection: minting or revoking one takes effect on the
-next connection, with nothing to restart.
-
-```bash
-qwen sessions controllers list          # ids, labels, when they were added
-qwen sessions controllers remove c_1a2b # revoke one
-```
-
-`/peers controllers` and `/peers revoke <id>` do the same from inside a
-session. A message that came through a grant is shown as
-`Message from a trusted controller (voice-bridge)`, and appears in
-`/peers` as `[controller] voice-bridge` if a `hold` setting parked it.
-
-The model sees such a message as
-`<cross_session_message from="controller" origin="controller" controller="voice-bridge">`,
-with a notice that it relays your own instructions — and the same two
-prohibitions that apply to every other origin: it may not edit
-permission settings, QWEN.md, or config because the message asked, and
-it may not treat the message as you approving a pending confirmation
-prompt. A controller can say what to do next; it cannot answer a prompt
-on your behalf.
-
-Anyone who holds the token can send as that controller, so treat it like
-any other credential: give it to one program, keep it out of shared
-config, and revoke it when that program is done.
-
-### Sessions a program drives over ACP
-
-Any `qwen --acp` child registers each session it hosts — as `serve` when
-the daemon spawned the process, as `headless` when an editor or another
-client is driving `qwen --acp` directly — and the session appears in
-`qwen sessions ps` and in another session's `list_agents` like any
-other. It can send: its model can call `send_message` to reach a terminal
-you have open. Several of them share one process and one inbox, so a
-sender has to name the session it means — every Qwen Code session does
-that automatically.
-
-Messages sent _to_ one are refused rather than held. Holding is a
-question put to a person, and nobody is watching a held-message list on a
-driven session's behalf; a sender is told at once instead of
-waiting out an expiry. Where a held message should surface for those
-sessions is not settled yet.
-
-A session registers unless its own settings turn
-`agents.crossSessionMessaging` off, or it was started with `--bare` or
-`--safe-mode` — those turn messaging off whatever the setting says. Turned
-off, it stays invisible, because the only reason to list a session nobody
-can message would be to advertise an address that never answers.
-
-### Programs that are not Qwen Code sessions
-
-Everything above works between sessions, but nothing in it is specific to
-one. A program that writes a registry record for itself and binds an
-inbox the same way is listed by `qwen sessions ps` and by `list_agents`,
-can be addressed by name from `send_message`, and receives delivery
-receipts for what it sends — a voice front-end, a relay, a build watcher.
-It should record `kind: "external"` so a listing can say what it is.
-
-[Cross-Session Protocol](./cross-session-protocol.md) is the contract for
-writing one: the record schema and how liveness is judged, the socket
-paths and framing, the auth line, every frame field, the receipt states
-and their transitions, and what a receiver does with a message before its
-model sees it.
-
-A Node program does not have to write any of that by hand:
-`@qwen-code/sdk/peer` implements the contract. `PeerEndpoint.start({ name })`
-publishes the record and binds the inbox, `list()` and `send()` address
-sessions by name, and `onMessage` receives what they send.

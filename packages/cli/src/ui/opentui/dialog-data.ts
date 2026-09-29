@@ -71,10 +71,6 @@ import { themeManager, AUTO_THEME_NAME } from '../themes/theme-manager.js';
 import { applyOpenTuiTheme } from './theme.js';
 import { getActiveOpenTuiTheme } from './theme-parity.js';
 import {
-  isSelectableVoiceModel,
-  formatUnsupportedVoiceModelMessage,
-} from '../voice/voice-model.js';
-import {
   ADVISOR_OFF_OPTION,
   buildModelSelectionKey,
   encodeAuxModelSelector,
@@ -105,8 +101,8 @@ function advisorSelector(
 /**
  * Model list parity of ModelDialog's `availableModelEntries`: runtime entries
  * are listed (tagged) outside image mode, QWEN_OAUTH models only under that
- * auth type, imageOnly/fastOnly/voiceOnly/visionOnly entries only in their
- * own selector modes, and image-mode rows additionally must resolve through
+ * auth type, voiceOnly entries never, imageOnly/fastOnly/visionOnly entries
+ * only in their own selector modes, and image-mode rows additionally must resolve through
  * `Config.resolveImageGenerationModel`. Rows are keyed like ink's option
  * values: runtime rows by their `$runtime|...` snapshot id, registry rows by
  * `authType::modelId[\0baseUrl]`. The raw registry entry travels on `model`
@@ -161,7 +157,7 @@ export function buildModelEntries(
         continue;
       }
       if (mode !== 'fast' && mode !== 'advisor' && model.fastOnly) continue;
-      if (mode !== 'voice' && model.voiceOnly) continue;
+      if (model.voiceOnly) continue;
       // ink keeps visionOnly models in vision AND image mode
       // (ModelDialog.tsx: isVisionModelMode || isImageModelMode || !m.visionOnly).
       if (mode !== 'vision' && mode !== 'image' && model.visionOnly) continue;
@@ -227,7 +223,7 @@ export function resolveModelPersistScope(
  * The selection key to highlight when the `/model` dialog opens (ink
  * ModelDialog `preferredKey` parity): the active runtime snapshot or the
  * current auth/model/baseUrl row in primary mode, and the entry owning the
- * persisted selector in the auxiliary modes (fast/voice/vision/compaction/
+ * persisted selector in the auxiliary modes (fast/vision/compaction/
  * image). Returns undefined when nothing matches (the dialog then starts on
  * the first row, as in ink's `initialIndex === -1 → 0` fallback).
  */
@@ -290,13 +286,11 @@ export function computeModelDialogInitialKey(params: {
   const rawSetting =
     mode === 'fast'
       ? settings.merged.fastModel
-      : mode === 'voice'
-        ? settings.merged.voiceModel
-        : mode === 'vision'
-          ? settings.merged.visionModel
-          : mode === 'compaction'
-            ? settings.merged.compactionModel
-            : settings.merged.imageModel;
+      : mode === 'vision'
+        ? settings.merged.visionModel
+        : mode === 'compaction'
+          ? settings.merged.compactionModel
+          : settings.merged.imageModel;
   if (typeof rawSetting !== 'string' || !rawSetting.trim()) return undefined;
   const trimmed = rawSetting.trim();
   if (byKey.has(trimmed)) return trimmed;
@@ -408,37 +402,6 @@ export async function applyModelSelection(
     } catch (error) {
       return { ok: false, error: getErrorMessage(error) };
     }
-  }
-
-  if (mode === 'voice') {
-    if (!selectedEntry?.model) {
-      return { ok: false, error: t('Selected voice model is unavailable.') };
-    }
-    const voiceModel = selectedEntry.model.id;
-    if (!isSelectableVoiceModel(selectedEntry.model)) {
-      return {
-        ok: false,
-        error: formatUnsupportedVoiceModelMessage(voiceModel),
-      };
-    }
-    const matchingEntries = entries.filter(
-      (entry) => entry.model?.id === voiceModel,
-    );
-    if (matchingEntries.length > 1) {
-      return {
-        ok: false,
-        error: t(
-          "Voice model '{{model}}' is configured more than once. Remove duplicate model ids before selecting it for voice transcription.",
-          { model: voiceModel },
-        ),
-      };
-    }
-    const scope = resolveModelPersistScope(settings, persistScope);
-    settings.setValue(scope, 'voiceModel', voiceModel);
-    return {
-      ok: true,
-      message: `${t('Voice Model')}: ${voiceModel}${scopeSuffix}`,
-    };
   }
 
   hydrateApiKeyEnvFromSettings(settings, selectedEntry?.model?.envKey);

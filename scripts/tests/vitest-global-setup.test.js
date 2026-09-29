@@ -30,25 +30,13 @@ import checkUnitTestPrerequisites, {
 
 const guardUrl = new URL('../vitest-global-setup.js', import.meta.url);
 
-// Mirrors the real manifest shapes: most channel packages declare their entry
-// via exports['.'].default, while acp-bridge/web-templates use exports['.'].import.
+// Mirrors the real manifest shape: acp-bridge/web-templates/core declare their
+// entry via exports['.'].import.
 function manifestFor(rel) {
-  if (
-    rel === 'packages/acp-bridge' ||
-    rel === 'packages/web-templates' ||
-    rel === 'packages/core'
-  ) {
-    return {
-      name: `fake-${path.basename(rel)}`,
-      exports: {
-        '.': { types: './dist/index.d.ts', import: './dist/index.js' },
-      },
-    };
-  }
   return {
     name: `fake-${path.basename(rel)}`,
     exports: {
-      '.': { types: './dist/index.d.ts', default: './dist/index.js' },
+      '.': { types: './dist/index.d.ts', import: './dist/index.js' },
     },
   };
 }
@@ -103,12 +91,12 @@ describe('vitest-global-setup prerequisite guard', () => {
 
   it('reports an unbuilt workspace package and a missing generated file', () => {
     root = buildFixtureRoot();
-    rmSync(path.join(root, 'packages/channels/base/dist/index.js'));
+    rmSync(path.join(root, 'packages/acp-bridge/dist/index.js'));
     rmSync(path.join(root, 'packages/cli/src/generated/git-commit.ts'));
 
     const missing = findMissingPrerequisites('packages/cli', root);
     expect(missing).toHaveLength(2);
-    expect(missing[0]).toContain('packages/channels/base');
+    expect(missing[0]).toContain('packages/acp-bridge');
     expect(missing[0]).toContain('has not been built');
     expect(missing[1]).toContain('packages/cli/src/generated/git-commit.ts');
   });
@@ -125,7 +113,9 @@ describe('vitest-global-setup prerequisite guard', () => {
 
   it('skips packages without known prerequisites', () => {
     root = buildFixtureRoot();
-    expect(findMissingPrerequisites('packages/web-shell', root)).toEqual([]);
+    expect(findMissingPrerequisites('packages/web-templates', root)).toEqual(
+      [],
+    );
   });
 
   it('reports an unbuilt packages/core dist for core tests', () => {
@@ -295,14 +285,14 @@ describe('checkAndReport', () => {
 
   it('returns 1 and prints the actionable message when prerequisites are missing', () => {
     root = buildFixtureRoot();
-    rmSync(path.join(root, 'packages/channels/base/dist/index.js'));
+    rmSync(path.join(root, 'packages/acp-bridge/dist/index.js'));
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const cwd = path.join(root, 'packages/cli');
     expect(checkAndReport({ cwd, root })).toBe(1);
     expect(errSpy).toHaveBeenCalledTimes(1);
     const printed = errSpy.mock.calls[0][0];
     expect(printed).toContain('npm run build');
-    expect(printed).toContain('packages/channels/base');
+    expect(printed).toContain('packages/acp-bridge');
   });
 
   it('yields silently when cwd matches the repo root (no known package key)', () => {
@@ -312,52 +302,6 @@ describe('checkAndReport', () => {
     // yields silently by design.
     expect(checkAndReport({ cwd: root, root })).toBe(0);
     expect(errSpy).not.toHaveBeenCalled();
-  });
-});
-
-function registryChannelEntries() {
-  const registryPath = fileURLToPath(
-    new URL(
-      '../../packages/cli/src/commands/channel/channel-registry.ts',
-      import.meta.url,
-    ),
-  );
-  const source = readFileSync(registryPath, 'utf8');
-  // npm package names may contain digits, underscores and dots; the class
-  // must tolerate them or a future builtin channel silently escapes this
-  // drift check.
-  const specifiers = [
-    ...source.matchAll(/import\('@qwen-code\/(channel-[a-z0-9._-]+)'\)/g),
-  ].map((match) => match[1]);
-  return specifiers.map(
-    (name) => `packages/channels/${name.replace('channel-', '')}`,
-  );
-}
-
-describe('DIST_PREREQUISITES stays in sync with channel-registry', () => {
-  it('every builtin channel dynamically imported by channel-registry.ts is listed', () => {
-    const entries = registryChannelEntries();
-    expect(entries.length).toBeGreaterThan(0);
-    const listed = DIST_PREREQUISITES['packages/cli'];
-    for (const entry of entries) {
-      expect(listed, `missing prerequisite entry for ${entry}`).toContain(
-        entry,
-      );
-    }
-  });
-
-  it('every listed packages/channels/* entry maps back to a registry import', () => {
-    const imported = new Set(registryChannelEntries());
-    // channel-base is a build dependency of the channel packages even though
-    // the registry never imports it directly.
-    imported.add('packages/channels/base');
-    for (const entry of DIST_PREREQUISITES['packages/cli']) {
-      if (!entry.startsWith('packages/channels/')) continue;
-      expect(
-        imported,
-        `stale prerequisite entry ${entry}: no matching channel-registry import`,
-      ).toContain(entry);
-    }
   });
 });
 
@@ -426,7 +370,7 @@ describe('guard probe edge cases (round 3)', () => {
 
   it('derives the package key when cwd reaches the root through a symlink', () => {
     root = buildFixtureRoot();
-    rmSync(path.join(root, 'packages/channels/base/dist/index.js'));
+    rmSync(path.join(root, 'packages/acp-bridge/dist/index.js'));
     const link = `${root}-link`;
     symlinkSync(root, link);
     try {
@@ -434,7 +378,7 @@ describe('guard probe edge cases (round 3)', () => {
       expect(
         checkAndReport({ cwd: path.join(link, 'packages/cli'), root }),
       ).toBe(1);
-      expect(errSpy.mock.calls[0][0]).toContain('packages/channels/base');
+      expect(errSpy.mock.calls[0][0]).toContain('packages/acp-bridge');
     } finally {
       rmSync(link);
     }
@@ -456,7 +400,7 @@ describe('default export (the vitest globalSetup entry)', () => {
 
   it('uses the vitest project root and exits 1 when prerequisites are missing', () => {
     root = buildFixtureRoot();
-    rmSync(path.join(root, 'packages/channels/base/dist/index.js'));
+    rmSync(path.join(root, 'packages/acp-bridge/dist/index.js'));
     process.env['QWEN_VITEST_GUARD_ROOT'] = root;
     const exitSpy = vi
       .spyOn(process, 'exit')
@@ -466,7 +410,7 @@ describe('default export (the vitest globalSetup entry)', () => {
       config: { root: path.join(root, 'packages/cli') },
     });
     expect(exitSpy).toHaveBeenCalledWith(1);
-    expect(errSpy.mock.calls[0][0]).toContain('packages/channels/base');
+    expect(errSpy.mock.calls[0][0]).toContain('packages/acp-bridge');
   });
 
   it('does not exit when the hermetic checkout is ready', () => {
@@ -517,11 +461,11 @@ describe('default export (the vitest globalSetup entry)', () => {
 
   it('subprocess: exits 1 and prints the fix command on a broken checkout', () => {
     root = buildFixtureRoot();
-    rmSync(path.join(root, 'packages/channels/base/dist/index.js'));
+    rmSync(path.join(root, 'packages/acp-bridge/dist/index.js'));
     const res = runGuardSubprocess(path.join(root, 'packages/cli'));
     expect(res.status).toBe(1);
     expect(res.stderr).toContain('npm run build');
-    expect(res.stderr).toContain('packages/channels/base');
+    expect(res.stderr).toContain('packages/acp-bridge');
   });
 
   it('subprocess: exits 0 silently on a ready checkout', () => {

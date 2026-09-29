@@ -45,7 +45,6 @@ export function TrustDialog({
     cwd,
     currentTrustLevel,
     isInheritedTrustFromParent,
-    isInheritedTrustFromIde,
     needsRestart,
     updateTrustLevel,
     commitTrustLevelChange,
@@ -90,13 +89,6 @@ export function TrustDialog({
             <Text color={theme.text.secondary}>
               Note: This folder currently inherits trust from a parent folder. A
               more-specific trust rule here can override that decision.
-            </Text>
-          )}
-          {isInheritedTrustFromIde && (
-            <Text color={theme.text.secondary}>
-              Note: This folder behaves as a trusted folder because the
-              connected IDE workspace is trusted. It will remain trusted even if
-              you set a different trust level here.
             </Text>
           )}
         </Box>

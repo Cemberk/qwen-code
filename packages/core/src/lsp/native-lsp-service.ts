@@ -6,7 +6,6 @@
 
 import type { Config as CoreConfig } from '../config/config.js';
 import type { Extension } from '../extension/extensionManager.js';
-import type { IdeContextStore } from '../ide/ideContext.js';
 import type { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import type { WorkspaceContext } from '../utils/workspaceContext.js';
 import type {
@@ -138,7 +137,6 @@ export class NativeLspService {
     workspaceContext: WorkspaceContext,
     _eventEmitter: EventEmitter,
     fileDiscoveryService: FileDiscoveryService,
-    _ideContextStore: IdeContextStore,
     options: NativeLspServiceOptions = {},
   ) {
     this.config = config;

@@ -36,18 +36,7 @@ if (!existsSync(join(root, 'node_modules'))) {
 // build all workspaces/packages in dependency order
 execSync('npm run generate', { stdio: 'inherit', cwd: root });
 
-// Select the CLI by path: the repository root has the same package name.
-const cliOnly = process.argv.includes('--cli-only');
-// Mobile MCP has an independent build and was never part of the root build.
-const filter = cliOnly
-  ? '--filter "{./packages/cli}..." --filter @qwen-code/node-repl-mcp --filter @qwen-code/channel-plugin-example'
-  : '--filter "!@qwen-code/mobile-mcp"';
-execSync(`corepack pnpm -r ${filter} run build`, {
-  stdio: 'inherit',
-  cwd: root,
-});
-
-execSync('node --import tsx/esm scripts/generate-settings-schema.ts', {
+execSync('corepack pnpm -r run build', {
   stdio: 'inherit',
   cwd: root,
 });

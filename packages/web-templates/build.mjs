@@ -14,11 +14,6 @@ const assetBuilds = [
     assetPath: join(assetsDir, 'insight'),
     buildPath: join(assetsDir, 'insight', 'build.mjs'),
   },
-  {
-    name: 'export-html',
-    assetPath: join(assetsDir, 'export-html'),
-    buildPath: join(assetsDir, 'export-html', 'build.mjs'),
-  },
 ];
 
 const runCommand = ({ command, args, cwd, label }) =>

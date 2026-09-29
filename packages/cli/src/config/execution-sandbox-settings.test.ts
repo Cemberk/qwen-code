@@ -16,7 +16,6 @@ import {
   validateExecutionSandboxSelection,
 } from './execution-sandbox-settings.js';
 import { createMinimalSettings, loadSettings } from './settings.js';
-import { loadServeFastPathSettings } from '../serve/fast-path-settings.js';
 
 const restricted = { filesystem: 'read-only', network: 'closed' } as const;
 const writable = { filesystem: 'workspace-write', network: 'open' } as const;
@@ -111,9 +110,6 @@ describe('operator execution sandbox policy', () => {
         workspaceTrusted: true,
       }).merged.tools?.executionSandbox,
     ).toBeUndefined();
-    expect(
-      loadServeFastPathSettings(workspace).tools?.executionSandbox,
-    ).toBeUndefined();
   });
   it('system replaces the whole user object, including backend', () => {
     write(defaults, { tools: { executionSandbox: writable } });
@@ -125,7 +121,6 @@ describe('operator execution sandbox policy', () => {
       readOperatorSandboxSettings(),
       createMinimalSettings().merged,
       loadSettings(workspace, { skipLoadEnvironment: true }).merged,
-      loadServeFastPathSettings(workspace),
     ]) {
       expect(settings.tools?.executionSandbox).toEqual(restricted);
     }
@@ -228,7 +223,6 @@ describe('operator execution sandbox policy', () => {
     });
     expect(() => loadSettings(workspace)).toThrow('literal');
     expect(() => createMinimalSettings()).toThrow('literal');
-    expect(() => loadServeFastPathSettings(workspace)).toThrow('literal');
   });
   it('does not reset malformed operator settings to an unconfined runtime', () => {
     write(user, {});
@@ -257,7 +251,6 @@ describe('operator execution sandbox policy', () => {
       readOperatorSandboxSettings(),
       createMinimalSettings().merged,
       loadSettings(workspace, { skipLoadEnvironment: true }).merged,
-      loadServeFastPathSettings(workspace),
     ]) {
       expect(settings.tools?.executionSandbox).toEqual(restricted);
     }
@@ -276,10 +269,6 @@ describe('operator execution sandbox policy', () => {
         () => loadSettings(workspace, { skipLoadEnvironment: true }),
         /Cannot read operator sandbox policy/,
       ],
-      [
-        () => loadServeFastPathSettings(workspace),
-        /Cannot read operator sandbox policy/,
-      ],
     ];
     for (const [load, error] of loaders) {
       expect(load).toThrow(error);
@@ -295,9 +284,6 @@ describe('operator execution sandbox policy', () => {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, '{broken');
     expect(() => readOperatorSandboxSettings()).toThrow(
-      'Cannot read operator sandbox policy',
-    );
-    expect(() => loadServeFastPathSettings(workspace)).toThrow(
       'Cannot read operator sandbox policy',
     );
     expect(fs.readFileSync(file, 'utf8')).toBe('{broken');

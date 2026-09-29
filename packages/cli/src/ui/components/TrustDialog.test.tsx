@@ -53,7 +53,6 @@ describe('TrustDialog', () => {
       cwd: '/test/dir',
       currentTrustLevel: TrustLevel.DO_NOT_TRUST,
       isInheritedTrustFromParent: false,
-      isInheritedTrustFromIde: false,
       needsRestart: false,
       updateTrustLevel: mockUpdateTrustLevel,
       commitTrustLevelChange: mockCommitTrustLevelChange,
@@ -82,7 +81,6 @@ describe('TrustDialog', () => {
       cwd: '/test/dir',
       currentTrustLevel: TrustLevel.DO_NOT_TRUST,
       isInheritedTrustFromParent: true,
-      isInheritedTrustFromIde: false,
       needsRestart: false,
       updateTrustLevel: mockUpdateTrustLevel,
       commitTrustLevelChange: mockCommitTrustLevelChange,
@@ -95,28 +93,6 @@ describe('TrustDialog', () => {
     await waitFor(() => {
       expect(lastFrame()).toContain(
         'currently inherits trust from a parent folder',
-      );
-    });
-  });
-
-  it('should display the inherited trust note from IDE', async () => {
-    vi.mocked(useTrustModify).mockReturnValue({
-      cwd: '/test/dir',
-      currentTrustLevel: TrustLevel.DO_NOT_TRUST,
-      isInheritedTrustFromParent: false,
-      isInheritedTrustFromIde: true,
-      needsRestart: false,
-      updateTrustLevel: mockUpdateTrustLevel,
-      commitTrustLevelChange: mockCommitTrustLevelChange,
-      isFolderTrustEnabled: true,
-    });
-    const { lastFrame } = renderWithProviders(
-      <TrustDialog onExit={vi.fn()} addItem={vi.fn()} />,
-    );
-
-    await waitFor(() => {
-      expect(lastFrame()).toContain(
-        'Note: This folder behaves as a trusted folder because the connected IDE workspace is trusted.',
       );
     });
   });
@@ -146,7 +122,6 @@ describe('TrustDialog', () => {
       cwd: '/test/dir',
       currentTrustLevel: TrustLevel.DO_NOT_TRUST,
       isInheritedTrustFromParent: false,
-      isInheritedTrustFromIde: false,
       needsRestart: true,
       updateTrustLevel: mockUpdateTrustLevel,
       commitTrustLevelChange: mockCommitTrustLevelChange,
@@ -180,7 +155,6 @@ describe('TrustDialog', () => {
       cwd: '/test/dir',
       currentTrustLevel: TrustLevel.DO_NOT_TRUST,
       isInheritedTrustFromParent: false,
-      isInheritedTrustFromIde: false,
       needsRestart: true,
       updateTrustLevel: mockUpdateTrustLevel,
       commitTrustLevelChange: mockCommitTrustLevelChange,
@@ -210,7 +184,6 @@ describe('TrustDialog', () => {
       cwd: '/test/dir',
       currentTrustLevel: TrustLevel.DO_NOT_TRUST,
       isInheritedTrustFromParent: false,
-      isInheritedTrustFromIde: false,
       needsRestart: true,
       updateTrustLevel: mockUpdateTrustLevel,
       commitTrustLevelChange: mockCommitTrustLevelChange,

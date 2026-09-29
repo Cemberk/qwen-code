@@ -30,7 +30,6 @@ import type {
   ExtensionUpdateStatus,
 } from '../state/extensions.js';
 import type { ExtensionRefreshState } from '../../config/extension-refresh-state.js';
-import type { PeerMessaging } from '../../peerMessaging/peer-messaging.js';
 
 export interface NonInteractiveSlashCommandPolicy {
   readonly allowSessionReset: boolean;
@@ -66,11 +65,6 @@ export interface CommandContext {
     settings: LoadedSettings;
     logger: Logger | null;
     extensionRefreshState?: ExtensionRefreshState;
-    /**
-     * Present only when cross-session messaging is enabled and its socket
-     * bound; `/peers` treats null as "the feature is off".
-     */
-    peerMessaging?: PeerMessaging | null;
   };
   // UI state and history management
   ui: {
@@ -239,7 +233,6 @@ export interface OpenDialogActionReturn {
     | 'model'
     | 'fast-model'
     | 'advisor-model'
-    | 'voice-model'
     | 'vision-model'
     | 'compaction-model'
     | 'image-model'

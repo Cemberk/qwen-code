@@ -10,13 +10,12 @@
     // it produced 300+ TS6307 "not listed within the file list" errors.
     "composite": false,
     // The root turns `noPropertyAccessFromIndexSignature` on, which forced
-    // bracket-access rewrites in production SDK sources just to satisfy this
+    // bracket-access rewrites in production sources just to satisfy this
     // test program. Relax it here so
     // packages keep their own compiler regime and the tests keep dot access.
     "noPropertyAccessFromIndexSignature": false,
     // Matches packages/cli. The suite drives browser-side code in
-    // `terminal-capture/` and pulls SDK sources that reference `WebSocket` /
-    // `HeadersInit`, none of which exist in the root's ES2023-only lib.
+    // `terminal-capture/`, which does not exist in the root's ES2023-only lib.
     "lib": ["DOM", "DOM.Iterable", "ES2023"],
     "baseUrl": ".",
     // Resolve workspace packages from source so `tsc -p` here does not depend
@@ -31,11 +30,8 @@
     // wildcard would map it to a file that does not exist. Do not delete those
     // entries: since core's exports map gained a `./*` catch-all they would
     // still resolve, silently, against dist declarations rather than failing.
-    // Keep these in sync with the packages' exports maps. The runtime vitest
-    // aliases
-    // (`integration-tests/vitest.config.ts`) still point at the built SDK
-    // bundle to exercise the published-bundle shape; these entries only affect
-    // type resolution.
+    // Keep these in sync with the packages' exports maps. These entries only
+    // affect type resolution.
     //
     // Keep notes like this OUT of `paths` itself: every value there must be an
     // array, so a `"//"` string key makes tsc abort with TS5063 before it type
@@ -95,22 +91,6 @@
       "@qwen-code/qwen-code-core/userPromptSubmitContext": [
         "../packages/core/src/hooks/user-prompt-submit-context.ts"
       ],
-      "@qwen-code/sdk": ["../packages/sdk-typescript/src/index.ts"],
-      "@qwen-code/sdk/daemon": [
-        "../packages/sdk-typescript/src/daemon/index.ts"
-      ],
-      "@qwen-code/sdk/daemon/transcript": [
-        "../packages/sdk-typescript/src/daemon/transcript.ts"
-      ],
-      "@qwen-code/sdk/daemon/transports": [
-        "../packages/sdk-typescript/src/daemon/transports.ts"
-      ],
-      "@qwen-code/sdk/daemon/types": [
-        "../packages/sdk-typescript/src/daemon/types.ts"
-      ],
-      "@qwen-code/sdk/daemon/ui/transcript": [
-        "../packages/sdk-typescript/src/daemon/ui/transcript.ts"
-      ],
       "@qwen-code/acp-bridge": ["../packages/acp-bridge/src/index.ts"],
       "@qwen-code/acp-bridge/bridge": ["../packages/acp-bridge/src/bridge.ts"],
       "@qwen-code/acp-bridge/bridgeClient": [
@@ -168,34 +148,9 @@
       "@qwen-code/acp-bridge/workspacePaths": [
         "../packages/acp-bridge/src/workspacePaths.ts"
       ],
-      // qwen-serve-web-shell-live-journal-recovery.test.ts imports Web Shell's
-      // daemon bindings; map to source so typecheck does not depend on dist.
-      "@qwen-code/web-shell/daemon-react-sdk": [
-        "../packages/web-shell/client/daemon-react-sdk.ts"
-      ],
-      // channel-plugin.test.ts and the plugin-example sources it imports
-      // both import `@qwen-code/channel-base`. Map it to source so the
-      // typecheck does not depend on channel-base's dist and both import
-      // sites share one declaration — mixing src and dist declarations
-      // produces duplicate-private-class errors.
-      "@qwen-code/channel-base": ["../packages/channels/base/src/index.ts"],
-      // cli's channel-registry.ts imports the nine builtin channel
-      // adapters and html.ts imports web-templates; without entries they
-      // resolve through their exports maps to dist, leaving the typecheck
-      // dependent on those packages being built.
-      "@qwen-code/channel-telegram": [
-        "../packages/channels/telegram/src/index.ts"
-      ],
-      "@qwen-code/channel-weixin": ["../packages/channels/weixin/src/index.ts"],
-      "@qwen-code/channel-dingtalk": [
-        "../packages/channels/dingtalk/src/index.ts"
-      ],
-      "@qwen-code/channel-dws": ["../packages/channels/dws/src/index.ts"],
-      "@qwen-code/channel-wecom": ["../packages/channels/wecom/src/index.ts"],
-      "@qwen-code/channel-feishu": ["../packages/channels/feishu/src/index.ts"],
-      "@qwen-code/channel-qqbot": ["../packages/channels/qqbot/src/index.ts"],
-      "@qwen-code/channel-github": ["../packages/channels/github/src/index.ts"],
-      "@qwen-code/channel-gitlab": ["../packages/channels/gitlab/src/index.ts"],
+      // cli's insight TemplateRenderer.ts imports web-templates; without an
+      // entry it resolves through the exports map to dist, leaving the
+      // typecheck dependent on that package being built.
       "@qwen-code/web-templates": ["../packages/web-templates/src/index.ts"],
       // node-pty declares `types` at the top level but its `exports` map is a
       // bare string with no `types` condition, so nodenext resolution never

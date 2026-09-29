@@ -910,7 +910,7 @@ describe('useSlashCommandProcessor', () => {
 
     it.each([
       '/model --fast',
-      '/model --voice --project',
+      '/model --fast --project',
       '/model --vision --global',
       '/model --compaction',
       '/model --image',
@@ -1219,25 +1219,6 @@ describe('useSlashCommandProcessor', () => {
       });
 
       expect(mockOpenOutputStyleDialog).toHaveBeenCalledTimes(1);
-    });
-
-    it('should handle "dialog: voice-model" action', async () => {
-      const command = createTestCommand({
-        name: 'voicemodelcmd',
-        action: vi
-          .fn()
-          .mockResolvedValue({ type: 'dialog', dialog: 'voice-model' }),
-      });
-      const result = setupProcessorHook([command]);
-      await waitFor(() => expect(result.current.slashCommands).toHaveLength(1));
-
-      await act(async () => {
-        await result.current.handleSlashCommand('/voicemodelcmd');
-      });
-
-      expect(mockOpenModelDialog).toHaveBeenCalledWith({
-        voiceModelMode: true,
-      });
     });
 
     it('should handle "dialog: vision-model" action', async () => {

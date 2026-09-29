@@ -280,22 +280,10 @@ describe('qwen sessions ps', () => {
   it('carries the kind into the JSON output, unfiltered', async () => {
     // This is the surface an aggregator reads to tell a user's own
     // terminals from sessions something else is driving, so the field has
-    // to survive the projection the token strip does.
+    // to survive the projection.
     listLiveSessions.mockResolvedValue([record({ kind: 'external' })]);
     await run({ json: true });
     expect(JSON.parse(stdout[0]).kind).toBe('external');
-  });
-
-  it('strips the inbox auth token from the JSON output', async () => {
-    listLiveSessions.mockResolvedValue([
-      record({ ipcPath: '/tmp/a.sock', ipcToken: 'secret-token' }),
-    ]);
-    await run({ json: true });
-
-    const emitted = JSON.parse(stdout[0]);
-    expect(emitted.ipcPath).toBe('/tmp/a.sock');
-    expect(emitted).not.toHaveProperty('ipcToken');
-    expect(stdout[0]).not.toContain('secret-token');
   });
 
   it('prints nothing on stdout for an empty JSON listing', async () => {

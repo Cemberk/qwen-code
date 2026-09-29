@@ -139,7 +139,6 @@ import {
   type QueuedGoalTurn,
 } from './useMessageQueue.js';
 import { classifyApiError } from '../../utils/classify-api-error.js';
-import { cleanupReviewWorktreeLeases } from '../../services/review-worktree-lease.js';
 import {
   getInlineImageData,
   MAX_INLINE_IMAGES_PER_ITEM,
@@ -4018,7 +4017,6 @@ export const useLlmStream = (
           streamingResponseLengthRef.current = 0;
         }
 
-        let cleanupReviewLease = false;
         let keepGoalBinding = false;
         try {
           // Emit user message to dual output sidecar (if enabled).
@@ -4121,7 +4119,6 @@ export const useLlmStream = (
           if (
             processingResult.status === StreamProcessingStatus.UserCancelled
           ) {
-            cleanupReviewLease = true;
             submitPromptOnCompleteRef.current = null;
             metadata?.onDeliveryFailed?.();
             return;
@@ -4221,7 +4218,6 @@ export const useLlmStream = (
           }
           const loopDetected = loopDetectedRef.current;
           if (loopDetected) {
-            cleanupReviewLease = true;
             loopDetectedRef.current = false;
             handleLoopDetectedEvent();
           }
@@ -4267,7 +4263,6 @@ export const useLlmStream = (
             }
           }
         } catch (error: unknown) {
-          cleanupReviewLease = true;
           metadata?.onDeliveryFailed?.();
           if (error instanceof UnauthorizedError) {
             onAuthError('Session expired or is unauthorized.');
@@ -4290,13 +4285,6 @@ export const useLlmStream = (
             });
           }
         } finally {
-          if (cleanupReviewLease && !config.getShellExecutionSandbox?.()) {
-            cleanupReviewWorktreeLeases({
-              sessionId: config.getSessionId(),
-              promptId: prompt_id!,
-              repositoryRoot: config.getProjectRoot(),
-            });
-          }
           submitPromptOnCompleteRef.current = null;
           activeModelStreamsRef.current = Math.max(
             0,

@@ -8,7 +8,6 @@ import { Storage, type Config } from '@qwen-code/qwen-code-core';
 import { RequestError } from '@agentclientprotocol/sdk';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { downloadSkill } from './skill-source-download.js';
 
 function toRecord(value: unknown): Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -41,15 +40,6 @@ function readRequiredString(value: unknown, fieldName: string): string {
   }
   return stringValue;
 }
-
-type QwenSkillInstallRequest = {
-  id: string;
-  slug: string;
-  name: string;
-  description?: string;
-  sourceUrl: string;
-  scope: 'global';
-};
 
 type QwenSkillDeleteRequest = {
   slug: string;
@@ -86,46 +76,6 @@ function validateSkillSlug(slug: string): void {
   ) {
     throw RequestError.invalidParams(undefined, 'Invalid skill.slug');
   }
-}
-
-function rejectInstallArtifactSlug(slug: string): void {
-  if (/\.(backup|installing)-\d+-\d+$/.test(slug)) {
-    throw RequestError.invalidParams(
-      undefined,
-      'Invalid skill.slug: name ends with a reserved install-artifact suffix',
-    );
-  }
-}
-
-function readSkillInstallRequest(
-  params: Record<string, unknown>,
-): QwenSkillInstallRequest {
-  const skillParams = toRecord(params['skill']);
-  const input = Object.keys(skillParams).length > 0 ? skillParams : params;
-  const slug = readRequiredString(input['slug'], 'skill.slug');
-  validateSkillSlug(slug);
-  rejectInstallArtifactSlug(slug);
-
-  const scope = readOptionalString(input['scope'], 'skill.scope') ?? 'global';
-  if (scope !== 'global') {
-    throw RequestError.invalidParams(
-      undefined,
-      'Only global skill installation is supported',
-    );
-  }
-
-  const description = readOptionalString(
-    input['description'],
-    'skill.description',
-  );
-  return {
-    id: readOptionalString(input['id'], 'skill.id') ?? slug,
-    slug,
-    name: readOptionalString(input['name'], 'skill.name') ?? slug,
-    ...(description ? { description } : {}),
-    sourceUrl: readRequiredString(input['sourceUrl'], 'skill.sourceUrl'),
-    scope,
-  };
 }
 
 function readSkillSlugRequest(
@@ -226,24 +176,9 @@ function setSkillFrontmatterEnabled(content: string, enabled: boolean): string {
   return `---\n${nextFrontmatter}\n---\n${body}`;
 }
 
-function resolveSkillInstallPath(
-  skillDir: string,
-  relativePath: string,
-): string {
-  const root = path.resolve(skillDir);
-  const target = path.resolve(skillDir, relativePath);
-  if (target !== root && !target.startsWith(root + path.sep)) {
-    throw RequestError.invalidParams(
-      undefined,
-      `Invalid skill file path: ${relativePath}`,
-    );
-  }
-  return target;
-}
-
 // Builds the per-skill directory and asserts (defense-in-depth, on top of
 // validateSkillSlug) that it stays strictly under the managed skills root, so a
-// crafted slug can never make install/delete operate on `<globalQwenDir>` itself.
+// crafted slug can never make delete operate on `<globalQwenDir>` itself.
 function resolveManagedSkillDir(skillsBaseDir: string, slug: string): string {
   const root = path.resolve(skillsBaseDir);
   const skillDir = path.resolve(skillsBaseDir, slug);
@@ -251,13 +186,6 @@ function resolveManagedSkillDir(skillsBaseDir: string, slug: string): string {
     throw RequestError.invalidParams(undefined, 'Invalid skill.slug');
   }
   return skillDir;
-}
-
-export async function installManagedSkill(
-  config: Config,
-  params: Record<string, unknown>,
-): Promise<Record<string, unknown>> {
-  return installSkillFromUrl(config, readSkillInstallRequest(params));
 }
 
 export async function deleteManagedSkill(
@@ -273,86 +201,6 @@ export async function setManagedSkillEnabled(
   cwd?: string,
 ): Promise<Record<string, unknown>> {
   return setGlobalSkillEnabled(config, readSkillSetEnabledRequest(params), cwd);
-}
-
-async function installSkillFromUrl(
-  config: Config,
-  request: QwenSkillInstallRequest,
-): Promise<Record<string, unknown>> {
-  const skillManager = config.getSkillManager();
-  if (!skillManager) {
-    throw RequestError.invalidParams(
-      undefined,
-      'SkillManager is not available',
-    );
-  }
-
-  const download = await downloadSkill(request.sourceUrl);
-  const skillsBaseDir = path.join(Storage.getGlobalQwenDir(), 'skills');
-  const skillDir = resolveManagedSkillDir(skillsBaseDir, request.slug);
-  const skillFile = path.join(skillDir, 'SKILL.md');
-  const parsed = skillManager.parseSkillContent(
-    download.skillContent,
-    skillFile,
-    'user',
-  );
-  if (parsed.name !== request.slug) {
-    throw RequestError.invalidParams(
-      undefined,
-      `Skill name "${parsed.name}" does not match requested slug "${request.slug}"`,
-    );
-  }
-
-  // Install atomically: stage all files in a sibling temp directory, then
-  // swap it in with a rollback-capable rename sequence. A mid-write failure
-  // (disk full, permission error) therefore leaves the previously installed
-  // skill intact instead of deleting it up front and ending up with a partial
-  // install. The rename-based swap also drops orphaned files from older
-  // versions, preserving the behavior of the previous rm-based approach.
-  const stagingDir = `${skillDir}.installing-${process.pid}-${Date.now()}`;
-  try {
-    await fs.rm(stagingDir, { recursive: true, force: true });
-    for (const file of download.files) {
-      const targetPath = resolveSkillInstallPath(stagingDir, file.relativePath);
-      await fs.mkdir(path.dirname(targetPath), { recursive: true });
-      await fs.writeFile(targetPath, file.content);
-    }
-    // Rollback-capable swap: backup the old directory, rename staging in,
-    // then remove the backup. On rename failure, restore the backup.
-    const backupDir = `${skillDir}.backup-${process.pid}-${Date.now()}`;
-    let backedUp = false;
-    try {
-      try {
-        await fs.rename(skillDir, backupDir);
-        backedUp = true;
-      } catch (err: unknown) {
-        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-        // Old directory doesn't exist, no backup needed.
-      }
-      await fs.rename(stagingDir, skillDir);
-    } catch (error) {
-      if (backedUp) {
-        await fs.rename(backupDir, skillDir).catch(() => {});
-      }
-      await fs.rm(stagingDir, { recursive: true, force: true }).catch(() => {});
-      throw error;
-    }
-    if (backedUp) {
-      await fs.rm(backupDir, { recursive: true, force: true }).catch(() => {});
-    }
-  } catch (error) {
-    await fs.rm(stagingDir, { recursive: true, force: true }).catch(() => {});
-    throw error;
-  }
-  await skillManager.refreshCache();
-
-  return {
-    id: request.id,
-    slug: parsed.name,
-    installed: true,
-    installedPath: skillFile,
-    sourceUrl: request.sourceUrl,
-  };
 }
 
 async function deleteGlobalSkill(

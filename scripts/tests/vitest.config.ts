@@ -24,7 +24,6 @@ export default defineConfig({
             // Bash-driven workflow suites cannot run on Windows; pure
             // YAML-parse workflow suites still do.
             'scripts/tests/qwen-*-workflow.test.js',
-            'scripts/tests/serve-ab-workflow.test.js',
           ]
         : [...configDefaults.exclude],
     setupFiles: ['scripts/tests/test-setup.ts'],

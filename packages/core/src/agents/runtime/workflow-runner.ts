@@ -76,10 +76,6 @@ import {
   describeWorkflowCompileError,
   type WorkflowMeta,
 } from './workflow-sandbox.js';
-import {
-  resolveReviewWorkflowLimits,
-  type ReviewWorkflowLimits,
-} from './review-workflow.js';
 
 export interface WorkflowRunnerOptions {
   config: Config;
@@ -364,7 +360,6 @@ export class WorkflowRunner {
     });
     let callerWasAbortedBeforeStart: boolean;
     let orchestrator: WorkflowOrchestrator;
-    let reviewLimits: ReviewWorkflowLimits | undefined;
     let scriptMeta: WorkflowMeta | null = null;
     try {
       const loaded = options.loadScript
@@ -377,13 +372,6 @@ export class WorkflowRunner {
           : undefined;
       script = loaded?.script ?? options.script ?? '';
       scriptPath = loaded?.scriptPath ?? options.scriptPath;
-      if (loaded && scriptPath && storage) {
-        reviewLimits = await resolveReviewWorkflowLimits(
-          scriptPath,
-          storage.getGeneratedWorkflowsDir(),
-          script,
-        );
-      }
       const workflowName =
         options.workflowName ??
         loaded?.savedWorkflowName ??
@@ -533,7 +521,6 @@ export class WorkflowRunner {
                     )
                   : () => undefined
             : undefined,
-          reviewLimits?.subagent,
         );
       orchestrator = new WorkflowOrchestrator(dispatch);
       const registration: WorkflowTaskRegistration = {
@@ -744,7 +731,7 @@ export class WorkflowRunner {
     };
 
     const scheduler = new WorkflowDispatchScheduler(
-      reviewLimits?.concurrency ?? resolveConcurrencyLimit(),
+      resolveConcurrencyLimit(),
       controller.signal,
       ({ state }) => {
         if (!isCurrentEntry()) return;
@@ -763,7 +750,6 @@ export class WorkflowRunner {
           const outcome = await orchestrator.run({
             script,
             args: options.args,
-            maxWallClockMs: reviewLimits?.maxWallClockMs,
             abortOnTimeout: controller,
             runId,
             emitter,

@@ -54,10 +54,6 @@ You'll be prompted to log in on first use. That's it! [Continue with Quickstart 
 >
 > See [troubleshooting](./support/troubleshooting) if you hit issues.
 
-> [!note]
->
-> **New VS Code Extension (Beta)**: Prefer a graphical interface? Our new **VS Code extension** provides an easy-to-use native IDE experience without requiring terminal familiarity. Simply install from the marketplace and start coding with Qwen Code directly in your sidebar. Download and install the [Qwen Code Companion](https://marketplace.visualstudio.com/items?itemName=qwenlm.qwen-code-vscode-ide-companion) now.
-
 ## What Qwen Code does for you
 
 - **Build features from descriptions**: Tell Qwen Code what you want to build in plain language. It will make a plan, write the code, and ensure it works.

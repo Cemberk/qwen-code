@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 
@@ -35,7 +35,7 @@ describe('e2e workflow', () => {
     expect(group).toContain('github.head_ref || github.ref_name');
   });
 
-  it('isolates child-process-heavy suites from the three parallel forks', () => {
+  it('runs the E2E batch on three parallel forks', () => {
     const linuxJob = yml.jobs['e2e-test-linux'];
     const runStep = linuxJob.steps.find(
       (step) => step.name === 'Run E2E tests',
@@ -49,45 +49,12 @@ describe('e2e workflow', () => {
     expect(e2eRunScript).toContain(
       'QWEN_E2E_RENDERER=ink npm run test:integration:sandbox:none -- "$@"',
     );
-    expect(
-      e2eRunScript.match(/--exclude '\*\*\/qwen-serve-routes\.test\.ts'/g),
-    ).toHaveLength(1);
-    expect(
-      e2eRunScript.match(/--exclude '\*\*\/sdk-typescript\/\*\*'/g),
-    ).toHaveLength(1);
-    expect(e2eRunScript).toContain(
-      'run_vitest sdk-typescript cli/qwen-serve-routes.test.ts --poolOptions.forks.maxForks=1',
-    );
+    expect(e2eRunScript).toContain('--poolOptions.forks.maxForks=3');
     expect(e2eRunScript).not.toContain('--poolOptions.forks.singleFork');
-    // The arrangement is load-bearing: the batch must run first and the
-    // isolated suites second, joined by `&&` with no other command between
-    // or after. Counts and substrings are order- and backgrounding-blind;
-    // the pattern tolerates formatting-only rewrites (continuations, comment
-    // lines, trailing spaces) so a benign edit cannot turn CI red.
-    expect(e2eRunScript).toMatch(
-      /run_vitest "\$\{bulk_args\[@\]\}"[ \t]*&&[ \t]*\\?\n?(?:[ \t]*#[^\n]*\n)*[ \t]*run_vitest sdk-typescript cli\/qwen-serve-routes\.test\.ts --poolOptions\.forks\.maxForks=1[ \t]*\n\}/,
-    );
-    // Text pins never touch the tree: renaming the file or directory these
-    // filters name silently returns the suites to the three-fork batch.
-    expect(existsSync('integration-tests/cli/qwen-serve-routes.test.ts')).toBe(
-      true,
-    );
-    expect(existsSync('integration-tests/sdk-typescript')).toBe(true);
-    expect(existsSync('integration-tests/channel-plugin.test.ts')).toBe(true);
-    expect(
-      existsSync('integration-tests/chat-transcript-document.test.ts'),
-    ).toBe(true);
+    // Text pins never touch the tree: renaming the file this filter names
+    // silently returns the suite to the three-fork batch.
     expect(
       existsSync('integration-tests/interactive/cron-interactive.test.ts'),
-    ).toBe(true);
-    // existsSync pins the directory's name, not its contents: suites moved
-    // out of it would rejoin the three-fork batch through the dead exclude,
-    // while vitest silently ignores a positional filter that matches nothing
-    // as long as a sibling filter still matches.
-    expect(
-      readdirSync('integration-tests/sdk-typescript').some((file) =>
-        file.endsWith('.test.ts'),
-      ),
     ).toBe(true);
   });
 

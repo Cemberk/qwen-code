@@ -54,26 +54,6 @@ const imports = [
     './bridgeOptions.js',
   ],
   [
-    'LIVE_TASK_TOOL_NAMES',
-    'packages/cli/src/acp-integration/live/live-task-tools.ts',
-    '@qwen-code/acp-bridge/bridgeOptions',
-  ],
-  [
-    'LIVE_TASK_TOOL_NAMES',
-    'packages/cli/src/serve/live/live-task-service.ts',
-    '@qwen-code/acp-bridge/bridgeOptions',
-  ],
-  [
-    'LiveTaskToolName',
-    'packages/cli/src/acp-integration/live/live-task-tools.ts',
-    '@qwen-code/acp-bridge/bridgeOptions',
-  ],
-  [
-    'LiveTaskToolName',
-    'packages/cli/src/serve/live/live-task-service.ts',
-    '@qwen-code/acp-bridge/bridgeOptions',
-  ],
-  [
     'MAX_SUB_SESSION_PROMPT_CHARS',
     'packages/core/src/tools/create-sub-session.ts',
     './sub-session-constants.js',

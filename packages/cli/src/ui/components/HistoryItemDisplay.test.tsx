@@ -236,7 +236,6 @@ describe('<HistoryItemDisplay />', () => {
         sandboxEnv: 'test-env',
         modelVersion: 'test-model',
         selectedAuthType: 'test-auth',
-        ideClient: 'test-ide',
         sessionId: 'test-session-id',
         memoryUsage: '100 MB',
         baseUrl: undefined,

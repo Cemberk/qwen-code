@@ -411,12 +411,6 @@ export function applySkillHooks(
   }
 }
 
-export class ReviewWorkflowActivationError extends Error {
-  constructor(cause: unknown) {
-    super(cause instanceof Error ? cause.message : String(cause), { cause });
-  }
-}
-
 /**
  * Applies every side effect a skill declares — `allowedTools` session allow
  * rules and frontmatter `hooks:` — behind the single folder-trust gate.
@@ -430,12 +424,11 @@ export class ReviewWorkflowActivationError extends Error {
  *
  * The registrations dedup, so calling this repeatedly for the same
  * skill is safe — and necessary, since folder trust can be granted mid-session.
- * Await review workflow registration before returning the skill to the model.
  */
 export async function applySkillSideEffects(
   config:
     | (Pick<Config, 'getHookSystem' | 'getSessionId' | 'getPermissionManager'> &
-        Pick<Config, 'isTrustedFolder' | 'enableReviewWorkflow'>)
+        Pick<Config, 'isTrustedFolder'>)
     | null
     | undefined,
   skill: SkillConfig,
@@ -455,13 +448,6 @@ export async function applySkillSideEffects(
     trustGated: skill.level === 'project',
   });
   applySkillHooks(config, skill);
-  if (skill.level === 'bundled' && skill.name === 'review') {
-    try {
-      await config.enableReviewWorkflow();
-    } catch (error) {
-      throw new ReviewWorkflowActivationError(error);
-    }
-  }
 }
 
 /**

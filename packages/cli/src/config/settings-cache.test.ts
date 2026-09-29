@@ -20,7 +20,6 @@ vi.mock('node:os', async (importOriginal) => {
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { ideContextStore } from '@qwen-code/qwen-code-core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearSettingsCacheForTesting,
@@ -67,9 +66,6 @@ describe('loadSettingsCached', () => {
     resetHomeEnvBootstrapForTesting();
     resetEnvironmentTrackingForTesting();
     resetTrustedFoldersForTesting();
-    // IDE trust feeds the ideTrust fingerprint component; clear it so state
-    // never leaks between tests.
-    ideContextStore.clear();
   };
 
   beforeEach(() => {
@@ -213,19 +209,6 @@ describe('loadSettingsCached', () => {
     expect(second).not.toBe(first);
   });
 
-  it('reloads when IDE trust state flips', () => {
-    // The ideTrust fingerprint component guards against a stale trust/merge
-    // result: IDE trust is the one trust input that can change within a live
-    // process (trustedFolders.json is a permanent singleton, folder-trust
-    // toggles live in the settings files themselves).
-    const first = loadSettingsCached(workspaceDir);
-
-    ideContextStore.set({ workspaceState: { isTrusted: true } });
-
-    const second = loadSettingsCached(workspaceDir);
-    expect(second).not.toBe(first);
-  });
-
   it('returns a fresh instance after setValue persisted a change', () => {
     writeJson(userSettingsPath(), versioned({ model: { name: 'initial' } }));
     const first = loadSettingsCached(workspaceDir);
@@ -240,27 +223,21 @@ describe('loadSettingsCached', () => {
   it('falls open to a reload when fingerprint validation throws', () => {
     // Fail-open is a core invariant: an unexpected error while checking the
     // fingerprint must degrade to a full reload, never surface. isEntryFresh
-    // reads ideContextStore first, so making that throw exercises the
-    // hit-path fail-open (and the caching fail-open, since the rebuilt
-    // fingerprint reads it too). loadSettings itself does not read it here
-    // (the workspace dir is not process.cwd()), so the reload still succeeds.
+    // resolves os.homedir() for the homeDir component, so making the next
+    // homedir lookup throw exercises the hit-path fail-open while the reload
+    // itself still succeeds.
     writeJson(userSettingsPath(), versioned({ model: { name: 'ok' } }));
     const first = loadSettingsCached(workspaceDir);
 
-    const trustSpy = vi.spyOn(ideContextStore, 'get').mockImplementation(() => {
+    vi.mocked(os.homedir).mockImplementationOnce(() => {
       throw new Error('boom');
     });
     const second = loadSettingsCached(workspaceDir);
     expect(second).not.toBe(first); // reloaded, not a propagated error
     expect(second.merged.model?.name).toBe('ok'); // ...and still correct
 
-    // Recovery: the degraded call could not cache (rebuilding the fingerprint
-    // also threw), so this first post-recovery call is itself a miss, then
-    // subsequent calls hit normally.
-    trustSpy.mockRestore();
-    const third = loadSettingsCached(workspaceDir);
-    expect(third.merged.model?.name).toBe('ok');
-    expect(loadSettingsCached(workspaceDir)).toBe(third);
+    // Recovery: the reload re-cached normally, so the next call hits.
+    expect(loadSettingsCached(workspaceDir)).toBe(second);
   });
 
   it('does not cache a load failure and recovers once the file is fixed', () => {

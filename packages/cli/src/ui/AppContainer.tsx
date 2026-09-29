@@ -38,18 +38,7 @@ import { MessageType, StreamingState } from './types.js';
 import {
   type EditorType,
   type Config,
-  type IdeInfo,
-  type IdeContext,
-  IdeClient,
-  ideContextStore,
   createDebugLogger,
-  describeDeliveryStatus,
-  describeDropReason,
-  PEER_ADMISSION_LIMITS,
-  parseHeldExpiry,
-  describeHoldCause,
-  describePeerInboxFailure,
-  flattenPeerLabel,
   getErrorMessage,
   getAllMemoryFilenames,
   ShellExecutionService,
@@ -108,11 +97,7 @@ import {
   profileCheckpoint,
   finalizeStartupProfile,
 } from '../utils/startupProfiler.js';
-import {
-  AppEvent,
-  appEvents,
-  type StartupIdeConnectionStatus,
-} from '../utils/events.js';
+import { appEvents } from '../utils/events.js';
 import process from 'node:process';
 
 /**
@@ -135,7 +120,6 @@ const STARTUP_PROFILE_FINALIZE_CAP_MS = 35_000;
 import { useHistory } from './hooks/useHistoryManager.js';
 import { useMemoryMonitor } from './hooks/useMemoryMonitor.js';
 import { useWakeRepaint } from './hooks/use-wake-repaint.js';
-import type { MicrophonePermission } from './hooks/use-voice-input.js';
 import { useThemeCommand } from './hooks/useThemeCommand.js';
 import { useFeedbackDialog } from './hooks/useFeedbackDialog.js';
 import { useAuthCommand } from './auth/useAuth.js';
@@ -194,7 +178,7 @@ import {
 import { buildWorkflowKeywordPrefix } from './utils/workflow-keyword.js';
 import { buildWorkflowSizeGuidelineChangePrefix } from './utils/workflow-size-notice.js';
 import { parseSlashCommand } from './commands/commands.js';
-import { type LoadedSettings, SettingScope } from '../config/settings.js';
+import { type LoadedSettings } from '../config/settings.js';
 import { type InitializationResult } from '../core/initializer.js';
 import { ExtensionRefreshState } from '../config/extension-refresh-state.js';
 import { useFocus } from './hooks/useFocus.js';
@@ -206,8 +190,6 @@ import { useLoadingIndicator } from './hooks/useLoadingIndicator.js';
 import { useTerminalProgress } from './hooks/useTerminalProgress.js';
 import { useFolderTrust } from './hooks/useFolderTrust.js';
 import { useMcpApproval } from './hooks/useMcpApproval.js';
-import { useIdeTrustListener } from './hooks/useIdeTrustListener.js';
-import { type IdeIntegrationNudgeResult } from './IdeIntegrationNudge.js';
 import { type CommandMigrationNudgeResult } from './CommandFormatMigrationNudge.js';
 import { useCommandMigration } from './hooks/useCommandMigration.js';
 import { migrateTomlCommands } from '../services/command-migration-tool.js';
@@ -266,15 +248,6 @@ import { useContextualTips } from './hooks/useContextualTips.js';
 import { getTipHistory } from '../services/tips/index.js';
 import { restorePromptStash } from '../services/prompt-stash.js';
 import { useRemoteInput } from '../remoteInput/RemoteInputContext.js';
-import {
-  usePeerInboxFailure,
-  usePeerMessaging,
-} from '../peerMessaging/PeerMessagingContext.js';
-import {
-  MAX_ACCEPTED_BACKLOG,
-  type PeerMessaging,
-} from '../peerMessaging/peer-messaging.js';
-import { inboundPolicyScope } from '../peerMessaging/inbound-policy-scope.js';
 import { useDualOutput } from '../dualOutput/DualOutputContext.js';
 import {
   requestConsentInteractive,
@@ -391,12 +364,9 @@ export function useQueuedSubmissionDrain({
   popNextSubmission,
   enqueueGoalTurn,
   restoreMessages,
-  restorePeerMessage,
-  addHistoryItem,
   submitQuery,
   submissionInFlightRef,
   submissionSettledRevision,
-  peerMessaging,
 }: {
   config: Config;
   isConfigInitialized: boolean;
@@ -408,12 +378,9 @@ export function useQueuedSubmissionDrain({
   popNextSubmission: UseMessageQueueReturn['popNextSubmission'];
   enqueueGoalTurn: UseMessageQueueReturn['enqueueGoalTurn'];
   restoreMessages: UseMessageQueueReturn['restoreMessages'];
-  restorePeerMessage: UseMessageQueueReturn['restorePeerMessage'];
-  addHistoryItem: (item: HistoryItemWithoutId, timestamp: number) => number;
   submitQuery: ReturnType<typeof useLlmStream>['submitQuery'];
   submissionInFlightRef: RefObject<boolean>;
   submissionSettledRevision: number;
-  peerMessaging?: PeerMessaging | null;
 }) {
   const goalRuntimeSessionId = config.getSessionId();
   const [goalQueueRevision, setGoalQueueRevision] = useState(0);
@@ -448,8 +415,7 @@ export function useQueuedSubmissionDrain({
         streamingState === admissionFailure.streamingState &&
         isProcessing === admissionFailure.isProcessing &&
         // A settle ends the turn the failed submission could not join;
-        // without this an idle session parks the restored entry forever
-        // while its sender holds a live 'delivered' receipt.
+        // without this an idle session parks the restored entry forever.
         submissionSettledRevision === admissionFailure.submissionSettledRevision
       ) {
         return;
@@ -484,13 +450,6 @@ export function useQueuedSubmissionDrain({
     }
     const submission = popNextSubmission(goalControlMode);
     if (submission === null) return;
-    if (
-      submission.kind === 'peer' &&
-      peerMessaging?.drainQueuedFrame(submission.delivery) === false
-    ) {
-      setQueueDrainNonce((nonce) => nonce + 1);
-      return;
-    }
 
     queueDrainingRef.current = true;
     let admissionFailed = false;
@@ -514,49 +473,6 @@ export function useQueuedSubmissionDrain({
           goal: submission,
           onAdmissionFailed: () => {
             enqueueGoalTurn(submission);
-            markAdmissionFailed();
-          },
-        },
-      );
-    } else if (submission.kind === 'peer') {
-      // Peer envelopes skip user-input preprocessing (slash/shell/@):
-      // the text is peer-authored, so submit them on the Teammate send
-      // type, whose early return exists for exactly this hazard. That
-      // path suppresses the user bubble, so render the one-line
-      // projection in its place — once: a failed admission restores the
-      // entry and retries, and re-rendering would stack an identical
-      // notification per retry while the model receives one message.
-      if (!submission.displayed) {
-        addHistoryItem(
-          { type: MessageType.NOTIFICATION, text: submission.displayText },
-          Date.now(),
-        );
-      }
-      request = submitQuery(
-        submission.modelText,
-        SendMessageType.Teammate,
-        undefined,
-        {
-          // Every other Teammate submitter passes the projection: the
-          // record stores it, and /resume falls back to the raw parts
-          // (the full envelope) without it.
-          notificationDisplayText: submission.displayText,
-          onAdmissionFailed: () => {
-            restorePeerMessage(
-              submission.modelText,
-              submission.displayText,
-              true,
-              submission.delivery,
-            );
-            markAdmissionFailed();
-          },
-          onDeliveryFailed: () => {
-            restorePeerMessage(
-              submission.modelText,
-              submission.displayText,
-              true,
-              submission.delivery,
-            );
             markAdmissionFailed();
           },
         },
@@ -612,12 +528,9 @@ export function useQueuedSubmissionDrain({
     isConfigInitialized,
     isProcessing,
     pendingSubmissionCount,
-    peerMessaging,
     popNextSubmission,
     queueDrainNonce,
     restoreMessages,
-    restorePeerMessage,
-    addHistoryItem,
     streamingState,
     submissionInFlightRef,
     submissionSettledRevision,
@@ -1089,11 +1002,6 @@ export const AppContainer = (props: AppContainerProps) => {
 
   // Layout measurements
   const mainControlsRef = useRef<DOMElement>(null);
-  // Dedup for the voice mic-permission notice. Held here rather than in
-  // Composer because dialogs (tool approvals, auth, settings) swap Composer
-  // out of the layout; a ref held there would reset on each swap and the
-  // notice would repeat on the next recording.
-  const voiceMicWarnedStatusRef = useRef<MicrophonePermission | null>(null);
   const lastTitleRef = useRef<string | null>(null);
   const [startupWarnings, setStartupWarnings] = useState(
     () => props.startupWarnings || [],
@@ -1333,11 +1241,6 @@ export const AppContainer = (props: AppContainerProps) => {
       }
     });
 
-    registerCleanup(async () => {
-      if (config.getShellExecutionSandbox?.()) return;
-      const ideClient = await IdeClient.getInstance();
-      await ideClient.disconnect();
-    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config]);
 
@@ -1832,7 +1735,6 @@ export const AppContainer = (props: AppContainerProps) => {
     isModelDialogOpen,
     isFastModelMode,
     isAdvisorModelMode,
-    isVoiceModelMode,
     isVisionModelMode,
     isCompactionModelMode,
     isImageModelMode,
@@ -2615,7 +2517,6 @@ export const AppContainer = (props: AppContainerProps) => {
     peekNextUserBatchKey,
     hasQueuedUserMessages,
     getPendingSubmissionCount,
-    getQueuedPeerCount,
     claimGoalTurn,
     claimDirectUserAdmission,
     removeGoalTurns,
@@ -2623,8 +2524,6 @@ export const AppContainer = (props: AppContainerProps) => {
     popAllMessages,
     restoreMessages,
     drainQueue,
-    addPeerMessage,
-    restorePeerMessage,
   } = useMessageQueue();
 
   midTurnDrainRef.current = drainQueue;
@@ -2696,270 +2595,6 @@ export const AppContainer = (props: AppContainerProps) => {
       return true;
     });
   }, [addMessage, remoteInput]);
-
-  // Cross-session messaging: accepted peer messages enter the same queue as
-  // typed input but drain on their own path — the queue marks them peer,
-  // and the drain submits them with a send type that skips user-input
-  // preprocessing, because the text is peer-authored: a `@path` inside it
-  // would otherwise read files into the context with no user interaction.
-  // First argument is the model-bound text and must stay the full
-  // envelope — it carries the attribution and the authority notice; the
-  // one-line form rides along as the display projection, never as the
-  // model's copy.
-  const peerMessaging = usePeerMessaging();
-  useEffect(() => {
-    if (!peerMessaging) return;
-    peerMessaging.setSubmitFn(
-      (modelText: string, displayText: string, delivery) => {
-        // Refuse once the queue's pending backlog reaches the cap: peer
-        // frames arrive at socket speed but drain at one per turn, and the
-        // queue must not grow unboundedly for a busy session.
-        if (getPendingSubmissionCount() >= MAX_ACCEPTED_BACKLOG) return false;
-        addPeerMessage(modelText, displayText, delivery);
-        return true;
-      },
-    );
-    // close() settles whatever is still queued with a corrective receipt;
-    // it needs the current depth to tell consumed entries from queued ones.
-    peerMessaging.setQueuedPeerCount(getQueuedPeerCount);
-  }, [
-    addPeerMessage,
-    getPendingSubmissionCount,
-    getQueuedPeerCount,
-    peerMessaging,
-  ]);
-
-  // Surface parked messages. The model never sees a held message, so
-  // without a notice the only symptom is a peer that seems to be ignored.
-  // Only ids that are newly held are announced: the gate emits on every
-  // change to the set, so announcing every emission would print "held a
-  // message" again when /peers released one of three — indistinguishable
-  // from a new arrival. Announcements are additionally gated on the set
-  // *growing*: once the hold buffer is full, every further frame evicts
-  // the oldest while arriving with a fresh id, and announcing those would
-  // grow the history (and re-render) once per frame — the leak the hold
-  // buffer's ceiling exists to prevent, one layer up.
-  const announcedHoldsRef = useRef<ReadonlySet<string>>(new Set());
-  const announcedCountRef = useRef(0);
-  useEffect(() => {
-    if (!peerMessaging) return;
-    return peerMessaging.onHeldChange((held) => {
-      const announced = announcedHoldsRef.current;
-      const fresh = held.filter((entry) => !announced.has(entry.frame.msgId));
-      // Track the gate's set exactly, so ids it dropped are forgotten
-      // rather than accumulating for the life of the session.
-      announcedHoldsRef.current = new Set(
-        held.map((entry) => entry.frame.msgId),
-      );
-      const grew = held.length > announcedCountRef.current;
-      announcedCountRef.current = held.length;
-      const newest = fresh.at(-1);
-      if (!newest || !grew) return;
-      historyManager.addItem(
-        {
-          type: MessageType.INFO,
-          text:
-            `Held a message from ${
-              newest.controller
-                ? `a trusted controller (${flattenPeerLabel(
-                    newest.controller.label,
-                  )})`
-                : newest.selfSent
-                  ? 'a process this session started'
-                  : 'another session'
-            } (${describeHoldCause(newest.cause, newest.policyScope)}). ` +
-            `${held.length} waiting — /peers to review.`,
-        },
-        Date.now(),
-      );
-    });
-  }, [historyManager, peerMessaging]);
-
-  // Surface what became of messages this session sent. A 'held' or
-  // 'denied' receipt is the only way to learn that a peer's user is
-  // sitting on — or threw away — a message the model was told was sent;
-  // without it the sender reads silence as delivery. 'delivered' is the
-  // expected outcome and is only worth a line when it ends a hold the
-  // user already saw announced. Receipts for ids this session never sent,
-  // and receipts that repeat a state, are dropped before they reach here
-  // — so neither a stranger nor a chatty peer can fill the history with
-  // them, and nothing here needs to remember what was announced.
-  useEffect(() => {
-    if (!peerMessaging) return;
-    return peerMessaging.onReceipt((receipt) => {
-      const { status, address, previous } = receipt;
-      if (status === 'delivered' && previous !== 'held') return;
-      // A dropped receipt can stand for a burst, so it says how many
-      // rather than repeating itself — the whole reason the far side
-      // folded it was to keep a flood from becoming this many lines.
-      if (status === 'dropped') {
-        const count = receipt.dropped ?? 1;
-        const why = receipt.dropReason
-          ? ` — ${describeDropReason(receipt.dropReason)}`
-          : '';
-        // A repeat is the one reason that does not mean "unsent": the
-        // receiver turned it away *because* the identical text was
-        // already accepted there. Advising a fold would have the model
-        // reword it and get the same instruction delivered twice.
-        const advice =
-          receipt.dropReason === 'duplicate'
-            ? count === 1
-              ? ' The identical message was accepted there within the last ' +
-                `${PEER_ADMISSION_LIMITS.dedupWindowMs / 1000} s, so there is nothing to re-send.`
-              : ' The identical messages were accepted there within the last ' +
-                `${PEER_ADMISSION_LIMITS.dedupWindowMs / 1000} s, so there is nothing to re-send.`
-            : count === 1
-              ? ' Treat it as unsent; fold what still matters into one later message.'
-              : ' Treat them as unsent; fold what still matters into one later message.';
-        historyManager.addItem(
-          {
-            type: MessageType.INFO,
-            text:
-              count === 1
-                ? `Message to ${address}: it was dropped at that session's inbox${why}.${advice}`
-                : `Messages to ${address}: ${count} were dropped at that session's inbox${why}.${advice}`,
-          },
-          Date.now(),
-        );
-        return;
-      }
-      // The wire text for `expired` speaks of a held message, which is
-      // only right when the message was held. A delivery corrected to
-      // expired means the session exited with it unread. An expiry with
-      // no delivery at all usually means the message arrived as that
-      // session was shutting down — but `previous` records what this
-      // sender *heard*, not what the receiver did, and a `held` receipt
-      // can be lost to the outbound ceiling under exactly the flood this
-      // feature is about, so the claim stays disjunctive and keeps the
-      // advice.
-      const detail =
-        status !== 'expired'
-          ? describeDeliveryStatus(status)
-          : previous === 'delivered'
-            ? 'That session exited before it read your message; it was not delivered.'
-            : previous === 'held'
-              ? describeDeliveryStatus(status)
-              : 'Your message was not delivered; that session was shutting down, or could not keep it. Retry once it is idle.';
-      historyManager.addItem(
-        {
-          type: MessageType.INFO,
-          text: `Message to ${address}: ${detail}`,
-        },
-        Date.now(),
-      );
-    });
-  }, [historyManager, peerMessaging]);
-
-  // Say when a peer is being turned away at this session's own inbox.
-  // Already throttled to one line per sender per minute, carrying the
-  // count of what it stands for: a message about a flood that scaled
-  // with the flood would do to the transcript what the flood was going
-  // to do anyway.
-  useEffect(() => {
-    if (!peerMessaging) return;
-    return peerMessaging.onDropped(({ frame, origin, reason, suppressed }) => {
-      const name = flattenPeerLabel(frame.fromName ?? '');
-      const address = frame.from ? flattenPeerLabel(frame.from) : '';
-      // Same attribution the delivered envelope uses, and for the same
-      // reason: a controller is named by the label its user gave it, and
-      // a sender's own `fromName` never decides which of the three this
-      // line calls it.
-      // The trust category first, then whatever the sender called itself.
-      // `fromName` is peer-chosen and not unique, so a line that led with
-      // it could read as the user's own session — and the two sibling
-      // lines (the held notice above, and the delivered envelope) both
-      // state the category.
-      const who =
-        name.length > 0 ? (address ? `${name} (${address})` : name) : address;
-      const selfSentWho = name || address;
-      const sender = origin.controller
-        ? `a trusted controller (${flattenPeerLabel(origin.controller.label)})`
-        : origin.selfSent
-          ? selfSentWho
-            ? `a process this session started (${selfSentWho})`
-            : 'a process this session started'
-          : who
-            ? `another session (${who})`
-            : 'another session';
-      // A rate limit has two walls and the verdict does not say which, so
-      // the wording names the one thing that is certainly true: this
-      // session is over its limit. Asserting the *sender's* own rate
-      // would accuse a peer that sent one message while somebody else
-      // filled the shared bucket.
-      const cause =
-        reason === 'rate-limited'
-          ? 'this session is taking peer messages faster than it accepts them'
-          : reason === 'duplicate'
-            ? `it repeated its previous message within ${PEER_ADMISSION_LIMITS.dedupWindowMs / 1000} s`
-            : "this session's queue of undelivered peer messages is full";
-      historyManager.addItem(
-        {
-          type: MessageType.INFO,
-          text:
-            `Dropped a message from ${sender}: ${cause}.` +
-            // Not "similar": once the session-wide notice budget is spent
-            // the count carries other senders' and other reasons' drops
-            // too, and naming one peer beside a total that is not its own
-            // is how the wrong peer gets blamed for a flood.
-            (suppressed > 0
-              ? ` (+${suppressed} more dropped during this notice window)`
-              : ''),
-        },
-        Date.now(),
-      );
-    });
-  }, [historyManager, peerMessaging]);
-
-  // Say so when the inbox could not bind. With the feature on, a session
-  // without an inbox is unreachable, and its only other symptom is peers
-  // reporting it absent — a problem the user would otherwise discover
-  // from the wrong side. One line, once, with the cause and what to do.
-  const peerInboxFailure = usePeerInboxFailure();
-  const announcedInboxFailureRef = useRef(false);
-  useEffect(() => {
-    if (!peerInboxFailure || announcedInboxFailureRef.current) return;
-    announcedInboxFailureRef.current = true;
-    historyManager.addItem(
-      {
-        type: MessageType.ERROR,
-        text: `Cross-session messaging is OFF for this session — the inbox could not bind: ${describePeerInboxFailure(peerInboxFailure)}`,
-      },
-      Date.now(),
-    );
-  }, [historyManager, peerInboxFailure]);
-
-  // A held message may only be waiting on a mode mismatch, so re-run the
-  // gate whenever the approval mode changes rather than making the user
-  // approve something the new mode would have accepted outright.
-  const approvalModeForPeers = config.getApprovalMode();
-  useEffect(() => {
-    peerMessaging?.reevaluate('approval-mode-changed');
-  }, [approvalModeForPeers, peerMessaging]);
-
-  // Both settings reload live (`requiresRestart: false`). Policy and expiry
-  // change the verdict for parked messages; a scope-only change refreshes
-  // the explanation shown for them. Nothing else re-runs the gate: parking
-  // under `never` arms no timer at all, so a later edit to `1m` would
-  // otherwise leave the backlog held until session exit while `/peers`
-  // counted down from the new value.
-  //
-  // Keyed on the parsed lifetime, policy, and effective scope rather than
-  // on any settings edit, because `reevaluate` also settles a parked backlog
-  // as `denied` under a refuse policy -- an unrelated key edit must not
-  // discard the user's backlog.
-  const heldExpiryForPeers = parseHeldExpiry(
-    settings.merged.agents?.crossSessionHeldExpiry,
-  );
-  const inboundPolicyForPeers = settings.merged.agents?.crossSessionInbound;
-  const inboundPolicyScopeForPeers = inboundPolicyScope(settings);
-  useEffect(() => {
-    peerMessaging?.reevaluate('held-expiry-changed');
-  }, [
-    heldExpiryForPeers,
-    inboundPolicyForPeers,
-    inboundPolicyScopeForPeers,
-    peerMessaging,
-  ]);
 
   // Notify remote input watcher when TUI becomes idle so it can
   // retry queued commands that were deferred while TUI was busy.
@@ -3908,28 +3543,6 @@ export const AppContainer = (props: AppContainerProps) => {
     }
   }, [promptSuggestion]);
 
-  const [idePromptAnswered, setIdePromptAnswered] = useState(false);
-  const [currentIDE, setCurrentIDE] = useState<IdeInfo | null>(null);
-  const [startupIdeConnectionStatus, setStartupIdeConnectionStatus] =
-    useState<StartupIdeConnectionStatus>({ state: 'idle' });
-
-  useEffect(() => {
-    if (config.getShellExecutionSandbox?.()) return;
-    const getIde = async () => {
-      const ideClient = await IdeClient.getInstance();
-      const currentIde = ideClient.getCurrentIde();
-      setCurrentIDE(currentIde || null);
-    };
-    getIde();
-  }, [config]);
-  const shouldShowIdePrompt = Boolean(
-    !config.getShellExecutionSandbox?.() &&
-      currentIDE &&
-      !config.getIdeMode() &&
-      !settings.merged.ide?.hasSeenNudge &&
-      !idePromptAnswered,
-  );
-
   // Command migration nudge
   const {
     showMigrationNudge: shouldShowCommandMigrationNudge,
@@ -3980,11 +3593,7 @@ export const AppContainer = (props: AppContainerProps) => {
   const [isRewindSelectorOpen, setIsRewindSelectorOpen] = useState(false);
   const [rewindEscPending, setRewindEscPending] = useState(false);
   const [constrainHeight, setConstrainHeight] = useState<boolean>(true);
-  const [ideContextState, setIdeContextState] = useState<
-    IdeContext | undefined
-  >();
   const [showEscapePrompt, setShowEscapePrompt] = useState(false);
-  const [showIdeRestartPrompt, setShowIdeRestartPrompt] = useState(false);
 
   const { isFolderTrustDialogOpen, handleFolderTrustSelect, isRestarting } =
     useFolderTrust(settings, setIsTrustedFolder);
@@ -3995,10 +3604,6 @@ export const AppContainer = (props: AppContainerProps) => {
     mcpApprovalRemaining,
     handleMcpApprovalSelect,
   } = useMcpApproval(config);
-  const {
-    needsRestart: ideNeedsRestart,
-    restartReason: ideTrustRestartReason,
-  } = useIdeTrustListener(!config.getShellExecutionSandbox?.());
   const {
     isFeedbackDialogOpen,
     openFeedbackDialog,
@@ -4014,7 +3619,6 @@ export const AppContainer = (props: AppContainerProps) => {
   });
   const dialogsVisible =
     showWelcomeBackDialog ||
-    shouldShowIdePrompt ||
     shouldShowCommandMigrationNudge ||
     isFolderTrustDialogOpen ||
     isMcpApprovalDialogOpen ||
@@ -4036,7 +3640,6 @@ export const AppContainer = (props: AppContainerProps) => {
     isAuthDialogOpen ||
     isAuthenticating ||
     isEditorDialogOpen ||
-    showIdeRestartPrompt ||
     isSubagentCreateDialogOpen ||
     isAgentsManagerDialogOpen ||
     isSkillsManagerDialogOpen ||
@@ -4184,53 +3787,18 @@ export const AppContainer = (props: AppContainerProps) => {
   // render strands border characters on screen.
   useWakeRepaint(wakeRepaint);
 
-  useEffect(() => {
-    if (ideNeedsRestart) {
-      // IDE trust changed, force a restart.
-      setShowIdeRestartPrompt(true);
-    }
-  }, [ideNeedsRestart]);
-
-  useEffect(() => {
-    const unsubscribe = ideContextStore.subscribe(setIdeContextState);
-    setIdeContextState(ideContextStore.get());
-    return unsubscribe;
-  }, []);
-
-  useEffect(() => {
-    const listener = (status: StartupIdeConnectionStatus) => {
-      setStartupIdeConnectionStatus(status);
-    };
-    appEvents.on(AppEvent.StartupIdeConnectionStatusChanged, listener);
-    return () => {
-      appEvents.off(AppEvent.StartupIdeConnectionStatusChanged, listener);
-    };
-  }, []);
-
   const handleEscapePromptChange = useCallback((showPrompt: boolean) => {
     setShowEscapePrompt(showPrompt);
   }, []);
 
   // --- Rewind selector callbacks ---
-  // IDE guard here is NOT redundant with the keyboard handler guard (line ~2375):
-  // /rewind calls openRewindSelector directly, bypassing the keyboard handler.
   const openRewindSelector = useCallback(() => {
     if (streamingState !== StreamingState.Idle) return;
     if (dialogsVisibleRef.current) return;
-    if (config.getIdeMode()) {
-      historyManager.addItem(
-        {
-          type: 'info',
-          text: 'Rewind is disabled in IDE mode.',
-        },
-        Date.now(),
-      );
-      return;
-    }
     const hasUserTurns = historyManager.history.some((h) => h.type === 'user');
     if (!hasUserTurns) return;
     setIsRewindSelectorOpen(true);
-  }, [streamingState, config, historyManager]);
+  }, [streamingState, historyManager]);
   openRewindSelectorRef.current = openRewindSelector;
 
   const closeRewindSelector = useCallback(() => {
@@ -4465,24 +4033,6 @@ export const AppContainer = (props: AppContainerProps) => {
 
   const handleDoubleEscRewind = useDoublePress(openRewindSelector, (pending) =>
     setRewindEscPending(pending),
-  );
-
-  const handleIdePromptComplete = useCallback(
-    (result: IdeIntegrationNudgeResult) => {
-      if (result.userSelection === 'yes') {
-        // Check whether the extension has been pre-installed
-        if (result.isExtensionPreInstalled) {
-          handleSlashCommand('/ide enable');
-        } else {
-          handleSlashCommand('/ide install');
-        }
-        settings.setValue(SettingScope.User, 'ide.hasSeenNudge', true);
-      } else if (result.userSelection === 'dismiss') {
-        settings.setValue(SettingScope.User, 'ide.hasSeenNudge', true);
-      }
-      setIdePromptAnswered(true);
-    },
-    [handleSlashCommand, settings],
   );
 
   const handleCommandMigrationComplete = useCallback(
@@ -4847,8 +4397,7 @@ export const AppContainer = (props: AppContainerProps) => {
         // Input is empty and idle — double-ESC opens rewind selector
         if (
           streamingState === StreamingState.Idle &&
-          !dialogsVisibleRef.current &&
-          !config.getIdeMode()
+          !dialogsVisibleRef.current
         ) {
           if (escapeTimerRef.current) {
             clearTimeout(escapeTimerRef.current);
@@ -4902,12 +4451,6 @@ export const AppContainer = (props: AppContainerProps) => {
         if (Object.keys(mcpServers || {}).length > 0) {
           handleSlashCommand(newValue ? '/mcp desc' : '/mcp nodesc');
         }
-      } else if (
-        keyMatchers[Command.TOGGLE_IDE_CONTEXT_DETAIL](key) &&
-        config.getIdeMode() &&
-        ideContextState
-      ) {
-        handleSlashCommand('/ide status');
       } else if (
         keyMatchers[Command.SHOW_MORE_LINES](key) &&
         buffer.text.length === 0 &&
@@ -4986,7 +4529,6 @@ export const AppContainer = (props: AppContainerProps) => {
       showToolDescriptions,
       setShowToolDescriptions,
       config,
-      ideContextState,
       handleExit,
       ctrlCPressedOnce,
       setCtrlCPressedOnce,
@@ -5078,12 +4620,9 @@ export const AppContainer = (props: AppContainerProps) => {
     popNextSubmission,
     enqueueGoalTurn,
     restoreMessages,
-    restorePeerMessage,
-    addHistoryItem: historyManager.addItem,
     submitQuery,
     submissionInFlightRef,
     submissionSettledRevision,
-    peerMessaging,
   });
 
   const nightly = props.version.includes('nightly');
@@ -5110,7 +4649,6 @@ export const AppContainer = (props: AppContainerProps) => {
       isModelDialogOpen,
       isFastModelMode,
       isAdvisorModelMode,
-      isVoiceModelMode,
       isVisionModelMode,
       isCompactionModelMode,
       isImageModelMode,
@@ -5149,7 +4687,6 @@ export const AppContainer = (props: AppContainerProps) => {
       inputWidth,
       suggestionsWidth,
       isInputActive,
-      shouldShowIdePrompt,
       shouldShowCommandMigrationNudge,
       commandMigrationTomlFiles,
       isFolderTrustDialogOpen: isFolderTrustDialogOpen ?? false,
@@ -5159,7 +4696,6 @@ export const AppContainer = (props: AppContainerProps) => {
       mcpApprovalRemaining,
       isTrustedFolder,
       constrainHeight,
-      ideContextState,
       showToolDescriptions,
       ctrlCPressedOnce,
       ctrlDPressedOnce,
@@ -5193,12 +4729,7 @@ export const AppContainer = (props: AppContainerProps) => {
       terminalWidth,
       terminalHeight,
       mainControlsRef,
-      voiceMicWarnedStatusRef,
-      currentIDE,
-      startupIdeConnectionStatus,
       updateInfo,
-      showIdeRestartPrompt,
-      ideTrustRestartReason,
       isRestarting,
       extensionsUpdateState,
       activePtyId,
@@ -5259,7 +4790,6 @@ export const AppContainer = (props: AppContainerProps) => {
       isModelDialogOpen,
       isFastModelMode,
       isAdvisorModelMode,
-      isVoiceModelMode,
       isVisionModelMode,
       isCompactionModelMode,
       isImageModelMode,
@@ -5298,7 +4828,6 @@ export const AppContainer = (props: AppContainerProps) => {
       inputWidth,
       suggestionsWidth,
       isInputActive,
-      shouldShowIdePrompt,
       shouldShowCommandMigrationNudge,
       commandMigrationTomlFiles,
       isFolderTrustDialogOpen,
@@ -5308,7 +4837,6 @@ export const AppContainer = (props: AppContainerProps) => {
       mcpApprovalRemaining,
       isTrustedFolder,
       constrainHeight,
-      ideContextState,
       showToolDescriptions,
       ctrlCPressedOnce,
       ctrlDPressedOnce,
@@ -5341,12 +4869,7 @@ export const AppContainer = (props: AppContainerProps) => {
       terminalWidth,
       terminalHeight,
       mainControlsRef,
-      voiceMicWarnedStatusRef,
-      currentIDE,
-      startupIdeConnectionStatus,
       updateInfo,
-      showIdeRestartPrompt,
-      ideTrustRestartReason,
       isRestarting,
       currentModel,
       extensionsUpdateState,
@@ -5423,7 +4946,6 @@ export const AppContainer = (props: AppContainerProps) => {
       closePermissionsDialog,
       setShellModeActive,
       vimHandleInput,
-      handleIdePromptComplete,
       handleCommandMigrationComplete,
       handleFolderTrustSelect,
       handleMcpApprovalSelect,
@@ -5516,7 +5038,6 @@ export const AppContainer = (props: AppContainerProps) => {
       closePermissionsDialog,
       setShellModeActive,
       vimHandleInput,
-      handleIdePromptComplete,
       handleCommandMigrationComplete,
       handleFolderTrustSelect,
       handleMcpApprovalSelect,

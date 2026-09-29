@@ -47,13 +47,7 @@ const common = {
   format: 'esm',
   target: 'node22',
   metafile: true,
-  external: [
-    '@lydell/node-pty',
-    'node-pty',
-    '@qwen-code/audio-capture',
-    '@teddyzhu/clipboard',
-    'sharp',
-  ],
+  external: ['@lydell/node-pty', 'node-pty', '@teddyzhu/clipboard', 'sharp'],
   inject: [path.join(root, 'scripts/esbuild-shims.js')],
   define: {
     'process.env.NODE_ENV': '"production"',

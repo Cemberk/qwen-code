@@ -16,7 +16,6 @@ import { arenaCommand } from '../ui/commands/arenaCommand.js';
 import { approvalModeCommand } from '../ui/commands/approvalModeCommand.js';
 import { authCommand } from '../ui/commands/authCommand.js';
 import { branchCommand } from '../ui/commands/branchCommand.js';
-import { peersCommand } from '../ui/commands/peers-command.js';
 import { btwCommand } from '../ui/commands/btwCommand.js';
 import { bugCommand } from '../ui/commands/bugCommand.js';
 import { cdCommand } from '../ui/commands/cdCommand.js';
@@ -42,9 +41,7 @@ import { goalCommand } from '../ui/commands/goalCommand.js';
 import { helpCommand } from '../ui/commands/helpCommand.js';
 import { historyCommand } from '../ui/commands/historyCommand.js';
 import { hooksCommand } from '../ui/commands/hooksCommand.js';
-import { ideCommand } from '../ui/commands/ideCommand.js';
 import { importConfigCommand } from '../ui/commands/importConfigCommand.js';
-import { createDebugLogger } from '@qwen-code/qwen-code-core';
 import { initCommand } from '../ui/commands/initCommand.js';
 import { languageCommand } from '../ui/commands/languageCommand.js';
 import { mcpCommand } from '../ui/commands/mcpCommand.js';
@@ -72,15 +69,12 @@ import { terminalSetupCommand } from '../ui/commands/terminalSetupCommand.js';
 import { themeCommand } from '../ui/commands/themeCommand.js';
 import { toolsCommand } from '../ui/commands/toolsCommand.js';
 import { vimCommand } from '../ui/commands/vimCommand.js';
-import { voiceCommand } from '../ui/commands/voice-command.js';
 import { setupGithubCommand } from '../ui/commands/setupGithubCommand.js';
 import { insightCommand } from '../ui/commands/insightCommand.js';
 import { learnCommand } from '../ui/commands/learn-command.js';
 import { statuslineCommand } from '../ui/commands/statuslineCommand.js';
 import { lspCommand } from '../ui/commands/lspCommand.js';
 import { updateCommand } from '../ui/commands/update-command.js';
-
-const builtinDebugLogger = createDebugLogger('BUILTIN_COMMAND_LOADER');
 
 /**
  * Loads the core, hard-coded slash commands that are an integral part
@@ -97,30 +91,6 @@ export class BuiltinCommandLoader implements ICommandLoader {
    * @returns A promise that resolves to an array of `SlashCommand` objects.
    */
   async loadCommands(_signal: AbortSignal): Promise<SlashCommand[]> {
-    // Load ideCommand separately with error handling so that a failure
-    // (e.g., platform-specific process detection on Windows) does not
-    // prevent ALL built-in commands from loading.
-    let resolvedIdeCommand: SlashCommand | null = null;
-    try {
-      // `/ide` is interactive-only, and building it walks the process tree
-      // with one `ps` per ancestor; headless and ACP runs would filter it out
-      // after paying for that on the way to their first request. This saves
-      // nothing when `ideMode` is on — `connectIdeForStartup` performs the
-      // same walk earlier, on the awaited startup path.
-      if (
-        !this.config?.getExecutionEnvironment?.() &&
-        !this.config?.getShellExecutionSandbox?.() &&
-        this.config?.isInteractive?.() !== false
-      ) {
-        resolvedIdeCommand = await ideCommand();
-      }
-    } catch (error) {
-      builtinDebugLogger.warn(
-        'Failed to load IDE command:',
-        error instanceof Error ? error.message : String(error),
-      );
-    }
-
     const allDefinitions: Array<SlashCommand | null> = [
       aboutCommand,
       advisorCommand,
@@ -136,7 +106,6 @@ export class BuiltinCommandLoader implements ICommandLoader {
       approvalModeCommand,
       authCommand,
       branchCommand,
-      peersCommand,
       btwCommand,
       forkCommand,
       bugCommand,
@@ -161,7 +130,6 @@ export class BuiltinCommandLoader implements ICommandLoader {
       helpCommand,
       historyCommand,
       hooksCommand,
-      resolvedIdeCommand,
       importConfigCommand,
       initCommand,
       languageCommand,
@@ -193,7 +161,6 @@ export class BuiltinCommandLoader implements ICommandLoader {
       settingsCommand,
       vimCommand,
       updateCommand,
-      voiceCommand,
       setupGithubCommand,
       terminalSetupCommand,
       insightCommand,

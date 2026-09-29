@@ -10,13 +10,7 @@ export default {
     type: 'separator',
     title: 'Outside of the terminal', // Title is optional
   },
-  'integration-vscode': 'Visual Studio Code',
-  'integration-zed': 'Zed IDE',
-  'integration-jetbrains': 'JetBrains IDEs',
   'integration-github-action': 'GitHub Actions',
-  'qwen-serve': 'Daemon mode (qwen serve)',
-  'qwen-serve-deploy-local': 'Daemon mode — local launch templates',
-  'conversations-recovery': 'Conversations writer locks and recovery',
   'Code with Qwen Code': {
     type: 'separator',
     title: 'Code with Qwen Code', // Title is optional
@@ -26,8 +20,4 @@ export default {
   extension: 'Extension',
   reference: 'Reference',
   support: 'Support',
-  // need refine
-  'ide-integration': {
-    display: 'hidden',
-  },
 };

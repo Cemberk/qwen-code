@@ -18,7 +18,6 @@ import {
   EVENT_CLI_CONFIG,
   EVENT_EXTENSION_UNINSTALL,
   EVENT_EXTENSION_ENABLE,
-  EVENT_IDE_CONNECTION,
   EVENT_TOOL_CALL,
   EVENT_REPEATED_TOOL_FAILURE_GUARD,
   EVENT_USER_PROMPT,
@@ -96,7 +95,6 @@ import type {
   ApiRequestEvent,
   ApiResponseEvent,
   FileOperationEvent,
-  IdeConnectionEvent,
   StartSessionEvent,
   ToolCallEvent,
   UserPromptEvent,
@@ -238,7 +236,6 @@ export function logStartSession(
     mcp_tools: event.mcp_tools,
     mcp_tools_count: event.mcp_tools_count,
     hooks: event.hooks,
-    ide_enabled: event.ide_enabled,
     interactive_shell_enabled: event.interactive_shell_enabled,
     output_format: event.output_format,
     skills: event.skills,
@@ -792,27 +789,6 @@ export function logSlashCommand(
   const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
     body: `Slash command: ${event.command}.`,
-    attributes,
-  };
-  logger.emit(logRecord);
-}
-
-export function logIdeConnection(
-  config: Config,
-  event: IdeConnectionEvent,
-): void {
-  QwenLogger.getInstance(config)?.logIdeConnectionEvent(event);
-  if (!isTelemetrySdkInitialized()) return;
-
-  const attributes: LogAttributes = {
-    ...getCommonAttributes(config),
-    ...event,
-    'event.name': EVENT_IDE_CONNECTION,
-  };
-
-  const logger = logs.getLogger(SERVICE_NAME);
-  const logRecord: LogRecord = {
-    body: `Ide connection. Type: ${event.connection_type}.`,
     attributes,
   };
   logger.emit(logRecord);

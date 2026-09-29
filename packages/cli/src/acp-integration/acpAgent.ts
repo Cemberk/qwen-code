@@ -169,8 +169,6 @@ import {
   type TurnResultRecordPayload,
   qualifySkillName,
   sessionIdContext,
-  registerSession,
-  getLastPeerInboxFailure,
   SessionSourceService,
   SessionSourceError,
 } from '@qwen-code/qwen-code-core';
@@ -222,10 +220,9 @@ import { AcpFileSystemService } from './service/filesystem.js';
 import { ndJsonStream } from '@qwen-code/acp-bridge/ndJsonStream';
 import { createAcpOutput } from './acp-output.js';
 import {
-  ACP_EVENT_LOOP_STALL_RESTART_MS,
   CHANNEL_PROMPT_META_KEY,
   CHANNEL_OUTPUT_MODE_META_KEY,
-} from '@qwen-code/channel-base';
+} from '../runtime/channel-delivery.js';
 import { observeAcpToolResultWire } from '../nonInteractive/tool-result-boundary-diagnostics.js';
 import { Readable } from 'node:stream';
 import { normalizeDisabledToolList } from '../config/normalizeDisabledTools.js';
@@ -267,7 +264,6 @@ import {
   type PermissionRuleSet,
 } from '../config/permission-settings.js';
 import { createLoadedSettingsAdapter } from '../config/loadedSettingsAdapter.js';
-import { isCompatibleLiveSessionSource } from '../runtime/live-session-source.js';
 import {
   getConversationDirectoryName,
   hasVerifiableInode,
@@ -297,17 +293,12 @@ import {
   inactiveExtensionSkillRefs,
   isInactiveExtensionSkill,
 } from './extension-skills.js';
-import { Session, registerCreateSubSessionTool } from './session/Session.js';
+import { Session } from './session/Session.js';
 import { restoreSessionModelThenAuthenticate } from './session-model-persistence.js';
 import { applyRestoredSessionApprovalMode } from './session-approval-mode-persistence.js';
 import { HistoryReplayer } from './session/history-replayer.js';
 import { renderPreparedGoalUpdate } from './session/recovered-goal-update.js';
 import { ActiveWorkReporter } from './active-work-reporter.js';
-import {
-  shouldProbeChildHeap,
-  startChildHeapProbe,
-  type ChildHeapProbe,
-} from './child-heap-probe.js';
 import { resolveReasoningCapabilities } from '@qwen-code/qwen-code-core/core/reasoning-overrides.js';
 import {
   applyReasoningSelection,
@@ -329,7 +320,6 @@ import {
 } from './model-configuration.js';
 import {
   deleteManagedSkill,
-  installManagedSkill,
   setManagedSkillEnabled,
 } from './skill-management.js';
 import {
@@ -359,11 +349,7 @@ import {
 } from '../i18n/languageUtils.js';
 import { runWithAcpRuntimeOutputDir } from './runtimeOutputDirContext.js';
 import { ACP_ERROR_CODES } from './errorCodes.js';
-import { registerCleanup, runExitCleanup } from '../utils/cleanup.js';
-import { QWEN_CODE_SERVE_ENV } from '../config/acp-channel-fallback.js';
-import { isSshWorkspaceExtMethodAllowed } from './ssh-workspace-guards.js';
-import { PeerMessaging } from '../peerMessaging/peer-messaging.js';
-import { isCrossSessionMessagingActive } from '../peerMessaging/enabled.js';
+import { runExitCleanup } from '../utils/cleanup.js';
 import { startNonInteractiveOpenAILogHousekeeping } from '../services/housekeeping/scheduler.js';
 import { appEvents, AppEvent } from '../utils/events.js';
 import {
@@ -614,6 +600,7 @@ const POSIX_TMP_LOCAL_READ_ROOT = '/tmp';
 const BTW_CHILD_TIMEOUT_MS = 55_000;
 const MCP_OAUTH_START_TIMEOUT_MS = 30_000;
 const SESSION_DRAIN_TIMEOUT_MS = 30_000;
+const ACP_EVENT_LOOP_STALL_RESTART_MS = 5 * 60 * 1000;
 const SESSION_ID_RE = /^[0-9a-fA-F-]{32,36}$/;
 // Must be less than WORKSPACE_MEMORY_REMEMBER_TIMEOUT_MS (300s) in bridge.ts.
 const WORKSPACE_MEMORY_REMEMBER_CHILD_TIMEOUT_MS = 295_000;
@@ -3175,12 +3162,6 @@ export async function runAcpAgent(
       return agentInstance;
     }, stream);
     markAcpStartup('transportSetupEnd');
-    // Read at call time rather than captured: the connection sets
-    // `agentInstance` when it builds the agent, and this runs first. The
-    // inbox is bound by the first hosted session, but it has to be closed
-    // on every path out — including a bare signal, which reaches neither
-    // `disposeSessions` nor `finishManagedShutdown`.
-    registerCleanup(() => agentInstance?.closePeerMessaging());
   } catch (err) {
     eventLoopMonitor.dispose();
     throw err;
@@ -3827,30 +3808,6 @@ async function assertManagedConversationDirectoryIdentity(
 
 class QwenAgent implements Agent {
   private sessions: Map<string, Session> = new Map();
-  /**
-   * Cross-session messaging for every session this process hosts.
-   *
-   * One inbox, not one per session: the address is a socket, the sessions
-   * are told apart by the `toSessionId` every sender pins on its frame,
-   * and binding a socket per session would multiply file descriptors by
-   * the session count for no added reach.
-   *
-   * Outbound only for now. Inbound is refused rather than held, because a
-   * hold is a question put to a person and nobody is watching a hold list
-   * on a daemon-managed session's behalf; a sender is told so at once
-   * instead of waiting out an expiry.
-   */
-  private peerMessagingStart: Promise<PeerMessaging | null> | null = null;
-  // Set by closePeerMessaging: a retry must not resurrect an inbox after
-  // teardown ran.
-  private peerMessagingClosed = false;
-  /**
-   * Sessions already given a record. A session is published once, but a
-   * reload can hand the same id back through the same path, and two
-   * records for one session would be two names for it in every listing.
-   */
-  private readonly registeredSessions = new Set<string>();
-  private inboxAddress: { ipcPath: string; ipcToken: string } | null = null;
   private modelProviderReloadRevision = 0;
   private readonly historyMutationTails = new Map<string, Promise<void>>();
   private readonly startingSessionIds = new Set<string>();
@@ -3941,16 +3898,6 @@ class QwenAgent implements Agent {
     }
   })();
   private prevChildCpuAt = Date.now();
-  /**
-   * Lifetime old-generation high-water marks, for the daemon's
-   * `workspaceResource` poll. `undefined` outside a daemon-spawned child — see
-   * {@link shouldProbeChildHeap} for why the gate is where it is.
-   *
-   * Started at construction rather than on the first poll: the peaks that
-   * matter include the ones reached before anyone asks.
-   */
-  private readonly childHeapProbe: ChildHeapProbe | undefined =
-    shouldProbeChildHeap(process.env) ? startChildHeapProbe() : undefined;
 
   /**
    * Workspace-shared MCP transport pool. Eagerly constructed; lazy
@@ -4116,10 +4063,6 @@ class QwenAgent implements Agent {
 
   async finishManagedShutdown(configs: Config[]): Promise<void> {
     const failures: unknown[] = [];
-    // Ahead of the session teardown below: the expiry receipts an inbox
-    // owes its senders travel over the socket, and its own record clear
-    // is a patch the records must still be there for.
-    await this.closePeerMessaging();
     for (const [sessionId, session] of [...this.sessions]) {
       await this.removeStoredSessionEntry(sessionId, session, failures, {
         shutdownConfig: false,
@@ -4534,10 +4477,6 @@ class QwenAgent implements Agent {
     } catch (error) {
       cleanupErrors.push(error);
     }
-    // Before the Config shuts down, which does not touch the registry:
-    // a record left behind advertises a session that is gone, and peers
-    // would keep addressing it until this process exits.
-    this.registeredSessions.delete(sessionId);
     try {
       await session.getConfig().unregisterSessionRegistry();
     } catch (error) {
@@ -4919,169 +4858,6 @@ class QwenAgent implements Agent {
     await this.closeStoredSession(sessionId, opts);
   }
 
-  /**
-   * Bind the one inbox every session this process hosts shares.
-   *
-   * Not awaited: binding a socket must not delay the first prompt, and a
-   * session published before it resolves still registers — the address
-   * is patched into every record when it arrives (`publishInboxAddress`).
-   */
-  private startPeerMessaging(): void {
-    if (this.peerMessagingStart) return;
-    // A closed inbox stays closed: teardown runs on every exit path, and
-    // a session registered after it must not resurrect the socket.
-    if (this.peerMessagingClosed) return;
-    // Imported statically on purpose. The transport's own imports are all
-    // inside this file's existing static closure, so lazy-loading it buys
-    // nothing — and a dynamic import of the core barrel turns it into a
-    // code-splitting entry, which re-partitions the shared chunks and can
-    // land modules the ACP fast path must not load (iconv-lite's tables)
-    // in a chunk this file then imports statically.
-    this.peerMessagingStart = (async () => {
-      try {
-        const messaging = await PeerMessaging.start({
-          // Inbound is refused outright, so neither the approval mode nor
-          // the parity rule it feeds is ever consulted. Stated rather than
-          // left to a default: what a daemon-managed session may be told
-          // is settled here and nowhere else.
-          getApprovalMode: () => null,
-          getPolicySetting: () => 'refuse',
-          updateSessionRegistryIpcPath: (ipcPath, ipcToken) =>
-            this.publishInboxAddress(ipcPath, ipcToken),
-          ownsSessionId: (id) => {
-            // The map key froze when the session was published, while
-            // the record a sender reads follows the Config's live id —
-            // /clear swaps the id under a running session. Test both, so
-            // a frame pinned to either spelling is answered by the
-            // session that holds it.
-            const wanted = normalizeSessionIdForLookup(id);
-            return (
-              this.sessions.has(wanted) ||
-              [...this.sessions.values()].some(
-                (session) =>
-                  normalizeSessionIdForLookup(
-                    session.getConfig().getSessionId(),
-                  ) === wanted,
-              )
-            );
-          },
-        });
-        // A bind that could not start is not "started": the next hosted
-        // session retries rather than the process staying dark until exit.
-        // Except for a platform with no inbox transport. That refusal is
-        // decided before any filesystem call and holds for every candidate
-        // path, so no later session in this process can succeed; keep the
-        // settled null so the attempt, and its log line, happen once.
-        if (
-          messaging === null &&
-          getLastPeerInboxFailure()?.cause !== 'unsupported_platform'
-        ) {
-          this.peerMessagingStart = null;
-        }
-        return messaging;
-      } catch (error) {
-        debugLogger.error(
-          '[ACP] cross-session messaging failed to start:',
-          error,
-        );
-        this.peerMessagingStart = null;
-        return null;
-      }
-    })();
-  }
-
-  /** Close the inbox and stop advertising it. Safe to call more than once. */
-  async closePeerMessaging(): Promise<void> {
-    this.peerMessagingClosed = true;
-    const pending = this.peerMessagingStart;
-    if (!pending) return;
-    this.peerMessagingStart = null;
-    try {
-      await (await pending)?.close();
-    } catch (error) {
-      debugLogger.debug(
-        `[ACP] closing cross-session messaging failed: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-    this.inboxAddress = null;
-  }
-
-  /**
-   * Give a newly published session a registry record of its own.
-   *
-   * Only when that session itself takes part in messaging. A record
-   * with no inbox behind it would put a name in every peer's listing
-   * that can be addressed and never answered, which is worse than not
-   * appearing at all — the interactive UI registers unconditionally
-   * because its record also answers "what is running right now", a
-   * question nobody asks of a session a daemon is driving.
-   */
-  private registerHostedSession(
-    sessionId: string,
-    config: Config,
-    settings: LoadedSettings,
-  ): void {
-    // Each session decides for itself: one process can host sessions from
-    // more than one workspace, and a record exists to be addressed, so it
-    // is written only when that session takes part. Read off this session's
-    // own `config`, never a process-startup one. The suppressions count
-    // here exactly as they do in the interactive UI: without them a hosted
-    // safe-mode or bare session binds an inbox and publishes its `ipcPath`,
-    // advertising itself as reachable from the mode that exists to close
-    // that surface — and, having an `ipcPath`, is also allowed to send.
-    if (!isCrossSessionMessagingActive(settings.merged, config)) return;
-    // Bound by the first session that needs it rather than at startup: an
-    // ACP process with no session has nothing to advertise and nobody to
-    // receive for, and this is also the first moment the agent exists.
-    this.startPeerMessaging();
-    if (this.registeredSessions.has(sessionId)) return;
-    this.registeredSessions.add(sessionId);
-    config.trackSessionRegistration(
-      registerSession({
-        sessionId,
-        cwd: config.getTargetDir(),
-        qwenVersion: config.getCliVersion() ?? null,
-        // What spawned this process, as far as it can tell: the daemon
-        // marks the children it starts, and anything else running
-        // `qwen --acp` is a client driving it directly.
-        kind: process.env[QWEN_CODE_SERVE_ENV] === '1' ? 'serve' : 'headless',
-        // One record per session rather than one per process: they have
-        // separate ids, names and working directories.
-        slot: 'own',
-      }),
-    );
-    if (this.inboxAddress) {
-      void config.updateSessionRegistryIpcPath(
-        this.inboxAddress.ipcPath,
-        this.inboxAddress.ipcToken,
-      );
-    }
-  }
-
-  /**
-   * Write the inbox address into every hosted session's record.
-   *
-   * They share one address, so this runs once per bind rather than once
-   * per session, and again with `undefined` at close so no record
-   * advertises a socket that is gone.
-   */
-  private async publishInboxAddress(
-    ipcPath: string | undefined,
-    ipcToken?: string,
-  ): Promise<void> {
-    this.inboxAddress =
-      ipcPath !== undefined && ipcToken !== undefined
-        ? { ipcPath, ipcToken }
-        : null;
-    await Promise.allSettled(
-      [...this.sessions.values()].map((session) =>
-        session.getConfig().updateSessionRegistryIpcPath(ipcPath, ipcToken),
-      ),
-    );
-  }
-
   async disposeSessions(): Promise<void> {
     this.activeWorkReporter?.dispose();
     this.activeWorkReporter = undefined;
@@ -5093,12 +4869,6 @@ class QwenAgent implements Agent {
       controller.abort();
     }
     this.workspaceGenerationControllers.clear();
-    // After the aborts, so a slow inbox drain cannot keep a running turn
-    // executing tools after the client is gone; ahead of the record
-    // teardown below, because the close's address clear is a patch the
-    // records must still be there for (the ordering
-    // finishManagedShutdown states).
-    await this.closePeerMessaging();
     await Promise.allSettled(
       [...this.sessions.entries()].map(([sessionId, session]) =>
         this.discardStoredSessionIfCurrent(sessionId, session, {
@@ -6064,9 +5834,6 @@ class QwenAgent implements Agent {
                     ),
                 }
               : {}),
-            enableLiveScreenContext: isCompatibleLiveSessionSource(
-              sessionSource ?? {},
-            ),
             replayHistory: false,
             prepareBeforeSessionCreate: async () => {
               if (bulkReplay && projection?.replay) {
@@ -6455,9 +6222,6 @@ class QwenAgent implements Agent {
                     ),
                 }
               : {}),
-            enableLiveScreenContext: isCompatibleLiveSessionSource(
-              sessionSource ?? {},
-            ),
             replayHistory: false,
             beforeSessionPublish: () => {
               response = profiler.timeSync('response_build', () => ({
@@ -9481,21 +9245,6 @@ class QwenAgent implements Agent {
     method: string,
     params: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    const sessionId = params['sessionId'];
-    const sessionConfig =
-      typeof sessionId === 'string'
-        ? this.sessions.get(sessionId)?.getConfig()
-        : undefined;
-    if (
-      (this.config.getExecutionEnvironment?.() ||
-        sessionConfig?.getExecutionEnvironment?.()) &&
-      !isSshWorkspaceExtMethodAllowed(method)
-    ) {
-      throw RequestError.invalidParams(
-        { errorKind: 'unsupported_operation' },
-        'This operation is unavailable for SSH workspaces.',
-      );
-    }
     const requestedCwd =
       typeof params['cwd'] === 'string' ? params['cwd'] : undefined;
     const cwd = requestedCwd || process.cwd();
@@ -9648,9 +9397,6 @@ class QwenAgent implements Agent {
           ...(effectiveBaseUrl ? { baseUrl: effectiveBaseUrl } : {}),
         };
       }
-      case 'qwen/skills/install': {
-        return installManagedSkill(this.config, params);
-      }
       case 'qwen/skills/delete': {
         return deleteManagedSkill(this.config, params);
       }
@@ -9789,18 +9535,9 @@ class QwenAgent implements Agent {
         } catch {
           /* restricted container — report 0 rss */
         }
-        // Spread rather than always-present fields: a child without the probe
-        // (no daemon marker) omits them entirely, so the daemon can tell "not
-        // measured" from a measured zero. Reporting 0 here would read as "this
-        // child needs no heap", which is the one wrong answer. The probe
-        // itself returns undefined until its first successful read, so a child
-        // whose every V8 call throws (restricted container) omits heap the
-        // same way instead of publishing a zeroed, coverage-complete report.
-        const childHeap = this.childHeapProbe?.snapshot();
         return {
           rssBytes,
           cpuPercent,
-          ...(childHeap ? { heap: childHeap } : {}),
         };
       }
       case SERVE_STATUS_EXT_METHODS.sessionContext: {
@@ -11589,9 +11326,6 @@ class QwenAgent implements Agent {
           }
         }
         const session = this.sessionOrThrow(sessionId);
-        if (isCompatibleLiveSessionSource(source)) {
-          await session.enableLiveScreenContext();
-        }
         const recording = session.getConfig().getChatRecordingService();
         let ok = false;
         if (recording) {
@@ -11615,90 +11349,6 @@ class QwenAgent implements Agent {
               }
             : {}),
         };
-      }
-      case SERVE_CONTROL_EXT_METHODS.sessionLiveConversation: {
-        const sessionId = params['sessionId'];
-        const active = params['active'];
-        if (typeof sessionId !== 'string' || sessionId.length === 0) {
-          throw RequestError.invalidParams(
-            undefined,
-            'Invalid or missing sessionId',
-          );
-        }
-        if (typeof active !== 'boolean') {
-          throw RequestError.invalidParams(
-            undefined,
-            'Invalid or missing active state',
-          );
-        }
-        await this.sessionOrThrow(sessionId).setLiveConversationActive(active);
-        return { sessionId, active };
-      }
-      case SERVE_CONTROL_EXT_METHODS.sessionLiveTranscript: {
-        const sessionId = params['sessionId'];
-        const entries = params['entries'];
-        const model = params['model'];
-        if (typeof sessionId !== 'string' || sessionId.length === 0) {
-          throw RequestError.invalidParams(
-            undefined,
-            'Invalid or missing sessionId',
-          );
-        }
-        if (
-          typeof model !== 'string' ||
-          model.length === 0 ||
-          model.length > 256
-        ) {
-          throw RequestError.invalidParams(
-            undefined,
-            'Invalid or missing realtime model',
-          );
-        }
-        if (!Array.isArray(entries) || entries.length > 128) {
-          throw RequestError.invalidParams(
-            undefined,
-            'Invalid realtime transcript entries',
-          );
-        }
-        const transcript: Array<{
-          role: 'user' | 'assistant';
-          text: string;
-        }> = [];
-        let totalLength = 0;
-        for (const entry of entries) {
-          if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
-            throw RequestError.invalidParams(
-              undefined,
-              'Invalid realtime transcript entry',
-            );
-          }
-          const role = (entry as Record<string, unknown>)['role'];
-          const text = (entry as Record<string, unknown>)['text'];
-          if (
-            (role !== 'user' && role !== 'assistant') ||
-            typeof text !== 'string' ||
-            text.length === 0 ||
-            text.length > 32_768
-          ) {
-            throw RequestError.invalidParams(
-              undefined,
-              'Invalid realtime transcript entry',
-            );
-          }
-          totalLength += text.length;
-          if (totalLength > 131_072) {
-            throw RequestError.invalidParams(
-              undefined,
-              'Realtime transcript is too large',
-            );
-          }
-          transcript.push({ role, text });
-        }
-        await this.sessionOrThrow(sessionId).appendLiveConversationTranscript(
-          transcript,
-          model,
-        );
-        return { sessionId, persisted: transcript.length };
       }
       case SERVE_CONTROL_EXT_METHODS.sessionBackgroundNotification: {
         const sessionId = params['sessionId'];
@@ -15786,7 +15436,6 @@ class QwenAgent implements Agent {
     sessionData?: ResumedSessionData,
     options: {
       replayHistory?: boolean;
-      enableLiveScreenContext?: boolean;
       deferWorkspaceActivation?: boolean;
       configProviderRevision?: number;
       fileDerivedApprovalMode?: ApprovalMode;
@@ -15918,10 +15567,6 @@ class QwenAgent implements Agent {
     }
     let published = false;
     try {
-      // After `new Session` (which wires the spawner the tool needs) and before
-      // the session is published: the permission check is async, and the tool
-      // must be declared before the first prompt can be served.
-      await registerCreateSubSessionTool(config);
       options.signal?.throwIfAborted();
       let forceAuthenticationRefresh =
         options.deferWorkspaceActivation !== true &&
@@ -15982,8 +15627,8 @@ class QwenAgent implements Agent {
         config.hydrateSessionRestoreFileHistory?.();
       }
       // Pin the workflow gate synchronously adjacent to publication. A write
-      // that lands while `registerCreateSubSessionTool` is suspended finds
-      // the session in neither the construction-time view nor the ext
+      // that lands while session creation is suspended finds the session in
+      // neither the construction-time view nor the ext
       // handler's live-session loop (it is not in `this.sessions` yet), so
       // the recorded override must be applied here; from `sessions.set`
       // onward concurrent writes reach the session through that loop. No
@@ -15995,7 +15640,6 @@ class QwenAgent implements Agent {
         );
       }
       this.sessions.set(sessionId, session);
-      this.registerHostedSession(sessionId, config, settings);
       // Track the file-derived mode, not a mode restored from the transcript.
       // An unchanged settings reload must not overwrite session-local state.
       this.sessionApprovalModeConverged.set(
@@ -16007,9 +15651,6 @@ class QwenAgent implements Agent {
       // learns about this Session from a report rather than inferring it.
       this.activeWorkReporter?.notifyChanged();
       this.initializingConfigs.delete(config);
-      if (options.enableLiveScreenContext) {
-        await session.enableLiveScreenContext();
-      }
 
       if (
         options.deferWorkspaceActivation !== true &&

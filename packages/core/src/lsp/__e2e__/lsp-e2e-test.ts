@@ -134,7 +134,6 @@ function createService(workspaceRoot: string): NativeLspService {
     workspaceContext as any,
     new EventEmitter(),
     fileDiscovery as any,
-    {} as any,
     { workspaceRoot, requireTrustedWorkspace: false },
   );
 }

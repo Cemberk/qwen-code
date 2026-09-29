@@ -7,10 +7,7 @@
 import type React from 'react';
 import { Box, Text } from 'ink';
 import { theme } from '../semantic-colors.js';
-import {
-  type IdeContext,
-  type MCPServerConfig,
-} from '@qwen-code/qwen-code-core';
+import { type MCPServerConfig } from '@qwen-code/qwen-code-core';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import { isNarrowWidth } from '../utils/isNarrowWidth.js';
 import { t } from '../../i18n/index.js';
@@ -21,7 +18,6 @@ interface ContextSummaryDisplayProps {
   mcpServers?: Record<string, MCPServerConfig>;
   blockedMcpServers?: Array<{ name: string; extensionName: string }>;
   showToolDescriptions?: boolean;
-  ideContext?: IdeContext;
 }
 
 export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
@@ -30,33 +26,19 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
   mcpServers,
   blockedMcpServers,
   showToolDescriptions,
-  ideContext,
 }) => {
   const { columns: terminalWidth } = useTerminalSize();
   const isNarrow = isNarrowWidth(terminalWidth);
   const mcpServerCount = Object.keys(mcpServers || {}).length;
   const blockedMcpServerCount = blockedMcpServers?.length || 0;
-  const openFileCount = ideContext?.workspaceState?.openFiles?.length ?? 0;
 
   if (
     memoryFileCount === 0 &&
     mcpServerCount === 0 &&
-    blockedMcpServerCount === 0 &&
-    openFileCount === 0
+    blockedMcpServerCount === 0
   ) {
     return <Text> </Text>; // Render an empty space to reserve height
   }
-
-  const openFilesText = (() => {
-    if (openFileCount === 0) {
-      return '';
-    }
-    const fileText =
-      openFileCount === 1
-        ? t('{{count}} open file', { count: String(openFileCount) })
-        : t('{{count}} open files', { count: String(openFileCount) });
-    return `${fileText} ${t('(ctrl+g to view)')}`;
-  })();
 
   const memoryFileText = (() => {
     if (memoryFileCount === 0) {
@@ -118,7 +100,7 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
     return text;
   })();
 
-  const summaryParts = [openFilesText, memoryFileText, mcpText].filter(Boolean);
+  const summaryParts = [memoryFileText, mcpText].filter(Boolean);
 
   if (isNarrow) {
     return (

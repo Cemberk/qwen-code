@@ -102,7 +102,6 @@ export const OPENTUI_COMMAND_PRIORITY: readonly Command[] = [
   Command.ESCAPE,
   Command.TOGGLE_THINKING_EXPANDED,
   Command.TOGGLE_TOOL_DESCRIPTIONS,
-  Command.TOGGLE_IDE_CONTEXT_DETAIL,
   Command.SHOW_MORE_LINES,
   Command.CLEAR_SCREEN,
   Command.CLEAR_INPUT,

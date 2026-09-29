@@ -24,7 +24,6 @@ import { parse, stringify } from 'yaml';
 
 import { hooks as pnpmHooks, workspacePackageNames } from '../../.pnpmfile.mjs';
 import { getPinnedPnpmPackage } from '../pnpm-package.js';
-import { INDEPENDENT_PACKAGES } from '../release-packages.mjs';
 
 import { getWorkflowJob, getWorkflowStep } from './workflow-helpers.js';
 
@@ -170,28 +169,28 @@ describe('package scripts', () => {
     const packageJson = {
       dependencies: {
         '@qwen-code/qwen-code-core': 'file:../core',
-        '@qwen-code/channel-base': '0.22.4',
+        '@qwen-code/web-templates': '0.22.4',
         fixture: 'file:../fixture',
       },
       devDependencies: {
         '@qwen-code/acp-bridge': 'file:../acp-bridge',
       },
       optionalDependencies: {
-        '@qwen-code/sdk': '0.22.4',
+        '@qwen-code/qwen-code': '0.22.4',
       },
     };
 
     expect(pnpmHooks.readPackage(packageJson)).toEqual({
       dependencies: {
         '@qwen-code/qwen-code-core': 'workspace:*',
-        '@qwen-code/channel-base': 'workspace:*',
+        '@qwen-code/web-templates': 'workspace:*',
         fixture: 'file:../fixture',
       },
       devDependencies: {
         '@qwen-code/acp-bridge': 'workspace:*',
       },
       optionalDependencies: {
-        '@qwen-code/sdk': 'workspace:*',
+        '@qwen-code/qwen-code': 'workspace:*',
       },
     });
   });
@@ -259,7 +258,7 @@ describe('package scripts', () => {
     });
   });
 
-  it('checks the pnpm lockfile for integrity and Playwright parity', () => {
+  it('checks the pnpm lockfile for integrity', () => {
     const result = spawnSync(
       process.execPath,
       [path.join(root, 'scripts/check-lockfile.js')],
@@ -268,10 +267,6 @@ describe('package scripts', () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('pnpm lockfile check passed.');
-    // Pins the Playwright parity block's existence and happy path: deleting it,
-    // or returning before it, goes red here. Its drift arms live in
-    // check-lockfile.test.js, which runs the script against perturbed fixtures.
-    expect(result.stdout).toContain('Playwright parity check passed.');
   });
 
   describe('check-lockfile failure branches', () => {
@@ -281,16 +276,7 @@ describe('package scripts', () => {
     function runCheckLockfile(mutate) {
       const fixtureRoot = mkdtempSync(path.join(tmpdir(), 'check-lockfile-'));
       try {
-        // The Playwright parity section reads the pinned manifests as
-        // well as the lockfiles, so the fixture carries them too: without
-        // them the run dies on a missing package.json before reaching the
-        // branch under test.
-        for (const file of [
-          'pnpm-lock.yaml',
-          'pnpm-workspace.yaml',
-          'package.json',
-          'packages/web-shell/package.json',
-        ]) {
+        for (const file of ['pnpm-lock.yaml', 'pnpm-workspace.yaml']) {
           const to = path.join(fixtureRoot, file);
           mkdirSync(path.dirname(to), { recursive: true });
           copyFileSync(path.join(root, file), to);
@@ -355,33 +341,6 @@ describe('package scripts', () => {
     });
   });
 
-  it('checks undeclared imports in web-shell shipped sources', () => {
-    // web-shell is published and keeps its shipped sources in client/, so the
-    // src/ globs reach none of it. Pinning the glob inside this block keeps a
-    // published package from silently dropping out of the check.
-    const config = readFileSync(path.join(root, 'eslint.config.js'), 'utf8');
-    const start = config.indexOf(
-      'A package must declare what its own sources import',
-    );
-    const end = config.indexOf('export-html and insight carry', start);
-
-    expect(start).toBeGreaterThan(-1);
-    expect(end).toBeGreaterThan(start);
-    expect(config.slice(start, end)).toContain(
-      "'packages/web-shell/client/**/*.{ts,tsx}'",
-    );
-  });
-
-  it('keeps the internal release-age exception independent of the version', () => {
-    const workspace = parse(
-      readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8'),
-    );
-
-    expect(workspace.minimumReleaseAgeExclude).toEqual([
-      '@qwen-code/channel-base',
-    ]);
-  });
-
   it('imports packages without hard links so patch-package cannot corrupt the store', () => {
     const workspace = parse(
       readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8'),
@@ -404,23 +363,6 @@ describe('package scripts', () => {
       .filter((line) => line !== '' && !line.startsWith('#'));
 
     expect(ignored).toContain('pnpm-lock.yaml');
-  });
-
-  it('keeps channel workspace lock entries independent of release versions', () => {
-    const lockfile = parse(
-      readFileSync(path.join(root, 'pnpm-lock.yaml'), 'utf8'),
-    );
-    const specifiers = Object.values(lockfile.importers).flatMap((importer) =>
-      ['dependencies', 'devDependencies', 'optionalDependencies'].flatMap(
-        (field) => {
-          const entry = importer[field]?.['@qwen-code/channel-base'];
-          return entry ? [entry.specifier] : [];
-        },
-      ),
-    );
-
-    expect(specifiers.length).toBeGreaterThan(0);
-    expect(new Set(specifiers)).toEqual(new Set(['workspace:*']));
   });
 
   it('bootstraps worktrees and preserves explicit hook settings', () => {
@@ -930,16 +872,6 @@ describe('package scripts', () => {
     }
   });
 
-  it('does not couple Node REPL to Qwen release versions', () => {
-    const versionScript = readFileSync(
-      path.join(root, 'scripts/version.js'),
-      'utf8',
-    );
-
-    expect(versionScript).toContain('INDEPENDENT_PACKAGES.map((name)');
-    expect(INDEPENDENT_PACKAGES).toContain('@qwen-code/node-repl-mcp');
-  });
-
   it('smoke-tests the real worktree bootstrap on every supported host', () => {
     const workflow = parse(
       readWorkflow('.github/workflows/pnpm-worktree-smoke.yml'),
@@ -960,14 +892,14 @@ describe('package scripts', () => {
 
     // The pnpm linker only materializes declared dependencies, so a
     // workspace import that npm's hoisting hides breaks typecheck and tests
-    // in the bootstrapped tree; resolve one through the worst offender.
+    // in the bootstrapped tree; resolve one through a declaring workspace.
     const resolveCheck = job.steps.find(
       (step) => step.name === 'Verify workspace links resolve',
     );
     expect(resolveCheck?.run).toContain(
       '@qwen-code/qwen-code-core/package.json',
     );
-    expect(resolveCheck?.run).toContain('packages/vscode-ide-companion');
+    expect(resolveCheck?.run).toContain('packages/cli');
 
     // `git diff --exit-code` misses untracked files; the install must leave
     // the porcelain output empty on every host, including Windows (hence
@@ -1016,15 +948,8 @@ describe('package scripts', () => {
       '.pnpmfile.mjs',
       'package.json',
       'packages/*/package.json',
-      '!packages/desktop/package.json',
-      '!packages/live-host/package.json',
-      '!packages/mobile-shell/package.json',
-      'packages/channels/*/package.json',
-      'integrations/*/package.json',
       'patches/**',
-      'packages/audio-capture/install.js',
       'packages/core/scripts/postinstall.js',
-      'packages/vscode-ide-companion/scripts/generate-notices.js',
       'pnpm-lock.yaml',
       'pnpm-workspace.yaml',
       'scripts/generate-git-commit-info.js',
@@ -1035,69 +960,6 @@ describe('package scripts', () => {
 
     expect(workflow.on.pull_request.paths).toEqual(expectedPaths);
     expect(workflow.on.push.paths).toEqual(expectedPaths);
-  });
-
-  it('includes the standalone qwen-live daemon in recursive root builds', () => {
-    const buildScript = readFileSync(
-      path.join(root, 'scripts/build.js'),
-      'utf8',
-    );
-
-    expect(buildScript).toContain('corepack pnpm -r');
-    expect(buildScript).not.toContain('!@qwen-code/qwen-live');
-    expect(readPackageJson().workspaces).toContain('packages/*');
-  });
-
-  it('selects the CLI dependency closure without selecting the same-named root', () => {
-    const buildScript = readFileSync(
-      path.join(root, 'scripts/build.js'),
-      'utf8',
-    );
-    const selector = buildScript.match(/\? '--filter "([^"]+)"/)?.[1];
-    expect(selector).toBeDefined();
-    const result = spawnSync(
-      'corepack',
-      ['pnpm', '--filter', selector, 'list', '--depth', '-1', '--json'],
-      { cwd: root, encoding: 'utf8', shell: process.platform === 'win32' },
-    );
-    expect(result.status, result.stderr).toBe(0);
-    const paths = JSON.parse(result.stdout).map((pkg) =>
-      path.relative(root, pkg.path).replaceAll('\\', '/'),
-    );
-    expect(paths).toEqual(
-      expect.arrayContaining([
-        'packages/cli',
-        'packages/core',
-        'packages/browser-use',
-        'packages/sdk-typescript',
-        'packages/web-shell',
-        'packages/web-templates',
-      ]),
-    );
-    expect(paths).not.toContain('');
-    expect(paths).not.toContain('packages/mobile-mcp');
-    expect(paths).not.toContain('packages/vscode-ide-companion');
-  });
-
-  it('keeps the Mem0 Extension manifest aligned with release versions', () => {
-    const versionScript = readFileSync(
-      path.join(root, 'scripts/version.js'),
-      'utf8',
-    );
-
-    expect(versionScript).toContain(
-      "'integrations/external-context-mem0/qwen-extension.json'",
-    );
-    expect(versionScript).toContain(
-      'const mem0Manifest = readJson(mem0ManifestPath);',
-    );
-    expect(versionScript).toContain('mem0Manifest.version = newVersion');
-    expect(versionScript).toContain(
-      'writeJson(mem0ManifestPath, mem0Manifest);',
-    );
-    expect(versionScript).toContain(
-      "'npx prettier --experimental-cli --write integrations/external-context-mem0/qwen-extension.json'",
-    );
   });
 
   it('lets the CI unit lane retry a contended attempt', () => {
@@ -1142,44 +1004,6 @@ describe('package scripts', () => {
     expect(step).toContain('timeout-minutes: 110');
   });
 
-  it('keeps the serve fast-path bundle check outside unit test scripts', () => {
-    const packageJson = readPackageJson();
-
-    expect(packageJson.scripts['test:ci']).not.toContain(
-      'npm run check:serve-fast-path-bundle',
-    );
-    expect(packageJson.scripts.preflight).toContain(
-      'npm run check:serve-fast-path-bundle',
-    );
-  });
-
-  it('limits SDK integration tests through the forks pool', () => {
-    const packageJson = readPackageJson();
-
-    expect(packageJson.scripts['test:integration:sdk:sandbox:none']).toContain(
-      '--poolOptions.forks.maxForks 2',
-    );
-    expect(
-      packageJson.scripts['test:integration:sdk:sandbox:docker'],
-    ).toContain('--poolOptions.forks.maxForks 2');
-  });
-
-  it('cleans package build artifacts before checking the serve fast path bundle', () => {
-    const packageJson = readPackageJson();
-
-    expect(packageJson.scripts['check:serve-fast-path-bundle']).toBe(
-      [
-        'node scripts/clean-package-build-artifacts.js',
-        '&& npm run build -- --cli-only',
-        '&& cross-env DEV=true npm run bundle',
-        '&& node scripts/check-serve-fast-path-bundle.js',
-      ].join(' '),
-    );
-    expect(packageJson.scripts['check:serve-fast-path-bundle']).not.toContain(
-      'npm run clean',
-    );
-  });
-
   it('defines a release test script that disables workspace coverage', () => {
     const packageJson = readPackageJson();
 
@@ -1192,29 +1016,6 @@ describe('package scripts', () => {
         'npm run test:ci --workspaces --if-present -- --coverage.enabled=false',
       ].join(' '),
     );
-
-    // No workspace forces coverage from its test:ci script any more; the
-    // configs decide, and only a post-merge run flips their switch on. A
-    // reintroduced `--coverage` flag would override the switch on every
-    // pull-request run.
-    for (const workspace of [
-      'packages/vscode-ide-companion',
-      'packages/web-shell',
-    ]) {
-      const workspacePackageJson = JSON.parse(
-        readFileSync(path.join(root, workspace, 'package.json'), 'utf8'),
-      );
-      expect(workspacePackageJson.scripts['test:ci']).not.toContain(
-        '--coverage',
-      );
-      const vitestConfig = readFileSync(
-        path.join(root, workspace, 'vitest.config.ts'),
-        'utf8',
-      );
-      expect(vitestConfig).toContain(
-        "enabled: process.env['QWEN_CI_COVERAGE'] === '1'",
-      );
-    }
   });
 
   it('skips build/bundle/husky but still generates git-commit info when CI builds explicitly', () => {
@@ -1514,10 +1315,7 @@ describe('package scripts', () => {
     const buildJob = getWorkflowJob(workflow, 'quality_build');
     const workspaceTestJob = getWorkflowJob(workflow, 'workspace_tests');
     const buildStep = getWorkflowStep(buildJob, 'Build Project');
-    const serveFastPathStep = getWorkflowStep(
-      buildJob,
-      'Check Serve Fast Path Bundle',
-    );
+    const bundleStep = getWorkflowStep(buildJob, 'Bundle Project');
     const packStep = getWorkflowStep(buildJob, 'Pack Build Outputs');
     const uploadStep = getWorkflowStep(buildJob, 'Upload Build Outputs');
     const verifyPackageStep = getWorkflowStep(
@@ -1533,10 +1331,12 @@ describe('package scripts', () => {
       'Run Script Tests',
     );
 
-    expect(buildJob).toContain("name: 'Check Serve Fast Path Bundle'");
-    expect(buildJob).toContain('npm run check:serve-fast-path-bundle');
-    expect(buildJob.indexOf(serveFastPathStep)).toBeLessThan(
+    expect(bundleStep).toContain('npm run bundle');
+    expect(buildJob.indexOf(bundleStep)).toBeGreaterThan(
       buildJob.indexOf(buildStep),
+    );
+    expect(buildJob.indexOf(packStep)).toBeGreaterThan(
+      buildJob.indexOf(bundleStep),
     );
     expect(buildJob.indexOf(uploadStep)).toBeGreaterThan(
       buildJob.indexOf(packStep),
@@ -1546,7 +1346,6 @@ describe('package scripts', () => {
     );
     expect(verifyPackageStep).toContain('run-release-step.sh verify-package');
     expect(releaseStepScript).toContain('npm run bundle');
-    expect(releaseStepScript).toContain('dist/review-sources.sha256');
     expect(releaseStepScript).toContain('npm run prepare:package');
     expect(workspaceTestStep).toContain(
       '.github/scripts/run-release-workspace-tests.sh',
@@ -1669,22 +1468,6 @@ describe('package scripts', () => {
   it('meets npm trusted publishing requirements', () => {
     for (const [workflowPath, jobName, publishStepName] of [
       ['.github/workflows/release.yml', 'publish', 'Publish npm packages'],
-      [
-        '.github/workflows/release-sdk.yml',
-        'release-sdk',
-        'Publish @qwen-code/sdk',
-      ],
-      [
-        '.github/workflows/cd-cua-driver.yml',
-        'publish-sdk',
-        'Publish immutable SDK tarball',
-      ],
-      [
-        '.github/workflows/cd-cua-driver.yml',
-        'publish-node-repl',
-        'Publish immutable Node REPL tarball',
-      ],
-      ['.github/workflows/cd-mobile-mcp.yml', 'build-and-publish', 'Publish'],
     ]) {
       const publishJob = getWorkflowJob(readWorkflow(workflowPath), jobName);
       const installStep = getWorkflowStep(publishJob, 'Install npm 11');
@@ -1702,25 +1485,7 @@ describe('package scripts', () => {
       );
     }
 
-    for (const packageDirectory of [
-      'integrations/external-context-mem0',
-      'packages/audio-capture',
-      'packages/cli',
-      'packages/channels/base',
-      'packages/channels/dingtalk',
-      'packages/channels/dws',
-      'packages/channels/feishu',
-      'packages/channels/github',
-      'packages/channels/qqbot',
-      'packages/channels/telegram',
-      'packages/channels/wecom',
-      'packages/channels/weixin',
-      'packages/cua-driver/typescript',
-      'packages/mobile-mcp',
-      'packages/node-repl',
-      'packages/sdk-typescript',
-      'packages/web-shell',
-    ]) {
+    for (const packageDirectory of ['packages/cli']) {
       const packageJson = JSON.parse(
         readFileSync(path.join(root, packageDirectory, 'package.json'), 'utf8'),
       );

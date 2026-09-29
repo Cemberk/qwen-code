@@ -94,11 +94,6 @@ function findLastSuccessfulCompressionIndex(history: HistoryItem[]): number {
  * and the startup context entry) to find the API boundary corresponding
  * to the target UI user turn.
  *
- * Note: In IDE mode, additional user Content entries may be injected for
- * IDE context. This function does not account for those and will produce
- * incorrect results. Rewind is therefore disabled in IDE mode (guarded
- * in openRewindSelector).
- *
  * @param uiHistory The full UI history array
  * @param targetUserItemId The ID of the user HistoryItem to rewind to
  * @param apiHistory The current API Content[] array

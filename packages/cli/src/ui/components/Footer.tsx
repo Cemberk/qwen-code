@@ -134,16 +134,6 @@ export const Footer: React.FC<FooterProps> = ({ containerRef }) => {
     <Text color={theme.text.secondary}>
       <Spinner /> {configInitMessage}
     </Text>
-  ) : uiState.startupIdeConnectionStatus.state === 'connecting' ? (
-    <Text color={theme.text.secondary}>
-      <Spinner /> {t('IDE connecting... context may be unavailable')}
-    </Text>
-  ) : uiState.startupIdeConnectionStatus.state === 'failed' ? (
-    <Text color={theme.status.warning}>
-      {t('IDE connection unavailable: {{message}}', {
-        message: uiState.startupIdeConnectionStatus.message,
-      })}
-    </Text>
   ) : uiState.streamingState === StreamingState.Responding ? (
     <Text color={theme.text.secondary}>
       {t('Enter to steer · Ctrl+Q to queue')}

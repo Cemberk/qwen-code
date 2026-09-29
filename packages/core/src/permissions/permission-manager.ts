@@ -852,8 +852,7 @@ export class PermissionManager {
       canonicalName === ToolNames.TASK_STOP ||
       canonicalName === ToolNames.TOOL_CALL ||
       canonicalName === ToolNames.TOOL_SEARCH ||
-      canonicalName.startsWith('mcp__') ||
-      canonicalName.startsWith('computer_use__')
+      canonicalName.startsWith('mcp__')
     );
   }
 
@@ -889,27 +888,16 @@ export class PermissionManager {
    *   `run_shell_command`'s schema says to use `task_stop` to stop a
    *   background command (and not to use broad process-name kills), and
    *   the background-promotion result instructs `task_stop({ task_id })`
-   *   verbatim. It is `shouldDefer=true` (task-stop.ts), the exact
-   *   property the computer_use__* exemption below cites: deferred
+   *   verbatim. It is `shouldDefer=true` (task-stop.ts): deferred
    *   schemas never enter the eager model request, so gating it buys
    *   nothing for the schema-shrink goal and only strips the sanctioned
    *   stop flow while the tool that advertises it stays listed (#9827).
-   * - Computer Use tools (`computer_use__*`): the generated cua-driver
-   *   surface (35 tools, `computerUseEnabled` defaults to true) has no
-   *   alias entry, meta-category, or wildcard rule form — the wire names
-   *   churn on every cua-driver version bump (see tool-names.ts), so no
-   *   concise allow rule can keep the family listed. Every member is
-   *   `shouldDefer=true`, so the schemas never enter the eager model
-   *   request anyway: gating them buys nothing for the schema-shrink
-   *   goal and only strips capability, including ToolSearch
-   *   discoverability. The legacy `tools.core` gate never dropped them
-   *   either (non-core tools bypassed it) (#9827).
    * - `tool_search` and `tool_call`: the deferred-tool discovery and
    *   invocation surfaces. When either bridge is absent from the registry,
    *   client.ts
    *   (`resolveDeferredToolsForReminder`) eagerly force-reveals EVERY
-   *   registered deferred tool — all `mcp__*` tools and the deferred
-   *   `computer_use__*` family — into the eager model request, and
+   *   registered deferred tool — all `mcp__*` tools — into the eager
+   *   model request, and
    *   `preloadDeferredToolsWithinBudget` early-returns without it, so
    *   gating either bridge under a narrow allowlist inverts the
    *   schema-shrink goal into maximal schema bloat for exactly the

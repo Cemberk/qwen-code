@@ -164,14 +164,10 @@ import {
   UnauthorizedError,
 } from '../utils/errors.js';
 import { checkNextSpeaker } from '../utils/nextSpeakerChecker.js';
-import {
-  flatMapTextParts,
-  prependToFirstTextPart,
-} from '../utils/partUtils.js';
+import { flatMapTextParts } from '../utils/partUtils.js';
 import { promptIdContext } from '../utils/promptIdContext.js';
 import { retryWithBackoff, isUnattendedMode } from '../utils/retry.js';
 import { subagentNameContext } from '../utils/subagentNameContext.js';
-import { escapeSystemReminderTags } from '../utils/xml.js';
 import { ApiRetryEvent } from '../telemetry/types.js';
 import { logApiRetry } from '../telemetry/loggers.js';
 import { shouldUsePlanOnlyReminderInSubagentContext } from '../agents/runtime/subagent-plan-tool-policy.js';
@@ -193,9 +189,6 @@ import { createHookOutput, SessionStartSource } from '../hooks/types.js';
 import fsPromises from 'node:fs/promises';
 import { MessageDisplayDispatcher } from './message-display-dispatcher.js';
 
-// IDE integration
-import { ideContextStore } from '../ide/ideContext.js';
-import { type File, type IdeContext } from '../ide/types.js';
 import type { StopHookOutput } from '../hooks/types.js';
 import { approvalModeToPermissionMode } from '../hooks/permission-mode.js';
 
@@ -292,11 +285,6 @@ export type MemoryDeliveryResult = RelevantAutoMemoryPromptResult & {
   deliveryEvent?: MemoryRecallDeliveryEvent;
   commitDeliveryState?: () => void;
 };
-
-function wrapIdeContext(contextText: string): string {
-  const safeContextText = escapeSystemReminderTags(contextText);
-  return `<system-reminder>\n${safeContextText}\n</system-reminder>`;
-}
 
 function sameGoalPermit(
   left: GoalTurnPermit | undefined,
@@ -477,8 +465,6 @@ export class LlmClient {
   private lastPromptId: string | undefined = undefined;
   private activeTodoWorkChainPromptId: string | undefined;
   private readonly activeAutomaticTodoWorkChainPromptIds = new Set<string>();
-  private lastSentIdeContext: IdeContext | undefined;
-  private forceFullIdeContext = true;
   private recentCompletedToolNames: string[] = [];
   private pendingMemoryPrefetch: MemoryPrefetchHandle | undefined;
   private lastDeliveredMemoryTreeRevision: string | undefined;
@@ -917,11 +903,6 @@ export class LlmClient {
     return chat.peekLastHistoryEntry?.() ?? chat.getHistory().at(-1);
   }
 
-  private getHistoryLength(): number {
-    const chat = this.getChat();
-    return chat.getHistoryLength?.() ?? chat.getHistory().length;
-  }
-
   /**
    * Applies a `propose_goal` approval at the true end of the turn that made it.
    *
@@ -1070,7 +1051,7 @@ export class LlmClient {
     const strippedEntries = chat.stripOrphanedUserEntriesFromHistory();
     const after = chat.getHistoryLength();
     if (after >= before) {
-      // Nothing to strip — leave caches and IDE context alone.
+      // Nothing to strip — leave caches alone.
       return strippedEntries;
     }
     this.trustedUserAnswers.clear();
@@ -1091,12 +1072,6 @@ export class LlmClient {
     // Same rewind hazard as setHistory: the stripped entries may have
     // carried the complete-tree router prompt.
     this.lastDeliveredMemoryTreeRevision = undefined;
-    // The stripped user turn may have carried the IDE context (open files,
-    // workspace state) that `lastSentIdeContext` advanced past. Without
-    // forcing a resend, the next request would either skip IDE context
-    // entirely or send only a diff against a now-removed baseline. Match
-    // the invalidation `setHistory()` / `truncateHistory()` already do.
-    this.forceFullIdeContext = true;
     return strippedEntries;
   }
 
@@ -1183,7 +1158,6 @@ export class LlmClient {
     // its chain so the next turn cannot continue work the restore removed.
     this.activeTodoWorkChainPromptId = undefined;
     this.config.clearActiveTodoReminders();
-    this.forceFullIdeContext = true;
   }
 
   truncateHistory(keepCount: number) {
@@ -1218,7 +1192,6 @@ export class LlmClient {
       this.activeTodoWorkChainPromptId = undefined;
       this.config.clearActiveTodoReminders();
     }
-    this.forceFullIdeContext = true;
   }
 
   async setTools(options: { skipHistoryReveal?: boolean } = {}): Promise<void> {
@@ -2609,7 +2582,6 @@ export class LlmClient {
     signal?.throwIfAborted();
     this.lastDeliveredMemoryTreeRevision = undefined;
     this.trustedUserAnswers.clear();
-    this.forceFullIdeContext = true;
     this.lastInjectedDate = undefined;
     // Clear stale cache params on session reset to prevent cross-session leakage
     clearCacheSafeParams();
@@ -2789,198 +2761,6 @@ export class LlmClient {
         'startChat',
       );
       throw new Error(`Failed to initialize chat: ${getErrorMessage(error)}`);
-    }
-  }
-
-  private getIdeContextParts(forceFullContext: boolean): {
-    contextParts: string[];
-    newIdeContext: IdeContext | undefined;
-  } {
-    const currentIdeContext = ideContextStore.get();
-    if (!currentIdeContext) {
-      return { contextParts: [], newIdeContext: undefined };
-    }
-
-    if (forceFullContext || !this.lastSentIdeContext) {
-      // Send full context as plain text
-      const openFiles = currentIdeContext.workspaceState?.openFiles || [];
-      const activeFile = openFiles.find((f) => f.isActive);
-      const otherOpenFiles = openFiles
-        .filter((f) => !f.isActive)
-        .map((f) => f.path);
-
-      const contextLines: string[] = [];
-
-      if (activeFile) {
-        contextLines.push('Active file:');
-        contextLines.push(`  Path: ${activeFile.path}`);
-        if (activeFile.cursor) {
-          contextLines.push(
-            `  Cursor: line ${activeFile.cursor.line}, character ${activeFile.cursor.character}`,
-          );
-        }
-        if (activeFile.selectedText) {
-          contextLines.push('  Selected text:');
-          contextLines.push('```');
-          contextLines.push(activeFile.selectedText);
-          contextLines.push('```');
-        }
-      }
-
-      if (otherOpenFiles.length > 0) {
-        if (contextLines.length > 0) {
-          contextLines.push('');
-        }
-        contextLines.push('Other open files:');
-        for (const filePath of otherOpenFiles) {
-          contextLines.push(`  - ${filePath}`);
-        }
-      }
-
-      if (contextLines.length === 0) {
-        return { contextParts: [], newIdeContext: currentIdeContext };
-      }
-
-      const contextParts = [
-        "Here is the user's current editor context. Use it when relevant, including to answer questions about the active file, open files, cursor, or selected text.",
-        contextLines.join('\n'),
-      ];
-
-      debugLogger.debug(contextParts.join('\n'));
-      return {
-        contextParts,
-        newIdeContext: currentIdeContext,
-      };
-    } else {
-      // Calculate and send delta as plain text
-      const changeLines: string[] = [];
-
-      const lastFiles = new Map(
-        (this.lastSentIdeContext.workspaceState?.openFiles || []).map(
-          (f: File) => [f.path, f],
-        ),
-      );
-      const currentFiles = new Map(
-        (currentIdeContext.workspaceState?.openFiles || []).map((f: File) => [
-          f.path,
-          f,
-        ]),
-      );
-
-      const openedFiles: string[] = [];
-      for (const [path] of currentFiles.entries()) {
-        if (!lastFiles.has(path)) {
-          openedFiles.push(path);
-        }
-      }
-      if (openedFiles.length > 0) {
-        changeLines.push('Files opened:');
-        for (const filePath of openedFiles) {
-          changeLines.push(`  - ${filePath}`);
-        }
-      }
-
-      const closedFiles: string[] = [];
-      for (const [path] of lastFiles.entries()) {
-        if (!currentFiles.has(path)) {
-          closedFiles.push(path);
-        }
-      }
-      if (closedFiles.length > 0) {
-        if (changeLines.length > 0) {
-          changeLines.push('');
-        }
-        changeLines.push('Files closed:');
-        for (const filePath of closedFiles) {
-          changeLines.push(`  - ${filePath}`);
-        }
-      }
-
-      const lastActiveFile = (
-        this.lastSentIdeContext.workspaceState?.openFiles || []
-      ).find((f: File) => f.isActive);
-      const currentActiveFile = (
-        currentIdeContext.workspaceState?.openFiles || []
-      ).find((f: File) => f.isActive);
-
-      if (currentActiveFile) {
-        if (!lastActiveFile || lastActiveFile.path !== currentActiveFile.path) {
-          if (changeLines.length > 0) {
-            changeLines.push('');
-          }
-          changeLines.push('Active file changed:');
-          changeLines.push(`  Path: ${currentActiveFile.path}`);
-          if (currentActiveFile.cursor) {
-            changeLines.push(
-              `  Cursor: line ${currentActiveFile.cursor.line}, character ${currentActiveFile.cursor.character}`,
-            );
-          }
-          if (currentActiveFile.selectedText) {
-            changeLines.push('  Selected text:');
-            changeLines.push('```');
-            changeLines.push(currentActiveFile.selectedText);
-            changeLines.push('```');
-          }
-        } else {
-          const lastCursor = lastActiveFile.cursor;
-          const currentCursor = currentActiveFile.cursor;
-          if (
-            currentCursor &&
-            (!lastCursor ||
-              lastCursor.line !== currentCursor.line ||
-              lastCursor.character !== currentCursor.character)
-          ) {
-            if (changeLines.length > 0) {
-              changeLines.push('');
-            }
-            changeLines.push('Cursor moved:');
-            changeLines.push(`  Path: ${currentActiveFile.path}`);
-            changeLines.push(
-              `  New position: line ${currentCursor.line}, character ${currentCursor.character}`,
-            );
-          }
-
-          const lastSelectedText = lastActiveFile.selectedText || '';
-          const currentSelectedText = currentActiveFile.selectedText || '';
-          if (lastSelectedText !== currentSelectedText) {
-            if (changeLines.length > 0) {
-              changeLines.push('');
-            }
-            changeLines.push('Selection changed:');
-            changeLines.push(`  Path: ${currentActiveFile.path}`);
-            if (currentSelectedText) {
-              changeLines.push('  Selected text:');
-              changeLines.push('```');
-              changeLines.push(currentSelectedText);
-              changeLines.push('```');
-            } else {
-              changeLines.push('  Selected text: (none)');
-            }
-          }
-        }
-      } else if (lastActiveFile) {
-        if (changeLines.length > 0) {
-          changeLines.push('');
-        }
-        changeLines.push('Active file changed:');
-        changeLines.push('  No active file');
-        changeLines.push(`  Previous path: ${lastActiveFile.path}`);
-      }
-
-      if (changeLines.length === 0) {
-        return { contextParts: [], newIdeContext: currentIdeContext };
-      }
-
-      const contextParts = [
-        "Here is a summary of changes in the user's current editor context. Use it with the previous editor context when relevant, including to answer questions about the active file, open files, cursor, or selected text.",
-        changeLines.join('\n'),
-      ];
-
-      debugLogger.debug(contextParts.join('\n'));
-      return {
-        contextParts,
-        newIdeContext: currentIdeContext,
-      };
     }
   }
 
@@ -4292,8 +4072,7 @@ export class LlmClient {
 
       // Auto-compaction happens inside LlmChat.sendMessageStream and surfaces
       // via the `compressed → ChatCompressed` bridge in turn.ts. Manual /compress
-      // still calls tryCompressChat directly for the full reset (env refresh +
-      // forceFullIdeContext flip).
+      // still calls tryCompressChat directly for the full reset (env refresh).
       const model = options?.modelOverride ?? this.config.getModel();
       const sessionTokenLimit = this.config.getSessionTokenLimit();
       if (sessionTokenLimit > 0) {
@@ -4338,34 +4117,12 @@ export class LlmClient {
       // Prevent context updates from being sent while a tool call is
       // waiting for a response. The Qwen API requires that a functionResponse
       // part from the user immediately follows a functionCall part from the model
-      // in the conversation history. The IDE context is not discarded; it will
-      // be included in the next regular message sent to the model.
-      const historyLength = this.getHistoryLength();
+      // in the conversation history.
       const lastMessage = this.peekLastHistoryEntry();
       const hasPendingToolCall =
         !!lastMessage &&
         lastMessage.role === 'model' &&
         (lastMessage.parts?.some((p) => 'functionCall' in p) || false);
-      let ideContextText: string | undefined;
-      let nextIdeContext: IdeContext | undefined;
-      let shouldUpdateIdeContextState = false;
-
-      if (this.config.getIdeMode() && !hasPendingToolCall) {
-        const { contextParts, newIdeContext } = this.getIdeContextParts(
-          this.forceFullIdeContext || historyLength === 0,
-        );
-        if (contextParts.length > 0) {
-          ideContextText = wrapIdeContext(contextParts.join('\n'));
-          nextIdeContext = newIdeContext;
-          shouldUpdateIdeContextState = true;
-        } else {
-          debugLogger.debug(
-            'IDE mode enabled but no context parts generated (forceFull=%s)',
-            this.forceFullIdeContext,
-          );
-        }
-      }
-
       // Check for arena control signal before starting a new turn
       const arenaAgentClient = this.config.getArenaAgentClient();
       if (arenaAgentClient) {
@@ -4413,16 +4170,12 @@ export class LlmClient {
 
       const turn = new Turn(this.getChat(), prompt_id, goalPermit);
 
-      // Assemble the outgoing request. IDE context is merged into the
-      // user prompt's first text part, then on UserQuery / Cron turns
-      // the system reminders block is prepended in front of everything
-      // so the final shape is: [systemReminders..., ideContext + user prompt].
+      // Assemble the outgoing request. On UserQuery / Cron turns the system
+      // reminders block is prepended in front of everything so the final
+      // shape is: [systemReminders..., user prompt].
       let requestToSend = await flatMapTextParts(request, async (text) => [
         text,
       ]);
-      if (ideContextText) {
-        requestToSend = prependToFirstTextPart(requestToSend, ideContextText);
-      }
       if (
         messageType === SendMessageType.UserQuery ||
         messageType === SendMessageType.Cron
@@ -4668,9 +4421,8 @@ export class LlmClient {
         if (toolResultMemory?.prompt) {
           // Append (not prepend): on a ToolResult turn, requestToSend leads
           // with functionResponse parts that must immediately follow the
-          // model's functionCall (Qwen API constraint — same reason the
-          // IDE-context block above is skipped while a tool call is pending,
-          // see the `hasPendingToolCall` guard). Putting the memory text
+          // model's functionCall (Qwen API constraint — see the
+          // `hasPendingToolCall` guard). Putting the memory text
           // after the functionResponse parts keeps the call/response pairing
           // intact under native Gemini; the OpenAI converter then emits the
           // text as a separate user message after the tool messages.
@@ -4716,7 +4468,6 @@ export class LlmClient {
       pushInitiated = true;
       agentOutput.beginResponse();
       const resultStream = turn.run(model, requestToSend, signal);
-      let didUpdateIdeContextState = false;
       let steerInputSettled = false;
       // callIds already fed to the loop guards this attempt. Mirrors the
       // execution-side dedup (coreToolScheduler.dedupeRequestsByCallId / the
@@ -4777,12 +4528,6 @@ export class LlmClient {
           if (messageDisplay && event.type === LlmEventType.Content) {
             messageDisplay.addChunk(event.value);
           }
-          if (shouldUpdateIdeContextState && !didUpdateIdeContextState) {
-            this.lastSentIdeContext = nextIdeContext;
-            this.forceFullIdeContext = false;
-            didUpdateIdeContextState = true;
-          }
-
           // A provider-duplicate emission of an already-fed call id executes
           // once (the schedulers collapse it), so feed the loop guards once —
           // counting both emissions would leave the request counters one ahead
@@ -4879,11 +4624,7 @@ export class LlmClient {
             await arenaAgentClient.updateStatus();
           }
 
-          // Re-send a full IDE context blob on the next regular message — auto
-          // compaction inside chat.sendMessageStream may have summarized away
-          // the previous merged IDE context.
           if (event.type === LlmEventType.ChatCompressed) {
-            this.forceFullIdeContext = true;
             this.resetManagedAutoMemoryAfterCompression();
             memoryDeliveryStateInvalidated = true;
             // Auto-compaction summarized away the startup prelude. Rebuild it
@@ -4935,7 +4676,6 @@ export class LlmClient {
           }
           yield event;
           if (event.type === LlmEventType.Error) {
-            this.forceFullIdeContext = true;
             if (arenaAgentClient) {
               const status = event.value.error?.status;
               const arenaError =
@@ -5634,8 +5374,7 @@ export class LlmClient {
 
   /**
    * Wrapper around {@link LlmChat.tryCompress} that restores main-session
-   * startup context after successful compaction and flips the IDE full-context
-   * flag for the next regular message.
+   * startup context after successful compaction.
    */
   async tryCompressChat(
     prompt_id: string,
@@ -5682,10 +5421,6 @@ export class LlmClient {
         info.newTokenCountIsEstimated ?? true,
       );
       this.resetManagedAutoMemoryAfterCompression();
-      // Re-send a full IDE context blob on the next regular message
-      // compression may have summarized away the merged IDE context
-      // that lived inside the previous user prompt.
-      this.forceFullIdeContext = true;
     }
     return info;
   }
@@ -5788,7 +5523,6 @@ export class LlmClient {
     // the old history (legacy recall exclusions, prefetched-body refs) must
     // be dropped exactly as on the LLM compression path.
     this.resetManagedAutoMemoryDeliveryState();
-    this.forceFullIdeContext = true;
 
     return info;
   }

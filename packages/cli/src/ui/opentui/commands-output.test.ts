@@ -56,7 +56,6 @@ describe('messageToHistoryItem (ink addMessage parity)', () => {
       sandboxEnv: 'none',
       modelVersion: 'test-model',
       selectedAuthType: 'api-key',
-      ideClient: 'none',
       sessionId: 'abc',
       memoryUsage: '1MB',
     };

@@ -116,7 +116,6 @@ const mockParseAndFormatApiError = vi.hoisted(() =>
 const mockLogApiCancel = vi.hoisted(() => vi.fn());
 const mockRefreshMemoryAfterManagedWrite = vi.hoisted(() => vi.fn());
 const mockRefreshMemoryInstruction = vi.hoisted(() => vi.fn());
-const mockCleanupReviewWorktreeLeases = vi.hoisted(() => vi.fn());
 const mockLogConversationFinishedEvent = vi.hoisted(() => vi.fn());
 const mockEndInteractionSpan = vi.hoisted(() => vi.fn());
 const mockGetActiveInteractionSpan = vi.hoisted(() => vi.fn());
@@ -128,10 +127,6 @@ const mockDualOutput = vi.hoisted(() => ({
   finalizeAssistantMessage: vi.fn(),
   emitToolResult: vi.fn(),
   emitUserMessage: vi.fn(),
-}));
-
-vi.mock('../../services/review-worktree-lease.js', () => ({
-  cleanupReviewWorktreeLeases: mockCleanupReviewWorktreeLeases,
 }));
 
 vi.mock('../../dualOutput/DualOutputContext.js', () => ({
@@ -357,7 +352,6 @@ describe('useLlmStream', () => {
       .mockReturnValue((async function* () {})());
     handleAtCommandSpy = vi.spyOn(atCommandProcessor, 'handleAtCommand');
     mockRunVisionBridge.mockReset();
-    mockCleanupReviewWorktreeLeases.mockReset();
     mockUseDualOutput.mockReset().mockReturnValue(null);
   });
 
@@ -17334,56 +17328,6 @@ describe('useLlmStream', () => {
       );
       expect(mockDualOutput.startAssistantMessage).toHaveBeenCalledOnce();
       expect(mockDualOutput.finalizeAssistantMessage).toHaveBeenCalledOnce();
-      await waitFor(() =>
-        expect(mockCleanupReviewWorktreeLeases).toHaveBeenCalledWith({
-          sessionId: 'test-session-id',
-          promptId: 'test-session-id########5',
-          repositoryRoot: '/test/dir',
-        }),
-      );
-    });
-
-    it('does not run host review-worktree cleanup in the tool sandbox', async () => {
-      mockConfig.getShellExecutionSandbox = vi
-        .fn()
-        .mockReturnValue({ network: 'closed' });
-      mockSendMessageStream.mockReturnValue(
-        (async function* () {
-          yield { type: ServerLlmEventType.Content, value: 'partial' };
-          throw new Error('stream failed in sandbox');
-        })(),
-      );
-      const { result } = renderTestHook();
-      await act(async () => {
-        await result.current.submitQuery('sandbox query');
-      });
-      expect(mockCleanupReviewWorktreeLeases).not.toHaveBeenCalled();
-    });
-
-    it('should clean up review lease when the stream throws', async () => {
-      mockSendMessageStream.mockReturnValue(
-        (async function* () {
-          yield {
-            type: ServerLlmEventType.Content,
-            value: 'partial',
-          };
-          throw new Error('stream blew up');
-        })(),
-      );
-
-      const { result } = renderTestHook();
-
-      await act(async () => {
-        await result.current.submitQuery('error query');
-      });
-
-      await waitFor(() =>
-        expect(mockCleanupReviewWorktreeLeases).toHaveBeenCalledWith({
-          sessionId: 'test-session-id',
-          promptId: 'test-session-id########5',
-          repositoryRoot: '/test/dir',
-        }),
-      );
     });
 
     it('should commit thought to history on Error', async () => {
@@ -19842,13 +19786,6 @@ describe('useLlmStream', () => {
           typeof result.current.loopDetectionConfirmationRequest?.onComplete,
         ).toBe('function');
       });
-      await waitFor(() =>
-        expect(mockCleanupReviewWorktreeLeases).toHaveBeenCalledWith({
-          sessionId: 'test-session-id',
-          promptId: 'test-session-id########5',
-          repositoryRoot: '/test/dir',
-        }),
-      );
     });
 
     it('should disable loop detection and show message when user selects "disable"', async () => {

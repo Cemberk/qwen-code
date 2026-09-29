@@ -269,7 +269,6 @@ export function decoratePlanModeShellConfirmation(
       ...confirmation,
       hideAlwaysAllow: true,
       hideModify: true,
-      skipIdeDiff: true,
       warnings: appendUnique(
         warnings,
         `Exact shell command: \`${decision.rawCommand}\``,

@@ -408,18 +408,6 @@ export * from './services/visionBridge/image-capability.js';
 export * from './services/sessionRecap.js';
 export * from './services/session-artifact-persistence.js';
 export * from './services/session-reference-service.js';
-export * from './ipc/inbound-gate.js';
-export * from './ipc/peer-admission.js';
-export * from './ipc/peer-controllers.js';
-export * from './ipc/peer-directory.js';
-export * from './ipc/peer-drop-reports.js';
-export * from './ipc/peer-envelope.js';
-export * from './ipc/peer-frames.js';
-export * from './ipc/peer-routing.js';
-export * from './ipc/peer-send.js';
-export * from './ipc/socket-path.js';
-export * from './ipc/uds-client.js';
-export * from './ipc/uds-inbox.js';
 export * from './services/session-registry.js';
 export * from './services/sessionService.js';
 export {
@@ -507,7 +495,6 @@ export * from './services/shellExecutionService.js';
 export * from './services/monitorRegistry.js';
 export * from './services/backgroundShellRegistry.js';
 export * from './agents/background-notification-queue.js';
-export * from './services/web-terminal-registry.js';
 export * from './agents/workflow-run-registry.js';
 export * from './agents/workflow-correlation.js';
 export * from './agents/workflow-snapshot.js';
@@ -568,8 +555,6 @@ export * from './memory/types.js';
 export * from './memory/paths.js';
 export * from './memory/store.js';
 export * from './utils/memory-constants.js';
-export * from './memory/channel-memory-document.js';
-export * from './memory/channel-memory.js';
 export * from './memory/remember.js';
 export * from './memory/refresh.js';
 export * from './memory/dream.js';
@@ -577,22 +562,6 @@ export * from './memory/learn-skill-agent.js';
 // Issue : write helper for hierarchical context files,
 // re-exported so the `qwen serve` daemon can mutate workspace memory
 // via `POST /workspace/memory` without depending on internal paths.
-export * from './memory/writeContextFile.js';
-
-// ============================================================================
-// IDE Support
-// ============================================================================
-
-export * from './ide/ide-client.js';
-export * from './ide/ideContext.js';
-export * from './ide/ide-installer.js';
-export {
-  detectIdeFromEnv,
-  IDE_DEFINITIONS,
-  type IdeInfo,
-} from './ide/detect-ide.js';
-export * from './ide/constants.js';
-export * from './ide/types.js';
 
 // ============================================================================
 // LSP Support
@@ -645,7 +614,6 @@ export {
   logAuth,
   logExtensionDisable,
   logExtensionEnable,
-  logIdeConnection,
   logLoopDetected,
   logRepeatedToolFailureGuard,
   logModelSlashCommand,
@@ -661,8 +629,6 @@ export {
   ExtensionEnableEvent,
   ExtensionInstallEvent,
   ExtensionUninstallEvent,
-  IdeConnectionEvent,
-  IdeConnectionType,
   LoopDetectedEvent,
   LoopType,
   RepeatedToolFailureGuardEvent,
@@ -719,7 +685,6 @@ export * from './utils/formatters.js';
 export * from './utils/generateContentResponseUtilities.js';
 export * from './utils/getFolderStructure.js';
 export * from './utils/git-branches.js';
-export * from './utils/git-worktrees.js';
 export * from './utils/gitDiff.js';
 export * from './utils/gitDirect.js';
 export * from './utils/git-ignore.js';
@@ -964,4 +929,3 @@ export type {
 } from './omni/policy/types.js';
 export * from './services/session-sources.js';
 export { RecordSourceTool } from './tools/record-source.js';
-export { resolveReviewWorkflowConcurrency } from './agents/runtime/review-workflow.js';

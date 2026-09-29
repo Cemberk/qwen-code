@@ -5,7 +5,6 @@
  */
 
 import { Box, Text } from 'ink';
-import { IdeIntegrationNudge } from '../IdeIntegrationNudge.js';
 import { CommandFormatMigrationNudge } from '../CommandFormatMigrationNudge.js';
 import { LoopDetectionConfirmation } from './LoopDetectionConfirmation.js';
 import { FolderTrustDialog } from './FolderTrustDialog.js';
@@ -41,7 +40,6 @@ import { AuthState } from '../types.js';
 import { AuthType } from '@qwen-code/qwen-code-core';
 import process from 'node:process';
 import { type UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
-import { IdeTrustChangeDialog } from './IdeTrustChangeDialog.js';
 import { WelcomeBackDialog } from './WelcomeBackDialog.js';
 import { WorktreeExitDialog } from './WorktreeExitDialog.js';
 import { AgentCreationWizard } from './subagents/create/AgentCreationWizard.js';
@@ -106,17 +104,6 @@ export const DialogManager = ({
         onKeep={() => void uiActions.handleWorktreeExit('keep')}
         onRemove={() => void uiActions.handleWorktreeExit('remove')}
         onCancel={() => void uiActions.handleWorktreeExit('cancel')}
-      />
-    );
-  }
-  if (uiState.showIdeRestartPrompt) {
-    return <IdeTrustChangeDialog reason={uiState.ideTrustRestartReason} />;
-  }
-  if (uiState.shouldShowIdePrompt) {
-    return (
-      <IdeIntegrationNudge
-        ide={uiState.currentIDE!}
-        onComplete={uiActions.handleIdePromptComplete}
       />
     );
   }
@@ -273,7 +260,6 @@ export const DialogManager = ({
         onClose={uiActions.closeModelDialog}
         isFastModelMode={uiState.isFastModelMode}
         isAdvisorModelMode={uiState.isAdvisorModelMode}
-        isVoiceModelMode={uiState.isVoiceModelMode}
         isVisionModelMode={uiState.isVisionModelMode}
         isCompactionModelMode={uiState.isCompactionModelMode}
         isImageModelMode={uiState.isImageModelMode}

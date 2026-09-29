@@ -52,7 +52,6 @@ describe('aboutCommand', () => {
       sandboxEnv: 'no sandbox',
       modelVersion: 'test-model',
       selectedAuthType: 'test-auth',
-      ideClient: 'test-ide',
       sessionId: 'test-session-id',
       memoryUsage: '100 MB',
       baseUrl: undefined,
@@ -102,7 +101,6 @@ describe('aboutCommand', () => {
           sandboxEnv: 'no sandbox',
           modelVersion: 'test-model',
           selectedAuthType: 'test-auth',
-          ideClient: 'test-ide',
           sessionId: 'test-session-id',
           memoryUsage: '100 MB',
           baseUrl: undefined,
@@ -123,7 +121,6 @@ describe('aboutCommand', () => {
       sandboxEnv: 'gemini-sandbox',
       modelVersion: 'test-model',
       selectedAuthType: 'test-auth',
-      ideClient: 'test-ide',
       sessionId: 'test-session-id',
       memoryUsage: '100 MB',
       baseUrl: undefined,
@@ -157,7 +154,6 @@ describe('aboutCommand', () => {
       sandboxEnv: 'sandbox-exec (test-profile)',
       modelVersion: 'test-model',
       selectedAuthType: 'test-auth',
-      ideClient: 'test-ide',
       sessionId: 'test-session-id',
       memoryUsage: '100 MB',
       baseUrl: undefined,
@@ -190,7 +186,6 @@ describe('aboutCommand', () => {
       sandboxEnv: 'no sandbox',
       modelVersion: 'test-model',
       selectedAuthType: 'test-auth',
-      ideClient: '',
       sessionId: 'test-session-id',
       memoryUsage: '100 MB',
       baseUrl: undefined,
@@ -215,7 +210,6 @@ describe('aboutCommand', () => {
           sandboxEnv: 'no sandbox',
           modelVersion: 'test-model',
           selectedAuthType: 'test-auth',
-          ideClient: '',
           sessionId: 'test-session-id',
           memoryUsage: '100 MB',
           baseUrl: undefined,
@@ -236,7 +230,6 @@ describe('aboutCommand', () => {
       sandboxEnv: 'no sandbox',
       modelVersion: 'test-model',
       selectedAuthType: 'test-auth',
-      ideClient: 'test-ide',
       sessionId: 'test-session-id',
       memoryUsage: '100 MB',
       baseUrl: undefined,
@@ -269,7 +262,6 @@ describe('aboutCommand', () => {
       sandboxEnv: 'no sandbox',
       modelVersion: 'Unknown',
       selectedAuthType: 'test-auth',
-      ideClient: '',
       sessionId: 'unknown',
       memoryUsage: '100 MB',
       baseUrl: undefined,
@@ -343,7 +335,7 @@ describe('aboutCommand', () => {
       expect(nonInteractiveContext.ui.addItem).not.toHaveBeenCalled();
     });
 
-    it('should include git commit and IDE when available', async () => {
+    it('should include git commit when available', async () => {
       if (!aboutCommand.action) throw new Error('No action');
 
       vi.mocked(systemInfoUtils.getExtendedSystemInfo).mockResolvedValue({
@@ -356,7 +348,6 @@ describe('aboutCommand', () => {
         sandboxEnv: 'no sandbox',
         modelVersion: 'test-model',
         selectedAuthType: 'test-auth',
-        ideClient: 'vscode',
         sessionId: 'sess-1',
         memoryUsage: '100 MB',
         baseUrl: undefined,
@@ -373,7 +364,6 @@ describe('aboutCommand', () => {
       };
 
       expect(result.content).toContain('abc1234');
-      expect(result.content).toContain('vscode');
     });
 
     it('paths subcommand should return text without calling addItem', async () => {
@@ -412,7 +402,6 @@ describe('aboutCommand', () => {
         sandboxEnv: 'no sandbox',
         modelVersion: 'test-model',
         selectedAuthType: 'test-auth',
-        ideClient: '',
         sessionId: 'sess-1',
         memoryUsage: '100 MB',
         baseUrl: undefined,

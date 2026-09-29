@@ -17,7 +17,7 @@ CLI Skill 管理保留现有交互和 settings 保存渠道，不增加 CLI 命�
 - Extension Management V2 已有稳定 Extension 身份、精确 workspace 覆盖、带锁的 Extension Store、原子提交和异步操作记录。整个 Extension 的开关使用 `/activation`。
 - 现有 Extension MCP 禁用列表保存在全局 `extension-preferences.json`，没有 workspace 维度，不能直接包装成新的 workspace 状态接口。
 
-相关设计：[Extension Management V2](extension-management-v2.md)、[默认关闭但可显式开启的 Skills](2026-07-20-skills-default-disabled.md)、[Skill 批量设置接口](daemon-skill-batch-toggle.md)。
+相关设计：[Extension Management V2](extension-management-v2.md)、[默认关闭但可显式开启的 Skills](2026-07-20-skills-default-disabled.md)。
 
 ## 声明与优先级
 

@@ -332,24 +332,4 @@ describe('tools.eager entries that match no discovered tool (#12435)', () => {
       expect(await check(session)).toHaveLength(1);
     });
   });
-
-  describe('computer_use__* entries', () => {
-    it('are left alone: their registration does not share the MCP discovery boundary', async () => {
-      const { warnOnUnmatchedEagerToolEntries } = await import(
-        './eager-allowlist-coverage.js'
-      );
-      const session = makeSession({
-        eagerTools: ['computer_use__screenshot'],
-        registered: ['read_file'],
-      });
-
-      warnOnUnmatchedEagerToolEntries(session.config);
-
-      expect(
-        warnSpy.mock.calls
-          .map((call) => String(call[0]))
-          .filter((message) => message.includes('tools.eager')),
-      ).toEqual([]);
-    });
-  });
 });

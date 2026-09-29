@@ -29,10 +29,6 @@ import {
   parseAcpModelOption,
 } from '../../utils/acpModelUtils.js';
 import { recordDaemonSessionModelFromConfig } from '../../acp-integration/session-model-persistence.js';
-import {
-  formatUnsupportedVoiceModelMessage,
-  isSelectableVoiceModel,
-} from '../voice/voice-model.js';
 
 const MAIN_MODEL_CONFIGURATION_HINT =
   'Configure models in settings.modelProviders and ensure the required environment variables are set. In interactive mode, run /auth to configure or switch providers, or run /model without arguments to choose from configured models.';
@@ -51,7 +47,6 @@ const IMAGE_MODEL_CONFIGURATION_HINT =
 
 const MODEL_PICKER_FLAGS = [
   'fast',
-  'voice',
   'vision',
   'compaction',
   'image',
@@ -331,34 +326,10 @@ function formatNonVisionModelWarning(modelName: string): string {
   );
 }
 
-function formatUnavailableVoiceModelMessage(
-  modelName: string,
-  availableModels: AvailableModel[],
-): string {
-  const availableModelIds = Array.from(
-    new Set(availableModels.map((model) => model.id)),
-  );
-  const availableModelsLine =
-    availableModelIds.length === 0
-      ? t('No models are configured.')
-      : t('Configured models: {{models}}.', {
-          models: availableModelIds.join(', '),
-        });
-
-  return (
-    t("Voice model '{{modelName}}' is not configured.", { modelName }) +
-    '\n' +
-    `${availableModelsLine}\n` +
-    t(
-      'Configure a unique model id in settings.modelProviders or run /model --voice to select an available model.',
-    )
-  );
-}
-
 // Get an array of the available model IDs as strings, filtered by mode
 function getAvailableModelIds(
   context: CommandContext,
-  mode: 'main' | 'fast' | 'voice' | 'vision' | 'compaction' | 'image' = 'main',
+  mode: 'main' | 'fast' | 'vision' | 'compaction' | 'image' = 'main',
 ) {
   const { services } = context;
   const { config } = services;
@@ -374,7 +345,6 @@ function getAvailableModelIds(
       return isImageGenerationCapable(m) && !m.fastOnly && !m.voiceOnly;
     if (mode === 'vision') return !m.fastOnly && !m.voiceOnly && !m.imageOnly;
     if (mode === 'fast') return !m.voiceOnly && !m.imageOnly && !m.visionOnly;
-    if (mode === 'voice') return !m.fastOnly && !m.imageOnly && !m.visionOnly;
     // 'main' and 'compaction' exclude all selector-only models.
     return !m.fastOnly && !m.voiceOnly && !m.imageOnly && !m.visionOnly;
   });
@@ -386,11 +356,11 @@ export const modelCommand: SlashCommand = {
   completionPriority: 100,
   get description() {
     return t(
-      'Switch the model for this session (--fast for suggestion model, --voice for voice transcription model, --vision for the vision bridge model, --compaction for chat compression model, --image for the image generation model, --project to persist to project settings, --global to persist to user settings, [model-id] to switch immediately, or [model-id] [prompt] to run a one-off prompt on another model; the inline prompt is sent verbatim without @file expansion).',
+      'Switch the model for this session (--fast for suggestion model, --vision for the vision bridge model, --compaction for chat compression model, --image for the image generation model, --project to persist to project settings, --global to persist to user settings, [model-id] to switch immediately, or [model-id] [prompt] to run a one-off prompt on another model; the inline prompt is sent verbatim without @file expansion).',
     );
   },
   argumentHint:
-    '[--fast|--voice|--vision|--compaction|--image] [--project|--global] [<model-id>] | <model-id> <prompt>',
+    '[--fast|--vision|--compaction|--image] [--project|--global] [<model-id>] | <model-id> <prompt>',
   kind: CommandKind.BUILT_IN,
   supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
   completion: async (context, partialArg) => {
@@ -401,10 +371,6 @@ export const modelCommand: SlashCommand = {
           description: t(
             'Set a lighter model for prompt suggestions and speculative execution',
           ),
-        },
-        {
-          value: '--voice',
-          description: t('Set the model for voice transcription'),
         },
         {
           value: '--vision',
@@ -440,17 +406,10 @@ export const modelCommand: SlashCommand = {
       }
       const trimmed = partialArg.trim();
       if (trimmed) {
-        let mode:
-          | 'main'
-          | 'fast'
-          | 'voice'
-          | 'vision'
-          | 'compaction'
-          | 'image' = 'main';
+        let mode: 'main' | 'fast' | 'vision' | 'compaction' | 'image' = 'main';
         // Strip all known flags to isolate the model prefix for completion
         const modelPrefix = trimmed
           .replace(/(?:^|\s)--fast(?:\s|$)/, ' ')
-          .replace(/(?:^|\s)--voice(?:\s|$)/, ' ')
           .replace(/(?:^|\s)--vision(?:\s|$)/, ' ')
           .replace(/(?:^|\s)--compaction(?:\s|$)/, ' ')
           .replace(/(?:^|\s)--image(?:\s|$)/, ' ')
@@ -458,7 +417,6 @@ export const modelCommand: SlashCommand = {
           .replace(/(?:^|\s)--global(?:\s|$)/, ' ')
           .trim();
         if (/(?:^|\s)--fast(?:\s|$)/.test(trimmed)) mode = 'fast';
-        else if (/(?:^|\s)--voice(?:\s|$)/.test(trimmed)) mode = 'voice';
         else if (/(?:^|\s)--vision(?:\s|$)/.test(trimmed)) mode = 'vision';
         else if (/(?:^|\s)--compaction(?:\s|$)/.test(trimmed))
           mode = 'compaction';
@@ -508,7 +466,7 @@ export const modelCommand: SlashCommand = {
       };
     }
     const auxiliarySelection =
-      /(?:^|\s)--(?:fast|voice|vision|compaction|image)(?:\s|$)/.test(rawArgs);
+      /(?:^|\s)--(?:fast|vision|compaction|image)(?:\s|$)/.test(rawArgs);
     if (
       (hasProject &&
         context.executionPolicy?.allowWorkspaceSettingsWrite === false) ||
@@ -540,79 +498,6 @@ export const modelCommand: SlashCommand = {
         : scopeOverride === SettingScope.User
           ? t(' (global)')
           : '';
-    const isVoiceModelCommand =
-      args === '--voice' || args.startsWith('--voice ');
-    if (isVoiceModelCommand) {
-      const modelName = args.replace('--voice', '').trim();
-      if (!modelName) {
-        if (context.executionMode !== 'interactive') {
-          const voiceModel =
-            context.services.settings?.merged?.voiceModel?.trim() ||
-            t('not set');
-          return {
-            type: 'message',
-            messageType: 'info',
-            content: t(
-              'Current voice model: {{voiceModel}}\nUse "/model --voice <model-id>" to set voice model.',
-              { voiceModel },
-            ),
-          };
-        }
-        return {
-          type: 'dialog',
-          dialog: 'voice-model',
-          ...persistScopeSpread(scopeOverride),
-        };
-      }
-
-      if (!settings) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: t('Settings service not available.'),
-        };
-      }
-
-      const availableModels = config
-        .getAllConfiguredModels()
-        .filter((m) => !m.fastOnly && !m.imageOnly && !m.visionOnly);
-      const matches = availableModels.filter((model) => model.id === modelName);
-      if (matches.length === 0) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: formatUnavailableVoiceModelMessage(
-            modelName,
-            availableModels,
-          ),
-        };
-      }
-      if (matches.length > 1) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: t(
-            "Voice model '{{modelName}}' is ambiguous. Configure a unique model id before using /model --voice.",
-            { modelName },
-          ),
-        };
-      }
-      if (!isSelectableVoiceModel(matches[0]!)) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: formatUnsupportedVoiceModelMessage(modelName),
-        };
-      }
-
-      persistSetting(settings, 'voiceModel', modelName, scopeOverride);
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: t('Voice Model') + ': ' + modelName + scopeSuffix,
-      };
-    }
-
     const isFastModelCommand = args === '--fast' || args.startsWith('--fast ');
     if (isFastModelCommand) {
       const modelName = args.replace('--fast', '').trim();

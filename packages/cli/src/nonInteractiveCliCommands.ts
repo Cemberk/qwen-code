@@ -49,10 +49,6 @@ import type { LoadedSettings } from './config/settings.js';
 import type { SessionStatsState } from './ui/contexts/SessionContext.js';
 import { t } from './i18n/index.js';
 import {
-  isSshSessionCommandAllowed,
-  SSH_SLASH_COMMAND_POLICY,
-} from './acp-integration/ssh-workspace-guards.js';
-import {
   appendUserPromptExpansionAdditionalContext,
   formatUserPromptExpansionBlockedMessage,
   serializeUserPromptExpansionPrompt,
@@ -70,11 +66,6 @@ export function isCommandAllowedByPolicy(
   command: Pick<SlashCommand, 'kind' | 'name'>,
   policy?: NonInteractiveSlashCommandPolicy,
 ): boolean {
-  if (
-    policy === SSH_SLASH_COMMAND_POLICY &&
-    !isSshSessionCommandAllowed(command)
-  )
-    return false;
   if (!policy || command.kind !== CommandKind.BUILT_IN) return true;
   if (command.name === 'clear' && !policy.allowSessionReset) return false;
   return !policy.blockedBuiltinCommandNames.includes(command.name);
@@ -434,9 +425,6 @@ export const handleSlashCommand = async (
     return { type: 'no_command' };
   }
 
-  const sshWorkspace = Boolean(config.getExecutionEnvironment?.());
-  if (sshWorkspace) executionPolicy = SSH_SLASH_COMMAND_POLICY;
-
   const isAcpMode = config.getExperimentalZedIntegration();
   const isInteractive = config.isInteractive();
 
@@ -447,16 +435,14 @@ export const handleSlashCommand = async (
       : 'non_interactive';
 
   // Load all commands to check if the command exists but is not allowed
-  const allLoaders = sshWorkspace
-    ? [new BuiltinCommandLoader(config)]
-    : [
-        new McpPromptLoader(config),
-        new BuiltinCommandLoader(config),
-        new BundledSkillLoader(config),
-        new SkillCommandLoader(config),
-        new SavedWorkflowLoader(config),
-        new FileCommandLoader(config),
-      ];
+  const allLoaders = [
+    new McpPromptLoader(config),
+    new BuiltinCommandLoader(config),
+    new BundledSkillLoader(config),
+    new SkillCommandLoader(config),
+    new SavedWorkflowLoader(config),
+    new FileCommandLoader(config),
+  ];
 
   // Build the disabled-command set (case-insensitive).
   const disabledSlashCommandsRaw = config.getDisabledSlashCommands();
@@ -774,18 +760,14 @@ export const getAvailableCommands = async (
   executionPolicy?: NonInteractiveSlashCommandPolicy,
 ): Promise<SlashCommand[]> => {
   try {
-    const sshWorkspace = Boolean(config.getExecutionEnvironment?.());
-    if (sshWorkspace) executionPolicy = SSH_SLASH_COMMAND_POLICY;
-    const loaders = sshWorkspace
-      ? [new BuiltinCommandLoader(config)]
-      : [
-          new McpPromptLoader(config),
-          new BuiltinCommandLoader(config),
-          new BundledSkillLoader(config),
-          new SkillCommandLoader(config),
-          new SavedWorkflowLoader(config),
-          new FileCommandLoader(config),
-        ];
+    const loaders = [
+      new McpPromptLoader(config),
+      new BuiltinCommandLoader(config),
+      new BundledSkillLoader(config),
+      new SkillCommandLoader(config),
+      new SavedWorkflowLoader(config),
+      new FileCommandLoader(config),
+    ];
 
     const disabledSlashCommands = config.getDisabledSlashCommands();
     const commandService = await CommandService.create(

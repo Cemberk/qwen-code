@@ -99,7 +99,6 @@ describe('modelDialogTitle', () => {
   it('uses the mode-specific title', () => {
     expect(modelDialogTitle('primary')).toBe('Select Model');
     expect(modelDialogTitle('fast')).toBe('Select Fast Model');
-    expect(modelDialogTitle('voice')).toBe('Select Voice Model');
     expect(modelDialogTitle('vision')).toBe('Select Vision Model');
     expect(modelDialogTitle('compaction')).toBe('Select Compaction Model');
     expect(modelDialogTitle('image')).toBe('Select Image Model');

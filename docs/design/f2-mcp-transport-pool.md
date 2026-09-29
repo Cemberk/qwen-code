@@ -4,9 +4,7 @@
 > premise is superseded by multi-workspace runtimes. The implemented pool still
 > has the same isolation boundary, but that boundary is now one
 > `WorkspaceRuntime`: sessions share within a runtime and never across
-> runtimes. See
-> [`daemon-multi-workspace-hardening.md`](./daemon-multi-workspace-hardening.md)
-> for the current ownership contract.
+> runtimes.
 >
 > Targets `daemon_mode_b_main` (per #4175 branching strategy). Replaces #4175 Wave 5 PR 23.
 > **Single-PR delivery** per maintainer's feature-cohesive batch guidance (2026-05-19).

@@ -11,7 +11,6 @@ import { execFile } from 'node:child_process';
 import type { CommandContext } from './commands/types.js';
 import { getCliVersion } from '../utils/version.js';
 import {
-  IdeClient,
   AuthType,
   createDebugLogger,
   formatMemoryUsage,
@@ -46,7 +45,6 @@ export interface SystemInfo {
   sandboxEnv: string;
   modelVersion: string;
   selectedAuthType: string;
-  ideClient: string;
   sessionId: string;
   proxy?: string;
 }
@@ -114,24 +112,6 @@ export async function getGitVersion(): Promise<string> {
 }
 
 /**
- * Gets the IDE client name if IDE mode is enabled.
- * Returns empty string if IDE mode is disabled or IDE client is not detected.
- */
-export async function getIdeClientName(
-  context: SystemInfoContext,
-): Promise<string> {
-  if (!context.services.config?.getIdeMode()) {
-    return '';
-  }
-  try {
-    const ideClient = await IdeClient.getInstance();
-    return ideClient?.getDetectedIdeDisplayName() ?? '';
-  } catch {
-    return '';
-  }
-}
-
-/**
  * Gets the sandbox environment information.
  * Handles different sandbox types including sandbox-exec and custom sandbox environments.
  * For bug reports, removes 'qwen-' or 'qwen-code-' prefixes from sandbox names.
@@ -180,7 +160,6 @@ export async function getSystemInfo(
   const modelVersion = context.services.config?.getModel() || 'Unknown';
   const cliVersion = await getCliVersion();
   const selectedAuthType = context.services.config?.getAuthType() || '';
-  const ideClient = await getIdeClientName(context);
   const sessionId = context.services.config?.getSessionId() || 'unknown';
   const proxy = context.services.config?.getProxy();
 
@@ -194,7 +173,6 @@ export async function getSystemInfo(
     sandboxEnv,
     modelVersion,
     selectedAuthType,
-    ideClient,
     sessionId,
     proxy,
   };

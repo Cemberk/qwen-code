@@ -26,16 +26,16 @@ The root manifest must target the canonical v1 schema:
 
 ## Supported capabilities
 
-| Capability                                 | Support                                  |
-| ------------------------------------------ | ---------------------------------------- |
-| Direct-child `skills/*/SKILL.md`           | Yes                                      |
-| stdio MCP servers                          | Yes                                      |
-| Streamable HTTP MCP servers                | Yes                                      |
-| Legacy HTTP+SSE MCP servers                | No; the entry is skipped                 |
-| Commands, agents, and hooks                | No; these directories are ignored        |
-| Workflows                                  | No; the directory is ignored             |
-| Qwen context, settings, channels, and apps | No                                       |
-| `extensions.*` client namespaces           | No; unimplemented namespaces are ignored |
+| Capability                       | Support                                  |
+| -------------------------------- | ---------------------------------------- |
+| Direct-child `skills/*/SKILL.md` | Yes                                      |
+| stdio MCP servers                | Yes                                      |
+| Streamable HTTP MCP servers      | Yes                                      |
+| Legacy HTTP+SSE MCP servers      | No; the entry is skipped                 |
+| Commands, agents, and hooks      | No; these directories are ignored        |
+| Workflows                        | No; the directory is ignored             |
+| Qwen context, settings, and apps | No                                       |
+| `extensions.*` client namespaces | No; unimplemented namespaces are ignored |
 
 Skills follow the [Agent Skills specification](https://agentskills.io/specification).
 An invalid skill is skipped without disabling valid sibling skills. The

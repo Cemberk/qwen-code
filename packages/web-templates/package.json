@@ -24,8 +24,6 @@
     "dist"
   ],
   "devDependencies": {
-    "@qwen-code/sdk": "file:../sdk-typescript",
-    "@qwen-code/web-shell": "file:../web-shell",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.2.0",

@@ -30,14 +30,6 @@ import { parseRule, toolMatchesRuleToolName } from './rule-parser.js';
 const MCP_PREFIX = 'mcp__';
 
 /**
- * The generated cua-driver surface is not part of the tool registry at the
- * MCP discovery boundary, so there is no reliable candidate set to check
- * these entries against. Reporting them would be a guaranteed false
- * positive; staying quiet costs one undetected typo.
- */
-const COMPUTER_USE_PREFIX = 'computer_use__';
-
-/**
  * Per-session warn-once ledger. Keyed by `Config` (one per session) so a
  * re-discovery — `/mcp reconnect`, an MCP hot-reload reconcile, a second
  * startup pass — does not repeat a warning the operator has already seen.
@@ -120,7 +112,7 @@ export function warnOnUnmatchedEagerToolEntries(config: Config): void {
     }
 
     for (const entry of entries) {
-      if (warned.has(entry) || entry.startsWith(COMPUTER_USE_PREFIX)) {
+      if (warned.has(entry)) {
         continue;
       }
       if (isOnUnconnectedServer(config, entry)) {

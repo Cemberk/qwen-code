@@ -1,7 +1,7 @@
 # Certified session writer handoff
 
 > **Conversations-runtime update (2026-09-06):**
-> [Relaxed Standalone Daemon Ownership](./2026-09-02-relaxed-standalone-daemon-ownership.md)
+> Relaxed Standalone Daemon Ownership
 > is implemented by [#10924](https://github.com/QwenLM/qwen-code/pull/10924)'s
 > mandatory writer fences and [#11207](https://github.com/QwenLM/qwen-code/pull/11207)'s
 > global-owner cutover. Every writer hosted by Conversations now participates,

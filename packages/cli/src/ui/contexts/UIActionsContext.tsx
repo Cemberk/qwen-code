@@ -6,7 +6,6 @@
 
 import { createContext, useContext } from 'react';
 import { type Key } from '../hooks/useKeypress.js';
-import { type IdeIntegrationNudgeResult } from '../IdeIntegrationNudge.js';
 import { type CommandMigrationNudgeResult } from '../CommandFormatMigrationNudge.js';
 import { type FolderTrustChoice } from '../components/FolderTrustDialog.js';
 import { type McpApprovalChoice } from '../components/mcp/MCPServerApprovalDialog.js';
@@ -57,7 +56,6 @@ export interface UIActions {
   openModelDialog: (options?: {
     fastModelMode?: boolean;
     advisorModelMode?: boolean;
-    voiceModelMode?: boolean;
     visionModelMode?: boolean;
     compactionModelMode?: boolean;
     imageModelMode?: boolean;
@@ -70,7 +68,6 @@ export interface UIActions {
   closePermissionsDialog: () => void;
   setShellModeActive: (value: boolean) => void;
   vimHandleInput: (key: Key) => boolean;
-  handleIdePromptComplete: (result: IdeIntegrationNudgeResult) => void;
   handleCommandMigrationComplete: (result: CommandMigrationNudgeResult) => void;
   handleFolderTrustSelect: (choice: FolderTrustChoice) => void;
   handleMcpApprovalSelect: (choice: McpApprovalChoice) => void;

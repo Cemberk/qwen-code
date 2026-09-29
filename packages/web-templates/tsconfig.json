@@ -8,5 +8,5 @@
     "types": ["node"]
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "exclude": ["node_modules", "dist", "src/insight", "src/export-html"]
+  "exclude": ["node_modules", "dist", "src/insight"]
 }

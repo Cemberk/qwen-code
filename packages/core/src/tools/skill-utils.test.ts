@@ -171,7 +171,6 @@ describe('applySkillSideEffects', () => {
       isTrustedFolder: () => true,
       getPermissionManager: () => pm,
       getSessionId: () => 'session-1',
-      enableReviewWorkflow: vi.fn().mockResolvedValue(undefined),
       getHookSystem: () => ({
         getSessionHooksManager: () => ({
           addSessionHook,
@@ -316,21 +315,6 @@ describe('applySkillSideEffects', () => {
       applySkillSideEffects(undefined, gatedSkill),
     ).resolves.toBeUndefined();
   });
-  it.each([
-    ['review', 'bundled', true],
-    ['review', 'project', false],
-    ['review', 'user', false],
-    ['other', 'bundled', false],
-  ] as const)(
-    'activates workflows only for %s at %s level',
-    async (name, level, enabled) => {
-      const { config } = makeConfig();
-      await applySkillSideEffects(config, { ...gatedSkill, name, level });
-      expect(config.enableReviewWorkflow).toHaveBeenCalledTimes(
-        enabled ? 1 : 0,
-      );
-    },
-  );
 });
 
 describe('skillModelInvocationBlock', () => {

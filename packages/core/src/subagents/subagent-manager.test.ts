@@ -2752,7 +2752,7 @@ System prompt 3`);
     it('should list subagents from both levels', async () => {
       const subagents = await manager.listSubagents();
 
-      expect(subagents).toHaveLength(9);
+      expect(subagents).toHaveLength(8);
       expect(subagents.map((s) => s.name)).toEqual([
         'agent1',
         'agent2',
@@ -2760,7 +2760,6 @@ System prompt 3`);
         'general-purpose',
         'Explore',
         'statusline-setup',
-        'review-agent',
         'claude-code',
         'codex',
       ]);
@@ -2797,7 +2796,6 @@ System prompt 3`);
         'codex',
         'Explore',
         'general-purpose',
-        'review-agent',
         'statusline-setup',
       ]);
     });
@@ -2810,12 +2808,11 @@ System prompt 3`);
 
       const subagents = await manager.listSubagents();
 
-      expect(subagents).toHaveLength(6); // Only built-in agents remain
+      expect(subagents).toHaveLength(5); // Only built-in agents remain
       expect(subagents.map((s) => s.name)).toEqual([
         'general-purpose',
         'Explore',
         'statusline-setup',
-        'review-agent',
         'claude-code',
         'codex',
       ]);
@@ -2829,12 +2826,11 @@ System prompt 3`);
 
       const subagents = await manager.listSubagents();
 
-      expect(subagents).toHaveLength(6); // Only built-in agents remain
+      expect(subagents).toHaveLength(5); // Only built-in agents remain
       expect(subagents.map((s) => s.name)).toEqual([
         'general-purpose',
         'Explore',
         'statusline-setup',
-        'review-agent',
         'claude-code',
         'codex',
       ]);

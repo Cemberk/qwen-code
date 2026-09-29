@@ -46,7 +46,6 @@ export enum Command {
   SUBMIT = 'submit',
   QUEUE_MESSAGE = 'queueMessage',
   NEWLINE = 'newline',
-  VOICE_PUSH_TO_TALK = 'voicePushToTalk',
 
   // External tools
   OPEN_EXTERNAL_EDITOR = 'openExternalEditor',
@@ -54,7 +53,6 @@ export enum Command {
 
   // App level bindings
   TOGGLE_TOOL_DESCRIPTIONS = 'toggleToolDescriptions',
-  TOGGLE_IDE_CONTEXT_DETAIL = 'toggleIDEContextDetail',
   QUIT = 'quit',
   EXIT = 'exit',
   SHOW_MORE_LINES = 'showMoreLines',
@@ -228,7 +226,6 @@ export const defaultKeyBindings: KeyBindingConfig = {
     { key: 'return', shift: true },
     { key: 'j', ctrl: true },
   ],
-  [Command.VOICE_PUSH_TO_TALK]: [{ key: 'space', ctrl: false, meta: false }],
 
   // External tools
   [Command.OPEN_EXTERNAL_EDITOR]: [
@@ -248,7 +245,6 @@ export const defaultKeyBindings: KeyBindingConfig = {
 
   // App level bindings
   [Command.TOGGLE_TOOL_DESCRIPTIONS]: [{ key: 't', ctrl: true }],
-  [Command.TOGGLE_IDE_CONTEXT_DETAIL]: [{ key: 'g', ctrl: true }],
   [Command.QUIT]: [{ key: 'c', ctrl: true, shift: false }],
   [Command.EXIT]: [{ key: 'd', ctrl: true }],
   [Command.SHOW_MORE_LINES]: [{ key: 's', ctrl: true }],

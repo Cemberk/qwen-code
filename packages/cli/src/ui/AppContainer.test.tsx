@@ -102,21 +102,10 @@ import {
   ToolNames,
   type LlmClient,
   type GoalTurnHost,
-  describeDeliveryStatus,
-  describeDropReason,
-  PEER_ADMISSION_LIMITS,
   WorktreeRestoreRefusedError,
-  type DropNotice,
-  type HeldMessage,
   type SubagentManager,
 } from '@qwen-code/qwen-code-core';
-import type {
-  PeerMessaging,
-  PeerQueuedDelivery,
-  PeerReceipt,
-} from '../peerMessaging/peer-messaging.js';
-import { MAX_ACCEPTED_BACKLOG } from '../peerMessaging/peer-messaging.js';
-import { SettingScope, type LoadedSettings } from '../config/settings.js';
+import type { LoadedSettings } from '../config/settings.js';
 import type { InitializationResult } from '../core/initializer.js';
 import { UIStateContext, type UIState } from './contexts/UIStateContext.js';
 import {
@@ -224,24 +213,6 @@ async function flushConfigInitialization() {
   );
 }
 
-// AppContainer reads the peer inbox through this hook; a holder keeps the
-// value swappable without wrapping every render in a provider.
-const peerMessagingHolder = vi.hoisted(() => ({
-  current: null as unknown,
-  failure: null as unknown,
-}));
-vi.mock('../peerMessaging/PeerMessagingContext.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('../peerMessaging/PeerMessagingContext.js')
-    >();
-  return {
-    ...actual,
-    usePeerMessaging: () => peerMessagingHolder.current,
-    usePeerInboxFailure: () => peerMessagingHolder.failure,
-  };
-});
-
 vi.mock('./hooks/useHistoryManager.js');
 vi.mock('./hooks/useThemeCommand.js');
 vi.mock('./auth/useAuth.js');
@@ -259,7 +230,6 @@ vi.mock('./hooks/useBracketedPaste.js');
 vi.mock('./hooks/useKeypress.js');
 vi.mock('./hooks/useLoadingIndicator.js');
 vi.mock('./hooks/useFolderTrust.js');
-vi.mock('./hooks/useIdeTrustListener.js');
 vi.mock('./hooks/useMessageQueue.js');
 vi.mock('./hooks/useAutoAcceptIndicator.js');
 vi.mock('./hooks/useGitBranchName.js');
@@ -315,7 +285,6 @@ import { useSlashCommandProcessor } from './hooks/slashCommandProcessor.js';
 import { useLlmStream } from './hooks/use-llm-stream.js';
 import { useVim } from './hooks/vim.js';
 import { useFolderTrust } from './hooks/useFolderTrust.js';
-import { useIdeTrustListener } from './hooks/useIdeTrustListener.js';
 import { useMessageQueue } from './hooks/useMessageQueue.js';
 import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
 import { useGitBranchName } from './hooks/useGitBranchName.js';
@@ -396,7 +365,6 @@ describe('AppContainer State Management', () => {
   const mockedUseLlmStream = useLlmStream as Mock;
   const mockedUseVim = useVim as Mock;
   const mockedUseFolderTrust = useFolderTrust as Mock;
-  const mockedUseIdeTrustListener = useIdeTrustListener as Mock;
   const mockedUseMessageQueue = useMessageQueue as Mock;
   const mockedUseAutoAcceptIndicator = useAutoAcceptIndicator as Mock;
   const mockedUseGitBranchName = useGitBranchName as Mock;
@@ -544,10 +512,6 @@ describe('AppContainer State Management', () => {
       handleFolderTrustSelect: vi.fn(),
       isRestarting: false,
     });
-    mockedUseIdeTrustListener.mockReturnValue({
-      needsRestart: false,
-      restartReason: 'NONE',
-    });
     // Complete UseMessageQueueReturn shape. AppContainer destructures all
     // of these and passes the drain fields straight into
     // useQueuedSubmissionDrain; a mock missing them leaves the drain with
@@ -559,12 +523,10 @@ describe('AppContainer State Management', () => {
       messageQueue: [],
       pendingSubmissionCount: 0,
       addMessage: vi.fn(),
-      addPeerMessage: vi.fn(),
       enqueueGoalTurn: vi.fn(),
       peekNextUserBatchKey: vi.fn(),
       hasQueuedUserMessages: vi.fn().mockReturnValue(false),
       getPendingSubmissionCount: vi.fn().mockReturnValue(0),
-      getQueuedPeerCount: vi.fn().mockReturnValue(0),
       claimGoalTurn: vi.fn(),
       claimDirectUserAdmission: vi.fn(),
       clearQueue: vi.fn(),
@@ -572,7 +534,6 @@ describe('AppContainer State Management', () => {
       popAllMessages: vi.fn().mockReturnValue(null),
       popNextSubmission: vi.fn().mockReturnValue(null),
       restoreMessages: vi.fn(),
-      restorePeerMessage: vi.fn(),
       drainQueue: vi.fn().mockReturnValue([]),
     });
     mockedUseAutoAcceptIndicator.mockReturnValue(false);
@@ -2117,8 +2078,6 @@ describe('AppContainer State Management', () => {
           popNextSubmission,
           enqueueGoalTurn: vi.fn(),
           restoreMessages: vi.fn(),
-          restorePeerMessage: vi.fn(),
-          addHistoryItem: vi.fn(),
           submitQuery,
           submissionInFlightRef: { current: false },
           submissionSettledRevision: 0,
@@ -2186,8 +2145,6 @@ describe('AppContainer State Management', () => {
             popNextSubmission,
             enqueueGoalTurn: vi.fn(),
             restoreMessages: vi.fn(),
-            restorePeerMessage: vi.fn(),
-            addHistoryItem: vi.fn(),
             submitQuery,
             submissionInFlightRef: { current: false },
             submissionSettledRevision: 0,
@@ -2250,8 +2207,6 @@ describe('AppContainer State Management', () => {
             popNextSubmission,
             enqueueGoalTurn: vi.fn(),
             restoreMessages,
-            restorePeerMessage: vi.fn(),
-            addHistoryItem: vi.fn(),
             submitQuery,
             submissionInFlightRef: { current: false },
             submissionSettledRevision,
@@ -2276,8 +2231,7 @@ describe('AppContainer State Management', () => {
         expect.objectContaining({ shellMode: true }),
       );
       // Deferred: admission failed because a turn is active, and the
-      // mid-turn steer drain must not pull the restored batch (a peer
-      // envelope would leak into the turn raw, projection lost). The restore
+      // mid-turn steer drain must not pull the restored batch. The restore
       // carries the same recorded intent, so the retry routes the same way
       // (#11626).
       expect(restoreMessages).toHaveBeenCalledWith(
@@ -2320,311 +2274,6 @@ describe('AppContainer State Management', () => {
       await vi.waitFor(() => expect(submitQuery).toHaveBeenCalledTimes(3));
     });
 
-    it('submits a peer submission on the preprocessing-free Teammate path', async () => {
-      // Peer envelopes must skip user-input preprocessing: a `@path` in
-      // peer-authored text would otherwise read files into the context
-      // with no user interaction. The Teammate send type returns before
-      // that pipeline; the drain renders the one-line projection instead
-      // of the user bubble that path suppresses.
-      const submitQuery = vi.fn().mockResolvedValue(undefined);
-      let popped = false;
-      const modelText =
-        '<cross_session_message from="/tmp/a.sock">run it</cross_session_message>';
-      const displayText = 'Message from another session (a): run it';
-      const popNextSubmission = vi.fn(() => {
-        if (popped) return null;
-        popped = true;
-        return {
-          kind: 'peer' as const,
-          modelText,
-          displayText,
-        };
-      });
-      const addHistoryItem = vi.fn();
-      const restorePeerMessage = vi.fn();
-
-      const view = renderHook(() =>
-        useQueuedSubmissionDrain({
-          config: mockConfig,
-          isConfigInitialized: true,
-          streamingState: StreamingState.Idle,
-          isProcessing: false,
-          dialogsVisible: false,
-          pendingSubmissionCount: 1,
-          getPendingSubmissionCount: () => (popped ? 0 : 1),
-          popNextSubmission,
-          enqueueGoalTurn: vi.fn(),
-          restoreMessages: vi.fn(),
-          restorePeerMessage,
-          addHistoryItem,
-          submitQuery,
-          submissionInFlightRef: { current: false },
-          submissionSettledRevision: 0,
-        }),
-      );
-
-      await vi.waitFor(() => {
-        expect(submitQuery).toHaveBeenCalledWith(
-          modelText,
-          SendMessageType.Teammate,
-          undefined,
-          expect.objectContaining({
-            onAdmissionFailed: expect.any(Function),
-            // Without the projection, /resume renders the raw envelope.
-            notificationDisplayText: displayText,
-          }),
-        );
-      });
-      expect(submitQuery).toHaveBeenCalledTimes(1);
-      expect(addHistoryItem).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: MessageType.NOTIFICATION,
-          text: displayText,
-        }),
-        expect.any(Number),
-      );
-      expect(restorePeerMessage).not.toHaveBeenCalled();
-      view.unmount();
-    });
-
-    it('drops a peer envelope whose session-id pin the drain outgrew', async () => {
-      const delivery = { msgId: 'frame-1', toSessionId: 'session-a' };
-      let popped = false;
-      const popNextSubmission = vi.fn(() => {
-        if (popped) return null;
-        popped = true;
-        return {
-          kind: 'peer' as const,
-          modelText: '<cross_session_message>stale</cross_session_message>',
-          displayText: 'Message from another session: stale',
-          delivery,
-        };
-      });
-      const drainQueuedFrame = vi.fn().mockReturnValue(false);
-      const submitQuery = vi.fn();
-      const addHistoryItem = vi.fn();
-
-      renderHook(() =>
-        useQueuedSubmissionDrain({
-          config: mockConfig,
-          isConfigInitialized: true,
-          streamingState: StreamingState.Idle,
-          isProcessing: false,
-          dialogsVisible: false,
-          pendingSubmissionCount: 1,
-          getPendingSubmissionCount: () => (popped ? 0 : 1),
-          popNextSubmission,
-          enqueueGoalTurn: vi.fn(),
-          restoreMessages: vi.fn(),
-          restorePeerMessage: vi.fn(),
-          addHistoryItem,
-          submitQuery,
-          submissionInFlightRef: { current: false },
-          submissionSettledRevision: 0,
-          peerMessaging: { drainQueuedFrame } as unknown as PeerMessaging,
-        }),
-      );
-
-      await vi.waitFor(() => {
-        expect(drainQueuedFrame).toHaveBeenCalledWith(delivery);
-      });
-      expect(submitQuery).not.toHaveBeenCalled();
-      expect(addHistoryItem).not.toHaveBeenCalled();
-    });
-
-    it('restores a failed peer admission as a peer entry, not user text', async () => {
-      // Restoring as plain user text would drain the envelope through the
-      // UserQuery preprocessing on retry — the exact hazard the peer
-      // send type exists to prevent.
-      const modelText = '<cross_session_message from="/tmp/a.sock">x</>';
-      const displayText = 'Message from another session (a): x';
-      const delivery = { msgId: 'frame-1', toSessionId: 'session-a' };
-      const popNextSubmission = vi.fn(() => ({
-        kind: 'peer' as const,
-        modelText,
-        displayText,
-        delivery,
-      }));
-      const restorePeerMessage = vi.fn(() => {});
-      const submitQuery = vi.fn(async (...args: unknown[]) => {
-        const metadata = args[3] as
-          | { onAdmissionFailed?: () => void }
-          | undefined;
-        metadata?.onAdmissionFailed?.();
-      }) as unknown as ReturnType<typeof useLlmStream>['submitQuery'];
-
-      renderHook(() =>
-        useQueuedSubmissionDrain({
-          config: mockConfig,
-          isConfigInitialized: true,
-          streamingState: StreamingState.Idle,
-          isProcessing: false,
-          dialogsVisible: false,
-          pendingSubmissionCount: 1,
-          getPendingSubmissionCount: () => 1,
-          popNextSubmission,
-          enqueueGoalTurn: vi.fn(),
-          restoreMessages: vi.fn(),
-          restorePeerMessage,
-          addHistoryItem: vi.fn(),
-          submitQuery,
-          submissionInFlightRef: { current: false },
-          submissionSettledRevision: 0,
-        }),
-      );
-
-      await vi.waitFor(() => {
-        expect(restorePeerMessage).toHaveBeenCalledWith(
-          modelText,
-          displayText,
-          true,
-          delivery,
-        );
-      });
-    });
-
-    it('restores a peer entry whose in-flight turn is cancelled or fails', async () => {
-      // A frame admitted on parity or /peers accept is receipted
-      // `delivered` at admission and destructively popped. Cancelling
-      // (ESC) or erroring the turn then fires only onDeliveryFailed —
-      // the Teammate path adds no user history item, so the generic
-      // ESC auto-restore bails. Without this restore the message dies
-      // while the sender keeps a live `delivered` receipt.
-      const modelText = '<cross_session_message from="/tmp/a.sock">x</>';
-      const displayText = 'Message from another session (a): x';
-      const delivery = { msgId: 'frame-1', toSessionId: 'session-a' };
-      const popNextSubmission = vi.fn(() => ({
-        kind: 'peer' as const,
-        modelText,
-        displayText,
-        delivery,
-      }));
-      const restorePeerMessage = vi.fn(() => {});
-      const submitQuery = vi.fn(async (...args: unknown[]) => {
-        const metadata = args[3] as
-          | { onDeliveryFailed?: () => void }
-          | undefined;
-        metadata?.onDeliveryFailed?.();
-      }) as unknown as ReturnType<typeof useLlmStream>['submitQuery'];
-
-      const { rerender } = renderHook(
-        ({ pendingSubmissionCount, submissionSettledRevision }) =>
-          useQueuedSubmissionDrain({
-            config: mockConfig,
-            isConfigInitialized: true,
-            streamingState: StreamingState.Idle,
-            isProcessing: false,
-            dialogsVisible: false,
-            pendingSubmissionCount,
-            getPendingSubmissionCount: () => 1,
-            popNextSubmission,
-            enqueueGoalTurn: vi.fn(),
-            restoreMessages: vi.fn(),
-            restorePeerMessage,
-            addHistoryItem: vi.fn(),
-            submitQuery,
-            submissionInFlightRef: { current: false },
-            submissionSettledRevision,
-          }),
-        {
-          initialProps: {
-            pendingSubmissionCount: 1,
-            submissionSettledRevision: 0,
-          },
-        },
-      );
-
-      await vi.waitFor(() => {
-        expect(restorePeerMessage).toHaveBeenCalledWith(
-          modelText,
-          displayText,
-          true,
-          delivery,
-        );
-      });
-      expect(submitQuery).toHaveBeenCalledTimes(1);
-
-      // The guard holds until the failed turn settles: the entry is
-      // back on the queue, but the drain must not immediately re-pop it
-      // into a turn while the cancelled one is still settling.
-      rerender({ pendingSubmissionCount: 1, submissionSettledRevision: 0 });
-      await new Promise<void>((resolve) => setTimeout(resolve, 25));
-      expect(submitQuery).toHaveBeenCalledTimes(1);
-
-      // Once the turn settles the restored envelope drains again —
-      // parking it until unrelated queue activity is a silent deadlock
-      // for a sender holding a live 'delivered' receipt.
-      rerender({ pendingSubmissionCount: 1, submissionSettledRevision: 1 });
-      await vi.waitFor(() => expect(submitQuery).toHaveBeenCalledTimes(2));
-    });
-
-    it('renders the peer notification once across failed-admission retries', async () => {
-      const goalRuntime = {
-        getSnapshot: () => ({ goal: { status: 'paused' } }),
-        subscribe: () => vi.fn(),
-      } as unknown as ReturnType<Config['getGoalRuntime']>;
-      vi.spyOn(mockConfig, 'getGoalRuntime').mockReturnValue(goalRuntime);
-      const modelText = '<cross_session_message from="/tmp/a.sock">x</>';
-      const displayText = 'Message from another session (a): x';
-      let pops = 0;
-      const popNextSubmission = vi.fn(() => {
-        pops += 1;
-        if (pops > 2) return null;
-        return {
-          kind: 'peer' as const,
-          modelText,
-          displayText,
-          ...(pops === 2 ? { displayed: true } : {}),
-        };
-      });
-      const addHistoryItem = vi.fn();
-      const submitQuery = vi.fn(async (...args: unknown[]) => {
-        const metadata = args[3] as
-          | { onAdmissionFailed?: () => void }
-          | undefined;
-        metadata?.onAdmissionFailed?.();
-      }) as unknown as ReturnType<typeof useLlmStream>['submitQuery'];
-
-      const { rerender } = renderHook(
-        ({ pendingSubmissionCount, submissionSettledRevision }) =>
-          useQueuedSubmissionDrain({
-            config: mockConfig,
-            isConfigInitialized: true,
-            streamingState: StreamingState.Idle,
-            isProcessing: false,
-            dialogsVisible: false,
-            pendingSubmissionCount,
-            getPendingSubmissionCount: () => 1,
-            popNextSubmission,
-            enqueueGoalTurn: vi.fn(),
-            restoreMessages: vi.fn(),
-            restorePeerMessage: vi.fn(),
-            addHistoryItem,
-            submitQuery,
-            submissionInFlightRef: { current: false },
-            submissionSettledRevision,
-          }),
-        {
-          initialProps: {
-            pendingSubmissionCount: 1,
-            submissionSettledRevision: 0,
-          },
-        },
-      );
-
-      await vi.waitFor(() => expect(submitQuery).toHaveBeenCalledTimes(1));
-      expect(addHistoryItem).toHaveBeenCalledTimes(1);
-
-      // Let the first drain's finally clear its in-flight flag before the
-      // retry render, the way the settlement tick does in production.
-      await new Promise<void>((resolve) => setTimeout(resolve, 25));
-
-      // The restore bumps the pending count, releasing the retry guard.
-      rerender({ pendingSubmissionCount: 2, submissionSettledRevision: 1 });
-      await vi.waitFor(() => expect(submitQuery).toHaveBeenCalledTimes(2));
-      expect(addHistoryItem).toHaveBeenCalledTimes(1);
-    });
-
     it('drains after preprocessing settlement releases the shared lock', async () => {
       const goalRuntime = {
         getSnapshot: () => ({ goal: { status: 'active' } }),
@@ -2656,8 +2305,6 @@ describe('AppContainer State Management', () => {
             popNextSubmission,
             enqueueGoalTurn: vi.fn(),
             restoreMessages: vi.fn(),
-            restorePeerMessage: vi.fn(),
-            addHistoryItem: vi.fn(),
             submitQuery,
             submissionInFlightRef,
             submissionSettledRevision,
@@ -2711,12 +2358,10 @@ describe('AppContainer State Management', () => {
         messageQueue: [],
         pendingSubmissionCount: 1,
         addMessage: vi.fn(),
-        addPeerMessage: vi.fn(),
         enqueueGoalTurn: vi.fn(),
         peekNextUserBatchKey: vi.fn(),
         hasQueuedUserMessages: vi.fn().mockReturnValue(false),
         getPendingSubmissionCount: vi.fn(() => (popped ? 0 : 1)),
-        getQueuedPeerCount: vi.fn().mockReturnValue(0),
         claimGoalTurn: vi.fn(),
         claimDirectUserAdmission: vi.fn(),
         clearQueue: vi.fn(),
@@ -2724,7 +2369,6 @@ describe('AppContainer State Management', () => {
         popAllMessages: vi.fn().mockReturnValue(null),
         popNextSubmission,
         restoreMessages: vi.fn(),
-        restorePeerMessage: vi.fn(),
         drainQueue: vi.fn().mockReturnValue([]),
       });
       vi.spyOn(mockConfig, 'initialize').mockResolvedValue(undefined);
@@ -7742,52 +7386,8 @@ describe('AppContainer State Management', () => {
     });
   });
 
-  describe('IDE mode rewind guard', () => {
-    it('shows info message instead of opening rewind selector when IDE mode is enabled', () => {
-      const mockAddItem = vi.fn();
-      mockedUseHistory.mockReturnValue({
-        history: [{ id: 1, type: 'user', text: 'hello' }],
-        addItem: mockAddItem,
-        updateItem: vi.fn(),
-        clearItems: vi.fn(),
-        loadHistory: vi.fn(),
-        truncateToItem: vi.fn(),
-      });
-      mockedUseLlmStream.mockReturnValue({
-        streamingState: 'idle',
-        submitQuery: vi.fn(),
-        initError: null,
-        pendingHistoryItems: [],
-        thought: null,
-        cancelOngoingRequest: vi.fn(),
-        retryLastPrompt: vi.fn(),
-        streamingResponseLengthRef: { current: 0 },
-        isReceivingContent: false,
-      });
-      vi.spyOn(mockConfig, 'getIdeMode').mockReturnValue(true);
-
-      render(
-        <AppContainer
-          config={mockConfig}
-          settings={mockSettings}
-          version="1.0.0"
-          initializationResult={mockInitResult}
-        />,
-      );
-
-      capturedUIActions.openRewindSelector();
-
-      expect(mockAddItem).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'info',
-          text: expect.stringMatching(/rewind.*disabled.*IDE/i),
-        }),
-        expect.any(Number),
-      );
-      expect(capturedUIState.isRewindSelectorOpen).toBeFalsy();
-    });
-
-    it('opens rewind selector normally when IDE mode is disabled', () => {
+  describe('rewind selector', () => {
+    it('opens rewind selector without an info message', () => {
       const mockAddItemDisabled = vi.fn();
       mockedUseHistory.mockReturnValue({
         history: [{ id: 1, type: 'user', text: 'hello' }],
@@ -7808,8 +7408,6 @@ describe('AppContainer State Management', () => {
         streamingResponseLengthRef: { current: 0 },
         isReceivingContent: false,
       });
-      vi.spyOn(mockConfig, 'getIdeMode').mockReturnValue(false);
-
       render(
         <AppContainer
           config={mockConfig}
@@ -8233,858 +7831,6 @@ describe('AppContainer State Management', () => {
         expect.objectContaining({ extensionRuleSources }),
       );
       expect(setContextFilePathsSpy).toHaveBeenCalledWith(['/custom/QWEN.md']);
-    });
-  });
-
-  describe('cross-session peer messages', () => {
-    afterEach(() => {
-      peerMessagingHolder.current = null;
-    });
-
-    interface FakePeerMessaging {
-      value: PeerMessaging;
-      submit: (
-        modelText: string,
-        displayText: string,
-        delivery?: PeerQueuedDelivery,
-      ) => void;
-      emitHeld: (held: readonly HeldMessage[]) => void;
-      emitReceipt: (receipt: PeerReceipt) => void;
-      emitDropped: (notice: DropNotice) => void;
-    }
-
-    const heldMessage = (msgId: string): HeldMessage =>
-      ({
-        frame: {
-          msgV: 1,
-          msgId,
-          type: 'user',
-          from: '/tmp/peer.sock',
-          message: { role: 'user', content: 'do a thing' },
-        },
-        cause: 'mode-mismatch',
-        heldAt: 1,
-      }) as unknown as HeldMessage;
-
-    const makePeerMessaging = (): FakePeerMessaging => {
-      let submitFn:
-        | ((
-            modelText: string,
-            displayText: string,
-            delivery?: PeerQueuedDelivery,
-          ) => void)
-        | null = null;
-      let heldListener: ((held: readonly HeldMessage[]) => void) | null = null;
-      let receiptListener: ((receipt: PeerReceipt) => void) | null = null;
-      let dropListener: ((notice: DropNotice) => void) | null = null;
-      const value = {
-        setSubmitFn: (
-          fn: (
-            modelText: string,
-            displayText: string,
-            delivery?: PeerQueuedDelivery,
-          ) => void,
-        ) => {
-          submitFn = fn;
-        },
-        setQueuedPeerCount: vi.fn(),
-        onHeldChange: (fn: (held: readonly HeldMessage[]) => void) => {
-          heldListener = fn;
-          return () => {};
-        },
-        onReceipt: (fn: (receipt: PeerReceipt) => void) => {
-          receiptListener = fn;
-          return () => {};
-        },
-        onDropped: (fn: (notice: DropNotice) => void) => {
-          dropListener = fn;
-          return () => {};
-        },
-        getHeld: () => [],
-        decide: vi.fn(),
-        reevaluate: vi.fn(),
-      } as unknown as PeerMessaging;
-      return {
-        value,
-        submit: (modelText, displayText, delivery) =>
-          submitFn?.(modelText, displayText, delivery),
-        emitHeld: (held) => {
-          if (!heldListener) throw new Error('no held-change listener wired');
-          heldListener(held);
-        },
-        emitReceipt: (receipt) => {
-          if (!receiptListener) throw new Error('no receipt listener wired');
-          receiptListener(receipt);
-        },
-        emitDropped: (notice) => {
-          if (!dropListener) throw new Error('no drop listener wired');
-          dropListener(notice);
-        },
-      };
-    };
-
-    const renderWithPeer = (peer: FakePeerMessaging) => {
-      peerMessagingHolder.current = peer.value;
-      render(
-        <AppContainer
-          config={mockConfig}
-          settings={mockSettings}
-          version="1.0.0"
-          initializationResult={mockInitResult}
-        />,
-      );
-    };
-
-    it('re-runs the gate when the held-expiry lifetime changes', () => {
-      // Both peer settings reload live, and both change what the gate
-      // would decide for messages already parked. Parking under `never`
-      // arms no timer at all, so without this trigger an edit to `1m`
-      // leaves the backlog held until session exit -- no expired receipt
-      // for the sender -- while `/peers` counts down from the new value.
-      const peer = makePeerMessaging();
-      peerMessagingHolder.current = peer.value;
-      const settingsWith = (crossSessionHeldExpiry: string) =>
-        ({
-          ...mockSettings,
-          merged: {
-            ...mockSettings.merged,
-            agents: {
-              ...mockSettings.merged.agents,
-              crossSessionHeldExpiry,
-            },
-          },
-        }) as unknown as LoadedSettings;
-
-      const { rerender } = render(
-        <AppContainer
-          config={mockConfig}
-          settings={settingsWith('never')}
-          version="1.0.0"
-          initializationResult={mockInitResult}
-        />,
-      );
-      const reevaluate = peer.value.reevaluate as ReturnType<typeof vi.fn>;
-      reevaluate.mockClear();
-
-      rerender(
-        <AppContainer
-          config={mockConfig}
-          settings={settingsWith('1m')}
-          version="1.0.0"
-          initializationResult={mockInitResult}
-        />,
-      );
-
-      expect(reevaluate).toHaveBeenCalledWith('held-expiry-changed');
-    });
-
-    it('re-runs the gate when the inbound policy changes', () => {
-      // The effect keys on the parsed lifetime AND the policy. The policy
-      // half is referenced nowhere in the effect body, so dropping it from
-      // the deps array flags nothing -- and a user live-editing
-      // `crossSessionInbound` from `hold` to `refuse` would never have the
-      // parked backlog settled as `denied`, leaving senders with no
-      // receipt for messages the new policy is supposed to have handled.
-      const peer = makePeerMessaging();
-      peerMessagingHolder.current = peer.value;
-      const settingsWith = (crossSessionInbound: string) =>
-        ({
-          ...mockSettings,
-          merged: {
-            ...mockSettings.merged,
-            agents: {
-              ...mockSettings.merged.agents,
-              crossSessionHeldExpiry: '5m',
-              crossSessionInbound,
-            },
-          },
-          isTrusted: true,
-          workspaceSettingsActive: true,
-          forScope: () => ({ settings: {} }),
-        }) as unknown as LoadedSettings;
-
-      const { rerender } = render(
-        <AppContainer
-          config={mockConfig}
-          settings={settingsWith('hold')}
-          version="1.0.0"
-          initializationResult={mockInitResult}
-        />,
-      );
-      const reevaluate = peer.value.reevaluate as ReturnType<typeof vi.fn>;
-      reevaluate.mockClear();
-
-      rerender(
-        <AppContainer
-          config={mockConfig}
-          settings={settingsWith('refuse')}
-          version="1.0.0"
-          initializationResult={mockInitResult}
-        />,
-      );
-
-      expect(reevaluate).toHaveBeenCalledWith('held-expiry-changed');
-    });
-
-    it('re-runs the gate when policy ownership changes without changing its value', () => {
-      const peer = makePeerMessaging();
-      peerMessagingHolder.current = peer.value;
-      const settingsWith = (owner: 'user' | 'workspace') =>
-        ({
-          ...mockSettings,
-          merged: {
-            ...mockSettings.merged,
-            agents: {
-              ...mockSettings.merged.agents,
-              crossSessionHeldExpiry: '5m',
-              crossSessionInbound: 'hold',
-            },
-          },
-          isTrusted: true,
-          workspaceSettingsActive: true,
-          forScope: (scope: SettingScope) => ({
-            settings:
-              (owner === 'user' && scope === SettingScope.User) ||
-              (owner === 'workspace' && scope === SettingScope.Workspace)
-                ? { agents: { crossSessionInbound: 'hold' } }
-                : {},
-          }),
-        }) as unknown as LoadedSettings;
-
-      const { rerender } = render(
-        <AppContainer
-          config={mockConfig}
-          settings={settingsWith('user')}
-          version="1.0.0"
-          initializationResult={mockInitResult}
-        />,
-      );
-      const reevaluate = peer.value.reevaluate as ReturnType<typeof vi.fn>;
-      reevaluate.mockClear();
-
-      rerender(
-        <AppContainer
-          config={mockConfig}
-          settings={settingsWith('workspace')}
-          version="1.0.0"
-          initializationResult={mockInitResult}
-        />,
-      );
-
-      expect(reevaluate).toHaveBeenCalledWith('held-expiry-changed');
-    });
-
-    it('does not re-run the gate when an unrelated setting changes', () => {
-      // `reevaluate` also settles a parked backlog as `denied` under a
-      // refuse policy, so it must key on the parsed lifetime and the
-      // policy -- not on any settings-file edit, which would discard the
-      // user's backlog on an unrelated key.
-      const peer = makePeerMessaging();
-      peerMessagingHolder.current = peer.value;
-      const settingsWith = (version: string) =>
-        ({
-          ...mockSettings,
-          merged: {
-            ...mockSettings.merged,
-            agents: {
-              ...mockSettings.merged.agents,
-              crossSessionHeldExpiry: '1m',
-            },
-            ui: { ...mockSettings.merged.ui, customWittyPhrases: [version] },
-          },
-        }) as unknown as LoadedSettings;
-
-      const { rerender } = render(
-        <AppContainer
-          config={mockConfig}
-          settings={settingsWith('a')}
-          version="1.0.0"
-          initializationResult={mockInitResult}
-        />,
-      );
-      const reevaluate = peer.value.reevaluate as ReturnType<typeof vi.fn>;
-      reevaluate.mockClear();
-
-      rerender(
-        <AppContainer
-          config={mockConfig}
-          settings={settingsWith('b')}
-          version="1.0.0"
-          initializationResult={mockInitResult}
-        />,
-      );
-
-      expect(reevaluate).not.toHaveBeenCalledWith('held-expiry-changed');
-    });
-
-    it('queues the envelope on the peer path, never as typed user input', () => {
-      // The peer path marks the entry so the drain submits it on the
-      // preprocessing-free Teammate send type — queued as user text, an
-      // `@path` in peer-authored content would read files into the
-      // context with no user interaction. The one-liner rides along as
-      // the display projection, never as the model's copy.
-      const addMessage = vi.fn();
-      const addPeerMessage = vi.fn();
-      mockedUseMessageQueue.mockReturnValue({
-        removeGoalTurns: vi.fn().mockReturnValue([]),
-        messageQueue: [],
-        addMessage,
-        addPeerMessage,
-        clearQueue: vi.fn(),
-        getQueuedMessagesText: vi.fn().mockReturnValue(''),
-        popAllMessages: vi.fn().mockReturnValue(null),
-        drainQueue: vi.fn().mockReturnValue([]),
-        popNextTurn: vi.fn().mockReturnValue(null),
-        getPendingSubmissionCount: vi.fn().mockReturnValue(0),
-        getQueuedPeerCount: vi.fn().mockReturnValue(0),
-      });
-      const peer = makePeerMessaging();
-      const delivery = {
-        msgId: 'frame-1',
-        from: '/tmp/peer.sock',
-        toSessionId: 'session-a',
-      };
-
-      renderWithPeer(peer);
-      act(() => {
-        peer.submit(
-          '<cross_session_message …>envelope</…>',
-          'one-liner',
-          delivery,
-        );
-      });
-
-      expect(addPeerMessage).toHaveBeenCalledWith(
-        '<cross_session_message …>envelope</…>',
-        'one-liner',
-        delivery,
-      );
-      expect(addMessage).not.toHaveBeenCalled();
-      // close() settles still-queued entries; it needs the live depth.
-      expect(peer.value.setQueuedPeerCount).toHaveBeenCalledWith(
-        expect.any(Function),
-      );
-    });
-
-    it('hands the drain the peer handle at the one production call site', () => {
-      // The drop behaviour itself is covered by the `renderHook` test in
-      // 'Queued submission drain', which injects `peerMessaging` directly —
-      // so it proves the logic and nothing about the container passing the
-      // handle in. Delete that single prop and the drain sees
-      // `peerMessaging === undefined`, the optional call short-circuits, and
-      // an envelope addressed to the session `/clear` replaced is submitted
-      // into its successor: the exact regression the pin check exists to
-      // prevent, with every hook-level test still green.
-      //
-      // Structural rather than behavioural for the reason recorded on the
-      // Ctrl+O guard in 'Thinking expansion': under this harness the mount
-      // effect's
-      // `setConfigInitialized(true)` never re-renders the tree, and the
-      // drain is gated on it, so a rendered AppContainer can never reach a
-      // drain at all here. Reading the call site out of the component's own
-      // source is what is left, and it is a real witness: removing
-      // `peerMessaging` from this call makes the assertion fail.
-      const drainCall = /useQueuedSubmissionDrain\(\{([^}]*)\}/.exec(
-        AppContainer.toString(),
-      );
-      expect(drainCall).not.toBeNull();
-      expect(drainCall![1]).toMatch(/\bpeerMessaging\b/);
-    });
-
-    it('refuses peer frames once the pending backlog reaches the cap', () => {
-      // Frames arrive at socket speed but drain at one per turn; without
-      // the guard a busy session's queue grows without bound.
-      const addPeerMessage = vi.fn();
-      mockedUseMessageQueue.mockReturnValue({
-        removeGoalTurns: vi.fn().mockReturnValue([]),
-        messageQueue: [],
-        addMessage: vi.fn(),
-        addPeerMessage,
-        clearQueue: vi.fn(),
-        getQueuedMessagesText: vi.fn().mockReturnValue(''),
-        popAllMessages: vi.fn().mockReturnValue(null),
-        drainQueue: vi.fn().mockReturnValue([]),
-        popNextTurn: vi.fn().mockReturnValue(null),
-        getPendingSubmissionCount: vi
-          .fn()
-          .mockReturnValue(MAX_ACCEPTED_BACKLOG),
-        getQueuedPeerCount: vi.fn().mockReturnValue(0),
-      });
-      const peer = makePeerMessaging();
-
-      renderWithPeer(peer);
-      act(() => {
-        peer.submit('<cross_session_message …>envelope</…>', 'one-liner');
-      });
-
-      expect(addPeerMessage).not.toHaveBeenCalled();
-    });
-
-    it('announces once, with the cause, when the inbox could not bind', () => {
-      const addItem = mockedUseHistory().addItem as Mock;
-      const failure = {
-        cause: 'foreign_owner',
-        socketPath: '/run/user/1000/qwen-socks/1.sock',
-        detail: 'belongs to uid 65534, not 1000',
-        hint: 'Set XDG_RUNTIME_DIR to a directory you own, then restart.',
-        attempts: 3,
-      };
-      peerMessagingHolder.failure = failure;
-      try {
-        const { rerender } = render(
-          <AppContainer
-            config={mockConfig}
-            settings={mockSettings}
-            version="1.0.0"
-            initializationResult={mockInitResult}
-          />,
-        );
-        peerMessagingHolder.failure = { ...failure };
-        rerender(
-          <AppContainer
-            config={mockConfig}
-            settings={mockSettings}
-            version="1.0.0"
-            initializationResult={mockInitResult}
-          />,
-        );
-        const notices = addItem.mock.calls
-          .map((call) => call[0] as { type?: string; text?: string })
-          .filter((item) =>
-            item.text?.includes('Cross-session messaging is OFF'),
-          );
-        expect(notices).toHaveLength(1);
-        expect(notices[0]?.type).toBe(MessageType.ERROR);
-        expect(notices[0]?.text).toContain('belongs to another user');
-        expect(notices[0]?.text).toContain('XDG_RUNTIME_DIR');
-      } finally {
-        peerMessagingHolder.failure = null;
-      }
-    });
-
-    it('announces held and denied receipts, and delivery only after a hold', () => {
-      const addItem = mockedUseHistory().addItem as Mock;
-      const peer = makePeerMessaging();
-      renderWithPeer(peer);
-      const notices = () =>
-        addItem.mock.calls
-          .map((call) => String((call[0] as { text?: string })?.text ?? ''))
-          .filter((text) => text.startsWith('Message to '));
-
-      // The common case: delivered straight away. Nothing to say.
-      act(() => {
-        peer.emitReceipt({
-          status: 'delivered',
-          address: 'docs-cd',
-          origMsgId: 'm1',
-          previous: 'pending',
-        });
-      });
-      expect(notices()).toEqual([]);
-
-      act(() => {
-        peer.emitReceipt({
-          status: 'held',
-          address: 'docs-cd',
-          origMsgId: 'm2',
-          previous: 'pending',
-        });
-      });
-      expect(notices()).toHaveLength(1);
-      expect(notices()[0]).toBe(
-        `Message to docs-cd: ${describeDeliveryStatus('held')}`,
-      );
-
-      // The user over there released it: that ends a hold they saw.
-      act(() => {
-        peer.emitReceipt({
-          status: 'delivered',
-          address: 'docs-cd',
-          origMsgId: 'm2',
-          previous: 'held',
-        });
-      });
-      expect(notices()).toHaveLength(2);
-      expect(notices()[1]).toContain(describeDeliveryStatus('delivered'));
-
-      act(() => {
-        peer.emitReceipt({
-          status: 'denied',
-          address: 'app-ab [ab12cd]',
-          origMsgId: 'm3',
-          previous: 'pending',
-        });
-      });
-      expect(notices()).toHaveLength(3);
-      expect(notices()[2]).toBe(
-        `Message to app-ab [ab12cd]: ${describeDeliveryStatus('denied')}`,
-      );
-
-      // Refused is not declined: nobody looked at this one, the setting
-      // turned it away at admission. This transcript line is the only
-      // place that distinction reaches a person, so it is what makes the
-      // two answers different rather than two words for the same thing.
-      act(() => {
-        peer.emitReceipt({
-          status: 'refused',
-          address: 'app-ab [ab12cd]',
-          origMsgId: 'm3b',
-          previous: 'pending',
-        });
-      });
-      expect(notices()).toHaveLength(4);
-      expect(notices()[3]).toBe(
-        `Message to app-ab [ab12cd]: ${describeDeliveryStatus('refused')}`,
-      );
-      expect(notices()[3]).not.toContain('declined');
-
-      // A stale address is named as such, never as a human's decision.
-      act(() => {
-        peer.emitReceipt({
-          status: 'misaddressed',
-          address: 'docs-cd',
-          origMsgId: 'm4',
-          previous: 'pending',
-        });
-      });
-      expect(notices()).toHaveLength(5);
-      expect(notices()[4]).toContain('different session');
-      expect(notices()[4]).not.toContain('declined');
-
-      // An accepted message that expired was never held: the wire text
-      // for 'expired' speaks of a held message and must not be reused.
-      act(() => {
-        peer.emitReceipt({
-          status: 'expired',
-          address: 'docs-cd',
-          origMsgId: 'm5',
-          previous: 'delivered',
-        });
-      });
-      expect(notices()).toHaveLength(6);
-      expect(notices()[5]).toContain('exited before it read');
-      expect(notices()[5]).not.toContain('held');
-
-      act(() => {
-        peer.emitReceipt({
-          status: 'expired',
-          address: 'docs-cd',
-          origMsgId: 'm6',
-          previous: 'held',
-        });
-      });
-      expect(notices()).toHaveLength(7);
-      expect(notices()[6]).toContain(describeDeliveryStatus('expired'));
-
-      // Expired with no delivery at all now means only that the message
-      // arrived as that session was shutting down: a full queue is a drop
-      // with a reason of its own.
-      act(() => {
-        peer.emitReceipt({
-          status: 'expired',
-          address: 'docs-cd',
-          origMsgId: 'm7',
-          previous: 'pending',
-        });
-      });
-      expect(notices()).toHaveLength(8);
-      expect(notices()[7]).not.toContain('exited before');
-      // Disjunctive: `previous` records what this sender heard, and a
-      // `held` receipt can be lost to the outbound ceiling under exactly
-      // the flood this feature is about, so a live peer can land here.
-      expect(notices()[7]).toContain('shutting down, or could not keep it');
-      expect(notices()[7]).toContain('Retry once it is idle');
-    });
-
-    it('says what became of messages the far inbox turned away', () => {
-      const addItem = mockedUseHistory().addItem as Mock;
-      const peer = makePeerMessaging();
-      renderWithPeer(peer);
-      const notices = () =>
-        addItem.mock.calls
-          .map((call) => String((call[0] as { text?: string })?.text ?? ''))
-          .filter((text) => text.startsWith('Message'));
-
-      act(() => {
-        peer.emitReceipt({
-          status: 'dropped',
-          address: 'docs-cd',
-          origMsgId: 'm1',
-          previous: 'pending',
-          dropReason: 'duplicate',
-          dropped: 1,
-        });
-      });
-      expect(notices()).toHaveLength(1);
-      expect(notices()[0]).toBe(
-        "Message to docs-cd: it was dropped at that session's inbox — " +
-          `${describeDropReason('duplicate')}. The identical message was ` +
-          `accepted there within the last ${PEER_ADMISSION_LIMITS.dedupWindowMs / 1000} s, ` +
-          'so there is nothing to re-send.',
-      );
-      // A repeat means the text is already over there, so advising a fold
-      // would have the model reword it and deliver the instruction twice.
-      expect(notices()[0]).not.toContain('Treat it as unsent');
-
-      // One receipt can stand for a burst, so the line counts rather than
-      // repeating itself.
-      act(() => {
-        peer.emitReceipt({
-          status: 'dropped',
-          address: 'docs-cd',
-          origMsgId: 'm2',
-          previous: 'pending',
-          dropReason: 'rate-limited',
-          dropped: 7,
-        });
-      });
-      expect(notices()).toHaveLength(2);
-      expect(notices()[1]).toBe(
-        "Messages to docs-cd: 7 were dropped at that session's inbox — " +
-          `${describeDropReason('rate-limited')}. Treat them as unsent; fold ` +
-          'what still matters into one later message.',
-      );
-
-      // A receipt from a build that named no reason still says enough.
-      act(() => {
-        peer.emitReceipt({
-          status: 'dropped',
-          address: 'docs-cd',
-          origMsgId: 'm3',
-          previous: 'pending',
-        });
-      });
-      expect(notices()).toHaveLength(3);
-      expect(notices()[2]).toContain('it was dropped');
-      expect(notices()[2]).not.toContain('—');
-    });
-
-    it('says when this session is turning a peer away', () => {
-      const addItem = mockedUseHistory().addItem as Mock;
-      const peer = makePeerMessaging();
-      renderWithPeer(peer);
-      const notices = () =>
-        addItem.mock.calls
-          .map((call) => String((call[0] as { text?: string })?.text ?? ''))
-          .filter((text) => text.startsWith('Dropped a message'));
-
-      const frame = {
-        msgV: 1,
-        msgId: 'm1',
-        type: 'user' as const,
-        from: '/tmp/peer.sock',
-        fromName: 'docs-cd',
-        priority: 'next' as const,
-        message: { role: 'user' as const, content: 'do a thing' },
-      };
-
-      act(() => {
-        peer.emitDropped({
-          frame,
-          origin: { selfSent: false },
-          reason: 'rate-limited',
-          suppressed: 0,
-        });
-      });
-      expect(notices()[0]).toBe(
-        'Dropped a message from another session (docs-cd (/tmp/peer.sock)): ' +
-          'this session is taking peer messages faster than it accepts them.',
-      );
-      // The trust category leads, as it does on both sibling lines: a
-      // peer-chosen name alone could read as the user's own session.
-      expect(notices()[0]).toContain('another session');
-
-      // The count of what one line stands for, so a flood stays one line.
-      act(() => {
-        peer.emitDropped({
-          frame,
-          origin: { selfSent: false },
-          reason: 'duplicate',
-          suppressed: 12,
-        });
-      });
-      expect(notices()[1]).toBe(
-        'Dropped a message from another session (docs-cd (/tmp/peer.sock)): ' +
-          'it repeated its previous message within ' +
-          `${PEER_ADMISSION_LIMITS.dedupWindowMs / 1000} s. ` +
-          '(+12 more dropped during this notice window)',
-      );
-      // The count is a session-wide total once the notice budget is
-      // spent, so it must not be labelled as this sender's own.
-      expect(notices()[1]).not.toContain('similar');
-
-      // A controller is named by the label its user gave it, never by
-      // anything the sender wrote.
-      act(() => {
-        peer.emitDropped({
-          frame,
-          origin: {
-            selfSent: false,
-            controller: { id: 'c_1234abcd', label: 'voice' },
-          },
-          reason: 'queue-full',
-          suppressed: 0,
-        });
-      });
-      expect(notices()[2]).toBe(
-        "Dropped a message from a trusted controller (voice): this session's " +
-          'queue of undelivered peer messages is full.',
-      );
-
-      act(() => {
-        peer.emitDropped({
-          frame: { ...frame, from: undefined, fromName: undefined },
-          origin: { selfSent: true },
-          reason: 'rate-limited',
-          suppressed: 0,
-        });
-      });
-      expect(notices()[3]).toContain('a process this session started');
-
-      act(() => {
-        peer.emitDropped({
-          frame: { ...frame, fromName: undefined },
-          origin: { selfSent: true },
-          reason: 'rate-limited',
-          suppressed: 0,
-        });
-      });
-      expect(notices()[4]).toContain(
-        'a process this session started (/tmp/peer.sock)',
-      );
-
-      act(() => {
-        peer.emitDropped({
-          frame: { ...frame, from: undefined, fromName: undefined },
-          origin: { selfSent: false },
-          reason: 'rate-limited',
-          suppressed: 0,
-        });
-      });
-      expect(notices()[5]).toContain('from another session');
-    });
-
-    it('announces a newly held message once and stays quiet when one is released', () => {
-      const addItem = mockedUseHistory().addItem as Mock;
-      const peer = makePeerMessaging();
-
-      renderWithPeer(peer);
-      const noticeCount = () =>
-        addItem.mock.calls.filter((call) =>
-          String((call[0] as { text?: string })?.text ?? '').includes(
-            'Held a message from another session',
-          ),
-        ).length;
-
-      act(() => {
-        peer.emitHeld([heldMessage('a'), heldMessage('b')]);
-      });
-      expect(noticeCount()).toBe(1);
-
-      // /peers accept b — the set changed, but nothing new was held.
-      act(() => {
-        peer.emitHeld([heldMessage('a')]);
-      });
-      expect(noticeCount()).toBe(1);
-
-      act(() => {
-        peer.emitHeld([heldMessage('a'), heldMessage('c')]);
-      });
-      expect(noticeCount()).toBe(2);
-    });
-
-    it('passes the policy scope into a held-message announcement', () => {
-      const addItem = mockedUseHistory().addItem as Mock;
-      const peer = makePeerMessaging();
-
-      renderWithPeer(peer);
-      act(() => {
-        peer.emitHeld([
-          {
-            ...heldMessage('a'),
-            cause: 'explicit-setting',
-            policyScope: 'workspace',
-          },
-        ]);
-      });
-
-      const notice = String(
-        (addItem.mock.calls.at(-1)?.[0] as { text?: string })?.text ?? '',
-      );
-      expect(notice).toContain("this repository's settings hold");
-    });
-
-    it("identifies a held message from the session's own process", () => {
-      const addItem = mockedUseHistory().addItem as Mock;
-      const peer = makePeerMessaging();
-
-      renderWithPeer(peer);
-      act(() => {
-        peer.emitHeld([{ ...heldMessage('a'), selfSent: true }]);
-      });
-
-      const notice = String(
-        (addItem.mock.calls.at(-1)?.[0] as { text?: string })?.text ?? '',
-      );
-      expect(notice).toContain(
-        'Held a message from a process this session started',
-      );
-      expect(notice).not.toContain('another session');
-    });
-
-    it('names the grant when a controller message is held', () => {
-      const addItem = mockedUseHistory().addItem as Mock;
-      const peer = makePeerMessaging();
-
-      renderWithPeer(peer);
-      act(() => {
-        peer.emitHeld([
-          {
-            ...heldMessage('a'),
-            controller: { id: 'c_0123abcd', label: 'voice bridge' },
-          },
-        ]);
-      });
-
-      const notice = String(
-        (addItem.mock.calls.at(-1)?.[0] as { text?: string })?.text ?? '',
-      );
-      expect(notice).toContain(
-        'Held a message from a trusted controller (voice bridge)',
-      );
-      expect(notice).not.toContain('another session');
-    });
-
-    it('does not announce arrivals that only replace an evicted entry', () => {
-      // Once the hold buffer is full, every further frame evicts the
-      // oldest while carrying a fresh id; announcing those would add a
-      // history item (and a re-render) per frame without bound.
-      const addItem = mockedUseHistory().addItem as Mock;
-      const peer = makePeerMessaging();
-
-      renderWithPeer(peer);
-      const noticeCount = () =>
-        addItem.mock.calls.filter((call) =>
-          String((call[0] as { text?: string })?.text ?? '').includes(
-            'Held a message from another session',
-          ),
-        ).length;
-
-      act(() => {
-        peer.emitHeld([heldMessage('a'), heldMessage('b')]);
-      });
-      expect(noticeCount()).toBe(1);
-
-      act(() => {
-        peer.emitHeld([heldMessage('b'), heldMessage('c')]);
-      });
-      expect(noticeCount()).toBe(1);
-
-      // A genuine growth still announces.
-      act(() => {
-        peer.emitHeld([heldMessage('b'), heldMessage('c'), heldMessage('d')]);
-      });
-      expect(noticeCount()).toBe(2);
     });
   });
 });

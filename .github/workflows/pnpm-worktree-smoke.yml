@@ -11,15 +11,8 @@ on:
       - '.pnpmfile.mjs'
       - 'package.json'
       - 'packages/*/package.json'
-      - '!packages/desktop/package.json'
-      - '!packages/live-host/package.json'
-      - '!packages/mobile-shell/package.json'
-      - 'packages/channels/*/package.json'
-      - 'integrations/*/package.json'
       - 'patches/**'
-      - 'packages/audio-capture/install.js'
       - 'packages/core/scripts/postinstall.js'
-      - 'packages/vscode-ide-companion/scripts/generate-notices.js'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
       - 'scripts/generate-git-commit-info.js'
@@ -35,15 +28,8 @@ on:
       - '.pnpmfile.mjs'
       - 'package.json'
       - 'packages/*/package.json'
-      - '!packages/desktop/package.json'
-      - '!packages/live-host/package.json'
-      - '!packages/mobile-shell/package.json'
-      - 'packages/channels/*/package.json'
-      - 'integrations/*/package.json'
       - 'patches/**'
-      - 'packages/audio-capture/install.js'
       - 'packages/core/scripts/postinstall.js'
-      - 'packages/vscode-ide-companion/scripts/generate-notices.js'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
       - 'scripts/generate-git-commit-info.js'
@@ -89,7 +75,7 @@ jobs:
         shell: 'bash'
         run: >-
           node -e "require.resolve('@qwen-code/qwen-code-core/package.json',
-          { paths: ['packages/vscode-ide-companion'] })"
+          { paths: ['packages/cli'] })"
 
       - name: 'Ensure bootstrap keeps the worktree clean'
         shell: 'bash'

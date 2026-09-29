@@ -39,7 +39,7 @@ import type {
   ToolCallConfirmationDetails,
   Config,
 } from '@qwen-code/qwen-code-core';
-import { IdeClient, ToolConfirmationOutcome } from '@qwen-code/qwen-code-core';
+import { ToolConfirmationOutcome } from '@qwen-code/qwen-code-core';
 import {
   renderWithProviders,
   withProviders,
@@ -68,7 +68,6 @@ describe('ToolConfirmationMessage', () => {
 
   const mockConfig = {
     isTrustedFolder: () => true,
-    getIdeMode: () => false,
   } as unknown as Config;
 
   it('should not display urls if prompt and url are the same', () => {
@@ -641,7 +640,6 @@ describe('ToolConfirmationMessage', () => {
       it('should show "allow always" when folder is trusted', () => {
         const mockConfig = {
           isTrustedFolder: () => true,
-          getIdeMode: () => false,
         } as unknown as Config;
 
         const { lastFrame } = renderWithProviders(
@@ -659,7 +657,6 @@ describe('ToolConfirmationMessage', () => {
       it('should NOT show "allow always" when folder is untrusted', () => {
         const mockConfig = {
           isTrustedFolder: () => false,
-          getIdeMode: () => false,
         } as unknown as Config;
 
         const { lastFrame } = renderWithProviders(
@@ -702,7 +699,6 @@ describe('ToolConfirmationMessage', () => {
       ) => {
         const config = {
           isTrustedFolder: () => trusted,
-          getIdeMode: () => false,
         } as unknown as Config;
         return renderWithProviders(
           <ToolConfirmationMessage
@@ -779,7 +775,6 @@ describe('ToolConfirmationMessage', () => {
     it('should show "Modify with external editor" when preferredEditor is set', () => {
       const mockConfig = {
         isTrustedFolder: () => true,
-        getIdeMode: () => false,
       } as unknown as Config;
       isEditorAvailableMock.mockClear();
 
@@ -831,7 +826,6 @@ describe('ToolConfirmationMessage', () => {
     it('should NOT show "Modify with external editor" when the configured editor is unavailable', () => {
       const mockConfig = {
         isTrustedFolder: () => true,
-        getIdeMode: () => false,
       } as unknown as Config;
       isEditorAvailableMock.mockClear();
       isEditorAvailableMock.mockReturnValueOnce(false);
@@ -853,7 +847,6 @@ describe('ToolConfirmationMessage', () => {
     it('should NOT show "Modify with external editor" when preferredEditor is not set', () => {
       const mockConfig = {
         isTrustedFolder: () => true,
-        getIdeMode: () => false,
       } as unknown as Config;
       isEditorAvailableMock.mockClear();
 
@@ -878,7 +871,6 @@ describe('ToolConfirmationMessage', () => {
     it('should NOT show "Modify with external editor" when hideModify is true', () => {
       const mockConfig = {
         isTrustedFolder: () => true,
-        getIdeMode: () => false,
       } as unknown as Config;
       isEditorAvailableMock.mockClear();
 
@@ -935,7 +927,6 @@ describe('ToolConfirmationMessage', () => {
     it('renders edit warnings and honors hideAlwaysAllow on small terminals', () => {
       const mockConfig = {
         isTrustedFolder: () => true,
-        getIdeMode: () => false,
       } as unknown as Config;
       const { lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
@@ -1137,70 +1128,6 @@ describe('ToolConfirmationMessage', () => {
       expect(frame).toContain('Apply this change?');
       expect(frame).toContain('Yes, allow once');
       expect(frame).toContain('No');
-    });
-
-    it('resolves ordinary IDE edits but skips confirmations that have no IDE diff', async () => {
-      const resolveDiffFromCli = vi.fn().mockResolvedValue(undefined);
-      const isDiffingEnabled = vi.fn().mockReturnValue(true);
-      const getInstanceSpy = vi
-        .spyOn(IdeClient, 'getInstance')
-        .mockResolvedValue({
-          isDiffingEnabled,
-          resolveDiffFromCli,
-        } as unknown as IdeClient);
-      const ideConfig = {
-        isTrustedFolder: () => true,
-        getIdeMode: () => true,
-      } as unknown as Config;
-
-      const ordinaryOnConfirm = vi.fn().mockResolvedValue(undefined);
-      const ordinary = renderWithProviders(
-        <ToolConfirmationMessage
-          confirmationDetails={{
-            ...editConfirmationDetails,
-            onConfirm: ordinaryOnConfirm,
-          }}
-          config={ideConfig}
-          availableTerminalHeight={30}
-          contentWidth={80}
-        />,
-      );
-      await vi.waitFor(() => expect(isDiffingEnabled).toHaveBeenCalled());
-      ordinary.stdin.write('\r');
-      await vi.waitFor(() =>
-        expect(resolveDiffFromCli).toHaveBeenCalledWith(
-          '/test.txt',
-          'accepted',
-        ),
-      );
-      ordinary.unmount();
-
-      resolveDiffFromCli.mockClear();
-      isDiffingEnabled.mockClear();
-      const skippedOnConfirm = vi.fn().mockResolvedValue(undefined);
-      const skipped = renderWithProviders(
-        <ToolConfirmationMessage
-          confirmationDetails={{
-            ...editConfirmationDetails,
-            onConfirm: skippedOnConfirm,
-            skipIdeDiff: true,
-          }}
-          config={ideConfig}
-          availableTerminalHeight={30}
-          contentWidth={80}
-        />,
-      );
-      await vi.waitFor(() => expect(isDiffingEnabled).toHaveBeenCalled());
-      skipped.stdin.write('\r');
-      await vi.waitFor(() =>
-        expect(skippedOnConfirm).toHaveBeenCalledWith(
-          ToolConfirmationOutcome.ProceedOnce,
-        ),
-      );
-      expect(resolveDiffFromCli).not.toHaveBeenCalled();
-
-      skipped.unmount();
-      getInstanceSpy.mockRestore();
     });
   });
 

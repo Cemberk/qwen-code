@@ -20,9 +20,7 @@ import { AuthType } from '../../core/contentGenerator.js';
 import {
   StartSessionEvent,
   EndSessionEvent,
-  IdeConnectionEvent,
   KittySequenceOverflowEvent,
-  IdeConnectionType,
   HookCallEvent,
   SkillLaunchEvent,
   ProtocolTagSanitizedEvent,
@@ -90,7 +88,6 @@ const makeFakeConfig = (overrides: Partial<Config> = {}): Config => {
     getToolRegistry: () => undefined,
     getTruncateToolOutputThreshold: () => 25000,
     getTruncateToolOutputLines: () => 0,
-    getIdeMode: () => false,
     getShouldUseNodePtyShell: () => false,
     getHookSystem: () => undefined,
     ...overrides,
@@ -583,26 +580,6 @@ describe('QwenLogger', () => {
             response_id: 'response-id',
             tag_name: 'thinking',
             tool_call_count: 3,
-          },
-        }),
-      );
-    });
-
-    it('should log IDE connection events', () => {
-      const logger = QwenLogger.getInstance(mockConfig)!;
-      const enqueueSpy = vi.spyOn(logger, 'enqueueLogEvent');
-
-      const event = new IdeConnectionEvent(IdeConnectionType.SESSION);
-
-      logger.logIdeConnectionEvent(event);
-
-      expect(enqueueSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          event_type: 'action',
-          type: 'ide',
-          name: 'ide_connection',
-          properties: {
-            connection_type: IdeConnectionType.SESSION,
           },
         }),
       );

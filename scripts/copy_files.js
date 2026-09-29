@@ -23,7 +23,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { copyBrowserUseAssets } from './copy-browser-use-assets.js';
 
 const extensionsToCopy = ['.md', '.json', '.sb'];
 
@@ -51,7 +50,6 @@ function copyFilesRecursive(source, target, rootSourceDir) {
     const normalizedPath = relativePath.replace(/\\/g, '/');
 
     if (item.isDirectory()) {
-      if (normalizedPath === 'skills/bundled/browser-use/runtime') continue;
       copyFilesRecursive(sourcePath, targetPath, rootSourceDir);
     } else {
       const ext = path.extname(item.name);
@@ -81,15 +79,6 @@ export function copyFiles({ root = process.cwd() } = {}) {
   copyFilesRecursive(sourceDir, targetDir, sourceDir);
 
   const packageName = path.basename(root);
-  if (
-    packageName === 'core' &&
-    fs.existsSync(path.join(sourceDir, 'skills/bundled/browser-use/SKILL.md'))
-  ) {
-    copyBrowserUseAssets(
-      path.resolve(root, '../..'),
-      path.join(targetDir, 'skills/bundled/browser-use'),
-    );
-  }
   // Copy example extensions into the bundle.
   if (packageName === 'cli') {
     const examplesSource = path.join(

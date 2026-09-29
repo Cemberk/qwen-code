@@ -25,18 +25,6 @@ describe('useModelCommand', () => {
     expect(result.current.isModelDialogOpen).toBe(true);
   });
 
-  it('should open the model dialog in voice model mode', () => {
-    const { result } = renderHook(() => useModelCommand());
-
-    act(() => {
-      result.current.openModelDialog({ voiceModelMode: true });
-    });
-
-    expect(result.current.isModelDialogOpen).toBe(true);
-    expect(result.current.isVoiceModelMode).toBe(true);
-    expect(result.current.isFastModelMode).toBe(false);
-  });
-
   it('should open the model dialog in vision model mode and suppress fast mode', () => {
     const { result } = renderHook(() => useModelCommand());
 
@@ -51,7 +39,6 @@ describe('useModelCommand', () => {
     expect(result.current.isModelDialogOpen).toBe(true);
     expect(result.current.isVisionModelMode).toBe(true);
     expect(result.current.isFastModelMode).toBe(false);
-    expect(result.current.isVoiceModelMode).toBe(false);
   });
 
   it('should open the model dialog in image model mode exclusively', () => {
@@ -60,7 +47,6 @@ describe('useModelCommand', () => {
     act(() => {
       result.current.openModelDialog({
         imageModelMode: true,
-        voiceModelMode: true,
         visionModelMode: true,
         fastModelMode: true,
       });
@@ -68,7 +54,6 @@ describe('useModelCommand', () => {
 
     expect(result.current.isImageModelMode).toBe(true);
     expect(result.current.isVisionModelMode).toBe(false);
-    expect(result.current.isVoiceModelMode).toBe(false);
     expect(result.current.isFastModelMode).toBe(false);
   });
 
@@ -77,17 +62,17 @@ describe('useModelCommand', () => {
 
     // Open it first
     act(() => {
-      result.current.openModelDialog({ voiceModelMode: true });
+      result.current.openModelDialog({ fastModelMode: true });
     });
     expect(result.current.isModelDialogOpen).toBe(true);
-    expect(result.current.isVoiceModelMode).toBe(true);
+    expect(result.current.isFastModelMode).toBe(true);
 
     // Then close it
     act(() => {
       result.current.closeModelDialog();
     });
     expect(result.current.isModelDialogOpen).toBe(false);
-    expect(result.current.isVoiceModelMode).toBe(false);
+    expect(result.current.isFastModelMode).toBe(false);
   });
 
   it('should reset isVisionModelMode on close', () => {

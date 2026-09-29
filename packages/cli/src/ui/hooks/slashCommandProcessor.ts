@@ -17,7 +17,6 @@ import { type PartListUnion } from '@google/genai';
 import process from 'node:process';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { ArenaDialogType } from './useArenaCommand.js';
-import { usePeerMessaging } from '../../peerMessaging/PeerMessagingContext.js';
 import {
   type Logger,
   type Config,
@@ -26,7 +25,6 @@ import {
   makeSlashCommandEvent,
   SlashCommandStatus,
   ToolConfirmationOutcome,
-  IdeClient,
   type SessionListItem,
   addMCPStatusChangeListener,
   removeMCPStatusChangeListener,
@@ -181,7 +179,6 @@ export interface SlashCommandProcessorActions {
   openModelDialog: (options?: {
     fastModelMode?: boolean;
     advisorModelMode?: boolean;
-    voiceModelMode?: boolean;
     visionModelMode?: boolean;
     compactionModelMode?: boolean;
     imageModelMode?: boolean;
@@ -245,10 +242,6 @@ export const useSlashCommandProcessor = (
   }
   const activeExtensionRefreshState =
     extensionRefreshState ?? fallbackExtensionRefreshStateRef.current;
-
-  // Null unless cross-session messaging is enabled and bound; `/peers`
-  // reads that as "the feature is off" rather than as an error.
-  const peerMessaging = usePeerMessaging();
 
   // Ref avoids adding `history` to the commandContext useMemo deps,
   // which would cause a full context rebuild on every history append.
@@ -523,7 +516,6 @@ export const useSlashCommandProcessor = (
         settings,
         logger,
         extensionRefreshState: activeExtensionRefreshState,
-        peerMessaging,
       },
       ui: {
         get history() {
@@ -589,37 +581,14 @@ export const useSlashCommandProcessor = (
       extensionsUpdateState,
       isIdleRef,
       activeExtensionRefreshState,
-      peerMessaging,
     ],
   );
-
-  useEffect(() => {
-    if (!config || config.getShellExecutionSandbox?.()) {
-      return;
-    }
-
-    const listener = () => {
-      reloadCommands();
-    };
-
-    (async () => {
-      const ideClient = await IdeClient.getInstance();
-      ideClient.addStatusChangeListener(listener);
-    })();
-
-    return () => {
-      (async () => {
-        const ideClient = await IdeClient.getInstance();
-        ideClient.removeStatusChangeListener(listener);
-      })();
-    };
-  }, [config, reloadCommands]);
 
   // MCP discovery is progressive: it runs in the background after the UI is
   // already interactive, so a server's prompts (prompts/list) are not in the
   // registry when the command loaders first run. Without this, an MCP prompt
-  // never surfaces as a `/<prompt>` command until some unrelated reload (IDE
-  // status / skill change) happens to fire — the `/mcp` dialog shows the
+  // never surfaces as a `/<prompt>` command until some unrelated reload
+  // (skill change) happens to fire — the `/mcp` dialog shows the
   // prompt count while the slash menu stays empty. Rebuild the command tree
   // when a server finishes connecting; debounce so a burst of servers
   // connecting at startup triggers a single rebuild.
@@ -1249,12 +1218,6 @@ export const useSlashCommandProcessor = (
                       return { type: 'handled' };
                     case 'advisor-model':
                       actions.openModelDialog({ advisorModelMode: true });
-                      return { type: 'handled' };
-                    case 'voice-model':
-                      actions.openModelDialog({
-                        voiceModelMode: true,
-                        persistScope: result.persistScope,
-                      });
                       return { type: 'handled' };
                     case 'vision-model':
                       actions.openModelDialog({

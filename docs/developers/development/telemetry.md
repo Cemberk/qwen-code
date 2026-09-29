@@ -14,7 +14,6 @@ Learn how to enable and setup OpenTelemetry for Qwen Code.
   - [Logs and Metrics](#logs-and-metrics)
     - [Logs](#logs)
     - [Metrics](#metrics)
-    - [Daemon Metrics](#daemon-metrics)
     - [Spans](#spans)
     - [Resource Metrics](#resource-metrics)
     - [Performance Monitoring (Reserved)](#performance-monitoring-reserved)
@@ -166,8 +165,6 @@ is written only to interaction, LLM, Tool, and Agent spans. It is not a Resource
 attribute, log or metric attribute, outbound Baggage value, or current
 OpenTelemetry GenAI standard field. Prefer a stable pseudonymous identifier.
 The value is resolved at startup, so configuration changes require a restart.
-Do not configure a process-wide value on a daemon or channel instance serving
-multiple end users.
 
 For detailed information about all configuration options, see the
 [Configuration Guide](../../users/configuration/settings.md).
@@ -312,8 +309,8 @@ cardinality pressure.
 When telemetry is enabled, Qwen Code registers `UndiciInstrumentation`
 which creates a client-side HTTP span for every outbound `fetch()`
 request originated by the process — including the LLM SDKs (`openai`,
-`@google/genai`, `@anthropic-ai/sdk`), the MCP StreamableHTTP client, the
-`WebFetch` tool, and any IDE-extension out-of-process calls. The span
+`@google/genai`, `@anthropic-ai/sdk`), the MCP StreamableHTTP client, and the
+`WebFetch` tool. The span
 lets you see network latency (TTFB / response body transfer) separately
 from upstream model processing time, which the existing
 `api.generateContent` span alone can't distinguish.
@@ -415,45 +412,6 @@ requires an explicit Routify `baseUrl` so Qwen Code can verify the
 destination.
 
 `X-Qwen-Code-Request-Id` is not implemented.
-
-## Inbound correlation (daemon HTTP API)
-
-The daemon HTTP API accepts the standard W3C `traceparent` header on every
-request. Two consumers read it independently:
-
-- **Request span re-parenting (telemetry enabled).** When the telemetry SDK
-  is initialized, a valid header is extracted as the request span's remote
-  parent, so daemon spans attach under the caller's trace instead of
-  starting a new one. The `_meta` forwarding path reads the same parent
-  chain, so session subprocess spans forwarded through a daemon request
-  inherit it too.
-- **Access-log `traceId` field (both modes).** A dedicated pre-auth capture
-  middleware parses the header on every request — including ones
-  short-circuited at auth (401), the rate limiter (429), the JSON body
-  parser (400), or never matched by any route (404) — and the access log
-  emits the caller trace id as a camelCase `traceId` field. With telemetry
-  disabled this field is the only join between a daemon log line and the
-  caller's logs (or trace backend), so one saved query works for both modes
-  with no telemetry configuration.
-
-An invalid-but-present header is rejected (the span stays parentless) and
-leaves a rate-limited DEBUG breadcrumb
-(`qwen-code.daemon.traceparent.invalid`) recording the rejected value, so a
-broken cross-service join is diagnosable from daemon logs alone.
-
-### Forced sampling under inbound parents
-
-Under the default `parentbased_always_on` sampler (and other parentbased
-defaults), a remote parent's `sampled=0` flag is a head-based decision on
-the caller's side, not a request to drop daemon telemetry, so extraction
-forces the SAMPLED flag on inbound parents. The only opt-out is
-`OTEL_TRACES_SAMPLER=parentbased_always_off`, which honors the caller's
-flags — note it also disables root-span sampling for the whole daemon, not
-just inbound-linked requests.
-
-**Warning:** a constant `traceparent` (e.g. hardcoded in a load-test
-client) re-parents every daemon request into one single trace; generate a
-fresh header per request.
 
 ## Aliyun Telemetry
 
@@ -705,9 +663,6 @@ The following events are logged:
 - `qwen-code.extension_update`: Extension updated.
   - **Attributes**: `extension_name` (string), `extension_id` (string), `extension_previous_version` (string), `extension_version` (string), `extension_source` (string), `status` (string: "success"/"error")
 
-- `qwen-code.ide_connection`: IDE connection event.
-  - **Attributes**: `connection_type` (string: "start" or "session")
-
 - `qwen-code.auth`: Authentication event.
   - **Attributes**: `auth_type` (string), `action_type` ("auto", "manual", "coding-plan"), `status` ("success", "error", "cancelled"), `error_message` (optional)
 
@@ -883,57 +838,9 @@ A resumed Goal can contribute multiple stop observations, each containing its li
 - `qwen-code.api.request.breakdown` (Histogram, ms): API request time breakdown by phase.
   - **Attributes**: `model`, `phase` ("request_preparation"/"network_latency"/"response_processing"/"token_processing")
 
-### Daemon Metrics
-
-The daemon process (long-running HTTP server mode) exposes its own metrics.
-
-> **Note:** The three Observable Gauges (`daemon.session.active`, `daemon.sse.active`, `daemon.process.heap_used`) are callback-based metrics updated at each collection interval; `registerDaemonGaugeCallbacks()` must be invoked during daemon initialization to register the observation callbacks.
-
-#### HTTP
-
-- `qwen-code.daemon.http.request.count` (Counter, Int): Request count by route and status class.
-  - **Attributes**: `route`, `status_class` ("2xx"/"4xx"/"5xx")
-
-- `qwen-code.daemon.http.request.duration` (Histogram, ms): Request duration.
-  - **Attributes**: `route`
-  - **Buckets**: 1, 2, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000
-
-#### Sessions
-
-- `qwen-code.daemon.session.active` (ObservableGauge, Int): Current active sessions.
-
-- `qwen-code.daemon.session.lifecycle` (Counter, Int): Session lifecycle events.
-  - **Attributes**: `action` ("spawn"/"close"/"die")
-
-#### Channels
-
-- `qwen-code.daemon.channel.lifecycle` (Counter, Int): ACP channel lifecycle events.
-  - **Attributes**: `action` ("spawn"/"exit"), `expected` (boolean, optional)
-
-#### Prompts
-
-- `qwen-code.daemon.prompt.queue_wait` (Histogram, ms): Prompt FIFO queue wait time.
-  - **Buckets**: 1, 5, 10, 50, 100, 500, 1000, 5000, 10000, 30000, 60000
-
-- `qwen-code.daemon.prompt.duration` (Histogram, ms): End-to-end prompt duration.
-  - **Buckets**: 100, 500, 1000, 2500, 5000, 10000, 30000, 60000, 120000, 300000, 600000
-
-#### Errors
-
-- `qwen-code.daemon.bridge.error.count` (Counter, Int): Bridge errors by type.
-  - **Attributes**: `error_type` (known class name or "unknown")
-
-- `qwen-code.daemon.cancel.count` (Counter, Int): Cancel request count.
-
-#### Resources
-
-- `qwen-code.daemon.sse.active` (ObservableGauge, Int): Active SSE connections.
-
-- `qwen-code.daemon.process.heap_used` (ObservableGauge, Int, bytes): Heap memory usage.
-
 ### Spans
 
-Distributed tracing spans form a tree rooted at `qwen-code.interaction`. In the CLI, each interaction is a trace root with its own `traceId`; ACP and daemon paths may inherit an inbound parent context. Cross-prompt correlation uses the `session.id` attribute.
+Distributed tracing spans form a tree rooted at `qwen-code.interaction`. In the CLI, each interaction is a trace root with its own `traceId`; ACP paths may inherit an inbound parent context. Cross-prompt correlation uses the `session.id` attribute.
 
 Session lifecycle is also exported through the OpenTelemetry General Session
 semantic conventions. When the OTel logs pipeline is enabled, Qwen Code emits
@@ -996,12 +903,6 @@ To make ARMS recognize exported spans as a GenAI application, configure its reso
 ```
 
 Qwen Code does not inject this ARMS-specific resource attribute or `gen_ai.span.kind`. ARMS can infer LLM, Tool, and Agent roles from `gen_ai.operation.name`.
-
-- `qwen-code.daemon.request`: Wraps a daemon HTTP request.
-  - **Attributes**: `http.request.method`, `http.route`, `qwen-code.daemon.operation`, `session.id`, `http.response.status_code`
-
-- `qwen-code.daemon.bridge`: Wraps daemon bridge operations.
-  - **Attributes**: `qwen-code.daemon.operation`
 
 #### Resource Metrics
 

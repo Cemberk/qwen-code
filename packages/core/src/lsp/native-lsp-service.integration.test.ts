@@ -9,7 +9,6 @@ import { EventEmitter } from 'events';
 import { NativeLspService } from './native-lsp-service.js';
 import type { Config as CoreConfig } from '../config/config.js';
 import type { FileDiscoveryService } from '../services/fileDiscoveryService.js';
-import type { IdeContextStore } from '../ide/ideContext.js';
 import type { WorkspaceContext } from '../utils/workspaceContext.js';
 import type { LspDiagnostic, LspLocation } from './types.js';
 
@@ -393,24 +392,17 @@ class MockFileDiscoveryService {
   }
 }
 
-/**
- * Mock IDE context store for testing.
- */
-class MockIdeContextStore {}
-
 describe('NativeLspService Integration Tests', () => {
   let lspService: NativeLspService;
   let mockConfig: MockConfig;
   let mockWorkspace: MockWorkspaceContext;
   let mockFileDiscovery: MockFileDiscoveryService;
-  let mockIdeStore: MockIdeContextStore;
   let eventEmitter: EventEmitter;
 
   beforeEach(() => {
     mockConfig = new MockConfig();
     mockWorkspace = new MockWorkspaceContext();
     mockFileDiscovery = new MockFileDiscoveryService();
-    mockIdeStore = new MockIdeContextStore();
     eventEmitter = new EventEmitter();
 
     lspService = new NativeLspService(
@@ -418,7 +410,6 @@ describe('NativeLspService Integration Tests', () => {
       mockWorkspace as unknown as WorkspaceContext,
       eventEmitter,
       mockFileDiscovery as unknown as FileDiscoveryService,
-      mockIdeStore as unknown as IdeContextStore,
       {
         workspaceRoot: mockWorkspace.rootPath,
       },
@@ -452,7 +443,6 @@ describe('NativeLspService Integration Tests', () => {
         mockWorkspace as unknown as WorkspaceContext,
         eventEmitter,
         mockFileDiscovery as unknown as FileDiscoveryService,
-        mockIdeStore as unknown as IdeContextStore,
         {
           workspaceRoot: mockWorkspace.rootPath,
           requireTrustedWorkspace: true,
@@ -646,7 +636,6 @@ describe('NativeLspService Integration Tests', () => {
         emptyWorkspace as unknown as WorkspaceContext,
         eventEmitter,
         mockFileDiscovery as unknown as FileDiscoveryService,
-        mockIdeStore as unknown as IdeContextStore,
       );
 
       await expect(service.discoverAndPrepare()).resolves.not.toThrow();
@@ -690,7 +679,6 @@ describe('NativeLspService Integration Tests', () => {
         mockWorkspace as unknown as WorkspaceContext,
         eventEmitter,
         mockFileDiscovery as unknown as FileDiscoveryService,
-        mockIdeStore as unknown as IdeContextStore,
         {
           requireTrustedWorkspace: true,
         },

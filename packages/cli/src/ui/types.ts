@@ -296,7 +296,6 @@ export type HistoryItemAbout = HistoryItemBase & {
     sandboxEnv: string;
     modelVersion: string;
     selectedAuthType: string;
-    ideClient: string;
     sessionId: string;
     memoryUsage: string;
     baseUrl?: string;
@@ -907,7 +906,6 @@ export type Message =
         sandboxEnv: string;
         modelVersion: string;
         selectedAuthType: string;
-        ideClient: string;
         sessionId: string;
         memoryUsage: string;
         baseUrl?: string;

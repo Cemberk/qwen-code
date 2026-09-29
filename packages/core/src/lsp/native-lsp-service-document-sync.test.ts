@@ -25,7 +25,6 @@ import type { LspServerManager } from './lsp-server-manager.js';
 import type { Config } from '../config/config.js';
 import type { WorkspaceContext } from '../utils/workspaceContext.js';
 import type { FileDiscoveryService } from '../services/fileDiscoveryService.js';
-import type { IdeContextStore } from '../ide/ideContext.js';
 import type {
   LspCallHierarchyItem,
   LspServerHandle,
@@ -120,7 +119,6 @@ describe('NativeLspService disk document synchronization', () => {
       { getDirectories: () => [directory] } as unknown as WorkspaceContext,
       new EventEmitter(),
       { shouldIgnoreFile: () => false } as unknown as FileDiscoveryService,
-      {} as IdeContextStore,
     );
     manager = (service as unknown as { serverManager: LspServerManager })
       .serverManager;

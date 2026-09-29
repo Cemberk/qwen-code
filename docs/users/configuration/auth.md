@@ -58,7 +58,7 @@ After authentication, use the `/model` command to switch between all Alibaba Clo
 
 ### Headless or scripted setup
 
-For CI, containers, or scripts, configure Coding Plan with environment variables or `settings.json` instead of the removed `qwen auth coding-plan` command.
+For CI, containers, or scripts, configure Coding Plan with environment variables or `settings.json`.
 
 ```bash
 export BAILIAN_CODING_PLAN_API_KEY="sk-sp-xxxxxxxxx"
@@ -382,23 +382,6 @@ qwen --model "qwen3-coder-plus"
 
 qwen --model "qwen3.5-plus"
 ```
-
-## Removed `qwen auth` CLI command
-
-The standalone `qwen auth` CLI command has been removed. Use these replacements instead:
-
-| Previous use case                | Replacement                                                                                   |
-| -------------------------------- | --------------------------------------------------------------------------------------------- |
-| Interactive authentication setup | Run `qwen`, then use `/auth`                                                                  |
-| Coding Plan setup                | Use `/auth`, or set `BAILIAN_CODING_PLAN_API_KEY` with the Coding Plan base URL               |
-| Token Plan setup                 | Use `/auth`, or set `BAILIAN_TOKEN_PLAN_API_KEY` with the Token Plan base URL for your region |
-| OpenRouter setup                 | Use `/auth`, or set `OPENROUTER_API_KEY` and `OPENAI_BASE_URL=https://openrouter.ai/api/v1`   |
-| Requesty setup                   | Use `/auth`, or set `REQUESTY_API_KEY` and `OPENAI_BASE_URL=https://router.requesty.ai/v1`    |
-| API-key or custom provider setup | Configure `~/.qwen/settings.json`, `.env`, or provider-specific environment variables         |
-| Check current authentication     | Run `/doctor` inside Qwen Code                                                                |
-| OAuth browser flow               | Run `qwen` interactively and use `/auth`; OAuth cannot be configured with env vars alone      |
-
-Legacy invocations such as `qwen auth status` print a removal notice that summarizes these migration paths, including a Token Plan entry with the base URLs for both regions.
 
 ## Security notes
 

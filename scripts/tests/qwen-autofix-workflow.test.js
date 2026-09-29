@@ -24223,48 +24223,13 @@ describe('growth-audit hardening: park wake set and verdict pipeline (round 3)',
     }
   });
 
-  it('pins the convergence signal codes inside the review CLI vocabulary, and the two gates in lockstep (#10107)', () => {
-    // The vocabulary is a CONTRACT owned by the review CLI: the workflow
-    // wires actions to codes the marker publishes, so a workflow code the
-    // CLI can never emit is a breaker that can never trip, and a renamed
-    // CLI code silently disarms it. Pin membership on both ends, and the
-    // deliberate absence of the exit code.
+  it('keeps the convergence signal codes and the two gates in lockstep (#10107)', () => {
     const codesEnv = workflow.match(
       /CONVERGENCE_SIGNAL_CODES: '(\[[^\n]*\])'/,
     )?.[1];
     expect(codesEnv).toBeTruthy();
     const signalCodes = JSON.parse(codesEnv);
     expect(signalCodes.length).toBeGreaterThan(0);
-    const convergenceTs = readFileSync(
-      'packages/cli/src/commands/review/lib/convergence.ts',
-      'utf8',
-    );
-    const vocab = convergenceTs
-      .match(/RECOMMENDATION_CODES = \[([\s\S]*?)\] as const/)?.[1]
-      .match(/'([a-z-]+)'/g)
-      .map((c) => c.replaceAll("'", ''));
-    expect(vocab).toBeTruthy();
-    for (const code of signalCodes) {
-      expect(vocab).toContain(code);
-    }
-    // …and the converse: every divergence code the CLI can emit is wired —
-    // the vocabulary minus the ONE documented exit code. A code the CLI
-    // emits that the gate never counts takes the streak reduce's else-0
-    // branch and RESETS an accumulated streak instead of extending it.
-    for (const code of vocab) {
-      if (code === 'land-and-defer') continue;
-      expect(signalCodes).toContain(code);
-    }
-    // 'land-and-defer' means "this loop can end by merging" — pausing on it
-    // would park exactly the PR a human should merge.
-    expect(vocab).toContain('land-and-defer');
-    expect(signalCodes).not.toContain('land-and-defer');
-    // The marker really publishes the field the gates read.
-    const ledgerTs = readFileSync(
-      'packages/cli/src/commands/review/lib/ledger.ts',
-      'utf8',
-    );
-    expect(ledgerTs).toContain('payload.rec = rec');
     // Lockstep: the scan gate and the prepare mirror must read the SAME
     // streak and the SAME boundary, or one side burns rounds the other
     // refused. The jq programs reference only their own --arg names, so

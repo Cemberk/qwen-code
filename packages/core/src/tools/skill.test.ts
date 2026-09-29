@@ -113,7 +113,6 @@ describe('SkillTool', () => {
     // Create mock config
     config = {
       getProjectRoot: vi.fn().mockReturnValue('/test/project'),
-      enableReviewWorkflow: vi.fn().mockResolvedValue(undefined),
       getAutoSkillEnabled: vi.fn().mockReturnValue(true),
       getSessionId: vi.fn().mockReturnValue('test-session-id'),
       isTrustedFolder: vi.fn().mockReturnValue(true),
@@ -552,41 +551,6 @@ describe('SkillTool', () => {
     });
   });
 
-  it('waits for workflow registration on first and repeated bundled review loads', async () => {
-    const review: SkillConfig = {
-      name: 'review',
-      description: 'Review',
-      level: 'bundled',
-      filePath: '/bundled/review/SKILL.md',
-      body: 'Review body.',
-    };
-    vi.mocked(mockSkillManager.loadSkillForRuntime).mockResolvedValue(review);
-    for (const attempt of [1, 2]) {
-      let release!: () => void;
-      const registration = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      vi.mocked(config.enableReviewWorkflow).mockReturnValue(registration);
-      let returned = false;
-      const invocation = (
-        skillTool as SkillToolWithProtectedMethods
-      ).createInvocation({ skill: 'review' });
-      const pending = invocation.execute().then((result) => {
-        returned = true;
-        return result;
-      });
-      await vi.waitFor(() =>
-        expect(config.enableReviewWorkflow).toHaveBeenCalledTimes(attempt),
-      );
-      expect(returned).toBe(false);
-      release();
-      const result = await pending;
-      expect(partToString(result.llmContent)).toContain(
-        attempt === 1 ? 'Review body.' : 'already loaded',
-      );
-    }
-  });
-
   it.each(['user', 'bundled'] as const)(
     'deduplicates simultaneous %s skill loads after side effects settle',
     async (level) => {
@@ -614,55 +578,6 @@ describe('SkillTool', () => {
     },
   );
 
-  it('retries the full skill body after workflow schema refresh fails', async () => {
-    vi.mocked(mockSkillManager.loadSkillForRuntime).mockResolvedValue({
-      name: 'review',
-      description: 'Review',
-      level: 'bundled',
-      filePath: '/bundled/review/SKILL.md',
-      body: 'Review body.',
-    });
-    vi.mocked(config.enableReviewWorkflow).mockRejectedValueOnce(
-      new Error('schema refresh failed'),
-    );
-    const invoke = () =>
-      (skillTool as SkillToolWithProtectedMethods)
-        .createInvocation({ skill: 'review' })
-        .execute();
-    const first = await invoke();
-    expect(partToString(first.llmContent)).toContain('schema refresh failed');
-    const retry = await invoke();
-    expect(partToString(retry.llmContent)).toContain('Review body.');
-    expect(partToString(retry.llmContent)).not.toContain('already loaded');
-  });
-
-  it('keeps a resident review loaded and warns when workflow activation fails', async () => {
-    vi.mocked(mockSkillManager.loadSkillForRuntime).mockResolvedValue({
-      name: 'review',
-      description: 'Review',
-      level: 'bundled',
-      filePath: '/bundled/review/SKILL.md',
-      body: 'Review body.',
-    });
-    const invoke = () =>
-      (skillTool as SkillToolWithProtectedMethods)
-        .createInvocation({ skill: 'review' })
-        .execute();
-    await invoke();
-    vi.mocked(config.enableReviewWorkflow).mockRejectedValueOnce(
-      new Error('schema refresh failed'),
-    );
-    const result = partToString((await invoke()).llmContent);
-    expect(result).toContain('already loaded');
-    expect(result).toContain('Warning:');
-    expect(result).toContain('schema refresh failed');
-    expect(result).not.toContain('Failed to load skill');
-    expect(result).not.toContain('Review body.');
-    const retry = partToString((await invoke()).llmContent);
-    expect(retry).toContain('already loaded');
-    expect(retry).not.toContain('Warning:');
-  });
-
   it('does not swallow hook failures for an already loaded review', async () => {
     vi.mocked(mockSkillManager.loadSkillForRuntime).mockResolvedValue({
       name: 'review',
@@ -687,7 +602,6 @@ describe('SkillTool', () => {
     expect(result).toContain('Failed to load skill');
     expect(result).toContain('hook registration failed');
     expect(result).not.toContain('already loaded');
-    expect(config.enableReviewWorkflow).toHaveBeenCalledOnce();
   });
 
   describe('project skill side effects require a trusted folder', () => {
@@ -2225,61 +2139,6 @@ describe('SkillTool', () => {
         expect(skillTool.getLoadedSkillNames()).toEqual(new Set(['deploy']));
         expect(mockAddSessionAllowRule).toHaveBeenCalledWith('Bash(npm *)', {
           trustGated: true,
-        });
-      });
-
-      describe('the bundled review skill', () => {
-        const reviewSkill: SkillConfig = {
-          ...gatedSkill,
-          name: 'review',
-          level: 'bundled',
-          filePath: '/bundled/review/SKILL.md',
-        };
-
-        beforeEach(() => {
-          vi.mocked(mockSkillManager.getCachedSkills).mockReturnValue([
-            reviewSkill,
-          ]);
-        });
-
-        it('finishes re-applying side effects before the restore resolves', async () => {
-          // Its workflow activation is the one asynchronous side effect.
-          let finishActivation!: () => void;
-          vi.mocked(config.enableReviewWorkflow).mockImplementation(
-            () =>
-              new Promise<void>((resolve) => {
-                finishActivation = resolve;
-              }),
-          );
-
-          let resolved = false;
-          const restoring = skillTool
-            .restoreLoadedSkillsFromHistory(resumedHistory(reviewSkill))
-            .then(() => {
-              resolved = true;
-            });
-          await vi.advanceTimersByTimeAsync(0);
-          expect(config.enableReviewWorkflow).toHaveBeenCalledTimes(1);
-          expect(resolved).toBe(false);
-
-          finishActivation();
-          await restoring;
-          expect(resolved).toBe(true);
-        });
-
-        it('does not fail the resume when its workflow cannot be activated', async () => {
-          vi.mocked(config.enableReviewWorkflow).mockRejectedValue(
-            new Error('workflow registry unavailable'),
-          );
-
-          await expect(
-            skillTool.restoreLoadedSkillsFromHistory(
-              resumedHistory(reviewSkill),
-            ),
-          ).resolves.toBeUndefined();
-          expect(mockAddSessionAllowRule).toHaveBeenCalledWith('Edit', {
-            trustGated: false,
-          });
         });
       });
 

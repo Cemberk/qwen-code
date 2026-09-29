@@ -20,7 +20,6 @@ describe('getAboutSystemInfoFields', () => {
       sandboxEnv: 'no sandbox',
       modelVersion: 'test-model',
       selectedAuthType: 'test-auth',
-      ideClient: 'test-ide',
       lspStatus: 'enabled, 1/1 ready',
       sessionId: 'test-session-id',
       memoryUsage: '100 MB',
@@ -35,7 +34,6 @@ describe('getAboutSystemInfoFields', () => {
     expect(labels).toEqual([
       'Qwen Code',
       'Runtime',
-      'IDE Client',
       'LSP',
       'OS',
       'Auth',
@@ -70,7 +68,6 @@ describe('getAboutSystemInfoFields', () => {
       sandboxEnv: 'no sandbox',
       modelVersion: 'test-model',
       selectedAuthType: 'test-auth',
-      ideClient: 'test-ide',
       sessionId: 'test-session-id',
       memoryUsage: '100 MB',
       baseUrl: undefined,

@@ -11,8 +11,8 @@
  * (ui/components/ModelDialog.tsx): model list with `[authType]` tags, the
  * highlighted-entry detail panel (Modality / Context Window / Base URL /
  * API Key), runtime/discontinued markers, the empty state, error box, and
- * the original footer hint. Esc closes; in auxiliary modes (fast/voice/
- * vision/compaction/image) ← closes too — both straight from the original.
+ * the original footer hint. Esc closes; in auxiliary modes (fast/vision/
+ * compaction/image) ← closes too — both straight from the original.
  * Model switching/persisting is the backend's job: `onSelect` receives the
  * row's selection key unchanged.
  */
@@ -80,7 +80,6 @@ export type ModelDialogMode =
   | 'primary'
   | 'fast'
   | 'advisor'
-  | 'voice'
   | 'vision'
   | 'compaction'
   | 'image';
@@ -186,19 +185,17 @@ export function modelDialogTitle(
   persistScope?: 'workspace' | 'user',
 ): string {
   const base =
-    mode === 'voice'
-      ? t('Select Voice Model')
-      : mode === 'vision'
-        ? t('Select Vision Model')
-        : mode === 'compaction'
-          ? t('Select Compaction Model')
-          : mode === 'image'
-            ? t('Select Image Model')
-            : mode === 'advisor'
-              ? t('Select Advisor Model')
-              : mode === 'fast'
-                ? t('Select Fast Model')
-                : t('Select Model');
+    mode === 'vision'
+      ? t('Select Vision Model')
+      : mode === 'compaction'
+        ? t('Select Compaction Model')
+        : mode === 'image'
+          ? t('Select Image Model')
+          : mode === 'advisor'
+            ? t('Select Advisor Model')
+            : mode === 'fast'
+              ? t('Select Fast Model')
+              : t('Select Model');
   const suffix =
     persistScope === 'workspace'
       ? t(' (this project)')

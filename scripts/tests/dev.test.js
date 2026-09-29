@@ -16,7 +16,6 @@ const {
   existsSyncMock,
   readFileSyncMock,
   writeFileSyncMock,
-  copyBrowserUseAssetsMock,
 } = vi.hoisted(() => ({
   spawnMock: vi.fn(() => ({ on: vi.fn() })),
   execSyncMock: vi.fn(),
@@ -24,11 +23,6 @@ const {
   existsSyncMock: vi.fn(() => false),
   readFileSyncMock: vi.fn(() => JSON.stringify({ version: '0.0.0-test' })),
   writeFileSyncMock: vi.fn(),
-  copyBrowserUseAssetsMock: vi.fn(),
-}));
-
-vi.mock('../copy-browser-use-assets.js', () => ({
-  copyBrowserUseAssets: copyBrowserUseAssetsMock,
 }));
 
 vi.mock('node:child_process', () => ({
@@ -103,14 +97,13 @@ describe('scripts/dev.js launcher', () => {
   });
 
   it.each(['--version', '--help'])(
-    'launches %s without building or staging Browser Use',
+    'launches %s without building',
     async (flag) => {
       process.argv = ['node', 'scripts/dev.js', flag];
 
-      await import('../dev.js?browser-use');
+      await import('../dev.js?informational');
 
       expect(execSyncMock).not.toHaveBeenCalled();
-      expect(copyBrowserUseAssetsMock).not.toHaveBeenCalled();
       expect(spawnMock).toHaveBeenCalledOnce();
       expect(spawnMock.mock.calls[0][1]).toContain(flag);
     },

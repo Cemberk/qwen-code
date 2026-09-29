@@ -51,7 +51,6 @@ describe('NotebookEditTool', () => {
       getFileReadCacheDisabled: () => false,
       getLlmClient: vi.fn(),
       getBaseLlmClient: vi.fn(),
-      getIdeMode: () => false,
       getApiKey: () => 'test-api-key',
       getModel: () => 'test-model',
       getSandbox: () => false,

@@ -65,10 +65,7 @@ import {
   resolveContentGeneratorConfigWithSources,
 } from '../core/contentGenerator.js';
 import { tokenLimit } from '../core/tokenLimits.js';
-import {
-  getRuntimeContentGenerator,
-  isTopLevelSession,
-} from '../agents/runtime/agent-context.js';
+import { getRuntimeContentGenerator } from '../agents/runtime/agent-context.js';
 import type { ExternalAgentExecutor } from '../agents/runtime/subagent-executor.js';
 import type {
   ExecutionEnvironment,
@@ -132,7 +129,6 @@ import type { InstructionLoadReason } from '../hooks/types.js';
 import { ApprovalMode } from './approval-mode.js';
 
 // Other modules
-import { ideContextStore } from '../ide/ideContext.js';
 import { InputFormat, OutputFormat } from '../output/types.js';
 import { PromptRegistry } from '../prompts/prompt-registry.js';
 import { ResourceRegistry } from '../resources/resource-registry.js';
@@ -1357,7 +1353,6 @@ export interface ConfigParameters {
   noBrowser?: boolean;
   folderTrustFeature?: boolean;
   folderTrust?: boolean;
-  ideMode?: boolean;
   authType?: AuthType;
   generationConfig?: Partial<ContentGeneratorConfig>;
   /** Exact initial model registry baseUrl; null selects an implicit route. */
@@ -2901,7 +2896,6 @@ export class Config {
   private readonly noBrowser: boolean;
   private readonly folderTrustFeature: boolean;
   private readonly folderTrust: boolean;
-  private ideMode: boolean;
 
   private readonly maxSessionTurns: number;
   private readonly goalTokenBudgetGrant: number;
@@ -3423,7 +3417,6 @@ export class Config {
     this.noBrowser = params.noBrowser ?? false;
     this.folderTrustFeature = params.folderTrustFeature ?? false;
     this.folderTrust = params.folderTrust ?? false;
-    this.ideMode = params.ideMode ?? false;
     this.modelProvidersConfig = params.modelProvidersConfig;
     this.providerProtocolConfig = params.providerProtocolConfig;
     this.cliVersion = params.cliVersion;
@@ -5751,30 +5744,12 @@ export class Config {
         // directory it names has not changed.
         this.queueRetriedSessionRegistryPatch(
           { sessionId: newSessionId, cwd: workDir },
-          'session registry record still names the previous session id; peers addressing this session by its new id will be refused until it is re-asserted',
+          'session registry record still names the previous session id',
         );
       }
     }
 
     return this.sessionId;
-  }
-
-  /**
-   * Re-write this session's current id and directory into its registry
-   * record. Called when a peer message arrives pinned to a session id this
-   * process does not hold: either the sender's directory is stale, or the
-   * record is — a /clear patch that was skipped in the fd-pressure window
-   * leaves the record naming the previous id for the rest of the process
-   * lifetime, and every send to this session would then be refused. Both
-   * cases are answered by asserting the record again.
-   */
-  async reassertSessionRegistryRecord(): Promise<void> {
-    if (!this.sessionRegistryActive) return;
-    this.queueRetriedSessionRegistryPatch(
-      { sessionId: this.sessionId, cwd: this.targetDir },
-      'session registry record could not be re-asserted; peers may keep addressing a stale session id',
-    );
-    await this.sessionRegistryWrite;
   }
 
   /**
@@ -5836,63 +5811,6 @@ export class Config {
         this.sessionRegistered = false;
         this.sessionRegistryActive = false;
       });
-  }
-
-  /**
-   * Which registry record describes this session.
-   *
-   * Read by the send path: a process hosting several sessions has a record
-   * each, and the reply address, name and id a message carries have to
-   * come from the sending session's own.
-   */
-  getSessionRegistrySlot(): SessionRecordSlot {
-    return this.sessionRegistrySlot;
-  }
-
-  /**
-   * Resolves once initial registration has settled, reporting whether a
-   * record actually exists.
-   *
-   * Anything that publishes *into* the record — the peer-messaging socket
-   * path, today — has to wait for this: `patchSessionRecord` no-ops when
-   * the record is missing, so advertising an address before registration
-   * lands would silently never advertise it at all. Reuses the same write
-   * queue rather than adding a second signal to keep in sync.
-   */
-  async whenSessionRegistered(): Promise<boolean> {
-    await this.sessionRegistryWrite.catch(() => {
-      // A failed earlier write is reported by the flag, not by throwing.
-    });
-    return this.sessionRegistered;
-  }
-
-  /** Serialize the peer inbox address with every other registry patch. */
-  async updateSessionRegistryIpcPath(
-    ipcPath: string | undefined,
-    ipcToken?: string,
-  ): Promise<void> {
-    if (!this.sessionRegistryActive) return;
-    let applied = false;
-    this.queueSessionRegistryWrite(async () => {
-      const slot = this.sessionRegistrySlot;
-      applied = await patchSessionRecord({ ipcPath, ipcToken }, slot);
-      if (ipcPath === undefined || applied) return;
-      // The advertise is one-shot: no later patch re-asserts ipcPath, and
-      // every skip is transient (the fd-pressure window on this process's
-      // own start-token read, or a momentary read error) — the same window
-      // registration retries the same reads for. Without a retry here the
-      // session would keep a live inbox no peer can ever discover.
-      for (let attempt = 0; attempt < 2 && !applied; attempt += 1) {
-        await delay(250);
-        applied = await patchSessionRecord({ ipcPath, ipcToken }, slot);
-      }
-      if (!applied) {
-        this.debugLogger.warn(
-          'peer inbox address was not published to the session registry; peers cannot discover this session until it restarts',
-        );
-      }
-    });
-    await this.sessionRegistryWrite;
   }
 
   /** Drain queued patches, then remove this process's registered record. */
@@ -9599,7 +9517,7 @@ export class Config {
   isWorkflowsEnabled(): boolean {
     if (this.shellExecutionSandbox) return false;
     if (this.provisionalWorkspace) return false;
-    // Workflows are opt-in via settings, env, or the bundled review skill.
+    // Workflows are opt-in via settings or env.
     // P1 also honors a kill switch: QWEN_CODE_DISABLE_WORKFLOWS=1 forces off
     if (process.env['QWEN_CODE_DISABLE_WORKFLOWS'] === '1') return false;
     if (process.env['QWEN_CODE_ENABLE_WORKFLOWS'] === '1') return true;
@@ -9608,23 +9526,6 @@ export class Config {
 
   setWorkflowsEnabled(enabled: boolean | undefined): void {
     this.workflowsEnabled = enabled;
-  }
-
-  async enableReviewWorkflow(): Promise<void> {
-    if (
-      this.shellExecutionSandbox ||
-      this.workflowsEnabled === false ||
-      !isTopLevelSession() ||
-      this.getBareMode() ||
-      this.provisionalWorkspace ||
-      process.env['QWEN_CODE_DISABLE_WORKFLOWS'] === '1'
-    ) {
-      return;
-    }
-    if (await this.registerWorkflowTool(this.getToolRegistry())) {
-      this.setWorkflowsEnabled(true);
-      await this.getLlmClient().setTools();
-    }
   }
 
   /**
@@ -10487,10 +10388,6 @@ export class Config {
     return this.getNoBrowser() || !shouldAttemptBrowserLaunch();
   }
 
-  getIdeMode(): boolean {
-    return !this.shellExecutionSandbox && this.ideMode;
-  }
-
   getFolderTrustFeature(): boolean {
     return this.folderTrustFeature;
   }
@@ -10524,20 +10421,7 @@ export class Config {
   }
 
   isTrustedFolder(): boolean {
-    const context = ideContextStore.get();
-    if (context?.workspaceState?.isTrusted !== undefined) {
-      return context.workspaceState.isTrusted;
-    }
-
     return this.trustedFolder ?? !this.folderTrust;
-  }
-
-  setIdeMode(value: boolean): void {
-    if (this.shellExecutionSandbox && value)
-      throw new Error(
-        'Tool execution sandbox does not support IDE integration.',
-      );
-    this.ideMode = value;
   }
 
   getAuthType(): AuthType | undefined {

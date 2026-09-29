@@ -3,10 +3,6 @@
  * Copyright 2025 Qwen Team
  * SPDX-License-Identifier: Apache-2.0
  */
-import {
-  QWEN_CODE_DESKTOP_ENV,
-  QWEN_CODE_SERVE_ENV,
-} from './acp-channel-fallback.js';
 import { PRIVATE_CONVERSATIONS_RUNTIME_ENV } from '@qwen-code/qwen-code-core/conversationsRuntimeMarker';
 
 import { writeStderrLineSafe } from '../utils/stdioHelpers.js';
@@ -45,10 +41,6 @@ export const PROJECT_ENV_HARDCODED_EXCLUSIONS = [
   // This points to a host temp file that carries build warnings. A project
   // `.env` must not redirect it to an arbitrary file to read or delete.
   'QWEN_CODE_WARNINGS_FILE',
-  // Runtime attribution markers are stamped by trusted launchers. A project
-  // `.env` must not spoof client channel telemetry.
-  QWEN_CODE_SERVE_ENV,
-  QWEN_CODE_DESKTOP_ENV,
   ENV_CORRUPTED_PATH,
   ENV_WAS_RECOVERED,
   // This is an operator rollout policy. A project must not be able to promote
@@ -65,22 +57,6 @@ export const PROJECT_ENV_HARDCODED_EXCLUSIONS = [
   // tools.workflowNameOnly, which a workspace may only turn on; a project
   // .env must not be able to unset the operator's exported value.
   'QWEN_CODE_WORKFLOW_NAME_ONLY',
-  // The review prebuild (commands/review/lib/prebuild.ts) is an operator
-  // decision: CI welds it as real step env, a local operator exports it. A
-  // project `.env` must not opt its own review into the blocking
-  // install+build prefix — and the read-time provenance check there cannot
-  // see file-sourcing across a process boundary (a child inherits the value
-  // with an empty registry), so the key must never enter the environment
-  // from repository content at all. prebuild.test.ts pins the membership
-  // with both real symbols.
-  'QWEN_REVIEW_PREBUILD',
-  // The automatic-review marker (commands/review/lib/docs-nav-profile.ts
-  // `automaticReviewRequested`) is an operator decision in the same class:
-  // it selects the reduced docs-nav profile, so a repository must not
-  // declare its own — possibly manual — review automatic and shrink the
-  // review of its own change to one reviewer with no reverse audit. CI
-  // welds it as a real step env, never a file.
-  'QWEN_REVIEW_AUTOMATIC',
   // QWEN_TLS_INSECURE (and NODE_TLS_REJECT_UNAUTHORIZED, which it mirrors)
   // disable TLS certificate verification for all outbound API connections. A
   // project `.env` must never enable either — that would let an untrusted repo
@@ -234,40 +210,12 @@ export const PROJECT_ENV_HARDCODED_EXCLUSIONS = [
   // `.env` pointing it at an attacker script runs on any browser-launch
   // flow.
   'BROWSER',
-  // QWEN_CLI_ENTRY is the script path daemon-spawned session processes run.
-  // A project `.env` or settings.env fixing it turns
-  // `cd <untrusted repo> && qwen serve` into code execution as the daemon
-  // via an attacker-chosen ACP entrypoint, for every workspace's sessions.
+  // QWEN_CLI_ENTRY is the script path spawned ACP session processes run. A
+  // project `.env` or settings.env fixing it would run an attacker-chosen
+  // ACP entrypoint.
   'QWEN_CLI_ENTRY',
-  // QWEN_CDP_MCP_COMMAND is the command the daemon spawns as the
-  // browser-automation MCP adapter, and QWEN_SERVE_CDP_TUNNEL_OVER_WS
-  // switches that tunnel surface on. A project `.env` or settings.env fixing
-  // either hijacks the daemon the same way QWEN_CLI_ENTRY does; values the
-  // operator set in the daemon's launch env still apply.
-  'QWEN_CDP_MCP_COMMAND',
-  'QWEN_SERVE_CDP_TUNNEL_OVER_WS',
-  // QWEN_SERVE_NEW_FILE_MODE decides the creation mode of every agent-written
-  // NEW file (owner-only 0600 vs umask-derived). A project `.env` flipping it
-  // to `system` would silently widen file visibility daemon-wide — including
-  // files written for OTHER workspaces — with no warning, since `system` is a
-  // valid value. The fail-closed 0600 posture is an operator decision
-  // (documented as a per-daemon opt-in), so only the daemon's launch
-  // environment or a home `.env` may set it.
-  'QWEN_SERVE_NEW_FILE_MODE',
-  'QWEN_SERVE_MAX_WORKSPACES',
-  // QWEN_SERVE_SESSION_ATTACHMENTS_ROOT decides where the daemon stores
-  // every workspace's session attachments. A project `.env` redirecting it
-  // would capture uploads for ALL workspaces the daemon serves — and reads
-  // consult the configured root first, so attacker-modified bytes would be
-  // served back — with no recovery after unsetting the variable. The
-  // location is an operator decision (documented as a per-daemon opt-in), so
-  // only the daemon's launch environment or a home `.env` may set it.
-  'QWEN_SERVE_SESSION_ATTACHMENTS_ROOT',
-  // DEV gates the daemon's inherited-loader-env scrub (run-qwen-serve.ts);
-  // only the dev harness (scripts/dev.js) stamps it into the launch env. A
-  // project file setting it would silently keep loader vars in the base env
-  // distributed to every workspace's session children — reopening the #8653
-  // vector for any repo whose .env happens to carry DEV=true.
+  // DEV selects dev-harness behavior; only the dev harness (scripts/dev.js)
+  // stamps it into the launch env, so a project file must not set it.
   'DEV',
   // The Conversations provenance marker is a private daemon-to-child signal:
   // a project `.env` or settings.env must never mark an ordinary workspace
@@ -434,151 +382,11 @@ export function isLoaderEnvKey(key: string): boolean {
   return canonical.startsWith('bash-func-') || LOADER_ENV_KEYS.has(canonical);
 }
 
-export function scrubInheritedLoaderEnv(
-  env: NodeJS.ProcessEnv,
-  snapshotInto?: Map<string, string>,
-): string[] {
-  const removedKeys: string[] = [];
-  for (const key of Object.keys(env)) {
-    if (isLoaderEnvKey(key)) {
-      const value = env[key];
-      if (snapshotInto && value !== undefined) snapshotInto.set(key, value);
-      delete env[key];
-      removedKeys.push(key);
-    }
-  }
-  return removedKeys;
-}
-
-// Runs the scrub and leaves a stderr breadcrumb naming the removed keys, so a
-// session subprocess missing an inherited var can be traced back to the
-// boundary that dropped it. Shared by every scrub boundary so the message
-// wording cannot desync between them.
-export function scrubAndReportInheritedLoaderEnv(
-  env: NodeJS.ProcessEnv,
-  commandLabel: string,
-  processLabel: string,
-  snapshotInto?: Map<string, string>,
-): string[] {
-  const removedKeys = scrubInheritedLoaderEnv(env, snapshotInto);
-  if (removedKeys.length > 0) {
-    writeStderrLineSafe(
-      `${commandLabel}: scrubbed inherited loader env vars from the ` +
-        `${processLabel} process; session subprocesses will not inherit ` +
-        `them: ${removedKeys.join(', ')}`,
-    );
-  }
-  return removedKeys;
-}
-
-// Concurrent embedded daemons in one process (a documented supported config —
-// see acp-bridge/src/bridgeOptions.ts `childEnvOverrides`) share this
-// process's `process.env`. A per-daemon scrub+restore over that shared object
-// races: the second daemon boots into an already-scrubbed env (nothing to
-// scrub, nothing to restore), then the first daemon's close() restores the
-// loader vars into the shared env and re-poisons the survivor's session
-// subprocesses — reopening #8653 for the still-live daemon. Coordinate the
-// scrub of `process.env` process-globally: each acquire snapshots the loader
-// values present at that boundary, and only the last release (refcount back
-// to zero) restores them.
-let sharedProcessEnvScrubDepth = 0;
-const sharedProcessEnvScrubOriginals = new Map<string, string>();
-
-export interface InheritedLoaderEnvScrubHandle {
-  /** Loader keys this acquire removed from the shared env (empty for a nested acquire whose env was already scrubbed). */
-  readonly removedKeys: readonly string[];
-  /** Idempotent; restores the snapshotted originals only when the last holder releases. */
-  release(): void;
-}
-
-// Scrubs loader vars from a shared, live env (the daemon passes its own
-// `process.env`), reference-counted so it is safe to call from overlapping
-// daemon instances in one process. The caller owns the `process.env`
-// reference so the serve-surface process.env guard still sees the access;
-// one-shot scrubs of a private env object (ACP child / channel worker boot)
-// use the same reporting scrub without a snapshot. Concurrent callers must
-// pass the same shared env object for the snapshot/restore refcount to be
-// correct.
-export function acquireInheritedLoaderEnvScrub(
-  env: NodeJS.ProcessEnv,
-  commandLabel: string,
-  processLabel: string,
-): InheritedLoaderEnvScrubHandle {
-  sharedProcessEnvScrubDepth++;
-  // Snapshot on every acquire, not just the first: the embedding host can
-  // assign loader keys between acquires, and the scrub below deletes them
-  // with no record — the final release would then leave the assignment
-  // absent or restore a stale pre-scrub value, corrupting the shared env.
-  // The newest value observed at any acquire boundary is the one the final
-  // restore must bring back. The snapshot is recorded inside the scrub's
-  // single pass over the shared env below.
-  const removedKeys = scrubAndReportInheritedLoaderEnv(
-    env,
-    commandLabel,
-    processLabel,
-    sharedProcessEnvScrubOriginals,
-  );
-  let released = false;
-  return {
-    removedKeys,
-    release() {
-      if (released) return;
-      released = true;
-      sharedProcessEnvScrubDepth--;
-      if (sharedProcessEnvScrubDepth > 0) return;
-      for (const [key, value] of sharedProcessEnvScrubOriginals) {
-        // A later legitimate assignment wins over the restore.
-        if (!Object.hasOwn(env, key)) env[key] = value;
-      }
-      sharedProcessEnvScrubOriginals.clear();
-    },
-  };
-}
-
-/** Test-only: reset the shared process-env scrub refcount/snapshot. */
-export function resetInheritedLoaderEnvScrubForTesting(): void {
-  sharedProcessEnvScrubDepth = 0;
-  sharedProcessEnvScrubOriginals.clear();
-}
-
 // Loader keys rejected from .env/settings.env used to apply on some
 // application paths before the denylist existed; dropping them silently
 // would send upgrade investigations everywhere except here. Report once per
-// source+key per process: daemon-side loadSettings() re-runs the .env load
-// for every session, and repeating the same warning per session would be
-// noise, not diagnostics. A fresh process (one ACP child per session)
-// starts with an empty map and warns once for itself.
+// source+key per process, so repeated loads do not repeat the same warning.
 const reportedLoaderKeyRejections = new Map<string, Set<string>>();
-
-// The daemon re-runs per-workspace .env loads long after boot stderr is
-// gone; a sink lets the daemon mirror fresh rejections into its durable
-// log. Interleaving is impossible: reportRejectedLoaderKeys is synchronous
-// and the sink is only swapped at boot.
-export type LoaderKeyRejectionReporter = (
-  source: string,
-  freshKeys: readonly string[],
-) => void;
-
-let loaderKeyRejectionReporter: LoaderKeyRejectionReporter | undefined;
-
-export function setLoaderKeyRejectionReporter(
-  reporter: LoaderKeyRejectionReporter | undefined,
-): void {
-  loaderKeyRejectionReporter = reporter;
-}
-
-// Overlapping daemons in one process each install their own reporter at boot
-// and clear it on close. An unconditional clear lets the first daemon's
-// close() drop the survivor's reporter, silently routing its fresh rejections
-// to the stderr fallback. Clear only when we are still the active reporter, so
-// a co-resident daemon that installed after us keeps its own.
-export function clearLoaderKeyRejectionReporterIfCurrent(
-  reporter: LoaderKeyRejectionReporter,
-): void {
-  if (loaderKeyRejectionReporter === reporter) {
-    loaderKeyRejectionReporter = undefined;
-  }
-}
 
 // candidateKeys is the raw key list of a parsed source (e.g.
 // Object.keys(parsedEnv)); the intersection with the loader denylist happens
@@ -594,14 +402,10 @@ export function reportRejectedLoaderKeys(
   if (freshKeys.length === 0) return rejectedKeys;
   for (const key of freshKeys) warnedKeys.add(key);
   reportedLoaderKeyRejections.set(source, warnedKeys);
-  if (loaderKeyRejectionReporter) {
-    loaderKeyRejectionReporter(source, freshKeys);
-  } else {
-    writeStderrLineSafe(
-      `qwen: ${source} cannot set loader-affecting env vars; ignored: ` +
-        freshKeys.join(', '),
-    );
-  }
+  writeStderrLineSafe(
+    `qwen: ${source} cannot set loader-affecting env vars; ignored: ` +
+      freshKeys.join(', '),
+  );
   return rejectedKeys;
 }
 

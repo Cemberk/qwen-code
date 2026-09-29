@@ -235,7 +235,6 @@ function setupGoalClient() {
     getMessageBus: vi.fn(() => undefined),
     getMaxSessionTurns: vi.fn(() => 1),
     getSessionTokenLimit: vi.fn(() => 0),
-    getIdeMode: vi.fn(() => false),
     getArenaAgentClient: vi.fn(() => null),
     getModel: vi.fn(() => 'test-model'),
     getSkipNextSpeakerCheck: vi.fn(() => false),

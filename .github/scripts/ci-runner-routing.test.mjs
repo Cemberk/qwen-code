@@ -1,5 +1,5 @@
-// Runner-routing regression guards for ci.yml, serve-ab.yml, e2e.yml, and
-// the qwen-autofix.yml scan lane.
+// Runner-routing regression guards for ci.yml, e2e.yml, and the
+// qwen-autofix.yml scan lane.
 //
 // classify_pr carries the routing logic TWICE — the `runs-on` expression
 // (which selects the classify job's own runner) and the `pick_runner` shell
@@ -29,9 +29,6 @@ const workflowsDir = join(
   'workflows',
 );
 const ciDoc = parse(readFileSync(join(workflowsDir, 'ci.yml'), 'utf8'));
-const serveAbDoc = parse(
-  readFileSync(join(workflowsDir, 'serve-ab.yml'), 'utf8'),
-);
 
 const TRUSTED = ['OWNER', 'MEMBER', 'COLLABORATOR'];
 const ECS = '["self-hosted", "linux", "x64", "ecs-qwen"]';
@@ -257,10 +254,10 @@ describe('ci.yml classify_pr runner routing', () => {
     // disagree: the shell step sends downstream Linux jobs to ECS while this
     // expression leaves classify_pr itself hosted. Pin the asymmetry so a
     // future "drift fix" has to read why first — this expression is the
-    // canonical association-routing text that sdk-java.yml and serve-ab.yml
-    // mirror, a push has no association to route on, and classify_pr is a
-    // seconds-long job whose pool costs nothing either way. The drift guard
-    // above evaluates both halves on pull_request, where they must agree.
+    // canonical association-routing text, a push has no association to
+    // route on, and classify_pr is a seconds-long job whose pool costs
+    // nothing either way. The drift guard above evaluates both halves on
+    // pull_request, where they must agree.
     assert.doesNotMatch(classifyRunsOn, /github\.event_name == 'push'/);
   });
 
@@ -338,137 +335,6 @@ describe('ci.yml test_windows runner routing', () => {
         `kill-switch must win on ${eventName}`,
       );
     }
-  });
-});
-
-describe('serve-ab.yml runner routing', () => {
-  const runsOn = String(serveAbDoc.jobs.ab['runs-on']);
-
-  it('admits same-repo and write-access fork PRs, guarded by the kill-switch', () => {
-    assert.match(runsOn, /head\.repo\.full_name == github\.repository/);
-    assert.match(
-      runsOn,
-      /contains\(fromJSON\('\["OWNER","MEMBER","COLLABORATOR"\]'\), github\.event\.pull_request\.author_association\)/,
-    );
-    assert.match(runsOn, /vars\.MAINTAINER_ECS_RUNNER_DISABLED != 'true'/);
-    assert.match(runsOn, /ecs-qwen/);
-    assert.match(runsOn, /ubuntu-latest/);
-  });
-
-  it('wipes the reused workspace except the shared root .git before checking out PR code', () => {
-    const steps = serveAbDoc.jobs.ab.steps;
-    const wipeIndex = steps.findIndex(
-      (s) =>
-        s.name ===
-        'Wipe stale workspace except the shared .git before checkout',
-    );
-    assert.ok(
-      wipeIndex !== -1,
-      'self-hosted reuse must not bleed one PR into the next',
-    );
-    const wipe = steps[wipeIndex];
-    assert.equal(wipe.if, "${{ runner.environment == 'self-hosted' }}");
-    // The script text alone does not decide whether the wipe runs: the
-    // shell wrapper, continue-on-error (step and job level), and env
-    // overrides (BASH_ENV, PATH, GITHUB_WORKSPACE) — at step, job, and
-    // workflow level — all control whether the pinned command executes
-    // and whether its failure fails the job.
-    const shell =
-      wipe.shell ??
-      serveAbDoc.jobs.ab.defaults?.run?.shell ??
-      serveAbDoc.defaults?.run?.shell;
-    assert.ok(
-      shell === undefined || shell === 'bash',
-      'the wipe must run under the default bash wrapper',
-    );
-    assert.ok(
-      !('continue-on-error' in wipe),
-      'a failed wipe must fail the job, not bleed into the next PR',
-    );
-    assert.ok(
-      !('continue-on-error' in serveAbDoc.jobs.ab),
-      'a job-level continue-on-error would mask a failed wipe',
-    );
-    for (const envMap of [wipe.env, serveAbDoc.jobs.ab.env, serveAbDoc.env]) {
-      assert.ok(
-        !envMap ||
-          (envMap.BASH_ENV === undefined &&
-            envMap.PATH === undefined &&
-            envMap.GITHUB_WORKSPACE === undefined),
-        'BASH_ENV, PATH, or GITHUB_WORKSPACE can shadow the pinned wipe command',
-      );
-    }
-    // The sudo-less wipe only works because ownership-restore ran first,
-    // and it must precede the checkouts or it deletes the freshly
-    // checked-out code instead of stale leftovers.
-    const stepIndex = (name) => steps.findIndex((s) => s.name === name);
-    const ownershipIndex = stepIndex('Restore workspace ownership');
-    assert.ok(
-      ownershipIndex !== -1,
-      'the wipe depends on the ownership-restore step existing',
-    );
-    assert.match(
-      steps[ownershipIndex].run,
-      /chown -R .* "\$GITHUB_WORKSPACE"/,
-      'ownership-restore must actually chown the workspace',
-    );
-    assert.ok(
-      ownershipIndex < wipeIndex,
-      'the wipe depends on ownership-restore running first',
-    );
-    const checkouts = steps.filter((s) =>
-      String(s.uses || '').startsWith('actions/checkout'),
-    );
-    for (const checkout of checkouts) {
-      assert.ok(
-        steps.indexOf(checkout) > wipeIndex,
-        'the wipe must run before every checkout it protects',
-      );
-    }
-    assert.ok(checkouts.length >= 2, 'expected at least two checkouts');
-    // Wiping the shared root .git forces the next job on this runner to
-    // re-fetch the full history from github.com — on the ECS pool's slow
-    // link that is the "hung runner" pathology. The checkout-heal path
-    // guard (#9220, #9265) ahead of it is pinned and exec-verified by
-    // scripts/tests/serve-ab-workflow.test.js; here pin that the guard is
-    // present and hands off to the kept-.git tail, line by line, so any
-    // change forces a deliberate test update.
-    assert.match(
-      wipe.run,
-      /refusing to wipe suspicious workspace path/,
-      'the wipe must keep the checkout-heal path guard',
-    );
-    const executed = wipe.run
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => l !== '' && !l.startsWith('#'));
-    assert.equal(executed[0], 'set -uo pipefail');
-    const tail = executed.slice(-5);
-    assert.equal(
-      tail[0],
-      'find "$WS" -mindepth 1 -maxdepth 1 ! \\( -name \'.git\' -type d \\) -exec rm -rf {} +',
-      'the wipe must keep only a REAL .git directory — a symlink or gitfile named .git can point outside the workspace — and only the guarded $WS may reach the rm',
-    );
-    assert.equal(
-      tail[1],
-      'rm -rf "$WS/.git/hooks" "$WS/.git/info/attributes"',
-      'the kept .git must lose its hooks and info/attributes exec vectors',
-    );
-    assert.equal(
-      tail[2],
-      'rm -f "$(git --git-dir="$WS/.git" rev-parse --git-path config.worktree 2>/dev/null || echo /nonexistent)" 2>/dev/null || true',
-      "extensions.worktreeConfig activates .git/config.worktree, a second local file that git config --local neither lists nor unsets — delete it like qwen-triage.yml's hardened config-sanitize",
-    );
-    assert.equal(
-      tail[3],
-      'git --git-dir="$WS/.git" config --local --unset-all extensions.worktreeConfig 2>/dev/null || true',
-      'drop the extension that re-activates the split config file',
-    );
-    assert.equal(
-      tail[4],
-      '{ git --git-dir="$WS/.git" config --local --name-only --list 2>/dev/null || true; } | { grep -ivE \'^(core\\.(repositoryformatversion|bare|filemode|symlinks|ignorecase|precomposeunicode|logallrefupdates|worktree|hidedotfiles|protecthfs|protectntfs)|remote\\.|branch\\.|extensions\\.|gc\\.|pack\\.|fetch\\.|index\\.|safe\\.|submodule\\.[^.]+\\.(url|active|branch))\' || true; } | while IFS= read -r key; do git --git-dir="$WS/.git" config --local --unset-all "$key" 2>/dev/null || true; done',
-      "the kept .git config must be scrubbed to the qwen-triage.yml config-sanitize allowlist, anchored to $WS/.git so a healed symlinked root never scrubs the link's target",
-    );
   });
 });
 

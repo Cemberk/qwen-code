@@ -318,75 +318,6 @@ const SETTINGS_SCHEMA = {
     mergeStrategy: MergeStrategy.SHALLOW_MERGE,
   },
 
-  // Channels configuration (Telegram, Discord, etc.)
-  channels: {
-    type: 'object',
-    label: 'Channels',
-    category: 'Advanced',
-    requiresRestart: true,
-    default: {} as Record<string, Record<string, unknown>>,
-    description: 'Configuration for messaging channels.',
-    showInDialog: false,
-    mergeStrategy: MergeStrategy.SHALLOW_MERGE,
-  },
-
-  serve: {
-    type: 'object',
-    label: 'Serve',
-    category: 'Advanced',
-    requiresRestart: true,
-    default: {},
-    description: 'Persistent qwen serve settings.',
-    showInDialog: false,
-    mergeStrategy: MergeStrategy.SHALLOW_MERGE,
-    properties: {
-      channels: {
-        type: 'array',
-        label: 'Startup Channels',
-        category: 'Advanced',
-        requiresRestart: true,
-        default: [] as string[],
-        description:
-          'Messaging channels to start automatically when the daemon boots.',
-        showInDialog: false,
-        items: { type: 'string' },
-      },
-      tokenQr: {
-        type: 'boolean',
-        label: 'Token QR',
-        category: 'Advanced',
-        requiresRestart: true,
-        default: false,
-        description:
-          "Print the token-bearing QR even when stdout is captured and the bearer is an operator-supplied (stable) token. Honored from user, system, and system-defaults settings only — a workspace settings file must not be able to push the operator's credential into logs; qwen serve --no-token-qr suppresses the QR for that run. Same effect as qwen serve --token-qr.",
-        showInDialog: false,
-      },
-      maxConcurrentSubSessionsPerCaller: {
-        type: 'integer',
-        label: 'Max Concurrent Sub-Sessions Per Caller',
-        category: 'Advanced',
-        requiresRestart: true,
-        default: 16,
-        minimum: 1,
-        description:
-          'Per-session ceiling on concurrent in-flight sub-sessions spawned via the create_sub_session tool.',
-        showInDialog: false,
-      },
-      maxConcurrentSubSessionsTotal: {
-        type: 'integer',
-        label: 'Max Concurrent Sub-Sessions Total',
-        category: 'Advanced',
-        requiresRestart: true,
-        default: 24,
-        minimum: 1,
-        maximum: 1024,
-        description:
-          'Workspace-wide ceiling on concurrent in-flight sub-sessions across all callers.',
-        showInDialog: false,
-      },
-    },
-  },
-
   // Model providers configuration grouped by provider id
   modelProviders: {
     type: 'object',
@@ -489,70 +420,6 @@ const SETTINGS_SCHEMA = {
         description: 'Enable Vim keybindings',
         showInDialog: true,
       },
-      voice: {
-        type: 'object',
-        label: 'Voice Dictation',
-        category: 'General',
-        requiresRestart: false,
-        default: {},
-        description: 'Voice dictation settings.',
-        showInDialog: false,
-        properties: {
-          enabled: {
-            type: 'boolean',
-            label: 'Voice Dictation',
-            category: 'General',
-            requiresRestart: false,
-            default: false,
-            description: 'Enable voice dictation in the prompt input.',
-            showInDialog: false,
-          },
-          mode: {
-            type: 'enum',
-            label: 'Voice Dictation Mode',
-            category: 'General',
-            requiresRestart: false,
-            default: 'hold',
-            description:
-              'How push-to-talk behaves: "hold" to talk while held, or "tap" to start and tap (or pause) to stop and submit.',
-            showInDialog: false,
-            options: [
-              { value: 'hold', label: 'Hold to talk' },
-              { value: 'tap', label: 'Tap to toggle' },
-            ],
-          },
-          language: {
-            type: 'string',
-            label: 'Voice Dictation Language',
-            category: 'General',
-            requiresRestart: false,
-            default: '',
-            description:
-              'Preferred spoken language for voice transcription (e.g. "english", "chinese"). Leave empty to auto-detect.',
-            showInDialog: false,
-          },
-          keytermsFile: {
-            type: 'string',
-            label: 'Voice Dictation Keyterms File',
-            category: 'General',
-            requiresRestart: false,
-            default: '',
-            description:
-              'Path to a custom keyterms file (one term per line, "#" for comments) that biases voice transcription toward domain-specific terms. Relative paths resolve from the workspace root; defaults to ".qwen/voice-keyterms.txt" when present. The file contents are sent to the ASR provider and it is read only in trusted workspaces. Only applies to Qwen ASR models (qwen3-asr-*).',
-            showInDialog: false,
-          },
-          refineTranscript: {
-            type: 'boolean',
-            label: 'Refine Voice Transcript',
-            category: 'General',
-            requiresRestart: false,
-            default: true,
-            description:
-              'Clean up voice transcripts with the fast model before inserting them — removes filler words and fixes recognition errors while preserving meaning. Falls back to the raw transcript on failure, and is skipped when no fast model is configured.',
-            showInDialog: false,
-          },
-        },
-      },
       enableAutoUpdate: {
         type: 'boolean',
         label: 'Enable Auto Update',
@@ -562,16 +429,6 @@ const SETTINGS_SCHEMA = {
         description:
           'Enable automatic update checks and installations on startup.',
         showInDialog: true,
-      },
-      batchAutoCollect: {
-        type: 'boolean',
-        label: 'Batch Auto Collect',
-        category: 'General',
-        requiresRestart: true,
-        default: true,
-        description:
-          "Collect this project's /batch-api tasks in interactive sessions when their batch finishes (also at startup) and write the results. Polls the provider over HTTP; never calls the model and never retries failed items.",
-        showInDialog: false,
       },
       showSessionRecap: {
         type: 'boolean',
@@ -754,103 +611,6 @@ const SETTINGS_SCHEMA = {
       },
     },
   },
-  review: {
-    type: 'object',
-    label: 'Review',
-    category: 'General',
-    requiresRestart: false,
-    default: {},
-    description: 'Settings for the /review skill.',
-    showInDialog: false,
-    properties: {
-      attribution: {
-        type: 'boolean',
-        label: 'Attribution: review',
-        category: 'General',
-        requiresRestart: false,
-        default: true,
-        description:
-          'Append the attribution footer naming the model and CLI version (e.g. "_— qwen3-coder via Qwen Code /review (v0.21.2)_") to review bodies and inline comments posted to GitHub. Disable to post reviews without VISIBLE AI attribution: no footer, and no "**[Critical]**"/"**[Suggestion]**" severity markers on posted comments and body lists. Unattributed posts stay identifiable in the raw source: each posted comment carries an invisible severity marker ("<!-- qwen-review critical -->") and the review body carries a ledger marker ("<!-- qwen-review-ledger ... -->") — anything reading comment bodies (GitHub API automation, the workflows this setting couples to) still recognizes a /review artifact, and presubmit duplicate detection recognizes the reviewing account\'s earlier posts by the severity marker, though unattributed posts from other accounts escape it. Another consequence: qwen-autofix\'s Critical-only mode (engaged after round 5, or earlier when a counting window\'s diff-growth budget trips) no longer recognizes the posted findings as Critical and defers them. Only honored from User, System, and SystemDefaults settings scopes; values set in Workspace settings are ignored, so a repository cannot set review policy for its reviewers.',
-        showInDialog: true,
-      },
-      sandbox: {
-        type: 'enum',
-        label: 'Sandbox the reviewed code: review',
-        category: 'General',
-        requiresRestart: false,
-        default: 'off',
-        description:
-          'Run the REVIEWED repository\'s own commands — `npm ci` with its install scripts, the build, the test suite, and every mutation probe — inside a container instead of directly as you. A review executes the code it is reviewing, and today those commands inherit the review process\'s whole environment (on CI that includes the model and GitHub credentials). "auto" uses a container when docker or podman answers and runs directly when neither does; "required" refuses to run them unsandboxed, which makes the evidence that depends on execution (build/test findings, mutation verdicts, `Source: [probe]`) unavailable for that run rather than ending the review; "off" is today\'s behaviour and stays the default, because containerising a build by surprise changes what native modules compile against. Only honored from User, System, and SystemDefaults settings scopes; values set in Workspace settings are ignored, so a repository cannot switch off the containment that exists to contain it.',
-        showInDialog: true,
-        options: [
-          { value: 'off', label: 'Off (run the reviewed code directly)' },
-          { value: 'auto', label: 'Auto (container when one is available)' },
-          { value: 'required', label: 'Required (never run it unsandboxed)' },
-        ],
-      },
-      effort: {
-        type: 'enum',
-        label: 'Default effort: review',
-        category: 'General',
-        requiresRestart: false,
-        default: 'auto',
-        description:
-          'Default effort for /review when neither --effort nor a project-remembered explicitly typed level applies. "auto" keeps the built-in rule (high for PRs, medium for local changes). An explicit or remembered level wins; an effective --comment still forces high and --fix still floors at medium. Only honored from User, System, and SystemDefaults settings scopes; values set in Workspace settings are ignored, so a repository cannot set review policy for its reviewers.',
-        showInDialog: true,
-        options: [
-          { value: 'auto', label: 'Auto (high for PRs, medium for local)' },
-          { value: 'low', label: 'Low' },
-          { value: 'medium', label: 'Medium' },
-          { value: 'high', label: 'High' },
-        ],
-      },
-      comment: {
-        type: 'boolean',
-        label: 'Comment by default: review',
-        category: 'General',
-        requiresRestart: false,
-        default: false,
-        description:
-          'Treat every PR /review as if --comment was passed: findings are posted to the pull request without the flag. The post still binds to the PR named in the invocation. Enable only if you always want reviews published. Only honored from User, System, and SystemDefaults settings scopes; values set in Workspace settings are ignored, so a repository cannot set review policy for its reviewers.',
-        showInDialog: true,
-      },
-      severityFloor: {
-        type: 'enum',
-        label: 'Posting floor: review',
-        category: 'General',
-        requiresRestart: false,
-        default: 'auto',
-        description:
-          'The lowest severity a PR /review posts when --severity-floor is not given. "auto" keeps the round-adaptive default: Suggestions post through round 5, and from round 6 only Criticals post while otherwise-postable high-confidence Suggestions are recorded and deferred (low-confidence and Nice-to-have findings stay terminal-only as ever); under "auto", rounds 2-5 additionally defer new Suggestions on code unchanged since the previous round — the same discipline that stops review rounds from ballooning a PR. "critical" applies that posture from round 1; "suggestion" keeps Suggestions posting at every round. Non-PR targets have no rounds and ignore this. Only honored from User, System, and SystemDefaults settings scopes; values set in Workspace settings are ignored, so a repository cannot set review policy for its reviewers.',
-        showInDialog: true,
-        options: [
-          { value: 'auto', label: 'Auto (Critical-only from round 6)' },
-          { value: 'critical', label: 'Critical-only (every round)' },
-          { value: 'suggestion', label: 'Suggestions and Criticals' },
-        ],
-      },
-      reverseAuditRounds: {
-        type: 'number',
-        label: 'Reverse-audit round ceiling: review',
-        category: 'General',
-        requiresRestart: false,
-        default: 0,
-        description:
-          'Lower the reverse-audit loop\'s round cap for every high-effort review. The cap is normally chosen from the diff topology (10 small / 5 chunked; a huge diff is 3 when the run has a review deadline and 5 when it does not, because that reduction answers a CI ceiling and applies only where one exists) because a round costs one agent on a small diff and ~90 minutes on a huge one; this setting can only LOWER whichever tier applies, never raise it — a value that is not a whole number above zero, or that is out of range (below 3, or above the plan\'s own tier), is ignored and leaves the tier alone — JSON Schema has no integer type here, so a fraction validates in an editor and is then discarded at runtime. Understand what it buys before enabling: the loop ends on two consecutive dry rounds, so cutting the cap does not make reviews converge sooner, it makes them stop before converging more often — and every such stop is disclosed as unreviewed scope and caps the verdict at Comment, so a cheaper review is also one that can no longer Approve. To spend LESS on reviews generally, prefer "effort". Nothing here makes a loop run LONGER: a review deadline bounds a run rather than extending it, and on a huge diff setting one lowers the cap from 5 to 3 rather than raising it. Only honored from User, System, and SystemDefaults settings scopes; values set in Workspace settings are ignored, so a repository cannot set review policy for its reviewers.',
-        showInDialog: true,
-      },
-      approachRounds: {
-        type: 'number',
-        label: 'Approach-signal round threshold: review',
-        category: 'General',
-        requiresRestart: false,
-        default: 0,
-        description:
-          'How many rounds a pull request must reach before the review may add one advisory paragraph saying the shape of the change, rather than the current patch, looks like the open question. It appears only when the diff has also grown several times over since the review first measured it, and never on an Approve. It is disclosure only: it adds no finding, changes no verdict, and blocks nothing — it exists because every finding is anchored to a line in the current diff, so the review can report where an approach leaks but never that a different approach would retire all of the leaks at once. Leave at 0 to keep the built-in threshold of 5 rounds; raise it to make the paragraph appear later, and set it very high to silence it. A value that is not a whole number above zero is ignored. Only honored from User, System, and SystemDefaults settings scopes; values set in Workspace settings are ignored, so a repository cannot set review policy for its reviewers.',
-        showInDialog: true,
-      },
-    },
-  },
   output: {
     type: 'object',
     label: 'Output',
@@ -952,38 +712,6 @@ const SETTINGS_SCHEMA = {
         default: 'Qwen Dark' as string,
         description: 'The color theme for the UI.',
         showInDialog: true,
-      },
-      brand: {
-        type: 'object',
-        label: 'Web Shell Brand',
-        category: 'UI',
-        requiresRestart: false,
-        default: {},
-        description:
-          'Product name and logo the Web Shell presents. Read from operator scopes only (System Defaults, User, System) — a workspace settings file cannot rebrand the shell, because it commonly comes from a repository the person opening the shell did not write. Not editable from the in-browser Settings page; edit settings.json directly.',
-        showInDialog: false,
-        properties: {
-          name: {
-            type: 'string',
-            label: 'Web Shell Brand Name',
-            category: 'UI',
-            requiresRestart: false,
-            default: '' as string,
-            description:
-              "Product name shown in the Web Shell sidebar, welcome header, About panel and browser tab title. Sanitized to a single line; capped at 80 characters. A placeholder value that substitution would change ($VAR/${VAR} with the variable set) is refused with a warning on the daemon's stderr, because the substitution source is process-wide and a workspace could supply it; an unresolvable placeholder is kept verbatim. Leave empty to use the built-in name. The terminal banner has its own separate setting, `ui.customBannerTitle`.",
-            showInDialog: false,
-          },
-          logoPath: {
-            type: 'string',
-            label: 'Web Shell Brand Logo Path',
-            category: 'UI',
-            requiresRestart: false,
-            default: '' as string,
-            description:
-              'Path to an SVG file used as the Web Shell sidebar logo and browser favicon. A leading "~" is expanded, and a relative path resolves against the directory of the settings file that declares it. The file must be a regular file — not a symlink, and not reachable through more than one hard link — at most 32 KiB both on disk and once UTF-8-decoded, and its root element must be a namespaced <svg> — a default xmlns, or an xmlns:svg binding on a prefix-bound root, is what makes it renderable as an image. Environment variable placeholders that would resolve are refused, as with the brand name. Leave empty to use the built-in logo.',
-            showInDialog: false,
-          },
-        },
       },
       autoModeAcknowledged: {
         type: 'boolean',
@@ -1255,13 +983,12 @@ const SETTINGS_SCHEMA = {
         category: 'UI',
         requiresRestart: false,
         default: false,
-        // Retired everywhere: compact tool output is always on in the TUI
-        // (Ctrl+O opens the transcript there), and the web shell now fixes
-        // its compact view on too. Kept schema-registered (mirrors
-        // `voiceModel`) so settings files that still carry the key load
-        // without warnings; nothing reads the value anymore.
+        // Retired: compact tool output is always on in the TUI (Ctrl+O opens
+        // the transcript there). Kept schema-registered so settings files
+        // that still carry the key load without warnings; nothing reads the
+        // value anymore.
         description:
-          'Retired: compact view is always on in both the TUI and the web shell. The key is kept so existing settings files do not warn.',
+          'Retired: compact view is always on in the TUI. The key is kept so existing settings files do not warn.',
         showInDialog: false,
       },
       useTerminalBuffer: {
@@ -1418,36 +1145,6 @@ const SETTINGS_SCHEMA = {
     },
   },
 
-  ide: {
-    type: 'object',
-    label: 'IDE',
-    category: 'IDE',
-    requiresRestart: true,
-    default: {},
-    description: 'IDE integration settings.',
-    showInDialog: false,
-    properties: {
-      enabled: {
-        type: 'boolean',
-        label: 'Auto-connect to IDE',
-        category: 'IDE',
-        requiresRestart: true,
-        default: false,
-        description: 'Enable IDE integration mode',
-        showInDialog: true,
-      },
-      hasSeenNudge: {
-        type: 'boolean',
-        label: 'Has Seen IDE Integration Nudge',
-        category: 'IDE',
-        requiresRestart: false,
-        default: false,
-        description: 'Whether the user has seen the IDE integration nudge.',
-        showInDialog: false,
-      },
-    },
-  },
-
   privacy: {
     type: 'object',
     label: 'Privacy',
@@ -1564,49 +1261,6 @@ const SETTINGS_SCHEMA = {
     showInDialog: true,
   },
 
-  batch: {
-    type: 'object',
-    label: 'Batch',
-    category: 'Model',
-    requiresRestart: true,
-    default: {},
-    description:
-      'Independent model selection for /batch-api and qwen batch. Unset to reuse the main model configuration.',
-    showInDialog: false,
-    properties: {
-      model: {
-        type: 'string',
-        label: 'Batch Model',
-        category: 'Model',
-        requiresRestart: true,
-        default: undefined as string | undefined,
-        description:
-          'Model ID in modelProviders. The selected entry supplies the endpoint, envKey and generationConfig.',
-        showInDialog: false,
-      },
-      authType: {
-        type: 'string',
-        label: 'Batch Auth Type',
-        category: 'Model',
-        requiresRestart: true,
-        default: undefined as string | undefined,
-        description:
-          'Batch protocol. Defaults to openai; only OpenAI-compatible chat-completions is supported.',
-        showInDialog: false,
-      },
-      baseUrl: {
-        type: 'string',
-        label: 'Batch Model Base URL',
-        category: 'Model',
-        requiresRestart: true,
-        default: undefined as string | undefined,
-        description:
-          'Optional exact modelProviders baseUrl to distinguish entries with the same model ID.',
-        showInDialog: false,
-      },
-    },
-  },
-
   advisorMaxUses: {
     type: 'integer',
     label: 'Advisor Session Call Limit',
@@ -1687,17 +1341,6 @@ const SETTINGS_SCHEMA = {
     description:
       'Ordered list of fallback model IDs (comma-separated, max 3) to try when the primary model hits capacity errors (429/503/529). Example: "qwen-plus,qwen-turbo". Set via CLI with --fallback-model.',
     showInDialog: true,
-  },
-
-  voiceModel: {
-    type: 'string',
-    label: 'Voice Model',
-    category: 'Model',
-    requiresRestart: false,
-    default: '',
-    description:
-      'Model used for voice transcription. Set with /model --voice. Leave empty to keep voice dictation disabled until a voice model is selected.',
-    showInDialog: false,
   },
 
   model: {
@@ -3291,82 +2934,6 @@ const SETTINGS_SCHEMA = {
     },
   },
 
-  policy: {
-    type: 'object',
-    label: 'Daemon Policy',
-    category: 'Daemon',
-    requiresRestart: true,
-    default: {},
-    description:
-      'Daemon multi-client coordination policies. Tool-level allow/deny rules ' +
-      'live under `permissions`; this section is for runtime mediation behavior ' +
-      'between concurrent HTTP clients sharing one `qwen serve` daemon.',
-    showInDialog: false,
-    properties: {
-      permissionStrategy: {
-        type: 'enum',
-        label: 'Permission Mediation Policy',
-        category: 'Daemon',
-        requiresRestart: true,
-        default: 'first-responder',
-        description:
-          'How permission requests resolve when multiple clients are attached. ' +
-          '`first-responder` (default) = any client decides, first wins. ' +
-          '`designated` = only the prompt originator decides; falls back to ' +
-          'first-responder if originator is anonymous. ' +
-          'NOTE: client identity comes from self-declared X-Qwen-Client-Id ' +
-          'with no proof-of-possession (pair-token identity is not implemented yet), ' +
-          'so any client observing originatorClientId on SSE frames can ' +
-          'register with the same id and impersonate the originator. ' +
-          '`consensus` = N-of-M voters must agree. Default N=floor(M/2)+1, ' +
-          'which means UNANIMITY for M=2 (quorum=2, both must agree) and ' +
-          'supermajority for larger even M (M=4 → quorum=3; M=6 → quorum=4). ' +
-          'For M=2 specifically, split votes resolve only via the configured ' +
-          'permission timeout, voter cancellation, or session cancellation. ' +
-          '`local-only` = only loopback clients can RESOLVE; remote clients ' +
-          'can still ABORT a pending permission via the cancel sentinel ' +
-          '({outcome:"cancelled"}) — cancel stays cross-policy for ' +
-          'consistency. Strict-cancel-too deployments need a dedicated ' +
-          'loopback-bound daemon. ' +
-          'Requires daemon restart — read once at boot.',
-        showInDialog: true,
-        options: [
-          { value: 'first-responder', label: 'First Responder' },
-          { value: 'designated', label: 'Designated Originator' },
-          { value: 'consensus', label: 'Consensus Quorum' },
-          { value: 'local-only', label: 'Local Only' },
-        ],
-      },
-      consensusQuorum: {
-        type: 'number',
-        label: 'Consensus Quorum Override',
-        category: 'Daemon',
-        requiresRestart: true,
-        default: undefined as number | undefined,
-        description:
-          'Optional fixed quorum size for consensus policy. Capped at M ' +
-          '(count of registered voters at request issue time) to prevent ' +
-          'unreachable quorum. Unset = floor(M/2)+1. ' +
-          'Requires daemon restart — read once at boot.',
-        showInDialog: false,
-        // run-qwen-serve.ts validates `Number.isInteger(n) && n >= 1` and
-        // refuses to boot otherwise. Override the generated schema so IDE
-        // (VSCode, JetBrains via JSON Schema) flags `0`, `-1`, `1.5`
-        // BEFORE the user restarts the daemon. The bare `type:'number'`
-        // mapping accepts all of these.
-        jsonSchemaOverride: {
-          type: 'integer',
-          minimum: 1,
-          description:
-            'Optional fixed quorum size for consensus policy. Capped at M ' +
-            '(count of registered voters at request issue time) to prevent ' +
-            'unreachable quorum. Unset = floor(M/2)+1. ' +
-            'Requires daemon restart — read once at boot.',
-        },
-      },
-    },
-  },
-
   mcp: {
     type: 'object',
     label: 'MCP',
@@ -3537,21 +3104,6 @@ const SETTINGS_SCHEMA = {
           'When true, HTTP hooks may target private/link-local IP ranges (the SSRF IP-range checks are skipped). Cloud metadata hostnames (e.g. 169.254.169.254, metadata.google.internal) remain blocked. Only honored from User, System, and SystemDefaults settings scopes; values set in Workspace settings are ignored so a cloned repository cannot self-grant this bypass. Enable only in trusted, managed environments, and pair with security.allowedHttpHookUrls.',
         showInDialog: false,
       },
-      allowedInsecureVoiceBaseUrls: {
-        type: 'array',
-        label: 'Allowed Insecure Voice Base URLs',
-        category: 'Security',
-        requiresRestart: false,
-        default: [] as string[],
-        description:
-          'Complete voice base URLs that may use HTTP or private-network addresses. Entries must include an explicit http:// or https:// scheme and the full provider path; only URL serialization and trailing slashes are normalized. Wildcards are not supported; metadata, link-local, local-use NAT64, 6to4, and Teredo addresses remain blocked even when listed, as do hostnames that resolve to loopback; IPv4-mapped, IPv4-compatible, and well-known NAT64 (64:ff9b::/96) literals are classified by their embedded IPv4 address. Only honored from User, System, and SystemDefaults settings scopes; values set in Workspace settings are ignored. Enable only for trusted endpoints in managed private networks. Cleartext HTTP also exposes the provider API key transmitted in the Authorization header. An allowlisted hostname is only as trustworthy as its DNS; prefer IP-literal entries when the gateway address is stable.',
-        showInDialog: false,
-        items: {
-          type: 'string',
-          description:
-            'Complete voice provider base URL with explicit scheme and full path (no wildcards)',
-        },
-      },
     },
   },
 
@@ -3674,47 +3226,6 @@ const SETTINGS_SCHEMA = {
             showInDialog: false,
           },
         },
-      },
-      crossSessionMessaging: {
-        type: 'boolean',
-        label: 'Cross-Session Messaging',
-        category: 'Advanced',
-        requiresRestart: true,
-        default: true,
-        description:
-          'Let Qwen Code sessions on this machine send each other messages over a per-session local socket. On by default: this session is discoverable by the others, takes peer messages under the review rules of agents.crossSessionInbound, and its model can address them from send_message. Two senders are delivered without review unless agents.crossSessionInbound is "hold" or "refuse": processes this session starts, which inherit its child token, and a same-user process that claims this session\'s own review class, which nothing authenticates. Set to false to keep this session invisible and unreachable.',
-        showInDialog: false,
-      },
-      crossSessionInbound: {
-        type: 'enum',
-        label: 'Inbound Cross-Session Messages',
-        category: 'Advanced',
-        requiresRestart: false,
-        default: undefined as string | undefined,
-        description:
-          'What happens to inbound cross-session messages. "accept" delivers them; "hold" parks them for your review without letting the model act; "refuse" opts this session out. Unset means user-minted controllers and this session\'s own child processes auto-deliver, while other sessions use review-class parity: both must review every action, or both must declare a mode that can apply actions without per-action review. Other messages are held for you to review.',
-        showInDialog: false,
-        options: [
-          { value: 'accept', label: 'Accept' },
-          { value: 'hold', label: 'Hold for review' },
-          { value: 'refuse', label: 'Refuse' },
-        ],
-      },
-      crossSessionHeldExpiry: {
-        type: 'enum',
-        label: 'Held Message Expiry',
-        category: 'Advanced',
-        requiresRestart: false,
-        default: '5m' as string,
-        description:
-          'How long a message held for your review waits before it expires and the sending session is told nobody answered. "never" keeps held messages until the session ends. Only affects messages that are held; accepted and refused ones are settled on arrival.',
-        showInDialog: false,
-        options: [
-          { value: '1m', label: '1 minute' },
-          { value: '5m', label: '5 minutes' },
-          { value: '10m', label: '10 minutes' },
-          { value: 'never', label: 'Never' },
-        ],
       },
       modelGrades: {
         type: 'object',
@@ -4172,78 +3683,6 @@ const SETTINGS_SCHEMA = {
     description: 'Settings to enable experimental features.',
     showInDialog: false,
     properties: {
-      liveVoice: {
-        type: 'object',
-        label: 'Live Voice',
-        category: 'Experimental',
-        requiresRestart: false,
-        default: {},
-        description:
-          'Experimental realtime voice conversations through Qwen Live Host on macOS WebShell.',
-        showInDialog: false,
-        properties: {
-          enabled: {
-            type: 'boolean',
-            label: 'Live Voice',
-            category: 'Experimental',
-            requiresRestart: false,
-            default: false,
-            description:
-              'Enable experimental realtime voice conversations on macOS WebShell.',
-            showInDialog: false,
-          },
-          apiKey: {
-            type: 'string',
-            label: 'DashScope Realtime API Key',
-            category: 'Experimental',
-            requiresRestart: false,
-            default: '' as string,
-            description:
-              'Dedicated DashScope API key for qwen3.5-omni-plus-realtime.',
-            showInDialog: false,
-          },
-          model: {
-            type: 'string',
-            label: 'Live Voice Model',
-            category: 'Experimental',
-            requiresRestart: false,
-            default: 'qwen3.5-omni-plus-realtime' as string,
-            description:
-              'Realtime model used for Live Voice: a modelId or provider:modelId. When it names a modelProviders entry with realtimeOnly: true, that entry supplies the endpoint (derived from baseUrl) and the key (envKey); otherwise endpoint and apiKey below are used.',
-            showInDialog: false,
-          },
-          endpoint: {
-            type: 'string',
-            label: 'Live Voice Endpoint',
-            category: 'Experimental',
-            requiresRestart: false,
-            default:
-              'wss://dashscope.aliyuncs.com/api-ws/v1/realtime' as string,
-            description:
-              'Base URL of the DashScope Realtime service, such as https://dashscope.aliyuncs.com/compatible-mode/v1; a Realtime WebSocket URL is also accepted.',
-            showInDialog: false,
-          },
-          voice: {
-            type: 'string',
-            label: 'Live Voice Output Voice',
-            category: 'Experimental',
-            requiresRestart: false,
-            default: 'Tina' as string,
-            description: 'Voice used for Realtime model audio output.',
-            showInDialog: false,
-          },
-          shortcut: {
-            type: 'string',
-            label: 'Live Voice Global Shortcut',
-            category: 'Experimental',
-            requiresRestart: false,
-            default: 'Command+E' as string,
-            description:
-              'Electron accelerator registered globally by Qwen Live Host.',
-            showInDialog: false,
-          },
-        },
-      },
       sessionWorkflow: {
         type: 'boolean',
         label: 'Session Workflow Plan & Review',

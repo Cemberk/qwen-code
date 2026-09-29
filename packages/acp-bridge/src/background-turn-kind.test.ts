@@ -13,7 +13,7 @@ describe('parseBackgroundNotificationTurn', () => {
   // parser does not know is dropped on the floor — the client never learns
   // the turn happened — so every kind a session can emit has to be listed
   // here as well as in the type.
-  it.each(['agent', 'monitor', 'shell', 'workflow', 'peer'] as const)(
+  it.each(['agent', 'monitor', 'shell', 'workflow'] as const)(
     'carries a %s turn through',
     (kind) => {
       expect(

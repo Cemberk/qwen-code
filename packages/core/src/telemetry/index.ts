@@ -240,22 +240,6 @@ export {
   type DaemonRequestSpanOptions,
 } from './daemon-tracing.js';
 export {
-  initializeDaemonMetrics,
-  registerDaemonGaugeCallbacks,
-  recordDaemonHttpRequest,
-  recordDaemonSessionLifecycle,
-  recordDaemonChannelLifecycle,
-  recordDaemonPromptQueueWait,
-  recordDaemonPromptDuration,
-  recordDaemonBridgeError,
-  recordDaemonCancel,
-  recordDaemonPipeMessage,
-} from './daemon-metrics.js';
-export type {
-  DaemonGaugeCallbacks,
-  DaemonPipeDirection,
-} from './daemon-metrics.js';
-export {
   startEventLoopLagMonitor,
   type EventLoopLagMonitor,
   type EventLoopLagMonitorOptions,

@@ -42,7 +42,6 @@ import {
   type StagedFileInfo,
 } from '../services/commitAttribution.js';
 import { buildGitNotesCommand } from '../services/attributionTrailer.js';
-import { SshExecutionEnvironment } from '../services/ssh-execution-environment.js';
 import {
   commandRunsGhPrCreate,
   ghPrCreateInlineEnv,
@@ -5722,10 +5721,7 @@ export class ShellTool extends BaseDeclarativeTool<
   }
 
   constructor(private readonly config: Config) {
-    const shellConfiguration: ShellConfiguration =
-      config.getExecutionEnvironment?.() instanceof SshExecutionEnvironment
-        ? { executable: 'bash', argsPrefix: ['-c'], shell: 'bash' }
-        : getShellConfiguration();
+    const shellConfiguration: ShellConfiguration = getShellConfiguration();
     super(
       ShellTool.Name,
       ToolDisplayNames.SHELL,

@@ -525,10 +525,9 @@ while increasing retained transcript and replay size. The size check happens
 **after** the SDK reads the response; it does not cap network transfer or peak
 memory. These two limit settings do not change the sandbox or CSP.
 
-App HTML is mounted only in a daemon-backed WebShell session and in replay of
-a recorded transcript. Terminal and headless sessions render the fallback text
-instead, so there these keys change only the warning text, the fetch cost and
-latency, and the retained transcript size.
+Terminal and headless sessions do not mount App HTML; they render the
+fallback text instead, so these keys change only the warning text, the fetch
+cost and latency, and the retained transcript size.
 
 Set these keys in the same source that declares the server. Configuration
 sources replace whole server objects by precedence rather than merging fields,

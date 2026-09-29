@@ -32,10 +32,6 @@ import { UIStateContext, type UIState } from '../contexts/UIStateContext.js';
 import { useSettings } from '../contexts/SettingsContext.js';
 import { getPersistScopeForModelSelection } from '../../config/modelProvidersScope.js';
 import { t } from '../../i18n/index.js';
-import {
-  formatUnsupportedVoiceModelMessage,
-  isSelectableVoiceModel,
-} from '../voice/voice-model.js';
 import type { HistoryItemWithoutId } from '../types.js';
 import {
   allowsFastOnlyAdvisorModel,
@@ -124,7 +120,6 @@ interface ModelDialogProps {
   onClose: () => void;
   isFastModelMode?: boolean;
   isAdvisorModelMode?: boolean;
-  isVoiceModelMode?: boolean;
   isVisionModelMode?: boolean;
   isCompactionModelMode?: boolean;
   isImageModelMode?: boolean;
@@ -302,7 +297,6 @@ export function ModelDialog({
   onClose,
   isFastModelMode,
   isAdvisorModelMode,
-  isVoiceModelMode,
   isVisionModelMode,
   isCompactionModelMode,
   isImageModelMode,
@@ -371,7 +365,7 @@ export function ModelDialog({
         (isFastModelMode ||
           (isAdvisorModelMode && isAvailableAdvisorModel) ||
           !m.fastOnly) &&
-        (isVoiceModelMode || !m.voiceOnly) &&
+        !m.voiceOnly &&
         (isVisionModelMode || isImageModelMode || !m.visionOnly) &&
         (!isAdvisorModelMode ||
           (isAvailableAdvisorModel &&
@@ -437,7 +431,6 @@ export function ModelDialog({
     isFastModelMode,
     isAdvisorModelMode,
     isImageModelMode,
-    isVoiceModelMode,
     isVisionModelMode,
   ]);
 
@@ -549,7 +542,6 @@ export function ModelDialog({
     typeof config?.getAdvisorModel === 'function'
       ? config.getAdvisorModel()
       : undefined;
-  const voiceModelSetting = settings?.merged?.voiceModel as string | undefined;
   const visionModelSetting = settings?.merged?.visionModel as
     | string
     | undefined;
@@ -605,7 +597,6 @@ export function ModelDialog({
   const isAuxiliaryModelMode =
     isFastModelMode ||
     isAdvisorModelMode ||
-    isVoiceModelMode ||
     isVisionModelMode ||
     isCompactionModelMode ||
     isImageModelMode;
@@ -650,12 +641,6 @@ export function ModelDialog({
             (advisorRegistryBaseUrl === undefined ||
               (!isRuntime &&
                 (model.registryBaseUrl ?? null) === advisorRegistryBaseUrl)),
-        )
-      : undefined;
-  const preferredVoiceModelEntry =
-    isVoiceModelMode && voiceModelSetting
-      ? availableModelEntries.find(
-          ({ model }) => model.id === voiceModelSetting,
         )
       : undefined;
   // Like fast mode, the vision setting may persist as a bare id (cross-provider)
@@ -721,49 +706,43 @@ export function ModelDialog({
     ? activeRuntimeSnapshot.id
     : isAdvisorModelMode && !advisorModelSetting
       ? ADVISOR_OFF_OPTION
-      : preferredVoiceModelEntry
+      : preferredVisionModelEntry
         ? buildModelSelectionKey(
-            preferredVoiceModelEntry.authType,
-            preferredVoiceModelEntry.model.id,
-            preferredVoiceModelEntry.model.baseUrl,
+            preferredVisionModelEntry.authType,
+            preferredVisionModelEntry.model.id,
+            preferredVisionModelEntry.model.baseUrl,
           )
-        : preferredVisionModelEntry
+        : preferredCompactionModelEntry
           ? buildModelSelectionKey(
-              preferredVisionModelEntry.authType,
-              preferredVisionModelEntry.model.id,
-              preferredVisionModelEntry.model.baseUrl,
+              preferredCompactionModelEntry.authType,
+              preferredCompactionModelEntry.model.id,
+              preferredCompactionModelEntry.model.baseUrl,
             )
-          : preferredCompactionModelEntry
+          : preferredImageModelEntry
             ? buildModelSelectionKey(
-                preferredCompactionModelEntry.authType,
-                preferredCompactionModelEntry.model.id,
-                preferredCompactionModelEntry.model.baseUrl,
+                preferredImageModelEntry.authType,
+                preferredImageModelEntry.model.id,
+                preferredImageModelEntry.model.baseUrl,
               )
-            : preferredImageModelEntry
+            : preferredAdvisorModelEntry
               ? buildModelSelectionKey(
-                  preferredImageModelEntry.authType,
-                  preferredImageModelEntry.model.id,
-                  preferredImageModelEntry.model.baseUrl,
+                  preferredAdvisorModelEntry.authType,
+                  preferredAdvisorModelEntry.model.id,
+                  preferredAdvisorModelEntry.model.registryBaseUrl,
                 )
-              : preferredAdvisorModelEntry
+              : preferredFastModelEntry
                 ? buildModelSelectionKey(
-                    preferredAdvisorModelEntry.authType,
-                    preferredAdvisorModelEntry.model.id,
-                    preferredAdvisorModelEntry.model.registryBaseUrl,
+                    preferredFastModelEntry.authType,
+                    preferredFastModelEntry.model.id,
+                    preferredFastModelEntry.model.baseUrl,
                   )
-                : preferredFastModelEntry
+                : authType
                   ? buildModelSelectionKey(
-                      preferredFastModelEntry.authType,
-                      preferredFastModelEntry.model.id,
-                      preferredFastModelEntry.model.baseUrl,
+                      authType,
+                      preferredModelId,
+                      currentBaseUrl,
                     )
-                  : authType
-                    ? buildModelSelectionKey(
-                        authType,
-                        preferredModelId,
-                        currentBaseUrl,
-                      )
-                    : '';
+                  : '';
 
   // Escape can arrive twice in one stdin chunk before the parent unmounts
   // the dialog; latch so the close feedback and onClose fire only once.
@@ -923,47 +902,6 @@ export function ModelDialog({
         reportAuxiliaryModelSelection({
           type: 'success',
           text: t('Advisor set to {{model}}', { model: advisorSelector }),
-        });
-        onClose();
-        return;
-      }
-
-      if (isVoiceModelMode) {
-        if (!selectedEntry) {
-          setErrorMessage(t('Selected voice model is unavailable.'));
-          return;
-        }
-
-        const voiceModel = selectedEntry.model.id;
-        if (!isSelectableVoiceModel(selectedEntry.model)) {
-          setErrorMessage(formatUnsupportedVoiceModelMessage(voiceModel));
-          return;
-        }
-
-        const matchingEntries = availableModelEntries.filter(
-          ({ model }) => model.id === voiceModel,
-        );
-        if (matchingEntries.length > 1) {
-          setErrorMessage(
-            t(
-              "Voice model '{{model}}' is configured more than once. Remove duplicate model ids before selecting it for voice transcription.",
-              { model: voiceModel },
-            ),
-          );
-          return;
-        }
-
-        const scope = resolvePersistScope(settings, persistScope);
-        settings.setValue(scope, 'voiceModel', voiceModel);
-        const scopeSuffix =
-          persistScope === 'workspace'
-            ? t(' (this project)')
-            : persistScope === 'user'
-              ? t(' (global)')
-              : '';
-        reportAuxiliaryModelSelection({
-          type: 'success',
-          text: `${t('Voice Model')}: ${voiceModel}${scopeSuffix}`,
         });
         onClose();
         return;
@@ -1233,7 +1171,6 @@ export function ModelDialog({
       setErrorMessage,
       isFastModelMode,
       isAdvisorModelMode,
-      isVoiceModelMode,
       isVisionModelMode,
       isCompactionModelMode,
       isImageModelMode,
@@ -1254,19 +1191,17 @@ export function ModelDialog({
       width="100%"
     >
       <Text bold>
-        {(isVoiceModelMode
-          ? t('Select Voice Model')
-          : isVisionModelMode
-            ? t('Select Vision Model')
-            : isCompactionModelMode
-              ? t('Select Compaction Model')
-              : isImageModelMode
-                ? t('Select Image Model')
-                : isAdvisorModelMode
-                  ? t('Select Advisor Model')
-                  : isFastModelMode
-                    ? t('Select Fast Model')
-                    : t('Select Model')) +
+        {(isVisionModelMode
+          ? t('Select Vision Model')
+          : isCompactionModelMode
+            ? t('Select Compaction Model')
+            : isImageModelMode
+              ? t('Select Image Model')
+              : isAdvisorModelMode
+                ? t('Select Advisor Model')
+                : isFastModelMode
+                  ? t('Select Fast Model')
+                  : t('Select Model')) +
           (persistScope === 'workspace'
             ? t(' (this project)')
             : persistScope === 'user'

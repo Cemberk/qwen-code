@@ -6,13 +6,11 @@
 
 import {
   createDebugLogger,
-  IdeClient,
   initializeTelemetry,
   type Config,
 } from '@qwen-code/qwen-code-core';
 import type { LoadedSettings } from '../config/settings.js';
 import { preconnectApi } from '../utils/apiPreconnect.js';
-import { AppEvent, appEvents } from '../utils/events.js';
 import { recordStartupEvent } from '../utils/startupProfiler.js';
 import {
   CUSTOM_SANDBOX_IMAGE_ENV_VAR,
@@ -23,63 +21,8 @@ import {
 
 const debugLogger = createDebugLogger('STARTUP_PREFETCH');
 
-const DEFERRED_IDE_CONNECT_TIMEOUT_MS = 15_000;
-
 const earlyStarted = new WeakSet<Config>();
 const postRenderStarted = new WeakSet<Config>();
-
-/**
- * Bounds optional startup work without cancelling the underlying promise.
- *
- * The original promise can still complete after the timeout branch wins the
- * race. We keep observing that late result so a late IDE success can be cleaned
- * up and a late rejection does not become an unhandled rejection.
- */
-function withTimeout<T>(
-  promise: Promise<T>,
-  name: string,
-  timeoutMs: number,
-  onTimeout: () => Promise<void> | void = () => {},
-): Promise<T> {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  let timedOut = false;
-  const runTimeoutCleanup = () => {
-    void Promise.resolve()
-      .then(onTimeout)
-      .catch((err) => {
-        debugLogger.debug(`${name} timeout cleanup failed:`, err);
-      });
-  };
-  const timeout = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      timedOut = true;
-      runTimeoutCleanup();
-      reject(new Error(`${name} timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
-    timeoutId.unref?.();
-  });
-
-  // This rejection handler intentionally mirrors `catch()`: it handles the
-  // underlying promise if it rejects after the timeout has already been reported.
-  void promise.then(
-    () => {
-      if (timedOut) {
-        runTimeoutCleanup();
-      }
-    },
-    (err) => {
-      if (timedOut) {
-        debugLogger.debug(`${name} underlying error after timeout:`, err);
-      }
-    },
-  );
-
-  return Promise.race([promise, timeout]).finally(() => {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-  });
-}
 
 /**
  * Starts a best-effort startup task without adding it to the caller's
@@ -97,19 +40,6 @@ function runDeferredTask(name: string, task: () => Promise<void> | void): void {
       recordStartupEvent('startup_prefetch_failed', { name });
       debugLogger.warn(`${name} failed:`, err);
     });
-}
-
-/**
- * Keeps deferred IDE timeout semantics consistent with the visible failure UI.
- *
- * A deferred IDE connection cannot be aborted directly, so on timeout we close
- * the singleton client. If the original connect later succeeds, `withTimeout`
- * invokes this cleanup again to avoid leaving an active IDE connection behind a
- * stale startup failure state.
- */
-async function disconnectIdeAfterDeferredTimeout(): Promise<void> {
-  const ideClient = await IdeClient.getInstance();
-  await ideClient.disconnect();
 }
 
 /**
@@ -143,13 +73,12 @@ export const UPDATE_CHECK_DELAY_MS = 3_000;
  *
  * This runs immediately after Ink's `render()` returns (`first_paint`). Tasks
  * here may load heavier modules or perform network/IPC work, but they must not
- * affect `startInteractiveUI()` success. `connectIde` is opt-in so headless,
- * stream-json, and ACP/Zed paths can keep their awaited IDE startup semantics.
+ * affect `startInteractiveUI()` success.
  */
 export function startPostRenderPrefetches(
   config: Config,
   settings: LoadedSettings,
-  options: { connectIde?: boolean; initializeTelemetry?: boolean } = {},
+  options: { initializeTelemetry?: boolean } = {},
 ): void {
   if (postRenderStarted.has(config)) return;
   postRenderStarted.add(config);
@@ -247,66 +176,8 @@ export function startPostRenderPrefetches(
     });
   }
 
-  if (options.connectIde && config.getIdeMode()) {
-    runDeferredTask('ide_connect', async () => {
-      appEvents.emit(AppEvent.StartupIdeConnectionStatusChanged, {
-        state: 'connecting',
-      });
-      try {
-        const { connectIdeForStartup } = await import('../core/initializer.js');
-        await withTimeout(
-          connectIdeForStartup(config),
-          'ide_connect',
-          DEFERRED_IDE_CONNECT_TIMEOUT_MS,
-          disconnectIdeAfterDeferredTimeout,
-        );
-        appEvents.emit(AppEvent.StartupIdeConnectionStatusChanged, {
-          state: 'connected',
-        });
-      } catch (err) {
-        appEvents.emit(AppEvent.StartupIdeConnectionStatusChanged, {
-          state: 'failed',
-          message: err instanceof Error ? err.message : String(err),
-        });
-        throw err;
-      }
-    });
-  }
-
   if (options.initializeTelemetry) {
     runDeferredTask('telemetry_init', () => initializeTelemetry(config));
-  }
-
-  if (
-    config.isInteractive() &&
-    settings.merged.general?.batchAutoCollect !== false
-  ) {
-    // Collects `/batch-api` tasks of this project as they finish (and any
-    // that finished while no session was open). HTTP only, no model call;
-    // results arrive as info notices through the update-notice channel,
-    // which defers them while a response is streaming.
-    runDeferredTask('batch_auto_collect', async () => {
-      const [
-        { startBatchAutoCollect },
-        { resolveEndpoint },
-        { updateEventEmitter },
-      ] = await Promise.all([
-        import('../commands/batch-auto-collect.js'),
-        import('../commands/batch.js'),
-        import('../utils/updateEventEmitter.js'),
-      ]);
-      startBatchAutoCollect({
-        projectRoot: config.getWorkingDir(),
-        notify: (message) =>
-          updateEventEmitter.emit('update-info', { message }),
-        resolveEndpoint: () =>
-          resolveEndpoint(process.env, {
-            settings: settings.merged,
-            warn: (message) => debugLogger.debug(message),
-          }),
-        log: (message) => debugLogger.debug(message),
-      });
-    });
   }
 
   if (config.isInteractive()) {

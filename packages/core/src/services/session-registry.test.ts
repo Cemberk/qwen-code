@@ -716,18 +716,18 @@ describe('registerSession — one process, several records', () => {
       slot: 'own',
     });
 
-    expect(
-      await patchSessionRecord({ ipcPath: '/tmp/shared.sock' }, first.slot),
-    ).toBe(true);
+    expect(await patchSessionRecord({ cwd: '/w/patched' }, first.slot)).toBe(
+      true,
+    );
     const afterPatch = await listLiveSessions();
-    expect(afterPatch.find((record) => record.sessionId === 'a')?.ipcPath).toBe(
-      '/tmp/shared.sock',
+    expect(afterPatch.find((record) => record.sessionId === 'a')?.cwd).toBe(
+      '/w/patched',
     );
     // The sibling is a separate file: a patch that resolved the path by
     // PID alone would have rewritten whichever record it found first.
-    expect(
-      afterPatch.find((record) => record.sessionId === 'b')?.ipcPath,
-    ).toBeUndefined();
+    expect(afterPatch.find((record) => record.sessionId === 'b')?.cwd).toBe(
+      '/w/two',
+    );
 
     await unregisterSession(second.slot);
     const afterRemove = await listLiveSessions();
@@ -1739,30 +1739,14 @@ describe('readOwnSessionRecord', () => {
     expect(await readOwnSessionRecord()).toBeNull();
   });
 
-  it("returns this process's record, including a patched ipcPath", async () => {
+  it("returns this process's record, including a patched cwd", async () => {
     await registerSession({ sessionId: 's1', cwd: '/w/app' });
-    await patchSessionRecord({ ipcPath: '/tmp/self.sock' });
+    await patchSessionRecord({ cwd: '/w/moved' });
     expect(await readOwnSessionRecord()).toMatchObject({
       pid: process.pid,
       sessionId: 's1',
-      cwd: '/w/app',
-      ipcPath: '/tmp/self.sock',
+      cwd: '/w/moved',
     });
-  });
-
-  it('round-trips the inbox token beside the address, dropping both on clear', async () => {
-    await registerSession({ sessionId: 's1', cwd: '/w/app' });
-    await patchSessionRecord({ ipcPath: '/tmp/self.sock', ipcToken: 'tok-1' });
-    expect(await readOwnSessionRecord()).toMatchObject({
-      ipcPath: '/tmp/self.sock',
-      ipcToken: 'tok-1',
-    });
-
-    await patchSessionRecord({ ipcPath: undefined, ipcToken: undefined });
-    const cleared = await readOwnSessionRecord();
-    expect(cleared).not.toBeNull();
-    expect(cleared).not.toHaveProperty('ipcPath');
-    expect(cleared).not.toHaveProperty('ipcToken');
   });
 
   it("is null for a foreign record sitting at this pid's path", async () => {

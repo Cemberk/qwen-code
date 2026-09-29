@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { readSshWorkspace } from '../serve/ssh-workspace-store.js';
-import { SshExecutionEnvironment } from '@qwen-code/qwen-code-core/services/ssh-execution-environment.js';
 import type { SessionExecutionEngine } from '@qwen-code/qwen-code-core/services/session-execution-engine.js';
 import {
   type ModelProposedGoalsMode,
@@ -25,7 +23,6 @@ import {
   InputFormat,
   OutputFormat,
   SessionService,
-  ideContextStore,
   type ResumedSessionData,
   type SessionRestoreProjection,
   type LspClient,
@@ -63,7 +60,6 @@ import {
   agentExecutionFactory,
 } from './agent-execution.js';
 import { hooksCommand } from '../commands/hooks.js';
-import { resolveAcpChannelFallback } from './acp-channel-fallback.js';
 import { normalizeDisabledToolList } from './normalizeDisabledTools.js';
 import type { LoadedSettings, Settings } from './settings.js';
 import { loadSettings, SettingScope } from './settings.js';
@@ -100,13 +96,8 @@ import {
 import { createExecutionSandboxPolicy } from './execution-sandbox-config.js';
 import { appEvents } from '../utils/events.js';
 import { mcpCommand } from '../commands/mcp.js';
-import { channelCommand } from '../commands/channel.js';
-import { authCommand } from '../commands/auth.js';
-import { serveCommand } from '../commands/serve.js';
 import { sessionsCommand } from '../commands/sessions.js';
-import { batchCommand } from '../commands/batch.js';
 import { boardCommand } from '../commands/board.js';
-import { updateCommand } from '../commands/update.js';
 import { sandboxCommand } from '../commands/sandbox.js';
 import { isValidSessionId, normalizeSessionIdForLookup } from './session-id.js';
 
@@ -867,28 +858,13 @@ export async function parseArguments(): Promise<CliArgs> {
     .command(mcpCommand)
     // Register Extension subcommands
     .command(extensionsCommand)
-    .command(authCommand)
     // Register Hooks subcommands
     .command(hooksCommand)
-    // Register Channel subcommands
-    .command(channelCommand)
     .command(boardCommand)
-    // Register `qwen serve` (Stage 1 daemon)
-    .command(serveCommand)
     // Register sessions subcommands
     .command(sessionsCommand)
-    .command(batchCommand)
-    // Register update command
-    .command(updateCommand)
     // Register `qwen sandbox` (inspect / prove the resolved sandbox backend)
     .command(sandboxCommand);
-
-  // /review skill helpers (presubmit checks, cleanup). The module pulls in
-  // every review subcommand, so it is only loaded when it can match.
-  if (rawArgv.includes('review')) {
-    const { reviewCommand } = await import('../commands/review.js');
-    yargsInstance.command(reviewCommand);
-  }
 
   for (const [option, message] of Object.entries(
     TOP_LEVEL_DEPRECATED_OPTIONS,
@@ -915,26 +891,15 @@ export async function parseArguments(): Promise<CliArgs> {
     result._.length > 0 &&
     (result._[0] === 'mcp' ||
       result._[0] === 'extensions' ||
-      result._[0] === 'auth' ||
       result._[0] === 'hooks' ||
-      result._[0] === 'channel' ||
-      result._[0] === 'review' ||
       result._[0] === 'sessions' ||
       result._[0] === 'board' ||
-      result._[0] === 'batch' ||
-      result._[0] === 'update' ||
       result._[0] === 'sandbox')
   ) {
-    // Note: `serve` is intentionally NOT in this list. Its handler blocks
-    // forever (after the listener is up); SIGINT/SIGTERM in runQwenServe
-    // drives shutdown. Hitting `process.exit(0)` here would kill the daemon.
-    // MCP/Extensions/Auth/Hooks/Channel/Review/Batch commands handle their own
+    // MCP/Extensions/Hooks/Sessions/Board/Sandbox commands handle their own
     // execution and exit. Returning here would let the main interactive flow
     // run, which would prompt for stdin input despite the user having already
-    // invoked a subcommand. `batch` must be here for a second reason: the main
-    // flow below relaunches the process for a larger heap, and a second parse
-    // would run the subcommand handler again — submitting (and billing) a
-    // duplicate batch job whose id the user never sees.
+    // invoked a subcommand.
     process.exit(process.exitCode ?? 0);
   }
 
@@ -973,11 +938,9 @@ export async function parseArguments(): Promise<CliArgs> {
   }
 
   // Apply ACP fallback: if acp or experimental-acp is present but no explicit
-  // --channel, attribute the launch — daemon-spawned children carry the serve
-  // marker, the Tauri desktop shell additionally sets QWEN_CODE_DESKTOP.
+  // --channel, attribute the launch to ACP.
   if ((result['acp'] || result['experimentalAcp']) && !result['channel']) {
-    (result as Record<string, unknown>)['channel'] =
-      resolveAcpChannelFallback();
+    (result as Record<string, unknown>)['channel'] = 'ACP';
   }
 
   return result as unknown as CliArgs;
@@ -1698,7 +1661,6 @@ export async function loadCliConfig(
   enabledSkillNamesProvider?: () => ReadonlySet<string>,
 ): Promise<Config> {
   assertKnownOmniSettingKeys(settings);
-  const sshWorkspace = readSshWorkspace(cwd);
   const provisionalWorkspace = hostPolicy?.provisionalWorkspace === true;
   const debugMode = isDebugMode(argv);
   if (debugMode && process.env['QWEN_DEBUG_LOG_FILE'] === undefined) {
@@ -1781,8 +1743,6 @@ export async function loadCliConfig(
       : undefined);
   const shellExecutionSandbox = requestedShellExecutionSandbox;
 
-  const ideMode = !sandboxEnabled && (settings.ide?.enabled ?? false);
-
   const folderTrust = settings.security?.folderTrust?.enabled ?? false;
   const trustedFolder = isWorkspaceTrusted(settings).isTrusted === true;
 
@@ -1841,10 +1801,7 @@ export async function loadCliConfig(
 
   // LSP configuration: enabled only via --experimental-lsp flag
   const lspEnabled =
-    !sshWorkspace &&
-    !provisionalWorkspace &&
-    !bareMode &&
-    argv.experimentalLsp === true;
+    !provisionalWorkspace && !bareMode && argv.experimentalLsp === true;
   let lspClient: LspClient | undefined;
   const question = argv.promptInteractive || argv.prompt || '';
   const inputFormat: InputFormat =
@@ -2670,7 +2627,6 @@ export async function loadCliConfig(
         ? false
         : (settings.security?.allowPrivateNetworkHooks ?? false),
     cliVersion: await getCliVersion(),
-    ideMode,
     chatCompression: settings.model?.chatCompression,
     autoCompactThreshold: settings.context?.autoCompactThreshold,
     folderTrust,
@@ -2809,37 +2765,6 @@ export async function loadCliConfig(
     executionEnvironmentFactory: agentExecutionFactory(),
   };
 
-  if (sshWorkspace) {
-    configParams.executionEnvironment = new SshExecutionEnvironment(
-      sshWorkspace,
-      cwd,
-      {
-        outputThreshold: configParams.truncateToolOutputThreshold,
-        shellDefaultTimeoutMs: configParams.shellDefaultTimeoutMs,
-        customIgnoreFiles: configParams.fileFiltering?.customIgnoreFiles,
-      },
-    );
-    configParams.codeModeOnly = false;
-    configParams.disableAllHooks = true;
-    configParams.mcpServers = {};
-    configParams.overrideExtensions = [];
-    configParams.workflowsEnabled = false;
-    configParams.enableManagedAutoMemory = false;
-    configParams.enableManagedAutoDream = false;
-    configParams.enableTeamMemory = false;
-    configParams.enableTeamMemorySync = false;
-    configParams.enableStructuredMemoryRecall = false;
-    configParams.enableAutoSkill = false;
-    configParams.fileCheckpointingEnabled = false;
-    configParams.artifactEnabled = false;
-    configParams.appendSystemPrompt = [
-      argv.appendSystemPrompt,
-      `This is an SSH workspace on ${sshWorkspace.host}. The project directory is ${sshWorkspace.directory}. All file, search and shell tools operate on that remote project. The local directory ${cwd} is only for session storage; it is not the project. Use remote absolute paths or paths relative to the remote project. Read QWEN.md and AGENTS.md at the remote project root before working if they exist. Remote hooks, skills, MCP, LSP, subagents, workflows and worktree management are unavailable in this session.`,
-    ]
-      .filter(Boolean)
-      .join('\n\n');
-  }
-
   const config = new Config(configParams);
   if (advisorModel) {
     validateCliAdvisorModel(config, advisorModel, {
@@ -2868,7 +2793,6 @@ export async function loadCliConfig(
         config.getWorkspaceContext(),
         appEvents,
         fileService!,
-        ideContextStore,
         {
           requireTrustedWorkspace: folderTrust,
         },

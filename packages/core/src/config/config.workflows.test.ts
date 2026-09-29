@@ -66,15 +66,6 @@ vi.mock('../subagents/subagent-manager.js', () => {
   SubagentManagerMock.prototype.listSubagents = vi.fn().mockResolvedValue([]);
   return { SubagentManager: SubagentManagerMock };
 });
-vi.mock('../ide/ide-client.js', () => ({
-  IdeClient: {
-    getInstance: vi.fn().mockResolvedValue({
-      getConnectionStatus: vi.fn(),
-      initialize: vi.fn(),
-      shutdown: vi.fn(),
-    }),
-  },
-}));
 vi.mock('../utils/memory-constants.js', () => ({
   setMemoryFilename: vi.fn(),
 }));

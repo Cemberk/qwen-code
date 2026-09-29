@@ -24,7 +24,6 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { TeamCreateTool } from './team-create.js';
-import { SHARED_RECORD_SLOT } from '../services/session-registry.js';
 import { TeamDeleteTool } from './team-delete.js';
 import { SendMessageTool } from './send-message.js';
 import { TaskCreateTool } from './task-create.js';
@@ -94,7 +93,6 @@ function makeConfig(): Config {
     getSubagentManager: () => null,
     getAgentsSettings: () => ({}),
     getSessionId: () => 'test-session-id',
-    getSessionRegistrySlot: () => SHARED_RECORD_SLOT,
     setTeamManager: vi.fn((m: TeamManager | null) => {
       teamManager = m;
     }),

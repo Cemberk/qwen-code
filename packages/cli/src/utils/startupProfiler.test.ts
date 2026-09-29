@@ -377,32 +377,16 @@ describe('startupProfiler', () => {
       expect(writtenPath).toMatch(/[\\/]outer-/);
     });
 
-    it('collects outside sandbox for qwen serve with the primary startup flag', () => {
+    it('does not treat serve argv as a sandbox-less collection target', () => {
       process.env['QWEN_CODE_PROFILE_STARTUP'] = '1';
       delete process.env['SANDBOX'];
+      delete process.env['QWEN_CODE_PROFILE_STARTUP_OUTER'];
       process.argv = ['node', 'qwen', 'serve'];
 
       initStartupProfiler();
-      profileCheckpoint('serve_listener_ready');
+      profileCheckpoint('main_entry');
 
-      const report = getStartupReport();
-      expect(report).not.toBeNull();
-      expect(report!.outerProcess).toBe(false);
-      expect(report!.phases[0]!.name).toBe('serve_listener_ready');
-    });
-
-    it('collects outside sandbox for bundled qwen serve argv shape', () => {
-      process.env['QWEN_CODE_PROFILE_STARTUP'] = '1';
-      delete process.env['SANDBOX'];
-      process.argv = ['node', 'qwen', '/repo/dist/cli.js', 'serve'];
-
-      initStartupProfiler();
-      profileCheckpoint('serve_listener_ready');
-
-      const report = getStartupReport();
-      expect(report).not.toBeNull();
-      expect(report!.outerProcess).toBe(false);
-      expect(report!.phases[0]!.name).toBe('serve_listener_ready');
+      expect(getStartupReport()).toBeNull();
     });
   });
 });

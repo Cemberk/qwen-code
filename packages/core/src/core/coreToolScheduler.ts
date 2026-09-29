@@ -161,7 +161,6 @@ import * as Diff from 'diff';
 import levenshtein from 'fast-levenshtein';
 import { ShellToolInvocation } from '../tools/shell.js';
 import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
-import { IdeClient } from '../ide/ide-client.js';
 import {
   getPlanRequiredTeammatePreApprovalMessage,
   isPlanRequiredTeammateAwaitingApproval,
@@ -2325,17 +2324,6 @@ export class CoreToolScheduler {
   }
 
   /**
-   * Best-effort attribution of the surface that resolved the blocked
-   * decision. When IDE mode is on, confirmations are most often resolved
-   * via the IDE diff flow (`openIdeDiffIfEnabled`) — but a CLI-fallback
-   * confirmation in IDE mode is also reported as 'ide' here. Operators
-   * can drill into the trace if they need finer-grained attribution.
-   */
-  private getBlockedSource(): ToolBlockedSource {
-    return this.config.getIdeMode?.() ? 'ide' : 'cli';
-  }
-
-  /**
    * Drain any tool/blocked spans associated with `callIds` that are still
    * live in the scheduler-local maps. Called on signal.abort for spans
    * that no other code path will finalize (e.g. user walks away from
@@ -4228,18 +4216,6 @@ export class CoreToolScheduler {
               }
             }
 
-            // Allow IDE to resolve confirmation
-            if (
-              confirmationDetails.type !== 'edit' ||
-              !confirmationDetails.skipIdeDiff
-            ) {
-              this.openIdeDiffIfEnabled(
-                confirmationDetails,
-                reqInfo.callId,
-                signal,
-              );
-            }
-
             const originalOnConfirm = confirmationDetails.onConfirm;
             const invocationContext = getInvocationContext();
             let planShellResponseClaimed = false;
@@ -4431,7 +4407,7 @@ export class CoreToolScheduler {
     );
 
     // Guard: if the tool is no longer awaiting approval (already handled by
-    // another confirmation path, e.g. IDE vs CLI race), skip to avoid double
+    // another confirmation path), skip to avoid double
     // processing and potential re-execution.
     if (!toolCall) {
       if (
@@ -4619,7 +4595,7 @@ export class CoreToolScheduler {
       this.finalizeBlockedSpan(
         callId,
         explicitCancel ? 'cancel' : 'aborted',
-        explicitCancel ? this.getBlockedSource() : 'system',
+        explicitCancel ? 'cli' : 'system',
       );
       this.finalizeToolSpan(callId);
     } else if (outcome === ToolConfirmationOutcome.ModifyWithEditor) {
@@ -4738,7 +4714,7 @@ export class CoreToolScheduler {
         outcome === ToolConfirmationOutcome.ProceedOnce
           ? 'proceed_once'
           : 'proceed_always';
-      this.finalizeBlockedSpan(callId, decision, this.getBlockedSource());
+      this.finalizeBlockedSpan(callId, decision, 'cli');
     }
     // attemptExecutionOfScheduledCalls is invoked by the caller
     // (handleConfirmationResponse, outside its catch) so a sister
@@ -4776,91 +4752,6 @@ export class CoreToolScheduler {
           `${formatDenialStateLog(before)} -> ${formatDenialStateLog(after)}`,
       );
       this.config.setAutoModeDenialState(after);
-    }
-  }
-
-  /**
-   * Opens an IDE diff view for edit-type tools when IDE mode is active.
-   * The IDE resolution is handled asynchronously — if the user accepts or
-   * rejects from the IDE, it triggers handleConfirmationResponse.
-   *
-   * Uses confirmationDetails.filePath / newContent (the same data shown in
-   * CLI diff) rather than ModifyContext so that the IDE diff is always
-   * consistent with the CLI and with resolveDiffFromCli.
-   */
-  private async openIdeDiffIfEnabled(
-    confirmationDetails: ToolCallConfirmationDetails,
-    callId: string,
-    signal: AbortSignal,
-  ) {
-    if (
-      confirmationDetails.type !== 'edit' ||
-      !this.config.getIdeMode() ||
-      this.config.getExecutionEnvironment?.()
-    ) {
-      return;
-    }
-
-    let resolution: Awaited<ReturnType<IdeClient['openDiff']>>;
-    try {
-      const ideClient = await IdeClient.getInstance();
-      if (!ideClient.isDiffingEnabled()) return;
-
-      resolution = await ideClient.openDiff(
-        confirmationDetails.filePath,
-        confirmationDetails.newContent,
-      );
-    } catch (error) {
-      if (!signal.aborted) {
-        debugLogger.warn(
-          `IDE diff open failed for ${callId}: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-      return;
-    }
-
-    // Guard: skip if the tool was already handled (e.g. by CLI
-    // confirmation).  Without this check, resolveDiffFromCli
-    // triggers this handler AND the CLI's onConfirm, causing a
-    // race where ProceedOnce overwrites ProceedAlways.
-    const still = this.toolCalls.find(
-      (c) => c.request.callId === callId && c.status === 'awaiting_approval',
-    );
-    if (!still) return;
-
-    // Guard: a PreToolUse-'ask' bounce re-enters awaiting_approval, so the
-    // guard above alone would let this stale round-1 resolution answer the
-    // BOUNCED confirmation. The accept path would flow resolution.content
-    // through _applyInlineModify (bounced edit details are type 'edit', and
-    // that path does not check hideModify) and execute IDE-panel content
-    // the hook never reviewed on the hook-skipping re-execution; the
-    // reject path would cancel a prompt the user never answered. Only the
-    // bounce's own confirmation may resolve a bounced call — the round-1
-    // diff is closed by resolveDiffFromCli regardless.
-    if (this.bouncedAwaitingApproval.has(callId)) return;
-
-    if (resolution.status === 'accepted') {
-      // When content is unchanged, skip the inline modify path so that
-      // the original tool params (e.g. partial old_string for edit tool)
-      // are preserved. Mitigate the multi-edit-on-same-file issue (#2702)
-      // for the common accept-without-edit case.
-      const userEdited =
-        resolution.content != null &&
-        resolution.content !== confirmationDetails.newContent;
-      await this.handleConfirmationResponse(
-        callId,
-        confirmationDetails.onConfirm,
-        ToolConfirmationOutcome.ProceedOnce,
-        signal,
-        userEdited ? { newContent: resolution.content } : undefined,
-      );
-    } else {
-      await this.handleConfirmationResponse(
-        callId,
-        confirmationDetails.onConfirm,
-        ToolConfirmationOutcome.Cancel,
-        signal,
-      );
     }
   }
 

@@ -36,7 +36,6 @@ export { buildSkillLlmContent } from './skill-utils.js';
 import {
   buildSkillLlmContent,
   applySkillSideEffects,
-  ReviewWorkflowActivationError,
   collectAvailableSkillEntries,
   clearCollectedSkillEntriesCache,
   skillModelInvocationBlock,
@@ -593,15 +592,7 @@ export class SkillTool extends BaseDeclarativeTool<SkillParams, ToolResult> {
       logSkillNotRestored(skill, SKILL_RESTORE_BLOCK_REASONS[blocked]);
       return;
     }
-    try {
-      await applySkillSideEffects(this.config, skill);
-    } catch (error) {
-      if (!(error instanceof ReviewWorkflowActivationError)) throw error;
-      debugLogger.warn(
-        `Review workflow activation failed while restoring skill "${skill.name}" on resume:`,
-        error,
-      );
-    }
+    await applySkillSideEffects(this.config, skill);
   }
 
   /**
@@ -913,18 +904,7 @@ class SkillToolInvocation extends BaseToolInvocation<SkillParams, ToolResult> {
       // live), and a project skill first invoked while untrusted must not
       // stay side-effect-less for the rest of the session. Both grants
       // dedup, so re-applying is idempotent.
-      let activationWarning = '';
-      try {
-        await this.applySideEffects(skill);
-      } catch (error) {
-        if (
-          !(error instanceof ReviewWorkflowActivationError) ||
-          !this.isSkillLoaded(this.params.skill)
-        ) {
-          throw error;
-        }
-        activationWarning = ` Warning: review workflow activation failed (${error.message}); workflow dispatch may be unavailable.`;
-      }
+      await this.applySideEffects(skill);
 
       // Prevent re-invoking an already-loaded skill from appending
       // duplicate instructions to context. The first invocation
@@ -935,7 +915,7 @@ class SkillToolInvocation extends BaseToolInvocation<SkillParams, ToolResult> {
       if (this.isSkillLoaded(this.params.skill)) {
         this.onSkillLoaded(this.params.skill);
         void this.recordAutoSkillUsageBestEffort(skill);
-        const msg = `Skill "${this.params.skill}" is already loaded in context.${activationWarning}`;
+        const msg = `Skill "${this.params.skill}" is already loaded in context.`;
         return {
           llmContent: msg,
           returnDisplay: msg,

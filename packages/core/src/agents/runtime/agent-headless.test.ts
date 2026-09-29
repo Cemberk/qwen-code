@@ -115,7 +115,6 @@ vi.mock('../../core/environmentContext.js', () => ({
   ]),
 }));
 vi.mock('../../core/nonInteractiveToolExecutor.js');
-vi.mock('../../ide/ide-client.js');
 vi.mock('../../core/client.js');
 vi.mock('../../telemetry/loggers.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../telemetry/loggers.js')>()),

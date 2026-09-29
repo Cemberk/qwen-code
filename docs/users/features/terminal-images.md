@@ -11,11 +11,8 @@ In assistant responses, text and images keep their original order. Tool rows
 show the result text followed by images for successful, failed, and cancelled
 results.
 
-Other output surfaces, including headless, ACP, daemon/Web Shell, and IDE
-integrations, do not render image parts. The WeChat (weixin), WeCom, and
-DingTalk channels can still deliver agent-generated image files through their
-`[IMAGE: ...]` marker flow; other IM channels do not currently deliver outbound
-images.
+Other output surfaces, including headless and ACP, do not render image
+parts.
 
 ## Terminal Support
 

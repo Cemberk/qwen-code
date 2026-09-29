@@ -2666,8 +2666,6 @@ describe('McpClientManager', () => {
 describe('McpClientManager — PR 14 guardrails', () => {
   afterEach(() => {
     vi.restoreAllMocks();
-    delete process.env['QWEN_SERVE_MCP_CLIENT_BUDGET'];
-    delete process.env['QWEN_SERVE_MCP_BUDGET_MODE'];
   });
 
   /**
@@ -2909,31 +2907,9 @@ describe('McpClientManager — PR 14 guardrails', () => {
     expect(manager.getMcpClientAccounting().reservedSlots).toEqual([]);
   });
 
-  it('env var fallback resolves budget + mode when constructor omits opts', async () => {
-    process.env['QWEN_SERVE_MCP_CLIENT_BUDGET'] = '7';
-    process.env['QWEN_SERVE_MCP_BUDGET_MODE'] = 'enforce';
+  it('defaults to no budget and off mode when constructor omits budgetConfig', async () => {
     const config = configWithServers({});
     const manager = mkManager({ config });
-    expect(manager.getMcpClientBudget()).toBe(7);
-    expect(manager.getMcpBudgetMode()).toBe('enforce');
-  });
-
-  it('env var fallback defaults mode to warn when only budget is set', async () => {
-    process.env['QWEN_SERVE_MCP_CLIENT_BUDGET'] = '5';
-    // No mode env var. Resolved mode is `warn` (the safe default).
-    const config = configWithServers({});
-    const manager = mkManager({ config });
-    expect(manager.getMcpClientBudget()).toBe(5);
-    expect(manager.getMcpBudgetMode()).toBe('warn');
-  });
-
-  it('env var fallback rejects non-positive budgets silently', async () => {
-    process.env['QWEN_SERVE_MCP_CLIENT_BUDGET'] = '-3';
-    const config = configWithServers({});
-    const manager = mkManager({ config });
-    // Invalid values fall through to `undefined` budget + `off` mode —
-    // no enforcement, no boot-time crash. Validation lives in the CLI
-    // flag handler (`packages/cli/src/commands/serve.ts`).
     expect(manager.getMcpClientBudget()).toBeUndefined();
     expect(manager.getMcpBudgetMode()).toBe('off');
   });
@@ -3235,18 +3211,6 @@ describe('McpClientManager — PR 14 guardrails', () => {
     expect(removeMcpToolsByServer).toHaveBeenCalledWith('foo');
     expect(removePromptsByServer).toHaveBeenCalledWith('foo');
     expect(removeResourcesByServer).toHaveBeenCalledWith('foo');
-  });
-
-  it('readBudgetFromEnv downgrades enforce-without-budget to off (wenshao S4)', async () => {
-    process.env['QWEN_SERVE_MCP_BUDGET_MODE'] = 'enforce';
-    // No QWEN_SERVE_MCP_CLIENT_BUDGET — silently fail-open pre-fix:
-    // `tryReserveSlot` returns 'reserved' when `clientBudget === undefined`,
-    // so an "enforce" daemon would let unlimited servers through.
-    const config = configWithServers({});
-    const manager = mkManager({ config });
-    expect(manager.getMcpClientBudget()).toBeUndefined();
-    // Downgraded — not 'enforce' — because enforce requires a budget.
-    expect(manager.getMcpBudgetMode()).toBe('off');
   });
 
   // Round 3 review fixes (PR #4247 wenshao second pass).
@@ -3551,46 +3515,6 @@ describe('McpClientManager — PR 14 guardrails', () => {
     expect(disconnectCalls).toBeGreaterThanOrEqual(1);
   });
 
-  it('readBudgetFromEnv emits stderr warning on invalid budget value (wenshao R7 #6 line 191)', async () => {
-    const writeSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
-    process.env['QWEN_SERVE_MCP_CLIENT_BUDGET'] = 'abc';
-    try {
-      const config = configWithServers({});
-      const manager = mkManager({ config });
-      expect(manager.getMcpClientBudget()).toBeUndefined();
-      // Operator-visible breadcrumb landed on stderr.
-      const calls = writeSpy.mock.calls.map((c) => String(c[0]));
-      expect(
-        calls.some(
-          (s) =>
-            s.includes('ignoring invalid QWEN_SERVE_MCP_CLIENT_BUDGET') &&
-            s.includes("'abc'"),
-        ),
-      ).toBe(true);
-    } finally {
-      writeSpy.mockRestore();
-    }
-  });
-
-  it('readBudgetFromEnv rejects non-decimal budget values (hex / scientific / float)', async () => {
-    const writeSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
-    try {
-      for (const bad of ['0x10', '1e2', '1.0']) {
-        process.env['QWEN_SERVE_MCP_CLIENT_BUDGET'] = bad;
-        const manager = mkManager({ config: configWithServers({}) });
-        // Pre-fix Number('0x10')=16 / Number('1e2')=100 slipped through as a budget.
-        expect(manager.getMcpClientBudget()).toBeUndefined();
-      }
-      // a plain decimal integer is still accepted.
-      process.env['QWEN_SERVE_MCP_CLIENT_BUDGET'] = '16';
-      const ok = mkManager({ config: configWithServers({}) });
-      expect(ok.getMcpClientBudget()).toBe(16);
-    } finally {
-      writeSpy.mockRestore();
-      delete process.env['QWEN_SERVE_MCP_CLIENT_BUDGET'];
-    }
-  });
-
   it('readResource rejects existing-but-now-disabled servers (wenshao R7 #5 line 1342)', async () => {
     // Pre-fix: a server connected pre-disable and then operator-
     // disabled mid-session via settings reload would still serve
@@ -3695,27 +3619,6 @@ describe('McpClientManager — PR 14 guardrails', () => {
     expect(manager.getMcpClientAccounting().reservedSlots).toEqual([]);
   });
 
-  it('readBudgetFromEnv emits stderr breadcrumb on enforce-no-budget downgrade (wenshao R9 #7)', async () => {
-    const writeSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
-    process.env['QWEN_SERVE_MCP_BUDGET_MODE'] = 'enforce';
-    // No budget → downgrade fires
-    try {
-      const config = configWithServers({});
-      const manager = mkManager({ config });
-      expect(manager.getMcpBudgetMode()).toBe('off');
-      const calls = writeSpy.mock.calls.map((c) => String(c[0]));
-      expect(
-        calls.some(
-          (s) =>
-            s.includes('QWEN_SERVE_MCP_BUDGET_MODE=enforce') &&
-            s.includes('downgrading to off'),
-        ),
-      ).toBe(true);
-    } finally {
-      writeSpy.mockRestore();
-    }
-  });
-
   it('discoverAllMcpTools disconnects on discover() failure (wenshao R8 #1 line 532)', async () => {
     // Bulk-path mirror of R7 #3 (per-server path). Pre-fix:
     // connect() success + discover() throw → catch deleted client
@@ -3746,21 +3649,8 @@ describe('McpClientManager — PR 14 guardrails', () => {
     expect(manager.getMcpClientAccounting().reservedSlots).toEqual([]);
   });
 
-  it('readBudgetFromEnv downgrades warn-without-budget to off (wenshao R8 #2)', async () => {
-    process.env['QWEN_SERVE_MCP_BUDGET_MODE'] = 'warn';
-    // No budget — pre-fix this passed through with mode='warn',
-    // reaching emitBudgetTelemetry with clientBudget=undefined.
-    const config = configWithServers({});
-    const manager = mkManager({ config });
-    expect(manager.getMcpClientBudget()).toBeUndefined();
-    expect(manager.getMcpBudgetMode()).toBe('off');
-  });
-
   it('constructor downgrades enforce-without-budget when budgetConfig passed directly (wenshao R8 #5)', async () => {
-    // Direct-budgetConfig path is test-/embedded-only — production
-    // callers (CLI, runQwenServe, env-var fallback) all validate
-    // upfront. Defense-in-depth: constructor mirrors the env-var
-    // path's downgrade so a future caller that bypasses validation
+    // Defense-in-depth: a caller that injects an invalid budgetConfig
     // can't silently fail-open.
     const config = configWithServers({});
     const manager = mkManager({
@@ -3823,8 +3713,6 @@ describe('McpClientManager — PR 14 guardrails', () => {
 describe('McpClientManager — PR 14b push events + hysteresis', () => {
   afterEach(() => {
     vi.restoreAllMocks();
-    delete process.env['QWEN_SERVE_MCP_CLIENT_BUDGET'];
-    delete process.env['QWEN_SERVE_MCP_BUDGET_MODE'];
   });
 
   function makeConnectedMcpClientMock() {

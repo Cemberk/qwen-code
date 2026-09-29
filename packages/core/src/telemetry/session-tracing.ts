@@ -1405,7 +1405,7 @@ export type ToolBlockedDecision =
   // user cancels don't double-count thrown exceptions in the approval path.
   | 'error';
 
-export type ToolBlockedSource = 'cli' | 'ide' | 'hook' | 'auto' | 'system';
+export type ToolBlockedSource = 'cli' | 'hook' | 'auto' | 'system';
 
 /**
  * Brackets the time a tool spends in `awaiting_approval` waiting on the user.

@@ -8,7 +8,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { render } from 'ink-testing-library';
 import { Text } from 'ink';
 import { Composer } from './Composer.js';
-import { InputPrompt } from './InputPrompt.js';
 import { UIStateContext, type UIState } from '../contexts/UIStateContext.js';
 import {
   UIActionsContext,
@@ -132,7 +131,6 @@ const createMockUIState = (overrides: Partial<UIState> = {}): UIState =>
     ctrlCPressedOnce: false,
     ctrlDPressedOnce: false,
     showEscapePrompt: false,
-    ideContextState: null,
     memoryFileCount: 0,
     showToolDescriptions: false,
     sessionStats: {
@@ -148,7 +146,6 @@ const createMockUIState = (overrides: Partial<UIState> = {}): UIState =>
     taskStartStreamingChars: 0,
     responseCandidateTokens: 0,
     streamingResponseLengthRef: { current: 0 },
-    voiceMicWarnedStatusRef: { current: null },
     isReceivingContent: false,
     pendingLlmHistoryItems: [],
     terminalWidth: 80,
@@ -466,37 +463,6 @@ describe('Composer', () => {
       const { lastFrame } = renderComposer(uiState);
 
       expect(lastFrame()).not.toContain('InputPrompt');
-    });
-
-    it('forwards the session voice permission ref across input-active toggles', () => {
-      const mockedInputPrompt = vi.mocked(InputPrompt);
-      mockedInputPrompt.mockClear();
-      const voiceMicWarnedStatusRef = { current: null };
-      const config = createMockConfig();
-      const uiActions = createMockUIActions();
-      const activeState = createMockUIState({ voiceMicWarnedStatusRef });
-      const inactiveState = createMockUIState({
-        voiceMicWarnedStatusRef,
-        isInputActive: false,
-      });
-
-      const { rerender } = render(
-        composerElement(activeState, config, uiActions),
-      );
-      expect(mockedInputPrompt).toHaveBeenCalled();
-      expect(
-        mockedInputPrompt.mock.calls.at(-1)![0].voiceMicWarnedStatusRef,
-      ).toBe(voiceMicWarnedStatusRef);
-
-      // Input goes inactive (InputPrompt unmounts), then active again — the
-      // remounted InputPrompt must receive the same ref object, not a new one.
-      rerender(composerElement(inactiveState, config, uiActions));
-      mockedInputPrompt.mockClear();
-      rerender(composerElement(activeState, config, uiActions));
-      expect(mockedInputPrompt).toHaveBeenCalled();
-      expect(
-        mockedInputPrompt.mock.calls.at(-1)![0].voiceMicWarnedStatusRef,
-      ).toBe(voiceMicWarnedStatusRef);
     });
 
     // Note: AutoAcceptIndicator and ShellModeIndicator are now rendered inside Footer component

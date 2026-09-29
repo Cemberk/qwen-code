@@ -9,7 +9,6 @@ import { NativeLspService } from './native-lsp-service.js';
 import { EventEmitter } from 'events';
 import type { Config as CoreConfig } from '../config/config.js';
 import type { FileDiscoveryService } from '../services/fileDiscoveryService.js';
-import type { IdeContextStore } from '../ide/ideContext.js';
 import type { WorkspaceContext } from '../utils/workspaceContext.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -82,23 +81,17 @@ class MockFileDiscoveryService {
   }
 }
 
-class MockIdeContextStore {
-  // 模拟 IDE 上下文存储
-}
-
 describe('NativeLspService', () => {
   let lspService: NativeLspService;
   let mockConfig: MockConfig;
   let mockWorkspace: MockWorkspaceContext;
   let mockFileDiscovery: MockFileDiscoveryService;
-  let mockIdeStore: MockIdeContextStore;
   let eventEmitter: EventEmitter;
 
   beforeEach(() => {
     mockConfig = new MockConfig();
     mockWorkspace = new MockWorkspaceContext();
     mockFileDiscovery = new MockFileDiscoveryService();
-    mockIdeStore = new MockIdeContextStore();
     eventEmitter = new EventEmitter();
 
     lspService = new NativeLspService(
@@ -106,7 +99,6 @@ describe('NativeLspService', () => {
       mockWorkspace as unknown as WorkspaceContext,
       eventEmitter,
       mockFileDiscovery as unknown as FileDiscoveryService,
-      mockIdeStore as unknown as IdeContextStore,
     );
   });
 
@@ -120,7 +112,6 @@ describe('NativeLspService', () => {
       mockWorkspace as unknown as WorkspaceContext,
       eventEmitter,
       mockFileDiscovery as unknown as FileDiscoveryService,
-      mockIdeStore as unknown as IdeContextStore,
     );
 
     const detectLanguages = vi.fn(async () => {
@@ -163,7 +154,6 @@ describe('NativeLspService', () => {
         mockWorkspace as unknown as WorkspaceContext,
         eventEmitter,
         mockFileDiscovery as unknown as FileDiscoveryService,
-        mockIdeStore as unknown as IdeContextStore,
         { workspaceRoot: tempDir },
       );
       const reconcileServerConfigs = vi.fn(async () => ({
@@ -203,7 +193,6 @@ describe('NativeLspService', () => {
         mockWorkspace as unknown as WorkspaceContext,
         eventEmitter,
         mockFileDiscovery as unknown as FileDiscoveryService,
-        mockIdeStore as unknown as IdeContextStore,
         { workspaceRoot: tempDir },
       );
       const reconcileServerConfigs = vi.fn();
@@ -236,7 +225,6 @@ describe('NativeLspService', () => {
         mockWorkspace as unknown as WorkspaceContext,
         eventEmitter,
         mockFileDiscovery as unknown as FileDiscoveryService,
-        mockIdeStore as unknown as IdeContextStore,
         { workspaceRoot: tempDir },
       );
       const reconcileServerConfigs = vi.fn();
@@ -264,7 +252,6 @@ describe('NativeLspService', () => {
         mockWorkspace as unknown as WorkspaceContext,
         eventEmitter,
         mockFileDiscovery as unknown as FileDiscoveryService,
-        mockIdeStore as unknown as IdeContextStore,
         { workspaceRoot: tempDir },
       );
       const reconcileServerConfigs = vi.fn(async () => ({
@@ -320,7 +307,6 @@ describe('NativeLspService', () => {
         mockWorkspace as unknown as WorkspaceContext,
         eventEmitter,
         mockFileDiscovery as unknown as FileDiscoveryService,
-        mockIdeStore as unknown as IdeContextStore,
         { workspaceRoot: tempDir },
       );
       const connection = {
@@ -415,7 +401,6 @@ describe('NativeLspService', () => {
         mockWorkspace as unknown as WorkspaceContext,
         eventEmitter,
         mockFileDiscovery as unknown as FileDiscoveryService,
-        mockIdeStore as unknown as IdeContextStore,
         { workspaceRoot: tempDir },
       );
       const connection = {
@@ -518,7 +503,6 @@ describe('NativeLspService', () => {
         mockWorkspace as unknown as WorkspaceContext,
         eventEmitter,
         mockFileDiscovery as unknown as FileDiscoveryService,
-        mockIdeStore as unknown as IdeContextStore,
         { workspaceRoot: tempDir },
       );
       const firstConnection = {
@@ -656,7 +640,6 @@ describe('NativeLspService', () => {
         mockWorkspace as unknown as WorkspaceContext,
         eventEmitter,
         mockFileDiscovery as unknown as FileDiscoveryService,
-        mockIdeStore as unknown as IdeContextStore,
         { workspaceRoot: tempDir },
       );
       const connection = {
@@ -757,7 +740,6 @@ describe('NativeLspService', () => {
         mockWorkspace as unknown as WorkspaceContext,
         eventEmitter,
         mockFileDiscovery as unknown as FileDiscoveryService,
-        mockIdeStore as unknown as IdeContextStore,
         { workspaceRoot: tempDir },
       );
       let resolveFirstReconcile: (
@@ -834,7 +816,6 @@ describe('NativeLspService', () => {
         mockWorkspace as unknown as WorkspaceContext,
         eventEmitter,
         mockFileDiscovery as unknown as FileDiscoveryService,
-        mockIdeStore as unknown as IdeContextStore,
         { workspaceRoot: tempDir },
       );
       const connection = {
@@ -941,7 +922,6 @@ describe('NativeLspService', () => {
         mockWorkspace as unknown as WorkspaceContext,
         eventEmitter,
         mockFileDiscovery as unknown as FileDiscoveryService,
-        mockIdeStore as unknown as IdeContextStore,
         { workspaceRoot: tempDir },
       );
       const connection = {
@@ -1027,7 +1007,6 @@ describe('NativeLspService', () => {
         mockWorkspace as unknown as WorkspaceContext,
         eventEmitter,
         mockFileDiscovery as unknown as FileDiscoveryService,
-        mockIdeStore as unknown as IdeContextStore,
         { workspaceRoot: tempDir },
       );
       let resolveFirstReconcile: (
@@ -1081,7 +1060,6 @@ describe('NativeLspService', () => {
       mockWorkspace as unknown as WorkspaceContext,
       eventEmitter,
       mockFileDiscovery as unknown as FileDiscoveryService,
-      mockIdeStore as unknown as IdeContextStore,
       { requireTrustedWorkspace: true },
     );
     const stopAll = vi.fn(async () => {});
@@ -1137,7 +1115,6 @@ describe('NativeLspService', () => {
         mockWorkspace as unknown as WorkspaceContext,
         eventEmitter,
         mockFileDiscovery as unknown as FileDiscoveryService,
-        mockIdeStore as unknown as IdeContextStore,
         { requireTrustedWorkspace: false, workspaceRoot: tempDir },
       );
       const reconcileServerConfigs = vi.fn(async () => ({
@@ -1195,7 +1172,6 @@ describe('NativeLspService', () => {
         mockWorkspace as unknown as WorkspaceContext,
         eventEmitter,
         mockFileDiscovery as unknown as FileDiscoveryService,
-        mockIdeStore as unknown as IdeContextStore,
         { requireTrustedWorkspace: false, workspaceRoot: tempDir },
       );
 
@@ -1490,7 +1466,6 @@ describe('NativeLspService', () => {
     const tempWorkspace = new MockWorkspaceContext();
     tempWorkspace.rootPath = tempDir;
     const tempDiscovery = new MockFileDiscoveryService();
-    const tempIdeStore = new MockIdeContextStore();
     const tempEmitter = new EventEmitter();
 
     const tempService = new NativeLspService(
@@ -1498,7 +1473,6 @@ describe('NativeLspService', () => {
       tempWorkspace as unknown as WorkspaceContext,
       tempEmitter,
       tempDiscovery as unknown as FileDiscoveryService,
-      tempIdeStore as unknown as IdeContextStore,
       { workspaceRoot: tempDir },
     );
 
@@ -1599,7 +1573,6 @@ describe('NativeLspService', () => {
     const tempWorkspace = new MockWorkspaceContext();
     tempWorkspace.rootPath = tempDir;
     const tempDiscovery = new MockFileDiscoveryService();
-    const tempIdeStore = new MockIdeContextStore();
     const tempEmitter = new EventEmitter();
 
     const tempService = new NativeLspService(
@@ -1607,7 +1580,6 @@ describe('NativeLspService', () => {
       tempWorkspace as unknown as WorkspaceContext,
       tempEmitter,
       tempDiscovery as unknown as FileDiscoveryService,
-      tempIdeStore as unknown as IdeContextStore,
       { workspaceRoot: tempDir },
     );
 
@@ -1674,7 +1646,6 @@ describe('NativeLspService', () => {
     const tempWorkspace = new MockWorkspaceContext();
     tempWorkspace.rootPath = tempDir;
     const tempDiscovery = new MockFileDiscoveryService();
-    const tempIdeStore = new MockIdeContextStore();
     const tempEmitter = new EventEmitter();
 
     const tempService = new NativeLspService(
@@ -1682,7 +1653,6 @@ describe('NativeLspService', () => {
       tempWorkspace as unknown as WorkspaceContext,
       tempEmitter,
       tempDiscovery as unknown as FileDiscoveryService,
-      tempIdeStore as unknown as IdeContextStore,
       { workspaceRoot: tempDir },
     );
 
@@ -1752,7 +1722,6 @@ describe('NativeLspService', () => {
     const tempWorkspace = new MockWorkspaceContext();
     tempWorkspace.rootPath = tempDir;
     const tempDiscovery = new MockFileDiscoveryService();
-    const tempIdeStore = new MockIdeContextStore();
     const tempEmitter = new EventEmitter();
 
     const tempService = new NativeLspService(
@@ -1760,7 +1729,6 @@ describe('NativeLspService', () => {
       tempWorkspace as unknown as WorkspaceContext,
       tempEmitter,
       tempDiscovery as unknown as FileDiscoveryService,
-      tempIdeStore as unknown as IdeContextStore,
       { workspaceRoot: tempDir },
     );
 
@@ -2125,7 +2093,6 @@ describe('NativeLspService', () => {
       tempWorkspace as unknown as WorkspaceContext,
       new EventEmitter(),
       new MockFileDiscoveryService() as unknown as FileDiscoveryService,
-      new MockIdeContextStore() as unknown as IdeContextStore,
       { workspaceRoot: tempDir },
     );
 
@@ -2266,7 +2233,6 @@ describe('NativeLspService', () => {
       tempWorkspace as unknown as WorkspaceContext,
       new EventEmitter(),
       new MockFileDiscoveryService() as unknown as FileDiscoveryService,
-      new MockIdeContextStore() as unknown as IdeContextStore,
       { workspaceRoot: tempDir },
     );
 

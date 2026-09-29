@@ -12,7 +12,6 @@ interface UseModelCommandReturn {
   isModelDialogOpen: boolean;
   isFastModelMode: boolean;
   isAdvisorModelMode: boolean;
-  isVoiceModelMode: boolean;
   isVisionModelMode: boolean;
   isCompactionModelMode: boolean;
   isImageModelMode: boolean;
@@ -20,7 +19,6 @@ interface UseModelCommandReturn {
   openModelDialog: (options?: {
     fastModelMode?: boolean;
     advisorModelMode?: boolean;
-    voiceModelMode?: boolean;
     visionModelMode?: boolean;
     compactionModelMode?: boolean;
     imageModelMode?: boolean;
@@ -33,7 +31,6 @@ export const useModelCommand = (): UseModelCommandReturn => {
   const [isModelDialogOpen, setIsModelDialogOpen] = useState(false);
   const [isFastModelMode, setIsFastModelMode] = useState(false);
   const [isAdvisorModelMode, setIsAdvisorModelMode] = useState(false);
-  const [isVoiceModelMode, setIsVoiceModelMode] = useState(false);
   const [isVisionModelMode, setIsVisionModelMode] = useState(false);
   const [isCompactionModelMode, setIsCompactionModelMode] = useState(false);
   const [isImageModelMode, setIsImageModelMode] = useState(false);
@@ -45,21 +42,18 @@ export const useModelCommand = (): UseModelCommandReturn => {
     (options?: {
       fastModelMode?: boolean;
       advisorModelMode?: boolean;
-      voiceModelMode?: boolean;
       visionModelMode?: boolean;
       compactionModelMode?: boolean;
       imageModelMode?: boolean;
       persistScope?: ModelDialogPersistScope;
     }) => {
       const advisorModelMode = options?.advisorModelMode ?? false;
-      const voiceModelMode = options?.voiceModelMode ?? false;
       const visionModelMode = options?.visionModelMode ?? false;
       const compactionModelMode = options?.compactionModelMode ?? false;
       const imageModelMode = options?.imageModelMode ?? false;
       // Modes are mutually exclusive; a specialized mode suppresses fast mode.
       setIsFastModelMode(
-        voiceModelMode ||
-          visionModelMode ||
+        visionModelMode ||
           compactionModelMode ||
           imageModelMode ||
           advisorModelMode
@@ -67,20 +61,9 @@ export const useModelCommand = (): UseModelCommandReturn => {
           : (options?.fastModelMode ?? false),
       );
       setIsAdvisorModelMode(
-        voiceModelMode ||
-          visionModelMode ||
-          compactionModelMode ||
-          imageModelMode
+        visionModelMode || compactionModelMode || imageModelMode
           ? false
           : advisorModelMode,
-      );
-      setIsVoiceModelMode(
-        advisorModelMode ||
-          visionModelMode ||
-          compactionModelMode ||
-          imageModelMode
-          ? false
-          : voiceModelMode,
       );
       setIsVisionModelMode(
         advisorModelMode || compactionModelMode || imageModelMode
@@ -101,7 +84,6 @@ export const useModelCommand = (): UseModelCommandReturn => {
     setIsModelDialogOpen(false);
     setIsFastModelMode(false);
     setIsAdvisorModelMode(false);
-    setIsVoiceModelMode(false);
     setIsVisionModelMode(false);
     setIsCompactionModelMode(false);
     setIsImageModelMode(false);
@@ -112,7 +94,6 @@ export const useModelCommand = (): UseModelCommandReturn => {
     isModelDialogOpen,
     isFastModelMode,
     isAdvisorModelMode,
-    isVoiceModelMode,
     isVisionModelMode,
     isCompactionModelMode,
     isImageModelMode,

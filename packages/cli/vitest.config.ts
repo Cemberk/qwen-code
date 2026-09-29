@@ -202,26 +202,6 @@ export default defineConfig({
           __dirname,
           '../acp-bridge/src/externalToolGuard.ts',
         ),
-        '@qwen-code/audio-capture': path.resolve(
-          __dirname,
-          '../audio-capture/src/index.ts',
-        ),
-        '@qwen-code/sdk/daemon/transcript': path.resolve(
-          __dirname,
-          '../sdk-typescript/src/daemon/transcript.ts',
-        ),
-        '@qwen-code/sdk/daemon/ui/transcript': path.resolve(
-          __dirname,
-          '../sdk-typescript/src/daemon/ui/transcript.ts',
-        ),
-        '@qwen-code/sdk/daemon/types': path.resolve(
-          __dirname,
-          '../sdk-typescript/src/daemon/types.ts',
-        ),
-        '@qwen-code/sdk/daemon': path.resolve(
-          __dirname,
-          '../sdk-typescript/src/daemon/index.ts',
-        ),
       }),
     ],
   },

@@ -46,7 +46,7 @@ describe('modelCommand', () => {
   it('should have the correct name and description', () => {
     expect(modelCommand.name).toBe('model');
     expect(modelCommand.description).toBe(
-      'Switch the model for this session (--fast for suggestion model, --voice for voice transcription model, --vision for the vision bridge model, --compaction for chat compression model, --image for the image generation model, --project to persist to project settings, --global to persist to user settings, [model-id] to switch immediately, or [model-id] [prompt] to run a one-off prompt on another model; the inline prompt is sent verbatim without @file expansion).',
+      'Switch the model for this session (--fast for suggestion model, --vision for the vision bridge model, --compaction for chat compression model, --image for the image generation model, --project to persist to project settings, --global to persist to user settings, [model-id] to switch immediately, or [model-id] [prompt] to run a one-off prompt on another model; the inline prompt is sent verbatim without @file expansion).',
     );
   });
 
@@ -93,7 +93,7 @@ describe('modelCommand', () => {
     ]);
   });
 
-  it.each(['fast', 'voice', 'vision', 'compaction'] as const)(
+  it.each(['fast', 'vision', 'compaction'] as const)(
     'should keep dual-role models eligible for --%s completion',
     async (mode) => {
       mockContext.services.config = {
@@ -1717,314 +1717,6 @@ describe('modelCommand', () => {
     });
   });
 
-  it('should open the voice model dialog for /model --voice in interactive mode', async () => {
-    const mockConfig = createMockConfig({
-      model: 'qwen-plus',
-      authType: AuthType.USE_OPENAI,
-    });
-    mockContext.services.config = mockConfig as Config;
-
-    const result = await modelCommand.action!(mockContext, '--voice');
-
-    expect(result).toEqual({
-      type: 'dialog',
-      dialog: 'voice-model',
-    });
-  });
-
-  it('should return current voice model outside interactive mode', async () => {
-    mockContext = createMockCommandContext({
-      executionMode: 'non_interactive',
-      invocation: { args: '--voice' },
-      services: {
-        config: createMockConfig({
-          model: 'qwen-max',
-          authType: AuthType.USE_OPENAI,
-        }),
-        settings: {
-          merged: { voiceModel: 'qwen3-asr-flash' } as Record<string, unknown>,
-        },
-      },
-    });
-
-    const result = await modelCommand.action!(mockContext, '--voice');
-
-    expect(result).toEqual({
-      type: 'message',
-      messageType: 'info',
-      content:
-        'Current voice model: qwen3-asr-flash\nUse "/model --voice <model-id>" to set voice model.',
-    });
-  });
-
-  it('should set voice model without switching the main model', async () => {
-    const setValue = vi.fn();
-    const switchModel = vi.fn();
-    mockContext = createMockCommandContext({
-      invocation: {
-        raw: '/model --voice qwen3-asr-flash',
-        name: 'model',
-        args: '--voice qwen3-asr-flash',
-      },
-      services: {
-        config: {
-          getContentGeneratorConfig: vi.fn().mockReturnValue({
-            model: 'qwen-plus',
-            authType: AuthType.USE_OPENAI,
-          }),
-          getAllConfiguredModels: vi.fn().mockReturnValue([
-            {
-              id: 'qwen3-asr-flash',
-              label: 'qwen3-asr-flash',
-              authType: AuthType.USE_OPENAI,
-              baseUrl: 'https://dashscope.example/v1',
-            },
-          ]),
-          switchModel,
-        },
-        settings: createMockSettings(setValue),
-      },
-    });
-
-    const result = await modelCommand.action!(
-      mockContext,
-      '--voice qwen3-asr-flash',
-    );
-
-    expect(setValue).toHaveBeenCalledWith(
-      expect.any(String),
-      'voiceModel',
-      'qwen3-asr-flash',
-    );
-    expect(switchModel).not.toHaveBeenCalled();
-    expect(setValue).not.toHaveBeenCalledWith(
-      expect.any(String),
-      'model.name',
-      expect.any(String),
-    );
-    expect(setValue).not.toHaveBeenCalledWith(
-      expect.any(String),
-      'fastModel',
-      expect.any(String),
-    );
-    expect(result).toEqual({
-      type: 'message',
-      messageType: 'info',
-      content: 'Voice Model: qwen3-asr-flash',
-    });
-  });
-
-  it('should reject unavailable voice models', async () => {
-    const setValue = vi.fn();
-    mockContext = createMockCommandContext({
-      invocation: {
-        raw: '/model --voice missing-model',
-        name: 'model',
-        args: '--voice missing-model',
-      },
-      services: {
-        config: {
-          getContentGeneratorConfig: vi.fn().mockReturnValue({
-            model: 'qwen-plus',
-            authType: AuthType.USE_OPENAI,
-          }),
-          getAllConfiguredModels: vi.fn().mockReturnValue([
-            {
-              id: 'qwen3-asr-flash',
-              label: 'qwen3-asr-flash',
-              authType: AuthType.USE_OPENAI,
-            },
-          ]),
-        },
-        settings: createMockSettings(setValue),
-      },
-    });
-
-    const result = await modelCommand.action!(
-      mockContext,
-      '--voice missing-model',
-    );
-
-    expect(setValue).not.toHaveBeenCalled();
-    expect(result).toEqual({
-      type: 'message',
-      messageType: 'error',
-      content:
-        "Voice model 'missing-model' is not configured.\n" +
-        'Configured models: qwen3-asr-flash.\n' +
-        'Configure a unique model id in settings.modelProviders or run /model --voice to select an available model.',
-    });
-  });
-
-  it('should reject voice models that cannot use the transcription endpoint', async () => {
-    const setValue = vi.fn();
-    mockContext = createMockCommandContext({
-      invocation: {
-        raw: '/model --voice qwen3-coder',
-        name: 'model',
-        args: '--voice qwen3-coder',
-      },
-      services: {
-        config: {
-          getContentGeneratorConfig: vi.fn().mockReturnValue({
-            model: 'qwen-plus',
-            authType: AuthType.USE_OPENAI,
-          }),
-          getAllConfiguredModels: vi.fn().mockReturnValue([
-            {
-              id: 'qwen3-coder',
-              label: 'qwen3-coder',
-              authType: AuthType.USE_OPENAI,
-            },
-          ]),
-        },
-        settings: createMockSettings(setValue),
-      },
-    });
-
-    const result = await modelCommand.action!(
-      mockContext,
-      '--voice qwen3-coder',
-    );
-
-    expect(result).toEqual({
-      type: 'message',
-      messageType: 'error',
-      content:
-        "Voice model 'qwen3-coder' cannot be used for transcription. Configure an OpenAI-compatible model with baseUrl in settings.modelProviders.",
-    });
-    expect(setValue).not.toHaveBeenCalled();
-  });
-
-  it('should reject non OpenAI-compatible voice models', async () => {
-    const setValue = vi.fn();
-    mockContext = createMockCommandContext({
-      invocation: {
-        raw: '/model --voice claude-sonnet',
-        name: 'model',
-        args: '--voice claude-sonnet',
-      },
-      services: {
-        config: {
-          getContentGeneratorConfig: vi.fn().mockReturnValue({
-            model: 'qwen-plus',
-            authType: AuthType.USE_OPENAI,
-          }),
-          getAllConfiguredModels: vi.fn().mockReturnValue([
-            {
-              id: 'claude-sonnet',
-              label: 'claude-sonnet',
-              authType: AuthType.USE_ANTHROPIC,
-              baseUrl: 'https://anthropic.example/v1',
-            },
-          ]),
-        },
-        settings: createMockSettings(setValue),
-      },
-    });
-
-    const result = await modelCommand.action!(
-      mockContext,
-      '--voice claude-sonnet',
-    );
-
-    expect(result).toEqual({
-      type: 'message',
-      messageType: 'error',
-      content:
-        "Voice model 'claude-sonnet' cannot be used for transcription. Configure an OpenAI-compatible model with baseUrl in settings.modelProviders.",
-    });
-    expect(setValue).not.toHaveBeenCalled();
-  });
-
-  it('should reject duplicate voice model ids as ambiguous', async () => {
-    const setValue = vi.fn();
-    mockContext = createMockCommandContext({
-      invocation: {
-        raw: '/model --voice qwen3-asr-flash',
-        name: 'model',
-        args: '--voice qwen3-asr-flash',
-      },
-      services: {
-        config: {
-          getContentGeneratorConfig: vi.fn().mockReturnValue({
-            model: 'qwen-plus',
-            authType: AuthType.USE_OPENAI,
-          }),
-          getAllConfiguredModels: vi.fn().mockReturnValue([
-            {
-              id: 'qwen3-asr-flash',
-              label: 'first',
-              authType: AuthType.USE_OPENAI,
-              baseUrl: 'https://one.example/v1',
-            },
-            {
-              id: 'qwen3-asr-flash',
-              label: 'second',
-              authType: AuthType.USE_OPENAI,
-              baseUrl: 'https://two.example/v1',
-            },
-          ]),
-        },
-        settings: createMockSettings(setValue),
-      },
-    });
-
-    const result = await modelCommand.action!(
-      mockContext,
-      '--voice qwen3-asr-flash',
-    );
-
-    expect(setValue).not.toHaveBeenCalled();
-    expect(result).toEqual({
-      type: 'message',
-      messageType: 'error',
-      content:
-        "Voice model 'qwen3-asr-flash' is ambiguous. Configure a unique model id before using /model --voice.",
-    });
-  });
-
-  it('should treat colon-containing voice model values as literal ids', async () => {
-    const setValue = vi.fn();
-    mockContext = createMockCommandContext({
-      invocation: {
-        raw: '/model --voice openai:qwen3-asr-flash',
-        name: 'model',
-        args: '--voice openai:qwen3-asr-flash',
-      },
-      services: {
-        config: {
-          getContentGeneratorConfig: vi.fn().mockReturnValue({
-            model: 'qwen-plus',
-            authType: AuthType.USE_OPENAI,
-          }),
-          getAllConfiguredModels: vi.fn().mockReturnValue([
-            {
-              id: 'qwen3-asr-flash',
-              label: 'qwen3-asr-flash',
-              authType: AuthType.USE_OPENAI,
-            },
-          ]),
-        },
-        settings: createMockSettings(setValue),
-      },
-    });
-
-    const result = await modelCommand.action!(
-      mockContext,
-      '--voice openai:qwen3-asr-flash',
-    );
-
-    expect(setValue).not.toHaveBeenCalled();
-    expect(result).toMatchObject({
-      type: 'message',
-      messageType: 'error',
-      content: expect.stringContaining(
-        "Voice model 'openai:qwen3-asr-flash' is not configured.",
-      ),
-    });
-  });
-
   it('should not treat model IDs prefixed with --fast as the --fast flag', async () => {
     const setValue = vi.fn();
     const switchModel = vi.fn().mockResolvedValue(undefined);
@@ -2507,83 +2199,6 @@ describe('modelCommand', () => {
       });
     });
 
-    it('should not filter out voiceOnly models from --voice selection', async () => {
-      const setValue = vi.fn();
-      mockContext = createMockCommandContext({
-        invocation: {
-          raw: '/model --voice qwen3-asr-flash',
-          name: 'model',
-          args: '--voice qwen3-asr-flash',
-        },
-        services: {
-          config: {
-            getContentGeneratorConfig: vi.fn().mockReturnValue({
-              model: 'main-model',
-              authType: AuthType.USE_OPENAI,
-            }),
-            getAllConfiguredModels: vi.fn().mockReturnValue([
-              {
-                id: 'main-model',
-                label: 'Main',
-                authType: AuthType.USE_OPENAI,
-              },
-              {
-                id: 'qwen3-asr-flash',
-                label: 'ASR',
-                voiceOnly: true,
-                authType: AuthType.USE_OPENAI,
-                baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-              },
-            ]),
-          },
-          settings: createMockSettings(setValue),
-        },
-      });
-
-      const result = await modelCommand.action!(
-        mockContext,
-        '--voice qwen3-asr-flash',
-      );
-      expect(result).toMatchObject({
-        type: 'message',
-        messageType: 'info',
-        content: expect.stringContaining('qwen3-asr-flash'),
-      });
-    });
-
-    it('should reject fastOnly models from --voice selection', async () => {
-      mockContext = createMockCommandContext({
-        invocation: {
-          raw: '/model --voice fast-model',
-          name: 'model',
-          args: '--voice fast-model',
-        },
-        services: {
-          config: {
-            getContentGeneratorConfig: vi.fn().mockReturnValue({
-              model: 'main-model',
-              authType: AuthType.USE_OPENAI,
-            }),
-            getAllConfiguredModels: vi.fn().mockReturnValue([
-              { id: 'main-model', label: 'Main' },
-              { id: 'fast-model', label: 'Fast', fastOnly: true },
-            ]),
-          },
-          settings: createMockSettings(),
-        },
-      });
-
-      const result = await modelCommand.action!(
-        mockContext,
-        '--voice fast-model',
-      );
-      expect(result).toMatchObject({
-        type: 'message',
-        messageType: 'error',
-        content: expect.stringContaining('fast-model'),
-      });
-    });
-
     it('should reject fastOnly models from --vision selection', async () => {
       mockContext = createMockCommandContext({
         invocation: {
@@ -2696,16 +2311,6 @@ describe('modelCommand', () => {
         type: 'dialog',
         dialog: 'fast-model',
         persistScope: 'workspace',
-      });
-    });
-
-    it('should include persistScope for /model --global --voice dialog', async () => {
-      const ctx = setupContext();
-      const result = await modelCommand.action!(ctx, '--global --voice');
-      expect(result).toEqual({
-        type: 'dialog',
-        dialog: 'voice-model',
-        persistScope: 'user',
       });
     });
 
@@ -2876,7 +2481,6 @@ describe('isPickerOnlyModelInvocation', () => {
     '',
     '   ',
     '--fast',
-    '--voice',
     '--vision',
     '--compaction',
     '--image',
@@ -2884,7 +2488,7 @@ describe('isPickerOnlyModelInvocation', () => {
     '--global',
     '--fast --project',
     '--vision --global',
-    '  --fast   --voice  ',
+    '  --fast   --vision  ',
   ])('treats %j as picker-only', (args) => {
     expect(isPickerOnlyModelInvocation(args)).toBe(true);
   });
@@ -2895,6 +2499,7 @@ describe('isPickerOnlyModelInvocation', () => {
     '--project qwen-max',
     '--fast --global qwen-max',
     '--invalid-flag',
+    '--voice',
     '--fastx',
     'qwen-max',
     'qwen-max write a one-off prompt',

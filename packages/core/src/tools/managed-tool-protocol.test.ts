@@ -258,7 +258,6 @@ describe('managed tool confirmation DTOs', () => {
       newContent: 'new',
       isModifying: true,
       hideModify: true,
-      skipIdeDiff: true,
       warnings: ['warning'],
       autoModeFallback: {
         reason: 'classifier_unavailable',

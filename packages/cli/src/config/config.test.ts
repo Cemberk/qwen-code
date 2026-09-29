@@ -36,20 +36,9 @@ import type { Settings } from './settings.js';
 import * as ServerConfig from '@qwen-code/qwen-code-core';
 import { isWorkspaceTrusted } from './trustedFolders.js';
 import { resetMcpApprovalsForTesting } from './mcpApprovals.js';
-import {
-  isCrossSessionMessagingActive,
-  isCrossSessionMessagingEnabled,
-} from '../peerMessaging/enabled.js';
-
-const sshWorkspaceProbe = vi.hoisted(() => vi.fn());
-vi.mock('../serve/ssh-workspace-store.js', () => ({
-  readSshWorkspace: sshWorkspaceProbe,
-}));
 
 const mockWriteStderrLine = vi.hoisted(() => vi.fn());
 const mockWriteStdoutLine = vi.hoisted(() => vi.fn());
-const mockUpdateHandler = vi.hoisted(() => vi.fn());
-const mockBatchHandler = vi.hoisted(() => vi.fn());
 const mockSessionServiceInstance = vi.hoisted(() => ({
   loadLastSession: vi.fn(),
   loadSession: vi.fn(),
@@ -68,27 +57,6 @@ vi.mock('../utils/stdioHelpers.js', () => ({
   writeStderrLine: mockWriteStderrLine,
   writeStdoutLine: mockWriteStdoutLine,
   clearScreen: vi.fn(),
-}));
-
-vi.mock('../commands/update.js', () => ({
-  updateCommand: {
-    command: 'update',
-    describe: 'mock update command',
-    handler: mockUpdateHandler,
-  },
-}));
-
-// The real handler resolves credentials and calls the Batch API, so leaving it
-// unmocked would turn the `batch` exit-list case into a live HTTPS request on
-// any machine with OPENAI_API_KEY + model + base URL set.
-vi.mock('../commands/batch.js', () => ({
-  batchCommand: {
-    // Positionals must be declared: parseArguments runs yargs in strict mode,
-    // so a bare `batch` would reject `status batch_x` before the handler runs.
-    command: 'batch <subcommand> [id]',
-    describe: 'mock batch command',
-    handler: mockBatchHandler,
-  },
 }));
 
 const createNativeLspServiceInstance = () => ({
@@ -262,13 +230,6 @@ vi.mock('@qwen-code/qwen-code-core', async (importOriginal) => {
     // Reset to `undefined` per test, which resolveOutputStyle treats as
     // "built-ins only"; the output-style tests below install a catalog.
     loadOutputStyleCatalog: vi.fn(),
-    IdeClient: {
-      getInstance: vi.fn().mockResolvedValue({
-        getConnectionStatus: vi.fn(),
-        initialize: vi.fn(),
-        shutdown: vi.fn(),
-      }),
-    },
     loadEnvironment: vi.fn(),
     loadServerHierarchicalMemory: vi.fn(
       // Match the real signature: (cwd, includeDirs, fileService,
@@ -455,41 +416,6 @@ describe('parseArguments', () => {
     const argv = await parseArguments();
 
     expect(argv.authType).toBe(AuthType.USE_OPENAI_RESPONSES);
-  });
-
-  it('registers update as an exiting subcommand', async () => {
-    process.argv = ['node', 'script.js', 'update'];
-    mockUpdateHandler.mockResolvedValue(undefined);
-    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit called');
-    });
-
-    await expect(parseArguments()).rejects.toThrow('process.exit called');
-
-    expect(mockUpdateHandler).toHaveBeenCalled();
-    expect(mockExit).toHaveBeenCalledWith(0);
-    mockExit.mockRestore();
-  });
-
-  it('propagates non-zero exitCode from the update handler', async () => {
-    process.argv = ['node', 'script.js', 'update'];
-    mockUpdateHandler.mockImplementation(() => {
-      process.exitCode = 1;
-    });
-    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit called');
-    });
-
-    try {
-      await expect(parseArguments()).rejects.toThrow('process.exit called');
-
-      expect(mockUpdateHandler).toHaveBeenCalled();
-      expect(mockExit).toHaveBeenCalledWith(1);
-    } finally {
-      mockExit.mockRestore();
-      mockUpdateHandler.mockReset();
-      process.exitCode = undefined;
-    }
   });
 
   it('should allow --prompt-interactive without --prompt', async () => {
@@ -933,30 +859,6 @@ describe('parseArguments', () => {
     mockExit.mockRestore();
   });
 
-  it('exits after a `batch` subcommand instead of falling through to the main flow', async () => {
-    // Falling through would reach the memory relaunch, whose child parses argv
-    // again and would submit (and bill) a second batch job.
-    process.argv = ['node', 'script.js', 'batch', 'status', 'batch_x'];
-    mockBatchHandler.mockResolvedValue(undefined);
-
-    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit called');
-    });
-
-    try {
-      await expect(parseArguments()).rejects.toThrow('process.exit called');
-
-      expect(mockBatchHandler).toHaveBeenCalled();
-      expect(mockExit).toHaveBeenCalledWith(0);
-    } finally {
-      mockExit.mockRestore();
-      mockBatchHandler.mockReset();
-      // `run()` in the batch command assigns this before exiting; a leaked 1
-      // would change the exit code of every later test on this worker.
-      process.exitCode = undefined;
-    }
-  });
-
   it('should reject --json-schema with no prompt source when stdin is a TTY', async () => {
     // True interactive invocation with no prompt anywhere → fail fast.
     process.argv = ['node', 'script.js', '--json-schema', '{"type":"object"}'];
@@ -1076,15 +978,9 @@ describe('parseArguments', () => {
   });
 
   it('should default ACP mode to the ACP channel when no channel is provided', async () => {
-    vi.stubEnv('QWEN_CODE_SERVE', '');
-    vi.stubEnv('QWEN_CODE_DESKTOP', '');
-    try {
-      process.argv = ['node', 'script.js', '--acp'];
-      const argv = await parseArguments();
-      expect(argv.channel).toBe('ACP');
-    } finally {
-      vi.unstubAllEnvs();
-    }
+    process.argv = ['node', 'script.js', '--acp'];
+    const argv = await parseArguments();
+    expect(argv.channel).toBe('ACP');
   });
 
   it('keeps an explicit --channel when combined with --acp (the desktop invocation)', async () => {
@@ -1096,36 +992,13 @@ describe('parseArguments', () => {
     expect(argv.acp).toBe(true);
   });
 
-  it('reports the daemon channel for daemon-spawned ACP children', async () => {
-    vi.stubEnv('QWEN_CODE_SERVE', '1');
-    vi.stubEnv('QWEN_CODE_DESKTOP', '');
-    try {
-      process.argv = ['node', 'script.js', '--acp'];
-      const argv = await parseArguments();
-      expect(argv.channel).toBe('daemon');
-    } finally {
-      vi.unstubAllEnvs();
-    }
-  });
-
-  it('reports the desktop channel for the Tauri desktop shell', async () => {
+  it('ignores the removed daemon and desktop launch markers for ACP attribution', async () => {
     vi.stubEnv('QWEN_CODE_SERVE', '1');
     vi.stubEnv('QWEN_CODE_DESKTOP', '1');
     try {
       process.argv = ['node', 'script.js', '--acp'];
       const argv = await parseArguments();
-      expect(argv.channel).toBe('desktop');
-    } finally {
-      vi.unstubAllEnvs();
-    }
-  });
-
-  it('keeps an explicit --channel over the daemon markers', async () => {
-    vi.stubEnv('QWEN_CODE_SERVE', '1');
-    try {
-      process.argv = ['node', 'script.js', '--acp', '--channel', 'VSCode'];
-      const argv = await parseArguments();
-      expect(argv.channel).toBe('VSCode');
+      expect(argv.channel).toBe('ACP');
     } finally {
       vi.unstubAllEnvs();
     }
@@ -1282,26 +1155,20 @@ describe('loadCliConfig', () => {
     vi.restoreAllMocks();
   });
 
-  it.each([undefined, '1'])(
-    'propagates the operator requirement independently of daemon factory availability: %s',
-    async (serve) => {
-      vi.stubEnv('QWEN_AGENT_EXECUTION_BACKEND', 'docker');
-      vi.stubEnv('QWEN_CODE_SERVE', serve);
-      vi.stubEnv('SANDBOX', undefined);
-      process.argv = ['node', 'script.js'];
-      const argv = await parseArguments();
-      await loadCliConfig({}, argv);
-      expect(mockConfigConstructorParams).toHaveBeenCalledWith(
-        expect.objectContaining({
-          agentExecutionBackend: 'container',
-          executionEnvironmentFactory:
-            serve || process.platform === 'win32'
-              ? undefined
-              : expect.any(Function),
-        }),
-      );
-    },
-  );
+  it('propagates the operator agent-execution requirement and factory', async () => {
+    vi.stubEnv('QWEN_AGENT_EXECUTION_BACKEND', 'docker');
+    vi.stubEnv('SANDBOX', undefined);
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments();
+    await loadCliConfig({}, argv);
+    expect(mockConfigConstructorParams).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentExecutionBackend: 'container',
+        executionEnvironmentFactory:
+          process.platform === 'win32' ? undefined : expect.any(Function),
+      }),
+    );
+  });
 
   it('should reset context file names to QWEN.md and AGENTS.md by default', async () => {
     process.argv = ['node', 'script.js'];
@@ -1316,49 +1183,6 @@ describe('loadCliConfig', () => {
       ServerConfig.DEFAULT_CONTEXT_FILENAME,
       ServerConfig.AGENT_CONTEXT_FILENAME,
     ]);
-  });
-
-  it('isolates SSH configuration from local project services and code-mode-only settings', async () => {
-    sshWorkspaceProbe.mockReturnValueOnce({
-      host: 'host',
-      port: 2222,
-      directory: '/srv/project',
-    });
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments();
-    await loadCliConfig(
-      {
-        tools: {
-          codeModeOnly: true,
-          truncateToolOutputThreshold: 2500,
-          shell: { defaultTimeoutMs: 45000 },
-        },
-        mcpServers: { local: { command: 'must-not-run' } },
-      },
-      argv,
-    );
-    expect(mockConfigConstructorParams).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        codeModeOnly: false,
-        disableAllHooks: true,
-        mcpServers: {},
-        overrideExtensions: [],
-        workflowsEnabled: false,
-        enableManagedAutoMemory: false,
-        enableManagedAutoDream: false,
-        enableTeamMemory: false,
-        enableTeamMemorySync: false,
-        enableStructuredMemoryRecall: false,
-        enableAutoSkill: false,
-        fileCheckpointingEnabled: false,
-        artifactEnabled: false,
-        executionEnvironment: expect.objectContaining({
-          toolNames: expect.any(Set),
-        }),
-        appendSystemPrompt: expect.stringContaining('/srv/project'),
-      }),
-    );
-    expect(nativeLspServiceMock).not.toHaveBeenCalled();
   });
 
   it('passes the effective model API to Config at startup', async () => {
@@ -1933,54 +1757,6 @@ describe('loadCliConfig', () => {
 
     expect(config.getAgentsSettings().maxParallelAgents).toBe(2);
   });
-
-  it('keeps cross-session messaging on when no suppression is in force', async () => {
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments();
-    // An unset key is on, so the off case has to say `false` explicitly.
-    const unset = await loadCliConfig({}, argv);
-    const enabled = await loadCliConfig(
-      { agents: { crossSessionMessaging: true } },
-      argv,
-    );
-    const disabled = await loadCliConfig(
-      { agents: { crossSessionMessaging: false } },
-      argv,
-    );
-
-    expect(isCrossSessionMessagingActive({}, unset)).toBe(true);
-    expect(
-      isCrossSessionMessagingActive(
-        { agents: { crossSessionMessaging: true } },
-        enabled,
-      ),
-    ).toBe(true);
-    expect(
-      isCrossSessionMessagingActive(
-        { agents: { crossSessionMessaging: false } },
-        disabled,
-      ),
-    ).toBe(false);
-  });
-
-  // Both suppressions rather than one: a gate that answered only for
-  // `--safe-mode` would leave `--bare` binding an inbox and publishing its
-  // socket path, in the mode documented as skipping implicit startup work.
-  it.each(['--bare', '--safe-mode'])(
-    'suppresses cross-session messaging in %s mode whatever the setting says',
-    async (flag) => {
-      process.argv = ['node', 'script.js', flag];
-      const argv = await parseArguments();
-      const settings = { agents: { crossSessionMessaging: true } };
-
-      const config = await loadCliConfig(settings, argv);
-
-      // The setting still says on: what turns messaging off is the session,
-      // which only the Config the flag already reaches can see.
-      expect(isCrossSessionMessagingEnabled(settings)).toBe(true);
-      expect(isCrossSessionMessagingActive(settings, config)).toBe(false);
-    },
-  );
 
   it('passes agents.maxParallelAgentsByModel from settings to core config', async () => {
     process.argv = ['node', 'script.js'];

@@ -117,8 +117,7 @@ budget, the page table drops each MCP App display's `html` whole (replay
 mounts the iframe only for non-empty `html` and never re-fetches the resource)
 and the turn stays navigable on `fallbackText`; only a page with nothing left
 to degrade fails closed. Larger accepted documents increase transcript and
-replay payloads. Streaming transfer limits remain outside this change. App-initiated server
-tool calls are specified in [MCP App server tool calls](mcp-app-server-tools.md).
+replay payloads. Streaming transfer limits remain outside this change.
 
 For live delivery, an empty subscriber queue admits the original App under the
 existing oversized-first-frame rule. Only a nonempty backlog that would overflow
@@ -159,9 +158,6 @@ AppBridge and postMessage deliver HTML, tool input and tool results to the
 inner iframe. The proxy validates parent and child origins, applies resource
 CSP as an HTTP response header, and forwards messages. The host AppBridge
 schema-validates inbound messages; the proxy does not filter payload shape.
-A bound daemon session advertises scoped App server-tool calls under the
-existing permission policy. See [MCP App server tool calls](mcp-app-server-tools.md)
-for the origin lifecycle, capability boundary and validation limits.
 
 ## Compatibility and safety
 

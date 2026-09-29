@@ -106,24 +106,6 @@ describe('useTrustModify', () => {
     );
 
     expect(result.current.isInheritedTrustFromParent).toBe(true);
-    expect(result.current.isInheritedTrustFromIde).toBe(false);
-  });
-
-  it('should detect inherited trust from IDE', () => {
-    mockedLoadTrustedFolders.mockReturnValue({
-      user: { config: {} }, // No explicit trust
-    } as unknown as LoadedTrustedFolders);
-    mockedIsWorkspaceTrusted.mockReturnValue({
-      isTrusted: true,
-      source: 'ide',
-    });
-
-    const { result } = renderHook(() =>
-      useTrustModify(mockOnExit, mockAddItem),
-    );
-
-    expect(result.current.isInheritedTrustFromIde).toBe(true);
-    expect(result.current.isInheritedTrustFromParent).toBe(false);
   });
 
   it('should set needsRestart but not save when trust changes', () => {
@@ -331,33 +313,6 @@ describe('useTrustModify', () => {
       {
         type: 'warning',
         text: 'Note: This folder is still trusted because a parent folder is trusted.',
-      },
-      expect.any(Number),
-    );
-  });
-
-  it('should add warning when setting DO_NOT_TRUST but still trusted by IDE', () => {
-    mockedLoadTrustedFolders.mockReturnValue({
-      user: { config: {} },
-      setValue: vi.fn(),
-    } as unknown as LoadedTrustedFolders);
-    mockedIsWorkspaceTrusted.mockReturnValue({
-      isTrusted: true,
-      source: 'ide',
-    });
-
-    const { result } = renderHook(() =>
-      useTrustModify(mockOnExit, mockAddItem),
-    );
-
-    act(() => {
-      result.current.updateTrustLevel(TrustLevel.DO_NOT_TRUST);
-    });
-
-    expect(mockAddItem).toHaveBeenCalledWith(
-      {
-        type: 'warning',
-        text: 'Note: This folder is still trusted because the connected IDE workspace is trusted.',
       },
       expect.any(Number),
     );

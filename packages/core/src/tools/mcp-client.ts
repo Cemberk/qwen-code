@@ -2661,16 +2661,6 @@ export async function createTransport(
     // config providing its own PATH fully replaces the parent value instead of
     // being merged with a stale case-variant.
     const inherited = normalizePathEnvForWindows(sanitizeChildEnv(process.env));
-    // The Desktop AppImage exports its bundled Python's PYTHONHOME/PYTHONPATH
-    // globally, and a stdio MCP server's own interpreter then looks for its
-    // standard library under the AppImage mount and crashes at startup
-    // (#11718). Strip both from the inherited environment under the desktop
-    // shell only — the CLI leaves a user's own Python setup untouched, and an
-    // explicit `env` entry in the server config below still wins.
-    if (process.env['QWEN_CODE_DESKTOP'] === '1') {
-      delete inherited['PYTHONHOME'];
-      delete inherited['PYTHONPATH'];
-    }
     const env = {
       ...inherited,
       ...(mcpServerConfig.env || {}),

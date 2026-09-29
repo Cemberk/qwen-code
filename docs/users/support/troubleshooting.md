@@ -56,10 +56,10 @@ This guide provides solutions to common issues and debugging tips, including top
   - A: Cached token information is only displayed when cached tokens are being used. This feature is available for API key users (e.g., Alibaba Cloud Model Studio API key or Google Cloud Vertex AI). You can still view your total token usage using the `/stats` command.
 
 - **Q: A customization (extension, hook, skill, MCP server, or subagent) seems to be breaking Qwen Code. How do I isolate it?**
-  - A: Start Qwen Code with the `--safe-mode` flag to disable all customizations — context files, hooks, extensions, skills, MCP servers, custom subagents (only built-in subagents load), permission rules, settings-sourced approval mode overrides, memory features, cross-session messaging, and sandbox settings — for the session. Note: the CLI flags `--yolo` and `--approval-mode` still take effect in safe mode. If the problem disappears in safe mode, re-enable your customizations one at a time to find the culprit.
+  - A: Start Qwen Code with the `--safe-mode` flag to disable all customizations — context files, hooks, extensions, skills, MCP servers, custom subagents (only built-in subagents load), permission rules, settings-sourced approval mode overrides, memory features, and sandbox settings — for the session. Note: the CLI flags `--yolo` and `--approval-mode` still take effect in safe mode. If the problem disappears in safe mode, re-enable your customizations one at a time to find the culprit.
     - Example: `qwen --safe-mode`
     - Alternative: set the environment variable `QWEN_CODE_SAFE_MODE=true` if the CLI cannot accept flags.
-    - Note: unlike the flag, an exported `QWEN_CODE_SAFE_MODE` is inherited by child processes. A `qwen serve` daemon or an editor started from that shell hosts every one of its sessions in safe mode, so those sessions are suppressed too: they write no session record, and other sessions can neither list nor message them. Unset the variable for the daemon rather than leaving it exported in the shell that starts it.
+    - Note: unlike the flag, an exported `QWEN_CODE_SAFE_MODE` is inherited by child processes. An editor started from that shell hosts every one of its sessions in safe mode, so those sessions are suppressed too: they write no session record, and other sessions cannot list them. Unset the variable for the editor rather than leaving it exported in the shell that starts it.
     - Note: "MCP servers" here means servers configured in `settings.json` / project `.mcp.json` — local, ambient state that safe mode is meant to isolate against. MCP servers you explicitly supply for the current invocation (an embedding ACP client's `session/new` `mcpServers`, or `--mcp-config`) are not local/ambient state and are still honored under safe mode.
 
 ## Common error messages and solutions
@@ -107,15 +107,6 @@ This guide provides solutions to common issues and debugging tips, including top
   - **Issue:** Native right-click context menus, OSC 8 hyperlink clicks, and terminal-native text selection stop working while Qwen Code is running.
   - **Cause:** When `ui.mouseTracking` is enabled (the default), Qwen Code captures all mouse events via SGR mouse tracking to power in-app text selection, click-to-position, row hover, history-item toggling, and viewport scrolling. The terminal forwards every mouse event to the app instead of handling it natively. Qwen Code supplies its own replacements while tracking is on: a single click opens an http(s) OSC 8 hyperlink, and right-click on a link or text selection opens an in-app context menu.
   - **Solution:** If you prefer the terminal's native handling, set `"ui.mouseTracking": false` in your `settings.json`. This turns off all in-app mouse interaction, including the in-app link open and context menu. In Virtualized History (`ui.useTerminalBuffer: true`, the default), the wheel will no longer scroll the transcript — use `Shift+↑/↓`, `PgUp/PgDn`, or `Ctrl+Home/End` instead. To also restore native terminal scrollback, set `"ui.useTerminalBuffer": false`. Requires restart.
-
-## IDE Companion not connecting
-
-- Ensure VS Code has a single workspace folder open.
-- Restart the integrated terminal after installing the extension so it inherits:
-  - `QWEN_CODE_IDE_WORKSPACE_PATH`
-  - `QWEN_CODE_IDE_SERVER_PORT`
-- If running in a container, verify `host.docker.internal` resolves. Otherwise, map the host appropriately.
-- Reinstall the companion with `/ide install` and use “Qwen Code: Run” in the Command Palette to verify it launches.
 
 ## Exit Codes
 

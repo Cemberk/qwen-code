@@ -2293,121 +2293,7 @@ describe('standalone release packaging', () => {
       expect(
         existsSync(path.join(extractDir, 'qwen-code', 'lib', 'patches')),
       ).toBe(false);
-      expect(
-        existsSync(
-          path.join(
-            extractDir,
-            'qwen-code',
-            'lib',
-            'export-transcript-document.js',
-          ),
-        ),
-      ).toBe(false);
-      expect(
-        existsSync(
-          path.join(
-            extractDir,
-            'qwen-code',
-            'lib',
-            'export-transcript-document.css',
-          ),
-        ),
-      ).toBe(false);
     } finally {
-      rmSync(tmpDir, { recursive: true, force: true });
-      restoreMinimalDist(createdDist);
-    }
-  });
-
-  it('requires the native audio prebuild when release packaging opts in', () => {
-    const createdDist = ensureMinimalDist();
-    const tmpDir = mkdtempSync(path.join(tmpdir(), 'qwen-package-test-'));
-    const target = process.platform === 'win32' ? 'win-x64' : 'linux-x64';
-    const prebuildDirName =
-      process.platform === 'win32' ? 'win32-x64' : 'linux-x64';
-    const fakeRuntimeArchive =
-      process.platform === 'win32'
-        ? createFakeWindowsNodeArchive(tmpDir)
-        : createFakeNodeArchive(tmpDir);
-
-    try {
-      expect(() =>
-        execFileSync(
-          'node',
-          [
-            'scripts/create-standalone-package.js',
-            '--target',
-            target,
-            '--node-archive',
-            fakeRuntimeArchive,
-            '--out-dir',
-            path.join(tmpDir, 'out'),
-            '--version',
-            '0.0.0-test',
-          ],
-          {
-            env: {
-              ...process.env,
-              QWEN_STANDALONE_REQUIRE_AUDIO_CAPTURE_PREBUILD: '1',
-            },
-            stdio: 'pipe',
-          },
-        ),
-      ).toThrow(new RegExp(`audio-capture prebuild.*${prebuildDirName}`));
-    } finally {
-      rmSync(tmpDir, { recursive: true, force: true });
-      restoreMinimalDist(createdDist);
-    }
-  });
-
-  it('requires a native audio prebuild file when release packaging opts in', () => {
-    const createdDist = ensureMinimalDist();
-    const tmpDir = mkdtempSync(path.join(tmpdir(), 'qwen-package-test-'));
-    const target = process.platform === 'win32' ? 'win-x64' : 'linux-x64';
-    const prebuildDirName =
-      process.platform === 'win32' ? 'win32-x64' : 'linux-x64';
-    const fakeRuntimeArchive =
-      process.platform === 'win32'
-        ? createFakeWindowsNodeArchive(tmpDir)
-        : createFakeNodeArchive(tmpDir);
-    const prebuildDir = path.join(
-      'packages',
-      'audio-capture',
-      'prebuilds',
-      prebuildDirName,
-    );
-    const createdPrebuildDir = !existsSync(prebuildDir);
-
-    try {
-      mkdirSync(prebuildDir, { recursive: true });
-
-      expect(() =>
-        execFileSync(
-          'node',
-          [
-            'scripts/create-standalone-package.js',
-            '--target',
-            target,
-            '--node-archive',
-            fakeRuntimeArchive,
-            '--out-dir',
-            path.join(tmpDir, 'out'),
-            '--version',
-            '0.0.0-test',
-          ],
-          {
-            env: {
-              ...process.env,
-              QWEN_STANDALONE_REQUIRE_AUDIO_CAPTURE_PREBUILD: '1',
-            },
-            stdio: 'pipe',
-          },
-        ),
-      ).toThrow(new RegExp(`audio-capture prebuild.*${prebuildDirName}`));
-    } finally {
-      if (createdPrebuildDir) {
-        rmSync(prebuildDir, { recursive: true, force: true });
-      }
       rmSync(tmpDir, { recursive: true, force: true });
       restoreMinimalDist(createdDist);
     }
@@ -2442,64 +2328,6 @@ describe('standalone release packaging', () => {
       }
     },
   );
-
-  itOnUnix('does not package audio-capture test artifacts', () => {
-    const createdDist = ensureMinimalDist();
-    const tmpDir = mkdtempSync(path.join(tmpdir(), 'qwen-package-test-'));
-    const prebuildDir = path.join(
-      'packages',
-      'audio-capture',
-      'prebuilds',
-      'linux-x64',
-    );
-    const prebuildFile = path.join(
-      prebuildDir,
-      '@qwen-code+audio-capture.node',
-    );
-    const createdPrebuildDir = !existsSync(prebuildDir);
-    const createdPrebuild = !existsSync(prebuildFile);
-
-    try {
-      mkdirSync(prebuildDir, { recursive: true });
-      if (createdPrebuild) {
-        writeFileSync(prebuildFile, 'fake native addon\n');
-      }
-
-      const archive = packageFakeStandalone(tmpDir);
-      const extractDir = path.join(tmpDir, 'extract');
-      mkdirSync(extractDir, { recursive: true });
-      execFileSync('tar', ['-xzf', archive, '-C', extractDir], {
-        stdio: 'ignore',
-      });
-
-      const addonDist = path.join(
-        extractDir,
-        'qwen-code',
-        'lib',
-        'node_modules',
-        '@qwen-code',
-        'audio-capture',
-        'dist',
-      );
-      expect(existsSync(path.join(addonDist, 'index.js'))).toBe(true);
-      expect(existsSync(path.join(addonDist, 'platform.test.js'))).toBe(false);
-      expect(existsSync(path.join(addonDist, 'platform.test.d.ts'))).toBe(
-        false,
-      );
-      expect(existsSync(path.join(addonDist, 'platform.test.js.map'))).toBe(
-        false,
-      );
-    } finally {
-      if (createdPrebuild) {
-        rmSync(prebuildFile, { force: true });
-      }
-      if (createdPrebuildDir) {
-        rmSync(prebuildDir, { recursive: true, force: true });
-      }
-      restoreMinimalDist(createdDist);
-      rmSync(tmpDir, { recursive: true, force: true });
-    }
-  });
 
   itOnUnix('packages only the matching clipboard native addon', () => {
     const createdDist = ensureMinimalDist();
@@ -3014,9 +2842,6 @@ describe('standalone release packaging', () => {
     expect(releaseStepScript).toContain(
       'npm run package:standalone:release --',
     );
-    expect(releaseWorkflow).toContain(
-      'QWEN_STANDALONE_REQUIRE_AUDIO_CAPTURE_PREBUILD',
-    );
     // Pin the gate structurally on the step that actually runs the packager:
     // build-standalone-release.js spawns it with no env override, so the value
     // reaches create-standalone-package.js only from this step's env. A
@@ -3195,25 +3020,6 @@ describe('standalone release packaging', () => {
     expect(ossWorkflow).toContain(
       '(cd "${hosted_tmp_dir}/global" && sha256sum -c SHA256SUMS)',
     );
-  });
-
-  it('automatically publishes the VSCode companion after stable CLI releases', () => {
-    const workflow = readScript(
-      '.github/workflows/release-vscode-companion.yml',
-    );
-
-    expect(workflow).toContain("release:\n    types: ['published']");
-    expect(workflow).toContain('workflow_dispatch:');
-    expect(workflow).toContain("github.event_name != 'release'");
-    expect(workflow).toContain(
-      "startsWith(github.event.release.tag_name, 'v')",
-    );
-    expect(workflow).toContain('github.event.release.prerelease == false');
-    expect(
-      workflow.match(
-        /github\.event\.release\.tag_name \|\| github\.event\.inputs\.ref \|\| github\.sha/g,
-      ) || [],
-    ).toHaveLength(3);
   });
 
   it('does not whitelist internal planning documents in gitignore', () => {
@@ -5206,14 +5012,6 @@ function ensureMinimalDist({
     writeFileSync(path.join(distPath, 'execution-worker.js'), '');
   }
   if (includeNpmPackageArtifacts) {
-    writeFileSync(
-      path.join(distPath, 'export-transcript-document.js'),
-      'window.QwenExportRenderer = true;\n',
-    );
-    writeFileSync(
-      path.join(distPath, 'export-transcript-document.css'),
-      'body{color:red}\n',
-    );
     writeFileSync(
       path.join(distPath, 'postinstall.js'),
       'console.log("postinstall");\n',

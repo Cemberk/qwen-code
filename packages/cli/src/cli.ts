@@ -22,8 +22,7 @@ import {
   TOP_LEVEL_HELP_OPTIONS,
   TOP_LEVEL_USAGE,
 } from './config/top-level-options.js';
-import { clearInheritedPeerMessagingEnv } from './peerMessaging/env.js';
-import { normalizeServeFastPathArgv } from './utils/serve-fast-path-argv.js';
+import { normalizeCliArgv } from './utils/cli-argv.js';
 import { initStartupProfiler } from './utils/startupProfiler.js';
 import { initCpuProfiler } from './utils/cpuProfiler.js';
 import {
@@ -36,39 +35,18 @@ import {
 initStartupProfiler();
 initCpuProfiler();
 
-type BootstrapRoute =
-  | 'serve'
-  | 'mcp'
-  | 'managed-runtime-worker'
-  | 'help'
-  | 'version'
-  | 'default';
+type BootstrapRoute = 'mcp' | 'help' | 'version' | 'default';
 
 export const TOP_LEVEL_COMMANDS = [
-  ['auth', 'Configure authentication (removed)'],
-  [
-    'batch <command>',
-    'Run many independent requests through the DashScope Batch API',
-  ],
   ['board <command>', 'Share work with other agents through a board'],
-  ['channel <command>', 'Manage messaging channels (Telegram, Discord, etc.)'],
   ['extensions <command>', 'Manage Qwen Code extensions.'],
   ['hooks', 'Manage Qwen Code hooks (use /hooks in interactive mode).'],
   ['mcp', 'Manage MCP servers'],
   [
-    'review <command>',
-    'Run a review non-interactively (`run`), plus the internal helpers used by the /review skill (PR worktree setup, context fetch, rules loading, presubmit checks, cleanup)',
-  ],
-  [
     'sandbox [cmd...]',
     'Inspect the sandbox backend, or run a command inside it',
   ],
-  [
-    'serve',
-    'Run Qwen Code as a local HTTP daemon (Stage 1 experimental: --http-bridge)',
-  ],
   ['sessions <command>', 'Manage Qwen Code sessions'],
-  ['update', 'Check for Qwen Code updates and install if available'],
 ] as const;
 
 export const MCP_COMMANDS = [
@@ -337,14 +315,14 @@ function normalizeMcpFastPathArgv(argv: readonly string[]): readonly string[] {
 export function resolveBootstrapRoute(
   rawArgv: readonly string[],
 ): BootstrapRoute {
-  const argv = normalizeServeFastPathArgv(rawArgv);
+  const argv = normalizeCliArgv(rawArgv);
 
   // Base-parity version intercept (structural close). Base printed the
   // version for any `-v`/`--version` token its hasFlag scan reached, no
   // matter what else the argv carries — command-prefixed (`mcp remove
   // victim -v help`, `mcp add name cmd server.js -v`), help tokens
   // (`---help -v`, `-v help`, `--h -v`), real options with h-prefixed
-  // names (`review fetch-pr … --host x -v`), option-shifted command argv
+  // names, option-shifted command argv
   // (`mcp --debug add … -v`). Verified by A/B probes against the base
   // binary. Printing the version is side-effect-free, while demoting to
   // the full parser EXECUTES subcommands (observed: `mcp remove victim -v
@@ -381,19 +359,12 @@ export function resolveBootstrapRoute(
   }
 
   const firstArg = argv[0];
-  if (firstArg === 'serve') {
-    return 'serve';
-  }
   // Version-bearing mcp argv never reaches here: the intercept above owns
   // every exact version token before `--`, and post-`--` tokens are
   // positional data the fast path persists verbatim.
   if (firstArg === 'mcp') {
     return 'mcp';
   }
-  if (firstArg === 'managed-runtime-worker') {
-    return 'managed-runtime-worker';
-  }
-
   return 'default';
 }
 
@@ -428,7 +399,7 @@ async function printBootstrapVersion(): Promise<void> {
 
 async function runMcpFastPath(rawArgv: readonly string[]): Promise<void> {
   const argv: readonly string[] = normalizeMcpFastPathArgv(
-    normalizeServeFastPathArgv(rawArgv),
+    normalizeCliArgv(rawArgv),
   );
   const hasSubcommand = argv.length > 1 && !argv[1]!.startsWith('-');
   if (!hasSubcommand) {
@@ -510,22 +481,14 @@ async function parseYargsCommand(
 export async function runCliEntry(
   rawArgv: readonly string[] = process.argv.slice(2),
 ): Promise<void> {
-  // Before ANY route can start a child: an inherited messaging pair names
-  // an ancestor session's inbox plus a token that authenticates to it, and
-  // no route here consumes it — a session that binds its own inbox
-  // re-exports its own pair from PeerMessaging.start. Leaving it in place
-  // hands the capability to, among others, the npm lifecycle scripts of a
-  // managed update (which spawns with the full environment), letting
-  // third-party code inject into the running session. Same boundary and
-  // same reason as the guard-token scrub below; that one needs a serve
-  // carve-out, this one does not.
-  clearInheritedPeerMessagingEnv();
+  // No route consumes an inherited external-tool guard token. Scrub it
+  // before any route can start a child process.
+  delete process.env['QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN'];
 
   const managedUpdateVersion =
     process.env['QWEN_CODE_MANAGED_NPM_UPDATE_VERSION'];
   if (managedUpdateVersion) {
     delete process.env['QWEN_CODE_MANAGED_NPM_UPDATE_VERSION'];
-    delete process.env['QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN'];
     const { installManagedNpmUpdate } = await import(
       './utils/managed-npm-update.js'
     );
@@ -533,39 +496,16 @@ export async function runCliEntry(
     return;
   }
 
-  const argv = normalizeServeFastPathArgv(rawArgv);
+  const argv = normalizeCliArgv(rawArgv);
   const route = resolveBootstrapRoute(argv);
-  if (route !== 'serve') {
-    // This credential belongs only to `qwen serve`. Scrub it before any other
-    // subcommand handler can start a child process during yargs parsing. The
-    // serve route keeps it until either the fast path or full serve handler
-    // has captured it into daemon-local options.
-    delete process.env['QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN'];
-  }
 
   if (route === 'version') {
     await printBootstrapVersion();
     return;
   }
 
-  if (route === 'serve') {
-    const { tryRunServeFastPath } = await import('./serve/fast-path.js');
-    if (await tryRunServeFastPath(argv)) {
-      return;
-    }
-  } else if (route === 'mcp') {
+  if (route === 'mcp') {
     await runMcpFastPath(argv);
-    return;
-  } else if (route === 'managed-runtime-worker') {
-    if (argv.length !== 1) {
-      writeStderrLine('Managed Runtime worker arguments are invalid.');
-      process.exitCode = 1;
-      return;
-    }
-    const { runManagedRuntimeAttestationWorker } = await import(
-      './serve/managed-runtime-attestation-worker.js'
-    );
-    await runManagedRuntimeAttestationWorker();
     return;
   } else if (route === 'help') {
     await printTopLevelHelp();
@@ -645,8 +585,7 @@ function writeStderrLine(line: string): void {
  *
  * First writer wins, unlike the wrapper's unconditional assignment: an
  * already-set value may come from an outer launcher in THIS process —
- * cli-entry.js selecting a standalone shim, or the desktop app's vendored
- * bundle — which knows launch details this module cannot see and must not be
+ * cli-entry.js selecting a standalone shim — which knows launch details this module cannot see and must not be
  * overwritten. The cost is that a value inherited from a PARENT qwen session
  * also survives, since the two cases are indistinguishable here; the primary
  * skew scenario — a workspace launch from a plain terminal — has the slot
@@ -659,9 +598,9 @@ function writeStderrLine(line: string): void {
  * launcher (they spawn the CLI as a child and must re-point an inherited value
  * at this build), whereas this module runs in-process AFTER an outer launcher
  * may already have stamped, so it yields. The bundled `node dist/cli.js` launch
- * (the desktop error message's instruction) is not stamped either — cli.js sits
- * at the package root, so the derived ../index.js does not exist and the
- * existence check skips it, consistent with this PR's workspace-entry scope.
+ * is not stamped either — cli.js sits at the package root, so the derived
+ * ../index.js does not exist and the existence check skips it, consistent
+ * with this PR's workspace-entry scope.
  */
 export function stampCliEntryEnv(entryPath?: string): void {
   if (process.env['QWEN_CODE_CLI']) {

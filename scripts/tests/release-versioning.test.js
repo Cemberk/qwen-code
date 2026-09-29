@@ -18,13 +18,12 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { expect, it } from 'vitest';
 import semver from 'semver';
-import { INDEPENDENT_PACKAGES } from '../release-packages.mjs';
 import { getWorkspacePackageJsonPaths } from '../workspaces.js';
 
-// A coupled manifest no later step rewrites: steps 6-8 of version.js only
-// touch the root, packages/cli (config.sandboxImageUri) and packages/channels/*
-// (the @qwen-code/channel-base pin), so any text change here is pnpm's.
-const LAYOUT_CANARY = 'packages/vscode-ide-companion/package.json';
+// A coupled manifest no later step rewrites: steps 6-7 of version.js only
+// touch the root and packages/cli (config.sandboxImageUri), so any text
+// change here is pnpm's.
+const LAYOUT_CANARY = 'packages/acp-bridge/package.json';
 
 /**
  * Put a manifest into a layout `pnpm version` rewrites: dependency entries in
@@ -43,7 +42,7 @@ function perturbManifestLayout(text) {
 }
 
 it.each(['patch', '99.0.0-preview.1'])(
-  'aligns coupled versions (%s) without changing independent packages or the pnpm lockfile',
+  'aligns coupled versions (%s) without changing the pnpm lockfile',
   (version) => {
     const root = process.cwd();
     const directory = mkdtempSync(join(tmpdir(), 'release-versioning-'));
@@ -51,8 +50,6 @@ it.each(['patch', '99.0.0-preview.1'])(
       JSON.parse(readFileSync(join(directory, path), 'utf8'));
     const manifest = JSON.parse(readFileSync('package.json', 'utf8'));
     const paths = getWorkspacePackageJsonPaths(root, manifest.workspaces);
-    const extensionPath =
-      'integrations/external-context-mem0/qwen-extension.json';
     try {
       for (const path of [
         'package.json',
@@ -61,9 +58,7 @@ it.each(['patch', '99.0.0-preview.1'])(
         '.pnpmfile.mjs',
         'scripts/version.js',
         'scripts/keep-manifest-layout.js',
-        'scripts/release-packages.mjs',
         'scripts/workspaces.js',
-        extensionPath,
         ...paths,
       ]) {
         mkdirSync(dirname(join(directory, path)), { recursive: true });
@@ -101,22 +96,9 @@ it.each(['patch', '99.0.0-preview.1'])(
       for (const path of paths) {
         const before = JSON.parse(readFileSync(join(root, path), 'utf8'));
         const after = read(path);
-        if (INDEPENDENT_PACKAGES.includes(before.name)) {
-          expect(after, path).toEqual(before);
-        } else {
-          expect(after.version, path).toBe(expected);
-        }
-        if (
-          before.dependencies?.['@qwen-code/channel-base'] &&
-          !before.dependencies['@qwen-code/channel-base'].startsWith('file:')
-        ) {
-          expect(after.dependencies['@qwen-code/channel-base'], path).toBe(
-            expected,
-          );
-        }
+        expect(after.version, path).toBe(expected);
         expect(after.private, path).toBe(before.private);
       }
-      expect(read(extensionPath).version).toBe(expected);
       for (const path of ['package.json', 'packages/cli/package.json']) {
         expect(read(path).config.sandboxImageUri).toBe(
           `ghcr.io/qwenlm/qwen-code:${expected}`,

@@ -5,7 +5,7 @@
  */
 
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -21,7 +21,6 @@ import type {
   ToolMcpConfirmationDetails,
 } from '@qwen-code/qwen-code-core/tools/tools.js';
 import type { EditorType } from '@qwen-code/qwen-code-core/utils/editor.js';
-import { IdeClient } from '@qwen-code/qwen-code-core/ide/ide-client.js';
 import { buildHumanReadableRuleLabel } from '@qwen-code/qwen-code-core/permissions/rule-parser.js';
 import { ToolConfirmationOutcome } from '@qwen-code/qwen-code-core/tools/tools.js';
 import { isEditorAvailable } from '@qwen-code/qwen-code-core/utils/editor.js';
@@ -102,51 +101,12 @@ export const ToolConfirmationMessage: React.FC<
     [compactMode, confirmationDetails.type, hideModify, preferredEditor],
   );
 
-  const [ideClient, setIdeClient] = useState<IdeClient | null>(null);
-  const [isDiffingEnabled, setIsDiffingEnabled] = useState(false);
-
-  useEffect(() => {
-    let isMounted = true;
-    if (config.getIdeMode()) {
-      const getIdeClient = async () => {
-        const client = await IdeClient.getInstance();
-        if (isMounted) {
-          setIdeClient(client);
-          setIsDiffingEnabled(client?.isDiffingEnabled() ?? false);
-        }
-      };
-      getIdeClient();
-    }
-    return () => {
-      isMounted = false;
-    };
-  }, [config]);
-
   const handleConfirm = async (outcome: ToolConfirmationOutcome) => {
-    // Call onConfirm before resolving the IDE diff so that the CLI outcome
-    // (e.g. ProceedAlways) is processed first.  resolveDiffFromCli would
-    // otherwise trigger the scheduler's ideConfirmation .then() handler
-    // with ProceedOnce, racing with the intended CLI outcome.
-    //
     // Hold the rejection here: the scheduler re-throws after terminalizing a
     // call the trust gate refused, and an unhandled rejection trips the
     // process-level handler (llm.tsx), which shows a "file a bug report"
     // banner and opens the debug console over a correctly-refused action.
     void Promise.resolve(onConfirm(outcome)).catch(() => {});
-
-    if (
-      confirmationDetails.type === 'edit' &&
-      !confirmationDetails.skipIdeDiff
-    ) {
-      if (config.getIdeMode() && isDiffingEnabled) {
-        const cliOutcome =
-          outcome === ToolConfirmationOutcome.Cancel ? 'rejected' : 'accepted';
-        await ideClient?.resolveDiffFromCli(
-          confirmationDetails.filePath,
-          cliOutcome,
-        );
-      }
-    }
   };
 
   const isTrustedFolder = config.isTrustedFolder();
@@ -295,11 +255,7 @@ export const ToolConfirmationMessage: React.FC<
         key: 'Yes, allow always',
       });
     }
-    if (
-      !confirmationDetails.hideModify &&
-      (!config.getIdeMode() || !isDiffingEnabled) &&
-      editorAvailable
-    ) {
+    if (!confirmationDetails.hideModify && editorAvailable) {
       options.push({
         label: t('Modify with external editor'),
         value: ToolConfirmationOutcome.ModifyWithEditor,

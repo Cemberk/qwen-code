@@ -364,7 +364,6 @@ describe('plan-mode shell policy', () => {
     expect(edit).toMatchObject({
       hideAlwaysAllow: true,
       hideModify: true,
-      skipIdeDiff: true,
       warnings: [
         UNKNOWN_WARNING,
         "Exact shell command: `python -c 'print(1)'`",

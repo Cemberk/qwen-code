@@ -14,7 +14,3 @@
 
 # --- Core package ---
 /packages/core/        @wenshao @tanzhenxin @yiliang114 @LaZzyMan @doudouOUC @qqqys
-
-# --- CUA Driver & Mobile MCP ---
-/packages/cua-driver/  @LaZzyMan
-/packages/mobile-mcp/  @LaZzyMan

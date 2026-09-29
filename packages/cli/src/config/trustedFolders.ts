@@ -12,16 +12,12 @@ import {
   createDebugLogger,
   FatalConfigError,
   getErrorMessage,
-  ideContextStore,
   Storage,
 } from '@qwen-code/qwen-code-core';
 import type { Settings } from './settings.js';
 import stripJsonComments from 'strip-json-comments';
 import { parseJsoncObject, updateJsoncContent } from '../utils/jsonc-editor.js';
-import {
-  arePathsEquivalent,
-  getPathComparisonVariants,
-} from './path-comparison.js';
+import { getPathComparisonVariants } from './path-comparison.js';
 import {
   buildTrustPrecedenceRules,
   resolveTrustDecision,
@@ -64,7 +60,7 @@ export interface TrustedFoldersFile {
 
 export interface TrustResult {
   isTrusted: boolean | undefined;
-  source: 'ide' | 'file' | undefined;
+  source: 'file' | undefined;
 }
 
 export type TrustedFoldersChangeListener = () => void;
@@ -84,7 +80,7 @@ function notifyTrustedFoldersChanged(): void {
 
 export type WorkspaceTrustState = 'trusted' | 'untrusted' | 'unknown';
 
-export type WorkspaceTrustSource = 'disabled' | 'ide' | 'file' | 'none';
+export type WorkspaceTrustSource = 'disabled' | 'file' | 'none';
 
 export interface WorkspaceTrustStatus {
   v: 1;
@@ -342,10 +338,7 @@ function trustStatusToResult(status: WorkspaceTrustStatus): TrustResult {
         : status.effective.state === 'untrusted'
           ? false
           : undefined,
-    source:
-      status.effective.source === 'file' || status.effective.source === 'ide'
-        ? status.effective.source
-        : undefined,
+    source: status.effective.source === 'file' ? 'file' : undefined,
   };
 }
 
@@ -360,24 +353,6 @@ export function getWorkspaceTrustStatus(
       workspaceCwd,
       folderTrustEnabled: false,
       effective: { state: 'trusted', source: 'disabled' },
-      explicitTrustLevel: null,
-      requiresDaemonRestartForChanges: true,
-    };
-  }
-
-  const ideTrust = ideContextStore.get()?.workspaceState?.isTrusted;
-  if (
-    ideTrust !== undefined &&
-    arePathsEquivalent(workspaceCwd, process.cwd())
-  ) {
-    return {
-      v: 1,
-      workspaceCwd,
-      folderTrustEnabled: true,
-      effective: {
-        state: ideTrust ? 'trusted' : 'untrusted',
-        source: 'ide',
-      },
       explicitTrustLevel: null,
       requiresDaemonRestartForChanges: true,
     };
@@ -414,15 +389,6 @@ export function isWorkspaceTrusted(
 ): TrustResult {
   if (!isFolderTrustEnabled(settings)) {
     return { isTrusted: true, source: undefined };
-  }
-
-  const ideTrust = ideContextStore.get()?.workspaceState?.isTrusted;
-  if (
-    ideTrust !== undefined &&
-    (workspacePath === undefined ||
-      arePathsEquivalent(workspacePath, process.cwd()))
-  ) {
-    return { isTrusted: ideTrust, source: 'ide' };
   }
 
   return trustStatusToResult(

@@ -79,7 +79,6 @@ import { createHash, randomBytes } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { Storage } from '../config/storage.js';
-import { flattenPeerLabel } from '../ipc/peer-envelope.js';
 import { atomicWriteJSON } from '../utils/atomicFileWrite.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
 import {
@@ -113,10 +112,34 @@ const MAX_RECORD_BYTES = 64 * 1024;
  * This is deliberately strict. A lenient `parseInt` prefix match would
  * read `2026-planning-notes.json` as PID 2026, fail its liveness check,
  * and delete a file this code never wrote. The optional suffix is matched
- * exactly, and is the same shape the peer socket uses when a PID
- * collision forces it to a sibling name.
+ * exactly.
  */
 const RECORD_FILENAME = /^\d+(-[0-9a-f]{8})?\.json$/;
+
+/**
+ * Characters that render as nothing: control and format characters, and
+ * the line and paragraph separators — by Unicode category, so zero-width
+ * spaces, bidi overrides and soft hyphens are covered along with the blocks
+ * nobody thinks to list.
+ */
+const INVISIBLE_CHARACTERS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+/gu;
+
+/** Longest label kept before the session-name cap applies, in code points. */
+const MAX_LABEL_CHARS = 200;
+
+/**
+ * Flatten a caller-supplied label to one line of printable text, so a
+ * name cannot read differently than it compares or rewrite the terminal.
+ */
+function flattenLabel(value: string): string {
+  const oneLine = value.replace(INVISIBLE_CHARACTERS, ' ').trim();
+  // Counted in code points, so the cut never leaves half of an astral
+  // character behind as a lone surrogate.
+  const points = Array.from(oneLine);
+  return points.length > MAX_LABEL_CHARS
+    ? `${points.slice(0, MAX_LABEL_CHARS - 1).join('')}\u2026`
+    : oneLine;
+}
 
 /**
  * Temp files left by `atomicWriteJSON` next to their target. Matched
@@ -177,10 +200,9 @@ const KIND_RE = /^[a-z][a-z0-9-]{0,15}$/;
  * Longest explicit display name kept.
  *
  * Derived names are short by construction, but an explicit one comes from
- * a caller and lands in `qwen sessions ps` and in peer listings, so it
- * gets what a peer-supplied label gets: flattened to one line, then
- * bounded. Shorter than the envelope's 200 because this one is printed in
- * a fixed-width table column.
+ * a caller and lands in `qwen sessions ps`, so it is flattened to one
+ * line, then bounded. Short because it is printed in a fixed-width table
+ * column.
  */
 export const MAX_SESSION_NAME_CHARS = 40;
 
@@ -211,28 +233,6 @@ export interface SessionRegistryRecord {
    * UI: nothing else registered before it existed.
    */
   kind?: string;
-  /**
-   * Path to this session's peer-messaging socket, when it has one.
-   *
-   * Absent means the session is discoverable but not messageable — the
-   * feature is off, or the inbox failed to bind. Readers must treat this
-   * as a hint and dial the socket to confirm: a record can outlive the
-   * process by the width of a crash, and a stale socket file still stats
-   * fine.
-   */
-  ipcPath?: string;
-  /**
-   * Token a connection to `ipcPath` must present on its first line before
-   * any frame is read. Published here because the record is 0600: being
-   * able to read the token is the same capability as being able to
-   * discover the socket at all, so senders get both in one read. Absent
-   * on records written before the field existed: such an inbox requires
-   * no token and admits every connection, so a newer sender reaches it by
-   * simply not leading with an auth line. The reverse direction is the
-   * lossy one — a pre-token sender never authenticates, so a token-
-   * requiring inbox drops what it sends.
-   */
-  ipcToken?: string;
 }
 
 export interface RegisterSessionFields {
@@ -293,7 +293,7 @@ export interface SessionRegistration {
  * derived from the working directory.
  */
 function resolveSessionName(fields: RegisterSessionFields): string {
-  const explicit = flattenPeerLabel(fields.name ?? '');
+  const explicit = flattenLabel(fields.name ?? '');
   if (explicit.length === 0) {
     return deriveSessionName(fields.cwd, fields.sessionId);
   }
@@ -562,9 +562,8 @@ export async function registerSession(
  * caller-supplied value could only corrupt it.
  *
  * Reports whether the patch was actually written: every skip below is
- * silent on the wire, and at least one caller (the peer inbox address
- * advertise) has no later event that would retry a skipped patch, so it
- * must be able to tell success from a no-op.
+ * silent on the wire, so a caller must be able to tell success from a
+ * no-op.
  */
 export async function patchSessionRecord(
   patch: Partial<
@@ -695,7 +694,7 @@ export async function readOwnSessionRecord(
  * is provably gone.
  *
  * Returns an empty list rather than throwing when the registry directory
- * is missing or unreadable — "no peers" and "cannot look" are the same
+ * is missing or unreadable — "no sessions" and "cannot look" are the same
  * outcome for every caller, and this sits on interactive paths.
  */
 export async function listLiveSessions(): Promise<SessionRegistryRecord[]> {
@@ -931,8 +930,6 @@ async function readRecord(filePath: string): Promise<ReadRecordResult> {
   const pidNs = value['pidNs'];
   const qwenVersion = value['qwenVersion'];
   const kind = value['kind'];
-  const ipcPath = value['ipcPath'];
-  const ipcToken = value['ipcToken'];
 
   return {
     status: 'ok',
@@ -951,13 +948,6 @@ async function readRecord(filePath: string): Promise<ReadRecordResult> {
       // and `describeSessionKind` is the one place that decides how that
       // reads. A value this build does not know is kept as written.
       ...(typeof kind === 'string' && KIND_RE.test(kind) ? { kind } : {}),
-      // Optional rather than nulled: absent and empty both mean "not
-      // messageable", and a record written before this field existed must
-      // read back identically to one written after it.
-      ...(typeof ipcPath === 'string' && ipcPath.length > 0 ? { ipcPath } : {}),
-      ...(typeof ipcToken === 'string' && ipcToken.length > 0
-        ? { ipcToken }
-        : {}),
     },
   };
 }

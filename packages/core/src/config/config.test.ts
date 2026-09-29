@@ -39,7 +39,6 @@ import {
 } from './config.js';
 import { GOAL_DEFAULT_TOKEN_BUDGET } from '../goals/goal-protocol.js';
 import { Storage } from './storage.js';
-import { SshExecutionEnvironment } from '../services/ssh-execution-environment.js';
 import { DEFAULT_MAX_TOOL_CALLS_PER_TURN } from '../services/loopDetectionService.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -72,7 +71,6 @@ import {
 } from '../core/contentGenerator.js';
 import { DEFAULT_TOKEN_LIMIT } from '../core/tokenLimits.js';
 import { LlmClient } from '../core/client.js';
-import { runWithAgentContext } from '../agents/runtime/agent-context.js';
 import { ShellTool } from '../tools/shell.js';
 import { canUseRipgrep } from '../utils/ripgrepUtils.js';
 import {
@@ -462,16 +460,6 @@ vi.mock('../subagents/subagent-manager.js', () => {
   SubagentManagerMock.prototype.listSubagents = vi.fn().mockResolvedValue([]);
   return { SubagentManager: SubagentManagerMock };
 });
-
-vi.mock('../ide/ide-client.js', () => ({
-  IdeClient: {
-    getInstance: vi.fn().mockResolvedValue({
-      getConnectionStatus: vi.fn(),
-      initialize: vi.fn(),
-      shutdown: vi.fn(),
-    }),
-  },
-}));
 
 import { BaseLlmClient } from '../core/baseLlmClient.js';
 
@@ -3208,7 +3196,6 @@ describe('Server Config (config.ts)', () => {
         bareMode: false,
         interactive: true,
         fileCheckpointingEnabled: true,
-        ideMode: true,
         enableManagedAutoMemory: true,
         enableManagedAutoDream: true,
         enableTeamMemory: true,
@@ -3238,8 +3225,6 @@ describe('Server Config (config.ts)', () => {
         ToolNames.STRUCTURED_OUTPUT,
       ]);
       expect(parent.getBareMode()).toBe(false);
-      expect(parent.getIdeMode()).toBe(false);
-      expect(() => parent.setIdeMode(true)).toThrow('does not support IDE');
       expect(parent.getDisableAllHooks()).toBe(true);
       expect(parent.getHookSystem()).toBeUndefined();
       expect(parent.getManagedAutoMemoryEnabled()).toBe(false);
@@ -7761,143 +7746,6 @@ describe('Server Config (config.ts)', () => {
       expect(registeredNames).toContain(ToolNames.RECORD_ARTIFACT);
     });
 
-    describe('bundled review workflow activation', () => {
-      beforeEach(() => {
-        vi.stubEnv('QWEN_CODE_ENABLE_WORKFLOWS', undefined);
-        vi.stubEnv('QWEN_CODE_DISABLE_WORKFLOWS', undefined);
-      });
-      afterEach(() => vi.unstubAllEnvs());
-
-      it.each([undefined, false, true])(
-        'preserves the configured workflow preference %s on review activation',
-        async (workflowsEnabled) => {
-          const config = new Config({ ...baseParams, workflowsEnabled });
-          await config.initialize();
-          const registry = config.getToolRegistry();
-          vi.spyOn(registry, 'getAllToolNames').mockReturnValue([
-            ToolNames.WORKFLOW,
-          ]);
-          const getRegistry = vi.spyOn(config, 'getToolRegistry');
-          const refresh = vi.spyOn(config.getLlmClient(), 'setTools');
-          await config.enableReviewWorkflow();
-          expect(config.isWorkflowsEnabled()).toBe(workflowsEnabled !== false);
-          expect(getRegistry).toHaveBeenCalledTimes(
-            workflowsEnabled === false ? 0 : 1,
-          );
-          expect(refresh).toHaveBeenCalledTimes(
-            workflowsEnabled === false ? 0 : 1,
-          );
-        },
-      );
-
-      it('restores review auto-activation when an explicit opt-out is removed', async () => {
-        const config = new Config({ ...baseParams, workflowsEnabled: false });
-        await config.initialize();
-        vi.spyOn(config.getToolRegistry(), 'getAllToolNames').mockReturnValue([
-          ToolNames.WORKFLOW,
-        ]);
-        config.setWorkflowsEnabled(undefined);
-        expect(config.isWorkflowsEnabled()).toBe(false);
-        await config.enableReviewWorkflow();
-        expect(config.isWorkflowsEnabled()).toBe(true);
-      });
-
-      it.each(['registered', 'deferred', 'disabled'] as const)(
-        'uses the existing registry with %s permissions',
-        async (status) => {
-          const config = new Config(baseParams);
-          await config.initialize();
-          const registry = config.getToolRegistry();
-          const names = new Set<string>();
-          vi.spyOn(registry, 'getAllToolNames').mockImplementation(() => [
-            ...names,
-          ]);
-          const eager = vi
-            .spyOn(registry, 'registerFactory')
-            .mockImplementation((name) => {
-              names.add(name);
-            });
-          const deferred = vi
-            .spyOn(registry, 'registerPermissionDeferredFactory')
-            .mockImplementation((name) => {
-              names.add(name);
-            });
-          eager.mockClear();
-          deferred.mockClear();
-          vi.spyOn(
-            config.getPermissionManager()!,
-            'getToolRegistrationStatus',
-          ).mockResolvedValue(status);
-          expect(config.isWorkflowsEnabled()).toBe(false);
-          await config.enableReviewWorkflow();
-          expect(config.getToolRegistry()).toBe(registry);
-          expect(eager).toHaveBeenCalledTimes(status === 'registered' ? 1 : 0);
-          expect(deferred).toHaveBeenCalledTimes(status === 'deferred' ? 1 : 0);
-          expect(config.isWorkflowsEnabled()).toBe(status !== 'disabled');
-          await config.enableReviewWorkflow();
-          expect(eager).toHaveBeenCalledTimes(status === 'registered' ? 1 : 0);
-          expect(deferred).toHaveBeenCalledTimes(status === 'deferred' ? 1 : 0);
-        },
-      );
-
-      it('waits for the live chat tool declarations to refresh', async () => {
-        const config = new Config(baseParams);
-        await config.initialize();
-        const registry = config.getToolRegistry();
-        vi.spyOn(registry, 'getAllToolNames').mockReturnValue([
-          ToolNames.WORKFLOW,
-        ]);
-        let release!: () => void;
-        const refresh = new Promise<void>((resolve) => {
-          release = resolve;
-        });
-        const setTools = vi
-          .spyOn(config.getLlmClient(), 'setTools')
-          .mockReturnValue(refresh);
-        let completed = false;
-        const activation = config.enableReviewWorkflow().then(() => {
-          completed = true;
-        });
-        await vi.waitFor(() => expect(setTools).toHaveBeenCalledOnce());
-        expect(completed).toBe(false);
-        release();
-        await activation;
-        expect(completed).toBe(true);
-      });
-
-      it.each([{ bareMode: true }, { provisionalWorkspace: true }])(
-        'keeps restricted sessions disabled: %j',
-        async (restriction) => {
-          const config = new Config({ ...baseParams, ...restriction });
-          const registration = vi.spyOn(config, 'getPermissionManager');
-          await config.enableReviewWorkflow();
-          expect(config.isWorkflowsEnabled()).toBe(false);
-          expect(registration).not.toHaveBeenCalled();
-        },
-      );
-
-      it('does not activate workflows or refresh the parent chat from a subagent', async () => {
-        const config = new Config(baseParams);
-        const registry = vi.spyOn(config, 'getToolRegistry');
-        const refresh = vi.spyOn(config.getLlmClient(), 'setTools');
-        await runWithAgentContext('review-child', () =>
-          config.enableReviewWorkflow(),
-        );
-        expect(registry).not.toHaveBeenCalled();
-        expect(refresh).not.toHaveBeenCalled();
-        expect(config.isWorkflowsEnabled()).toBe(false);
-      });
-
-      it('honors the explicit workflow kill switch before registering', async () => {
-        const config = new Config(baseParams);
-        vi.stubEnv('QWEN_CODE_DISABLE_WORKFLOWS', '1');
-        const registration = vi.spyOn(config, 'getPermissionManager');
-        await config.enableReviewWorkflow();
-        expect(config.isWorkflowsEnabled()).toBe(false);
-        expect(registration).not.toHaveBeenCalled();
-      });
-    });
-
     it('binds record_source only for a supported top-level session and refreshes it after session rotation', async () => {
       const { SessionSourceService } = await import(
         '../services/session-sources.js'
@@ -10926,156 +10774,9 @@ describe('Server Config (config.ts)', () => {
     unregisterSessionSpy.mockRestore();
   });
 
-  it('serializes the peer inbox address with session transitions', async () => {
-    const config = new Config(baseParams);
-    config.trackSessionRegistration(sharedRegistration());
-    await expect(config.whenSessionRegistered()).resolves.toBe(true);
-
-    let finishIpcPatch!: () => void;
-    const calls: Array<Record<string, unknown>> = [];
-    const patchSessionRecordSpy = vi
-      .spyOn(sessionRegistry, 'patchSessionRecord')
-      .mockImplementation(async (patch) => {
-        calls.push(patch);
-        if ('ipcPath' in patch) {
-          await new Promise<void>((resolve) => {
-            finishIpcPatch = resolve;
-          });
-        }
-        return true;
-      });
-
-    const advertise = config.updateSessionRegistryIpcPath('/tmp/peer.sock');
-    await vi.waitFor(() => expect(calls).toHaveLength(1));
-    const newSessionId = config.startNewSession('replacement-session');
-
-    await Promise.resolve();
-    expect(calls).toEqual([{ ipcPath: '/tmp/peer.sock' }]);
-
-    finishIpcPatch();
-    await advertise;
-    await vi.waitFor(() => expect(calls).toHaveLength(2));
-    expect(calls[1]).toEqual({
-      sessionId: newSessionId,
-      cwd: config.getTargetDir(),
-    });
-
-    patchSessionRecordSpy.mockRestore();
-  });
-
-  it('retries the peer inbox advertise when the registry patch skips', async () => {
-    // The advertise is one-shot: no later /clear or /cd re-asserts
-    // ipcPath, so a patch skipped on transient fd pressure must retry
-    // itself or the inbox stays undiscoverable until restart.
-    const config = new Config(baseParams);
-    config.trackSessionRegistration(sharedRegistration());
-    await expect(config.whenSessionRegistered()).resolves.toBe(true);
-    const patchSessionRecordSpy = vi
-      .spyOn(sessionRegistry, 'patchSessionRecord')
-      .mockResolvedValueOnce(false)
-      .mockResolvedValue(true);
-
-    await config.updateSessionRegistryIpcPath('/tmp/peer.sock');
-
-    expect(patchSessionRecordSpy).toHaveBeenCalledTimes(2);
-    expect(patchSessionRecordSpy).toHaveBeenCalledWith(
-      {
-        ipcPath: '/tmp/peer.sock',
-      },
-      sessionRegistry.SHARED_RECORD_SLOT,
-    );
-    patchSessionRecordSpy.mockRestore();
-  });
-
-  it('names the minted record a hosted session registered under, on every write', async () => {
-    // A process hosting several sessions owns one record each. Every
-    // patch and the final removal have to name the right one — with the
-    // default slot they would all resolve to a `<pid>.json` that such a
-    // process never wrote, so a hosted session's record would never be
-    // updated and never be removed.
-    const config = new Config(baseParams);
-    config.trackSessionRegistration(
-      Promise.resolve({ registered: true, slot: 'a1b2c3d4' }),
-    );
-    await expect(config.whenSessionRegistered()).resolves.toBe(true);
-    expect(config.getSessionRegistrySlot()).toBe('a1b2c3d4');
-
-    const patchSessionRecordSpy = vi
-      .spyOn(sessionRegistry, 'patchSessionRecord')
-      .mockResolvedValue(true);
-    const unregisterSessionSpy = vi
-      .spyOn(sessionRegistry, 'unregisterSession')
-      .mockResolvedValue(undefined);
-
-    await config.updateSessionRegistryIpcPath('/tmp/acp.sock', 'tok');
-    expect(patchSessionRecordSpy).toHaveBeenLastCalledWith(
-      { ipcPath: '/tmp/acp.sock', ipcToken: 'tok' },
-      'a1b2c3d4',
-    );
-
-    config.startNewSession('replacement-session');
-    await vi.waitFor(() =>
-      expect(patchSessionRecordSpy).toHaveBeenLastCalledWith(
-        expect.objectContaining({ sessionId: 'replacement-session' }),
-        'a1b2c3d4',
-      ),
-    );
-
-    await config.unregisterSessionRegistry();
-    expect(unregisterSessionSpy).toHaveBeenCalledWith('a1b2c3d4');
-
-    patchSessionRecordSpy.mockRestore();
-    unregisterSessionSpy.mockRestore();
-  });
-
-  it('re-asserts the registry record with the current session id, retrying a skipped patch', async () => {
-    // A peer message pinned to an id this process does not hold means the
-    // record may be the stale side (a /clear patch skipped under fd
-    // pressure); re-asserting is the fix, and it retries like the advertise.
-    const config = new Config(baseParams);
-    config.trackSessionRegistration(sharedRegistration());
-    await expect(config.whenSessionRegistered()).resolves.toBe(true);
-    const patchSessionRecordSpy = vi
-      .spyOn(sessionRegistry, 'patchSessionRecord')
-      .mockResolvedValueOnce(false)
-      .mockResolvedValue(true);
-
-    await config.reassertSessionRegistryRecord();
-
-    expect(patchSessionRecordSpy).toHaveBeenCalledTimes(2);
-    expect(patchSessionRecordSpy).toHaveBeenLastCalledWith(
-      {
-        sessionId: config.getSessionId(),
-        cwd: config.getTargetDir(),
-      },
-      sessionRegistry.SHARED_RECORD_SLOT,
-    );
-    patchSessionRecordSpy.mockRestore();
-  });
-
-  it('bounds the re-assert retry and is a no-op with no registration', async () => {
-    const config = new Config(baseParams);
-    config.trackSessionRegistration(sharedRegistration());
-    await expect(config.whenSessionRegistered()).resolves.toBe(true);
-    const patchSessionRecordSpy = vi
-      .spyOn(sessionRegistry, 'patchSessionRecord')
-      .mockResolvedValue(false);
-    await expect(
-      config.reassertSessionRegistryRecord(),
-    ).resolves.toBeUndefined();
-    expect(patchSessionRecordSpy).toHaveBeenCalledTimes(3);
-
-    patchSessionRecordSpy.mockClear();
-    const unregistered = new Config(baseParams);
-    await unregistered.reassertSessionRegistryRecord();
-    expect(patchSessionRecordSpy).not.toHaveBeenCalled();
-    patchSessionRecordSpy.mockRestore();
-  });
-
   it('retries the /clear session-id patch when the registry skips it', async () => {
     const config = new Config(baseParams);
     config.trackSessionRegistration(sharedRegistration());
-    await expect(config.whenSessionRegistered()).resolves.toBe(true);
     const patchSessionRecordSpy = vi
       .spyOn(sessionRegistry, 'patchSessionRecord')
       .mockResolvedValueOnce(false)
@@ -11093,46 +10794,6 @@ describe('Server Config (config.ts)', () => {
     expect(sessionPatches[1]?.[0]).toMatchObject({
       sessionId: config.getSessionId(),
     });
-    patchSessionRecordSpy.mockRestore();
-  });
-
-  it('carries the inbox token into the record, on the first patch and the retry', async () => {
-    // `toMatchObject`/`toEqual` treat { ipcPath } and { ipcPath, ipcToken:
-    // undefined } as equal, so the existing one-arg call sites pass whether
-    // or not the token is forwarded. Dropping ipcToken from either patch
-    // would publish an address peers cannot authenticate to — sends read as
-    // 'sent' and are silently dropped — with the whole suite still green.
-    const config = new Config(baseParams);
-    config.trackSessionRegistration(sharedRegistration());
-    await expect(config.whenSessionRegistered()).resolves.toBe(true);
-    const patchSessionRecordSpy = vi
-      .spyOn(sessionRegistry, 'patchSessionRecord')
-      // The first patch is skipped, so the retry path carries the token too.
-      .mockResolvedValueOnce(false)
-      .mockResolvedValue(true);
-
-    await config.updateSessionRegistryIpcPath('/tmp/peer.sock', 'tok-xyz');
-
-    expect(patchSessionRecordSpy).toHaveBeenCalledTimes(2);
-    for (const [patch] of patchSessionRecordSpy.mock.calls) {
-      expect(patch).toEqual({ ipcPath: '/tmp/peer.sock', ipcToken: 'tok-xyz' });
-    }
-    patchSessionRecordSpy.mockRestore();
-  });
-
-  it('gives up on the peer inbox advertise after a bounded retry', async () => {
-    const config = new Config(baseParams);
-    config.trackSessionRegistration(sharedRegistration());
-    await expect(config.whenSessionRegistered()).resolves.toBe(true);
-    const patchSessionRecordSpy = vi
-      .spyOn(sessionRegistry, 'patchSessionRecord')
-      .mockResolvedValue(false);
-
-    await expect(
-      config.updateSessionRegistryIpcPath('/tmp/peer.sock'),
-    ).resolves.toBeUndefined();
-
-    expect(patchSessionRecordSpy).toHaveBeenCalledTimes(3);
     patchSessionRecordSpy.mockRestore();
   });
 
@@ -12220,68 +11881,6 @@ describe('Server Config (config.ts)', () => {
   });
 
   describe('createToolRegistry', () => {
-    it('uses a main-session execution environment and disposes it once', async () => {
-      const environment = new SshExecutionEnvironment(
-        { host: 'host', directory: '/srv/project' },
-        '/local/anchor',
-      );
-      const dispose = vi
-        .spyOn(environment, 'dispose')
-        .mockResolvedValue(undefined);
-      const config = new Config({
-        ...baseParams,
-        executionEnvironment: environment,
-        jsonSchema: { type: 'object', properties: { ok: { type: 'boolean' } } },
-        todoWriteEnabled: true,
-        mcpServers: { local: { command: 'must-not-start' } },
-      });
-      expect(config.getExecutionEnvironment()).toBe(environment);
-      expect(config.getMcpServers()).toEqual({});
-      await config.createToolRegistry();
-      const registered = vi
-        .mocked(ToolRegistry.prototype.registerFactory)
-        .mock.calls.map(([name]) => name);
-      expect(registered).toContain(ToolNames.READ_FILE);
-      expect(registered).toContain(ToolNames.SHELL);
-      for (const name of [
-        ToolNames.STRUCTURED_OUTPUT,
-        ToolNames.WEB_FETCH,
-        ToolNames.GET_GOAL,
-        ToolNames.UPDATE_GOAL,
-        ToolNames.TODO_WRITE,
-      ])
-        expect(registered).toContain(name);
-      expect(registered).not.toContain(ToolNames.TASK_STOP);
-      expect(registered).not.toContain(ToolNames.NOTEBOOK_EDIT);
-      expect(registered).not.toContain(ToolNames.CREATE_SUB_SESSION);
-      await config.shutdownExecutionEnvironments();
-      await config.shutdownExecutionEnvironments();
-      expect(dispose).toHaveBeenCalledOnce();
-    });
-    it('skips host project hooks, skills, extensions and memory during SSH initialization', async () => {
-      const environment = new SshExecutionEnvironment(
-        { host: 'host', directory: '/srv/project' },
-        '/local/anchor',
-      );
-      const config = new Config({
-        ...baseParams,
-        executionEnvironment: environment,
-        enableAutoSkill: true,
-      });
-      const refreshExtensions = vi.spyOn(
-        config.getExtensionManager(),
-        'refreshCache',
-      );
-      await config.initialize({ skipLlmInitialization: true });
-      await config.refreshHierarchicalMemory();
-      expect(HookSystem).not.toHaveBeenCalled();
-      expect(SkillManager.prototype.startWatching).not.toHaveBeenCalled();
-      expect(SkillManager.prototype.refreshCache).not.toHaveBeenCalled();
-      expect(refreshExtensions).not.toHaveBeenCalled();
-      expect(loadServerHierarchicalMemory).not.toHaveBeenCalled();
-      await config.shutdown();
-    });
-
     it('registers zoom_image unconditionally so it survives model switches', async () => {
       const config = new Config(baseParams);
       // A first-run / text-only session reports no image modality, yet the tool

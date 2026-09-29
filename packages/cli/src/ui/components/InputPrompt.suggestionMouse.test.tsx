@@ -23,7 +23,6 @@ import {
 } from '../hooks/useCommandCompletion.js';
 import { useInputHistory } from '../hooks/useInputHistory.js';
 import { useReverseSearchCompletion } from '../hooks/useReverseSearchCompletion.js';
-import { useVoiceInput } from '../hooks/use-voice-input.js';
 import {
   useExportCompletion,
   type ExportCompletionResult,
@@ -53,7 +52,6 @@ vi.mock('../hooks/useShellHistory.js');
 vi.mock('../hooks/useCommandCompletion.js');
 vi.mock('../hooks/useInputHistory.js');
 vi.mock('../hooks/useReverseSearchCompletion.js');
-vi.mock('../hooks/use-voice-input.js');
 vi.mock('../hooks/useExportCompletion.js');
 vi.mock('../contexts/UIStateContext.js', () => ({
   useUIState: vi.fn(() => ({ isFeedbackDialogOpen: false, messageQueue: [] })),
@@ -186,12 +184,6 @@ describe('InputPrompt suggestion mouse routing', () => {
       handleAutocomplete: vi.fn(),
       resetCompletionState: vi.fn(),
       setActiveSuggestionIndex: vi.fn(),
-    });
-    vi.mocked(useVoiceInput).mockReturnValue({
-      status: 'idle',
-      interimText: '',
-      audioLevel: 0,
-      handleKeypress: vi.fn(() => false),
     });
     vi.mocked(useExportCompletion).mockReturnValue({
       shouldShowSuggestions: false,

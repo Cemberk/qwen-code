@@ -62,7 +62,6 @@ import {
   SETTINGS_DIRECTORY_NAME, // This is from the original module, but used by the mock.
   type Settings,
   loadEnvironment,
-  preResolveHomeEnvOverrides,
   reloadEnvironment,
   SETTINGS_VERSION,
   SETTINGS_VERSION_KEY,
@@ -3723,10 +3722,7 @@ describe('Settings Loading and Merging', () => {
       const workspacePayload: Record<string, Record<string, unknown>> = {};
       for (const { section, key } of WORKSPACE_RESTRICTED_SETTINGS) {
         workspacePayload[section] ??= {};
-        workspacePayload[section][key] =
-          key === 'allowedInsecureVoiceBaseUrls'
-            ? ['http://voice.example/v1']
-            : true;
+        workspacePayload[section][key] = true;
       }
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
@@ -3892,222 +3888,43 @@ describe('Settings Loading and Merging', () => {
       ).toBe(false);
     });
 
-    it('keeps a workspace hold over a User accept that loosened a SystemDefaults refuse', () => {
-      mockScopes(
-        { agents: { crossSessionInbound: 'refuse' } },
-        { agents: { crossSessionInbound: 'accept' } },
-        { agents: { crossSessionInbound: 'hold' } },
-      );
-
-      const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.agents?.crossSessionInbound).toBe('hold');
-      expect(
-        getSettingsWarnings(settings).some((w) =>
-          w.includes('agents.crossSessionInbound'),
-        ),
-      ).toBe(false);
-    });
-
     it('still drops, with a warning, a workspace value looser than User', () => {
       mockScopes(
-        { agents: { crossSessionInbound: 'accept' } },
-        { agents: { crossSessionInbound: 'refuse' } },
-        { agents: { crossSessionInbound: 'hold' } },
+        { tools: { workflowNameOnly: false } },
+        { tools: { workflowNameOnly: true } },
+        { tools: { workflowNameOnly: false } },
       );
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.agents?.crossSessionInbound).toBe('refuse');
+      expect(settings.merged.tools?.workflowNameOnly).toBe(true);
       expect(
         getSettingsWarnings(settings).find((w) =>
-          w.includes('agents.crossSessionInbound'),
+          w.includes('tools.workflowNameOnly'),
         ),
       ).toContain('would loosen the User value');
     });
   });
 
-  describe('cross-session settings scope handling', () => {
-    it('should honor the cross-session keys from user scope', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(true);
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify({
-              agents: {
-                crossSessionMessaging: true,
-                crossSessionInbound: 'hold',
-              },
-            });
-          return '{}';
-        },
-      );
-
-      const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.agents?.crossSessionMessaging).toBe(true);
-      expect(settings.merged.agents?.crossSessionInbound).toBe('hold');
-    });
-
-    it('drops a workspace value that would loosen either key, even when trusted', () => {
-      // A trusted repository must not be able to self-grant the peer
-      // channel or force incoming messages through: the loosening
-      // direction is dropped exactly like a restricted setting.
-      (mockFsExistsSync as Mock).mockReturnValue(true);
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify({
-              agents: {
-                crossSessionMessaging: true,
-                crossSessionInbound: 'accept',
-                maxParallelAgents: 4,
-              },
-            });
-          return '{}';
-        },
-      );
-
-      const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.agents?.crossSessionMessaging).toBeUndefined();
-      expect(settings.merged.agents?.crossSessionInbound).toBeUndefined();
-      // ...while other workspace agent settings still merge.
-      expect(settings.merged.agents?.maxParallelAgents).toBe(4);
-
-      const warnings = getSettingsWarnings(settings);
-      const inboundWarning = warnings.find((w) =>
-        w.includes('agents.crossSessionInbound'),
-      );
-      expect(inboundWarning).toBeDefined();
-      expect(inboundWarning).toContain('would loosen the default value');
-      expect(inboundWarning).toContain('only make this setting stricter');
-      // The switch is on by default, so a workspace `true` only repeats
-      // what is already in force: dropped, but nothing to warn about.
-      expect(
-        warnings.some((w) => w.includes('agents.crossSessionMessaging')),
-      ).toBe(false);
-    });
-
-    it('honors a workspace value that tightens the user value', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(true);
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify({
-              agents: {
-                crossSessionMessaging: true,
-                crossSessionInbound: 'accept',
-              },
-            });
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify({
-              agents: {
-                crossSessionMessaging: false,
-                crossSessionInbound: 'refuse',
-              },
-            });
-          return '{}';
-        },
-      );
-
-      const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.agents?.crossSessionMessaging).toBe(false);
-      expect(settings.merged.agents?.crossSessionInbound).toBe('refuse');
-      expect(
-        getSettingsWarnings(settings).some((w) => w.includes('crossSession')),
-      ).toBe(false);
-    });
-
-    it('honors a workspace hold when no operator scope sets the key', () => {
-      // Unset means parity, which delivers some messages; `hold` is
-      // stricter than that, so a repository may ask for it.
-      (mockFsExistsSync as Mock).mockReturnValue(true);
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify({
-              agents: { crossSessionInbound: 'hold' },
-            });
-          return '{}';
-        },
-      );
-
-      const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.agents?.crossSessionInbound).toBe('hold');
-      expect(
-        getSettingsWarnings(settings).some((w) => w.includes('crossSession')),
-      ).toBe(false);
-    });
-
+  describe('tighten-only scope precedence and warnings', () => {
     it('drops, without a warning, a workspace value that repeats what is in force', () => {
       (mockFsExistsSync as Mock).mockReturnValue(true);
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
           if (p === USER_SETTINGS_PATH)
-            return JSON.stringify({ agents: { crossSessionInbound: 'hold' } });
+            return JSON.stringify({ tools: { workflowNameOnly: true } });
           if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify({
-              agents: {
-                crossSessionMessaging: false,
-                crossSessionInbound: 'hold',
-              },
-            });
+            return JSON.stringify({ tools: { workflowNameOnly: true } });
           return '{}';
         },
       );
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.agents?.crossSessionInbound).toBe('hold');
-      // The switch defaults to on, so a workspace `false` is a tightening
-      // against an unset user scope and is kept — also without a warning.
-      expect(settings.merged.agents?.crossSessionMessaging).toBe(false);
+      expect(settings.merged.tools?.workflowNameOnly).toBe(true);
       expect(
-        getSettingsWarnings(settings).some((w) => w.includes('crossSession')),
+        getSettingsWarnings(settings).some((w) =>
+          w.includes('tools.workflowNameOnly'),
+        ),
       ).toBe(false);
-    });
-
-    it('drops a workspace value looser than the user value and says which scope it lost to', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(true);
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify({
-              agents: { crossSessionInbound: 'refuse' },
-            });
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify({ agents: { crossSessionInbound: 'hold' } });
-          return '{}';
-        },
-      );
-
-      const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.agents?.crossSessionInbound).toBe('refuse');
-      const warning = getSettingsWarnings(settings).find((w) =>
-        w.includes('agents.crossSessionInbound'),
-      );
-      expect(warning).toContain('would loosen the User value');
-    });
-
-    it('warns when a workspace true would reopen a switch the user turned off', () => {
-      // The one warning path left for this key: an operator scope's false
-      // outranks a workspace true. An unset operator scope would not reach
-      // it — a workspace true then repeats the default and drops silently.
-      (mockFsExistsSync as Mock).mockReturnValue(true);
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify({
-              agents: { crossSessionMessaging: false },
-            });
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify({ agents: { crossSessionMessaging: true } });
-          return '{}';
-        },
-      );
-
-      const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.agents?.crossSessionMessaging).toBe(false);
-      const warning = getSettingsWarnings(settings).find((w) =>
-        w.includes('agents.crossSessionMessaging'),
-      );
-      expect(warning).toContain('would loosen the User value');
     });
 
     it('lets System scope override a stricter workspace value, with a warning', () => {
@@ -4118,21 +3935,17 @@ describe('Settings Loading and Merging', () => {
         (fs.readFileSync as Mock).mockImplementation(
           (p: fs.PathOrFileDescriptor) => {
             if (p === systemSettingsPath)
-              return JSON.stringify({
-                agents: { crossSessionInbound: 'accept' },
-              });
+              return JSON.stringify({ tools: { workflowNameOnly: false } });
             if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-              return JSON.stringify({
-                agents: { crossSessionInbound: 'refuse' },
-              });
+              return JSON.stringify({ tools: { workflowNameOnly: true } });
             return '{}';
           },
         );
 
         const settings = loadSettings(MOCK_WORKSPACE_DIR);
-        expect(settings.merged.agents?.crossSessionInbound).toBe('accept');
+        expect(settings.merged.tools?.workflowNameOnly).toBe(false);
         const warning = getSettingsWarnings(settings).find((w) =>
-          w.includes('agents.crossSessionInbound'),
+          w.includes('tools.workflowNameOnly'),
         );
         expect(warning).toContain('System scope settings also set it');
       } finally {
@@ -4140,109 +3953,23 @@ describe('Settings Loading and Merging', () => {
       }
     });
 
-    it('keeps an unrecognized workspace value so the reader fails closed', () => {
-      // Both readers fail closed, so these values are stricter than the
-      // user's permissive values and remain effective.
-      (mockFsExistsSync as Mock).mockReturnValue(true);
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify({
-              agents: {
-                crossSessionMessaging: true,
-                crossSessionInbound: 'accept',
-              },
-            });
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify({
-              agents: {
-                crossSessionMessaging: 'yes',
-                crossSessionInbound: 'maybe',
-              },
-            });
-          return '{}';
-        },
-      );
-
-      const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.agents?.crossSessionInbound).toBe('maybe');
-      expect(settings.merged.agents?.crossSessionMessaging).toBe('yes');
-      expect(
-        getSettingsWarnings(settings).some((w) => w.includes('would loosen')),
-      ).toBe(false);
-    });
-
-    it('does not let an unrecognized workspace policy loosen a user refusal', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(true);
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify({
-              agents: { crossSessionInbound: 'refuse' },
-            });
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify({
-              agents: { crossSessionInbound: 'maybe' },
-            });
-          return '{}';
-        },
-      );
-
-      const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.agents?.crossSessionInbound).toBe('refuse');
-      expect(
-        getSettingsWarnings(settings).find((warning) =>
-          warning.includes('agents.crossSessionInbound'),
-        ),
-      ).toContain('would loosen the User value');
-    });
-
-    it('lets a workspace refusal tighten an unrecognized user policy', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(true);
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify({
-              agents: { crossSessionInbound: 'maybe' },
-            });
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify({
-              agents: { crossSessionInbound: 'refuse' },
-            });
-          return '{}';
-        },
-      );
-
-      const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.agents?.crossSessionInbound).toBe('refuse');
-      expect(
-        getSettingsWarnings(settings).some((warning) =>
-          warning.includes('agents.crossSessionInbound'),
-        ),
-      ).toBe(false);
-    });
-
     it('compares against SystemDefaults and names it in the warning', () => {
       (mockFsExistsSync as Mock).mockReturnValue(true);
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
           if (p === getSystemDefaultsPath())
-            return JSON.stringify({
-              agents: { crossSessionInbound: 'hold' },
-            });
+            return JSON.stringify({ tools: { workflowNameOnly: true } });
           if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify({
-              agents: { crossSessionInbound: 'accept' },
-            });
+            return JSON.stringify({ tools: { workflowNameOnly: false } });
           return '{}';
         },
       );
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.agents?.crossSessionInbound).toBe('hold');
+      expect(settings.merged.tools?.workflowNameOnly).toBe(true);
       expect(
         getSettingsWarnings(settings).find((warning) =>
-          warning.includes('agents.crossSessionInbound'),
+          warning.includes('tools.workflowNameOnly'),
         ),
       ).toContain('would loosen the SystemDefaults value');
     });
@@ -4252,12 +3979,7 @@ describe('Settings Loading and Merging', () => {
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
           if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify({
-              agents: {
-                crossSessionMessaging: false,
-                crossSessionInbound: 'refuse',
-              },
-            });
+            return JSON.stringify({ tools: { workflowNameOnly: true } });
           return '{}';
         },
       );
@@ -4265,164 +3987,7 @@ describe('Settings Loading and Merging', () => {
       const settings = loadSettings(MOCK_WORKSPACE_DIR, {
         workspaceTrusted: false,
       });
-      expect(settings.merged.agents?.crossSessionMessaging).toBeUndefined();
-      expect(settings.merged.agents?.crossSessionInbound).toBeUndefined();
-    });
-
-    it('should warn when workspace settings define agents.crossSessionInbound', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(true);
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify({
-              agents: { crossSessionInbound: 'accept' },
-            });
-          return '{}';
-        },
-      );
-
-      const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      const warnings = getSettingsWarnings(settings);
-      expect(
-        warnings.some((w) => w.includes('agents.crossSessionInbound')),
-      ).toBe(true);
-    });
-
-    it('should let user scope win over a stripped workspace value', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(true);
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify({
-              agents: { crossSessionInbound: 'hold' },
-            });
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify({
-              agents: { crossSessionInbound: 'accept' },
-            });
-          return '{}';
-        },
-      );
-
-      const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.agents?.crossSessionInbound).toBe('hold');
-    });
-  });
-
-  describe('allowedInsecureVoiceBaseUrls scope handling', () => {
-    it('should honor the allowlist from user scope', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(true);
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify({
-              security: {
-                allowedInsecureVoiceBaseUrls: [
-                  'http://voice.region-a.internal.example/v1',
-                ],
-              },
-            });
-          return '{}';
-        },
-      );
-
-      const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.security?.allowedInsecureVoiceBaseUrls).toEqual([
-        'http://voice.region-a.internal.example/v1',
-      ]);
-    });
-
-    it('should strip and warn about the allowlist from workspace scope', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(true);
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify({
-              security: {
-                allowedInsecureVoiceBaseUrls: [
-                  'http://voice.region-a.internal.example/v1',
-                ],
-                allowedHttpHookUrls: ['https://hooks.example.com/*'],
-              },
-            });
-          return '{}';
-        },
-      );
-
-      const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(
-        settings.merged.security?.allowedInsecureVoiceBaseUrls,
-      ).toBeUndefined();
-      expect(settings.merged.security?.allowedHttpHookUrls).toEqual([
-        'https://hooks.example.com/*',
-      ]);
-      expect(
-        getSettingsWarnings(settings).some((warning) =>
-          warning.includes('security.allowedInsecureVoiceBaseUrls'),
-        ),
-      ).toBe(true);
-    });
-
-    it('should preserve a user allowlist when workspace defines another', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(true);
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify({
-              security: {
-                allowedInsecureVoiceBaseUrls: [
-                  'http://voice.region-a.internal.example/v1',
-                ],
-              },
-            });
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify({
-              security: {
-                allowedInsecureVoiceBaseUrls: [
-                  'http://voice.region-b.internal.example/v1',
-                ],
-              },
-            });
-          return '{}';
-        },
-      );
-
-      const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.security?.allowedInsecureVoiceBaseUrls).toEqual([
-        'http://voice.region-a.internal.example/v1',
-      ]);
-    });
-
-    it('should let a system-scope empty allowlist revoke a user entry', () => {
-      const systemSettingsPath = '/mock/system/settings.json';
-      process.env['QWEN_CODE_SYSTEM_SETTINGS_PATH'] = systemSettingsPath;
-      try {
-        (mockFsExistsSync as Mock).mockReturnValue(true);
-        (fs.readFileSync as Mock).mockImplementation(
-          (p: fs.PathOrFileDescriptor) => {
-            if (p === USER_SETTINGS_PATH)
-              return JSON.stringify({
-                security: {
-                  allowedInsecureVoiceBaseUrls: [
-                    'http://voice.region-a.internal.example/v1',
-                  ],
-                },
-              });
-            if (p === systemSettingsPath)
-              return JSON.stringify({
-                security: { allowedInsecureVoiceBaseUrls: [] },
-              });
-            return '{}';
-          },
-        );
-
-        const settings = loadSettings(MOCK_WORKSPACE_DIR);
-        expect(settings.merged.security?.allowedInsecureVoiceBaseUrls).toEqual(
-          [],
-        );
-      } finally {
-        delete process.env['QWEN_CODE_SYSTEM_SETTINGS_PATH'];
-      }
+      expect(settings.merged.tools?.workflowNameOnly).toBeUndefined();
     });
   });
 
@@ -4980,12 +4545,12 @@ describe('Settings Loading and Merging', () => {
         (p: fs.PathOrFileDescriptor) => {
           if (p === USER_SETTINGS_PATH) {
             return JSON.stringify({
-              general: { voice: { language: 'en' } },
+              general: { preferredEditor: 'vim' },
             });
           }
           if (p === MOCK_WORKSPACE_SETTINGS_PATH) {
             return JSON.stringify({
-              general: { voice: { enabled: false } },
+              general: { vimMode: false },
             });
           }
           return '{}';
@@ -5002,12 +4567,12 @@ describe('Settings Loading and Merging', () => {
           [
             {
               scope: SettingScope.User,
-              key: 'general.voice.language',
-              value: 'zh',
+              key: 'general.preferredEditor',
+              value: 'code',
             },
             {
               scope: SettingScope.Workspace,
-              key: 'general.voice.enabled',
+              key: 'general.vimMode',
               value: true,
             },
           ],
@@ -5018,9 +4583,9 @@ describe('Settings Loading and Merging', () => {
       );
 
       expect(committed).toEqual([SettingScope.User]);
-      expect(settings.user.settings.general?.voice?.language).toBe('zh');
-      expect(settings.workspace.settings.general?.voice?.enabled).toBe(false);
-      expect(settings.merged.general?.voice?.enabled).toBe(false);
+      expect(settings.user.settings.general?.preferredEditor).toBe('code');
+      expect(settings.workspace.settings.general?.vimMode).toBe(false);
+      expect(settings.merged.general?.vimMode).toBe(false);
     });
   });
 
@@ -5821,40 +5386,6 @@ describe('Settings Loading and Merging', () => {
         loadEnvironment(loadSettings(MOCK_WORKSPACE_DIR).merged);
 
         expect(process.env['QWEN_HOME']).toEqual('/tmp/from-user-env');
-        cwdSpy.mockRestore();
-      });
-
-      it('does not pre-resolve attribution markers from a user-level .env', () => {
-        delete process.env['QWEN_HOME'];
-        delete process.env['QWEN_CODE_SERVE'];
-        delete process.env['QWEN_CODE_DESKTOP'];
-
-        const cwdSpy = vi
-          .spyOn(process, 'cwd')
-          .mockReturnValue('/mock/home/user');
-        const userQwenEnvPath = path.join('/mock/home/user', QWEN_DIR, '.env');
-
-        (mockFsExistsSync as Mock).mockImplementation((p: fs.PathLike) =>
-          [userQwenEnvPath].includes(p.toString()),
-        );
-        (fs.readFileSync as Mock).mockImplementation(
-          (p: fs.PathOrFileDescriptor) => {
-            if (p === userQwenEnvPath) {
-              return [
-                'QWEN_HOME=/tmp/from-user-env',
-                'QWEN_CODE_SERVE=1',
-                'QWEN_CODE_DESKTOP=1',
-              ].join('\n');
-            }
-            return '{}';
-          },
-        );
-
-        preResolveHomeEnvOverrides();
-
-        expect(process.env['QWEN_HOME']).toEqual('/tmp/from-user-env');
-        expect(process.env['QWEN_CODE_SERVE']).toBeUndefined();
-        expect(process.env['QWEN_CODE_DESKTOP']).toBeUndefined();
         cwdSpy.mockRestore();
       });
 

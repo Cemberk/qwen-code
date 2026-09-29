@@ -87,7 +87,7 @@ case "${step}" in
     build_paths=('dist' 'packages/web-templates/src/generated')
     while IFS= read -r -d '' path; do
       build_paths+=("${path}")
-    done < <(find packages integrations -type d -name node_modules -prune -o -type d -name dist -prune -print0)
+    done < <(find packages -type d -name node_modules -prune -o -type d -name dist -prune -print0)
     printf '%s\n' "${build_paths[@]}"
     [[ ${#build_paths[@]} -gt 2 ]] || {
       echo "::error::Pack Build Outputs found no build outputs beyond the hardcoded paths."
@@ -98,10 +98,6 @@ case "${step}" in
 
   verify-package)
     npm run bundle
-    test -f dist/review-sources.sha256 || {
-      echo "::error::review source stamp missing — see the copy_bundle_assets warning above"
-      exit 1
-    }
     npm run prepare:package
     ;;
 
@@ -118,7 +114,7 @@ case "${step}" in
 
   push-release-branch)
     release_branch_name="${BRANCH_NAME:?}"
-    git add package.json pnpm-lock.yaml packages/*/package.json packages/channels/*/package.json integrations/*/package.json integrations/*/qwen-extension.json
+    git add package.json pnpm-lock.yaml packages/*/package.json
     if git diff --staged --quiet; then
       echo "No version changes to commit"
     else
@@ -160,10 +156,6 @@ case "${step}" in
   build-package)
     npm run build
     npm run bundle
-    test -f dist/review-sources.sha256 || {
-      echo "::error::review source stamp missing — see the copy_bundle_assets warning above"
-      exit 1
-    }
     npm run prepare:package
     ;;
 
@@ -179,7 +171,9 @@ case "${step}" in
     package_names="$(node "$(dirname "$0")/../../scripts/release-packages.mjs")"
     publish_args=(--access public "--tag=${NPM_TAG}" --no-git-checks --provenance)
     while IFS= read -r name; do
-      publish_args+=("--filter=${name}")
+      if [[ -n "${name}" ]]; then
+        publish_args+=("--filter=${name}")
+      fi
     done <<< "${package_names}"
     if [[ "${IS_DRY_RUN}" == "true" ]]; then
       # Exercise packing and lifecycle checks even for an existing version.

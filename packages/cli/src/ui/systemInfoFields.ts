@@ -31,7 +31,6 @@ export function getSystemInfoFields(
 
   addField(fields, t('Qwen Code'), formatCliVersion(info));
   addField(fields, t('Runtime'), formatRuntime(info));
-  addField(fields, t('IDE Client'), info.ideClient);
   addField(fields, 'LSP', info.lspStatus ?? '');
   addField(fields, t('OS'), formatOs(info));
   addField(fields, t('Auth'), formatAuth(info));

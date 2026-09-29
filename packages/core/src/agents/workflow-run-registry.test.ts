@@ -771,7 +771,6 @@ describe('WorkflowRunRegistry', () => {
         type: 'edit',
         hideAlwaysAllow: true,
         hideModify: true,
-        skipIdeDiff: true,
       },
     });
   });

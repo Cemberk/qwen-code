@@ -20,6 +20,15 @@ export {
   MAX_CHANNEL_DELIVERY_TEXT_LENGTH,
 };
 
+// Channel-turn ACP meta keys. Trusted-parent metadata: the ACP agent strips
+// them from untrusted callers.
+export const CHANNEL_PROMPT_META_KEY = 'qwen.channel.prompt';
+export const CHANNEL_OUTPUT_MODE_META_KEY = 'qwen.channel.outputMode';
+export const CHANNEL_TASK_RESULT_META_KEY = 'qwen.channel.taskResult';
+export const CHANNEL_TASK_RESULT_PARTIAL_META_KEY =
+  'qwen.channel.taskResultPartial';
+export const CHANNEL_TASK_OUTPUT_META_KEY = 'qwen.channel.taskOutput';
+
 const TRUNCATED_TEXT_SUFFIX =
   '\n\n[Channel delivery truncated because the result exceeded the delivery size limit.]';
 

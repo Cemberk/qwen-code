@@ -47,13 +47,8 @@ export function agentExecutionFactory(
   env: NodeJS.ProcessEnv = process.env,
   fileSourced: (key: string) => boolean = isFileSourcedEnvKey,
 ): ExecutionEnvironmentFactory | undefined {
-  // Sandbox and daemon handoffs do not preserve environment provenance.
-  if (
-    process.platform === 'win32' ||
-    env['SANDBOX'] ||
-    env['QWEN_CODE_SERVE'] === '1'
-  )
-    return undefined;
+  // Sandbox handoffs do not preserve environment provenance.
+  if (process.platform === 'win32' || env['SANDBOX']) return undefined;
   const runtime = agentExecutionRuntime(env, fileSourced);
   if (!runtime) return undefined;
   const clientEnv = trustedProcessEnv(env, fileSourced);

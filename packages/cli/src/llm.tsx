@@ -45,8 +45,6 @@ import path from 'node:path';
 import v8 from 'node:v8';
 import { validateAuthMethod } from './config/auth.js';
 import * as cliConfig from './config/config.js';
-import { scrubAndReportInheritedLoaderEnv } from './config/shared-env-keys.js';
-import { QWEN_CODE_SERVE_ENV } from './config/acp-channel-fallback.js';
 import {
   buildDisabledSkillNamesProvider,
   buildEnabledSkillNamesProvider,
@@ -102,7 +100,7 @@ import {
   relaunchAppInChildProcess,
   relaunchOnExitCode,
 } from './utils/relaunch.js';
-import { start_sandbox } from './serve/sandbox.js';
+import { start_sandbox } from './sandbox/sandbox.js';
 import { getStartupWarnings } from './utils/startupWarnings.js';
 import { getUserStartupWarnings } from './utils/userStartupWarnings.js';
 import { getInterruptedWorkflowRunsNotice } from './utils/interrupted-workflow-runs.js';
@@ -110,7 +108,6 @@ import { initializeWarningHandler } from './utils/warningHandler.js';
 import { writeStderrLine, writeStderrLineSafe } from './utils/stdioHelpers.js';
 import { sanitizeTerminalText } from './ui/utils/textUtils.js';
 import { getHeadlessYoloSafetyWarning } from './utils/headlessSafetyWarnings.js';
-import { clearInheritedPeerMessagingEnv } from './peerMessaging/env.js';
 import { initializeLlmOutputLanguage } from './i18n/languageUtils.js';
 import {
   CUSTOM_SANDBOX_IMAGE_ENV_VAR,
@@ -422,13 +419,6 @@ function installInteractiveSignalHandlers(wasRaw: boolean): () => void {
 
 export async function main() {
   profileCheckpoint('main_entry');
-  // First thing, before any child can be spawned: an inherited messaging
-  // address/token names the ANCESTOR's inbox, and handing that pair on
-  // would let this session's hooks inject into the wrong session. Modes
-  // that never bind an inbox — feature off, headless `-p`, a registration
-  // that never completes — reach no other scrub, so it happens here for
-  // all of them. A session that does bind one re-exports its own pair.
-  clearInheritedPeerMessagingEnv();
   const acpStartupProfilerEnabled = isAcpStartupProfilerEnabled();
   // Bridge core-package startup events (Config.initialize, MCP discovery,
   // LlmClient.setTools) into the cli's startup profiler. Gated on
@@ -857,23 +847,6 @@ export async function main() {
     }
   }
 
-  if (isAcpMode && process.env[QWEN_CODE_SERVE_ENV] === '1') {
-    // A daemon-spawned ACP child hosts sessions for arbitrary workspaces.
-    // Loader vars from the daemon's launch environment were only needed to
-    // boot this process (e.g. the dev harness tsx loader); left in
-    // process.env they propagate into every session subprocess — shell
-    // tool, MCP servers, hooks — and hijack module resolution across
-    // workspace boundaries. The gate is the daemon stamp: direct ACP
-    // integrations (editor companions) spawn the same --acp command line
-    // but host the user's own session, where an exported
-    // NODE_OPTIONS=--max-old-space-size is expected to reach tool
-    // subprocesses. Placement is after the relaunch/sandbox handoff: those
-    // respawn this process with process.env and still need the loader to
-    // boot, and the respawned child re-runs this scrub itself. Only the
-    // final process (no relaunch) reaches here.
-    scrubAndReportInheritedLoaderEnv(process.env, 'qwen', 'ACP child');
-  }
-
   // When --worktree is going to chdir us into a worktree below, resolve
   // any relative-path argv fields to absolute paths now — BEFORE the
   // chdir. Otherwise downstream `fs.existsSync('./mcp.json')` calls in
@@ -1255,16 +1228,8 @@ export async function main() {
     // For other modes, initialize normally
     const { initializeApp } = await import('./core/initializer.js');
     let input = config.getQuestion();
-    const hasRemoteInput = Boolean(config.getInputFile?.());
-    const deferIdeConnection =
-      config.isInteractive() &&
-      !config.getExperimentalZedIntegration() &&
-      !input &&
-      !hasRemoteInput;
     markAcpStartup('appInitializationStart');
-    const initializationResult = await initializeApp(config, settings, {
-      deferIdeConnection,
-    });
+    const initializationResult = await initializeApp(config, settings);
     markAcpStartup('appInitializationEnd');
     profileCheckpoint('after_initialize_app');
 
@@ -1400,7 +1365,6 @@ export async function main() {
             process.cwd(),
             initializationResult!,
             {
-              postRenderConnectIde: deferIdeConnection,
               extensionRefreshState,
             },
           );
@@ -1436,7 +1400,6 @@ export async function main() {
         process.cwd(),
         initializationResult!,
         {
-          postRenderConnectIde: deferIdeConnection,
           extensionRefreshState,
         },
       );

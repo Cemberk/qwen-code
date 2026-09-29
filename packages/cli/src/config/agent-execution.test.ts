@@ -16,11 +16,7 @@ describe('agent execution capability', () => {
   it.each(['docker', 'podman', ' Docker '])(
     'records the trusted operator requirement for %s independently of capability',
     (runtime) => {
-      for (const handoff of [
-        {},
-        { SANDBOX: 'sandbox' },
-        { QWEN_CODE_SERVE: '1' },
-      ]) {
+      for (const handoff of [{}, { SANDBOX: 'sandbox' }]) {
         expect(
           agentExecutionBackend(
             { ...handoff, [AGENT_EXECUTION_BACKEND_ENV]: runtime },
@@ -47,10 +43,10 @@ describe('agent execution capability', () => {
     );
   });
 
-  it('rejects invalid trusted policy even if a daemon handoff disables the factory', () => {
+  it('rejects invalid trusted policy even if a sandbox handoff disables the factory', () => {
     expect(() =>
       agentExecutionBackend(
-        { QWEN_CODE_SERVE: '1', [AGENT_EXECUTION_BACKEND_ENV]: 'remote' },
+        { SANDBOX: 'sandbox', [AGENT_EXECUTION_BACKEND_ENV]: 'remote' },
         () => false,
       ),
     ).toThrow('must be docker or podman');
@@ -140,16 +136,4 @@ describe('agent execution capability', () => {
       ).toThrow('must be docker or podman');
     },
   );
-  it('does not trust inherited backend settings in daemon ACP sessions', () => {
-    expect(
-      agentExecutionFactory(
-        {
-          QWEN_CODE_SERVE: '1',
-          [AGENT_EXECUTION_BACKEND_ENV]: 'docker',
-          DOCKER_HOST: 'tcp://file-controlled.invalid:2375',
-        },
-        () => false,
-      ),
-    ).toBeUndefined();
-  });
 });

@@ -268,97 +268,6 @@ export function mcpTransportOf(config: MCPServerConfig): McpTransportKind {
 }
 
 /**
- * Resolve budget config from env vars when the constructor caller
- * doesn't pass one. Daemon-mode (`qwen serve`) sets these when
- * spawning the `qwen --acp` child; standalone `qwen` invocations
- * leave them unset and get `{ budgetMode: 'off' }` — the historical
- * behavior, no enforcement.
- *
- * `QWEN_SERVE_MCP_CLIENT_BUDGET` — positive integer; non-numeric /
- *   zero / negative / NaN are rejected (treated as unset) and a
- *   stderr breadcrumb is written so the misconfiguration is visible.
- * `QWEN_SERVE_MCP_BUDGET_MODE` — `enforce|warn|off`. Defaults to
- *   `warn` when a budget is set, `off` otherwise.
- */
-function readBudgetFromEnv(): McpBudgetConfig {
-  const rawBudget = process.env['QWEN_SERVE_MCP_CLIENT_BUDGET'];
-  const rawMode = process.env['QWEN_SERVE_MCP_BUDGET_MODE'];
-  let clientBudget: number | undefined;
-  if (rawBudget !== undefined && rawBudget !== '') {
-    // Parse strictly as a decimal integer: Number('0x10')=16, Number('1e2')=100
-    // and Number('1.0')=1 all pass isInteger, so a loose parse would silently
-    // accept them. Only plain decimal digits should set a budget.
-    const trimmed = rawBudget.trim();
-    const parsed = Number(trimmed);
-    if (/^\d+$/.test(trimmed) && Number.isSafeInteger(parsed) && parsed > 0) {
-      clientBudget = parsed;
-    } else {
-      // operator typos
-      // like `QWEN_SERVE_MCP_CLIENT_BUDGET=abc` previously fell
-      // through silently to "no budget" with zero indication. The
-      // CLI parent (`commands/serve.ts` + `run-qwen-serve.ts`)
-      // validates and throws, but the ACP child process — where
-      // this function runs — has no such validation. Surface a
-      // boot breadcrumb so operators see the misconfiguration in
-      // journald / docker logs.
-      process.stderr.write(
-        `qwen serve: ignoring invalid QWEN_SERVE_MCP_CLIENT_BUDGET=` +
-          `'${rawBudget}' (expected positive integer); ` +
-          `MCP budget enforcement disabled for this child.\n`,
-      );
-    }
-  }
-  let budgetMode: McpBudgetMode;
-  if (rawMode === 'enforce' || rawMode === 'warn' || rawMode === 'off') {
-    budgetMode = rawMode;
-  } else {
-    if (rawMode !== undefined && rawMode !== '') {
-      // Same operator-visibility rationale as the budget breadcrumb
-      // above. Unknown mode value silently fell through to the
-      // budget-driven default; now it gets a stderr line so the
-      // typo is visible.
-      process.stderr.write(
-        `qwen serve: ignoring invalid QWEN_SERVE_MCP_BUDGET_MODE=` +
-          `'${rawMode}' (expected enforce|warn|off); falling back to ` +
-          `${clientBudget === undefined ? 'off' : 'warn'}.\n`,
-      );
-    }
-    budgetMode = clientBudget === undefined ? 'off' : 'warn';
-  }
-  // mode-without-budget
-  // downgrade. Originally only `enforce` got downgraded — but `warn`
-  // mode without a budget threshold is equally meaningless: nothing
-  // actionable can ever fire (no `liveCount >= 0.75 * budget`
-  // comparison can be true when budget is undefined). Downgrading
-  // BOTH to `off` removes the comment-vs-code mismatch in
-  // `emitBudgetTelemetry` (which previously claimed
-  // `mode !== 'off' ⇒ clientBudget defined` — true for enforce,
-  // false for warn until this fix).
-  //
-  // R9 #7: emit a stderr breadcrumb when the downgrade fires.
-  // Pre-fix the downgrade was silent — operator sets
-  // `QWEN_SERVE_MCP_BUDGET_MODE=enforce` in a Docker Compose / k8s
-  // env without the matching budget, daemon boots happy, snapshot
-  // shows `budgetMode: 'off'`, and enforcement is silently
-  // disabled. The CLI handler + `runQwenServe` path both throw on
-  // this combination; the env-var fallback path (used by the ACP
-  // child) was the laggard. Now mirrors the R7 #6 invalid-value
-  // breadcrumb pattern.
-  if (
-    (budgetMode === 'enforce' || budgetMode === 'warn') &&
-    clientBudget === undefined
-  ) {
-    process.stderr.write(
-      `qwen serve: QWEN_SERVE_MCP_BUDGET_MODE=${budgetMode} requires ` +
-        `QWEN_SERVE_MCP_CLIENT_BUDGET=N; downgrading to off. ` +
-        `Set both env vars to enable MCP guardrail enforcement.\n`,
-    );
-    budgetMode = 'off';
-  }
-  return { clientBudget, budgetMode };
-}
-
-/**
  * options bag for
  * `McpClientManager` construction, replacing the prior 5 trailing
  * positional parameters (`eventEmitter`, `sendSdkMcpMessage`,
@@ -573,29 +482,12 @@ export class McpClientManager {
     this.healthConfig = { ...DEFAULT_HEALTH_CONFIG, ...options.healthConfig };
     const budgetConfig = options.budgetConfig;
 
-    // Tests inject `budgetConfig` directly; production reads env vars
-    // set by `qwen serve --mcp-client-budget=N --mcp-budget-mode=X`
-    // when spawning the ACP child. Standalone `qwen` invocations
-    // leave both unset and get `mode: 'off'` — the pre-PR-14 default.
-    const resolved = budgetConfig ?? readBudgetFromEnv();
-    let resolvedMode = resolved.budgetMode;
-    // mirror
-    // `readBudgetFromEnv`'s `(enforce|warn)`-without-budget
-    // downgrade for the direct-`budgetConfig` path too. All
-    // production callers (CLI handler, `runQwenServe`, env-var
-    // fallback) validate upfront, but a future code path that
-    // injects `budgetConfig` without running the validation
-    // would re-introduce the silent fail-open. Defense in depth.
-    //
-    // R10 line 357: emit the same stderr breadcrumb the env-var
-    // path uses. Pre-R10 the env-var path logged on downgrade but
-    // this constructor path was silent — same operator-visibility
-    // failure mode (operator only sees `budgetMode: 'off'` after
-    // the fact via the snapshot). Now both paths surface the
-    // misconfiguration at boot, so a future caller that bypasses
-    // CLI / env-var validation can't ship a daemon that
-    // advertises `mcp_guardrails` while silently disabling
+    // Callers that do not inject `budgetConfig` get `mode: 'off'` — no
     // enforcement.
+    const resolved: McpBudgetConfig = budgetConfig ?? { budgetMode: 'off' };
+    let resolvedMode = resolved.budgetMode;
+    // Downgrade `(enforce|warn)`-without-budget to `off` and surface the
+    // misconfiguration at boot.
     if (
       (resolvedMode === 'enforce' || resolvedMode === 'warn') &&
       resolved.clientBudget === undefined
@@ -834,9 +726,8 @@ export class McpClientManager {
    * pollute the startup-event sink.
    *
    * Invariant (post R8 #2): `mode !== 'off'` ⇒ `clientBudget` was
-   * resolved. Both `readBudgetFromEnv` AND the constructor downgrade
-   * `enforce`/`warn`-without-budget to `off` so neither call site can
-   * leave a budgetless mode reaching this telemetry path.
+   * resolved. The constructor downgrades `enforce`/`warn`-without-budget
+   * to `off` so a budgetless mode never reaches this telemetry path.
    * `clientBudget ?? 0` is kept as belt-and-suspenders against future
    * call sites that might bypass both validations.
    */

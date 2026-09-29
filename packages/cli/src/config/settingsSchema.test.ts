@@ -9,7 +9,6 @@ import {
   DEFAULT_QWEN_CUSTOM_IGNORE_FILE_NAMES,
   GOAL_MAX_ACTIVE_MINUTES_CAP,
   GOAL_MAX_TURNS_CAP,
-  HELD_EXPIRY_OPTIONS,
   HookEventName,
   MAX_WEB_SEARCH_MAX_PER_SESSION,
   MAX_WEB_SEARCH_TIMEOUT_MS,
@@ -24,11 +23,6 @@ import {
   type SettingsSchema,
 } from './settingsSchema.js';
 import { MergeStrategy } from '../utils/deepMerge.js';
-import {
-  MAX_CONCURRENT_SUB_SESSIONS_PER_CALLER,
-  MAX_CONCURRENT_SUB_SESSIONS_TOTAL,
-  MAX_TRACKED_SPAWNED_SESSIONS,
-} from '../serve/create-sub-session.js';
 
 describe('SettingsSchema', () => {
   describe('getSettingsSchema', () => {
@@ -76,7 +70,6 @@ describe('SettingsSchema', () => {
         'mcpServers',
         'general',
         'ui',
-        'ide',
         'privacy',
         'telemetry',
         'model',
@@ -86,7 +79,6 @@ describe('SettingsSchema', () => {
         'security',
         'advanced',
         'plansDirectory',
-        'voiceModel',
         'imageModel',
       ];
 
@@ -138,7 +130,6 @@ describe('SettingsSchema', () => {
       const nestedSettings: Array<keyof Settings> = [
         'general',
         'ui',
-        'ide',
         'privacy',
         'model',
         'context',
@@ -316,17 +307,6 @@ describe('SettingsSchema', () => {
       expect(getSettingsSchema().plansDirectory.showInDialog).toBe(false);
     });
 
-    it('should have voice model setting in schema', () => {
-      const voiceModel = getSettingsSchema().voiceModel;
-
-      expect(voiceModel).toBeDefined();
-      expect(voiceModel.type).toBe('string');
-      expect(voiceModel.category).toBe('Model');
-      expect(voiceModel.default).toBe('');
-      expect(voiceModel.requiresRestart).toBe(false);
-      expect(voiceModel.showInDialog).toBe(false);
-    });
-
     it('should define the image model setting', () => {
       const imageModel = getSettingsSchema().imageModel;
 
@@ -357,58 +337,6 @@ describe('SettingsSchema', () => {
       expect(exploreModel.default).toBe('inherit');
       expect(exploreModel.requiresRestart).toBe(true);
       expect(exploreModel.showInDialog).toBe(false);
-    });
-
-    it('should keep cross-session messaging on by default', () => {
-      // On by default since docs/design/2026-09-14-cross-session-messaging-default-on.md.
-      // This value is not what bounds a peer: the inbound gate is (review-class
-      // parity, an explicit hold or refuse), with the tighten-only workspace
-      // ranking and the per-session inbox token around it.
-      const crossSessionMessaging =
-        getSettingsSchema().agents.properties.crossSessionMessaging;
-
-      expect(crossSessionMessaging.type).toBe('boolean');
-      expect(crossSessionMessaging.default).toBe(true);
-      expect(crossSessionMessaging.requiresRestart).toBe(true);
-      expect(crossSessionMessaging.showInDialog).toBe(false);
-    });
-
-    it('should define the inbound cross-session policy as accept/hold/refuse', () => {
-      const crossSessionInbound =
-        getSettingsSchema().agents.properties.crossSessionInbound;
-
-      expect(crossSessionInbound.type).toBe('enum');
-      // Unset is not a fourth policy: it means approval-mode parity, which
-      // the gate derives. A concrete default here would silence that.
-      expect(crossSessionInbound.default).toBeUndefined();
-      expect(crossSessionInbound.options).toEqual([
-        { value: 'accept', label: 'Accept' },
-        { value: 'hold', label: 'Hold for review' },
-        { value: 'refuse', label: 'Refuse' },
-      ]);
-      expect(crossSessionInbound.description).toContain(
-        'user-minted controllers',
-      );
-      expect(crossSessionInbound.description).toContain('child processes');
-    });
-
-    it('should offer exactly the hold lifetimes core knows how to parse', () => {
-      // Three copies of this vocabulary exist: core's table, these
-      // options, and the generated JSON schema. Adding an option here
-      // without a core entry fails nowhere -- `parseHeldExpiry` takes its
-      // unrecognized branch, logs at debug level (off by default), and
-      // returns the five-minute default. A user who hand-edits
-      // settings.json to the new value gets a silently shorter review
-      // window, with the whole suite green.
-      const crossSessionHeldExpiry =
-        getSettingsSchema().agents.properties.crossSessionHeldExpiry;
-
-      expect(crossSessionHeldExpiry.options?.map((o) => o.value)).toEqual(
-        HELD_EXPIRY_OPTIONS,
-      );
-      // And the declared default must be one core resolves to a real
-      // lifetime, not one that happens to fall back to it.
-      expect(HELD_EXPIRY_OPTIONS).toContain(crossSessionHeldExpiry.default);
     });
 
     it('should define model grade settings', () => {
@@ -529,29 +457,6 @@ describe('SettingsSchema', () => {
       });
     });
 
-    it('should have voice dictation settings under general', () => {
-      const voice =
-        getSettingsSchema().general.properties.voice.properties ?? {};
-
-      expect(voice.enabled.type).toBe('boolean');
-      expect(voice.enabled.default).toBe(false);
-
-      expect(voice.mode.type).toBe('enum');
-      expect(voice.mode.default).toBe('hold');
-      expect(
-        voice.mode.options?.map((o: { value: string }) => o.value),
-      ).toEqual(['hold', 'tap']);
-
-      expect(voice.language.type).toBe('string');
-      expect(voice.language.default).toBe('');
-
-      expect(voice.keytermsFile.type).toBe('string');
-      expect(voice.keytermsFile.default).toBe('');
-
-      expect(voice.refineTranscript.type).toBe('boolean');
-      expect(voice.refineTranscript.default).toBe(true);
-    });
-
     it('should have unique categories', () => {
       const categories = new Set();
 
@@ -652,9 +557,6 @@ describe('SettingsSchema', () => {
       expect(getSettingsSchema().general.properties.vimMode.showInDialog).toBe(
         true,
       );
-      expect(getSettingsSchema().ide.properties.enabled.showInDialog).toBe(
-        true,
-      );
       expect(
         getSettingsSchema().general.properties.enableAutoUpdate.showInDialog,
       ).toBe(true);
@@ -699,24 +601,6 @@ describe('SettingsSchema', () => {
         getSettingsSchema().advanced.properties.autoConfigureMemory
           .showInDialog,
       ).toBe(false);
-    });
-
-    it('should define the web shell brand as deployment-only configuration', () => {
-      const brand = getSettingsSchema().ui.properties.brand;
-
-      expect(brand.type).toBe('object');
-      // Edited in settings.json, not from the in-browser Settings page: brand
-      // is deployment identity, not a preference one viewer of a workspace
-      // should be able to change for everyone else.
-      expect(brand.showInDialog).toBe(false);
-
-      const { name, logoPath } = brand.properties;
-      expect(name.type).toBe('string');
-      expect(name.default).toBe('');
-      expect(name.showInDialog).toBe(false);
-      expect(logoPath.type).toBe('string');
-      expect(logoPath.default).toBe('');
-      expect(logoPath.showInDialog).toBe(false);
     });
 
     it('should define Markdown render mode as a user-facing UI enum', () => {
@@ -781,22 +665,6 @@ describe('SettingsSchema', () => {
       expect(responseTokensPerSecond.default).toBe(false);
       expect(responseTokensPerSecond.showInDialog).toBe(true);
       expect(responseTokensPerSecond.requiresRestart).toBe(true);
-    });
-
-    it('should pin serve sub-session caps to the runtime defaults', () => {
-      const serve = getSettingsSchema().serve.properties;
-      expect(serve.maxConcurrentSubSessionsPerCaller.default).toBe(
-        MAX_CONCURRENT_SUB_SESSIONS_PER_CALLER,
-      );
-      expect(serve.maxConcurrentSubSessionsTotal.default).toBe(
-        MAX_CONCURRENT_SUB_SESSIONS_TOTAL,
-      );
-      // The runtime clamps the total cap to the tracked-id set size; the
-      // schema maximum must match so editors reject values that the daemon
-      // would otherwise silently clamp.
-      expect(serve.maxConcurrentSubSessionsTotal.maximum).toBe(
-        MAX_TRACKED_SPAWNED_SESSIONS,
-      );
     });
 
     it('should infer Settings type correctly', () => {

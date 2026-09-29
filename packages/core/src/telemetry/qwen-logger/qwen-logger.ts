@@ -26,7 +26,6 @@ import type {
   NextSpeakerCheckEvent,
   SlashCommandEvent,
   MalformedJsonResponseEvent,
-  IdeConnectionEvent,
   KittySequenceOverflowEvent,
   ChatCompressionEvent,
   InvalidChunkEvent,
@@ -464,7 +463,6 @@ export class QwenLogger {
         core_tools_enabled: event.core_tools_enabled,
         debug_enabled: event.debug_enabled,
         hooks: event.hooks,
-        ide_enabled: event.ide_enabled,
         interactive_shell_enabled: event.interactive_shell_enabled,
         mcp_servers: event.mcp_servers,
         model: event.model,
@@ -812,18 +810,6 @@ export class QwenLogger {
         }),
       },
     );
-
-    this.enqueueLogEvent(rumEvent);
-    this.flushIfNeeded();
-  }
-
-  // ide events
-  logIdeConnectionEvent(event: IdeConnectionEvent): void {
-    const rumEvent = this.createActionEvent('ide', 'ide_connection', {
-      properties: {
-        connection_type: event.connection_type,
-      },
-    });
 
     this.enqueueLogEvent(rumEvent);
     this.flushIfNeeded();

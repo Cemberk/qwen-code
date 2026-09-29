@@ -198,22 +198,6 @@ describe('getVersion', () => {
       expect(result.releaseVersion).toBe('0.8.0-preview.1');
     });
 
-    it('should auto-increment when the version exists only on a channel package', () => {
-      vi.mocked(execSync).mockImplementation((command) => {
-        if (
-          command.includes(
-            'npm view @qwen-code/channel-telegram@0.8.0-preview.0 version',
-          )
-        )
-          return '0.8.0-preview.0';
-
-        return mockExecSync(command);
-      });
-
-      const result = getVersion({ type: 'preview' });
-      expect(result.releaseVersion).toBe('0.8.0-preview.1');
-    });
-
     it('should keep the nightly base when no stable is published yet (greenfield)', () => {
       vi.mocked(execSync).mockImplementation((command) => {
         // No latest dist-tag
@@ -742,21 +726,7 @@ describe('assertVersionUnreleased', () => {
 
   it('pins the full published-package set', () => {
     // Changing private flags must not accidentally expand the release surface.
-    expect(PUBLISHED_PACKAGES).toEqual([
-      '@qwen-code/qwen-code',
-      '@qwen-code/external-context-mem0',
-      '@qwen-code/audio-capture',
-      '@qwen-code/channel-base',
-      '@qwen-code/channel-dingtalk',
-      '@qwen-code/channel-dws',
-      '@qwen-code/channel-feishu',
-      '@qwen-code/channel-github',
-      '@qwen-code/channel-qqbot',
-      '@qwen-code/channel-telegram',
-      '@qwen-code/channel-wecom',
-      '@qwen-code/channel-weixin',
-      '@qwen-code/web-shell',
-    ]);
+    expect(PUBLISHED_PACKAGES).toEqual(['@qwen-code/qwen-code']);
   });
 
   it('passes when no package, tag, or release has shipped the version', () => {
@@ -819,27 +789,6 @@ describe('assertVersionUnreleased', () => {
     });
     expect(() => assertVersionUnreleased('1.2.3')).toThrow(
       refusalMessage('GitHub release v1.2.3'),
-    );
-  });
-
-  it('names every shipped package after a partial publish', () => {
-    // A retry of a partially published release is refused forever; the
-    // refusal must name exactly which packages to complete, which needs
-    // the strict scan of every package, not a stop at the first hit.
-    const shipped = [PUBLISHED_PACKAGES[1], PUBLISHED_PACKAGES[7]];
-    const commands = [];
-    vi.mocked(execSync).mockImplementation((command) => {
-      commands.push(command);
-      if (shipped.some((pkg) => command === `npm view ${pkg}@1.2.3 version`)) {
-        return '1.2.3';
-      }
-      return notFoundAnywhere(command);
-    });
-    expect(() => assertVersionUnreleased('1.2.3')).toThrow(
-      refusalMessage(shipped.join(', ')),
-    );
-    expect(commands.filter((c) => c.startsWith('npm view '))).toHaveLength(
-      PUBLISHED_PACKAGES.length,
     );
   });
 

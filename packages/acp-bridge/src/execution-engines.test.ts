@@ -2677,17 +2677,6 @@ describe('paired quarantine recovery', () => {
         message: expect.stringContaining('new prompts'),
       },
     );
-    // A message from another session is new input, not work settling.
-    await expect(
-      managed.agentConnection.extMethod('_qwencode/start_turn', {
-        sessionId: waiting.sessionId,
-        source: 'background_notification',
-        turnId: 'peer-1',
-        taskId: 'message-1',
-        kind: 'peer',
-        startedAt: 1000,
-      }),
-    ).resolves.toEqual({ accepted: false });
     await expect(
       p.bridge.spawnOrAttach({ workspaceCwd: WS_A }),
     ).rejects.toMatchObject({ reason: 'new_session_settlement_overdue' });

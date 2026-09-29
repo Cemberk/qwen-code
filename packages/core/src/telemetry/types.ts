@@ -58,7 +58,6 @@ export class StartSessionEvent implements BaseTelemetryEvent {
   mcp_tools?: string;
   output_format: OutputFormat;
   hooks?: string;
-  ide_enabled: boolean;
   interactive_shell_enabled: boolean;
   skills?: string;
   subagents?: string;
@@ -88,7 +87,6 @@ export class StartSessionEvent implements BaseTelemetryEvent {
       config.getFileFilteringRespectGitIgnore();
     this.mcp_servers_count = mcpServers ? Object.keys(mcpServers).length : 0;
     this.output_format = config.getOutputFormat();
-    this.ide_enabled = config.getIdeMode();
     this.interactive_shell_enabled = config.getShouldUseNodePtyShell();
 
     const hookSystem = config.getHookSystem();
@@ -717,23 +715,6 @@ export class MalformedJsonResponseEvent implements BaseTelemetryEvent {
   }
 }
 
-export enum IdeConnectionType {
-  START = 'start',
-  SESSION = 'session',
-}
-
-export class IdeConnectionEvent {
-  'event.name': 'ide_connection';
-  'event.timestamp': string;
-  connection_type: IdeConnectionType;
-
-  constructor(connection_type: IdeConnectionType) {
-    this['event.name'] = 'ide_connection';
-    this['event.timestamp'] = new Date().toISOString();
-    this.connection_type = connection_type;
-  }
-}
-
 export class ConversationFinishedEvent {
   'event_name': 'conversation_finished';
   'event.timestamp': string; // ISO 8601;
@@ -1319,7 +1300,6 @@ export type TelemetryEvent =
   | NextSpeakerCheckEvent
   | KittySequenceOverflowEvent
   | MalformedJsonResponseEvent
-  | IdeConnectionEvent
   | ConversationFinishedEvent
   | SlashCommandEvent
   | FileOperationEvent

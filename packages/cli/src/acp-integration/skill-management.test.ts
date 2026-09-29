@@ -14,35 +14,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const downloadSkillMock = vi.hoisted(() => vi.fn());
-type RenameFn = typeof import('node:fs/promises').rename;
-const renameOverride = vi.hoisted(() => ({
-  fn: null as RenameFn | null,
-  realRename: null as RenameFn | null,
-}));
-
-vi.mock('./skill-source-download.js', () => ({
-  downloadSkill: downloadSkillMock,
-}));
-
-vi.mock('node:fs/promises', async () => {
-  const actual =
-    await vi.importActual<typeof import('node:fs/promises')>(
-      'node:fs/promises',
-    );
-  renameOverride.realRename = actual.rename;
-  return {
-    ...actual,
-    rename: ((...args: Parameters<RenameFn>) => {
-      if (renameOverride.fn) return renameOverride.fn(...args);
-      return actual.rename(...args);
-    }) as RenameFn,
-  };
-});
-
 import {
   deleteManagedSkill,
-  installManagedSkill,
   setManagedSkillEnabled,
 } from './skill-management.js';
 
@@ -82,68 +55,10 @@ async function writeSkill(root: string, relativeDir: string, name: string) {
 }
 
 afterEach(() => {
-  downloadSkillMock.mockReset();
   vi.restoreAllMocks();
 });
 
 describe('managed Skill mutations', () => {
-  it('installs every downloaded file and refreshes the cache', async () => {
-    const tempHome = await fs.mkdtemp(path.join(os.tmpdir(), 'qwen-skill-'));
-    vi.spyOn(Storage, 'getGlobalQwenDir').mockReturnValue(tempHome);
-    const manager = managerFor('pptx');
-    downloadSkillMock.mockResolvedValue({
-      skillContent:
-        '---\nname: pptx\ndescription: Create slide decks\n---\nBody\n',
-      files: [
-        {
-          relativePath: 'SKILL.md',
-          content: Buffer.from('---\nname: pptx\n---\nBody\n'),
-        },
-        {
-          relativePath: 'references/editing.md',
-          content: Buffer.from('# Editing guide\n'),
-        },
-      ],
-    });
-
-    try {
-      const result = await installManagedSkill(configWith(manager), {
-        skill: {
-          id: 'pptx-id',
-          slug: 'pptx',
-          name: 'PPTX',
-          sourceUrl:
-            'https://github.com/anthropics/skills/blob/main/skills/pptx/SKILL.md',
-        },
-      });
-      const installedPath = path.join(tempHome, 'skills', 'pptx', 'SKILL.md');
-
-      expect(result).toMatchObject({
-        id: 'pptx-id',
-        slug: 'pptx',
-        installed: true,
-        installedPath,
-      });
-      await expect(fs.readFile(installedPath, 'utf8')).resolves.toContain(
-        'name: pptx',
-      );
-      await expect(
-        fs.readFile(
-          path.join(tempHome, 'skills', 'pptx', 'references', 'editing.md'),
-          'utf8',
-        ),
-      ).resolves.toBe('# Editing guide\n');
-      expect(manager.parseSkillContent).toHaveBeenCalledWith(
-        expect.stringContaining('name: pptx'),
-        installedPath,
-        'user',
-      );
-      expect(manager.refreshCache).toHaveBeenCalledTimes(1);
-    } finally {
-      await fs.rm(tempHome, { recursive: true, force: true });
-    }
-  });
-
   it('enables, disables, and deletes a global Skill', async () => {
     const tempHome = await fs.mkdtemp(path.join(os.tmpdir(), 'qwen-skill-'));
     vi.spyOn(Storage, 'getGlobalQwenDir').mockReturnValue(tempHome);
@@ -359,127 +274,7 @@ describe('managed Skill mutations', () => {
     }
   });
 
-  it('cleans up the backup directory on a successful reinstall', async () => {
-    const tempHome = await fs.mkdtemp(path.join(os.tmpdir(), 'qwen-skill-'));
-    vi.spyOn(Storage, 'getGlobalQwenDir').mockReturnValue(tempHome);
-    await writeSkill(tempHome, 'skills', 'pptx');
-    const manager = managerFor('pptx');
-    downloadSkillMock.mockResolvedValue({
-      skillContent:
-        '---\nname: pptx\ndescription: Create slide decks\n---\nNew body\n',
-      files: [
-        {
-          relativePath: 'SKILL.md',
-          content: Buffer.from('---\nname: pptx\n---\nNew body\n'),
-        },
-      ],
-    });
-
-    try {
-      await installManagedSkill(configWith(manager), {
-        skill: {
-          id: 'pptx-id',
-          slug: 'pptx',
-          name: 'PPTX',
-          sourceUrl:
-            'https://github.com/anthropics/skills/blob/main/skills/pptx/SKILL.md',
-        },
-      });
-
-      const skillsDir = path.join(tempHome, 'skills');
-      const entries = await fs.readdir(skillsDir);
-      // Only the real skill dir should remain; no leftover .backup-* siblings.
-      expect(entries).toEqual(['pptx']);
-      const installedPath = path.join(skillsDir, 'pptx', 'SKILL.md');
-      await expect(fs.readFile(installedPath, 'utf8')).resolves.toContain(
-        'name: pptx',
-      );
-      // Verify the reinstall actually replaced the skill content, not just
-      // that the pre-existing SKILL.md is still present.
-      await expect(fs.readFile(installedPath, 'utf8')).resolves.toContain(
-        'New body',
-      );
-    } finally {
-      await fs.rm(tempHome, { recursive: true, force: true });
-    }
-  });
-
-  it('restores the original skill when the swap rename fails', async () => {
-    const tempHome = await fs.mkdtemp(path.join(os.tmpdir(), 'qwen-skill-'));
-    vi.spyOn(Storage, 'getGlobalQwenDir').mockReturnValue(tempHome);
-    const originalContent =
-      '---\nname: pptx\ndescription: Original skill\n---\nOriginal body\n';
-    const { skillFile } = await writeSkill(tempHome, 'skills', 'pptx');
-    // Overwrite with known content so we can assert restoration exactly.
-    await fs.writeFile(skillFile, originalContent, 'utf8');
-
-    const manager = managerFor('pptx');
-    downloadSkillMock.mockResolvedValue({
-      skillContent:
-        '---\nname: pptx\ndescription: New version\n---\nNew body\n',
-      files: [
-        {
-          relativePath: 'SKILL.md',
-          content: Buffer.from('---\nname: pptx\n---\nNew body\n'),
-        },
-      ],
-    });
-
-    // Make the staging → final rename fail with EPERM, but let the
-    // original → backup rename succeed so the rollback path is exercised.
-    const realRename = renameOverride.realRename!;
-    let renameCalled = false;
-    renameOverride.fn = (async (
-      oldPath: Parameters<RenameFn>[0],
-      newPath: Parameters<RenameFn>[1],
-    ) => {
-      const dest = String(newPath);
-      const skillsRoot = path.join(tempHome, 'skills');
-      // The swap rename: staging dir → final skill dir.
-      if (
-        dest === path.join(skillsRoot, 'pptx') &&
-        String(oldPath).includes('.installing-')
-      ) {
-        renameCalled = true;
-        const err = new Error('EPERM') as NodeJS.ErrnoException;
-        err.code = 'EPERM';
-        throw err;
-      }
-      return realRename(oldPath, newPath);
-    }) as RenameFn;
-
-    try {
-      await expect(
-        installManagedSkill(configWith(manager), {
-          skill: {
-            id: 'pptx-id',
-            slug: 'pptx',
-            name: 'PPTX',
-            sourceUrl:
-              'https://github.com/anthropics/skills/blob/main/skills/pptx/SKILL.md',
-          },
-        }),
-      ).rejects.toThrow('EPERM');
-
-      // Sanity: the failing rename was actually hit.
-      expect(renameCalled).toBe(true);
-
-      // Original content must be intact after the rollback.
-      await expect(fs.readFile(skillFile, 'utf8')).resolves.toBe(
-        originalContent,
-      );
-
-      // No leftover .backup-* or .installing-* siblings.
-      const skillsDir = path.join(tempHome, 'skills');
-      const entries = await fs.readdir(skillsDir);
-      expect(entries).toEqual(['pptx']);
-    } finally {
-      renameOverride.fn = null;
-      await fs.rm(tempHome, { recursive: true, force: true });
-    }
-  });
-
-  it('rejects traversal slugs before downloading or touching disk', async () => {
+  it('rejects traversal slugs before touching disk', async () => {
     const tempHome = await fs.mkdtemp(path.join(os.tmpdir(), 'qwen-skill-'));
     vi.spyOn(Storage, 'getGlobalQwenDir').mockReturnValue(tempHome);
     const sentinel = path.join(tempHome, 'settings.json');
@@ -489,15 +284,6 @@ describe('managed Skill mutations', () => {
     try {
       for (const slug of ['..', '.']) {
         await expect(
-          installManagedSkill(config, {
-            skill: {
-              slug,
-              sourceUrl:
-                'https://github.com/anthropics/skills/blob/main/SKILL.md',
-            },
-          }),
-        ).rejects.toThrow('Invalid skill.slug');
-        await expect(
           deleteManagedSkill(config, { skill: { slug } }),
         ).rejects.toThrow('Invalid skill.slug');
         await expect(
@@ -506,58 +292,7 @@ describe('managed Skill mutations', () => {
           }),
         ).rejects.toThrow('Invalid skill.slug');
       }
-      expect(downloadSkillMock).not.toHaveBeenCalled();
       await expect(fs.readFile(sentinel, 'utf8')).resolves.toContain('keep');
-    } finally {
-      await fs.rm(tempHome, { recursive: true, force: true });
-    }
-  });
-
-  it('rejects artifact-shaped slugs reserved by the reinstall swap', async () => {
-    const tempHome = await fs.mkdtemp(path.join(os.tmpdir(), 'qwen-skill-'));
-    vi.spyOn(Storage, 'getGlobalQwenDir').mockReturnValue(tempHome);
-    const config = configWith(managerFor('unused'));
-
-    try {
-      // Names shaped exactly like the swap artifacts
-      // (`<slug>.backup-<pid>-<timestamp>` / `.installing-...`) are
-      // skipped by the skill loaders, so installing them must fail loudly
-      // instead of reporting success for a skill that never loads.
-      for (const slug of ['foo.backup-1-2', 'foo.installing-12345-67890']) {
-        await expect(
-          installManagedSkill(config, {
-            skill: {
-              slug,
-              sourceUrl:
-                'https://github.com/anthropics/skills/blob/main/SKILL.md',
-            },
-          }),
-        ).rejects.toThrow('Invalid skill.slug');
-      }
-      expect(downloadSkillMock).not.toHaveBeenCalled();
-      await expect(fs.readdir(path.join(tempHome, 'skills'))).rejects.toThrow();
-
-      for (const slug of ['foo.backup-1-2-extra', 'foo-backup-1-2']) {
-        downloadSkillMock.mockResolvedValueOnce({
-          skillContent: `---\nname: ${slug}\n---\nBody\n`,
-          files: [
-            {
-              relativePath: 'SKILL.md',
-              content: Buffer.from(`---\nname: ${slug}\n---\nBody\n`),
-            },
-          ],
-        });
-
-        await expect(
-          installManagedSkill(configWith(managerFor(slug)), {
-            skill: {
-              slug,
-              sourceUrl:
-                'https://github.com/anthropics/skills/blob/main/SKILL.md',
-            },
-          }),
-        ).resolves.toMatchObject({ slug, installed: true });
-      }
     } finally {
       await fs.rm(tempHome, { recursive: true, force: true });
     }

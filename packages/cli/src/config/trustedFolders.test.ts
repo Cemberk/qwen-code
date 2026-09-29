@@ -8,7 +8,6 @@ import * as osActual from 'node:os';
 import {
   atomicWriteFileSync,
   FatalConfigError,
-  ideContextStore,
 } from '@qwen-code/qwen-code-core';
 import {
   describe,
@@ -749,10 +748,13 @@ describe('getWorkspaceTrustStatus', () => {
   });
 });
 
-describe('isWorkspaceTrusted with IDE override', () => {
+describe('isWorkspaceTrusted folder trust resolution', () => {
+  beforeEach(() => {
+    resetTrustedFoldersForTesting();
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
-    ideContextStore.clear();
     resetTrustedFoldersForTesting();
   });
 
@@ -764,31 +766,7 @@ describe('isWorkspaceTrusted with IDE override', () => {
     },
   };
 
-  it('should return true when ideTrust is true, ignoring config', () => {
-    ideContextStore.set({ workspaceState: { isTrusted: true } });
-    // Even if config says don't trust, ideTrust should win.
-    vi.spyOn(fs, 'readFileSync').mockReturnValue(
-      JSON.stringify({ [process.cwd()]: TrustLevel.DO_NOT_TRUST }),
-    );
-    expect(isWorkspaceTrusted(mockSettings)).toEqual({
-      isTrusted: true,
-      source: 'ide',
-    });
-  });
-
-  it('should return false when ideTrust is false, ignoring config', () => {
-    ideContextStore.set({ workspaceState: { isTrusted: false } });
-    // Even if config says trust, ideTrust should win.
-    vi.spyOn(fs, 'readFileSync').mockReturnValue(
-      JSON.stringify({ [process.cwd()]: TrustLevel.TRUST_FOLDER }),
-    );
-    expect(isWorkspaceTrusted(mockSettings)).toEqual({
-      isTrusted: false,
-      source: 'ide',
-    });
-  });
-
-  it('should fall back to config when ideTrust is undefined', () => {
+  it('should resolve trust from the trusted folders config', () => {
     vi.spyOn(fs, 'existsSync').mockReturnValue(true);
     vi.spyOn(fs, 'readFileSync').mockReturnValue(
       JSON.stringify({ [process.cwd()]: TrustLevel.TRUST_FOLDER }),
@@ -807,15 +785,13 @@ describe('isWorkspaceTrusted with IDE override', () => {
         },
       },
     };
-    ideContextStore.set({ workspaceState: { isTrusted: false } });
     expect(isWorkspaceTrusted(settings)).toEqual({
       isTrusted: true,
       source: undefined,
     });
   });
 
-  it('should not apply IDE trust to an explicit different workspace', () => {
-    ideContextStore.set({ workspaceState: { isTrusted: true } });
+  it('should resolve an explicit different workspace from the config', () => {
     vi.spyOn(process, 'cwd').mockReturnValue('/home/user/current');
     vi.spyOn(fs, 'existsSync').mockImplementation(
       (p) => p === getTrustedFoldersPath(),

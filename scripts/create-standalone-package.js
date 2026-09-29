@@ -11,7 +11,6 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 
@@ -84,8 +83,8 @@ const DIST_REQUIRED_PATHS = [
 const DIST_ALLOWED_ENTRIES = new Set([
   'cli.js',
   'execution-worker.js',
-  // bin wrapper emitted by prepare-package.js. Standalone shims use it for
-  // `qwen serve` so daemon startup gets the same fast path as npm installs.
+  // bin wrapper emitted by prepare-package.js; the standalone shims launch
+  // through it.
   'cli-entry.js',
   // fzf fuzzy-search worker; esbuild emits it as a standalone entry that must
   // sit next to cli.js so `new URL('./fzfWorker.js', ...)` resolves at runtime.
@@ -103,11 +102,6 @@ const DIST_ALLOWED_ENTRIES = new Set([
   'package.json',
   'README.md',
   'LICENSE',
-  // Digest of the review sources this bundle was built from, stamped by
-  // copy_bundle_assets.js. Harmless to ship: a standalone install lays the
-  // dist entries out under `lib/`, and the staleness check only applies to
-  // a `<root>/dist/cli.js` layout — it never reads the stamp there.
-  'review-sources.sha256',
   'locales',
   'examples',
   // OpenTUI renderer runtime assets (tree-sitter grammars, parser worker,
@@ -116,23 +110,13 @@ const DIST_ALLOWED_ENTRIES = new Set([
   // directory for code-block syntax highlighting. copyOpenTuiAddon syncs the
   // target's native library into it.
   'opentui-assets',
-  // Web Shell SPA served at the daemon root by `qwen serve` (index.html +
-  // assets/). Copied into dist/web-shell/ by copy_bundle_assets.js when the
-  // web-shell workspace has been built; optional, so it's allowed but not
-  // required.
-  'web-shell',
 ]);
 const DIST_ALLOWED_ENTRY_PATTERNS = [
   /^sandbox-macos-(permissive|restrictive)-(open|closed|proxied)\.sb$/,
 ];
 // Emitted into dist/ by prepare-package.js for npm publishing only;
 // standalone archives must not copy them into lib/.
-const DIST_NPM_PACKAGE_ONLY_ENTRIES = new Set([
-  'export-transcript-document.js',
-  'export-transcript-document.css',
-  'postinstall.js',
-  'patches',
-]);
+const DIST_NPM_PACKAGE_ONLY_ENTRIES = new Set(['postinstall.js', 'patches']);
 const ROOT_REQUIRED_PATHS = ['README.md', 'LICENSE'];
 
 if (isMainModule()) {
@@ -188,7 +172,6 @@ async function main() {
     fs.mkdirSync(runtimeExtractDir, { recursive: true });
 
     copyRuntimeAssets(packageRoot, outDir, args.runtime);
-    copyNativeAddon(packageRoot, target);
     copyClipboardAddon(packageRoot, target, args.nativeModulesDir);
     // getPty() returns null under Bun without touching node-pty, so only the
     // node runtime needs the PTY packages.
@@ -427,75 +410,6 @@ function copyRuntimeAssets(packageRoot, outDir, runtime) {
   );
 }
 
-// Bundle the @qwen-code/audio-capture native addon (compiled JS + only this
-// target's prebuild + its runtime dep node-gyp-build) into lib/node_modules so
-// streaming voice works in standalone installs. The addon is esbuild-external
-// and resolved at runtime via import('@qwen-code/audio-capture') from
-// lib/cli.js, so lib/node_modules is where Node looks. Without it, standalone
-// users fall back to SoX/arecord (batch only) — #5502 follow-up #5590.
-function copyNativeAddon(packageRoot, target) {
-  const prebuildDirName = TARGET_PREBUILD_DIR.get(target);
-  const addonSrc = path.join(rootDir, 'packages', 'audio-capture');
-  const prebuildSrc = path.join(addonSrc, 'prebuilds', prebuildDirName);
-  if (!hasNativePrebuild(prebuildSrc)) {
-    if (process.env.QWEN_STANDALONE_REQUIRE_AUDIO_CAPTURE_PREBUILD === '1') {
-      fail(
-        `Required audio-capture prebuild is missing for ${prebuildDirName}: ${prebuildSrc}`,
-      );
-    }
-    // No prebuild for this target (e.g. a local build without the release
-    // artifacts). Ship without the addon: voice degrades to the SoX/arecord
-    // fallback, streaming is unavailable. The release pipeline downloads
-    // prebuilds before packaging, so release archives do bundle it.
-    console.warn(
-      `[standalone] no audio-capture prebuild for ${prebuildDirName}; ` +
-        'bundling without the native addon (streaming voice unavailable; ' +
-        'batch via SoX still works).',
-    );
-    return;
-  }
-
-  const nodeRequire = createRequire(import.meta.url);
-  const nodeGypBuildSrc = path.dirname(
-    nodeRequire.resolve('node-gyp-build/package.json'),
-  );
-
-  const modulesDir = path.join(packageRoot, 'lib', 'node_modules');
-  const addonDest = path.join(modulesDir, '@qwen-code', 'audio-capture');
-  fs.mkdirSync(addonDest, { recursive: true });
-
-  // Trimmed manifest: keep type/exports so ESM resolution works; drop the
-  // install hook (no npm runs inside the archive).
-  const addonPkg = JSON.parse(
-    fs.readFileSync(path.join(addonSrc, 'package.json'), 'utf8'),
-  );
-  delete addonPkg.scripts;
-  delete addonPkg.devDependencies;
-  fs.writeFileSync(
-    path.join(addonDest, 'package.json'),
-    JSON.stringify(addonPkg, null, 2) + '\n',
-  );
-
-  const copyOpts = {
-    recursive: true,
-    dereference: true,
-    verbatimSymlinks: false,
-  };
-  fs.cpSync(path.join(addonSrc, 'dist'), path.join(addonDest, 'dist'), {
-    ...copyOpts,
-    filter: (src) => !/\.test\.(d\.)?[mc]?[jt]s(\.map)?$/.test(src),
-  });
-  fs.cpSync(
-    prebuildSrc,
-    path.join(addonDest, 'prebuilds', prebuildDirName),
-    copyOpts,
-  );
-  // node-gyp-build is the addon's only runtime dependency (zero-dep itself).
-  fs.cpSync(nodeGypBuildSrc, path.join(modulesDir, 'node-gyp-build'), copyOpts);
-
-  assertNoSymlinks(modulesDir, 'Bundled native addon still contains symlinks.');
-}
-
 function copyClipboardAddon(packageRoot, target, nativeModulesDir) {
   const modulesSrc = path.resolve(
     nativeModulesDir || path.join(rootDir, 'node_modules'),
@@ -551,14 +465,11 @@ function copyClipboardAddon(packageRoot, target, nativeModulesDir) {
 // `@lydell/node-pty-<platform>-<arch>` from node_modules. Without this step
 // the archive declares the packages in optionalDependencies but ships none of
 // them, so every web terminal creation fails with "PTY not available"
-// (#11872). Missing packages warn-and-degrade locally (like the audio-capture
-// step) rather than failing the build, so a developer archive still builds for
-// a target whose prebuild the host install does not have: npm skips
-// optionalDependencies whose os/cpu do not match the installing machine, and a
-// staged --native-modules-dir can carry the clipboard packages without this
-// target's node-pty prebuild. An unmapped target is not that case —
-// copyNativeAddon reads the same TARGET_PREBUILD_DIR and its unconditional
-// path.join() throws on the undefined dir name before this step is reached.
+// (#11872). Missing packages warn-and-degrade locally rather than failing the
+// build, so a developer archive still builds for a target whose prebuild the
+// host install does not have: npm skips optionalDependencies whose os/cpu do
+// not match the installing machine, and a staged --native-modules-dir can
+// carry the clipboard packages without this target's node-pty prebuild.
 // Release builds cannot degrade silently: release.yml exports
 // QWEN_STANDALONE_REQUIRE_NODE_PTY_PREBUILD=1 for the archive build, turning a
 // missing prebuild into a hard failure now that every shipped target has a

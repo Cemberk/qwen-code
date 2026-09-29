@@ -36,7 +36,6 @@ describe('bugCommand', () => {
       sandboxEnv: 'test',
       modelVersion: 'qwen3-coder-plus',
       selectedAuthType: '',
-      ideClient: 'VSCode',
       sessionId: 'test-session-id',
       memoryUsage: '100 MB',
       gitCommit:
@@ -76,7 +75,6 @@ describe('bugCommand', () => {
         : 'Qwen Code: 0.1.0';
     const expectedInfo = `${qwenCodeLine}
 Runtime: Node.js v20.0.0 / npm 10.0.0
-IDE Client: VSCode
 OS: test-platform x64 (22.0.0)
 Model: qwen3-coder-plus
 Fast Model: qwen3-coder-plus
@@ -121,7 +119,6 @@ Memory Usage: 100 MB`;
         : 'Qwen Code: 0.1.0';
     const expectedInfo = `${qwenCodeLine}
 Runtime: Node.js v20.0.0 / npm 10.0.0
-IDE Client: VSCode
 OS: test-platform x64 (22.0.0)
 Model: qwen3-coder-plus
 Fast Model: qwen3-coder-plus
@@ -156,7 +153,6 @@ Memory Usage: 100 MB`;
       sandboxEnv: 'test',
       modelVersion: 'qwen3-coder-plus',
       selectedAuthType: AuthType.USE_OPENAI,
-      ideClient: 'VSCode',
       sessionId: 'test-session-id',
       memoryUsage: '100 MB',
       baseUrl: 'https://api.openai.com/v1',
@@ -183,7 +179,6 @@ Memory Usage: 100 MB`;
         : 'Qwen Code: 0.1.0';
     const expectedInfo = `${qwenCodeLine}
 Runtime: Node.js v20.0.0 / npm 10.0.0
-IDE Client: VSCode
 OS: test-platform x64 (22.0.0)
 Auth: API Key - ${AuthType.USE_OPENAI}
 Base URL: https://api.openai.com/v1

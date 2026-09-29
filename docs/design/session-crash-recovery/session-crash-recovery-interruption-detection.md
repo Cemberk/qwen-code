@@ -211,8 +211,7 @@ Covered immediately:
   as the tail: recovery reported `clean` with `canContinue = false`, and the
   orphaned prompt silently lost its banner and Retry. Both halves of that
   shape are now closed on the authoritative provenance channel — the
-  prompt-terminal-ledger completion guard in
-  `docs/design/2026-08-19-prompt-terminal-ledger-design.md` step 6 fails
+  prompt-terminal-ledger completion guard fails
   closed instead of stamping `completed`, and on the recovery side
   `buildSessionHistoryFromConversation`
   (`packages/core/src/services/session-api-history.ts`) also returns

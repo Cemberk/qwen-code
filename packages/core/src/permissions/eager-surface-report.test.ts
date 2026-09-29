@@ -26,7 +26,7 @@
  * Two honest limits:
  *
  * - The status here is the *permission-derived* one. A tool whose own class
- *   sets `shouldDefer=true` (`task_stop`, `monitor`, `computer_use__*`, …) is
+ *   sets `shouldDefer=true` (`task_stop`, `monitor`, …) is
  *   on demand regardless, so `registered` means "the settings do not withhold
  *   it", not "its schema is in the first request".
  * - Nothing here says whether the model *thinks to* reach a withheld tool.
@@ -62,12 +62,7 @@ function makeConfig(
 
 /** Every built-in tool name, plus one sample from each dynamic family. */
 const MCP_SAMPLE = 'mcp__acme__search';
-const COMPUTER_USE_SAMPLE = 'computer_use__screenshot';
-const ALL_NAMES: readonly string[] = [
-  ...Object.values(ToolNames),
-  MCP_SAMPLE,
-  COMPUTER_USE_SAMPLE,
-];
+const ALL_NAMES: readonly string[] = [...Object.values(ToolNames), MCP_SAMPLE];
 
 /** The allowlist a file-and-shell deployment would write. */
 const FILE_WORK_ALLOWLIST = [

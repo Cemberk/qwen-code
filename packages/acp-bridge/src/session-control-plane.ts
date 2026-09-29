@@ -3799,15 +3799,12 @@ export function createSessionControlPlane(
    * exists, and refusing its report never retires the channel sooner, because
    * the child keeps the report queued and keeps reporting it as held work. The
    * drain deadline, not a refusal, bounds how long admitted turns keep the
-   * channel busy. A message from another session is new input and is refused,
-   * and so is every turn once the channel's termination has begun. A session
-   * fenced by a tightening change is refused before this is asked.
+   * channel busy. Every turn is refused once the channel's termination has
+   * begun. A session fenced by a tightening change is refused before this is
+   * asked.
    */
-  function quarantineAdmitsBackgroundTurn(
-    ci: ChannelInfo,
-    turn: BackgroundNotificationTurn,
-  ): boolean {
-    return turn.kind !== 'peer' && !ci.harness.isDying;
+  function quarantineAdmitsBackgroundTurn(ci: ChannelInfo): boolean {
+    return !ci.harness.isDying;
   }
 
   /**
@@ -4855,7 +4852,7 @@ export function createSessionControlPlane(
           // model turn at all until it is acknowledged (#12737 Q2).
           entry.workspaceChangeFence !== undefined ||
           (infoRef.current?.quarantine !== undefined &&
-            !quarantineAdmitsBackgroundTurn(infoRef.current, turn))
+            !quarantineAdmitsBackgroundTurn(infoRef.current))
         )
           return false;
         entry.backgroundTurn = turn;

@@ -102,7 +102,6 @@ class RunRecord:
     prompt_results: List[PromptResult] = field(default_factory=list)
     diff_file: Optional[str] = None  # Path to git diff output
     session_log_file: Optional[str] = None  # Path to session log (chat recording)
-    session_html_file: Optional[str] = None  # Path to rendered chat HTML
     session_id: Optional[str] = None  # Session ID (UUID from chat recording)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -122,7 +121,6 @@ class RunRecord:
             "error_message": self.error_message,
             "diff_file": self.diff_file,
             "session_log_file": self.session_log_file,
-            "session_html_file": self.session_html_file,
             "session_id": self.session_id,
             "prompt_results": [
                 {
@@ -155,7 +153,6 @@ class RunRecord:
             error_message=data.get("error_message"),
             diff_file=data.get("diff_file"),
             session_log_file=data.get("session_log_file"),
-            session_html_file=data.get("session_html_file"),
             session_id=data.get("session_id"),
         )
 
@@ -262,7 +259,7 @@ class GitWorktreeManager:
 
         return result.stdout
 
-    async def collect_session_log(self, worktree_dir: Path, output_dir: Path) -> Optional[Tuple[Path, str, Path]]:
+    async def collect_session_log(self, worktree_dir: Path, output_dir: Path) -> Optional[Tuple[Path, str]]:
         """Collect the session log file from the worktree's chat recording.
 
         Session logs are stored at:
@@ -271,7 +268,7 @@ class GitWorktreeManager:
         Where projectId is the sanitized worktree path.
 
         Returns:
-            Tuple of (output_path, session_id, rendered_html_path) or None if not found.
+            Tuple of (output_path, session_id) or None if not found.
         """
         import re
 
@@ -326,27 +323,7 @@ class GitWorktreeManager:
 
         self.console.print(f"[dim]Session log copied: {session_log.name}[/dim]")
 
-        # Generate rendered HTML using the JS exporter script
-        rendered_html_path = chats_output_dir / f"{session_id}.html"
-        try:
-            exporter_script = Path(__file__).parent / "export-html-from-chatrecord-jsonl.js"
-            if exporter_script.exists():
-                # Call the JS script to generate the HTML
-                result = await self._run_command(
-                    ["node", str(exporter_script), str(output_log)],
-                    cwd=exporter_script.parent,
-                    timeout=30
-                )
-                if result.returncode == 0:
-                    self.console.print(f"[dim]Rendered chat HTML saved: {rendered_html_path.name}[/dim]")
-                else:
-                    self.console.print(f"[yellow]Warning: HTML exporter failed: {result.stderr}[/yellow]")
-            else:
-                self.console.print(f"[yellow]Warning: HTML exporter script not found at {exporter_script}[/yellow]")
-        except Exception as e:
-            self.console.print(f"[yellow]Warning: Failed to render chat HTML: {e}[/yellow]")
-
-        return output_log, session_id, rendered_html_path
+        return output_log, session_id
 
     async def _run_command(
         self,
@@ -458,10 +435,7 @@ class StatusTracker:
                 links.append(f'<a href="file://{abs_diff_file}">Diff</a>')
                 
             # Session Log
-            if run.get("session_html_file"):
-                abs_session_html = os.path.abspath(run["session_html_file"])
-                links.append(f'<a href="file://{abs_session_html}">Chat</a>')
-            elif run.get("session_log_file"):
+            if run.get("session_log_file"):
                 abs_session_log = os.path.abspath(run["session_log_file"])
                 links.append(f'<a href="file://{abs_session_log}">Chat (Raw)</a>')
 
@@ -955,9 +929,8 @@ async def execute_single_run(
             try:
                 result = await worktree_manager.collect_session_log(worktree_dir, output_dir)
                 if result:
-                    session_log, session_id, session_html = result
+                    session_log, session_id = result
                     run.session_log_file = str(session_log)
-                    run.session_html_file = str(session_html)
                     run.session_id = session_id
                     console.print(f"[dim]Session log saved: {session_log.name} (ID: {session_id})[/dim]")
             except Exception as e:
@@ -969,7 +942,6 @@ async def execute_single_run(
             run.status,
             diff_file=run.diff_file,
             session_log_file=run.session_log_file,
-            session_html_file=run.session_html_file,
             session_id=run.session_id,
         )
 

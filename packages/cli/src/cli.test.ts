@@ -39,7 +39,6 @@ import {
 
 const mocks = vi.hoisted(() => ({
   main: vi.fn(),
-  tryRunServeFastPath: vi.fn(),
   initStartupProfiler: vi.fn(),
   initializeAcpStartupProfiler: vi.fn(),
   markAcpStartup: vi.fn(),
@@ -55,10 +54,6 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('./llm.js', () => ({
   main: mocks.main,
-}));
-
-vi.mock('./serve/fast-path.js', () => ({
-  tryRunServeFastPath: mocks.tryRunServeFastPath,
 }));
 
 vi.mock('./utils/startupProfiler.js', () => ({
@@ -119,15 +114,16 @@ vi.mock('./commands/mcp.js', () => ({
 }));
 
 describe('resolveBootstrapRoute', () => {
-  it('routes top-level help, version, serve, mcp, and the Runtime worker correctly', async () => {
+  it('routes top-level help, version, and mcp correctly', async () => {
     expect(resolveBootstrapRoute(['--help'])).toBe('help');
     expect(resolveBootstrapRoute(['--version'])).toBe('version');
     expect(resolveBootstrapRoute(['mcp', '--version'])).toBe('version');
-    expect(resolveBootstrapRoute(['serve', '--help'])).toBe('serve');
     expect(resolveBootstrapRoute(['mcp', '--help'])).toBe('mcp');
-    expect(resolveBootstrapRoute(['managed-runtime-worker'])).toBe(
-      'managed-runtime-worker',
-    );
+  });
+
+  it('sends the removed serve and Runtime worker commands to the full parser', async () => {
+    expect(resolveBootstrapRoute(['serve', '--help'])).toBe('default');
+    expect(resolveBootstrapRoute(['managed-runtime-worker'])).toBe('default');
   });
 
   it('keeps bundled entrypoint paths out of the route detection', async () => {
@@ -202,20 +198,20 @@ describe('resolveBootstrapRoute', () => {
     // yargs detects commands in an earlier pass where these options are
     // unknown and consume at most one token; the scanner must match, or a
     // command sitting after array values misfires the top-level help path.
-    expect(resolveBootstrapRoute(['--extensions=a', 'serve', '--help'])).toBe(
-      'default',
-    );
     expect(
-      resolveBootstrapRoute(['--extensions', 'a', 'serve', '--help']),
+      resolveBootstrapRoute(['--extensions=a', 'sessions', '--help']),
     ).toBe('default');
-    expect(resolveBootstrapRoute(['-e', 'a', 'serve', '--help'])).toBe(
+    expect(
+      resolveBootstrapRoute(['--extensions', 'a', 'sessions', '--help']),
+    ).toBe('default');
+    expect(resolveBootstrapRoute(['-e', 'a', 'sessions', '--help'])).toBe(
       'default',
     );
     expect(
       resolveBootstrapRoute(['--include-directories', 'x', 'mcp', '--help']),
     ).toBe('default');
     expect(
-      resolveBootstrapRoute(['--fallback-model', 'm1', 'serve', '--help']),
+      resolveBootstrapRoute(['--fallback-model', 'm1', 'sessions', '--help']),
     ).toBe('default');
   });
 
@@ -234,8 +230,8 @@ describe('resolveBootstrapRoute', () => {
     );
     // Non-array `--flag=value` keeps its value inside the token: the next
     // token must NOT be consumed (consuming it would misroute this to
-    // top-level help instead of the slow-path `serve --help`).
-    expect(resolveBootstrapRoute(['--model=gpt-4', 'serve', '--help'])).toBe(
+    // top-level help instead of the slow-path `sessions --help`).
+    expect(resolveBootstrapRoute(['--model=gpt-4', 'sessions', '--help'])).toBe(
       'default',
     );
   });
@@ -277,7 +273,7 @@ describe('resolveBootstrapRoute', () => {
     expect(resolveBootstrapRoute(['-v', '--help'])).toBe('version');
     expect(resolveBootstrapRoute(['--version', '--help'])).toBe('version');
     expect(resolveBootstrapRoute(['foo', '-v', '--help'])).toBe('version');
-    expect(resolveBootstrapRoute(['serve', '-v', '--help'])).toBe('version');
+    expect(resolveBootstrapRoute(['sessions', '-v', '--help'])).toBe('version');
     expect(resolveBootstrapRoute(['mcp', '-v', '--help'])).toBe('version');
     // Help still wins when no exact version token exists.
     expect(resolveBootstrapRoute(['--model', 'gpt-4', '--help'])).toBe('help');
@@ -350,7 +346,7 @@ describe('resolveBootstrapRoute', () => {
     expect(resolveBootstrapRoute(['help', '--version'])).toBe('version');
     expect(resolveBootstrapRoute(['-v', 'help'])).toBe('version');
     expect(resolveBootstrapRoute(['foo', 'help', '-v'])).toBe('version');
-    expect(resolveBootstrapRoute(['update', 'help', '-v'])).toBe('version');
+    expect(resolveBootstrapRoute(['sessions', 'help', '-v'])).toBe('version');
     expect(resolveBootstrapRoute(['--help=true', '-v'])).toBe('version');
     expect(resolveBootstrapRoute(['--help=true', '--version'])).toBe('version');
     expect(resolveBootstrapRoute(['--h', '-v'])).toBe('version');
@@ -369,7 +365,7 @@ describe('resolveBootstrapRoute', () => {
 
   it('routes command-prefixed version argv to the version fast path', () => {
     // Command builders disable version via `.version(false)` (mcp, hooks,
-    // extensions, channel, review, auth, sessions) while the root parser's
+    // extensions, sessions) while the root parser's
     // version alias still consumes the token — so the full parser EXECUTES
     // the subcommand instead of printing the version (`mcp remove` deletes
     // the server and its OAuth creds). Base printed the version for these
@@ -566,21 +562,19 @@ describe('resolveBootstrapRoute', () => {
         '-v',
       ]),
     ).toBe('version');
-    // serve argv is command-prefixed too.
-    expect(resolveBootstrapRoute(['serve', '--version'])).toBe('version');
+    // sessions argv is command-prefixed too.
+    expect(resolveBootstrapRoute(['sessions', '--version'])).toBe('version');
     // Entrance-class regressions: the old help-state guard suppressed the
-    // intercept for real `--h*` options (`--host`, 14 sites) and for help
+    // intercept for real `--h*` options (`--host`) and for help
     // tokens after/around the version token, letting the full parser
     // EXECUTE the subcommand where base printed the version (probed:
     // `mcp remove victim -v help` ran the remove handler).
     expect(
       resolveBootstrapRoute([
-        'review',
-        'fetch-pr',
-        '12345',
-        'owner/repo',
-        '--out',
-        'report.json',
+        'mcp',
+        'add',
+        'my-server',
+        'node',
         '--host',
         'ghe.example.com',
         '-v',
@@ -681,8 +675,6 @@ describe('runCliEntry', () => {
       process.env['QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN'],
     QWEN_CODE_MANAGED_NPM_UPDATE_VERSION:
       process.env['QWEN_CODE_MANAGED_NPM_UPDATE_VERSION'],
-    QWEN_CODE_MESSAGING_SOCKET: process.env['QWEN_CODE_MESSAGING_SOCKET'],
-    QWEN_CODE_MESSAGING_TOKEN: process.env['QWEN_CODE_MESSAGING_TOKEN'],
   };
 
   let stdout: string[];
@@ -695,7 +687,6 @@ describe('runCliEntry', () => {
     savedExitCode = process.exitCode;
     process.exitCode = undefined;
     vi.clearAllMocks();
-    mocks.tryRunServeFastPath.mockResolvedValue(false);
     mocks.getCliVersion.mockResolvedValue('fallback-version');
     process.env['CLI_VERSION'] = '9.9.9';
     vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
@@ -732,16 +723,6 @@ describe('runCliEntry', () => {
       process.env['QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN'] =
         savedEnv.QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN;
     }
-    for (const name of [
-      'QWEN_CODE_MESSAGING_SOCKET',
-      'QWEN_CODE_MESSAGING_TOKEN',
-    ] as const) {
-      if (savedEnv[name] === undefined) {
-        delete process.env[name];
-      } else {
-        process.env[name] = savedEnv[name];
-      }
-    }
     vi.restoreAllMocks();
   });
 
@@ -750,19 +731,15 @@ describe('runCliEntry', () => {
 
     expect(stdout.join('')).toContain('9.9.9');
     expect(mocks.main).not.toHaveBeenCalled();
-    expect(mocks.tryRunServeFastPath).not.toHaveBeenCalled();
     expect(mocks.initStartupProfiler).not.toHaveBeenCalled();
     expect(mocks.initCpuProfiler).not.toHaveBeenCalled();
   });
 
-  it('rejects arguments on the hidden Runtime worker route', async () => {
-    await runCliEntry(['managed-runtime-worker', '--help']);
+  it('hands the removed Runtime worker argv to the full CLI', async () => {
+    await runCliEntry(['managed-runtime-worker']);
 
-    expect(process.exitCode).toBe(1);
-    expect(stderr.join('')).toContain(
-      'Managed Runtime worker arguments are invalid.',
-    );
-    expect(mocks.main).not.toHaveBeenCalled();
+    expect(stderr.join('')).not.toContain('Managed Runtime worker');
+    expect(mocks.main).toHaveBeenCalledTimes(1);
   });
 
   it('runs a managed update worker without starting the CLI', async () => {
@@ -781,40 +758,6 @@ describe('runCliEntry', () => {
     expect(mocks.main).not.toHaveBeenCalled();
   });
 
-  it('scrubs an inherited messaging pair before the managed update spawns npm', async () => {
-    // The pair names an ancestor session's inbox and authenticates to it.
-    // installManagedNpmUpdate spawns npm with the full environment, so a
-    // pair surviving to here reaches the installed package's lifecycle
-    // scripts — third-party code able to inject into the live session.
-    // This route never reaches main(), so the entry-level scrub is the
-    // only thing standing between them.
-    process.env['QWEN_CODE_MESSAGING_SOCKET'] = '/tmp/ancestor.sock';
-    process.env['QWEN_CODE_MESSAGING_TOKEN'] = 'ancestor-token';
-    process.env['QWEN_CODE_MANAGED_NPM_UPDATE_VERSION'] = '2.0.0';
-    mocks.installManagedNpmUpdate.mockImplementationOnce(async () => {
-      expect(process.env['QWEN_CODE_MESSAGING_SOCKET']).toBeUndefined();
-      expect(process.env['QWEN_CODE_MESSAGING_TOKEN']).toBeUndefined();
-    });
-
-    await runCliEntry([]);
-
-    expect(mocks.installManagedNpmUpdate).toHaveBeenCalledWith('2.0.0');
-  });
-
-  it('scrubs an inherited messaging pair on the fast paths that never reach main', async () => {
-    // serve and mcp dispatch without main(), and both hand the full
-    // environment to the children they start.
-    for (const argv of [['mcp'], ['serve']]) {
-      process.env['QWEN_CODE_MESSAGING_SOCKET'] = '/tmp/ancestor.sock';
-      process.env['QWEN_CODE_MESSAGING_TOKEN'] = 'ancestor-token';
-
-      await runCliEntry(argv);
-
-      expect(process.env['QWEN_CODE_MESSAGING_SOCKET']).toBeUndefined();
-      expect(process.env['QWEN_CODE_MESSAGING_TOKEN']).toBeUndefined();
-    }
-  });
-
   it('falls back to getCliVersion when CLI_VERSION is unset', async () => {
     delete process.env['CLI_VERSION'];
 
@@ -823,7 +766,6 @@ describe('runCliEntry', () => {
     expect(stdout.join('')).toContain('fallback-version');
     expect(mocks.getCliVersion).toHaveBeenCalledTimes(1);
     expect(mocks.main).not.toHaveBeenCalled();
-    expect(mocks.tryRunServeFastPath).not.toHaveBeenCalled();
   });
 
   it('prints top-level help without loading the full CLI graph', async () => {
@@ -843,7 +785,15 @@ describe('runCliEntry', () => {
     expect(helpText).toContain('Positional prompt.');
     expect(helpText).toContain('Manage Qwen Code hooks');
     expect(helpText).toContain('Manage MCP servers');
-    expect(helpText).toContain('Run Qwen Code as a local HTTP daemon');
+    for (const removed of [
+      'Run Qwen Code as a local HTTP daemon',
+      'Manage messaging channels',
+      'DashScope Batch API',
+      'Run a review non-interactively',
+      'Check for Qwen Code updates',
+    ]) {
+      expect(helpText).not.toContain(removed);
+    }
     expect(helpText).toContain('--model');
     expect(helpText).toContain('-p, --prompt');
     expect(helpText).toContain('--safe-mode');
@@ -865,7 +815,6 @@ describe('runCliEntry', () => {
     );
     expect(helpText).toContain('deprecated');
     expect(mocks.main).not.toHaveBeenCalled();
-    expect(mocks.tryRunServeFastPath).not.toHaveBeenCalled();
     expect(mocks.initStartupProfiler).not.toHaveBeenCalled();
     expect(mocks.initCpuProfiler).not.toHaveBeenCalled();
   });
@@ -887,7 +836,6 @@ describe('runCliEntry', () => {
 
     expect(stdout.join('')).toContain('Manage MCP servers');
     expect(mocks.main).not.toHaveBeenCalled();
-    expect(mocks.tryRunServeFastPath).not.toHaveBeenCalled();
     expect(mocks.initStartupProfiler).not.toHaveBeenCalled();
     expect(mocks.initCpuProfiler).not.toHaveBeenCalled();
     expect(mocks.mcpBuilder).not.toHaveBeenCalled();
@@ -1002,39 +950,7 @@ describe('runCliEntry', () => {
     expect(mocks.main).not.toHaveBeenCalled();
   });
 
-  it('keeps the serve fast path ahead of the full CLI startup', async () => {
-    mocks.tryRunServeFastPath.mockResolvedValue(true);
-
-    await runCliEntry(['serve']);
-
-    expect(mocks.tryRunServeFastPath).toHaveBeenCalledWith(['serve']);
-    expect(mocks.main).not.toHaveBeenCalled();
-  });
-
-  it('initializes profilers once when the serve fast path falls back', async () => {
-    mocks.tryRunServeFastPath.mockResolvedValue(false);
-
-    await runCliEntry(['serve']);
-
-    expect(mocks.tryRunServeFastPath).toHaveBeenCalledWith(['serve']);
-    expect(mocks.main).toHaveBeenCalledTimes(1);
-  });
-
-  it('preserves the external Guard token for the full serve parser', async () => {
-    process.env['QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN'] = 'guard-secret';
-    mocks.tryRunServeFastPath.mockResolvedValue(false);
-    mocks.main.mockImplementationOnce(async () => {
-      expect(process.env['QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN']).toBe(
-        'guard-secret',
-      );
-    });
-
-    await runCliEntry(['serve']);
-
-    expect(mocks.main).toHaveBeenCalledTimes(1);
-  });
-
-  it('scrubs the external Guard token before non-serve startup', async () => {
+  it('scrubs the external Guard token before startup', async () => {
     process.env['QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN'] = 'guard-secret';
     mocks.main.mockImplementationOnce(async () => {
       expect(
@@ -1234,98 +1150,11 @@ describe('bootstrap import boundaries', () => {
     const source = readFileSync('../../scripts/cli-entry.js', 'utf8');
 
     expect(source).toContain('function isInProcessFastPath()');
-    expect(source).toContain("first === 'serve'");
+    expect(source).not.toContain("first === 'serve'");
     expect(source).toContain("first === 'mcp'");
     expect(source).toContain("hasFlag('--help', '-h')");
     expect(source).toContain("hasFlag('--version', '-v')");
     expect(source).toContain('UPDATE_COMPLETE_EXIT_CODE = 44');
-  });
-
-  it('publishes the daemon compile cache without overriding user policy', () => {
-    const tempDir = mkdtempSync(path.join(tmpdir(), 'qwen-compile-cache-'));
-    const entryPath = path.join(tempDir, 'cli-entry.mjs');
-    const unsupportedEntryPath = path.join(
-      tempDir,
-      'unsupported-cli-entry.mjs',
-    );
-    const probeEntryPath = path.join(tempDir, 'compile-cache-probe.mjs');
-    try {
-      copyFileSync('../../scripts/cli-entry.js', entryPath);
-      writeFileSync(
-        unsupportedEntryPath,
-        readFileSync('../../scripts/cli-entry.js', 'utf8').replace(
-          "const { default: module } = await import('node:module');",
-          'const module = {};',
-        ),
-      );
-      writeFileSync(
-        probeEntryPath,
-        [
-          "import module from 'node:module';",
-          'const result = module.enableCompileCache?.();',
-          'process.stdout.write(JSON.stringify(Boolean(',
-          '  result?.status === module.constants?.compileCacheStatus?.ENABLED &&',
-          '    result?.directory,',
-          ')));',
-        ].join('\n'),
-      );
-      writeFileSync(
-        path.join(tempDir, 'cli.js'),
-        [
-          'process.stdout.write(JSON.stringify({',
-          '  cacheDir: process.env.NODE_COMPILE_CACHE,',
-          '  pendingCacheDir: process.env.QWEN_CODE_PENDING_COMPILE_CACHE,',
-          '}));',
-        ].join('\n'),
-      );
-      const baseEnv = { ...process.env };
-      delete baseEnv['NODE_COMPILE_CACHE'];
-      delete baseEnv['NODE_DISABLE_COMPILE_CACHE'];
-      const runEntry = (
-        env: NodeJS.ProcessEnv,
-        args: string[] = ['serve'],
-        selectedEntryPath = entryPath,
-      ) =>
-        JSON.parse(
-          execFileSync(process.execPath, [selectedEntryPath, ...args], {
-            encoding: 'utf8',
-            env,
-          }),
-        );
-
-      const canEnableCompileCache = JSON.parse(
-        execFileSync(process.execPath, [probeEntryPath], {
-          encoding: 'utf8',
-          env: baseEnv,
-        }),
-      );
-      if (canEnableCompileCache) {
-        expect(runEntry(baseEnv)).toEqual({
-          pendingCacheDir: expect.any(String),
-        });
-      } else {
-        expect(runEntry(baseEnv)).toEqual({});
-      }
-      expect(runEntry(baseEnv, ['serve'], unsupportedEntryPath)).toEqual({});
-      expect(runEntry(baseEnv, ['mcp', 'list'])).toEqual({});
-
-      const configuredCacheDir = path.join(tempDir, 'configured-cache');
-      expect(
-        runEntry({
-          ...baseEnv,
-          NODE_COMPILE_CACHE: configuredCacheDir,
-        }),
-      ).toEqual({ cacheDir: configuredCacheDir });
-
-      expect(
-        runEntry({
-          ...baseEnv,
-          NODE_DISABLE_COMPILE_CACHE: '1',
-        }),
-      ).toEqual({});
-    } finally {
-      rmSync(tempDir, { recursive: true, force: true });
-    }
   });
 
   it.skipIf(process.platform === 'win32')(
@@ -1751,18 +1580,12 @@ describe('bootstrap import boundaries', () => {
   it('keeps bootstrap top-level help commands aligned with config registrations', () => {
     const configSource = readFileSync('src/config/config.ts', 'utf8');
     const commandNameByIdentifier = new Map([
-      ['authCommand', 'auth'],
-      ['batchCommand', 'batch'],
       ['boardCommand', 'board'],
-      ['channelCommand', 'channel'],
       ['extensionsCommand', 'extensions'],
       ['hooksCommand', 'hooks'],
       ['mcpCommand', 'mcp'],
-      ['reviewCommand', 'review'],
       ['sandboxCommand', 'sandbox'],
-      ['serveCommand', 'serve'],
       ['sessionsCommand', 'sessions'],
-      ['updateCommand', 'update'],
     ]);
     const registeredIdentifiers = [
       ...configSource.matchAll(/\.command\((\w+Command)\)/g),

@@ -3613,18 +3613,6 @@ describe('PermissionManager', () => {
         expect(await pm.getToolRegistrationStatus(toolName)).toBe('registered');
       });
 
-      it('computer_use__* tools are exempt', async () => {
-        // The generated cua-driver family has no alias entry,
-        // meta-category, or wildcard rule form — its wire names churn on
-        // every version bump — and every member is shouldDefer=true, so the
-        // schemas never enter the eager request anyway.
-        pm = new PermissionManager(makeConfig({ eagerTools: ['ReadFile'] }));
-        pm.initialize();
-        expect(
-          await pm.getToolRegistrationStatus('computer_use__screenshot'),
-        ).toBe('registered');
-      });
-
       it.each(exempt)(
         'a whole-tool deny rule still wins over the %s exemption',
         async (_label, toolName) => {

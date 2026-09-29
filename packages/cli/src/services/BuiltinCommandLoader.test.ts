@@ -31,16 +31,6 @@ vi.mock('../ui/commands/cdCommand.js', () => ({
   },
 }));
 
-vi.mock('../ui/commands/ideCommand.js', async () => {
-  const { CommandKind } = await import('../ui/commands/types.js');
-  return {
-    ideCommand: vi.fn().mockResolvedValue({
-      name: 'ide',
-      description: 'IDE command',
-      kind: CommandKind.BUILT_IN,
-    }),
-  };
-});
 vi.mock('../ui/commands/restoreCommand.js', () => ({
   restoreCommand: vi.fn(),
 }));
@@ -82,7 +72,6 @@ import type { Config } from '@qwen-code/qwen-code-core';
 import { CommandKind } from '../ui/commands/types.js';
 
 import { restoreCommand } from '../ui/commands/restoreCommand.js';
-import { ideCommand } from '../ui/commands/ideCommand.js';
 
 vi.mock('../ui/commands/authCommand.js', () => ({ authCommand: {} }));
 vi.mock('../ui/commands/bugCommand.js', () => ({ bugCommand: {} }));
@@ -144,67 +133,21 @@ describe('BuiltinCommandLoader', () => {
     });
   });
 
-  it('skips automatic IDE process detection in tool sandbox', async () => {
-    const { ideCommand } = await import('../ui/commands/ideCommand.js');
-    mockConfig.getShellExecutionSandbox = vi
-      .fn()
-      .mockReturnValue({ backend: 'bwrap' });
-    const commands = await new BuiltinCommandLoader(mockConfig).loadCommands(
-      new AbortController().signal,
-    );
-    expect(ideCommand).not.toHaveBeenCalled();
-    expect(commands.some((command) => command.name === 'ide')).toBe(false);
-  });
-
-  it('does not probe local IDE processes for a non-interactive run', async () => {
-    mockConfig.isInteractive = vi.fn().mockReturnValue(false);
-
-    const commands = await new BuiltinCommandLoader(mockConfig).loadCommands(
-      new AbortController().signal,
-    );
-
-    expect(ideCommand).not.toHaveBeenCalled();
-    expect(commands.some((command) => command.name === 'ide')).toBe(false);
-  });
-
-  it('still builds the IDE command for an interactive run', async () => {
-    mockConfig.isInteractive = vi.fn().mockReturnValue(true);
-
-    const commands = await new BuiltinCommandLoader(mockConfig).loadCommands(
-      new AbortController().signal,
-    );
-
-    expect(ideCommand).toHaveBeenCalledOnce();
-    expect(commands.some((command) => command.name === 'ide')).toBe(true);
-  });
-
   it('should correctly pass the config object to restore command factory', async () => {
     const loader = new BuiltinCommandLoader(mockConfig);
     await loader.loadCommands(new AbortController().signal);
 
-    // ideCommand is now a constant, no longer needs config
     expect(restoreCommandMock).toHaveBeenCalledTimes(1);
     expect(restoreCommandMock).toHaveBeenCalledWith(mockConfig);
   });
 
-  it('does not probe local IDE processes for an execution environment', async () => {
-    mockConfig.getExecutionEnvironment = vi.fn().mockReturnValue({});
-    const loader = new BuiltinCommandLoader(mockConfig);
-
-    const commands = await loader.loadCommands(new AbortController().signal);
-
-    expect(ideCommand).not.toHaveBeenCalled();
-    expect(commands.some((command) => command.name === 'ide')).toBe(false);
-  });
-
   it('should filter out null command definitions returned by factories', async () => {
-    // ideCommand is now a constant SlashCommand
+    restoreCommandMock.mockReturnValue(null);
     const loader = new BuiltinCommandLoader(mockConfig);
     const commands = await loader.loadCommands(new AbortController().signal);
 
-    // The 'ide' command should be present.
-    const ideCmd = commands.find((c) => c.name === 'ide');
-    expect(ideCmd).toBeDefined();
+    expect(commands).not.toContain(null);
+    expect(commands.find((c) => c.name === 'restore')).toBeUndefined();
 
     // Other commands should still be present.
     const statusCmd = commands.find((c) => c.name === 'status');
@@ -214,7 +157,6 @@ describe('BuiltinCommandLoader', () => {
   it('should handle a null config gracefully when calling factories', async () => {
     const loader = new BuiltinCommandLoader(null);
     await loader.loadCommands(new AbortController().signal);
-    // ideCommand is now a constant, no longer needs config
     expect(restoreCommandMock).toHaveBeenCalledTimes(1);
     expect(restoreCommandMock).toHaveBeenCalledWith(null);
   });
@@ -235,9 +177,6 @@ describe('BuiltinCommandLoader', () => {
     expect(cdCmd).toBeDefined();
     expect(cdCmd?.kind).toBe(CommandKind.BUILT_IN);
 
-    const ideCmd = commands.find((c) => c.name === 'ide');
-    expect(ideCmd).toBeDefined();
-
     const importConfigCmd = commands.find((c) => c.name === 'import-config');
     expect(importConfigCmd).toBeDefined();
 
@@ -249,6 +188,16 @@ describe('BuiltinCommandLoader', () => {
 
     const curatorCmd = commands.find((c) => c.name === 'curator');
     expect(curatorCmd).toBeDefined();
+  });
+
+  it('does not register the removed /ide, /peers, and /voice commands', async () => {
+    const loader = new BuiltinCommandLoader(mockConfig);
+    const commands = await loader.loadCommands(new AbortController().signal);
+    const names = commands.map((c) => c.name);
+
+    expect(names).not.toContain('ide');
+    expect(names).not.toContain('peers');
+    expect(names).not.toContain('voice');
   });
 
   it('should include trust command when folder trust is enabled', async () => {
@@ -331,33 +280,6 @@ describe('BuiltinCommandLoader', () => {
     );
 
     expect(enabledCommands.find((c) => c.name === 'workflows')).toBeDefined();
-  });
-
-  it('should still load all other commands when ideCommand() throws', async () => {
-    // Simulate ideCommand() failure (e.g., platform-specific process detection fails)
-    const { ideCommand: ideCommandMock } = await import(
-      '../ui/commands/ideCommand.js'
-    );
-    (ideCommandMock as Mock).mockRejectedValueOnce(
-      new Error('PowerShell not available'),
-    );
-
-    const loader = new BuiltinCommandLoader(mockConfig);
-    const commands = await loader.loadCommands(new AbortController().signal);
-
-    // IDE command should NOT be present
-    const ideCmd = commands.find((c) => c.name === 'ide');
-    expect(ideCmd).toBeUndefined();
-
-    // But all other built-in commands should still be loaded
-    const modelCmd = commands.find((c) => c.name === 'model');
-    expect(modelCmd).toBeDefined();
-
-    const statusCmd = commands.find((c) => c.name === 'status');
-    expect(statusCmd).toBeDefined();
-
-    const mcpCmd = commands.find((c) => c.name === 'mcp');
-    expect(mcpCmd).toBeDefined();
   });
 
   it('should always include hooks command regardless of disableAllHooks', async () => {

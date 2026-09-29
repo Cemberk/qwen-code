@@ -462,7 +462,6 @@ describe('loggers', () => {
         getToolRegistry: () => undefined,
         getChatRecordingService: () => undefined,
         getHookSystem: () => undefined,
-        getIdeMode: () => false,
         getShouldUseNodePtyShell: () => true,
       } as unknown as Config;
 
@@ -488,7 +487,6 @@ describe('loggers', () => {
           mcp_tools: undefined,
           mcp_tools_count: undefined,
           hooks: undefined,
-          ide_enabled: false,
           interactive_shell_enabled: true,
           output_format: 'json',
           skills: undefined,

@@ -96,7 +96,6 @@ import {
 const debugLogger = createDebugLogger('OPEN_TUI_START');
 
 export interface StartOpenTuiUIOptions {
-  postRenderConnectIde?: boolean;
   postRenderInitializeTelemetry?: boolean;
   extensionRefreshState?: ExtensionRefreshState;
 }
@@ -474,7 +473,6 @@ export async function startOpenTuiUI(
     profileCheckpoint('first_paint');
 
     startPostRenderPrefetches(config, settings, {
-      connectIde: options.postRenderConnectIde ?? false,
       initializeTelemetry:
         options.postRenderInitializeTelemetry ??
         config.isTelemetryInitializationDeferred(),

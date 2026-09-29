@@ -22,13 +22,6 @@ vi.mock('./sessions/ps.js', () => ({
   },
 }));
 
-vi.mock('./sessions/controllers.js', () => ({
-  controllersCommand: {
-    command: 'controllers',
-    describe: 'Manage trusted controller tokens',
-  },
-}));
-
 import { sessionsCommand } from './sessions.js';
 import { type Argv } from 'yargs';
 import yargs from 'yargs';
@@ -58,7 +51,7 @@ describe('sessions command', () => {
     expect(options.key).toHaveProperty('help');
   });
 
-  it('should register the list, ps and controllers subcommands', () => {
+  it('should register the list and ps subcommands', () => {
     const mockYargs = {
       command: vi.fn().mockReturnThis(),
       demandCommand: vi.fn().mockReturnThis(),
@@ -71,14 +64,14 @@ describe('sessions command', () => {
     }
     builder(mockYargs as unknown as Argv);
 
-    expect(mockYargs.command).toHaveBeenCalledTimes(3);
+    expect(mockYargs.command).toHaveBeenCalledTimes(2);
 
     const commandCalls = mockYargs.command.mock.calls;
     const commandNames = commandCalls.map((call) => call[0].command);
 
     expect(commandNames).toContain('list');
     expect(commandNames).toContain('ps');
-    expect(commandNames).toContain('controllers');
+    expect(commandNames).not.toContain('controllers');
 
     expect(mockYargs.demandCommand).toHaveBeenCalledWith(
       1,

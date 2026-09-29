@@ -69,7 +69,6 @@ describe('EditTool', () => {
       setApprovalMode: vi.fn(),
       getWorkspaceContext: () => createMockWorkspaceContext(rootDir),
       getFileSystemService: () => fsService,
-      getIdeMode: () => false,
       getApiKey: () => 'test-api-key',
       getModel: () => 'test-model',
       getSandbox: () => false,

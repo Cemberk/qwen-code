@@ -8,8 +8,8 @@
  * Vitest globalSetup guard for package-local unit tests.
  *
  * In a fresh clone or a new worktree, workspace packages such as
- * `@qwen-code/acp-bridge`, `@qwen-code/web-templates` and the channel
- * packages have no `dist/` output until `npm run build` has run, and
+ * `@qwen-code/acp-bridge` and `@qwen-code/web-templates` have no `dist/`
+ * output until `npm run build` has run, and
  * `src/generated/git-commit.ts` does not exist until `npm run generate`
  * has run. Unit tests that import them then fail during collection with
  * module-resolution errors that name neither the cause nor the fix.
@@ -36,25 +36,10 @@ export const repoRoot = path.resolve(__dirname, '..');
 // package's own exports to `dist/index.js`.
 // Verified against a clean checkout: each missing entry below produces a
 // "Failed to resolve" collection error. When you add a cross-package import
-// that is not source-aliased, add its package here as well; the sync test in
-// scripts/tests/vitest-global-setup.test.js asserts the builtin channels of
-// channel-registry.ts stay covered.
+// that is not source-aliased, add its package here as well.
 export const DIST_PREREQUISITES = {
   'packages/core': ['packages/core'],
-  'packages/cli': [
-    'packages/acp-bridge',
-    'packages/web-templates',
-    'packages/channels/base',
-    'packages/channels/dingtalk',
-    'packages/channels/dws',
-    'packages/channels/feishu',
-    'packages/channels/github',
-    'packages/channels/gitlab',
-    'packages/channels/qqbot',
-    'packages/channels/telegram',
-    'packages/channels/wecom',
-    'packages/channels/weixin',
-  ],
+  'packages/cli': ['packages/acp-bridge', 'packages/web-templates'],
 };
 
 // Generated files that unit tests import but that a fresh checkout does

@@ -348,9 +348,6 @@ export function serializeManagedToolConfirmation(
         ...(details.hideModify !== undefined
           ? { hideModify: details.hideModify }
           : {}),
-        ...(details.skipIdeDiff !== undefined
-          ? { skipIdeDiff: details.skipIdeDiff }
-          : {}),
         ...(details.warnings !== undefined
           ? { warnings: details.warnings }
           : {}),

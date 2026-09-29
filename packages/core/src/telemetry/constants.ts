@@ -29,7 +29,6 @@ export const EVENT_RIPGREP_RUNTIME_RECOVERY =
   'qwen-code.ripgrep_runtime_recovery';
 export const EVENT_NEXT_SPEAKER_CHECK = 'qwen-code.next_speaker_check';
 export const EVENT_SLASH_COMMAND = 'qwen-code.slash_command';
-export const EVENT_IDE_CONNECTION = 'qwen-code.ide_connection';
 export const EVENT_CHAT_COMPRESSION = 'qwen-code.chat_compression';
 export const EVENT_INVALID_CHUNK = 'qwen-code.chat.invalid_chunk';
 export const EVENT_CONTENT_RETRY = 'qwen-code.chat.content_retry';

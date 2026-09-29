@@ -55,13 +55,11 @@ test('uses github_ci_only for each allowed GitHub CI helper file', () => {
 });
 
 test('keeps yaml-dependent helper suites on the full profile', () => {
-  // web-shell-visuals-publish.test.mjs statically imports `yaml`, so the
+  // ci-runner-routing.test.mjs statically imports `yaml`, so the
   // dependency-free github_ci_only lane can never execute it; downgrading a
   // PR that only edits that suite would green-light it without running it.
   assert.equal(
-    classifyChangedFiles([
-      '.github/scripts/web-shell-visuals-publish.test.mjs',
-    ]),
+    classifyChangedFiles(['.github/scripts/ci-runner-routing.test.mjs']),
     'full',
   );
 });

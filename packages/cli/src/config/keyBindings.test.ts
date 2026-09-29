@@ -55,11 +55,5 @@ describe('keyBindings config', () => {
       const config: KeyBindingConfig = defaultKeyBindings;
       expect(config[Command.HOME]).toBeDefined();
     });
-
-    it('should bind voice push-to-talk to bare Space by default', () => {
-      expect(defaultKeyBindings[Command.VOICE_PUSH_TO_TALK]).toEqual([
-        { key: 'space', ctrl: false, meta: false },
-      ]);
-    });
   });
 });

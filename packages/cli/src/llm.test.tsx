@@ -213,7 +213,7 @@ vi.mock('./utils/events.js', async (importOriginal) => {
   };
 });
 
-vi.mock('./serve/sandbox.js', () => ({
+vi.mock('./sandbox/sandbox.js', () => ({
   sandbox_command: vi.fn(() => ''), // Default to no sandbox command
   start_sandbox: vi.fn(() => Promise.resolve()), // Mock as an async function that resolves
 }));
@@ -486,7 +486,6 @@ describe('llm.tsx main function', () => {
         getModelProvidersConfig: () => undefined,
         initialize: vi.fn(),
         waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-        getIdeMode: () => false,
         getExperimentalZedIntegration: () => false,
         getScreenReader: () => false,
         getMemoryFileCount: () => 0,
@@ -598,7 +597,6 @@ describe('llm.tsx main function', () => {
         getModelProvidersConfig: () => undefined,
         initialize: vi.fn(),
         waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-        getIdeMode: () => false,
         getExperimentalZedIntegration: () => false,
         getScreenReader: () => false,
         getMemoryFileCount: () => 0,
@@ -689,7 +687,6 @@ describe('llm.tsx main function', () => {
           getModelProvidersConfig: () => undefined,
           initialize: vi.fn(),
           waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-          getIdeMode: () => false,
           getExperimentalZedIntegration: () => false,
           getScreenReader: () => false,
           getMemoryFileCount: () => 0,
@@ -771,7 +768,6 @@ describe('llm.tsx main function', () => {
           getModelProvidersConfig: () => undefined,
           initialize: vi.fn(),
           waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-          getIdeMode: () => false,
           getExperimentalZedIntegration: () => false,
           getScreenReader: () => false,
           getMemoryFileCount: () => 0,
@@ -875,7 +871,6 @@ describe('llm.tsx main function', () => {
           getModelProvidersConfig: () => undefined,
           initialize: vi.fn(),
           waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-          getIdeMode: () => false,
           getExperimentalZedIntegration: () => false,
           getScreenReader: () => false,
           getMemoryFileCount: () => 0,
@@ -915,7 +910,7 @@ describe('llm.tsx main function', () => {
     );
     const { loadSettings } = await import('./config/settings.js');
     const { loadSandboxConfig } = await import('./config/sandboxConfig.js');
-    const { start_sandbox } = await import('./serve/sandbox.js');
+    const { start_sandbox } = await import('./sandbox/sandbox.js');
     vi.mocked(start_sandbox).mockClear();
     vi.mocked(parseArguments).mockResolvedValue({
       acp: true,
@@ -979,7 +974,7 @@ describe('llm.tsx main function', () => {
     );
   });
 
-  // The accepted path through the sandbox handoff: `serve/sandbox.ts` merges
+  // The accepted path through the sandbox handoff: `utils/sandbox.ts` merges
   // `{ ...process.env, ...childEnv }` with childEnv last, so an accepted
   // marker must ride in the childEnv argument — the pre-spawn scrub keeps it
   // out of process.env by design.
@@ -996,7 +991,7 @@ describe('llm.tsx main function', () => {
     );
     const { loadSettings } = await import('./config/settings.js');
     const { loadSandboxConfig } = await import('./config/sandboxConfig.js');
-    const { start_sandbox } = await import('./serve/sandbox.js');
+    const { start_sandbox } = await import('./sandbox/sandbox.js');
     vi.mocked(start_sandbox).mockClear();
     vi.mocked(parseArguments).mockResolvedValue({ acp: true } as CliArgs);
     vi.stubEnv('QWEN_CODE_PRIVATE_ACP_CAPABILITY', 'private-capability');
@@ -1152,135 +1147,6 @@ describe('llm.tsx main function', () => {
       }
     },
   );
-
-  // Regression for #8653: every daemon-hosted session runs in an ACP child,
-  // so the scrub at that boundary must not silently disappear. The positive
-  // case fails if the call is deleted; the negative cases pin the gate —
-  // only daemon-stamped children (QWEN_CODE_SERVE) scrub, direct editor ACP
-  // integrations and non-ACP launches keep their own loader vars.
-  it.each([
-    ['scrubs for a daemon-spawned child', { acp: true } as CliArgs, '1', true],
-    [
-      'keeps for a direct (editor) ACP child',
-      { acp: true } as CliArgs,
-      '',
-      false,
-    ],
-    [
-      'keeps when the daemon marker is zero',
-      { acp: true } as CliArgs,
-      '0',
-      false,
-    ],
-    [
-      'keeps when the daemon marker is false',
-      { acp: true } as CliArgs,
-      'false',
-      false,
-    ],
-    ['keeps for a non-ACP launch', {} as CliArgs, '', false],
-  ])(
-    'inherited loader env vars past the ACP handoff (%s)',
-    async (_mode, argv, daemonMarker, expectScrubbed) => {
-      vi.stubEnv(
-        'NODE_OPTIONS',
-        '--import file:///other-checkout/register.mjs',
-      );
-      vi.stubEnv('NODE_PATH', '/other-checkout/node_modules');
-      vi.stubEnv('QWEN_CODE_NO_RELAUNCH', 'true');
-      if (daemonMarker !== undefined) {
-        vi.stubEnv('QWEN_CODE_SERVE', daemonMarker);
-      }
-
-      const { parseArguments, loadCliConfig } = await import(
-        './config/config.js'
-      );
-      const { loadSettings } = await import('./config/settings.js');
-      vi.mocked(parseArguments).mockResolvedValue(argv);
-      vi.mocked(loadSettings).mockReturnValue({
-        errors: [],
-        merged: {
-          advanced: {},
-          security: { auth: {} },
-          ui: {},
-        },
-        setValue: vi.fn(),
-        forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
-        migrationWarnings: [],
-        getSystemHooks: () => undefined,
-        getUserHooks: () => undefined,
-        getProjectHooks: () => undefined,
-      } as never);
-      // loadCliConfig is the first expensive call past the relaunch/sandbox
-      // handoff — the scrub must have run by here.
-      vi.mocked(loadCliConfig).mockImplementation(async () => {
-        if (expectScrubbed) {
-          expect(process.env['NODE_OPTIONS']).toBeUndefined();
-          expect(process.env['NODE_PATH']).toBeUndefined();
-        } else {
-          expect(process.env['NODE_OPTIONS']).toBe(
-            '--import file:///other-checkout/register.mjs',
-          );
-        }
-        throw new Error('stop after loader env scrub check');
-      });
-
-      try {
-        await expect(main()).rejects.toThrow(
-          'stop after loader env scrub check',
-        );
-      } finally {
-        vi.unstubAllEnvs();
-      }
-    },
-  );
-
-  // Regression for #8653 (placement): relaunchAppInChildProcess spawns with
-  // {...process.env} captured at call time, so scrubbing BEFORE the handoff
-  // would strip the loader the respawned child still needs to boot. The
-  // scrubbed child re-runs the scrub itself after its own handoff.
-  it('keeps inherited loader env vars present at the relaunch handoff', async () => {
-    vi.stubEnv('NODE_OPTIONS', '--import file:///other-checkout/register.mjs');
-    vi.stubEnv('NODE_PATH', '/other-checkout/node_modules');
-    vi.stubEnv('QWEN_CODE_NO_RELAUNCH', '');
-    vi.stubEnv('QWEN_CODE_SERVE', '1');
-
-    const { parseArguments } = await import('./config/config.js');
-    const { loadSettings } = await import('./config/settings.js');
-    const { loadSandboxConfig } = await import('./config/sandboxConfig.js');
-    const { relaunchAppInChildProcess } = await import('./utils/relaunch.js');
-    vi.mocked(parseArguments).mockResolvedValue({ acp: true } as CliArgs);
-    vi.mocked(loadSettings).mockReturnValue({
-      errors: [],
-      merged: {
-        advanced: {},
-        security: { auth: {} },
-        ui: {},
-      },
-      setValue: vi.fn(),
-      forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
-      migrationWarnings: [],
-      getSystemHooks: () => undefined,
-      getUserHooks: () => undefined,
-      getProjectHooks: () => undefined,
-    } as never);
-    vi.mocked(loadSandboxConfig).mockResolvedValue(undefined);
-    vi.mocked(relaunchAppInChildProcess).mockImplementation(async () => {
-      expect(process.env['NODE_OPTIONS']).toBe(
-        '--import file:///other-checkout/register.mjs',
-      );
-      expect(process.env['NODE_PATH']).toBe('/other-checkout/node_modules');
-      throw new Error('stop after loader env handoff check');
-    });
-
-    try {
-      await expect(main()).rejects.toThrow(
-        'stop after loader env handoff check',
-      );
-    } finally {
-      vi.unstubAllEnvs();
-    }
-  });
 
   // Pins the process-replacement predicate in llm.tsx: a one-shot headless
   // prompt replaces the already-loaded process, while supervisor-backed
@@ -1515,50 +1381,6 @@ describe('llm.tsx main function', () => {
     },
   );
 
-  // Regression for #8653 (sandbox hop): getSandboxPassthroughEnvArgs
-  // forwards the QWEN_CODE_SERVE stamp into the container, so the sandboxed
-  // stage of a daemon-spawned ACP child must still scrub.
-  it('scrubs inherited loader env vars in the sandboxed ACP stage', async () => {
-    vi.stubEnv('NODE_OPTIONS', '--import file:///other-checkout/register.mjs');
-    vi.stubEnv('NODE_PATH', '/other-checkout/node_modules');
-    vi.stubEnv('SANDBOX', 'sandbox-exec');
-    vi.stubEnv('QWEN_CODE_NO_RELAUNCH', '');
-    vi.stubEnv('QWEN_CODE_SERVE', '1');
-
-    const { parseArguments, loadCliConfig } = await import(
-      './config/config.js'
-    );
-    const { loadSettings } = await import('./config/settings.js');
-    vi.mocked(parseArguments).mockResolvedValue({ acp: true } as CliArgs);
-    vi.mocked(loadSettings).mockReturnValue({
-      errors: [],
-      merged: {
-        advanced: {},
-        security: { auth: {} },
-        ui: {},
-      },
-      setValue: vi.fn(),
-      forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
-      migrationWarnings: [],
-      getSystemHooks: () => undefined,
-      getUserHooks: () => undefined,
-      getProjectHooks: () => undefined,
-    } as never);
-    vi.mocked(loadCliConfig).mockImplementation(async () => {
-      expect(process.env['NODE_OPTIONS']).toBeUndefined();
-      expect(process.env['NODE_PATH']).toBeUndefined();
-      throw new Error('stop after sandboxed loader env scrub check');
-    });
-
-    try {
-      await expect(main()).rejects.toThrow(
-        'stop after sandboxed loader env scrub check',
-      );
-    } finally {
-      vi.unstubAllEnvs();
-    }
-  });
-
   it('keeps the external Guard token available to command parsing and scrubs it before settings load', async () => {
     vi.stubEnv('QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN', 'guard-secret');
     const { parseArguments } = await import('./config/config.js');
@@ -1624,7 +1446,6 @@ describe('llm.tsx main function', () => {
       getModelProvidersConfig: () => undefined,
       initialize: vi.fn().mockResolvedValue(undefined),
       waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-      getIdeMode: () => false,
       getExperimentalZedIntegration: () => false,
       getScreenReader: () => false,
       getMemoryFileCount: () => 0,
@@ -1924,7 +1745,6 @@ describe('llm.tsx main function', () => {
       }),
       waitForMcpReady: vi.fn().mockResolvedValue(undefined),
       getFailedMcpServerNames: () => [],
-      getIdeMode: () => false,
       getExperimentalZedIntegration: () => false,
       getScreenReader: () => false,
       getMemoryFileCount: () => 0,
@@ -1985,7 +1805,6 @@ describe('llm.tsx main function', () => {
     expect(initializerModule.initializeApp).toHaveBeenCalledWith(
       configStub,
       expect.any(Object),
-      { deferIdeConnection: false },
     );
     expect(mockStartNonInteractiveOpenAILogHousekeeping).toHaveBeenCalledWith(
       configStub,
@@ -2168,7 +1987,6 @@ describe('llm.tsx main function', () => {
       initialize: vi.fn().mockResolvedValue(undefined),
       waitForMcpReady: vi.fn().mockResolvedValue(undefined),
       getFailedMcpServerNames: () => [],
-      getIdeMode: () => false,
       getExperimentalZedIntegration: () => false,
       getScreenReader: () => false,
       getMemoryFileCount: () => 0,
@@ -2269,7 +2087,7 @@ describe('llm.tsx main function', () => {
     );
     const { loadSettings } = await import('./config/settings.js');
     const { loadSandboxConfig } = await import('./config/sandboxConfig.js');
-    const { start_sandbox } = await import('./serve/sandbox.js');
+    const { start_sandbox } = await import('./sandbox/sandbox.js');
     const { relaunchOnExitCode } = await import('./utils/relaunch.js');
 
     vi.mocked(start_sandbox).mockClear();
@@ -2560,7 +2378,6 @@ describe('llm.tsx main function', () => {
       getModelProvidersConfig: () => undefined,
       initialize: vi.fn().mockResolvedValue(undefined),
       waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-      getIdeMode: () => false,
       getExperimentalZedIntegration: () => false,
       getScreenReader: () => false,
       getMemoryFileCount: () => 0,
@@ -2619,7 +2436,6 @@ describe('llm.tsx main function', () => {
     expect(initializerModule.initializeApp).toHaveBeenCalledWith(
       configStub,
       expect.any(Object),
-      { deferIdeConnection: false },
     );
     expect(mockStartNonInteractiveOpenAILogHousekeeping).toHaveBeenCalledWith(
       validatedConfig,
@@ -2754,7 +2570,6 @@ describe('llm.tsx OpenTUI renderer dispatch', () => {
       getModelProvidersConfig: () => undefined,
       initialize: vi.fn(),
       waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-      getIdeMode: () => false,
       getExperimentalZedIntegration: () => false,
       getScreenReader: () => screenReader,
       getMemoryFileCount: () => 0,
@@ -2983,7 +2798,6 @@ describe('llm.tsx main function kitty protocol', () => {
       getModelProvidersConfig: () => undefined,
       initialize: vi.fn(),
       waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-      getIdeMode: () => false,
       getExperimentalZedIntegration: () => false,
       getScreenReader: () => false,
       getMemoryFileCount: () => 0,
@@ -3070,15 +2884,11 @@ describe('llm.tsx main function kitty protocol', () => {
     expect(initializeAppSpy).toHaveBeenCalledWith(
       expect.any(Object),
       expect.any(Object),
-      {
-        deferIdeConnection: true,
-      },
     );
     expect(mockStartPostRenderPrefetches).toHaveBeenCalledWith(
       expect.any(Object),
       expect.any(Object),
       {
-        connectIde: true,
         initializeTelemetry: true,
       },
     );
@@ -3087,7 +2897,7 @@ describe('llm.tsx main function kitty protocol', () => {
     );
   });
 
-  it('should await IDE connection when interactive mode has an initial prompt', async () => {
+  it('initializes the app without options when interactive mode has an initial prompt', async () => {
     const { loadCliConfig, parseArguments } = await import(
       './config/config.js'
     );
@@ -3113,7 +2923,6 @@ describe('llm.tsx main function kitty protocol', () => {
       getModelProvidersConfig: () => undefined,
       initialize: vi.fn(),
       waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-      getIdeMode: () => false,
       getExperimentalZedIntegration: () => false,
       getScreenReader: () => false,
       getMemoryFileCount: () => 0,
@@ -3198,15 +3007,11 @@ describe('llm.tsx main function kitty protocol', () => {
     expect(initializeAppSpy).toHaveBeenCalledWith(
       expect.any(Object),
       expect.any(Object),
-      {
-        deferIdeConnection: false,
-      },
     );
     expect(mockStartPostRenderPrefetches).toHaveBeenCalledWith(
       expect.any(Object),
       expect.any(Object),
       {
-        connectIde: false,
         initializeTelemetry: false,
       },
     );
@@ -3215,7 +3020,7 @@ describe('llm.tsx main function kitty protocol', () => {
     );
   });
 
-  it('should await IDE connection when interactive mode has an input file', async () => {
+  it('initializes the app without options when interactive mode has an input file', async () => {
     const { loadCliConfig, parseArguments } = await import(
       './config/config.js'
     );
@@ -3242,7 +3047,6 @@ describe('llm.tsx main function kitty protocol', () => {
       getModelProvidersConfig: () => undefined,
       initialize: vi.fn(),
       waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-      getIdeMode: () => false,
       getExperimentalZedIntegration: () => false,
       getScreenReader: () => false,
       getMemoryFileCount: () => 0,
@@ -3327,21 +3131,17 @@ describe('llm.tsx main function kitty protocol', () => {
     expect(initializeAppSpy).toHaveBeenCalledWith(
       expect.any(Object),
       expect.any(Object),
-      {
-        deferIdeConnection: false,
-      },
     );
     expect(mockStartPostRenderPrefetches).toHaveBeenCalledWith(
       expect.any(Object),
       expect.any(Object),
       {
-        connectIde: false,
         initializeTelemetry: true,
       },
     );
   });
 
-  it('should not defer IDE connection when Zed integration is enabled', async () => {
+  it('runs the ACP agent when Zed integration is enabled', async () => {
     const { loadCliConfig, parseArguments } = await import(
       './config/config.js'
     );
@@ -3368,7 +3168,6 @@ describe('llm.tsx main function kitty protocol', () => {
       getModelProvidersConfig: () => undefined,
       initialize: vi.fn(),
       waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-      getIdeMode: () => false,
       getExperimentalZedIntegration: () => true,
       getScreenReader: () => false,
       getMemoryFileCount: () => 0,
@@ -3464,9 +3263,6 @@ describe('llm.tsx main function kitty protocol', () => {
     expect(initializeAppSpy).toHaveBeenCalledWith(
       expect.any(Object),
       expect.any(Object),
-      {
-        deferIdeConnection: false,
-      },
     );
     expect(mockRunAcpAgent).toHaveBeenCalledWith(
       expect.any(Object),
@@ -3521,7 +3317,6 @@ describe('llm.tsx main function kitty protocol', () => {
       getModelProvidersConfig: () => undefined,
       initialize: vi.fn(),
       waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-      getIdeMode: () => false,
       getExperimentalZedIntegration: () => false,
       getScreenReader: () => false,
       getMemoryFileCount: () => 0,
@@ -3842,7 +3637,6 @@ describe('llm.tsx main function kitty protocol', () => {
       getModelProvidersConfig: () => undefined,
       initialize: vi.fn(),
       waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-      getIdeMode: () => false,
       getExperimentalZedIntegration: () => false,
       getScreenReader: () => false,
       getMemoryFileCount: () => 0,
@@ -4034,10 +3828,6 @@ describe('startInteractiveUI', () => {
       ui: {
         hideWindowTitle: false,
       },
-      // Messaging is on by default, and on it binds an inbox and arms its
-      // own exit cleanup. These tests are about startup order and render
-      // options; the messaging path is covered in startInteractiveUI.test.
-      agents: { crossSessionMessaging: false },
     },
     getSystemHooks: () => undefined,
     getUserHooks: () => undefined,
@@ -4358,7 +4148,7 @@ describe('startInteractiveUI', () => {
     expect(mockStartPostRenderPrefetches).toHaveBeenCalledWith(
       mockConfig,
       mockSettings,
-      { connectIde: false, initializeTelemetry: true },
+      { initializeTelemetry: true },
     );
   });
 
@@ -4371,8 +4161,6 @@ describe('startInteractiveUI', () => {
         ui: {
           hideWindowTitle: false,
         },
-        // Off for the reason `mockSettings` gives: this is not about messaging.
-        agents: { crossSessionMessaging: false },
       },
     } as LoadedSettings;
 
@@ -4394,11 +4182,11 @@ describe('startInteractiveUI', () => {
     expect(mockStartPostRenderPrefetches).toHaveBeenCalledWith(
       mockConfig,
       settingsWithAutoUpdateDisabled,
-      { connectIde: false, initializeTelemetry: true },
+      { initializeTelemetry: true },
     );
   });
 
-  it('can skip post-render IDE connection after prompt-interactive awaited it', async () => {
+  it('leaves telemetry initialization out of post-render when config did not defer it', async () => {
     const promptInteractiveConfig = {
       ...mockConfig,
       isTelemetryInitializationDeferred: () => false,
@@ -4416,13 +4204,12 @@ describe('startInteractiveUI', () => {
       mockStartupWarnings,
       mockWorkspaceRoot,
       mockInitializationResult,
-      { postRenderConnectIde: false },
     );
 
     expect(mockStartPostRenderPrefetches).toHaveBeenCalledWith(
       promptInteractiveConfig,
       mockSettings,
-      { connectIde: false, initializeTelemetry: false },
+      { initializeTelemetry: false },
     );
   });
 
@@ -4721,10 +4508,8 @@ describe('startInteractiveUI', () => {
         getMemoryPressureMonitor: () => ({ performCheck }),
       } as unknown as Config;
       const settings = {
-        // Off for the reason `mockSettings` gives: this is not about messaging.
         merged: {
           ui: { hideWindowTitle: true },
-          agents: { crossSessionMessaging: false },
         },
       } as unknown as LoadedSettings;
 
@@ -4756,10 +4541,8 @@ describe('startInteractiveUI', () => {
         getMemoryPressureMonitor: () => ({ performCheck }),
       } as unknown as Config;
       const settings = {
-        // Off for the reason `mockSettings` gives: this is not about messaging.
         merged: {
           ui: { hideWindowTitle: true },
-          agents: { crossSessionMessaging: false },
         },
       } as unknown as LoadedSettings;
       // An earlier describe's vi.restoreAllMocks() wipes the shared ink

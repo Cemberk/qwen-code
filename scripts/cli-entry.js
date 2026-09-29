@@ -42,7 +42,7 @@ function hasFlag(flag, alias) {
 
 function isInProcessFastPath() {
   const first = cliArgs[0];
-  if (first === 'serve' || first === 'mcp') {
+  if (first === 'mcp') {
     return true;
   }
   if (first === undefined || first.startsWith('-')) {
@@ -228,9 +228,9 @@ function getManagedNpmInstallation() {
 // that reaches this build" is the shim: stamping this file instead would hand
 // subprocesses a `#!/usr/bin/env node` script on a machine where that resolves to
 // nothing. Read before the spawn path deletes the variable below.
-// Captured AND deleted here, not just read: the serve/mcp fast path below never
+// Captured AND deleted here, not just read: the mcp fast path below never
 // reaches the spawn branch that used to delete it, so the hint leaked into every
-// child of a standalone daemon — and a child qwen from a DIFFERENT checkout
+// child of a standalone MCP server — and a child qwen from a DIFFERENT checkout
 // would read the outer shim and republish it as its own entry: the wrong build,
 // wearing this one's stamp.
 const standaloneShim = process.env['QWEN_CODE_LAUNCHER_PATH'];
@@ -293,15 +293,7 @@ if (isTopLevelVersion) {
 
 if (isInProcessFastPath()) {
   const { default: module } = await import('node:module');
-  const compileCache = module.enableCompileCache?.();
-  if (
-    cliArgs[0] === 'serve' &&
-    !process.env['NODE_COMPILE_CACHE'] &&
-    compileCache?.status === module.constants?.compileCacheStatus?.ENABLED &&
-    compileCache?.directory
-  ) {
-    process.env['QWEN_CODE_PENDING_COMPILE_CACHE'] = compileCache.directory;
-  }
+  module.enableCompileCache?.();
   process.argv[1] = cliPath;
   await import(pathToFileURL(cliPath).href);
 } else {
@@ -420,8 +412,8 @@ if (isInProcessFastPath()) {
 
   // A fresh Node image (the spawned or relaunched CLI) reaches the cache only
   // through NODE_COMPILE_CACHE; enabling it here also resolves the default
-  // directory and honours NODE_DISABLE_COMPILE_CACHE. Like the serve fast
-  // path, the value then reaches tool subprocesses too.
+  // directory and honours NODE_DISABLE_COMPILE_CACHE. The value then reaches
+  // tool subprocesses too.
   const { default: module } = await import('node:module');
   const compileCache = module.enableCompileCache?.();
   const compileCacheEnv =

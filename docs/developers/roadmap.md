@@ -2,13 +2,13 @@
 
 > **Objective**: Catch up with Claude Code's product functionality, continuously refine details, and enhance user experience.
 
-| Category                        | Phase 1                                                                                                                                                                            | Phase 2                                                                                                                                                                                     |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| User Experience                 | ✅ Terminal UI<br>✅ Support OpenAI Protocol<br>✅ Settings<br>✅ OAuth<br>✅ Cache Control<br>✅ Memory<br>✅ Compress<br>✅ Theme                                                | Better UI<br>OnBoarding<br>LogView<br>✅ Session<br>Permission<br>🔄 Cross-platform Compatibility<br>✅ Coding Plan<br>✅ Anthropic Provider<br>✅ Multimodal Input<br>✅ Unified Web Shell |
-| Coding Workflow                 | ✅ Slash Commands<br>✅ MCP<br>✅ PlanMode<br>✅ TodoWrite<br>✅ SubAgent<br>✅ Multi Model<br>✅ Chat Management<br>✅ Tools (WebFetch, Bash, TextSearch, FileReadFile, EditFile) | 🔄 Hooks<br>✅ Skill<br>✅ Headless Mode<br>✅ Tools (WebSearch)<br>✅ LSP Support<br>✅ Concurrent Runner                                                                                  |
-| Building Open Capabilities      | ✅ Custom Commands                                                                                                                                                                 | ✅ QwenCode SDK<br>✅ Extension System                                                                                                                                                      |
-| Integrating Community Ecosystem |                                                                                                                                                                                    | ✅ VSCode Plugin<br>✅ ACP/Zed<br>✅ GHA                                                                                                                                                    |
-| Administrative Capabilities     | ✅ Stats<br>✅ Feedback                                                                                                                                                            | Costs<br>Dashboard<br>✅ User Feedback Dialog                                                                                                                                               |
+| Category                        | Phase 1                                                                                                                                                                            | Phase 2                                                                                                                                                             |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| User Experience                 | ✅ Terminal UI<br>✅ Support OpenAI Protocol<br>✅ Settings<br>✅ OAuth<br>✅ Cache Control<br>✅ Memory<br>✅ Compress<br>✅ Theme                                                | Better UI<br>OnBoarding<br>LogView<br>✅ Session<br>Permission<br>🔄 Cross-platform Compatibility<br>✅ Coding Plan<br>✅ Anthropic Provider<br>✅ Multimodal Input |
+| Coding Workflow                 | ✅ Slash Commands<br>✅ MCP<br>✅ PlanMode<br>✅ TodoWrite<br>✅ SubAgent<br>✅ Multi Model<br>✅ Chat Management<br>✅ Tools (WebFetch, Bash, TextSearch, FileReadFile, EditFile) | 🔄 Hooks<br>✅ Skill<br>✅ Headless Mode<br>✅ Tools (WebSearch)<br>✅ LSP Support<br>✅ Concurrent Runner                                                          |
+| Building Open Capabilities      | ✅ Custom Commands                                                                                                                                                                 | ✅ Extension System                                                                                                                                                 |
+| Integrating Community Ecosystem |                                                                                                                                                                                    | ✅ ACP<br>✅ GHA                                                                                                                                                    |
+| Administrative Capabilities     | ✅ Stats<br>✅ Feedback                                                                                                                                                            | Costs<br>Dashboard<br>✅ User Feedback Dialog                                                                                                                       |
 
 > For more details, please see the list below.
 
@@ -19,8 +19,7 @@
 | Feature                 | Version   | Description                                             | Category                        | Phase |
 | ----------------------- | --------- | ------------------------------------------------------- | ------------------------------- | ----- |
 | **Coding Plan**         | `V0.10.0` | Alibaba Cloud Coding Plan authentication & models       | User Experience                 | 2     |
-| Unified Web Shell       | `V0.9.0`  | Shared browser UI for VS Code and `qwen serve`          | User Experience                 | 2     |
-| Export Chat             | `V0.8.0`  | Export sessions to Markdown/HTML/JSON/JSONL             | User Experience                 | 2     |
+| Export Chat             | `V0.8.0`  | Export sessions to Markdown/JSON/JSONL                  | User Experience                 | 2     |
 | Extension System        | `V0.8.0`  | Full extension management with slash commands           | Building Open Capabilities      | 2     |
 | LSP Support             | `V0.7.0`  | Experimental LSP service (`--experimental-lsp`)         | Coding Workflow                 | 2     |
 | Anthropic Provider      | `V0.7.0`  | Anthropic API provider support                          | User Experience                 | 2     |
@@ -29,12 +28,10 @@
 | Multimodal Input        | `V0.6.0`  | Image, PDF, audio, video input support                  | User Experience                 | 2     |
 | Skill                   | `V0.6.0`  | Extensible custom AI skills (experimental)              | Coding Workflow                 | 2     |
 | GitHub Actions          | `V0.5.0`  | qwen-code-action and automation                         | Integrating Community Ecosystem | 1     |
-| VSCode Plugin           | `V0.5.0`  | VSCode extension plugin                                 | Integrating Community Ecosystem | 1     |
-| QwenCode SDK            | `V0.4.0`  | Open SDK for third-party integration                    | Building Open Capabilities      | 1     |
 | Session                 | `V0.4.0`  | Enhanced session management                             | User Experience                 | 1     |
 | i18n                    | `V0.3.0`  | Internationalization and multilingual support           | User Experience                 | 1     |
 | Headless Mode           | `V0.3.0`  | Headless mode (non-interactive)                         | Coding Workflow                 | 1     |
-| ACP/Zed                 | `V0.2.0`  | ACP and Zed editor integration                          | Integrating Community Ecosystem | 1     |
+| ACP                     | `V0.2.0`  | Agent Client Protocol (stdio) integration               | Integrating Community Ecosystem | 1     |
 | Terminal UI             | `V0.1.0+` | Interactive terminal user interface                     | User Experience                 | 1     |
 | Settings                | `V0.1.0+` | Configuration management system                         | User Experience                 | 1     |
 | Theme                   | `V0.1.0+` | Multi-theme support                                     | User Experience                 | 1     |

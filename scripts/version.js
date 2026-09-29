@@ -5,10 +5,9 @@
  */
 
 import { execSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { keepManifestLayout } from './keep-manifest-layout.js';
-import { INDEPENDENT_PACKAGES } from './release-packages.mjs';
 import { getWorkspacePackageJsonPaths } from './workspaces.js';
 
 // A script to handle versioning and ensure all related changes are in a single, atomic commit.
@@ -56,7 +55,7 @@ run(
 const rootPackageJsonPath = resolve(process.cwd(), 'package.json');
 const newVersion = readJson(rootPackageJsonPath).version;
 run(
-  `corepack pnpm -r ${INDEPENDENT_PACKAGES.map((name) => `--filter="!${name}"`).join(' ')} version ${newVersion} --no-git-tag-version --allow-same-version --no-git-checks`,
+  `corepack pnpm -r version ${newVersion} --no-git-tag-version --allow-same-version --no-git-checks`,
 );
 
 for (const [file, original] of originalManifests) {
@@ -65,18 +64,6 @@ for (const [file, original] of originalManifests) {
     writeFileSync(file, keepManifestLayout(original, updated));
   }
 }
-
-// 5. Keep the published Mem0 Extension manifest aligned with its package.
-const mem0ManifestPath = resolve(
-  process.cwd(),
-  'integrations/external-context-mem0/qwen-extension.json',
-);
-const mem0Manifest = readJson(mem0ManifestPath);
-mem0Manifest.version = newVersion;
-writeJson(mem0ManifestPath, mem0Manifest);
-run(
-  'npx prettier --experimental-cli --write integrations/external-context-mem0/qwen-extension.json',
-);
 
 // 6. Update the sandboxImageUri in the root package.json
 const rootPackageJson = readJson(rootPackageJsonPath);
@@ -97,26 +84,6 @@ if (cliPackageJson.config?.sandboxImageUri) {
     `Updated sandboxImageUri in cli package to use version ${newVersion}`,
   );
   writeJson(cliPackageJsonPath, cliPackageJson);
-}
-
-// 8. Pin channel adapters' semver dependency on @qwen-code/channel-base to
-// the exact new version. A caret range like ^0.21.0 does not match a
-// prerelease bump (e.g. 0.21.1-preview.0), so npm would replace the workspace
-// link with the stale registry package and the release build would compile
-// against outdated types.
-const channelsDir = resolve(process.cwd(), 'packages/channels');
-for (const entry of readdirSync(channelsDir)) {
-  const pkgPath = join(channelsDir, entry, 'package.json');
-  if (!existsSync(pkgPath)) continue;
-  const pkg = readJson(pkgPath);
-  const dep = pkg.dependencies?.['@qwen-code/channel-base'];
-  if (dep && !dep.startsWith('file:')) {
-    pkg.dependencies['@qwen-code/channel-base'] = newVersion;
-    writeJson(pkgPath, pkg);
-    console.log(
-      `Pinned @qwen-code/channel-base to ${newVersion} in ${pkg.name}`,
-    );
-  }
 }
 
 console.log(`Successfully bumped versions to v${newVersion}.`);

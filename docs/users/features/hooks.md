@@ -702,9 +702,9 @@ If the hooks fail, or do not finish within 15 seconds, the batch continues with 
 }
 ```
 
-`submitted_prompt` is optional. It is present on supported interactive TUI submissions and first-turn headless `UserQuery` sends. On the ACP session path used by ACP clients, `serve`, and daemon hosts, a fresh turn must carry an explicit submission declaration. Missing, non-string, empty, or whitespace-only declarations omit the field; the value is never reconstructed from `prompt` or a display label. Retries, continuations, and channel-classified turns omit it. The channel exclusion includes both automated events and human messages relayed through channel adapters.
+`submitted_prompt` is optional. It is present on supported interactive TUI submissions and first-turn headless `UserQuery` sends. On the ACP session path used by ACP clients, a fresh turn must carry an explicit submission declaration. Missing, non-string, empty, or whitespace-only declarations omit the field; the value is never reconstructed from `prompt` or a display label. Retries and continuations omit it.
 
-Web Shell provides the original composer text at its submission boundary. Realtime voice handoffs do not declare provenance because their request text comes from model-generated tool arguments. Other ACP/daemon SDK clients can opt in per request with `_meta: { "qwen.submittedPrompt": "original submitted text" }`, captured before resource or model-only expansion. Existing clients without this declaration continue running legacy hooks but do not trigger provenance-gated Auto Recall. Do not add the declaration globally to an SDK transport: scheduled tasks, Live task runs, sub-session spawns, model-authored cross-session messages, and promoted mid-turn messages must not acquire it automatically. The private `qwen.daemon.submittedPrompt` key is reserved for the daemon-to-child hop and is stripped from external callers. These declarations are caller-supplied provenance, not proof of human authorship or authorization.
+ACP clients can opt in per request with `_meta: { "qwen.submittedPrompt": "original submitted text" }`, captured before resource or model-only expansion. Existing clients without this declaration continue running legacy hooks but do not trigger provenance-gated Auto Recall. Do not add the declaration globally to a client transport: scheduled tasks and promoted mid-turn messages must not acquire it automatically. These declarations are caller-supplied provenance, not proof of human authorship or authorization.
 
 On the ACP path, the initial legacy `prompt` is the request's text blocks joined with a space before resource, attachment, slash-command, or model-only expansion. It does not expose the complete expanded model input. `submitted_prompt` can equal that text, but comes only from the explicit declaration and preserves its original whitespace. On the core/headless path, legacy `prompt` represents the current model-bound text for the hook invocation. Neither field is a complete DLP inspection surface.
 
@@ -886,7 +886,7 @@ A command hook that exits 0 with plain-text `stdout` has that text treated as `a
 }
 ```
 
-The hook uses the deleting runtime's normal session fields (`session_id`, `transcript_path`, and `cwd`); over ACP, `transcript_path` is empty because the deleting runtime has no transcript of its own. `SessionDelete` currently fires for the interactive `/delete` flow and ACP's explicit `deleteSession` method; daemon REST batch deletion and internal cleanup do not emit it. A command hook is left to finish if Qwen exits after dispatch; its stdout and stderr are ignored and remain independent of Qwen's pipes.
+The hook uses the deleting runtime's normal session fields (`session_id`, `transcript_path`, and `cwd`); over ACP, `transcript_path` is empty because the deleting runtime has no transcript of its own. `SessionDelete` currently fires for the interactive `/delete` flow and ACP's explicit `deleteSession` method; internal cleanup does not emit it. A command hook is left to finish if Qwen exits after dispatch; its stdout and stderr are ignored and remain independent of Qwen's pipes.
 
 #### MessageDisplay
 
@@ -913,7 +913,7 @@ The hook uses the deleting runtime's normal session fields (`session_id`, `trans
 - **`displayed_text` is provisional until `is_final`.** It reflects what has streamed so far; treat intermediate payloads as display state, not as authoritative final content.
 - **A tool-using turn produces multiple messages.** Each model call gets its own `message_id` with its own `is_final: true` firing: the text before a tool call is one message, the continuation after the tool result is another. Model calls that produce no displayed text (tool-call-only) fire nothing.
 
-**Note**: Fires in the terminal UI, headless (`-p`), and ACP (IDE/editor/`qwen serve`) sessions, with the same payload contract on every surface.
+**Note**: Fires in the terminal UI, headless (`-p`), and ACP (editor) sessions, with the same payload contract on every surface.
 
 #### Stop
 
@@ -1673,7 +1673,7 @@ A PostToolUse HTTP hook that sends all tool execution records to a remote audit 
 
 On the core/headless path, `prompt` can include generated or expanded content rather than original user input. On ACP it starts with the pre-expansion request text, so reading it does not inspect attachment bodies or the complete model input. `UserPromptSubmit` does not cover every model send. Do not silently fall back from `submitted_prompt` to `prompt` when source provenance is required.
 
-A UserPromptSubmit hook that validates supported submitted text and provides context for long prompts. It also runs on headless submissions and explicitly declared ACP/daemon submissions; it is not TUI-only. It skips invocations where source provenance is unavailable. A blocking result stops the affected invocation, including on these non-TUI paths. The keyword check is illustrative and is not a complete DLP policy:
+A UserPromptSubmit hook that validates supported submitted text and provides context for long prompts. It also runs on headless submissions and explicitly declared ACP submissions; it is not TUI-only. It skips invocations where source provenance is unavailable. A blocking result stops the affected invocation, including on these non-TUI paths. The keyword check is illustrative and is not a complete DLP policy:
 
 **prompt_validator.py**
 

@@ -23,9 +23,7 @@ import type { CommandContext, SlashCommand } from '../commands/types.js';
 import type { RecentSlashCommands } from '../hooks/useSlashCompletion.js';
 import type { TextBuffer } from '../components/shared/text-buffer.js';
 import type {
-  IdeContext,
   ApprovalMode,
-  IdeInfo,
   OutputStyleDefinition,
   SessionListItem,
 } from '@qwen-code/qwen-code-core';
@@ -37,12 +35,9 @@ import type { UpdateObject } from '../utils/updateCheck.js';
 
 import { type UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 import { type HelpTab } from './UIActionsContext.js';
-import { type RestartReason } from '../hooks/useIdeTrustListener.js';
 import { type ProviderUpdateRequest } from '../hooks/useProviderUpdates.js';
 import { type ArenaDialogType } from '../hooks/useArenaCommand.js';
-import type { MicrophonePermission } from '../hooks/use-voice-input.js';
 import type { StatusLinePresetConfig } from '../statusLinePresets.js';
-import type { StartupIdeConnectionStatus } from '../../utils/events.js';
 
 export interface PendingSkillView {
   name: string;
@@ -73,7 +68,6 @@ export interface UIState {
   isModelDialogOpen: boolean;
   isFastModelMode: boolean;
   isAdvisorModelMode: boolean;
-  isVoiceModelMode: boolean;
   isVisionModelMode: boolean;
   isCompactionModelMode: boolean;
   isImageModelMode: boolean;
@@ -112,7 +106,6 @@ export interface UIState {
   inputWidth: number;
   suggestionsWidth: number;
   isInputActive: boolean;
-  shouldShowIdePrompt: boolean;
   shouldShowCommandMigrationNudge: boolean;
   commandMigrationTomlFiles: string[];
   isFolderTrustDialogOpen: boolean;
@@ -122,7 +115,6 @@ export interface UIState {
   mcpApprovalRemaining: number;
   isTrustedFolder: boolean | undefined;
   constrainHeight: boolean;
-  ideContextState: IdeContext | undefined;
   showToolDescriptions: boolean;
   ctrlCPressedOnce: boolean;
   ctrlDPressedOnce: boolean;
@@ -176,12 +168,7 @@ export interface UIState {
   terminalWidth: number;
   terminalHeight: number;
   mainControlsRef: React.MutableRefObject<DOMElement | null>;
-  voiceMicWarnedStatusRef: React.MutableRefObject<MicrophonePermission | null>;
-  currentIDE: IdeInfo | null;
-  startupIdeConnectionStatus: StartupIdeConnectionStatus;
   updateInfo: UpdateObject | null;
-  showIdeRestartPrompt: boolean;
-  ideTrustRestartReason: RestartReason;
   isRestarting: boolean;
   extensionsUpdateState: Map<string, ExtensionUpdateState>;
   activePtyId: number | undefined;

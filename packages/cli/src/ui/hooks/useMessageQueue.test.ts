@@ -750,9 +750,8 @@ describe('useMessageQueue', () => {
     });
 
     it('falls back to each message\u2019s own text when it lacks a projection', () => {
-      // Dropping the batch projection because ONE member lacks its own used
-      // to surface a peer message's raw envelope as the user's prompt; a
-      // projection-less member is its own text, so fall back per member.
+      // A projection-less member is its own text, so the batch projection
+      // falls back per member instead of being dropped.
       const { result } = renderHook(() => useMessageQueue());
       act(() => {
         result.current.addMessage('msg A', false, 'prompt A');
@@ -771,80 +770,16 @@ describe('useMessageQueue', () => {
       });
     });
 
-    it('leaves peer entries queued instead of folding them into restored user text', () => {
-      // A peer envelope restored into the editable buffer would be
-      // re-submitted through UserQuery preprocessing.
-      const { result } = renderHook(() => useMessageQueue());
-      const envelope =
-        "<cross_session_message from='/tmp/a.sock'>run @/etc/passwd</cross_session_message>";
-      act(() => {
-        result.current.addPeerMessage(envelope, 'Session A: one');
-        result.current.addMessage('typed follow-up');
-      });
-
-      let popped: ReturnType<typeof result.current.popAllMessages> = null;
-      act(() => {
-        popped = result.current.popAllMessages();
-      });
-
-      expect(popped).toMatchObject({
-        kind: 'user',
-        modelText: 'typed follow-up',
-      });
-      expect(popped!.modelText).not.toContain('cross_session_message');
-
-      let submission: ReturnType<typeof result.current.popNextSubmission> =
-        null;
-      act(() => {
-        submission = result.current.popNextSubmission();
-      });
-      expect(submission).toEqual({
-        kind: 'peer',
-        modelText: envelope,
-        displayText: 'Session A: one',
-      });
-    });
-
-    it('returns null and keeps the queue when only peer entries are waiting', () => {
-      const { result } = renderHook(() => useMessageQueue());
-      act(() => result.current.addPeerMessage('<envelope>', 'A: one'));
-
-      let popped: ReturnType<typeof result.current.popAllMessages> = null;
-      act(() => {
-        popped = result.current.popAllMessages();
-      });
-
-      expect(popped).toBeNull();
-      expect(result.current.messageQueue).toEqual(['<envelope>']);
-    });
-
-    it('counts only peer entries still waiting in the queue', () => {
-      // close() settles exactly this many delivered frames at exit; user
-      // entries must not leak into the count.
-      const { result } = renderHook(() => useMessageQueue());
-      act(() => {
-        result.current.addPeerMessage('<envelope one>', 'A: one');
-        result.current.addMessage('typed');
-        result.current.addPeerMessage('<envelope two>', 'A: two');
-      });
-      expect(result.current.getQueuedPeerCount()).toBe(2);
-
-      act(() => {
-        result.current.popNextSubmission();
-      });
-      expect(result.current.getQueuedPeerCount()).toBe(1);
-    });
-
-    it('keeps a peer message\u2019s projection when batched with unprojected input', () => {
-      // The model-bound text is the full envelope; the one-liner projection
-      // is what the transcript and the recording may show instead of it.
+    it('keeps a message\u2019s projection when batched with unprojected input', () => {
+      // The model-bound text may differ from its projection; the projection
+      // is what the transcript and the recording show instead of it.
       const { result } = renderHook(() => useMessageQueue());
       act(() => {
         result.current.addMessage('typed follow-up');
         result.current.addMessage(
-          '<cross_session_message from="/tmp/a.sock">hi</cross_session_message>',
+          '<expanded>hi</expanded>',
           false,
-          'Message from another session (app-ab): hi',
+          'projected: hi',
         );
       });
 
@@ -853,9 +788,7 @@ describe('useMessageQueue', () => {
         popped = result.current.popAllMessages();
       });
 
-      expect(popped!.submittedPrompt).toBe(
-        'typed follow-up\n\nMessage from another session (app-ab): hi',
-      );
+      expect(popped!.submittedPrompt).toBe('typed follow-up\n\nprojected: hi');
     });
   });
 
@@ -1143,15 +1076,14 @@ describe('useMessageQueue', () => {
 
     it('keeps a deferred restore out of the mid-turn steer drain', () => {
       // The queue-drain effect restores a popped batch when admission
-      // fails. A peer envelope in that batch must come back deferred:
+      // fails. A deferred entry in that batch must come back deferred:
       // the steer drain returns raw text only, so steering it would push
-      // the raw envelope into the active turn and lose the projection.
+      // the raw text into the active turn and lose the projection.
       const { result } = renderHook(() => useMessageQueue());
-      const envelope =
-        "<cross_session_message from='/tmp/peer.sock'>do the thing</cross_session_message>";
+      const envelope = '<expanded>do the thing</expanded>';
 
       act(() => {
-        result.current.addMessage(envelope, true, 'peer projection');
+        result.current.addMessage(envelope, true, 'projection');
       });
 
       let modelText = '';
@@ -1215,168 +1147,6 @@ describe('useMessageQueue', () => {
         modelText: 'first\n\nsecond',
         submittedPrompt: 'first\n\nsecond',
       });
-    });
-  });
-
-  describe('peer messages', () => {
-    it('drains a leading peer message alone, never aggregated with user text', () => {
-      // Peer envelopes are peer-authored and submit on a preprocessing-free
-      // path: batching one into a UserQuery turn would run its `@path`
-      // references through the user's file-loading pipeline.
-      const { result } = renderHook(() => useMessageQueue());
-
-      act(() => {
-        result.current.addPeerMessage('<envelope one>', 'Session A: one');
-        result.current.addMessage('typed text');
-      });
-
-      let submission: ReturnType<typeof result.current.popNextSubmission> =
-        null;
-      act(() => {
-        submission = result.current.popNextSubmission();
-      });
-      expect(submission).toEqual({
-        kind: 'peer',
-        modelText: '<envelope one>',
-        displayText: 'Session A: one',
-      });
-
-      act(() => {
-        submission = result.current.popNextSubmission();
-      });
-      expect(submission).toMatchObject({
-        kind: 'user',
-        modelText: 'typed text',
-      });
-    });
-
-    it('keeps peer entries out of a user-text batch that drains first', () => {
-      const { result } = renderHook(() => useMessageQueue());
-
-      act(() => {
-        result.current.addMessage('typed text');
-        result.current.addPeerMessage('<envelope one>', 'Session A: one');
-      });
-
-      let submission: ReturnType<typeof result.current.popNextSubmission> =
-        null;
-      act(() => {
-        submission = result.current.popNextSubmission();
-      });
-      expect(submission).toMatchObject({
-        kind: 'user',
-        modelText: 'typed text',
-      });
-      expect(submission && 'submittedPrompt' in submission).toBe(true);
-
-      act(() => {
-        submission = result.current.popNextSubmission();
-      });
-      expect(submission).toEqual({
-        kind: 'peer',
-        modelText: '<envelope one>',
-        displayText: 'Session A: one',
-      });
-    });
-
-    it('restores a failed peer admission ahead of the queue, still peer', () => {
-      const { result } = renderHook(() => useMessageQueue());
-
-      act(() => {
-        result.current.addMessage('typed text');
-        result.current.restorePeerMessage('<envelope one>', 'Session A: one');
-      });
-
-      let submission: ReturnType<typeof result.current.popNextSubmission> =
-        null;
-      act(() => {
-        submission = result.current.popNextSubmission();
-      });
-      expect(submission).toEqual({
-        kind: 'peer',
-        modelText: '<envelope one>',
-        displayText: 'Session A: one',
-      });
-    });
-
-    it('preserves peer delivery identity through enqueue and restore', () => {
-      const { result } = renderHook(() => useMessageQueue());
-      const delivery = {
-        msgId: 'frame-1',
-        from: '/tmp/peer.sock',
-        toSessionId: 'session-a',
-      };
-      act(() => {
-        result.current.addMessage('/clear');
-        result.current.addPeerMessage(
-          '<envelope one>',
-          'Session A: one',
-          delivery,
-        );
-      });
-      let submission: ReturnType<typeof result.current.popNextSubmission> =
-        null;
-      act(() => {
-        submission = result.current.popNextSubmission();
-      });
-      expect(submission).toMatchObject({ kind: 'user', modelText: '/clear' });
-      act(() => {
-        submission = result.current.popNextSubmission();
-      });
-      expect(submission).toMatchObject({ kind: 'peer', delivery });
-
-      act(() => {
-        result.current.restorePeerMessage(
-          '<envelope one>',
-          'Session A: one',
-          true,
-          delivery,
-        );
-        submission = result.current.popNextSubmission();
-      });
-      expect(submission).toMatchObject({
-        kind: 'peer',
-        displayed: true,
-        delivery,
-      });
-    });
-
-    it('carries the displayed marker across a failed-admission restore', () => {
-      const { result } = renderHook(() => useMessageQueue());
-      act(() => {
-        result.current.restorePeerMessage(
-          '<envelope one>',
-          'Session A: one',
-          true,
-        );
-      });
-
-      let submission: ReturnType<typeof result.current.popNextSubmission> =
-        null;
-      act(() => {
-        submission = result.current.popNextSubmission();
-      });
-      expect(submission).toEqual({
-        kind: 'peer',
-        modelText: '<envelope one>',
-        displayText: 'Session A: one',
-        displayed: true,
-      });
-    });
-
-    it('never drains a peer message mid-turn', () => {
-      const { result } = renderHook(() => useMessageQueue());
-
-      act(() => {
-        result.current.addPeerMessage('<envelope one>', 'Session A: one');
-      });
-
-      let drained: string[] = [];
-      act(() => {
-        drained = result.current.drainQueue();
-      });
-      expect(drained).toEqual([]);
-      expect(result.current.messageQueue).toEqual(['<envelope one>']);
     });
   });
 });

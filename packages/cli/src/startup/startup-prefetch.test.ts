@@ -8,11 +8,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Config } from '@qwen-code/qwen-code-core';
 import type { LoadedSettings } from '../config/settings.js';
 import {
-  AppEvent,
-  appEvents,
-  type StartupIdeConnectionStatus,
-} from '../utils/events.js';
-import {
   startEarlyStartupPrefetches,
   startPostRenderPrefetches,
   UPDATE_CHECK_DELAY_MS,
@@ -27,28 +22,14 @@ const mockHandleAutoUpdate = vi.hoisted(() => vi.fn());
 const mockRequestUpdateOnExit = vi.hoisted(() => vi.fn());
 const mockGetInstallationInfo = vi.hoisted(() => vi.fn());
 const mockUpdateEventEmit = vi.hoisted(() => vi.fn());
-const mockConnectIdeForStartup = vi.hoisted(() => vi.fn());
-const mockDisconnectIde = vi.hoisted(() => vi.fn());
-const mockGetIdeClientInstance = vi.hoisted(() =>
-  vi.fn().mockResolvedValue({ disconnect: mockDisconnectIde }),
-);
 const mockInitializeTelemetry = vi.hoisted(() => vi.fn());
 const mockStartBackgroundHousekeeping = vi.hoisted(() => vi.fn());
-const mockStartBatchAutoCollect = vi.hoisted(() => vi.fn());
-const mockResolveEndpoint = vi.hoisted(() =>
-  vi.fn((..._args: unknown[]) => ({
-    apiKey: 'k',
-    baseUrl: 'http://b',
-    model: 'm',
-  })),
-);
 
 vi.mock('@qwen-code/qwen-code-core', () => ({
   createDebugLogger: () => ({
     debug: mockDebug,
     warn: mockWarn,
   }),
-  IdeClient: { getInstance: () => mockGetIdeClientInstance() },
   initializeTelemetry: (...args: unknown[]) => mockInitializeTelemetry(...args),
 }));
 
@@ -96,23 +77,9 @@ vi.mock('../i18n/index.js', () => ({
       : key,
 }));
 
-vi.mock('../core/initializer.js', () => ({
-  connectIdeForStartup: (...args: unknown[]) =>
-    mockConnectIdeForStartup(...args),
-}));
-
 vi.mock('../services/housekeeping/scheduler.js', () => ({
   startBackgroundHousekeeping: (...args: unknown[]) =>
     mockStartBackgroundHousekeeping(...args),
-}));
-
-vi.mock('../commands/batch-auto-collect.js', () => ({
-  startBatchAutoCollect: (...args: unknown[]) =>
-    mockStartBatchAutoCollect(...args),
-}));
-
-vi.mock('../commands/batch.js', () => ({
-  resolveEndpoint: (...args: unknown[]) => mockResolveEndpoint(...args),
 }));
 
 function makeConfig(overrides: Partial<Config> = {}): Config {
@@ -124,7 +91,6 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     getProxy: () => 'http://proxy.example',
     getProjectRoot: () => '/repo',
     getWorkingDir: () => '/repo',
-    getIdeMode: () => true,
     isInteractive: () => true,
     ...overrides,
   } as unknown as Config;
@@ -157,11 +123,6 @@ describe('startupPrefetch', () => {
       isStandalone: false,
     });
     mockRequestUpdateOnExit.mockReturnValue(true);
-    mockConnectIdeForStartup.mockResolvedValue(undefined);
-    mockDisconnectIde.mockResolvedValue(undefined);
-    mockGetIdeClientInstance.mockResolvedValue({
-      disconnect: mockDisconnectIde,
-    });
   });
 
   afterEach(() => {
@@ -172,20 +133,6 @@ describe('startupPrefetch', () => {
   async function settle() {
     await vi.advanceTimersByTimeAsync(UPDATE_CHECK_DELAY_MS);
     await vi.dynamicImportSettled();
-  }
-
-  function captureIdeConnectionStatuses() {
-    const statuses: StartupIdeConnectionStatus[] = [];
-    const listener = (status: StartupIdeConnectionStatus) => {
-      statuses.push(status);
-    };
-    appEvents.on(AppEvent.StartupIdeConnectionStatusChanged, listener);
-    return {
-      statuses,
-      stop: () => {
-        appEvents.off(AppEvent.StartupIdeConnectionStatusChanged, listener);
-      },
-    };
   }
 
   it('starts API preconnect with resolved auth config', () => {
@@ -432,12 +379,11 @@ describe('startupPrefetch', () => {
     const updatePromise = new Promise<null>(() => {});
     mockCheckForUpdatesDetailed.mockReturnValue(updatePromise);
 
-    startPostRenderPrefetches(config, makeSettings(), { connectIde: true });
+    startPostRenderPrefetches(config, makeSettings());
 
     await settle();
 
     expect(mockCheckForUpdatesDetailed).toHaveBeenCalledTimes(1);
-    expect(mockConnectIdeForStartup).toHaveBeenCalledWith(config);
     expect(mockStartBackgroundHousekeeping).toHaveBeenCalledWith(
       config,
       expect.any(Object),
@@ -447,14 +393,11 @@ describe('startupPrefetch', () => {
   it('does not run update check when auto-update is disabled', async () => {
     const config = makeConfig();
 
-    startPostRenderPrefetches(config, makeSettings(false), {
-      connectIde: true,
-    });
+    startPostRenderPrefetches(config, makeSettings(false));
 
     await settle();
 
     expect(mockCheckForUpdatesDetailed).not.toHaveBeenCalled();
-    expect(mockConnectIdeForStartup).toHaveBeenCalledWith(config);
   });
 
   it('surfaces update check errors as a warning through the update event emitter', async () => {
@@ -513,177 +456,6 @@ describe('startupPrefetch', () => {
         'Update check skipped (registry unreachable) — run /update to retry.',
       severity: 'warning',
     });
-  });
-
-  it('requires connectIde option before connecting IDE', async () => {
-    const config = makeConfig();
-    const { statuses, stop } = captureIdeConnectionStatuses();
-
-    try {
-      startPostRenderPrefetches(config, makeSettings());
-
-      await settle();
-
-      expect(mockConnectIdeForStartup).not.toHaveBeenCalled();
-      expect(statuses).toEqual([]);
-    } finally {
-      stop();
-    }
-  });
-
-  it('does not connect IDE when IDE mode is disabled', async () => {
-    const config = makeConfig({ getIdeMode: () => false } as Partial<Config>);
-    const { statuses, stop } = captureIdeConnectionStatuses();
-
-    try {
-      startPostRenderPrefetches(config, makeSettings(), { connectIde: true });
-
-      await settle();
-
-      expect(mockConnectIdeForStartup).not.toHaveBeenCalled();
-      expect(statuses).toEqual([]);
-    } finally {
-      stop();
-    }
-  });
-
-  it('emits IDE connecting and connected statuses for deferred IDE startup', async () => {
-    const config = makeConfig();
-    const { statuses, stop } = captureIdeConnectionStatuses();
-
-    try {
-      startPostRenderPrefetches(config, makeSettings(), { connectIde: true });
-
-      await settle();
-
-      expect(statuses).toEqual([
-        { state: 'connecting' },
-        { state: 'connected' },
-      ]);
-    } finally {
-      stop();
-    }
-  });
-
-  it('fails deferred IDE connection when the startup connect hangs', async () => {
-    vi.useFakeTimers();
-    const config = makeConfig();
-    const hangingConnect = new Promise<void>(() => {});
-    mockConnectIdeForStartup.mockReturnValue(hangingConnect);
-    const { statuses, stop } = captureIdeConnectionStatuses();
-
-    try {
-      startPostRenderPrefetches(config, makeSettings(), { connectIde: true });
-
-      await settle();
-      await vi.advanceTimersByTimeAsync(15_000);
-
-      expect(statuses).toEqual([
-        { state: 'connecting' },
-        {
-          state: 'failed',
-          message: 'ide_connect timed out after 15000ms',
-        },
-      ]);
-      expect(mockRecordStartupEvent).toHaveBeenCalledWith(
-        'startup_prefetch_failed',
-        { name: 'ide_connect' },
-      );
-      expect(mockWarn).toHaveBeenCalledWith(
-        'ide_connect failed:',
-        expect.objectContaining({
-          message: 'ide_connect timed out after 15000ms',
-        }),
-      );
-      expect(mockDisconnectIde).toHaveBeenCalledTimes(1);
-    } finally {
-      stop();
-    }
-  });
-
-  it('disconnects IDE again if startup connect succeeds after timeout', async () => {
-    vi.useFakeTimers();
-    const config = makeConfig();
-    let resolveConnect!: () => void;
-    const delayedSuccess = new Promise<void>((resolve) => {
-      resolveConnect = resolve;
-    });
-    mockConnectIdeForStartup.mockReturnValue(delayedSuccess);
-
-    startPostRenderPrefetches(config, makeSettings(), { connectIde: true });
-
-    await settle();
-    await vi.advanceTimersByTimeAsync(15_000);
-    await settle();
-
-    expect(mockDisconnectIde).toHaveBeenCalledTimes(1);
-
-    resolveConnect();
-    await settle();
-
-    expect(mockDisconnectIde).toHaveBeenCalledTimes(2);
-    expect(mockWarn).toHaveBeenCalledWith(
-      'ide_connect failed:',
-      expect.objectContaining({
-        message: 'ide_connect timed out after 15000ms',
-      }),
-    );
-  });
-
-  it('fails deferred IDE connection when the startup connect rejects quickly', async () => {
-    const config = makeConfig();
-    const error = new Error('connection refused');
-    mockConnectIdeForStartup.mockRejectedValue(error);
-    const { statuses, stop } = captureIdeConnectionStatuses();
-
-    try {
-      startPostRenderPrefetches(config, makeSettings(), { connectIde: true });
-
-      await settle();
-
-      expect(statuses).toEqual([
-        { state: 'connecting' },
-        { state: 'failed', message: 'connection refused' },
-      ]);
-      expect(mockRecordStartupEvent).toHaveBeenCalledWith(
-        'startup_prefetch_failed',
-        { name: 'ide_connect' },
-      );
-      expect(mockWarn).toHaveBeenCalledWith('ide_connect failed:', error);
-      expect(mockDisconnectIde).not.toHaveBeenCalled();
-    } finally {
-      stop();
-    }
-  });
-
-  it('logs the underlying IDE connection error after timeout', async () => {
-    vi.useFakeTimers();
-    const config = makeConfig();
-    let rejectConnect!: (error: Error) => void;
-    const delayedFailure = new Promise<void>((_, reject) => {
-      rejectConnect = reject;
-    });
-    mockConnectIdeForStartup.mockReturnValue(delayedFailure);
-
-    startPostRenderPrefetches(config, makeSettings(), { connectIde: true });
-
-    await settle();
-    await vi.advanceTimersByTimeAsync(15_000);
-
-    const underlyingError = new Error('socket closed');
-    rejectConnect(underlyingError);
-    await settle();
-
-    expect(mockWarn).toHaveBeenCalledWith(
-      'ide_connect failed:',
-      expect.objectContaining({
-        message: 'ide_connect timed out after 15000ms',
-      }),
-    );
-    expect(mockDebug).toHaveBeenCalledWith(
-      'ide_connect underlying error after timeout:',
-      underlyingError,
-    );
   });
 
   it('initializes telemetry when requested', async () => {
@@ -756,53 +528,6 @@ describe('startupPrefetch', () => {
     expect(mockStartBackgroundHousekeeping).not.toHaveBeenCalled();
   });
 
-  it('starts batch auto-collect for interactive sessions by default', async () => {
-    // Update check off: when it and auto-collect import the mocked update
-    // emitter in the same tick, vitest hands one of them the real module.
-    const settings = makeSettings(false);
-    // The working directory, not the project root, scopes the collector.
-    startPostRenderPrefetches(
-      makeConfig({ getWorkingDir: () => '/repo/sub' } as Partial<Config>),
-      settings,
-    );
-
-    await vi.dynamicImportSettled();
-
-    expect(mockStartBatchAutoCollect).toHaveBeenCalledTimes(1);
-    const options = mockStartBatchAutoCollect.mock.calls[0][0] as {
-      projectRoot: string;
-      notify: (message: string) => void;
-    };
-    expect(options).toMatchObject({ projectRoot: '/repo/sub' });
-    expect(
-      (
-        options as unknown as { resolveEndpoint: () => unknown }
-      ).resolveEndpoint(),
-    ).toMatchObject({ baseUrl: 'http://b' });
-    // The session's own loaded settings, not a re-read from disk.
-    expect(mockResolveEndpoint).toHaveBeenCalledWith(
-      process.env,
-      expect.objectContaining({ settings: settings.merged }),
-    );
-    // Notices go through the update-notice channel, deferred while streaming.
-    options.notify('Batch task t: 2 result(s) delivered.');
-    expect(mockUpdateEventEmit).toHaveBeenCalledWith('update-info', {
-      message: 'Batch task t: 2 result(s) delivered.',
-    });
-  });
-
-  it('honors general.batchAutoCollect and skips non-interactive sessions', async () => {
-    startPostRenderPrefetches(makeConfig(), {
-      merged: { general: { batchAutoCollect: false } },
-    } as LoadedSettings);
-    startPostRenderPrefetches(
-      makeConfig({ isInteractive: () => false } as Partial<Config>),
-      makeSettings(),
-    );
-    await vi.dynamicImportSettled();
-    expect(mockStartBatchAutoCollect).not.toHaveBeenCalled();
-  });
-
   it('starts post-render prefetch only once per config', async () => {
     const config = makeConfig();
 
@@ -812,6 +537,6 @@ describe('startupPrefetch', () => {
     await settle();
 
     expect(mockCheckForUpdatesDetailed).toHaveBeenCalledTimes(1);
-    expect(mockStartBatchAutoCollect).toHaveBeenCalledTimes(1);
+    expect(mockStartBackgroundHousekeeping).toHaveBeenCalledTimes(1);
   });
 });

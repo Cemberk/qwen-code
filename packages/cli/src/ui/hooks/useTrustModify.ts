@@ -20,7 +20,6 @@ import type { LoadedSettings } from '../../config/settings.js';
 interface TrustState {
   currentTrustLevel: TrustLevel | undefined;
   isInheritedTrustFromParent: boolean;
-  isInheritedTrustFromIde: boolean;
 }
 
 function getInitialTrustState(
@@ -38,7 +37,6 @@ function getInitialTrustState(
   return {
     currentTrustLevel: explicitTrustLevel,
     isInheritedTrustFromParent: !!(source === 'file' && isInheritedTrust),
-    isInheritedTrustFromIde: !!(source === 'ide' && isInheritedTrust),
   };
 }
 
@@ -60,9 +58,6 @@ export const useTrustModify = (
   const [isInheritedTrustFromParent] = useState(
     initialState.isInheritedTrustFromParent,
   );
-  const [isInheritedTrustFromIde] = useState(
-    initialState.isInheritedTrustFromIde,
-  );
   const [needsRestart, setNeedsRestart] = useState(false);
 
   const isFolderTrustEnabled = !!settings.merged.security?.folderTrust?.enabled;
@@ -80,17 +75,15 @@ export const useTrustModify = (
         newConfig,
       );
 
-      if (trustLevel === TrustLevel.DO_NOT_TRUST && isTrusted) {
-        let message =
-          'Note: This folder is still trusted because the connected IDE workspace is trusted.';
-        if (source === 'file') {
-          message =
-            'Note: This folder is still trusted because a parent folder is trusted.';
-        }
+      if (
+        trustLevel === TrustLevel.DO_NOT_TRUST &&
+        isTrusted &&
+        source === 'file'
+      ) {
         addItem(
           {
             type: MessageType.WARNING,
-            text: message,
+            text: 'Note: This folder is still trusted because a parent folder is trusted.',
           },
           Date.now(),
         );
@@ -143,7 +136,6 @@ export const useTrustModify = (
     cwd,
     currentTrustLevel,
     isInheritedTrustFromParent,
-    isInheritedTrustFromIde,
     needsRestart,
     updateTrustLevel,
     commitTrustLevelChange,

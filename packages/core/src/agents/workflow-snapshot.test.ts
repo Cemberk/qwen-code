@@ -183,7 +183,6 @@ describe('toSnapshot', () => {
             newContent: '',
             hideAlwaysAllow: true,
             hideModify: true,
-            skipIdeDiff: true,
           },
           at: 1,
         },

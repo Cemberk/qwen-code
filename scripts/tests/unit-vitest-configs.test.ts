@@ -10,28 +10,9 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { parse } from 'yaml';
 
-import externalContextConfig from '../../integrations/external-context/vitest.config.js';
-import externalContextMem0Config from '../../integrations/external-context-mem0/vitest.config.js';
 import acpBridgeConfig from '../../packages/acp-bridge/vitest.config.js';
-import audioCaptureConfig from '../../packages/audio-capture/vitest.config.js';
-import browserUseConfig from '../../packages/browser-use/vitest.config.js';
-import channelsBaseConfig from '../../packages/channels/base/vitest.config.js';
-import dingtalkConfig from '../../packages/channels/dingtalk/vitest.config.js';
-import dwsConfig from '../../packages/channels/dws/vitest.config.js';
-import feishuConfig from '../../packages/channels/feishu/vitest.config.js';
-import githubConfig from '../../packages/channels/github/vitest.config.js';
-import gitlabConfig from '../../packages/channels/gitlab/vitest.config.js';
-import qqbotConfig from '../../packages/channels/qqbot/vitest.config.js';
-import telegramConfig from '../../packages/channels/telegram/vitest.config.js';
-import wecomConfig from '../../packages/channels/wecom/vitest.config.js';
-import weixinConfig from '../../packages/channels/weixin/vitest.config.js';
-import chromeExtensionConfig from '../../packages/chrome-extension/vitest.config.js';
 import cliConfig from '../../packages/cli/vitest.config.js';
 import coreConfig from '../../packages/core/vitest.config.js';
-import nodeReplConfig from '../../packages/node-repl/vitest.config.js';
-import sdkTypescriptConfig from '../../packages/sdk-typescript/vitest.config.js';
-import vscodeCompanionConfig from '../../packages/vscode-ide-companion/vitest.config.js';
-import webShellConfig from '../../packages/web-shell/vitest.config.js';
 import { getTestCiWorkspacePackageJsonPaths } from '../workspaces.js';
 import scriptsTestsConfig from './vitest.config.js';
 
@@ -52,28 +33,9 @@ type ExemptionConfig = {
 };
 
 const configs: Record<string, ExemptionConfig> = {
-  'integrations/external-context': externalContextConfig,
-  'integrations/external-context-mem0': externalContextMem0Config,
   'packages/acp-bridge': acpBridgeConfig,
-  'packages/audio-capture': audioCaptureConfig,
-  'packages/browser-use': browserUseConfig,
-  'packages/channels/base': channelsBaseConfig,
-  'packages/channels/dingtalk': dingtalkConfig,
-  'packages/channels/dws': dwsConfig,
-  'packages/channels/feishu': feishuConfig,
-  'packages/channels/github': githubConfig,
-  'packages/channels/gitlab': gitlabConfig,
-  'packages/channels/qqbot': qqbotConfig,
-  'packages/channels/telegram': telegramConfig,
-  'packages/channels/wecom': wecomConfig,
-  'packages/channels/weixin': weixinConfig,
-  'packages/chrome-extension': chromeExtensionConfig,
   'packages/cli': cliConfig,
   'packages/core': coreConfig,
-  'packages/node-repl': nodeReplConfig,
-  'packages/sdk-typescript': sdkTypescriptConfig,
-  'packages/vscode-ide-companion': vscodeCompanionConfig,
-  'packages/web-shell': webShellConfig,
   'scripts/tests': scriptsTestsConfig,
 };
 
@@ -104,61 +66,17 @@ const configModules: Record<
   string,
   () => Promise<{ default: ExemptionConfig }>
 > = {
-  'integrations/external-context': () =>
-    import('../../integrations/external-context/vitest.config.js'),
-  'integrations/external-context-mem0': () =>
-    import('../../integrations/external-context-mem0/vitest.config.js'),
   'packages/acp-bridge': () =>
     import('../../packages/acp-bridge/vitest.config.js'),
-  'packages/audio-capture': () =>
-    import('../../packages/audio-capture/vitest.config.js'),
-  'packages/browser-use': () =>
-    import('../../packages/browser-use/vitest.config.js'),
-  'packages/channels/base': () =>
-    import('../../packages/channels/base/vitest.config.js'),
-  'packages/channels/dingtalk': () =>
-    import('../../packages/channels/dingtalk/vitest.config.js'),
-  'packages/channels/dws': () =>
-    import('../../packages/channels/dws/vitest.config.js'),
-  'packages/channels/feishu': () =>
-    import('../../packages/channels/feishu/vitest.config.js'),
-  'packages/channels/github': () =>
-    import('../../packages/channels/github/vitest.config.js'),
-  'packages/channels/gitlab': () =>
-    import('../../packages/channels/gitlab/vitest.config.js'),
-  'packages/channels/qqbot': () =>
-    import('../../packages/channels/qqbot/vitest.config.js'),
-  'packages/channels/telegram': () =>
-    import('../../packages/channels/telegram/vitest.config.js'),
-  'packages/channels/wecom': () =>
-    import('../../packages/channels/wecom/vitest.config.js'),
-  'packages/channels/weixin': () =>
-    import('../../packages/channels/weixin/vitest.config.js'),
-  'packages/chrome-extension': () =>
-    import('../../packages/chrome-extension/vitest.config.js'),
   'packages/cli': () => import('../../packages/cli/vitest.config.js'),
   'packages/core': () => import('../../packages/core/vitest.config.js'),
-  'packages/node-repl': () =>
-    import('../../packages/node-repl/vitest.config.js'),
-  // qwen-live's ceiling is unconditional (its config carries a flat 60s), so
-  // it passes the on-pool floor from any runner name and stays out of the
-  // off-pool sample below.
-  'packages/qwen-live': () =>
-    import('../../packages/qwen-live/vitest.config.js'),
-  'packages/sdk-typescript': () =>
-    import('../../packages/sdk-typescript/vitest.config.js'),
-  'packages/vscode-ide-companion': () =>
-    import('../../packages/vscode-ide-companion/vitest.config.js'),
-  'packages/web-shell': () =>
-    import('../../packages/web-shell/vitest.config.js'),
   'scripts/tests': () => import('./vitest.config.js'),
 };
 
 describe('shared-pool test timeout', () => {
   // 60s is the ceiling the five already-raised configs settled on. Assert a
-  // floor rather than equality so the configs that legitimately sit higher
-  // (scripts/tests at 90s, sdk-typescript at E2E_TIMEOUT_MINUTES x 60s) pass
-  // without pinning their own numbers here.
+  // floor rather than equality so the config that legitimately sits higher
+  // (scripts/tests at 90s) passes without pinning its own number here.
   const POOL_FLOOR_MS = 60_000;
   // Two names that share only the documented prefix: a gate narrowed past
   // `ecs-qwen-` (e.g. to the first stub itself) passes one name and fails the
@@ -170,14 +88,13 @@ describe('shared-pool test timeout', () => {
       for (const runnerName of POOL_RUNNER_NAMES) {
         // The configs read RUNNER_NAME at import time and the static imports
         // at the top of this file already resolved the off-pool branch, so
-        // stub first and re-import. scripts/tests and sdk-typescript derive
-        // their ceiling from ambient env knobs rather than a literal, so pin
-        // those too — the test must read the configs' logic, not whatever
-        // the surrounding environment happens to carry. `?? 90_000` makes
-        // '' read as 0, so stub a real number at the documented default.
+        // stub first and re-import. scripts/tests derives its ceiling from an
+        // ambient env knob rather than a literal, so pin that too — the test
+        // must read the configs' logic, not whatever the surrounding
+        // environment happens to carry. `?? 90_000` makes '' read as 0, so
+        // stub a real number at the documented default.
         vi.stubEnv('RUNNER_NAME', runnerName);
         vi.stubEnv('QWEN_SCRIPTS_TEST_TIMEOUT_MS', '90000');
-        vi.stubEnv('E2E_TIMEOUT_MINUTES', '3');
         vi.resetModules();
         try {
           const mod = await load();
@@ -196,32 +113,12 @@ describe('shared-pool test timeout', () => {
   // default, so a hang on a developer machine still fails in 5s. One list,
   // iterated by both off-pool arms below — a newly gated workspace gets
   // registered in two places (the map and here), not three.
-  const OFF_POOL_DEFAULT = [
-    'integrations/external-context',
-    'integrations/external-context-mem0',
-    'packages/acp-bridge',
-    'packages/audio-capture',
-    'packages/browser-use',
-    'packages/channels/base',
-    'packages/channels/dingtalk',
-    'packages/channels/dws',
-    'packages/channels/feishu',
-    'packages/channels/github',
-    'packages/channels/gitlab',
-    'packages/channels/qqbot',
-    'packages/channels/telegram',
-    'packages/channels/wecom',
-    'packages/channels/weixin',
-    'packages/chrome-extension',
-    'packages/web-shell',
-  ] as const;
+  const OFF_POOL_DEFAULT = ['packages/acp-bridge'] as const;
 
   // cli and core gate the same way but pin 15s off the pool instead of the
   // default. Naming the value is what stops either ternary being flattened to
   // the pool number: the floor above passes on 60_000, so without this a real
   // hang off CI would surface at 60s instead of 15s and nothing would go red.
-  // vscode-ide-companion pins the same 15s and is already asserted in both
-  // branches by `bundle-guard timeout ceiling` below.
   const OFF_POOL_PINNED: Readonly<Record<string, number>> = {
     'packages/cli': 15_000,
     'packages/core': 15_000,
@@ -244,8 +141,8 @@ describe('shared-pool test timeout', () => {
     // machine still fails in 5s rather than 60s. Sample every gated ternary:
     // a flat `testTimeout: 60_000` in any of them must fail here. The rest of
     // the map stays out on purpose: cli/core pin a lower off-pool value and
-    // `expectOffPoolCeilings` asserts it, node-repl/sdk-typescript/scripts/tests
-    // carry flat ceilings, and qwen-live's ceiling is unconditional.
+    // `expectOffPoolCeilings` asserts it, and scripts/tests carries a flat
+    // ceiling.
     vi.stubEnv('RUNNER_NAME', 'ubuntu-latest-runner');
     vi.resetModules();
     try {
@@ -281,23 +178,13 @@ describe('shared-pool test timeout', () => {
     // on-pool floor above. Pin the partition instead: every configModules
     // entry must sit in exactly one arm and every arm entry must exist in
     // the map, so a dropped or double-registered name fails here first.
-    const FLAT_CEILING_CONFIGS = [
-      // No gated ternary, hence no off-pool branch to sample: node-repl,
-      // sdk-typescript and scripts/tests carry flat literals, qwen-live's
-      // ceiling is unconditional.
-      'packages/node-repl',
-      'packages/qwen-live',
-      'packages/sdk-typescript',
-      'scripts/tests',
-    ];
-    // Pins 15s off the pool and is asserted in both branches by
-    // `bundle-guard timeout ceiling` below.
-    const ASSERTED_ELSEWHERE = ['packages/vscode-ide-companion'];
+    // No gated ternary, hence no off-pool branch to sample: scripts/tests
+    // carries a flat literal.
+    const FLAT_CEILING_CONFIGS = ['scripts/tests'];
     const arms = [
       ...OFF_POOL_DEFAULT,
       ...Object.keys(OFF_POOL_PINNED),
       ...FLAT_CEILING_CONFIGS,
-      ...ASSERTED_ELSEWHERE,
     ];
     expect(new Set(arms).size, 'one off-pool arm per workspace').toBe(
       arms.length,
@@ -314,9 +201,8 @@ describe('shared-pool test timeout', () => {
     // follow-up adding a workspace with a test:ci script and a bare vitest
     // config joins the pool lane on vitest's 5s default — the #10490 flake
     // class this pin exists to kill — with every test above still green.
-    // One-directional on purpose: the root glob carries negations,
-    // packages/channels/plugin-example is a workspace without test:ci, and
-    // scripts/tests is in the map without being a workspace. The selection
+    // One-directional on purpose: scripts/tests is in the map without being a
+    // workspace. The selection
     // itself lives in scripts/workspaces.js so it cannot drift from the
     // release-workflow pins that gate on the same set.
     const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
@@ -345,11 +231,10 @@ describe('autofix gate load clamps', () => {
     vi.resetModules();
     // Re-imported under the stub: the configs read the env at import time,
     // and the static imports above already resolved the non-ECS branch.
-    const [core, cli, acpBridge, webShell] = await Promise.all([
+    const [core, cli, acpBridge] = await Promise.all([
       import('../../packages/core/vitest.config.js'),
       import('../../packages/cli/vitest.config.js'),
       import('../../packages/acp-bridge/vitest.config.js'),
-      import('../../packages/web-shell/vitest.config.js'),
     ]);
     vi.unstubAllEnvs();
 
@@ -376,13 +261,8 @@ describe('autofix gate load clamps', () => {
     );
 
     // 60_000 / 60_000 / '25%' on the ECS branch of core and cli;
-    // acp-bridge and web-shell set the two timeouts but define no maxWorkers.
-    for (const config of [
-      core.default,
-      cli.default,
-      acpBridge.default,
-      webShell.default,
-    ]) {
+    // acp-bridge sets the two timeouts but defines no maxWorkers.
+    for (const config of [core.default, cli.default, acpBridge.default]) {
       expect(String(config.test?.testTimeout)).toBe(clamps['testTimeout']);
       expect(String(config.test?.hookTimeout)).toBe(clamps['hookTimeout']);
     }
@@ -426,7 +306,7 @@ describe('autofix gate load clamps', () => {
     expect(Number(vitestVersion('.').split('.')[0])).toBeGreaterThanOrEqual(2);
     const legacyWorkspaces = Object.keys(lock.importers).filter(
       (path) =>
-        (path.startsWith('packages/') || path.startsWith('integrations/')) &&
+        path.startsWith('packages/') &&
         vitestVersion(path) !== '' &&
         Number(vitestVersion(path).split('.')[0]) < 2,
     );
@@ -444,27 +324,6 @@ describe('autofix gate load clamps', () => {
         typeof config.test?.poolOptions?.threads?.maxThreads,
         workspace,
       ).toBe('number');
-    }
-  });
-});
-
-describe('bundle-guard timeout ceiling', () => {
-  it('keeps the bundle-guard timeout ceiling in packages/vscode-ide-companion', async () => {
-    // The config reads RUNNER_NAME at import time, so re-import it under
-    // each stub to pin both branches, not only the ambient one.
-    for (const [runnerName, expected] of [
-      ['ecs-qwen-parity', 60_000],
-      ['ubuntu-latest-runner', 15_000],
-    ] as const) {
-      vi.stubEnv('RUNNER_NAME', runnerName);
-      vi.resetModules();
-      const mod = await import(
-        '../../packages/vscode-ide-companion/vitest.config.js'
-      );
-      expect(mod.default.test?.testTimeout, `RUNNER_NAME=${runnerName}`).toBe(
-        expected,
-      );
-      vi.unstubAllEnvs();
     }
   });
 });

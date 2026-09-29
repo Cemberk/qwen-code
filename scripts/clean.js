@@ -20,7 +20,6 @@
 import { rmSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { globSync } from 'glob';
 import { getWorkspacePackageJsonPaths } from './workspaces.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -45,16 +44,4 @@ for (const pkgPath of getWorkspacePackageJsonPaths(
   const pkgDir = dirname(join(root, pkgPath));
   rmSync(join(pkgDir, 'dist'), RMRF_OPTIONS);
   rmSync(join(pkgDir, 'tsconfig.tsbuildinfo'), { force: true });
-}
-
-// Clean up vscode-ide-companion package
-rmSync(join(root, 'packages/vscode-ide-companion/node_modules'), {
-  recursive: true,
-  force: true,
-});
-const vsixFiles = globSync('packages/vscode-ide-companion/*.vsix', {
-  cwd: root,
-});
-for (const vsixFile of vsixFiles) {
-  rmSync(join(root, vsixFile), RMRF_OPTIONS);
 }

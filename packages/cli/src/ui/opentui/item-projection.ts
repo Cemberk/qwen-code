@@ -90,7 +90,6 @@ export function projectAbout(systemInfo: Record<string, unknown>): string {
       .filter(Boolean)
       .join(' / '),
   );
-  addField('IDE Client', String(systemInfo['ideClient'] ?? ''));
   const lspStatus = systemInfo['lspStatus'];
   if (lspStatus !== undefined) addField('LSP', String(lspStatus));
   addField(

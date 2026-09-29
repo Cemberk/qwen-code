@@ -1959,7 +1959,6 @@ function restrictWorkflowConfirmationDetails(
         newContent: '',
         hideAlwaysAllow: true,
         hideModify: true,
-        skipIdeDiff: true,
         warnings: details.warnings ? [...details.warnings] : undefined,
       };
     case 'exec':

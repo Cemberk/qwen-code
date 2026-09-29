@@ -156,12 +156,6 @@ export function routeDialogToOpenTui(
         mode: 'fast',
         ...(result.persistScope ? { persistScope: result.persistScope } : {}),
       };
-    case 'voice-model':
-      return {
-        dialog: 'model',
-        mode: 'voice',
-        ...(result.persistScope ? { persistScope: result.persistScope } : {}),
-      };
     case 'vision-model':
       return {
         dialog: 'model',
@@ -290,7 +284,6 @@ export const OPEN_TUI_COMMAND_ROUTES: readonly CommandRouteSpec[] = [
   { name: 'help', altNames: ['?'], results: ['dialog'], dialogs: ['help'] },
   { name: 'history', results: ['message'] },
   { name: 'hooks', results: ['dialog', 'message'], dialogs: ['hooks'] },
-  { name: 'ide', results: ['message'] },
   { name: 'import-config', results: ['message'] },
   { name: 'init', results: ['confirm_action', 'message', 'submit_prompt'] },
   { name: 'language', results: ['message'] },
@@ -310,7 +303,6 @@ export const OPEN_TUI_COMMAND_ROUTES: readonly CommandRouteSpec[] = [
     dialogs: [
       'model',
       'fast-model',
-      'voice-model',
       'vision-model',
       'compaction-model',
       'image-model',
@@ -323,7 +315,6 @@ export const OPEN_TUI_COMMAND_ROUTES: readonly CommandRouteSpec[] = [
   },
   { name: 'remember', results: ['message', 'submit_prompt'] },
   { name: 'plan', results: ['message', 'submit_prompt'] },
-  { name: 'peers', results: ['message'] },
   { name: 'permissions', results: ['dialog'], dialogs: ['permissions'] },
   {
     name: 'trust',
@@ -365,7 +356,6 @@ export const OPEN_TUI_COMMAND_ROUTES: readonly CommandRouteSpec[] = [
   { name: 'settings', results: ['dialog'], dialogs: ['settings'] },
   { name: 'vim', results: ['message'] },
   { name: 'update', results: ['message'] },
-  { name: 'voice', results: ['message'] },
   { name: 'setup-github', results: ['tool'] },
   { name: 'terminal-setup', results: ['message'] },
   { name: 'insight', results: ['message', 'stream_messages'] },
