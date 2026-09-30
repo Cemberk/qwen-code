@@ -158,7 +158,6 @@ describeLocal('GenAI telemetry fields', () => {
       http_proxy: undefined,
       https_proxy: undefined,
       all_proxy: undefined,
-      DASHSCOPE_PROXY_BASE_URL: undefined,
       QWEN_TELEMETRY_INCLUDE_SENSITIVE_SPAN_ATTRIBUTES: 'true',
       QWEN_TELEMETRY_USER_ID: 'integration-user-079458',
     });
@@ -499,7 +498,6 @@ describeLocal('GenAI telemetry fields', () => {
       http_proxy: undefined,
       https_proxy: undefined,
       all_proxy: undefined,
-      DASHSCOPE_PROXY_BASE_URL: undefined,
     });
 
     try {
@@ -579,7 +577,6 @@ describeLocal('GenAI telemetry fields', () => {
       http_proxy: undefined,
       https_proxy: undefined,
       all_proxy: undefined,
-      DASHSCOPE_PROXY_BASE_URL: undefined,
       QWEN_TELEMETRY_INCLUDE_SENSITIVE_SPAN_ATTRIBUTES: 'false',
     });
 

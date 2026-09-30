@@ -7,38 +7,99 @@
 
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  AuthType,
-  buildInstallPlan,
-  customProvider,
-} from '@qwen-code/qwen-code-core';
-import type { ProviderConfig } from '@qwen-code/qwen-code-core';
+import { buildInstallPlan, customProvider } from '@qwen-code/qwen-code-core';
 import { useProviderSetupFlow } from './useProviderSetupFlow.js';
 import { maskApiKey } from './useAuth.js';
 
-describe('useProviderSetupFlow API selection', () => {
-  // A preset has no `protocolOptions`, so the API step never renders for it —
-  // but the daemon/ACP contracts accept `wireApi` for any provider id, so a preset
-  // can already hold a Responses install.
-  const preset: ProviderConfig = {
-    id: 'deepseek',
-    label: 'DeepSeek',
-    description: 'DeepSeek',
-    protocol: AuthType.USE_OPENAI,
-    baseUrl: 'https://api.deepseek.com/v1',
-    envKey: 'DEEPSEEK_API_KEY',
-    models: [{ id: 'deepseek-v4' }],
-    modelNamePrefix: 'DeepSeek',
+const LOCAL_BASE_URL = 'http://127.0.0.1:11434/v1';
+
+describe('useProviderSetupFlow base URL step', () => {
+  const startFlow = () => {
+    const submit = vi.fn().mockResolvedValue(undefined);
+    const hook = renderHook(() => useProviderSetupFlow(submit));
+    act(() => hook.result.current.start(customProvider));
+    return hook.result;
   };
 
-  it('previews the same Responses model configuration that it submits', () => {
+  it('opens on the base URL step with no default value', () => {
+    const result = startFlow();
+    expect(result.current.state.step).toBe('baseUrl');
+    expect(result.current.state.stepIndex).toBe(1);
+    expect(result.current.state.totalSteps).toBe(5);
+    expect(result.current.state.baseUrl).toBe('');
+    expect(result.current.state.baseUrlError).toBeNull();
+  });
+
+  it('shows an error for an empty base URL instead of falling back', () => {
+    const result = startFlow();
+    let accepted = true;
+    act(() => {
+      accepted = result.current.submitBaseUrl();
+    });
+    expect(accepted).toBe(false);
+    expect(result.current.state.step).toBe('baseUrl');
+    expect(result.current.state.baseUrl).toBe('');
+    expect(result.current.state.baseUrlError).toContain(
+      'No model server base URL is configured',
+    );
+  });
+
+  it.each(['https://api.openai.com/v1', 'http://192.168.1.5:8000/v1'])(
+    'rejects the non-loopback base URL %s',
+    (url) => {
+      const result = startFlow();
+      act(() => result.current.changeBaseUrl(url));
+      let accepted = true;
+      act(() => {
+        accepted = result.current.submitBaseUrl();
+      });
+      expect(accepted).toBe(false);
+      expect(result.current.state.step).toBe('baseUrl');
+      expect(result.current.state.baseUrlError).toContain(
+        'the host must be 127.0.0.1, ::1 or localhost',
+      );
+    },
+  );
+
+  it.each(['http://127.0.0.1:11434/v1', 'http://localhost:1234/v1'])(
+    'accepts the loopback base URL %s',
+    (url) => {
+      const result = startFlow();
+      let accepted = false;
+      act(() => {
+        accepted = result.current.submitBaseUrl(`  ${url}  `);
+      });
+      expect(accepted).toBe(true);
+      expect(result.current.state.baseUrlError).toBeNull();
+      expect(result.current.state.baseUrl).toBe(url);
+      expect(result.current.state.step).toBe('apiKey');
+    },
+  );
+
+  it('clears the base URL error once the field is edited', () => {
+    const result = startFlow();
+    act(() => {
+      result.current.submitBaseUrl('https://api.openai.com/v1');
+    });
+    expect(result.current.state.baseUrlError).not.toBeNull();
+    act(() => result.current.changeBaseUrl('http://localhost'));
+    expect(result.current.state.baseUrlError).toBeNull();
+  });
+});
+
+describe('useProviderSetupFlow preview', () => {
+  it('prefills saved model ids but never a base URL', () => {
+    const { result } = renderHook(() => useProviderSetupFlow(vi.fn()));
+    act(() => result.current.start(customProvider, ['a', 'b']));
+    expect(result.current.state.modelIds).toBe('a, b');
+    expect(result.current.state.baseUrl).toBe('');
+  });
+
+  it('previews the same model configuration that it submits', () => {
     const submit = vi.fn().mockResolvedValue(undefined);
     const { result } = renderHook(() => useProviderSetupFlow(submit));
     act(() => result.current.start(customProvider));
-    act(() => result.current.selectProtocol(AuthType.USE_OPENAI));
-    expect(result.current.state.step).toBe('wireApi');
-    act(() => result.current.selectWireApi('responses'));
-    act(() => result.current.changeBaseUrl('https://gateway.example/v1'));
+    act(() => result.current.changeBaseUrl(LOCAL_BASE_URL));
     act(() => result.current.submitBaseUrl());
     act(() => result.current.submitApiKey('sk-secret-test'));
     act(() => result.current.changeModelIds('model'));
@@ -46,31 +107,40 @@ describe('useProviderSetupFlow API selection', () => {
     act(() => result.current.toggleFocusedAdvancedOption());
     act(() => result.current.changeContextWindowSize('272000'));
     act(() => result.current.submitAdvancedConfig());
+    expect(result.current.state.step).toBe('review');
     const preview = JSON.parse(result.current.state.previewJson);
     act(() => result.current.submit());
     const [provider, inputs] = submit.mock.calls[0]!;
+    expect(inputs).toEqual({
+      baseUrl: LOCAL_BASE_URL,
+      apiKey: 'sk-secret-test',
+      modelIds: ['model'],
+      advancedConfig: {
+        enableThinking: true,
+        multimodal: undefined,
+        contextWindowSize: 272000,
+      },
+    });
     const plan = buildInstallPlan(provider, inputs);
     expect(preview.modelProviders).toEqual({
       openai: plan.modelProviders![0]!.models,
     });
     expect(preview.modelProviders.openai[0]).toMatchObject({
-      wireApi: 'responses',
+      baseUrl: LOCAL_BASE_URL,
       generationConfig: {
-        reasoning: { effort: 'medium' },
+        extra_body: { enable_thinking: true },
         contextWindowSize: 272000,
       },
     });
     expect(preview.security.auth.selectedType).toBe(plan.authType);
-    expect(preview.model).toEqual({ name: 'model', baseUrl: inputs.baseUrl });
+    expect(preview.model).toEqual({ name: 'model', baseUrl: LOCAL_BASE_URL });
     expect(Object.values(preview.env)).toEqual([maskApiKey(inputs.apiKey)]);
     expect(result.current.state.previewJson).not.toContain(inputs.apiKey);
   });
 
   it('uses the saved canonical model metadata in both preview and submit', () => {
     const inputs = {
-      protocol: AuthType.USE_OPENAI,
-      wireApi: 'responses' as const,
-      baseUrl: 'https://gateway.example/v1',
+      baseUrl: LOCAL_BASE_URL,
       apiKey: 'test-secret',
       modelIds: ['same'],
     };
@@ -89,8 +159,6 @@ describe('useProviderSetupFlow API selection', () => {
       useProviderSetupFlow(submit, { openai: models }),
     );
     act(() => result.current.start(customProvider));
-    act(() => result.current.selectProtocol(AuthType.USE_OPENAI));
-    act(() => result.current.selectWireApi('responses'));
     act(() => result.current.changeBaseUrl(inputs.baseUrl));
     act(() => result.current.submitBaseUrl());
     act(() => result.current.submitApiKey(inputs.apiKey));
@@ -114,27 +182,19 @@ describe('useProviderSetupFlow API selection', () => {
     expect(result.current.state.previewJson).not.toContain(inputs.apiKey);
   });
 
-  // Reconnect the custom provider on Chat Completions at `baseUrl` with the
-  // given ids and stop on the review step, where the preview is computed.
+  // Reconnect the local server at `baseUrl` with the given ids and stop on
+  // the review step, where the preview is computed.
   const reviewCustomReconnect = (
     submit: ReturnType<typeof vi.fn>,
     modelProviders: Parameters<typeof useProviderSetupFlow>[1],
     baseUrl: string,
     modelIds: string,
-    rawModelProviders?: Parameters<typeof useProviderSetupFlow>[4],
+    rawModelProviders?: Parameters<typeof useProviderSetupFlow>[2],
   ) => {
     const { result } = renderHook(() =>
-      useProviderSetupFlow(
-        submit,
-        modelProviders,
-        undefined,
-        undefined,
-        rawModelProviders,
-      ),
+      useProviderSetupFlow(submit, modelProviders, rawModelProviders),
     );
     act(() => result.current.start(customProvider));
-    act(() => result.current.selectProtocol(AuthType.USE_OPENAI));
-    act(() => result.current.selectWireApi('chat-completions'));
     act(() => result.current.changeBaseUrl(baseUrl));
     act(() => result.current.submitBaseUrl());
     act(() => result.current.submitApiKey('sk-secret-test'));
@@ -151,7 +211,7 @@ describe('useProviderSetupFlow API selection', () => {
     // distinct explicit envKeys). buildInstallPlan refuses to reconnect them
     // under a single key; the preview runs during render, so the refusal has
     // to be surfaced there rather than escape to the root error boundary.
-    const baseUrl = 'https://gateway.example/v1';
+    const baseUrl = LOCAL_BASE_URL;
     const saved = (keyA: string, keyB: string) => ({
       openai: [
         { id: 'a', baseUrl, envKey: keyA },
@@ -192,7 +252,7 @@ describe('useProviderSetupFlow API selection', () => {
     // Merged settings are env-resolved, so a saved `${TOKEN}` header reaches
     // the hook as the real secret. The review screen masks the API key; it
     // must not print that header value next to it.
-    const baseUrl = 'https://gateway.example/v1';
+    const baseUrl = LOCAL_BASE_URL;
     const models = [
       {
         id: 'gpt-5',
@@ -231,7 +291,7 @@ describe('useProviderSetupFlow API selection', () => {
     // live value, while the writer restores the placeholder before persisting.
     // The review screen claims to show what will be saved, so it renders the
     // same placeholder form; a literal header value stays masked.
-    const baseUrl = 'https://gateway.example/v1';
+    const baseUrl = LOCAL_BASE_URL;
     const raw = [
       {
         id: 'gpt-5',
@@ -288,145 +348,4 @@ describe('useProviderSetupFlow API selection', () => {
       resolved[0]!.generationConfig,
     );
   });
-
-  it('prefills saved Responses and clears API when switching to Anthropic', () => {
-    const submit = vi.fn().mockResolvedValue(undefined);
-    const { result } = renderHook(() => useProviderSetupFlow(submit));
-    act(() =>
-      result.current.start(customProvider, AuthType.USE_OPENAI_RESPONSES),
-    );
-    expect(result.current.state.protocol).toBe(AuthType.USE_OPENAI);
-    expect(result.current.state.wireApi).toBe('responses');
-    act(() => result.current.selectProtocol(AuthType.USE_OPENAI));
-    expect(result.current.state.wireApi).toBe('responses');
-    act(() => result.current.goBack());
-    act(() => result.current.selectProtocol(AuthType.USE_ANTHROPIC));
-    expect(result.current.state.step).toBe('baseUrl');
-    act(() => result.current.submit());
-    expect(submit.mock.calls[0]![1]).not.toHaveProperty('wireApi');
-  });
-
-  it.each([false, true])(
-    'preserves saved preset APIs without broadcasting a hidden choice (mixed: %s)',
-    (mixed) => {
-      const config = {
-        ...preset,
-        models: mixed
-          ? [{ id: 'deepseek-v4' }, { id: 'deepseek-pro' }]
-          : preset.models,
-        showAdvancedConfig: true,
-      };
-      const models = [
-        {
-          id: 'deepseek-v4',
-          name: '[DeepSeek] Tuned',
-          envKey: 'DEEPSEEK_API_KEY',
-          baseUrl: 'https://api.deepseek.com/v1',
-          wireApi: 'responses' as const,
-        },
-        ...(mixed
-          ? [
-              {
-                id: 'deepseek-pro',
-                name: '[DeepSeek] Pro',
-                envKey: 'DEEPSEEK_API_KEY',
-                baseUrl: 'https://api.deepseek.com/v1',
-              },
-            ]
-          : []),
-      ];
-      const selection = {
-        id: 'deepseek-v4',
-        authType: AuthType.USE_OPENAI_RESPONSES,
-      };
-      const submit = vi.fn().mockResolvedValue(undefined);
-      const { result } = renderHook(() =>
-        useProviderSetupFlow(submit, { openai: models }, undefined, selection),
-      );
-      act(() => result.current.start(config, AuthType.USE_OPENAI_RESPONSES));
-      expect(result.current.state.step).toBe('apiKey');
-      act(() => result.current.submitApiKey('sk-secret-test'));
-      act(() => result.current.submitAdvancedConfig());
-      const preview = JSON.parse(result.current.state.previewJson);
-      act(() => result.current.submit());
-      expect(submit).toHaveBeenCalledOnce();
-      const [provider, inputs] = submit.mock.calls[0]!;
-      expect(inputs).not.toHaveProperty('wireApi');
-      const plan = buildInstallPlan(provider, inputs, models, selection);
-      expect(plan.modelProviders![0]!.models).toEqual(models);
-      expect(preview.modelProviders.openai).toEqual(models);
-      expect(preview.security.auth.selectedType).toBe(plan.authType);
-      expect(plan.authType).toBe(AuthType.USE_OPENAI_RESPONSES);
-      expect(preview.model.name).toBe(plan.modelSelection!.modelId);
-      expect(result.current.state.previewJson).not.toContain(inputs.apiKey);
-    },
-  );
-
-  it('omits api when re-authenticating a preset with no Responses install', () => {
-    // A preset re-authentication that carries no Responses install must submit
-    // without `wireApi`: stamping the default route would make the recorded
-    // model-list version irreproducible by buildProviderTemplate and prompt a
-    // spurious update on every launch.
-    const submit = vi.fn().mockResolvedValue(undefined);
-    const { result } = renderHook(() => useProviderSetupFlow(submit));
-    act(() => result.current.start(preset));
-    act(() => result.current.submitApiKey('sk-secret-test'));
-    expect(submit).toHaveBeenCalledOnce();
-    expect(submit.mock.calls[0]![1]).not.toHaveProperty('wireApi');
-  });
-
-  it('derives the baseUrl placeholder from the effective API route', () => {
-    const submit = vi.fn().mockResolvedValue(undefined);
-    const { result } = renderHook(() => useProviderSetupFlow(submit));
-    act(() =>
-      result.current.start(customProvider, AuthType.USE_OPENAI_RESPONSES),
-    );
-    act(() => result.current.selectProtocol(AuthType.USE_OPENAI));
-    // The Responses API prefilled from the saved model keeps the protocol
-    // reselection on the Responses wire's default endpoint.
-    expect(result.current.state.baseUrlPlaceholder).toBe(
-      'https://api.openai.com',
-    );
-    act(() => result.current.selectWireApi('chat-completions'));
-    expect(result.current.state.baseUrlPlaceholder).toBe(
-      'https://api.openai.com/v1',
-    );
-    act(() => result.current.goBack());
-    act(() => result.current.selectWireApi('responses'));
-    expect(result.current.state.baseUrlPlaceholder).toBe(
-      'https://api.openai.com',
-    );
-    act(() => result.current.submitBaseUrl());
-    expect(result.current.state.baseUrl).toBe('https://api.openai.com');
-    // Switching routes after a blank submit must drop the endpoint auto-filled
-    // from the previous route's placeholder — otherwise the install persists
-    // the Responses default onto the Chat Completions wire, where the SDK
-    // appends no /v1 and every request 404s.
-    act(() => result.current.goBack());
-    act(() => result.current.goBack());
-    act(() => result.current.selectWireApi('chat-completions'));
-    expect(result.current.state.baseUrl).toBe('https://api.openai.com/v1');
-    expect(result.current.state.baseUrlPlaceholder).toBe(
-      'https://api.openai.com/v1',
-    );
-    act(() => result.current.submitBaseUrl());
-    expect(result.current.state.baseUrl).toBe('https://api.openai.com/v1');
-  });
-  it.each(['responses', 'chat-completions'] as const)(
-    'keeps a typed endpoint when selecting %s',
-    (wireApi) => {
-      const { result } = renderHook(() => useProviderSetupFlow(vi.fn()));
-      act(() => result.current.start(customProvider));
-      act(() => result.current.selectProtocol(AuthType.USE_OPENAI));
-      act(() => result.current.selectWireApi('chat-completions'));
-      act(() =>
-        result.current.changeBaseUrl('https://private-gateway.example/v1'),
-      );
-      act(() => result.current.goBack());
-      act(() => result.current.selectWireApi(wireApi));
-      expect(result.current.state.baseUrl).toBe(
-        'https://private-gateway.example/v1',
-      );
-    },
-  );
 });

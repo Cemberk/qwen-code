@@ -189,7 +189,7 @@ export type OpenTuiStreamEvent =
 export interface EventMapperContext {
   /**
    * Formats an `error` event payload for display (ink parity:
-   * parseAndFormatApiError + auth-type hints). Falls back to the raw
+   * parseAndFormatApiError). Falls back to the raw
    * error message when absent.
    */
   formatError?: (error: unknown) => string;

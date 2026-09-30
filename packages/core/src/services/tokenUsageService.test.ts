@@ -27,6 +27,10 @@ import {
   resetTokenUsageFailureLogging,
 } from './tokenUsageService.js';
 
+// Usage files can hold records written under an auth type that no longer
+// exists; they still group under their own key.
+const OTHER_AUTH_TYPE = 'legacy-auth';
+
 describe('tokenUsageService', () => {
   let tempDir: string;
   let originalRuntimeDir: string | undefined;
@@ -76,7 +80,7 @@ describe('tokenUsageService', () => {
       model,
       options.durationMs ?? 100,
       promptId,
-      options.authType ?? AuthType.USE_GEMINI,
+      options.authType ?? AuthType.USE_OPENAI,
       usageData,
       undefined,
       options.subagentName,
@@ -101,7 +105,7 @@ describe('tokenUsageService', () => {
         totalTokenCount: 35,
       },
       {
-        authType: AuthType.QWEN_OAUTH,
+        authType: AuthType.USE_OPENAI,
         subagentName: 'agent-a',
       },
     );
@@ -115,7 +119,7 @@ describe('tokenUsageService', () => {
       localMonth: '2026-05',
       sessionId: 'session-1',
       model: 'qwen-model',
-      authType: AuthType.QWEN_OAUTH,
+      authType: AuthType.USE_OPENAI,
       source: 'agent-a',
       inputTokens: 10,
       outputTokens: 20,
@@ -193,7 +197,7 @@ describe('tokenUsageService', () => {
           totalTokenCount: 15,
         },
         {
-          authType: AuthType.USE_VERTEX_AI,
+          authType: OTHER_AUTH_TYPE,
           timestamp: '2026-05-25T12:00:00.000Z',
         },
       ),
@@ -239,8 +243,8 @@ describe('tokenUsageService', () => {
       'model-b',
     ]);
     expect(summary.byAuthType.map((group) => group.key)).toEqual([
-      AuthType.USE_GEMINI,
-      AuthType.USE_VERTEX_AI,
+      AuthType.USE_OPENAI,
+      OTHER_AUTH_TYPE,
     ]);
   });
 
@@ -442,7 +446,7 @@ describe('tokenUsageService', () => {
           totalTokenCount: 3,
         },
         {
-          authType: AuthType.USE_GEMINI,
+          authType: AuthType.USE_OPENAI,
           subagentName: 'agent-a',
         },
       ),
@@ -458,7 +462,7 @@ describe('tokenUsageService', () => {
           totalTokenCount: 9,
         },
         {
-          authType: AuthType.USE_VERTEX_AI,
+          authType: OTHER_AUTH_TYPE,
           subagentName: 'agent-a',
         },
       ),
@@ -474,7 +478,7 @@ describe('tokenUsageService', () => {
           totalTokenCount: 13,
         },
         {
-          authType: AuthType.USE_GEMINI,
+          authType: AuthType.USE_OPENAI,
         },
       ),
     );
@@ -490,22 +494,22 @@ describe('tokenUsageService', () => {
       expect.objectContaining({ key: 'model-a', totalTokens: 12 }),
     ]);
     expect(summary.byAuthType).toEqual([
-      expect.objectContaining({ key: AuthType.USE_GEMINI, totalTokens: 16 }),
-      expect.objectContaining({ key: AuthType.USE_VERTEX_AI, totalTokens: 9 }),
+      expect.objectContaining({ key: AuthType.USE_OPENAI, totalTokens: 16 }),
+      expect.objectContaining({ key: OTHER_AUTH_TYPE, totalTokens: 9 }),
     ]);
     expect(summary.byModelAndAuthType).toEqual([
       expect.objectContaining({
-        key: `model-b|${AuthType.USE_GEMINI}`,
+        key: `model-b|${AuthType.USE_OPENAI}`,
         model: 'model-b',
-        authType: AuthType.USE_GEMINI,
+        authType: AuthType.USE_OPENAI,
         totalTokens: 13,
       }),
       expect.objectContaining({
-        key: `model-a|${AuthType.USE_VERTEX_AI}`,
+        key: `model-a|${OTHER_AUTH_TYPE}`,
         totalTokens: 9,
       }),
       expect.objectContaining({
-        key: `model-a|${AuthType.USE_GEMINI}`,
+        key: `model-a|${AuthType.USE_OPENAI}`,
         totalTokens: 3,
       }),
     ]);

@@ -13,7 +13,6 @@ import { EnhancedErrorHandler } from './errorHandler.js';
 import type { ContentGeneratorConfig } from '../contentGenerator.js';
 import { isAbortError } from '../../utils/errors.js';
 import { createDebugLogger } from '../../utils/debugLogger.js';
-import { redactProxyError } from '../../utils/runtimeFetchOptions.js';
 import { extractTextFromContents } from '../../utils/extract-text-from-contents.js';
 
 const debugLogger = createDebugLogger('OPENAI');
@@ -97,10 +96,9 @@ export class OpenAIContentGenerator implements ContentGenerator {
         ],
       };
     } catch (error) {
-      const redactedError = redactProxyError(error);
-      debugLogger.error('OpenAI API Embedding Error:', redactedError);
+      debugLogger.error('OpenAI API Embedding Error:', error);
       throw new Error(
-        `OpenAI API error: ${redactedError instanceof Error ? redactedError.message : String(redactedError)}`,
+        `OpenAI API error: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }

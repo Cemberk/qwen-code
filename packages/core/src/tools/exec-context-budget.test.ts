@@ -21,7 +21,6 @@ describe('exec context output budget', () => {
       cwd: '/tmp',
       targetDir: '/tmp',
       model: 'test',
-      embeddingModel: 'test',
       sandbox: undefined,
       debugMode: false,
       userMemory: '',

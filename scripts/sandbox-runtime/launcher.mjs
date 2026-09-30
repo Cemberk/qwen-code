@@ -77,7 +77,7 @@ async function until(predicate, label) {
 }
 let summary;
 try {
-  await config.refreshAuth(AuthType.USE_OPENAI, true);
+  await config.refreshAuth(AuthType.USE_OPENAI);
   await config.initialize();
   if (spec.startupOnly) {
     summary = { code: 0, initialized: true };
@@ -96,7 +96,7 @@ try {
     if (spec.second) {
       const first = summary;
       config = await loadRuntime(spec.second.workspace, spec.second.baseUrl);
-      await config.refreshAuth(AuthType.USE_OPENAI, true);
+      await config.refreshAuth(AuthType.USE_OPENAI);
       await config.initialize();
       const secondCode = await runNonInteractive(
         config,

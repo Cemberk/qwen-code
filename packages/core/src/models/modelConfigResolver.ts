@@ -15,12 +15,14 @@
  * 2. CLI arguments - Command line flags (--model, --openaiApiKey, etc.)
  * 3. Environment variables - OPENAI_API_KEY, OPENAI_MODEL, etc.
  * 4. Settings - User/workspace settings file
- * 5. Defaults - Built-in default values
+ *
+ * There are no built-in defaults for the model id or base URL.
  */
 
-import { AuthType } from '../core/contentGenerator.js';
-import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
-import { DEFAULT_QWEN_MODEL } from '../config/models.js';
+import type {
+  AuthType,
+  ContentGeneratorConfig,
+} from '../core/contentGenerator.js';
 import { defaultModalities } from '../core/modalityDefaults.js';
 import { knownTokenLimit } from '../core/tokenLimits.js';
 import {
@@ -33,14 +35,11 @@ import {
   modelProvidersSource,
   defaultSource,
   computedSource,
-  type ConfigSource,
   type ConfigSources,
   type ConfigLayer,
 } from '../utils/configResolver.js';
 import {
-  AUTH_ENV_MAPPINGS,
-  DEFAULT_MODELS,
-  QWEN_OAUTH_ALLOWED_MODELS,
+  OPENAI_ENV_MAPPING,
   MODEL_GENERATION_CONFIG_FIELDS,
 } from './constants.js';
 import type { ModelConfig as ModelProviderConfig } from './types.js';
@@ -90,9 +89,6 @@ export interface ModelConfigSourcesInput {
 
   /** Model from ModelProviders (explicit selection, highest priority) */
   modelProvider?: ModelProviderConfig;
-
-  /** Proxy URL (computed from Config) */
-  proxy?: string;
 }
 
 /**
@@ -150,19 +146,13 @@ function applyTimeoutEnvOverride(
 export function resolveModelConfig(
   input: ModelConfigSourcesInput,
 ): ModelConfigResolutionResult {
-  const { authType, cli, settings, env, modelProvider, proxy } = input;
+  const { authType, cli, settings, env, modelProvider } = input;
   const warnings: string[] = [];
   const sources: ConfigSources = {};
 
-  // Special handling for Qwen OAuth
-  if (authType === AuthType.QWEN_OAUTH) {
-    return resolveQwenOAuthConfig(input, warnings);
-  }
-
-  // Get auth-specific env var mappings.
-  // If authType is not provided, do not read any auth env vars.
+  // If authType is not provided, do not read any env vars.
   const envMapping = authType
-    ? AUTH_ENV_MAPPINGS[authType]
+    ? OPENAI_ENV_MAPPING
     : { model: [], apiKey: [], baseUrl: [] };
 
   // Build layers for each field in priority order
@@ -189,12 +179,7 @@ export function resolveModelConfig(
     modelLayers.push(layer(settings.model, settingsSource('model.name')));
   }
 
-  const defaultModel = authType ? DEFAULT_MODELS[authType] : '';
-  const modelResult = resolveField(
-    modelLayers,
-    defaultModel,
-    defaultSource(defaultModel),
-  );
+  const modelResult = resolveField(modelLayers, '', defaultSource(''));
   sources['model'] = modelResult.source;
 
   // ---- API Key ----
@@ -287,87 +272,11 @@ export function resolveModelConfig(
     apiKey: apiKeyResult?.value,
     apiKeyEnvKey,
     baseUrl: baseUrlResult?.value,
-    proxy,
     ...generationConfig,
   };
-
-  // Add proxy source
-  if (proxy) {
-    sources['proxy'] = computedSource('Config.getProxy()');
-  }
 
   // Add authType source
   sources['authType'] = computedSource('provided by caller');
-
-  return { config, sources, warnings };
-}
-
-/**
- * Special resolver for Qwen OAuth authentication.
- * Qwen OAuth has fixed model options and uses dynamic tokens.
- */
-function resolveQwenOAuthConfig(
-  input: ModelConfigSourcesInput,
-  warnings: string[],
-): ModelConfigResolutionResult {
-  const { cli, settings, proxy, modelProvider } = input;
-  const sources: ConfigSources = {};
-
-  // Qwen OAuth only allows specific models
-  const allowedModels = new Set<string>(QWEN_OAUTH_ALLOWED_MODELS);
-
-  // Determine requested model
-  const requestedModel = cli?.model || settings?.model;
-  let resolvedModel: string;
-  let modelSource: ConfigSource;
-
-  if (requestedModel && allowedModels.has(requestedModel)) {
-    resolvedModel = requestedModel;
-    modelSource = cli?.model
-      ? cliSource('--model')
-      : settingsSource('model.name');
-  } else {
-    if (requestedModel) {
-      const isVisionModel =
-        requestedModel.includes('vl') || requestedModel.includes('vision');
-      const extraMessage = isVisionModel
-        ? ` Note: vision-model has been removed since coder-model now supports vision capabilities.`
-        : '';
-      warnings.push(
-        `Warning: Unsupported Qwen OAuth model '${requestedModel}', falling back to '${DEFAULT_QWEN_MODEL}'.${extraMessage}`,
-      );
-    }
-    resolvedModel = DEFAULT_QWEN_MODEL;
-    modelSource = defaultSource(`fallback to '${DEFAULT_QWEN_MODEL}'`);
-  }
-
-  sources['model'] = modelSource;
-  sources['apiKey'] = computedSource('Qwen OAuth dynamic token');
-  sources['authType'] = computedSource('provided by caller');
-
-  if (proxy) {
-    sources['proxy'] = computedSource('Config.getProxy()');
-  }
-
-  // Resolve generation config from settings and modelProvider
-  const generationConfig = resolveGenerationConfig(
-    settings?.generationConfig,
-    modelProvider?.generationConfig,
-    AuthType.QWEN_OAUTH,
-    resolvedModel,
-    sources,
-  );
-
-  // ---- Env override: QWEN_CODE_API_TIMEOUT_MS ----
-  applyTimeoutEnvOverride(input.env, generationConfig, sources, modelProvider);
-
-  const config: ContentGeneratorConfig = {
-    authType: AuthType.QWEN_OAUTH,
-    model: resolvedModel,
-    apiKey: 'QWEN_OAUTH_DYNAMIC_TOKEN',
-    proxy,
-    ...generationConfig,
-  };
 
   return { config, sources, warnings };
 }

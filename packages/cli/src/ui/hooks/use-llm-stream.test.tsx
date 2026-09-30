@@ -256,8 +256,7 @@ describe('useLlmStream', () => {
     const contentGeneratorConfig = {
       model: 'test-model',
       apiKey: 'test-key',
-      vertexai: false,
-      authType: AuthType.USE_GEMINI,
+      authType: AuthType.USE_OPENAI,
     };
     mockBackgroundShellRegistry = {
       setNotificationCallback: vi.fn(),
@@ -13500,10 +13499,10 @@ describe('useLlmStream', () => {
       const allowInlineModel = (modelId = 'inline-model') => {
         mockConfig.getModel = vi.fn(() => 'session-model');
         mockConfig.getContentGeneratorConfig = vi.fn(
-          () => ({ authType: AuthType.QWEN_OAUTH }) as never,
+          () => ({ authType: AuthType.USE_OPENAI }) as never,
         );
         mockConfig.getAvailableModelsForAuthType = vi.fn(
-          () => [{ id: modelId, authType: AuthType.QWEN_OAUTH }] as never,
+          () => [{ id: modelId, authType: AuthType.USE_OPENAI }] as never,
         );
       };
 
@@ -15505,10 +15504,10 @@ describe('useLlmStream', () => {
   });
 
   describe('Error Handling', () => {
-    it('should call parseAndFormatApiError with the correct authType on stream initialization failure', async () => {
+    it('should call parseAndFormatApiError on stream initialization failure', async () => {
       // 1. Setup
       const mockError = new Error('Rate limit exceeded');
-      const mockAuthType = AuthType.USE_VERTEX_AI;
+      const mockAuthType = AuthType.USE_OPENAI;
       mockParseAndFormatApiError.mockClear();
       mockSendMessageStream.mockReturnValue(
         (async function* () {
@@ -15558,7 +15557,6 @@ describe('useLlmStream', () => {
       await waitFor(() => {
         expect(mockParseAndFormatApiError).toHaveBeenCalledWith(
           'Rate limit exceeded',
-          mockAuthType,
         );
       });
     });
@@ -18176,10 +18174,9 @@ describe('useLlmStream', () => {
       });
 
       // Verify parseAndFormatApiError was called
-      expect(mockParseAndFormatApiError).toHaveBeenCalledWith(
-        { message: 'Test error' },
-        expect.any(String),
-      );
+      expect(mockParseAndFormatApiError).toHaveBeenCalledWith({
+        message: 'Test error',
+      });
     });
 
     it('should clear static error when starting a new query', async () => {

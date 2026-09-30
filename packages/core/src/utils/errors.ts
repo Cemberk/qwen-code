@@ -39,10 +39,8 @@ export function isAbortError(error: unknown): boolean {
   // A user cancel on a provider SDK path surfaces as `APIUserAbortError`. That
   // class does not set `.name` (it stays 'Error') and carries no ABORT_ERR
   // code, so the checks above miss it — leaving user cancels logged as
-  // api_errors and classified 'unknown' rather than 'abort'. Both SDKs this
-  // package depends on (`openai`, `@anthropic-ai/sdk`) are Stainless-generated
-  // and share this class name, so one check covers both. Match on the class
-  // name — as `getErrorType` below already does for SDK errors — so this
+  // api_errors and classified 'unknown' rather than 'abort'. Match on the
+  // class name — as `getErrorType` below already does for SDK errors — so this
   // provider-agnostic util needs no SDK import. The CLI bundle preserves class
   // names (esbuild `keepNames: true` in esbuild.config.js); other bundles that
   // minify without keepNames (e.g. vscode-ide-companion) do not, but they don't

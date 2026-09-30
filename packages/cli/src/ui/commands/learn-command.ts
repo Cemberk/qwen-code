@@ -5,7 +5,6 @@
  */
 
 import {
-  AuthType,
   buildLearnSkillPrompt,
   buildLearnVideoSkillRequest,
   expandHomeDir,
@@ -69,13 +68,7 @@ export const learnCommand: SlashCommand = {
     const video = parseLearnVideoInput(rawInput);
 
     if (video) {
-      const authType = config.getContentGeneratorConfig()?.authType;
-      const supportsVideoTransport =
-        authType === AuthType.USE_OPENAI || authType === AuthType.QWEN_OAUTH;
-      if (
-        config.getEffectiveInputModalities().video !== true ||
-        !supportsVideoTransport
-      ) {
+      if (config.getEffectiveInputModalities().video !== true) {
         return {
           type: 'message',
           messageType: 'error',

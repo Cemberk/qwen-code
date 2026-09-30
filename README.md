@@ -23,7 +23,7 @@
 
 - **Agentic out of the box** — Auto-Memory, Auto-Skills, SubAgents, Agent Teams, and MCP. Dynamic workflows, zero setup.
 - **Open-source, inside and out** — The framework and the Qwen models are open-source. They evolve together. No vendor lock-in.
-- **Multi-protocol** — Supports OpenAI, Anthropic, Gemini, and Qwen APIs. Any third-party provider or local model (Ollama / vLLM). Switch at runtime.
+- **Local models only** — Talks only to a local OpenAI-compatible model server on this machine (Ollama, LM Studio, vLLM, llama.cpp). No cloud providers and no sign-in: the base URL must be `127.0.0.1`, `::1` or `localhost`. Switch between local models at runtime.
 
 > [!TIP]
 > Qwen Code is actively iterating on itself — using its own agent and models to file issues, submit PRs, review code, and run tests. Powered by the community, driven by AI.
@@ -63,14 +63,14 @@ brew install qwen-code
 
 ## Quick Start
 
-Open a terminal in your project and start Qwen Code:
+Start a local OpenAI-compatible model server first (for example Ollama, which serves `http://127.0.0.1:11434/v1`). Then open a terminal in your project and start Qwen Code:
 
 ```bash
 cd /path/to/your-project
 qwen
 ```
 
-Inside the session, run `/auth` to configure your provider and API key. Then try:
+Inside the session, run `/auth` to enter the server's base URL, an API key value (any non-empty value if the server doesn't check keys) and the model IDs to use. Then try:
 
 ```text
 Explain this repository and show me where to start.
@@ -94,17 +94,17 @@ See the [Authentication Guide](https://qwenlm.github.io/qwen-code-docs/en/users/
 
 If you know Claude Code, you already know Qwen Code — and then some. We've put significant effort into [bringing Qwen Code to feature parity with Claude Code](https://github.com/wenshao/codeagents/blob/main/docs/comparison/qwen-code-improvement-report.md), improving both breadth and reliability across the board.
 
-| Feature                                                            | Qwen Code | Claude Code |
-| ------------------------------------------------------------------ | :-------: | :---------: |
-| SubAgents, Agent Teams, Dynamic Workflows                          |     ✓     |      ✓      |
-| Auto-Memory, Auto-Skills, Hooks                                    |     ✓     |      ✓      |
-| Built-in Skills (/batch, /loop, /bugfix…)                          |     ✓     |      ✓      |
-| MCP, Plan Mode, LSP Integration                                    |     ✓     |      ✓      |
-| Auto Mode, Sandbox, Git Worktrees                                  |     ✓     |      ✓      |
-| Headless Mode, Session Management                                  |     ✓     |      ✓      |
-| Open-source — model and framework                                  |     ✓     |      —      |
-| Multi-protocol (OpenAI / Anthropic / Gemini / Qwen + any provider) |     ✓     |      —      |
-| Agent Arena (multi-model head-to-head on same task)                |     ✓     |      —      |
+| Feature                                                          | Qwen Code | Claude Code |
+| ---------------------------------------------------------------- | :-------: | :---------: |
+| SubAgents, Agent Teams, Dynamic Workflows                        |     ✓     |      ✓      |
+| Auto-Memory, Auto-Skills, Hooks                                  |     ✓     |      ✓      |
+| Built-in Skills (/batch, /loop, /bugfix…)                        |     ✓     |      ✓      |
+| MCP, Plan Mode, LSP Integration                                  |     ✓     |      ✓      |
+| Auto Mode, Sandbox, Git Worktrees                                |     ✓     |      ✓      |
+| Headless Mode, Session Management                                |     ✓     |      ✓      |
+| Open-source — model and framework                                |     ✓     |      —      |
+| Runs on local models only (OpenAI-compatible server on loopback) |     ✓     |      —      |
+| Agent Arena (multi-model head-to-head on same task)              |     ✓     |      —      |
 
 ## Qwen Code Evaluation
 
@@ -149,8 +149,6 @@ https://raw.githubusercontent.com/QwenLM/qwen-code/refs/heads/main/.qwen/skills/
 Then follow the instructions inside to install, authenticate, and use Qwen Code via acpx for all coding tasks.
 ```
 
-- [**Aliyun Model Studio CLI**](https://github.com/modelstudioai/cli) — Official CLI for Aliyun's AI platform (`bailian-cli`). Extends Qwen Code with image/video generation, knowledge retrieval, app orchestration, and model deployment
-
 ## Privacy
 
 See the [Terms of Service and Privacy Notice](./docs/users/support/tos-privacy.md).
@@ -161,4 +159,4 @@ Contributions are welcome! See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelin
 
 ## Acknowledgments
 
-This project was originally based on [Google Gemini CLI](https://github.com/google-gemini/gemini-cli) v0.8.2. We gratefully acknowledge the Gemini CLI team's excellent work. Starting from Qwen Code v0.1, we stopped syncing with upstream and began independent development as a multi-protocol, multi-platform agent framework with deep integrations for Qwen models and beyond.
+This project was originally based on [Google Gemini CLI](https://github.com/google-gemini/gemini-cli) v0.8.2. We gratefully acknowledge the Gemini CLI team's excellent work. Starting from Qwen Code v0.1, we stopped syncing with upstream and began independent development as a multi-platform agent framework with deep integrations for Qwen models and beyond.

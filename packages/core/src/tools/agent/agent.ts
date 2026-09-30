@@ -1940,7 +1940,7 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
 
     // Read the parent's live generationConfig (systemInstruction + tool
     // declarations) so the fork's API requests share the parent's exact
-    // cache prefix for DashScope prompt caching. When the client isn't
+    // cache prefix for server-side prefix caching. When the client isn't
     // available (first turn edge case), fall back to the fork agent's own
     // system prompt and wildcard tools.
     let promptConfig: PromptConfig;

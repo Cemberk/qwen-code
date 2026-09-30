@@ -48,7 +48,7 @@ By default, suggestions use the same model as your main conversation. For lower-
 ### Via command
 
 ```
-/model --fast qwen3-coder-flash
+/model --fast qwen3:4b
 ```
 
 Or use `/model --fast` (without a model name) to open a selection dialog.
@@ -57,7 +57,7 @@ Or use `/model --fast` (without a model name) to open a selection dialog.
 
 ```json
 {
-  "fastModel": "qwen3-coder-flash"
+  "fastModel": "qwen3:4b"
 }
 ```
 
@@ -82,7 +82,7 @@ These settings can be configured in `settings.json`:
 
 ```json
 {
-  "fastModel": "qwen3-coder-flash",
+  "fastModel": "qwen3:4b",
   "ui": {
     "enableFollowupSuggestions": true,
     "enableCacheSharing": true

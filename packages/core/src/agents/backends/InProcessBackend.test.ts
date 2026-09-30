@@ -70,7 +70,7 @@ function createMockConfig() {
       model: 'test-model',
       authType: 'openai',
       apiKey: 'parent-key',
-      baseUrl: 'https://parent.example.com',
+      baseUrl: 'http://127.0.0.1:11434/v1',
     }),
     getAuthType: vi.fn().mockReturnValue('openai'),
     getModelsConfig: vi.fn().mockReturnValue({
@@ -1089,9 +1089,9 @@ describe('InProcessBackend', () => {
 
       const config = createSpawnConfig('agent-1');
       config.inProcess!.authOverrides = {
-        authType: 'anthropic',
+        authType: 'openai',
         apiKey: 'agent-key-123',
-        baseUrl: 'https://agent.example.com',
+        baseUrl: 'http://127.0.0.1:8080/v1',
       };
 
       await backend.spawnAgent(config);
@@ -1106,9 +1106,9 @@ describe('InProcessBackend', () => {
       );
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          authType: 'anthropic',
+          authType: 'openai',
           apiKey: 'agent-key-123',
-          baseUrl: 'https://agent.example.com',
+          baseUrl: 'http://127.0.0.1:8080/v1',
           model: 'test-model',
         }),
         agentContext,
@@ -1124,7 +1124,7 @@ describe('InProcessBackend', () => {
 
       const config = createSpawnConfig('agent-1');
       config.inProcess!.authOverrides = {
-        authType: 'anthropic',
+        authType: 'openai',
         apiKey: 'agent-key',
       };
 
@@ -1136,7 +1136,7 @@ describe('InProcessBackend', () => {
 
       expect(runtimeView).toBeDefined();
       expect(runtimeView!.contentGenerator).toBe(agentGenerator);
-      expect(runtimeView!.contentGeneratorConfig.authType).toBe('anthropic');
+      expect(runtimeView!.contentGeneratorConfig.authType).toBe('openai');
       expect(backend.getAgentContentGenerator('agent-1')).toBe(agentGenerator);
     });
 
@@ -1158,7 +1158,7 @@ describe('InProcessBackend', () => {
 
       const config = createSpawnConfig('agent-1');
       config.inProcess!.authOverrides = {
-        authType: 'anthropic',
+        authType: 'openai',
         apiKey: 'bad-key',
       };
 
@@ -1185,13 +1185,13 @@ describe('InProcessBackend', () => {
       config1.inProcess!.authOverrides = {
         authType: 'openai',
         apiKey: 'key-1',
-        baseUrl: 'https://api1.example.com',
+        baseUrl: 'http://127.0.0.1:8001/v1',
       };
       const config2 = createSpawnConfig('agent-2');
       config2.inProcess!.authOverrides = {
-        authType: 'anthropic',
+        authType: 'openai',
         apiKey: 'key-2',
-        baseUrl: 'https://api2.example.com',
+        baseUrl: 'http://127.0.0.1:8002/v1',
       };
 
       await backend.spawnAgent(config1);

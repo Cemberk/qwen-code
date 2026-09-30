@@ -25,7 +25,7 @@ import type { AvailableModel } from '../models/types.js';
 const route: ContentGeneratorConfig = {
   model: 'alias',
   authType: AuthType.USE_OPENAI,
-  baseUrl: 'https://one.example/v1',
+  baseUrl: 'http://127.0.0.1:11434/v1',
 };
 const declaration = {
   profile: 'openai-effort' as const,
@@ -76,15 +76,11 @@ function snapshotConfig(
 describe('reasoning declarations', () => {
   it('overrides a known default without persisting a user choice', () => {
     const resolved = resolveReasoningCapabilities(
-      {
-        ...route,
-        model: 'qwen3.8-max',
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-      },
-      { defaultEffort: 'medium' },
+      { ...route, model: 'gpt-5.2' },
+      { efforts: ['low', 'medium', 'xhigh'], defaultEffort: 'medium' },
     );
     expect(resolved).toMatchObject({
-      profile: 'dashscope-effort',
+      profile: 'openai-effort',
       efforts: ['low', 'medium', 'xhigh'],
       defaultEffort: 'medium',
     });
@@ -144,8 +140,7 @@ describe('reasoning declarations', () => {
     { ...declaration, defaultEffort: null },
     { ...declaration, efforts: ['low', 'low'] },
     { ...declaration, defaultEffort: 'max' },
-    { ...declaration, profile: 'gemini' },
-    { profile: 'dashscope-thinking', defaultEffort: 'medium' },
+    { profile: 'qwen-chat-template', defaultEffort: 'medium' },
   ])('rejects an invalid declaration %j', (value) => {
     expect(resolveReasoningCapabilities(route, value)).toBeUndefined();
     expect(() => validateReasoningCapabilities(route, value)).toThrow(
@@ -163,107 +158,20 @@ describe('reasoning declarations', () => {
   });
 
   it.each([
-    'claude-opus-4-6',
-    'us.anthropic.claude-opus-4-6-v1:0',
-    'anthropic.claude-opus-4.6',
-  ])('inherits native Claude tiers for %s', (model) => {
-    expect(
-      resolveReasoningCapabilities(
-        {
-          ...route,
-          model,
-          authType: AuthType.USE_ANTHROPIC,
-        },
-        { defaultEffort: 'medium' },
-      ),
-    ).toMatchObject({
-      profile: 'anthropic-adaptive',
-      efforts: ['low', 'medium', 'high', 'max'],
-      defaultEffort: 'medium',
-    });
-  });
-
-  it.each([
-    ['qwen3.5-plus', 'https://coding.dashscope.aliyuncs.com/v1'],
-    ['qwen3-max-2026-01-23', 'https://coding.dashscope.aliyuncs.com/v1'],
-    ['kimi-k2.5', 'https://coding.dashscope.aliyuncs.com/v1'],
-    ['kimi-k2.6', 'https://api.moonshot.ai/v1'],
-    [
-      'qwen3.6-flash',
-      'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
-    ],
-    [
-      'deepseek-v3.2',
-      'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
-    ],
-  ])('inherits %s toggle capabilities from its provider', (model, baseUrl) => {
-    const target = { ...route, model, baseUrl };
-    expect(
-      resolveReasoningCapabilities(target, { canDisable: false }),
-    ).toMatchObject({
-      disableField: baseUrl.includes('moonshot')
-        ? 'thinking'
-        : 'enable_thinking',
-      toggleOnly: true,
-      canDisable: false,
-    });
-    expect(
-      resolveReasoningCapabilities(target, { defaultEffort: 'medium' }),
-    ).toBeUndefined();
-  });
-
-  it('inherits the selected provider policy for the same model', () => {
-    const target = { ...route, model: 'qwen3.8-max-preview' };
-    const input = { defaultEffort: 'medium' };
-    expect(
-      resolveReasoningCapabilities(
-        {
-          ...target,
-          baseUrl:
-            'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
-        },
-        input,
-      ),
-    ).toMatchObject({ defaultEffort: 'medium', canDisable: false });
-    expect(
-      resolveReasoningCapabilities(
-        {
-          ...target,
-          baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        },
-        input,
-      )?.canDisable,
-    ).toBeUndefined();
-  });
-
-  it.each(['openai/gpt-5.4', 'openai/gpt-5.4:batch'])(
-    'infers nested reasoning for %s',
-    (model) => {
+    ['qwen-chat-template', 'enable_thinking', true],
+    ['deepseek-openai', 'thinking', false],
+  ] as const)(
+    'maps the %s profile to its wire switch',
+    (profile, disableField, toggleOnly) => {
+      const declared =
+        profile === 'qwen-chat-template'
+          ? { profile }
+          : { ...declaration, profile };
       expect(
-        resolveReasoningCapabilities(
-          {
-            ...route,
-            model,
-            baseUrl: 'https://openrouter.ai/api/v1',
-          },
-          { defaultEffort: 'medium' },
-        ),
-      ).toMatchObject({ profile: 'openai-reasoning', defaultEffort: 'medium' });
+        resolveReasoningCapabilities({ ...route, model: 'qwen3:8b' }, declared),
+      ).toMatchObject({ profile, disableField, toggleOnly });
     },
   );
-
-  it('ignores misleading Qwen hosts during inference', () => {
-    expect(
-      resolveReasoningCapabilities(
-        {
-          ...route,
-          model: 'qwen3.8-max',
-          baseUrl: 'https://evil.example/dashscope.aliyuncs.com',
-        },
-        { defaultEffort: 'medium' },
-      ),
-    ).toBeUndefined();
-  });
 });
 
 describe('prompt reasoning snapshots', () => {
@@ -386,36 +294,13 @@ describe('prompt reasoning snapshots', () => {
     });
   });
 
-  it('uses the captured capability for existing DashScope override controls', () => {
-    const config = Object.create(Config.prototype) as Config;
-    const generation = {
-      ...route,
-      model: 'qwen3.8-max',
-      baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-      reasoningRouteBaseUrl: route.baseUrl,
-      extra_body: { reasoning_effort: 'high' },
-      reasoningSnapshot: captureReasoningSnapshot([model('qwen3.8-max')]),
-    };
-    Object.assign(config, {
-      getContentGeneratorConfig: () => generation,
-      getReasoningEffort: () => undefined,
-      getResolvedModelConfig: () => {
-        throw new Error('must not read live reasoning');
-      },
-    });
-    expect(config.getReasoningEffortOverride()).toEqual({
-      source: 'extra_body',
-      field: 'reasoning_effort',
-    });
-  });
-
   it('is immutable, exact-route scoped, and never falls through to a changed registry', () => {
     const models = [
       model(),
       {
         ...model('alias', 'high'),
-        baseUrl: 'https://two.example/v1',
-        registryBaseUrl: 'https://two.example/v1',
+        baseUrl: 'http://127.0.0.1:1234/v1',
+        registryBaseUrl: 'http://127.0.0.1:1234/v1',
       },
     ];
     const snapshot = captureReasoningSnapshot(models);
@@ -445,14 +330,14 @@ describe('prompt reasoning snapshots', () => {
     expect(
       resolveReasoningForModel(config, {
         ...route,
-        baseUrl: 'https://two.example/v1',
+        baseUrl: 'http://127.0.0.1:1234/v1',
         reasoningSnapshot: snapshot,
       }),
     ).toMatchObject({ defaultEffort: 'high' });
     expect(
       resolveReasoningForModel(config, {
         ...route,
-        baseUrl: 'https://third.example/v1',
+        baseUrl: 'http://127.0.0.1:8000/v1',
         reasoningSnapshot: snapshot,
       }),
     ).toBeUndefined();

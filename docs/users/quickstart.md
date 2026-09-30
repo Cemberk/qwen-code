@@ -10,7 +10,7 @@ Make sure you have:
 
 - A **terminal** or command prompt open
 - A code project to work with
-- An API key from Alibaba Cloud ModelStudio ([Beijing](https://bailian.console.aliyun.com/) / [intl](https://modelstudio.console.alibabacloud.com/)), or an Alibaba Cloud Token Plan ([Beijing](https://bailian.console.aliyun.com/cn-beijing?tab=doc#/doc/?type=model&url=3028856) / [intl](https://modelstudio.console.alibabacloud.com/ap-southeast-1?tab=doc#/doc/?type=model)) subscription
+- A local OpenAI-compatible model server running on this machine, such as [Ollama](https://ollama.com), [LM Studio](https://lmstudio.ai), [vLLM](https://docs.vllm.ai) or llama.cpp (`llama-server`), with at least one model available
 
 ## Step 1: Install Qwen Code
 
@@ -52,29 +52,28 @@ npm install -g @qwen-code/qwen-code@latest
 brew install qwen-code
 ```
 
-## Step 2: Set up authentication
+## Step 2: Connect your local model server
 
-When you start an interactive session with the `qwen` command, you'll be prompted to configure authentication:
+When you start an interactive session with the `qwen` command, you'll be prompted to connect a model server:
 
 ```bash
-# You'll be prompted to set up authentication on first use
+# You'll be prompted to connect a local model server on first use
 qwen
 ```
 
 ```bash
-# Or run /auth anytime to change authentication method
+# Or run /auth anytime to change the server or models
 /auth
 ```
 
-The first-run menu lets you connect a model provider. Choose one of:
+The setup wizard asks for:
 
-- **Alibaba ModelStudio** — the recommended setup. Opens a sub-menu:
-  - **Token Plan**: usage-based billing with a dedicated endpoint, aimed at teams and companies. See the [Token Plan guide](https://bailian.console.aliyun.com/cn-beijing?tab=doc#/doc/?type=model&url=3028856) ([intl](https://modelstudio.console.alibabacloud.com/ap-southeast-1?tab=doc#/doc/?type=model)) for setup instructions.
-  - **Standard API Key**: connect with an existing API key from Alibaba Cloud ModelStudio ([Beijing](https://bailian.console.aliyun.com/) / [intl](https://modelstudio.console.alibabacloud.com/)). See the API setup guide ([Beijing](https://bailian.console.aliyun.com/cn-beijing/?tab=doc#/doc/?type=model&url=3023091) / [intl](https://modelstudio.console.alibabacloud.com/ap-southeast-1?tab=doc#/doc/?type=model&url=2974721)) for details.
-- **Third-party Providers** — choose a built-in provider (DeepSeek, Grok, MiniMax, Z.AI, Kimi, Idealab, ModelScope, OpenRouter, Requesty, and more) and connect with an API key.
-- **Custom Provider** — manually connect a local server, proxy, or unsupported provider.
+1. **Base URL** of the server's OpenAI-compatible API. The host must be `127.0.0.1`, `::1` or `localhost`. For example: Ollama `http://127.0.0.1:11434/v1`, LM Studio `http://localhost:1234/v1`, vLLM `http://127.0.0.1:8000/v1`, llama.cpp `http://127.0.0.1:8080/v1`.
+2. **API key**: any non-empty value if your server doesn't check keys (for example `ollama`).
+3. **Model IDs**: picked from the server's model list when it provides one, or typed in.
+4. Optional advanced settings, then a review of the JSON saved to `settings.json`.
 
-> ⚠️ **Note**: Qwen OAuth was discontinued on April 15, 2026. If you were previously using Qwen OAuth, please switch to one of the methods above.
+Qwen Code only connects to model servers on this machine. Remote and cloud endpoints are rejected.
 
 > [!note]
 >
@@ -82,7 +81,7 @@ The first-run menu lets you connect a model provider. Choose one of:
 
 > [!tip]
 >
-> To configure authentication, start Qwen Code and run `/auth`. Use `/doctor` to check your current configuration at any time. See the [Authentication](./configuration/auth) page for details.
+> To connect a model server, start Qwen Code and run `/auth`. Use `/doctor` to check your current configuration at any time. See the [Authentication](./configuration/auth) page for details.
 
 ## Step 3: Start your first session
 
@@ -224,7 +223,7 @@ Here are the most important commands for daily use:
 | Command               | What it does                                     | Example                            |
 | --------------------- | ------------------------------------------------ | ---------------------------------- |
 | `qwen`                | start Qwen Code                                  | `qwen`                             |
-| `/auth`               | Change authentication method (in session)        | `/auth`                            |
+| `/auth`               | Connect a local model server (in session)        | `/auth`                            |
 | `/doctor`             | Check current authentication and environment     | `/doctor`                          |
 | `/help`               | Display help information for available commands  | `/help` or `/?`                    |
 | `/compress`           | Replace chat history with summary to save Tokens | `/compress`                        |

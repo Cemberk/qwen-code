@@ -18,10 +18,6 @@ import { LoggingContentGenerator } from './index.js';
 import { OpenAIContentConverter } from '../openaiContentGenerator/converter.js';
 import { openaiRequestCaptureContext } from '../openaiContentGenerator/requestCaptureContext.js';
 import {
-  convertResponsesEventToGemini,
-  ResponsesStreamState,
-} from '../openaiResponsesContentGenerator/responses-converter.js';
-import {
   logApiRequest,
   logApiResponse,
   logApiError,
@@ -522,7 +518,7 @@ describe('LoggingContentGenerator', () => {
     );
     const generatorConfig = {
       model: 'test-model',
-      authType: AuthType.QWEN_OAUTH,
+      authType: AuthType.USE_OPENAI,
       contextWindowSize: 1_000_000,
     };
     const generator = new LoggingContentGenerator(
@@ -750,7 +746,7 @@ describe('LoggingContentGenerator', () => {
     };
     const generator = new LoggingContentGenerator(
       wrapped,
-      createConfig({ authType: AuthType.USE_ANTHROPIC }),
+      createConfig(),
       generatorConfig,
     );
 
@@ -1103,45 +1099,6 @@ describe('LoggingContentGenerator', () => {
     expect(
       genAiExchangeState.controllers.at(-1)?.finalize,
     ).toHaveBeenCalledWith(true);
-  });
-
-  it('emits output type only for Gemini and Vertex wire configurations', async () => {
-    const makeGenerator = (authType: AuthType) =>
-      new LoggingContentGenerator(
-        createWrappedGenerator(
-          vi
-            .fn()
-            .mockResolvedValue(
-              createResponse('response', 'actual-model', [{ text: 'ok' }]),
-            ),
-          vi.fn(),
-        ),
-        createConfig(),
-        { model: 'request-model', authType },
-      );
-    const request = {
-      model: 'request-model',
-      contents: 'Hello',
-      config: { responseMimeType: 'application/json' },
-    } as unknown as GenerateContentParameters;
-
-    await makeGenerator(AuthType.USE_GEMINI).generateContent(request, 'g');
-    await makeGenerator(AuthType.USE_VERTEX_AI).generateContent(request, 'v');
-    await makeGenerator(AuthType.USE_OPENAI).generateContent(request, 'o');
-
-    expect(loggingSpanRecords[0]!.attributes).toMatchObject({
-      'gen_ai.operation.name': 'generate_content',
-      'gen_ai.provider.name': 'gcp.gemini',
-      'gen_ai.output.type': 'json',
-    });
-    expect(loggingSpanRecords[1]!.attributes).toMatchObject({
-      'gen_ai.operation.name': 'generate_content',
-      'gen_ai.provider.name': 'gcp.vertex_ai',
-      'gen_ai.output.type': 'json',
-    });
-    expect(
-      loggingSpanRecords[2]!.attributes['gen_ai.output.type'],
-    ).toBeUndefined();
   });
 
   it('orders non-stream finish reasons by candidate index', async () => {
@@ -2501,73 +2458,6 @@ describe('LoggingContentGenerator', () => {
     expect(spanRecord.ended).toBe(true);
   });
 
-  it('reports nested Responses stream errors with provider details', async () => {
-    const message =
-      'Your requests to gpt-6-astra in eastus have exceeded rate limit.';
-    const expectedMessage = `Responses API error: rate_limit_exceeded: ${message}`;
-    const wrapped = createWrappedGenerator(
-      vi.fn(),
-      vi.fn().mockResolvedValue(
-        (async function* () {
-          const chunk = convertResponsesEventToGemini(
-            {
-              event: 'error',
-              data: {
-                type: 'error',
-                error: {
-                  message,
-                  type: 'too_many_requests',
-                  code: 'rate_limit_exceeded',
-                },
-              },
-            },
-            'gpt-6-astra',
-            new ResponsesStreamState(),
-          );
-          if (chunk) yield chunk;
-        })(),
-      ),
-    );
-    const generator = new LoggingContentGenerator(wrapped, createConfig(), {
-      model: 'gpt-6-astra',
-      authType: AuthType.USE_OPENAI_RESPONSES,
-      enableOpenAILogging: true,
-    });
-    const stream = await generator.generateContentStream(
-      { model: 'gpt-6-astra', contents: 'Hello' },
-      'prompt-responses-error',
-    );
-    await expect(async () => {
-      for await (const _item of stream) {
-        // Consume the stream to reach the provider error.
-      }
-    }).rejects.toThrow(expectedMessage);
-
-    expect(logApiResponse).not.toHaveBeenCalled();
-    expect(logApiError).toHaveBeenCalledTimes(1);
-    const [, errorEvent] = vi.mocked(logApiError).mock.calls[0];
-    expect(errorEvent).toMatchObject({
-      error_message: expectedMessage,
-      error_type: 'too_many_requests',
-      status_code: 429,
-      auth_type: AuthType.USE_OPENAI_RESPONSES,
-    });
-    const openaiLoggerInstance = vi.mocked(OpenAILogger).mock.results[0]
-      ?.value as { logInteraction: ReturnType<typeof vi.fn> };
-    const [, , loggedError] = openaiLoggerInstance.logInteraction.mock.calls[0];
-    expect(loggedError).toMatchObject({
-      message: expectedMessage,
-      code: 'rate_limit_exceeded',
-      type: 'too_many_requests',
-      status: 429,
-    });
-    expect(getStreamSpanRecord().endMetadata).toMatchObject({
-      success: false,
-      errorType: 'too_many_requests',
-      errorStatusCode: 429,
-    });
-  });
-
   it('keeps a real partial-stream failure as an error when it races an abort', async () => {
     const abortController = new AbortController();
     const response = createResponse(
@@ -3344,7 +3234,7 @@ describe('LoggingContentGenerator', () => {
       // Provider-injected fields the synthetic reconstruction would drop:
       reasoning_effort: 'max',
       extra_body: { thinking: { type: 'enabled' }, enable_thinking: true },
-      metadata: { dashscope_user_id: 'abc' },
+      metadata: { user_id: 'abc' },
     } as unknown as OpenAI.Chat.ChatCompletionCreateParams;
 
     const wrapped = createWrappedGenerator(
@@ -3379,7 +3269,7 @@ describe('LoggingContentGenerator', () => {
     expect(loggedRequest).toMatchObject({
       reasoning_effort: 'max',
       extra_body: { thinking: { type: 'enabled' }, enable_thinking: true },
-      metadata: { dashscope_user_id: 'abc' },
+      metadata: { user_id: 'abc' },
     });
   });
 

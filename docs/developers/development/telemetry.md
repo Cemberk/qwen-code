@@ -265,8 +265,8 @@ and logs still carry `session.id`.
 
 When telemetry is enabled, Qwen Code registers `UndiciInstrumentation`
 which creates a client-side HTTP span for every outbound `fetch()`
-request originated by the process — including the LLM SDKs (`openai`,
-`@google/genai`, `@anthropic-ai/sdk`) and the MCP StreamableHTTP client. The span
+request originated by the process — including the `openai` SDK used for
+model requests and the MCP StreamableHTTP client. The span
 lets you see network latency (TTFB / response body transfer) separately
 from upstream model processing time, which the existing
 `api.generateContent` span alone can't distinguish.
@@ -389,7 +389,7 @@ The following events are logged:
   - **Attributes**: `skill_name` (string), `success` (boolean), `prompt_id` (string)
 
 - `qwen-code.auth`: Authentication event.
-  - **Attributes**: `auth_type` (string), `action_type` ("auto", "manual", "coding-plan"), `status` ("success", "error", "cancelled"), `error_message` (optional)
+  - **Attributes**: `auth_type` (string), `action_type` ("auto", "manual"), `status` ("success", "error", "cancelled"), `error_message` (optional)
 
 #### Subagent Events
 

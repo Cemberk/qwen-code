@@ -23,7 +23,6 @@ import {
   DISABLED_REQUEST_TIMEOUT_MS,
 } from '../constants.js';
 import { buildRuntimeFetchOptions } from '../../../utils/runtimeFetchOptions.js';
-import type { OpenAIRuntimeFetchOptions } from '../../../utils/runtimeFetchOptions.js';
 
 // Mock OpenAI
 vi.mock('openai', () => ({
@@ -47,8 +46,9 @@ vi.mock('../../../utils/debugLogger.js', () => ({
   createDebugLogger: vi.fn(() => mockDebugLogger),
 }));
 
+const runtimeFetch = vi.hoisted(() => vi.fn());
 vi.mock('../../../utils/runtimeFetchOptions.js', () => ({
-  buildRuntimeFetchOptions: vi.fn(),
+  buildRuntimeFetchOptions: vi.fn(() => ({ fetch: runtimeFetch })),
 }));
 
 describe('DefaultOpenAICompatibleProvider', () => {
@@ -62,16 +62,10 @@ describe('DefaultOpenAICompatibleProvider', () => {
     vi.clearAllMocks();
     savedMaxOutputTokensEnv = process.env[MAX_OUTPUT_TOKENS_ENV];
     delete process.env[MAX_OUTPUT_TOKENS_ENV];
-    const mockedBuildRuntimeFetchOptions =
-      buildRuntimeFetchOptions as unknown as MockedFunction<
-        (sdkType: 'openai', proxyUrl?: string) => OpenAIRuntimeFetchOptions
-      >;
-    mockedBuildRuntimeFetchOptions.mockReturnValue(undefined);
-
     // Mock ContentGeneratorConfig
     mockContentGeneratorConfig = {
       apiKey: 'test-api-key',
-      baseUrl: 'https://api.openai.com/v1',
+      baseUrl: 'http://127.0.0.1:11434/v1',
       timeout: 60000,
       maxRetries: 2,
       model: 'gpt-4',
@@ -80,7 +74,6 @@ describe('DefaultOpenAICompatibleProvider', () => {
     // Mock Config
     mockCliConfig = {
       getCliVersion: vi.fn().mockReturnValue('1.0.0'),
-      getProxy: vi.fn().mockReturnValue(undefined),
       getSessionId: vi.fn().mockReturnValue('session-1'),
     } as unknown as Config;
 
@@ -182,14 +175,16 @@ describe('DefaultOpenAICompatibleProvider', () => {
       expect(OpenAI).toHaveBeenCalledWith(
         expect.objectContaining({
           apiKey: 'test-api-key',
-          baseURL: 'https://api.openai.com/v1',
+          baseURL: 'http://127.0.0.1:11434/v1',
           timeout: 60000,
           maxRetries: 2,
           defaultHeaders: {
             'User-Agent': `QwenCode/1.0.0 (${process.platform}; ${process.arch})`,
           },
+          fetch: runtimeFetch,
         }),
       );
+      expect(buildRuntimeFetchOptions).toHaveBeenCalledWith();
 
       expect(client).toBeDefined();
     });
@@ -203,7 +198,7 @@ describe('DefaultOpenAICompatibleProvider', () => {
       expect(OpenAI).toHaveBeenCalledWith(
         expect.objectContaining({
           apiKey: 'test-api-key',
-          baseURL: 'https://api.openai.com/v1',
+          baseURL: 'http://127.0.0.1:11434/v1',
           timeout: DEFAULT_TIMEOUT,
           maxRetries: DEFAULT_MAX_RETRIES,
           defaultHeaders: {
@@ -653,20 +648,6 @@ describe('DefaultOpenAICompatibleProvider', () => {
         });
       },
     );
-
-    it('keeps the OpenRouter nested reasoning protocol', () => {
-      mockContentGeneratorConfig.baseUrl = 'https://openrouter.ai/api/v1';
-      const result = provider.buildRequest(
-        {
-          model: 'openai/gpt-5.4',
-          messages: [],
-          reasoning: { effort: 'max' },
-        } as unknown as OpenAI.Chat.ChatCompletionCreateParams,
-        'prompt-id',
-      ) as unknown as Record<string, unknown>;
-      expect(result['reasoning']).toEqual({ effort: 'xhigh' });
-      expect(result['reasoning_effort']).toBeUndefined();
-    });
 
     it('preserves an explicit flat effort over the configured effort', () => {
       mockContentGeneratorConfig.extra_body = { reasoning_effort: 'low' };

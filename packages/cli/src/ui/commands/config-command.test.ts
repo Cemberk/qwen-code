@@ -159,7 +159,7 @@ describe('configCommand', () => {
       });
     });
 
-    it.each(['ui.accessibility.screenReader', 'security.auth.useExternal'])(
+    it.each(['ui.accessibility.screenReader'])(
       'enables an unset default-off setting: %s',
       async (key) => {
         const { ctx, setValuesMock } = createMockContext({});
@@ -446,14 +446,14 @@ describe('configCommand', () => {
 
     it('masks sensitive values in listing', async () => {
       const { ctx } = createMockContext({
-        proxy: 'http://my-secret-proxy:8080',
+        security: { auth: { baseUrl: 'http://127.0.0.1:8080/my-secret-path' } },
       });
       const result = await configCommand.action!(ctx, '--help');
 
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',
-        content: expect.not.stringContaining('my-secret-proxy'),
+        content: expect.not.stringContaining('my-secret-path'),
       });
     });
   });
@@ -463,7 +463,7 @@ describe('configCommand', () => {
       const { ctx } = createMockContext({});
       const result = await configCommand.action!(
         ctx,
-        'proxy=http://localhost:8080',
+        'security.auth.baseUrl=http://localhost:8080/v1',
       );
 
       expect(result).toEqual({
@@ -489,11 +489,11 @@ describe('configCommand', () => {
   });
 
   describe('security-sensitive settings', () => {
-    it('shows sensitive warning when setting proxy', async () => {
+    it('shows sensitive warning when setting a base URL', async () => {
       const { ctx } = createMockContext({});
       const result = await configCommand.action!(
         ctx,
-        'proxy=http://localhost:8080',
+        'security.auth.baseUrl=http://localhost:8080/v1',
       );
 
       expect(result).toEqual({
@@ -503,16 +503,16 @@ describe('configCommand', () => {
       });
     });
 
-    it('masks sensitive value when getting proxy without =', async () => {
+    it('masks sensitive value when getting a base URL without =', async () => {
       const { ctx } = createMockContext({
-        proxy: 'http://secret-proxy:8080',
+        security: { auth: { baseUrl: 'http://127.0.0.1:8080/secret-path' } },
       });
-      const result = await configCommand.action!(ctx, 'proxy');
+      const result = await configCommand.action!(ctx, 'security.auth.baseUrl');
 
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',
-        content: expect.not.stringContaining('secret-proxy'),
+        content: expect.not.stringContaining('secret-path'),
       });
     });
 
@@ -520,13 +520,13 @@ describe('configCommand', () => {
       const { ctx } = createMockContext({});
       const result = await configCommand.action!(
         ctx,
-        'proxy=http://secret-proxy:8080',
+        'security.auth.baseUrl=http://127.0.0.1:8080/secret-path',
       );
 
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',
-        content: expect.not.stringContaining('secret-proxy'),
+        content: expect.not.stringContaining('secret-path'),
       });
       expect(result).toEqual({
         type: 'message',

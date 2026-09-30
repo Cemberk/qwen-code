@@ -8,7 +8,6 @@ import type React from 'react';
 import { useMemo, useState } from 'react';
 import { Box, Text } from 'ink';
 import Link from 'ink-link';
-import { AuthType } from '@qwen-code/qwen-code-core';
 import { useConfig } from '../../contexts/ConfigContext.js';
 import { theme } from '../../semantic-colors.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
@@ -33,25 +32,18 @@ export function ArenaStartDialog({
 
   const modelItems = useMemo(() => {
     const allModels = config.getAllConfiguredModels();
-    const selectableModels = allModels.filter(
-      (model) => !model.isRuntimeModel && !model.imageOnly,
-    );
+    const selectableModels = allModels.filter((model) => !model.isRuntimeModel);
 
     return selectableModels.map((model) => {
       const token = `${model.authType}:${model.id}`;
-      const isQwenOauth = model.authType === AuthType.QWEN_OAUTH;
       return {
         key: token,
         value: token,
         label: `[${model.authType}] ${model.label}`,
-        disabled: isQwenOauth,
       };
     });
   }, [config]);
-  const hasDisabledQwenOauth = modelItems.some((item) => item.disabled);
-  const selectableModelCount = modelItems.filter(
-    (item) => !item.disabled,
-  ).length;
+  const selectableModelCount = modelItems.length;
   const needsMoreModels = selectableModelCount < 2;
   const shouldShowMoreModelsHint =
     selectableModelCount >= 2 && selectableModelCount < 3;
@@ -114,28 +106,17 @@ export function ArenaStartDialog({
         </Box>
       )}
 
-      {(hasDisabledQwenOauth || needsMoreModels) && (
+      {needsMoreModels && (
         <Box marginTop={1} flexDirection="column">
-          {hasDisabledQwenOauth && (
-            <Text color={theme.status.warning}>
-              {t('Note: qwen-oauth models are not supported in Arena.')}
-            </Text>
-          )}
-          {needsMoreModels && (
-            <>
-              <Text color={theme.status.warning}>
-                {t('Arena requires at least 2 models. To add more:')}
-              </Text>
-              <Text color={theme.status.warning}>
-                {t(
-                  '  - Run /auth to set up a Coding Plan (includes multiple models)',
-                )}
-              </Text>
-              <Text color={theme.status.warning}>
-                {t('  - Or configure modelProviders in settings.json')}
-              </Text>
-            </>
-          )}
+          <Text color={theme.status.warning}>
+            {t('Arena requires at least 2 models. To add more:')}
+          </Text>
+          <Text color={theme.status.warning}>
+            {t('  - Run /auth and select more models from your local server')}
+          </Text>
+          <Text color={theme.status.warning}>
+            {t('  - Or configure modelProviders in settings.json')}
+          </Text>
         </Box>
       )}
 

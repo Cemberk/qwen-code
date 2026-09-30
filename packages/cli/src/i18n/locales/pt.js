@@ -1198,64 +1198,17 @@ export default {
   'Welcome back! (Last updated: {{timeAgo}})':
     'Bem-vindo de volta! (Última atualização: {{timeAgo}})',
   'Overall Goal:': 'Objetivo Geral:',
-  'Connect a Provider': 'Conectar um provedor',
   'You must connect a provider to proceed. Press Ctrl+C again to exit.':
     'Você deve conectar um provedor para prosseguir. Pressione Ctrl+C novamente para sair.',
-  'Terms of Services and Privacy Notice':
-    'Termos de Serviço e Aviso de Privacidade',
-  'Qwen OAuth': 'Qwen OAuth',
-  'Discontinued — switch to Coding Plan or API Key':
-    'Descontinuado — mude para Coding Plan ou API Key',
-  'Qwen OAuth free tier was discontinued on 2026-04-15. Please select Coding Plan or API Key instead.':
-    'O nível gratuito do Qwen OAuth foi descontinuado em 2026-04-15. Selecione Coding Plan ou API Key.',
-  'Qwen OAuth free tier was discontinued on 2026-04-15. Please select a model from another provider or run /auth to switch.':
-    'O nível gratuito do Qwen OAuth foi descontinuado em 2026-04-15. Por favor, selecione um modelo de outro provedor ou execute /auth para trocar.',
-  '\n⚠ Qwen OAuth free tier was discontinued on 2026-04-15. Please select another option.\n':
-    '\n⚠ O nível gratuito do Qwen OAuth foi descontinuado em 2026-04-15. Selecione outra opção.\n',
-  'Paid \u00B7 Up to 6,000 requests/5 hrs \u00B7 All Alibaba Cloud Coding Plan Models':
-    'Pago \u00B7 Até 6.000 solicitações/5 hrs \u00B7 Todos os modelos Alibaba Cloud Coding Plan',
-  'Alibaba Cloud Coding Plan': 'Alibaba Cloud Coding Plan',
   'Bring your own API key': 'Traga sua própria API Key',
-  'Browser-based authentication with third-party providers (e.g. OpenRouter, ModelScope)':
-    'Autenticação baseada em navegador com provedores terceiros (por exemplo, OpenRouter, ModelScope)',
-  'Authentication is enforced to be {{enforcedType}}, but you are currently using {{currentType}}.':
-    'A autenticação é forçada para {{enforcedType}}, mas você está usando {{currentType}} no momento.',
-  'Qwen OAuth Authentication': 'Autenticação Qwen OAuth',
-  'Please visit this URL to authorize:': 'Visite esta URL para autorizar:',
-  'Waiting for authorization': 'Aguardando autorização',
-  'Time remaining:': 'Tempo restante:',
-  'Qwen OAuth Authentication Timeout':
-    'Tempo Limite de Autenticação Qwen OAuth',
-  'OAuth token expired (over {{seconds}} seconds). Please select authentication method again.':
-    'Token OAuth expirado (mais de {{seconds}} segundos). Selecione o método de autenticação novamente.',
-  'Press any key to return to authentication type selection.':
-    'Pressione qualquer tecla para retornar à seleção do tipo de autenticação.',
-  'Waiting for Qwen OAuth authentication...':
-    'Aguardando autenticação Qwen OAuth...',
-  'Authentication timed out. Please try again.':
-    'A autenticação expirou. Tente novamente.',
-  'Waiting for auth... (Press ESC or CTRL+C to cancel)':
-    'Aguardando autenticação... (Pressione ESC ou CTRL+C para cancelar)',
   'Missing API key for OpenAI-compatible auth. Set settings.security.auth.apiKey, or set the {{envKeyHint}} environment variable.':
     'API Key ausente para autenticação compatível com OpenAI. Defina settings.security.auth.apiKey ou a variável de ambiente {{envKeyHint}}.',
-  '{{envKeyHint}} environment variable not found. Please set it in your .env file or environment variables.':
-    'Variável de ambiente {{envKeyHint}} não encontrada. Defina-a no seu arquivo .env ou variáveis de ambiente.',
-  '{{envKeyHint}} environment variable not found (or set settings.security.auth.apiKey). Please set it in your .env file or environment variables.':
-    'Variável de ambiente {{envKeyHint}} não encontrada (ou defina settings.security.auth.apiKey). Defina-a no seu arquivo .env ou variáveis de ambiente.',
   'Missing API key for OpenAI-compatible auth. Set the {{envKeyHint}} environment variable.':
     'API Key ausente para autenticação compatível com OpenAI. Defina a variável de ambiente {{envKeyHint}}.',
-  'Anthropic provider missing required baseUrl in modelProviders[].baseUrl.':
-    'Provedor Anthropic sem a baseUrl necessária em modelProviders[].baseUrl.',
-  'ANTHROPIC_BASE_URL environment variable not found.':
-    'Variável de ambiente ANTHROPIC_BASE_URL não encontrada.',
-  'Invalid auth method selected.':
-    'Método de autenticação inválido selecionado.',
   'Failed to authenticate. Message: {{message}}':
     'Falha ao autenticar. Mensagem: {{message}}',
   'Authenticated successfully with {{authType}} credentials.':
     'Autenticado com sucesso com credenciais {{authType}}.',
-  'Invalid QWEN_DEFAULT_AUTH_TYPE value: "{{value}}". Valid values are: {{validValues}}':
-    'Valor QWEN_DEFAULT_AUTH_TYPE inválido: "{{value}}". Valores válidos são: {{validValues}}',
   // ============================================================================
   // Dialogs - Model
   // ============================================================================
@@ -1747,20 +1700,13 @@ export default {
   // Coding Plan Authentication
   // ============================================================================
   'API key cannot be empty.': 'A API Key não pode estar vazia.',
-  'You can get your Coding Plan API key here':
-    'Você pode obter sua API Key do Coding Plan aqui',
-  'Failed to update Coding Plan configuration: {{message}}':
-    'Falha ao atualizar a configuração do Coding Plan: {{message}}',
 
   // ============================================================================
   // Auth Dialog - View Titles and Labels
   // ============================================================================
-  'Coding Plan': 'Coding Plan',
   Custom: 'Personalizado',
-  'Select Region for Coding Plan': 'Selecionar região do Coding Plan',
   'Choose based on where your account is registered':
     'Escolha com base em onde sua conta está registrada',
-  'Enter Coding Plan API Key': 'Inserir API Key do Coding Plan',
 
   // ============================================================================
   // Coding Plan International Updates
@@ -1808,8 +1754,6 @@ export default {
     'Configuração do {{region}} atualizada com sucesso.',
   'Authenticated successfully with {{region}}. API key and model configs saved to settings.json.':
     'Autenticado com sucesso com {{region}}. API Key e configurações de modelo salvas em settings.json.',
-  'Tip: Use /model to switch between available Coding Plan models.':
-    'Dica: Use /model para alternar entre os modelos disponíveis do Coding Plan.',
   'Type something...': 'Digite algo...',
   Submit: 'Enviar',
   'Submit answers': 'Enviar respostas',
@@ -1821,63 +1765,27 @@ export default {
     '↑/↓: Navegar | ←/→: Alternar abas | Enter: Selecionar',
   '↑/↓: Navigate | Enter: Select | Esc: Cancel':
     '↑/↓: Navegar | Enter: Selecionar | Esc: Cancelar',
-  'Authenticate using Qwen OAuth': 'Autenticar usando Qwen OAuth',
-  'Authenticate using Alibaba Cloud Coding Plan':
-    'Autenticar usando Alibaba Cloud Coding Plan',
-  'Region for Coding Plan (china/global)':
-    'Região para Coding Plan (china/global)',
-  'API key for Coding Plan': 'API Key para Coding Plan',
   'Show current authentication status': 'Mostrar status atual de autenticação',
   'Authentication completed successfully.':
     'Autenticação concluída com sucesso.',
-  'Starting Qwen OAuth authentication...':
-    'Iniciando autenticação Qwen OAuth...',
-  'Successfully authenticated with Qwen OAuth.':
-    'Autenticado com sucesso via Qwen OAuth.',
-  'Failed to authenticate with Qwen OAuth: {{error}}':
-    'Falha ao autenticar com Qwen OAuth: {{error}}',
-  'Processing Alibaba Cloud Coding Plan authentication...':
-    'Processando autenticação Alibaba Cloud Coding Plan...',
-  'Successfully authenticated with Alibaba Cloud Coding Plan.':
-    'Autenticado com sucesso via Alibaba Cloud Coding Plan.',
-  'Failed to authenticate with Coding Plan: {{error}}':
-    'Falha ao autenticar com Coding Plan: {{error}}',
-  '阿里云百炼 (aliyun.com)': '阿里云百炼 (aliyun.com)',
   Global: 'Global',
-  'Alibaba Cloud (alibabacloud.com)': 'Alibaba Cloud (alibabacloud.com)',
-  'Select region for Coding Plan:': 'Selecione a região para Coding Plan:',
-  'Enter your Coding Plan API key: ': 'Insira sua API Key do Coding Plan: ',
-  'Select authentication method:': 'Selecione o método de autenticação:',
   '\n=== Authentication Status ===\n': '\n=== Status de Autenticação ===\n',
-  '⚠  No authentication method configured.\n':
-    '⚠  Nenhum método de autenticação configurado.\n',
   'Run one of the following commands to get started:\n':
     'Execute um dos seguintes comandos para começar:\n',
-  '  qwen auth qwen-oauth     - Authenticate with Qwen OAuth (discontinued)':
-    '  qwen auth qwen-oauth     - Autenticar com Qwen OAuth (descontinuado)',
   'Or simply run:': 'Ou simplesmente execute:',
   '  qwen auth                - Interactive authentication setup\n':
     '  qwen auth                - Configuração interativa de autenticação\n',
-  '✓ Authentication Method: Qwen OAuth': '✓ Método de autenticação: Qwen OAuth',
   '  Type: Free tier (discontinued 2026-04-15)':
     '  Tipo: Nível gratuito (descontinuado 2026-04-15)',
   '  Limit: No longer available': '  Limite: Não mais disponível',
-  'Qwen OAuth free tier was discontinued on 2026-04-15. Run /auth to switch to Coding Plan, OpenRouter, Fireworks AI, or another provider.':
-    'O nível gratuito do Qwen OAuth foi descontinuado em 2026-04-15. Execute /auth para mudar para Coding Plan, OpenRouter, Fireworks AI ou outro provedor.',
-  '✓ Authentication Method: Alibaba Cloud Coding Plan':
-    '✓ Método de autenticação: Alibaba Cloud Coding Plan',
-  'Global - Alibaba Cloud': 'Global - Alibaba Cloud',
   '  Region: {{region}}': '  Região: {{region}}',
   '  Current Model: {{model}}': '  Modelo atual: {{model}}',
   '  Config Version: {{version}}': '  Versão da configuração: {{version}}',
   '  Status: API key configured\n': '  Status: API Key configurada\n',
-  '⚠  Authentication Method: Alibaba Cloud Coding Plan (Incomplete)':
-    '⚠  Método de autenticação: Alibaba Cloud Coding Plan (Incompleto)',
   '  Issue: API key not found in environment or settings\n':
     '  Problema: API Key não encontrada no ambiente ou configurações\n',
   '  Run `qwen auth coding-plan` to re-configure.\n':
     '  Execute `qwen auth coding-plan` para reconfigurar.\n',
-  '✓ Authentication Method: {{type}}': '✓ Método de autenticação: {{type}}',
   '  Status: Configured\n': '  Status: Configurado\n',
   'Failed to check authentication status: {{error}}':
     'Falha ao verificar status de autenticação: {{error}}',
@@ -2040,8 +1948,6 @@ export default {
   'Press Ctrl+Y to retry': 'Pressione Ctrl+Y para tentar novamente',
   'No failed request to retry.': 'Nenhuma solicitação com falha para repetir.',
   'to retry last request': 'para repetir a última solicitação',
-  'Invalid API key. Coding Plan API keys start with "sk-sp-". Please check.':
-    'API Key inválida. As API Keys do Coding Plan começam com "sk-sp-". Verifique.',
   'Lock release warning': 'Aviso de liberação de bloqueio',
   'Metadata write warning': 'Aviso de gravação de metadados',
   "Subsequent dreams may be skipped as locked until the next session's staleness sweep cleans the file.":
@@ -2075,7 +1981,6 @@ export default {
   'Status:': 'Estado:',
   Use: 'Uso',
   '中国 (China)': 'China',
-  '中国 (China) - 阿里云百炼': 'China - 阿里云百炼',
 
   // Stats Dashboard — Category 2
   'Activity Heatmap': 'Mapa de Atividade',
@@ -2111,8 +2016,6 @@ export default {
   out: 'saída',
   'In/Out': 'Ent/Saída',
   // Update command
-  'Update successful! Please restart Qwen Code to use the new version. Switching model providers before restarting may not work correctly.':
-    'Atualização bem-sucedida! Reinicie o Qwen Code para usar a nova versão. Alternar provedores de modelo antes de reiniciar pode não funcionar corretamente.',
   'Standalone install detected. Please rerun the standalone installer to update:':
     'Instalação standalone detectada. Execute novamente o instalador standalone para atualizar:',
   'Unable to auto-update this standalone installation. Please reinstall from:':

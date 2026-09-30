@@ -24,7 +24,6 @@ import {
   InMemoryImagePayloadStore,
   buildReattachParts,
   replaceImagePayloadsInPlace,
-  trailingReattachPartCount,
 } from '../../services/image-payload-references.js';
 import { convertToFunctionResponse } from '../coreToolScheduler.js';
 import { getToolCallPreparations } from '../tool-call-preparation.js';
@@ -1396,9 +1395,6 @@ describe('OpenAIContentConverter', () => {
       expect(name).not.toContain('.');
     });
 
-    // DashScope places its cache breakpoint `trailingReattachPartCount`
-    // blocks before the end of the last message (#11627), so every part of
-    // the reattach region, labels included, must stay exactly one block.
     it('emits one wire block per reattach region part', () => {
       const store = new InMemoryImagePayloadStore();
       const history: Content[] = ['a', 'b'].map((data) => ({
@@ -1422,9 +1418,7 @@ describe('OpenAIContentConverter', () => {
         requestContext,
       );
       const content = messages.at(-1)?.content as Array<{ type: string }>;
-      const regionCount = trailingReattachPartCount(contents);
 
-      expect(regionCount).toBe(5);
       expect(content.map((block) => block.type)).toEqual([
         'text',
         'image_url',
@@ -1434,7 +1428,6 @@ describe('OpenAIContentConverter', () => {
         'text',
         'image_url',
       ]);
-      expect(content.length - regionCount).toBe(2);
     });
 
     it('preserves ordered multi-part startup reminder user content', () => {

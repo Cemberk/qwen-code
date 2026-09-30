@@ -9,8 +9,6 @@ import process from 'node:process';
 import { AuthType } from '../core/contentGenerator.js';
 import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
 import type { ContentGeneratorConfigSources } from '../core/contentGenerator.js';
-import { DEFAULT_QWEN_MODEL } from '../config/models.js';
-import { normalizeOpenAiWireBaseUrl } from '../core/openaiContentGenerator/constants.js';
 import { tokenLimit } from '../core/tokenLimits.js';
 import { defaultModalities } from '../core/modalityDefaults.js';
 import {
@@ -19,13 +17,9 @@ import {
 } from '../utils/runtimeModelPrefix.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
 
-import {
-  ModelRegistry,
-  resolveModelSelectionAuthType,
-} from './modelRegistry.js';
+import { ModelRegistry } from './modelRegistry.js';
 import {
   type ModelProvidersConfig,
-  type ProviderProtocolConfig,
   type ResolvedModelConfig,
   type AvailableModel,
   type ModelSwitchMetadata,
@@ -49,10 +43,7 @@ const debugLogger = createDebugLogger('ModelsConfig');
  * Callback for when the model changes.
  * Used by Config to refresh auth/ContentGenerator when needed.
  */
-export type OnModelChangeCallback = (
-  authType: AuthType,
-  requiresRefresh: boolean,
-) => Promise<void>;
+export type OnModelChangeCallback = (authType: AuthType) => Promise<void>;
 
 /**
  * Options for creating ModelsConfig
@@ -62,8 +53,6 @@ export interface ModelsConfigOptions {
   initialAuthType?: AuthType;
   /** Model providers configuration */
   modelProvidersConfig?: ModelProvidersConfig;
-  /** Maps custom provider ids to their SDK protocol (AuthType). */
-  providerProtocolConfig?: ProviderProtocolConfig;
   /** Generation config from CLI/settings */
   generationConfig?: Partial<ContentGeneratorConfig>;
   /** Source tracking for generation config */
@@ -98,9 +87,6 @@ export class ModelsConfig {
 
   // Flag for strict model provider selection
   private strictModelProviderSelection: boolean = false;
-
-  // One-shot flag for qwen-oauth credential caching
-  private requireCachedQwenCredentialsOnce: boolean = false;
 
   // One-shot flag indicating credentials were manually set via updateCredentials()
   // When true, syncAfterAuthRefresh should NOT override these credentials with
@@ -160,10 +146,7 @@ export class ModelsConfig {
   }
 
   constructor(options: ModelsConfigOptions = {}) {
-    this.modelRegistry = new ModelRegistry(
-      options.modelProvidersConfig,
-      options.providerProtocolConfig,
-    );
+    this.modelRegistry = new ModelRegistry(options.modelProvidersConfig);
     this.onModelChange = options.onModelChange;
 
     // Initialize generation config
@@ -179,17 +162,7 @@ export class ModelsConfig {
 
     // Initialize selection state
     const initialModelId = this._generationConfig.model;
-    this.currentAuthType = options.initialAuthType
-      ? resolveModelSelectionAuthType(
-          options.initialAuthType,
-          this.generationConfigSources['model']?.kind === 'default'
-            ? undefined
-            : initialModelId,
-          options.modelProvidersConfig,
-          options.providerProtocolConfig,
-          options.initialRegistryBaseUrl,
-        )
-      : undefined;
+    this.currentAuthType = options.initialAuthType;
     if (this.currentAuthType && initialModelId) {
       const initialModel = this.modelRegistry.getModel(
         this.currentAuthType,
@@ -213,7 +186,6 @@ export class ModelsConfig {
     generationConfig: Partial<ContentGeneratorConfig>;
     generationConfigSources: ContentGeneratorConfigSources;
     strictModelProviderSelection: boolean;
-    requireCachedQwenCredentialsOnce: boolean;
     hasManualCredentials: boolean;
     activeRuntimeModelSnapshotId: string | undefined;
     currentRegistryBaseUrl: string | null | undefined;
@@ -225,7 +197,6 @@ export class ModelsConfig {
         this.generationConfigSources,
       ),
       strictModelProviderSelection: this.strictModelProviderSelection,
-      requireCachedQwenCredentialsOnce: this.requireCachedQwenCredentialsOnce,
       hasManualCredentials: this.hasManualCredentials,
       activeRuntimeModelSnapshotId: this.activeRuntimeModelSnapshotId,
       currentRegistryBaseUrl: this.currentRegistryBaseUrl,
@@ -245,8 +216,6 @@ export class ModelsConfig {
     this._generationConfig = snapshot.generationConfig;
     this.generationConfigSources = snapshot.generationConfigSources;
     this.strictModelProviderSelection = snapshot.strictModelProviderSelection;
-    this.requireCachedQwenCredentialsOnce =
-      snapshot.requireCachedQwenCredentialsOnce;
     this.hasManualCredentials = snapshot.hasManualCredentials;
     this.activeRuntimeModelSnapshotId = snapshot.activeRuntimeModelSnapshotId;
     this.currentRegistryBaseUrl = snapshot.currentRegistryBaseUrl;
@@ -256,7 +225,7 @@ export class ModelsConfig {
    * Get current model ID
    */
   getModel(): string {
-    return this._generationConfig.model || DEFAULT_QWEN_MODEL;
+    return this._generationConfig.model || '';
   }
 
   /**
@@ -295,51 +264,18 @@ export class ModelsConfig {
   }
 
   /**
-   * Get all configured models across authTypes.
-   *
-   * Notes:
-   * - By default, returns models across all authTypes.
-   * - qwen-oauth models are always ordered first.
-   * - Runtime model option (if active) is included before registry models of the same authType.
+   * Get all configured models, with the active runtime model (if any) first.
+   * `authTypes`, when given, limits the result to those auth types.
    */
   getAllConfiguredModels(authTypes?: AuthType[]): AvailableModel[] {
-    const inputAuthTypes =
-      authTypes && authTypes.length > 0 ? authTypes : Object.values(AuthType);
-
-    // De-duplicate while preserving the original order.
-    const seen = new Set<AuthType>();
-    const uniqueAuthTypes: AuthType[] = [];
-    for (const authType of inputAuthTypes) {
-      if (!seen.has(authType)) {
-        seen.add(authType);
-        uniqueAuthTypes.push(authType);
-      }
+    if (authTypes?.length && !authTypes.includes(AuthType.USE_OPENAI)) {
+      return [];
     }
-
-    // Force qwen-oauth to the front (if requested / defaulted in).
-    const orderedAuthTypes: AuthType[] = [];
-    if (uniqueAuthTypes.includes(AuthType.QWEN_OAUTH)) {
-      orderedAuthTypes.push(AuthType.QWEN_OAUTH);
-    }
-    for (const authType of uniqueAuthTypes) {
-      if (authType !== AuthType.QWEN_OAUTH) {
-        orderedAuthTypes.push(authType);
-      }
-    }
-
-    // Get runtime model option
     const runtimeOption = this.getRuntimeModelOption();
-
-    const allModels: AvailableModel[] = [];
-    for (const authType of orderedAuthTypes) {
-      // Add runtime option first if it matches this authType
-      if (runtimeOption && runtimeOption.authType === authType) {
-        allModels.push(runtimeOption);
-      }
-      // Add registry models
-      allModels.push(...this.modelRegistry.getModelsForAuthType(authType));
-    }
-    return allModels;
+    return [
+      ...(runtimeOption ? [runtimeOption] : []),
+      ...this.modelRegistry.getModelsForAuthType(AuthType.USE_OPENAI),
+    ];
   }
 
   /**
@@ -389,52 +325,12 @@ export class ModelsConfig {
     newModel: string,
     metadata?: ModelSwitchMetadata,
   ): Promise<void> {
-    // Special case: qwen-oauth model switch - hot update in place
-    // coder-model supports vision capabilities and can be hot-updated
-    if (
-      this.currentAuthType === AuthType.QWEN_OAUTH &&
-      newModel === DEFAULT_QWEN_MODEL
-    ) {
-      this.strictModelProviderSelection = false;
-      this.currentRegistryBaseUrl = undefined;
-      this._generationConfig.model = newModel;
-      this.generationConfigSources['model'] = {
-        kind: 'programmatic',
-        detail: metadata?.reason || 'setModel',
-      };
-      // Refresh model-derived defaults (modalities, context window) for the new
-      // model — otherwise the previous model's modalities linger and the vision
-      // bridge gate misreads whether the current model accepts images.
-      this.applyRawModelDerivedDefaults(newModel);
-
-      // Notify Config to update contentGeneratorConfig
-      if (this.onModelChange) {
-        await this.onModelChange(AuthType.QWEN_OAUTH, false);
-      }
-      return;
-    }
-
     // If model exists in registry, use full switch logic
     if (
       this.currentAuthType &&
       this.modelRegistry.hasModel(this.currentAuthType, newModel)
     ) {
       await this.switchModel(this.currentAuthType, newModel);
-      return;
-    }
-
-    // The registry buckets each model under the wire its `wireApi` derives, which
-    // may be the sibling OpenAI wire of the session's currentAuthType — probe
-    // it before falling back to a raw override that would bind the model id to
-    // the current wire's credentials and defaults.
-    const siblingWire =
-      this.currentAuthType === AuthType.USE_OPENAI
-        ? AuthType.USE_OPENAI_RESPONSES
-        : this.currentAuthType === AuthType.USE_OPENAI_RESPONSES
-          ? AuthType.USE_OPENAI
-          : undefined;
-    if (siblingWire && this.modelRegistry.hasModel(siblingWire, newModel)) {
-      await this.switchModel(siblingWire, newModel);
       return;
     }
 
@@ -451,7 +347,7 @@ export class ModelsConfig {
       this.applyRawModelDerivedDefaults(newModel);
 
       if (this.onModelChange && this.currentAuthType) {
-        await this.onModelChange(this.currentAuthType, true);
+        await this.onModelChange(this.currentAuthType);
       }
     } catch (error) {
       this.rollbackToStateSnapshot(rollbackSnapshot);
@@ -511,7 +407,7 @@ export class ModelsConfig {
   async switchModel(
     authType: AuthType,
     modelId: string,
-    options?: { requireCachedCredentials?: boolean; baseUrl?: string },
+    options?: { baseUrl?: string },
   ): Promise<void> {
     // Check if this is a RuntimeModelSnapshot reference
     const runtimeModelSnapshotId = this.extractRuntimeModelSnapshotId(modelId);
@@ -521,9 +417,6 @@ export class ModelsConfig {
     }
 
     const rollbackSnapshot = this.createStateSnapshotForRollback();
-    if (authType === AuthType.QWEN_OAUTH && options?.requireCachedCredentials) {
-      this.requireCachedQwenCredentialsOnce = true;
-    }
 
     try {
       const isAuthTypeChange = authType !== this.currentAuthType;
@@ -539,11 +432,6 @@ export class ModelsConfig {
           `Model '${modelId}' not found for authType '${authType}'`,
         );
       }
-      if (model.imageOnly || model.voiceOnly || model.realtimeOnly) {
-        throw new Error(
-          `${model.imageOnly ? 'Image' : model.voiceOnly ? 'Voice' : 'Realtime'}-only model '${modelId}' cannot be used as the primary model`,
-        );
-      }
 
       const previousModelId = rollbackSnapshot.generationConfig.model || '';
       const previousAuthType = rollbackSnapshot.currentAuthType;
@@ -555,29 +443,13 @@ export class ModelsConfig {
               rollbackSnapshot.currentRegistryBaseUrl,
             ) ?? this.modelRegistry.getModel(previousAuthType, previousModelId))
           : undefined;
-      const sharesOpenAICredentials =
-        (authType === AuthType.USE_OPENAI ||
-          authType === AuthType.USE_OPENAI_RESPONSES) &&
-        (previousAuthType === AuthType.USE_OPENAI ||
-          previousAuthType === AuthType.USE_OPENAI_RESPONSES);
-      const sameEndpoint = (a: string | undefined, b: string | undefined) =>
-        a === b ||
-        (isAuthTypeChange &&
-          sharesOpenAICredentials &&
-          normalizeOpenAiWireBaseUrl(a) === normalizeOpenAiWireBaseUrl(b));
       const canReusePreviousApiKey =
-        authType !== AuthType.QWEN_OAUTH &&
-        (!isAuthTypeChange ||
-          (sharesOpenAICredentials &&
-            sameEndpoint(
-              rollbackSnapshot.generationConfig.baseUrl,
-              model.baseUrl,
-            ))) &&
+        !isAuthTypeChange &&
         !!rollbackSnapshot.generationConfig.apiKey &&
         !!model.envKey &&
         previousModel !== undefined &&
         previousModel.envKey === model.envKey &&
-        sameEndpoint(previousModel.baseUrl, model.baseUrl);
+        previousModel.baseUrl === model.baseUrl;
       const previousApiKey = canReusePreviousApiKey
         ? rollbackSnapshot.generationConfig.apiKey
         : undefined;
@@ -598,12 +470,8 @@ export class ModelsConfig {
       // Clear active runtime model snapshot since we're now using a registry model
       this.activeRuntimeModelSnapshotId = undefined;
 
-      const requiresRefresh = isAuthTypeChange
-        ? true
-        : this.checkRequiresRefresh(previousModelId);
-
       if (this.onModelChange) {
-        await this.onModelChange(authType, requiresRefresh);
+        await this.onModelChange(authType);
       }
     } catch (error) {
       // Rollback on error
@@ -869,15 +737,6 @@ export class ModelsConfig {
   }
 
   /**
-   * Check and consume the one-shot cached credentials flag
-   */
-  consumeRequireCachedCredentialsFlag(): boolean {
-    const value = this.requireCachedQwenCredentialsOnce;
-    this.requireCachedQwenCredentialsOnce = false;
-    return value;
-  }
-
-  /**
    * Apply resolved model config to generation config
    */
   private applyResolvedModelDefaults(model: ResolvedModelConfig): void {
@@ -896,25 +755,8 @@ export class ModelsConfig {
     };
 
     // Clear credentials to avoid reusing previous model's API key
-
-    // For Qwen OAuth, apiKey must always be a placeholder. It will be dynamically
-    // replaced when building requests. Do not preserve any previous key or read
-    // from envKey.
-    //
-    // (OpenAI client instantiation requires an apiKey even though it will be
-    // replaced later.)
-    if (this.currentAuthType === AuthType.QWEN_OAUTH) {
-      this._generationConfig.apiKey = 'QWEN_OAUTH_DYNAMIC_TOKEN';
-      this.generationConfigSources['apiKey'] = {
-        kind: 'computed',
-        detail: 'Qwen OAuth placeholder token',
-      };
-      this._generationConfig.apiKeyEnvKey = undefined;
-      delete this.generationConfigSources['apiKeyEnvKey'];
-    } else {
-      this._generationConfig.apiKey = undefined;
-      this._generationConfig.apiKeyEnvKey = undefined;
-    }
+    this._generationConfig.apiKey = undefined;
+    this._generationConfig.apiKeyEnvKey = undefined;
 
     // Read API key from environment variable if envKey is specified
     if (model.envKey !== undefined) {
@@ -989,71 +831,6 @@ export class ModelsConfig {
   }
 
   /**
-   * Check if model switch requires ContentGenerator refresh.
-   *
-   * Note: This method is ONLY called by switchModel() for same-authType model switches.
-   * Cross-authType switches use switchModel(authType, modelId), which always requires full refresh.
-   *
-   * When this method is called:
-   * - this.currentAuthType is already the target authType
-   * - We're checking if switching between two models within the SAME authType needs refresh
-   *
-   * Examples:
-   * - Qwen OAuth: coder-model switches (same authType, hot-update safe)
-   * - OpenAI: model-a -> model-b with same envKey (same authType, hot-update safe)
-   * - OpenAI: gpt-4 -> deepseek-chat with different envKey (same authType, needs refresh)
-   *
-   * Cross-authType scenarios:
-   * - OpenAI -> Qwen OAuth: handled by switchModel(authType, modelId), always refreshes
-   * - Qwen OAuth -> OpenAI: handled by switchModel(authType, modelId), always refreshes
-   */
-  private checkRequiresRefresh(previousModelId: string): boolean {
-    // Defensive: this method is only called after switchModel() sets currentAuthType,
-    // but keep type safety for any future callsites.
-    const authType = this.currentAuthType;
-    if (!authType) {
-      return true;
-    }
-
-    // For Qwen OAuth, model switches within the same authType can always be hot-updated
-    // (coder-model supports vision capabilities and doesn't require ContentGenerator recreation)
-    if (authType === AuthType.QWEN_OAUTH) {
-      return false;
-    }
-
-    // Get previous and current model configs.
-    // Use current baseUrl to disambiguate when multiple models share the same id.
-    const currentModel = this.modelRegistry.getModel(
-      authType,
-      this._generationConfig.model || '',
-      this._generationConfig.baseUrl || undefined,
-    );
-    const previousModel = this.modelRegistry.getModel(
-      authType,
-      previousModelId,
-    );
-
-    // If either model is not in registry, require refresh to be safe
-    if (!previousModel || !currentModel) {
-      return true;
-    }
-
-    // Check if critical fields changed that require ContentGenerator recreation
-    const criticalFieldsChanged =
-      previousModel.envKey !== currentModel.envKey ||
-      previousModel.baseUrl !== currentModel.baseUrl;
-
-    if (criticalFieldsChanged) {
-      return true;
-    }
-
-    // For other auth types with strict model provider selection,
-    // if no critical fields changed, we can still hot-update
-    // (e.g., switching between two OpenAI models with same envKey and baseUrl)
-    return false;
-  }
-
-  /**
    * Sync state after auth refresh with fallback strategy:
    * 1. If modelId can be found in modelRegistry, use the config from modelRegistry.
    * 2. Otherwise, if existing credentials exist in resolved generationConfig from other sources
@@ -1084,8 +861,6 @@ export class ModelsConfig {
           ? this._generationConfig.baseUrl
           : undefined);
     const wasRegistered =
-      (authType === AuthType.USE_OPENAI ||
-        authType === AuthType.USE_OPENAI_RESPONSES) &&
       previousAuthType === authType &&
       this.currentRegistryBaseUrl !== undefined &&
       modelId === this._generationConfig.model;
@@ -1096,11 +871,6 @@ export class ModelsConfig {
     if (wasRegistered && !resolved) {
       throw new Error(
         `Model '${modelId}' is no longer configured for authType '${authType}'. Select an available model.`,
-      );
-    }
-    if (resolved?.imageOnly || resolved?.voiceOnly || resolved?.realtimeOnly) {
-      throw new Error(
-        `${resolved.imageOnly ? 'Image' : resolved.voiceOnly ? 'Voice' : 'Realtime'}-only model '${modelId}' cannot be used as the primary model`,
       );
     }
 
@@ -1353,8 +1123,6 @@ export class ModelsConfig {
     const rollbackSnapshot = this.createStateSnapshotForRollback();
 
     try {
-      const isAuthTypeChange =
-        runtimeModelSnapshot.authType !== this.currentAuthType;
       this.currentAuthType = runtimeModelSnapshot.authType;
       this.activeRuntimeModelSnapshotId = snapshotId;
       this.currentRegistryBaseUrl = undefined;
@@ -1401,13 +1169,8 @@ export class ModelsConfig {
         );
       }
 
-      const requiresRefresh = isAuthTypeChange;
-
       if (this.onModelChange) {
-        await this.onModelChange(
-          runtimeModelSnapshot.authType,
-          requiresRefresh,
-        );
+        await this.onModelChange(runtimeModelSnapshot.authType);
       }
     } catch (error) {
       this.rollbackToStateSnapshot(rollbackSnapshot);
@@ -1433,11 +1196,6 @@ export class ModelsConfig {
       id: snapshot.modelId,
       label: snapshot.modelId,
       authType: snapshot.authType,
-      /**
-       * `isVision` is for automatic switching of qwen-oauth vision model.
-       * Runtime models are basically specified via CLI arguments, env variables,
-       * or settings for other auth types.
-       */
       isVision: false,
       contextWindowSize: snapshot.generationConfig?.contextWindowSize,
       isRuntimeModel: true,
@@ -1499,25 +1257,15 @@ export class ModelsConfig {
    * This enables hot-reloading of modelProviders settings without restarting the CLI.
    *
    * @param modelProvidersConfig - The updated model providers configuration
-   * @param providerProtocolConfig - Updated provider->protocol map; `undefined`
-   *   preserves the existing map (see {@link ModelRegistry.reloadModels}).
    */
   reloadModelProvidersConfig(
     modelProvidersConfig?: ModelProvidersConfig,
-    providerProtocolConfig?: ProviderProtocolConfig,
   ): void {
-    this.modelRegistry.reloadModels(
-      modelProvidersConfig,
-      providerProtocolConfig,
-    );
+    this.modelRegistry.reloadModels(modelProvidersConfig);
   }
 
   /** The raw providers config the registry was last built from. */
   getModelProvidersConfig(): ModelProvidersConfig | undefined {
     return this.modelRegistry.getModelProvidersConfig();
-  }
-
-  getProviderProtocolConfig(): ProviderProtocolConfig {
-    return this.modelRegistry.getProviderProtocolConfig();
   }
 }

@@ -83,9 +83,9 @@ describe('session-model-persistence', () => {
       getActiveRuntimeModelSnapshot: vi.fn().mockReturnValue(undefined),
       getCurrentModelRegistryBaseUrl: vi
         .fn()
-        .mockReturnValue('https://example.test/v1'),
+        .mockReturnValue('http://127.0.0.1:11434/v1'),
       getContentGeneratorConfig: vi.fn().mockReturnValue({
-        baseUrl: 'https://example.test/v1',
+        baseUrl: 'http://127.0.0.1:11434/v1',
       }),
       getChatRecordingService: vi.fn().mockReturnValue({ recordSessionModel }),
     } as unknown as Config;
@@ -95,77 +95,8 @@ describe('session-model-persistence', () => {
     expect(recordSessionModel).toHaveBeenCalledWith({
       modelId: 'qwen3-coder-plus',
       authType: AuthType.USE_OPENAI,
-      baseUrl: 'https://example.test/v1',
+      baseUrl: 'http://127.0.0.1:11434/v1',
     });
-  });
-
-  it('records and restores the effective Responses API despite a same-id Chat route', async () => {
-    const recordSessionModel = vi.fn().mockResolvedValue(true);
-    const baseUrl = 'https://example.test/v1';
-    const config = {
-      getModel: () => 'gpt-model',
-      getAuthType: () => AuthType.USE_OPENAI_RESPONSES,
-      getCurrentModelRegistryBaseUrl: () => baseUrl,
-      getChatRecordingService: () => ({ recordSessionModel }),
-    } as unknown as Config;
-    await recordDaemonSessionModelFromConfig(config);
-    expect(recordSessionModel).toHaveBeenCalledWith({
-      modelId: 'gpt-model',
-      authType: AuthType.USE_OPENAI_RESPONSES,
-      baseUrl,
-    });
-
-    const switchModel = vi.fn().mockResolvedValue(undefined);
-    const restoreConfig = {
-      getModel: () => 'gpt-model',
-      getAuthType: () => AuthType.USE_OPENAI,
-      getCurrentModelRegistryBaseUrl: () => baseUrl,
-      getResolvedModelConfig: resolvedWhen(baseUrl),
-      switchModel,
-    } as unknown as Config;
-    await applyRestoredSessionModel(
-      restoreConfig,
-      recordingProjection({
-        lastCompletedUuid: 'leaf',
-        turnParentUuids: [null],
-        sessionModel: recordSessionModel.mock.calls[0][0],
-      }),
-    );
-    expect(switchModel).toHaveBeenCalledWith(
-      AuthType.USE_OPENAI_RESPONSES,
-      'gpt-model',
-      { baseUrl },
-    );
-  });
-
-  it('does not retry a removed recorded Responses route as Chat', async () => {
-    const switchModel = vi
-      .fn()
-      .mockRejectedValue(new Error('Model route unavailable'));
-    const config = {
-      getModel: () => 'gpt-model',
-      getAuthType: () => AuthType.USE_OPENAI,
-      getResolvedModelConfig: () => undefined,
-      switchModel,
-    } as unknown as Config;
-    await applyRestoredSessionModel(
-      config,
-      recordingProjection({
-        lastCompletedUuid: 'leaf',
-        turnParentUuids: [null],
-        sessionModel: {
-          modelId: 'gpt-model',
-          authType: AuthType.USE_OPENAI_RESPONSES,
-          baseUrl: 'https://example.test/v1',
-        },
-      }),
-    );
-    expect(switchModel).toHaveBeenCalledOnce();
-    expect(switchModel).toHaveBeenCalledWith(
-      AuthType.USE_OPENAI_RESPONSES,
-      'gpt-model',
-      undefined,
-    );
   });
 
   it('omits baseUrl for an implicit registry route', async () => {
@@ -176,7 +107,7 @@ describe('session-model-persistence', () => {
       getActiveRuntimeModelSnapshot: vi.fn().mockReturnValue(undefined),
       getCurrentModelRegistryBaseUrl: vi.fn().mockReturnValue(null),
       getContentGeneratorConfig: vi.fn().mockReturnValue({
-        baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+        baseUrl: 'http://127.0.0.1:11434/v1',
       }),
       getChatRecordingService: vi.fn().mockReturnValue({ recordSessionModel }),
     } as unknown as Config;
@@ -195,7 +126,7 @@ describe('session-model-persistence', () => {
       getModel: vi.fn().mockReturnValue('settings-default'),
       getAuthType: vi.fn().mockReturnValue(AuthType.USE_OPENAI),
       getContentGeneratorConfig: vi.fn().mockReturnValue({}),
-      getResolvedModelConfig: resolvedWhen('https://example.test/v1'),
+      getResolvedModelConfig: resolvedWhen('http://127.0.0.1:11434/v1'),
       switchModel,
     } as unknown as Config;
 
@@ -207,7 +138,7 @@ describe('session-model-persistence', () => {
         sessionModel: {
           modelId: 'qwen3-coder-plus',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://example.test/v1',
+          baseUrl: 'http://127.0.0.1:11434/v1',
         },
       }),
     );
@@ -215,7 +146,7 @@ describe('session-model-persistence', () => {
     expect(switchModel).toHaveBeenCalledWith(
       AuthType.USE_OPENAI,
       'qwen3-coder-plus',
-      { baseUrl: 'https://example.test/v1' },
+      { baseUrl: 'http://127.0.0.1:11434/v1' },
     );
   });
 
@@ -308,11 +239,11 @@ describe('session-model-persistence', () => {
       getAuthType: vi.fn().mockReturnValue(AuthType.USE_OPENAI),
       getCurrentModelRegistryBaseUrl: vi
         .fn()
-        .mockReturnValue('https://example.test/v1'),
+        .mockReturnValue('http://127.0.0.1:11434/v1'),
       getContentGeneratorConfig: vi.fn().mockReturnValue({
-        baseUrl: 'https://example.test/v1',
+        baseUrl: 'http://127.0.0.1:11434/v1',
       }),
-      getResolvedModelConfig: resolvedWhen('https://example.test/v1'),
+      getResolvedModelConfig: resolvedWhen('http://127.0.0.1:11434/v1'),
       switchModel,
     } as unknown as Config;
 
@@ -324,7 +255,7 @@ describe('session-model-persistence', () => {
         sessionModel: {
           modelId: 'qwen3-coder-plus',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://example.test/v1',
+          baseUrl: 'http://127.0.0.1:11434/v1',
         },
       }),
     );
@@ -482,64 +413,6 @@ describe('session-model-persistence', () => {
     );
   });
 
-  it('requires cached credentials when restoring Qwen OAuth from another auth', async () => {
-    const switchModel = vi.fn().mockResolvedValue(undefined);
-    const config = {
-      getModel: vi.fn().mockReturnValue('settings-default'),
-      getAuthType: vi.fn().mockReturnValue(AuthType.USE_OPENAI),
-      getCurrentModelRegistryBaseUrl: vi.fn().mockReturnValue(undefined),
-      getContentGeneratorConfig: vi.fn().mockReturnValue({}),
-      switchModel,
-    } as unknown as Config;
-
-    await applyRestoredSessionModel(
-      config,
-      recordingProjection({
-        lastCompletedUuid: 'leaf',
-        turnParentUuids: [null],
-        sessionModel: {
-          modelId: 'coder-model',
-          authType: AuthType.QWEN_OAUTH,
-        },
-      }),
-    );
-
-    expect(switchModel).toHaveBeenCalledWith(
-      AuthType.QWEN_OAUTH,
-      'coder-model',
-      { requireCachedCredentials: true },
-    );
-  });
-
-  it('switches when recorded authType differs even if the model id matches', async () => {
-    const switchModel = vi.fn().mockResolvedValue(undefined);
-    const config = {
-      getModel: vi.fn().mockReturnValue('coder-model'),
-      getAuthType: vi.fn().mockReturnValue(AuthType.USE_OPENAI),
-      getCurrentModelRegistryBaseUrl: vi.fn().mockReturnValue(undefined),
-      getContentGeneratorConfig: vi.fn().mockReturnValue({}),
-      switchModel,
-    } as unknown as Config;
-
-    await applyRestoredSessionModel(
-      config,
-      recordingProjection({
-        lastCompletedUuid: 'leaf',
-        turnParentUuids: [null],
-        sessionModel: {
-          modelId: 'coder-model',
-          authType: AuthType.QWEN_OAUTH,
-        },
-      }),
-    );
-
-    expect(switchModel).toHaveBeenCalledWith(
-      AuthType.QWEN_OAUTH,
-      'coder-model',
-      { requireCachedCredentials: true },
-    );
-  });
-
   it('trims padded recorded authType before switching', async () => {
     const switchModel = vi.fn().mockResolvedValue(undefined);
     const config = {
@@ -580,7 +453,7 @@ describe('session-model-persistence', () => {
     );
     const authenticate = vi
       .fn()
-      .mockRejectedValueOnce(new Error('oauth expired'))
+      .mockRejectedValueOnce(new Error('restored auth failed'))
       .mockResolvedValueOnce(undefined);
     const config = {
       getModel: vi.fn(() => currentModel),
@@ -596,8 +469,8 @@ describe('session-model-persistence', () => {
         lastCompletedUuid: 'leaf',
         turnParentUuids: [null],
         sessionModel: {
-          modelId: 'coder-model',
-          authType: AuthType.QWEN_OAUTH,
+          modelId: 'session-model',
+          authType: AuthType.USE_OPENAI,
         },
       }),
       authenticate,
@@ -606,9 +479,9 @@ describe('session-model-persistence', () => {
     expect(authenticate).toHaveBeenCalledTimes(2);
     expect(switchModel).toHaveBeenNthCalledWith(
       1,
-      AuthType.QWEN_OAUTH,
-      'coder-model',
-      { requireCachedCredentials: true },
+      AuthType.USE_OPENAI,
+      'session-model',
+      undefined,
     );
     expect(switchModel).toHaveBeenNthCalledWith(
       2,
@@ -649,7 +522,7 @@ describe('session-model-persistence', () => {
   it('retries authentication when restore only changed the registry baseUrl', async () => {
     let currentAuth: string | undefined = AuthType.USE_OPENAI;
     let currentModel = 'qwen3-coder-plus';
-    let currentBaseUrl: string | undefined = 'https://settings.example/v1';
+    let currentBaseUrl: string | undefined = 'http://127.0.0.1:11434/v1';
     const switchModel = vi.fn(
       async (
         authType: string,
@@ -663,7 +536,7 @@ describe('session-model-persistence', () => {
     );
     const authenticate = vi
       .fn()
-      .mockRejectedValueOnce(new Error('oauth expired'))
+      .mockRejectedValueOnce(new Error('restored auth failed'))
       .mockResolvedValueOnce(undefined);
     const config = {
       getModel: vi.fn(() => currentModel),
@@ -671,7 +544,7 @@ describe('session-model-persistence', () => {
       getCurrentModelRegistryBaseUrl: vi.fn(() => currentBaseUrl),
       getActiveRuntimeModelSnapshot: vi.fn().mockReturnValue(undefined),
       getContentGeneratorConfig: vi.fn().mockReturnValue({}),
-      getResolvedModelConfig: resolvedWhen('https://session.example/v1'),
+      getResolvedModelConfig: resolvedWhen('http://localhost:1234/v1'),
       switchModel,
     } as unknown as Config;
 
@@ -683,7 +556,7 @@ describe('session-model-persistence', () => {
         sessionModel: {
           modelId: 'qwen3-coder-plus',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://session.example/v1',
+          baseUrl: 'http://localhost:1234/v1',
         },
       }),
       authenticate,
@@ -694,13 +567,13 @@ describe('session-model-persistence', () => {
       1,
       AuthType.USE_OPENAI,
       'qwen3-coder-plus',
-      { baseUrl: 'https://session.example/v1' },
+      { baseUrl: 'http://localhost:1234/v1' },
     );
     expect(switchModel).toHaveBeenNthCalledWith(
       2,
       AuthType.USE_OPENAI,
       'qwen3-coder-plus',
-      { baseUrl: 'https://settings.example/v1' },
+      { baseUrl: 'http://127.0.0.1:11434/v1' },
     );
   });
 
@@ -718,7 +591,7 @@ describe('session-model-persistence', () => {
     );
     const authenticate = vi
       .fn()
-      .mockRejectedValueOnce(new Error('oauth expired'))
+      .mockRejectedValueOnce(new Error('restored auth failed'))
       .mockResolvedValueOnce(undefined);
     const config = {
       getModel: vi.fn(() => currentModel),
@@ -738,8 +611,8 @@ describe('session-model-persistence', () => {
         lastCompletedUuid: 'leaf',
         turnParentUuids: [null],
         sessionModel: {
-          modelId: 'coder-model',
-          authType: AuthType.QWEN_OAUTH,
+          modelId: 'session-model',
+          authType: AuthType.USE_OPENAI,
         },
       }),
       authenticate,
@@ -748,9 +621,9 @@ describe('session-model-persistence', () => {
     expect(authenticate).toHaveBeenCalledTimes(2);
     expect(switchModel).toHaveBeenNthCalledWith(
       1,
-      AuthType.QWEN_OAUTH,
-      'coder-model',
-      { requireCachedCredentials: true },
+      AuthType.USE_OPENAI,
+      'session-model',
+      undefined,
     );
     expect(switchModel).toHaveBeenNthCalledWith(
       2,
@@ -784,7 +657,7 @@ describe('session-model-persistence', () => {
     );
     const authenticate = vi
       .fn()
-      .mockRejectedValueOnce(new Error('oauth expired'))
+      .mockRejectedValueOnce(new Error('restored auth failed'))
       .mockResolvedValueOnce(undefined);
     const config = {
       getModel: vi.fn(() => currentModel),
@@ -834,7 +707,7 @@ describe('session-model-persistence', () => {
     );
     const authenticate = vi
       .fn()
-      .mockRejectedValueOnce(new Error('oauth expired'))
+      .mockRejectedValueOnce(new Error('restored auth failed'))
       .mockRejectedValueOnce(new Error('settings auth failed'));
     const config = {
       getModel: vi.fn(() => currentModel),
@@ -852,8 +725,8 @@ describe('session-model-persistence', () => {
           lastCompletedUuid: 'leaf',
           turnParentUuids: [null],
           sessionModel: {
-            modelId: 'coder-model',
-            authType: AuthType.QWEN_OAUTH,
+            modelId: 'session-model',
+            authType: AuthType.USE_OPENAI,
           },
         }),
         authenticate,
@@ -881,7 +754,9 @@ describe('session-model-persistence', () => {
         currentModel = modelId;
       },
     );
-    const authenticate = vi.fn().mockRejectedValue(new Error('oauth expired'));
+    const authenticate = vi
+      .fn()
+      .mockRejectedValue(new Error('restored auth failed'));
     const config = {
       getModel: vi.fn(() => currentModel),
       getAuthType: vi.fn(() => currentAuth),
@@ -898,13 +773,13 @@ describe('session-model-persistence', () => {
           lastCompletedUuid: 'leaf',
           turnParentUuids: [null],
           sessionModel: {
-            modelId: 'coder-model',
-            authType: AuthType.QWEN_OAUTH,
+            modelId: 'session-model',
+            authType: AuthType.USE_OPENAI,
           },
         }),
         authenticate,
       ),
-    ).rejects.toThrow('oauth expired');
+    ).rejects.toThrow('restored auth failed');
 
     expect(authenticate).toHaveBeenCalledTimes(1);
     expect(switchModel).toHaveBeenNthCalledWith(
@@ -926,7 +801,7 @@ describe('session-model-persistence', () => {
       }),
       getCurrentModelRegistryBaseUrl: vi
         .fn()
-        .mockReturnValue('https://example.test/v1'),
+        .mockReturnValue('http://127.0.0.1:11434/v1'),
       getContentGeneratorConfig: vi.fn().mockReturnValue({}),
       getChatRecordingService: vi.fn().mockReturnValue({ recordSessionModel }),
     } as unknown as Config;
@@ -1033,11 +908,11 @@ describe('session-model-persistence', () => {
       getAuthType: vi.fn().mockReturnValue(AuthType.USE_OPENAI),
       getCurrentModelRegistryBaseUrl: vi
         .fn()
-        .mockReturnValue('https://b.example/v1'),
+        .mockReturnValue('http://localhost:1234/v1'),
       getContentGeneratorConfig: vi.fn().mockReturnValue({
-        baseUrl: 'https://b.example/v1',
+        baseUrl: 'http://localhost:1234/v1',
       }),
-      getResolvedModelConfig: resolvedWhen('https://a.example/v1'),
+      getResolvedModelConfig: resolvedWhen('http://127.0.0.1:8080/v1'),
       switchModel,
     } as unknown as Config;
 
@@ -1049,7 +924,7 @@ describe('session-model-persistence', () => {
         sessionModel: {
           modelId: 'qwen3-coder-plus',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://a.example/v1',
+          baseUrl: 'http://127.0.0.1:8080/v1',
         },
       }),
     );
@@ -1057,7 +932,7 @@ describe('session-model-persistence', () => {
     expect(switchModel).toHaveBeenCalledWith(
       AuthType.USE_OPENAI,
       'qwen3-coder-plus',
-      { baseUrl: 'https://a.example/v1' },
+      { baseUrl: 'http://127.0.0.1:8080/v1' },
     );
   });
 
@@ -1068,7 +943,7 @@ describe('session-model-persistence', () => {
       getAuthType: vi.fn().mockReturnValue(AuthType.USE_OPENAI),
       getCurrentModelRegistryBaseUrl: vi.fn().mockReturnValue(null),
       getContentGeneratorConfig: vi.fn().mockReturnValue({}),
-      getResolvedModelConfig: resolvedWhen('https://a.example/v1'),
+      getResolvedModelConfig: resolvedWhen('http://127.0.0.1:8080/v1'),
       switchModel,
     } as unknown as Config;
 
@@ -1080,7 +955,7 @@ describe('session-model-persistence', () => {
         sessionModel: {
           modelId: 'qwen3-coder-plus',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://a.example/v1',
+          baseUrl: 'http://127.0.0.1:8080/v1',
         },
       }),
     );
@@ -1088,7 +963,7 @@ describe('session-model-persistence', () => {
     expect(switchModel).toHaveBeenCalledWith(
       AuthType.USE_OPENAI,
       'qwen3-coder-plus',
-      { baseUrl: 'https://a.example/v1' },
+      { baseUrl: 'http://127.0.0.1:8080/v1' },
     );
   });
 
@@ -1099,9 +974,9 @@ describe('session-model-persistence', () => {
       getAuthType: vi.fn().mockReturnValue(AuthType.USE_OPENAI),
       getCurrentModelRegistryBaseUrl: vi
         .fn()
-        .mockReturnValue('https://b.example/v1'),
+        .mockReturnValue('http://localhost:1234/v1'),
       getContentGeneratorConfig: vi.fn().mockReturnValue({
-        baseUrl: 'https://b.example/v1',
+        baseUrl: 'http://localhost:1234/v1',
       }),
       switchModel,
     } as unknown as Config;

@@ -10,13 +10,7 @@ import type {
   AvailableModel,
   ModelReasoningCapabilities,
 } from '../models/types.js';
-import { ALL_PROVIDERS } from '../providers/all-providers.js';
 import { normalize } from './tokenLimits.js';
-import { isOpenRouterHostname } from './openaiContentGenerator/provider/openrouter.js';
-import {
-  parseClaudeModelVersion,
-  anthropicSupportedEffortTiers,
-} from './anthropic-reasoning.js';
 import {
   clampReasoningEffort,
   getGptReasoningCapabilities,
@@ -25,17 +19,19 @@ import {
   type ReasoningEffort,
 } from './reasoning-effort.js';
 
+/**
+ * Request-body shapes a model's reasoning switch can take on an
+ * OpenAI-compatible server:
+ * - `openai-effort`: top-level `reasoning_effort`
+ * - `openai-reasoning`: a `reasoning` object
+ * - `deepseek-openai`: `thinking: { type }` plus `reasoning_effort`
+ * - `qwen-chat-template`: `chat_template_kwargs.enable_thinking`
+ */
 export const REASONING_PROFILES = [
   'openai-effort',
   'openai-reasoning',
   'deepseek-openai',
-  'dashscope-effort',
-  'dashscope-thinking',
   'qwen-chat-template',
-  'anthropic-manual',
-  'anthropic-adaptive',
-  'deepseek-anthropic',
-  'gemini',
 ] as const;
 export type ReasoningProfile = (typeof REASONING_PROFILES)[number];
 export type ModelReasoningOverride = {
@@ -147,112 +143,27 @@ export function validateReasoningCapabilities(
   if (input.profile === undefined && 'thinking' in input)
     return parseModelReasoningCapabilities(input);
   const model = normalize(route.model);
-  const provider = ALL_PROVIDERS.find((candidate) =>
-    typeof candidate.baseUrl === 'string'
-      ? candidate.baseUrl === route.baseUrl
-      : candidate.baseUrl?.some((option) => option.url === route.baseUrl),
-  );
-  const known = (
-    provider?.models?.find((candidate) => candidate.id === route.model) ??
-    provider?.models?.find((candidate) => candidate.id === model)
-  )?.capabilities?.reasoning;
-  const inherited = parseModelReasoningCapabilities(known);
-  if (!input.profile && inherited?.toggleOnly) {
-    if (input.efforts || input.defaultEffort) return invalidReasoning(route);
-    return parseModelReasoningCapabilities({ ...inherited, ...input });
-  }
   const gpt = getGptReasoningCapabilities(route.model);
-  const claude =
-    route.authType === 'anthropic'
-      ? parseClaudeModelVersion(route.model)
-      : undefined;
-  if (!inherited && !gpt && !claude && !input.profile)
-    return invalidReasoning(route);
-  const auth = route.authType;
-  let host = '';
-  try {
-    host = new URL(route.baseUrl ?? '').hostname.toLowerCase();
-  } catch {
-    host = '';
-  }
-  const dashscope =
-    auth === 'qwen-oauth' ||
-    /(^|\.)(dashscope(?:-intl|-us)?\.aliyuncs\.com|alibaba-inc\.com|aliyun-inc\.com|alicloudapi\.com)$/.test(
-      host,
-    ) ||
-    /^token-plan\..+\.maas\.aliyuncs\.com$/.test(host);
+  if (!gpt && !input.profile) return invalidReasoning(route);
   const profile =
     input.profile ??
-    (auth === 'gemini' || auth === 'vertex-ai'
-      ? 'gemini'
-      : auth === 'openai-responses'
-        ? 'openai-reasoning'
-        : auth === 'openai' && isOpenRouterHostname(route)
-          ? 'openai-reasoning'
-          : auth === 'anthropic'
-            ? model.includes('deepseek')
-              ? 'deepseek-anthropic'
-              : claude &&
-                  (claude.major > 4 ||
-                    (claude.major === 4 && claude.minor >= 6))
-                ? 'anthropic-adaptive'
-                : 'anthropic-manual'
-            : model.startsWith('qwen')
-              ? dashscope
-                ? inherited?.disableField === 'reasoning_effort'
-                  ? 'dashscope-effort'
-                  : 'dashscope-thinking'
-                : 'qwen-chat-template'
-              : inherited?.disableField === 'thinking'
-                ? 'deepseek-openai'
-                : 'openai-effort');
-  const protocol =
-    profile === 'gemini'
-      ? 'gemini'
-      : profile.startsWith('anthropic-') || profile === 'deepseek-anthropic'
-        ? 'anthropic'
-        : 'openai';
-  if (
-    (auth === 'openai-responses' && profile !== 'openai-reasoning') ||
-    (auth &&
-      protocol !==
-        (auth === 'vertex-ai'
-          ? 'gemini'
-          : auth === 'qwen-oauth' || auth === 'openai-responses'
-            ? 'openai'
-            : auth))
-  )
-    return invalidReasoning(route);
-  const toggleOnly =
-    profile === 'dashscope-thinking' || profile === 'qwen-chat-template';
-  const disableField =
-    (!input.profile && inherited?.disableField) ||
-    (toggleOnly
-      ? 'enable_thinking'
-      : profile === 'openai-effort' || profile === 'dashscope-effort'
-        ? 'reasoning_effort'
-        : 'thinking');
-  const inheritedEfforts =
-    inherited && !inherited.toggleOnly
-      ? inherited.efforts
-      : (gpt?.efforts ??
-        (claude ? anthropicSupportedEffortTiers(route.model) : undefined));
-  const efforts = input.efforts ?? inheritedEfforts;
-  const inheritedDefault =
-    inherited && !inherited.toggleOnly
-      ? inherited.defaultEffort
-      : gpt?.defaultEffort;
+    (model.startsWith('qwen') ? 'qwen-chat-template' : 'openai-effort');
+  const toggleOnly = profile === 'qwen-chat-template';
+  const disableField = toggleOnly
+    ? 'enable_thinking'
+    : profile === 'openai-effort'
+      ? 'reasoning_effort'
+      : 'thinking';
+  const efforts = input.efforts ?? gpt?.efforts;
   const defaultEffort =
     input.defaultEffort ??
-    (inheritedDefault && efforts
-      ? clampReasoningEffort(inheritedDefault, efforts)
+    (gpt?.defaultEffort && efforts
+      ? clampReasoningEffort(gpt.defaultEffort, efforts)
       : undefined);
   if (
     (toggleOnly &&
       (input.efforts !== undefined || input.defaultEffort !== undefined)) ||
-    (!toggleOnly && (!efforts || !defaultEffort)) ||
-    (profile === 'gemini' &&
-      efforts?.some((tier) => tier === 'xhigh' || tier === 'max'))
+    (!toggleOnly && (!efforts || !defaultEffort))
   )
     return invalidReasoning(route);
   const result = {
@@ -262,9 +173,7 @@ export function validateReasoningCapabilities(
     toggleOnly,
     disableField,
     ...(toggleOnly ? {} : { efforts, defaultEffort }),
-    ...(route.thinkingMandatory ||
-    inherited?.canDisable === false ||
-    gpt?.thinkingMandatory
+    ...(route.thinkingMandatory || gpt?.thinkingMandatory
       ? { canDisable: false }
       : {}),
   };

@@ -19,9 +19,7 @@ export interface AdvisorModelContext {
 
 interface AdvisorModelCandidate {
   fastOnly?: boolean;
-  voiceOnly?: boolean;
   visionOnly?: boolean;
-  imageOnly?: boolean;
 }
 
 function resolvesToSameModel(
@@ -59,12 +57,7 @@ export function isAdvisorModelEligible(
   model: AdvisorModelCandidate,
   allowFastOnly = false,
 ): boolean {
-  return (
-    (allowFastOnly || !model.fastOnly) &&
-    !model.voiceOnly &&
-    !model.visionOnly &&
-    !model.imageOnly
-  );
+  return (allowFastOnly || !model.fastOnly) && !model.visionOnly;
 }
 
 export function checkAdvisorModelAvailability(

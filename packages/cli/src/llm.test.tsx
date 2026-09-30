@@ -1734,7 +1734,6 @@ describe('llm.tsx main function', () => {
       getContentGeneratorConfig: () => undefined,
       getUsageStatisticsEnabled: () => true,
       getSessionId: () => 'test-session-id',
-      getProxy: () => undefined,
     } as unknown as Config;
 
     vi.mocked(parseArguments).mockResolvedValue({
@@ -1976,7 +1975,6 @@ describe('llm.tsx main function', () => {
       getContentGeneratorConfig: () => undefined,
       getUsageStatisticsEnabled: () => true,
       getSessionId: () => 'test-session-id',
-      getProxy: () => undefined,
       getResumedSessionData: () => ({
         conversation: {
           sessionId: 'test-session-id',
@@ -2365,11 +2363,7 @@ describe('llm.tsx main function', () => {
     // approval / hook setup.
     expect(settingsArg).toBeDefined();
 
-    expect(validateAuthSpy).toHaveBeenCalledWith(
-      undefined,
-      configStub,
-      expect.any(Object),
-    );
+    expect(validateAuthSpy).toHaveBeenCalledWith(configStub);
     expect(initializerModule.initializeApp).toHaveBeenCalledWith(
       configStub,
       expect.any(Object),
@@ -2559,7 +2553,6 @@ describe('llm.tsx OpenTUI renderer dispatch', () => {
       openaiApiKey: undefined,
       openaiBaseUrl: undefined,
       openaiLoggingDir: undefined,
-      proxy: undefined,
       includeDirectories: undefined,
       screenReader: undefined,
       inputFormat: undefined,
@@ -2783,7 +2776,6 @@ describe('llm.tsx main function kitty protocol', () => {
       openaiApiKey: undefined,
       openaiBaseUrl: undefined,
       openaiLoggingDir: undefined,
-      proxy: undefined,
       includeDirectories: undefined,
       screenReader: undefined,
       inputFormat: undefined,
@@ -2901,7 +2893,6 @@ describe('llm.tsx main function kitty protocol', () => {
       openaiApiKey: undefined,
       openaiBaseUrl: undefined,
       openaiLoggingDir: undefined,
-      proxy: undefined,
       includeDirectories: undefined,
       screenReader: undefined,
       inputFormat: undefined,
@@ -3018,7 +3009,6 @@ describe('llm.tsx main function kitty protocol', () => {
       openaiApiKey: undefined,
       openaiBaseUrl: undefined,
       openaiLoggingDir: undefined,
-      proxy: undefined,
       includeDirectories: undefined,
       screenReader: undefined,
       inputFormat: undefined,
@@ -3134,7 +3124,6 @@ describe('llm.tsx main function kitty protocol', () => {
       openaiApiKey: undefined,
       openaiBaseUrl: undefined,
       openaiLoggingDir: undefined,
-      proxy: undefined,
       includeDirectories: undefined,
       screenReader: undefined,
       inputFormat: undefined,
@@ -3234,7 +3223,6 @@ describe('llm.tsx main function kitty protocol', () => {
         getCurrentAuthType: () => null,
         getGenerationConfig: () => ({}),
       }),
-      getProxy: () => undefined,
       getUsageStatisticsEnabled: () => true,
       getSessionId: () => 'test-session-id',
       isTelemetryInitializationDeferred: () => true,

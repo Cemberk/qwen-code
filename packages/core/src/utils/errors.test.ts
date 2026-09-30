@@ -5,7 +5,6 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { APIUserAbortError as AnthropicAPIUserAbortError } from '@anthropic-ai/sdk';
 import { APIConnectionError, APIUserAbortError } from 'openai';
 import { getErrorMessage, isAbortError, isNodeError } from './errors.js';
 
@@ -241,23 +240,8 @@ describe('isAbortError', () => {
     const error = new APIUserAbortError({ message: 'Request was aborted.' });
 
     // Assert the requirement (the name-based branch can't match it) rather than
-    // the SDK internal `.name === 'Error'`, which would break if OpenAI/Anthropic
-    // ever set a name without changing the correct behavior here.
-    expect(error.name).not.toBe('AbortError');
-    expect(isAbortError(error)).toBe(true);
-  });
-
-  it('should return true for the Anthropic SDK APIUserAbortError', () => {
-    // Both SDKs this package depends on are Stainless-generated and share the
-    // abort class name, so the same check covers auth_type=anthropic. Pinned so
-    // the cross-SDK coverage is intentional rather than incidental.
-    const error = new AnthropicAPIUserAbortError({
-      message: 'Request was aborted.',
-    });
-
-    // Assert the requirement (the name-based branch can't match it) rather than
-    // the SDK internal `.name === 'Error'`, which would break if OpenAI/Anthropic
-    // ever set a name without changing the correct behavior here.
+    // the SDK internal `.name === 'Error'`, which would break if OpenAI ever
+    // set a name without changing the correct behavior here.
     expect(error.name).not.toBe('AbortError');
     expect(isAbortError(error)).toBe(true);
   });

@@ -23,15 +23,6 @@ import type { ReactNode } from 'react';
 
 export type { ThoughtSummary };
 
-export enum AuthState {
-  // Attempting to authenticate or re-authenticate
-  Unauthenticated = 'unauthenticated',
-  // Auth dialog is open for user to select auth method
-  Updating = 'updating',
-  // Successfully authenticated
-  Authenticated = 'authenticated',
-}
-
 // Only defining the state enum needed by the UI
 export enum StreamingState {
   Idle = 'idle',

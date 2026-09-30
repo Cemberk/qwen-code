@@ -73,8 +73,7 @@ const mockConfig = {
   getSessionId: vi.fn().mockReturnValue('test-session-id'),
   getContentGeneratorConfig: vi
     .fn()
-    .mockReturnValue({ authType: AuthType.USE_GEMINI }),
-  getEmbeddingModel: vi.fn().mockReturnValue('test-embedding-model'),
+    .mockReturnValue({ authType: AuthType.USE_OPENAI }),
   // Default test model — matches `defaultOptions.model` so resolveForModel
   // returns the constructor-injected ContentGenerator without trying to
   // build a per-model one.
@@ -156,7 +155,7 @@ describe('BaseLlmClient', () => {
     vi.clearAllMocks();
     mockConfig.getContentGeneratorConfig.mockReturnValue({
       model: 'test-model',
-      authType: AuthType.USE_GEMINI,
+      authType: AuthType.USE_OPENAI,
     });
     // Reset the mocked implementation for getErrorMessage for accurate error message assertions
     vi.mocked(getErrorMessage).mockImplementation((e) =>
@@ -351,7 +350,7 @@ describe('BaseLlmClient', () => {
       const retryErrorCodes = [4999];
       mockConfig.getContentGeneratorConfig.mockReturnValue({
         model: 'test-model',
-        authType: AuthType.USE_GEMINI,
+        authType: AuthType.USE_OPENAI,
         retryErrorCodes,
       });
       const mockResponse = createMockResponseWithFunctionCall({
@@ -485,7 +484,7 @@ describe('BaseLlmClient', () => {
   it('filters unsupported media from text and JSON side queries', async () => {
     mockConfig.getContentGeneratorConfig.mockReturnValue({
       model: 'test-model',
-      authType: AuthType.USE_GEMINI,
+      authType: AuthType.USE_OPENAI,
       modalities: { pdf: true },
     });
     const contents = [
@@ -521,95 +520,6 @@ describe('BaseLlmClient', () => {
       expect(sent).not.toContain('image-bytes');
       expect(sent).toContain('pdf-bytes');
     }
-  });
-
-  describe('generateEmbedding', () => {
-    const texts = ['hello world', 'goodbye world'];
-    const testEmbeddingModel = 'test-embedding-model';
-
-    it('should call embedContent with correct parameters and return embeddings', async () => {
-      const mockEmbeddings = [
-        [0.1, 0.2, 0.3],
-        [0.4, 0.5, 0.6],
-      ];
-      mockEmbedContent.mockResolvedValue({
-        embeddings: [
-          { values: mockEmbeddings[0] },
-          { values: mockEmbeddings[1] },
-        ],
-      });
-
-      const result = await client.generateEmbedding(texts);
-
-      expect(mockEmbedContent).toHaveBeenCalledTimes(1);
-      expect(mockEmbedContent).toHaveBeenCalledWith({
-        model: testEmbeddingModel,
-        contents: texts,
-      });
-      expect(result).toEqual(mockEmbeddings);
-    });
-
-    it('should return an empty array if an empty array is passed', async () => {
-      const result = await client.generateEmbedding([]);
-      expect(result).toEqual([]);
-      expect(mockEmbedContent).not.toHaveBeenCalled();
-    });
-
-    it('should throw an error if API response has no embeddings array', async () => {
-      mockEmbedContent.mockResolvedValue({});
-
-      await expect(client.generateEmbedding(texts)).rejects.toThrow(
-        'No embeddings found in API response.',
-      );
-    });
-
-    it('should throw an error if API response has an empty embeddings array', async () => {
-      mockEmbedContent.mockResolvedValue({
-        embeddings: [],
-      });
-
-      await expect(client.generateEmbedding(texts)).rejects.toThrow(
-        'No embeddings found in API response.',
-      );
-    });
-
-    it('should throw an error if API returns a mismatched number of embeddings', async () => {
-      mockEmbedContent.mockResolvedValue({
-        embeddings: [{ values: [1, 2, 3] }], // Only one for two texts
-      });
-
-      await expect(client.generateEmbedding(texts)).rejects.toThrow(
-        'API returned a mismatched number of embeddings. Expected 2, got 1.',
-      );
-    });
-
-    it('should throw an error if any embedding has nullish values', async () => {
-      mockEmbedContent.mockResolvedValue({
-        embeddings: [{ values: [1, 2, 3] }, { values: undefined }], // Second one is bad
-      });
-
-      await expect(client.generateEmbedding(texts)).rejects.toThrow(
-        'API returned an empty embedding for input text at index 1: "goodbye world"',
-      );
-    });
-
-    it('should throw an error if any embedding has an empty values array', async () => {
-      mockEmbedContent.mockResolvedValue({
-        embeddings: [{ values: [] }, { values: [1, 2, 3] }], // First one is bad
-      });
-
-      await expect(client.generateEmbedding(texts)).rejects.toThrow(
-        'API returned an empty embedding for input text at index 0: "hello world"',
-      );
-    });
-
-    it('should propagate errors from the API call', async () => {
-      mockEmbedContent.mockRejectedValue(new Error('API Failure'));
-
-      await expect(client.generateEmbedding(texts)).rejects.toThrow(
-        'API Failure',
-      );
-    });
   });
 
   describe('generateText - streaming', () => {
@@ -912,6 +822,14 @@ describe('BaseLlmClient', () => {
       embedContent: vi.fn(),
     } as unknown as Mocked<ContentGenerator>;
 
+    const MAIN_BASE_URL = 'http://127.0.0.1:11434/v1';
+    const FAST_BASE_URL = 'http://127.0.0.1:1234/v1';
+    const fastModelConfig = {
+      id: fastModel,
+      authType: AuthType.USE_OPENAI,
+      envKey: 'LOCAL_API_KEY',
+      baseUrl: FAST_BASE_URL,
+    };
     const getResolvedModel = vi.fn();
     let crossProviderConfig: Mocked<Config>;
 
@@ -928,27 +846,18 @@ describe('BaseLlmClient', () => {
       mockCreateContentGenerator.mockResolvedValue(fastContentGenerator);
       mockBuildAgentContentGeneratorConfig.mockReturnValue({
         model: fastModel,
-        authType: AuthType.USE_ANTHROPIC,
+        authType: AuthType.USE_OPENAI,
+        baseUrl: FAST_BASE_URL,
       });
 
       crossProviderConfig = {
         getSessionId: vi.fn().mockReturnValue('test-session-id'),
-        getContentGeneratorConfig: vi
-          .fn()
-          .mockReturnValue({ authType: AuthType.QWEN_OAUTH }),
-        getEmbeddingModel: vi.fn().mockReturnValue('test-embedding-model'),
+        getContentGeneratorConfig: vi.fn().mockReturnValue({
+          authType: AuthType.USE_OPENAI,
+          baseUrl: MAIN_BASE_URL,
+        }),
         getModel: vi.fn().mockReturnValue('main-model'),
         getFastModel: vi.fn().mockReturnValue(undefined),
-        getAllConfiguredModels: vi.fn((authTypes?: AuthType[]) =>
-          authTypes?.includes(AuthType.QWEN_OAUTH)
-            ? []
-            : [
-                {
-                  id: fastModel,
-                  authType: AuthType.USE_ANTHROPIC,
-                },
-              ],
-        ),
         getModelsConfig: vi.fn().mockReturnValue({ getResolvedModel }),
       } as unknown as Mocked<Config>;
     });
@@ -959,7 +868,6 @@ describe('BaseLlmClient', () => {
       const resolved = await c.resolveForModel('main-model');
 
       expect(resolved.contentGenerator).toBe(mockContentGenerator);
-      expect(resolved.retryAuthType).toBe(AuthType.QWEN_OAUTH);
       expect(getResolvedModel).not.toHaveBeenCalled();
       expect(mockCreateContentGenerator).not.toHaveBeenCalled();
     });
@@ -982,28 +890,21 @@ describe('BaseLlmClient', () => {
       const resolved = await c.resolveForModel('runtime-model');
 
       expect(resolved.contentGenerator).toBe(runtimeContentGenerator);
-      expect(resolved.retryAuthType).toBe(AuthType.USE_OPENAI);
       expect(getResolvedModel).not.toHaveBeenCalled();
       expect(mockCreateContentGenerator).not.toHaveBeenCalled();
     });
 
-    it('builds a per-model generator when model differs and is registered under another authType', async () => {
-      // Main authType is QWEN_OAUTH; fast model only resolves under USE_ANTHROPIC.
-      getResolvedModel.mockImplementation((authType: string, model: string) => {
-        if (authType === AuthType.QWEN_OAUTH) return undefined;
-        if (authType === AuthType.USE_ANTHROPIC && model === fastModel) {
-          return {
-            authType: AuthType.USE_ANTHROPIC,
-            envKey: 'ANTHROPIC_API_KEY',
-            baseUrl: 'https://api.anthropic.com',
-          };
-        }
-        return undefined;
-      });
+    it('builds a per-model generator when the model differs from main', async () => {
+      getResolvedModel.mockImplementation((authType: string, model: string) =>
+        authType === AuthType.USE_OPENAI && model === fastModel
+          ? fastModelConfig
+          : undefined,
+      );
 
       const targetConfig = {
         model: fastModel,
-        authType: AuthType.USE_ANTHROPIC,
+        authType: AuthType.USE_OPENAI,
+        baseUrl: FAST_BASE_URL,
       };
       mockBuildAgentContentGeneratorConfig.mockReturnValue(targetConfig);
       const c = new BaseLlmClient(mockContentGenerator, crossProviderConfig);
@@ -1012,34 +913,56 @@ describe('BaseLlmClient', () => {
 
       expect(resolved.contentGenerator).toBe(fastContentGenerator);
       expect(resolved.contentGeneratorConfig).toBe(targetConfig);
-      expect(resolved.retryAuthType).toBe(AuthType.USE_ANTHROPIC);
       expect(mockBuildAgentContentGeneratorConfig).toHaveBeenCalledWith(
         crossProviderConfig,
         fastModel,
         expect.objectContaining({
-          authType: AuthType.USE_ANTHROPIC,
-          baseUrl: 'https://api.anthropic.com',
+          authType: AuthType.USE_OPENAI,
+          baseUrl: FAST_BASE_URL,
         }),
       );
       expect(mockCreateContentGenerator).toHaveBeenCalledTimes(1);
     });
 
-    it('does not confuse a qualified cross-provider namesake with the primary', async () => {
+    it.each(['claude-sonnet-4', 'anthropic:claude-3', 'gpt-4o'])(
+      'never builds a generator for the unconfigured model %s',
+      async (model) => {
+        getResolvedModel.mockReturnValue(undefined);
+        const c = new BaseLlmClient(mockContentGenerator, crossProviderConfig);
+
+        const resolved = await c.resolveForModel(model);
+
+        expect(getResolvedModel).toHaveBeenCalledWith(
+          AuthType.USE_OPENAI,
+          model,
+        );
+        expect(resolved.contentGenerator).toBe(mockContentGenerator);
+        expect(resolved.contentGeneratorConfig.baseUrl).toBe(MAIN_BASE_URL);
+        await expect(
+          c.resolveForModel(model, { failClosed: true }),
+        ).rejects.toThrow('is not configured');
+        expect(mockBuildAgentContentGeneratorConfig).not.toHaveBeenCalled();
+        expect(mockCreateContentGenerator).not.toHaveBeenCalled();
+      },
+    );
+
+    it('does not reuse the primary generator for a namesake on another baseUrl', async () => {
       vi.mocked(crossProviderConfig.getModel).mockReturnValue('shared-model');
-      getResolvedModel.mockImplementation((authType: string, model: string) =>
-        authType === AuthType.USE_ANTHROPIC && model === 'shared-model'
-          ? {
-              id: 'shared-model',
-              authType: AuthType.USE_ANTHROPIC,
-              baseUrl: '',
-            }
-          : undefined,
+      getResolvedModel.mockImplementation(
+        (authType: string, model: string, baseUrl?: string) =>
+          authType === AuthType.USE_OPENAI &&
+          model === 'shared-model' &&
+          baseUrl === FAST_BASE_URL
+            ? { ...fastModelConfig, id: 'shared-model' }
+            : undefined,
       );
 
       const resolved = await new BaseLlmClient(
         mockContentGenerator,
         crossProviderConfig,
-      ).resolveForModel('anthropic:shared-model', { failClosed: true });
+      ).resolveForModel(`openai:shared-model\0${FAST_BASE_URL}`, {
+        failClosed: true,
+      });
 
       expect(resolved.contentGenerator).toBe(fastContentGenerator);
       expect(mockCreateContentGenerator).toHaveBeenCalledOnce();
@@ -1047,18 +970,14 @@ describe('BaseLlmClient', () => {
 
     it('keeps explicit vision capability on the resolved generator config', async () => {
       getResolvedModel.mockImplementation((authType: string, model: string) =>
-        authType === AuthType.USE_ANTHROPIC && model === fastModel
-          ? {
-              id: fastModel,
-              authType: AuthType.USE_ANTHROPIC,
-              baseUrl: 'https://api.anthropic.com',
-              capabilities: { vision: true },
-            }
+        authType === AuthType.USE_OPENAI && model === fastModel
+          ? { ...fastModelConfig, capabilities: { vision: true } }
           : undefined,
       );
       mockBuildAgentContentGeneratorConfig.mockReturnValue({
         model: fastModel,
-        authType: AuthType.USE_ANTHROPIC,
+        authType: AuthType.USE_OPENAI,
+        baseUrl: FAST_BASE_URL,
         modalities: {},
       });
 
@@ -1075,7 +994,7 @@ describe('BaseLlmClient', () => {
     });
 
     it('resolves same-id model selectors by baseUrl when provided', async () => {
-      const selectedBaseUrl = 'https://token-plan.example.com/v1';
+      const selectedBaseUrl = FAST_BASE_URL;
       getResolvedModel.mockImplementation(
         (authType: string, model: string, baseUrl?: string) => {
           if (
@@ -1086,7 +1005,7 @@ describe('BaseLlmClient', () => {
             return {
               id: 'qwen3.7-plus',
               authType: AuthType.USE_OPENAI,
-              envKey: 'TOKEN_PLAN_KEY',
+              envKey: 'LOCAL_API_KEY',
               baseUrl: selectedBaseUrl,
             };
           }
@@ -1116,18 +1035,18 @@ describe('BaseLlmClient', () => {
     });
 
     it('threads baseUrl through bare model registry lookups', async () => {
-      const selectedBaseUrl = 'https://token-plan.example.com/v1';
+      const selectedBaseUrl = FAST_BASE_URL;
       getResolvedModel.mockImplementation(
         (authType: string, model: string, baseUrl?: string) => {
           if (
-            authType === AuthType.USE_ANTHROPIC &&
+            authType === AuthType.USE_OPENAI &&
             model === 'qwen3.7-plus' &&
             baseUrl === selectedBaseUrl
           ) {
             return {
               id: 'qwen3.7-plus',
-              authType: AuthType.USE_ANTHROPIC,
-              envKey: 'TOKEN_PLAN_KEY',
+              authType: AuthType.USE_OPENAI,
+              envKey: 'LOCAL_API_KEY',
               baseUrl: selectedBaseUrl,
             };
           }
@@ -1139,15 +1058,15 @@ describe('BaseLlmClient', () => {
       await c.resolveForModel(`qwen3.7-plus\0${selectedBaseUrl}`);
 
       expect(getResolvedModel).toHaveBeenCalledWith(
-        AuthType.QWEN_OAUTH,
+        AuthType.USE_OPENAI,
         'qwen3.7-plus',
         selectedBaseUrl,
       );
     });
 
     it('does not reuse the main generator when the requested baseUrl differs', async () => {
-      const mainBaseUrl = 'https://main.example.com/v1';
-      const selectedBaseUrl = 'https://token-plan.example.com/v1';
+      const mainBaseUrl = MAIN_BASE_URL;
+      const selectedBaseUrl = FAST_BASE_URL;
       vi.mocked(crossProviderConfig.getModel).mockReturnValue('qwen3.7-plus');
       vi.mocked(crossProviderConfig.getContentGeneratorConfig).mockReturnValue({
         authType: AuthType.USE_OPENAI,
@@ -1164,7 +1083,7 @@ describe('BaseLlmClient', () => {
             return {
               id: 'qwen3.7-plus',
               authType: AuthType.USE_OPENAI,
-              envKey: 'TOKEN_PLAN_KEY',
+              envKey: 'LOCAL_API_KEY',
               baseUrl: selectedBaseUrl,
             };
           }
@@ -1192,7 +1111,7 @@ describe('BaseLlmClient', () => {
 
       await expect(
         c.resolveForModel('ghost-model', { failClosed: true }),
-      ).rejects.toThrow(/not registered/i);
+      ).rejects.toThrow(/not configured/i);
       expect(mockCreateContentGenerator).not.toHaveBeenCalled();
     });
 
@@ -1201,23 +1120,19 @@ describe('BaseLlmClient', () => {
       const c = new BaseLlmClient(mockContentGenerator, crossProviderConfig);
 
       await expect(
-        c.resolveForModel('openai:real-model\0https://wrong-url.example.com', {
+        c.resolveForModel('openai:real-model\0http://127.0.0.1:9999/v1', {
           failClosed: true,
         }),
       ).rejects.toThrow(
-        'Model "openai:real-model" at baseUrl "https://wrong-url.example.com" is not registered',
+        'Model "openai:real-model" at baseUrl "http://127.0.0.1:9999/v1" is not configured',
       );
       expect(mockCreateContentGenerator).not.toHaveBeenCalled();
     });
 
     it('fails closed (throws) when generator creation fails and failClosed is set', async () => {
       getResolvedModel.mockImplementation((authType: string, model: string) =>
-        authType === AuthType.USE_ANTHROPIC && model === fastModel
-          ? {
-              authType: AuthType.USE_ANTHROPIC,
-              envKey: 'ANTHROPIC_API_KEY',
-              baseUrl: 'https://api.anthropic.com',
-            }
+        authType === AuthType.USE_OPENAI && model === fastModel
+          ? fastModelConfig
           : undefined,
       );
       mockCreateContentGenerator.mockRejectedValue(
@@ -1244,10 +1159,7 @@ describe('BaseLlmClient', () => {
       // chatCompressionService passes both `model` and `stream: true`, so the
       // streaming branch must run on the resolveForModel-selected generator,
       // not the constructor-injected default.
-      getResolvedModel.mockReturnValue({
-        authType: AuthType.USE_ANTHROPIC,
-        envKey: 'ANTHROPIC_API_KEY',
-      });
+      getResolvedModel.mockReturnValue(fastModelConfig);
       const usage = {
         promptTokenCount: 2,
         candidatesTokenCount: 2,
@@ -1285,10 +1197,7 @@ describe('BaseLlmClient', () => {
     });
 
     it('caches the per-model generator across resolveForModel calls', async () => {
-      getResolvedModel.mockReturnValue({
-        authType: AuthType.USE_ANTHROPIC,
-        envKey: 'ANTHROPIC_API_KEY',
-      });
+      getResolvedModel.mockReturnValue(fastModelConfig);
 
       const c = new BaseLlmClient(mockContentGenerator, crossProviderConfig);
 
@@ -1299,10 +1208,7 @@ describe('BaseLlmClient', () => {
     });
 
     it('shares a successful per-model generator across failClosed modes', async () => {
-      getResolvedModel.mockReturnValue({
-        authType: AuthType.USE_ANTHROPIC,
-        envKey: 'ANTHROPIC_API_KEY',
-      });
+      getResolvedModel.mockReturnValue(fastModelConfig);
 
       const c = new BaseLlmClient(mockContentGenerator, crossProviderConfig);
 
@@ -1313,10 +1219,7 @@ describe('BaseLlmClient', () => {
     });
 
     it('clearPerModelGeneratorCache forces a rebuild on the next call', async () => {
-      getResolvedModel.mockReturnValue({
-        authType: AuthType.USE_ANTHROPIC,
-        envKey: 'ANTHROPIC_API_KEY',
-      });
+      getResolvedModel.mockReturnValue(fastModelConfig);
 
       const c = new BaseLlmClient(mockContentGenerator, crossProviderConfig);
       await c.resolveForModel(fastModel);
@@ -1333,8 +1236,6 @@ describe('BaseLlmClient', () => {
       const resolved = await c.resolveForModel('unknown-model');
 
       expect(resolved.contentGenerator).toBe(mockContentGenerator);
-      // Falls back to main authType for retry classification.
-      expect(resolved.retryAuthType).toBe(AuthType.QWEN_OAUTH);
       expect(mockCreateContentGenerator).not.toHaveBeenCalled();
     });
 
@@ -1371,10 +1272,7 @@ describe('BaseLlmClient', () => {
     });
 
     it('falls back to the main generator when createContentGenerator throws', async () => {
-      getResolvedModel.mockReturnValue({
-        authType: AuthType.USE_ANTHROPIC,
-        envKey: 'ANTHROPIC_API_KEY',
-      });
+      getResolvedModel.mockReturnValue(fastModelConfig);
       mockCreateContentGenerator.mockRejectedValue(
         new Error('SDK init failed'),
       );
@@ -1383,16 +1281,12 @@ describe('BaseLlmClient', () => {
       const resolved = await c.resolveForModel(fastModel);
 
       expect(resolved.contentGenerator).toBe(mockContentGenerator);
-      // retryAuthType still reflects the target provider — failure to build
-      // the generator does not change which provider's retry policy applies.
-      expect(resolved.retryAuthType).toBe(AuthType.USE_ANTHROPIC);
     });
 
-    it('generateJson routes through the per-model generator and forwards retry authType', async () => {
+    it('generateJson routes through the per-model generator and forwards its retry codes', async () => {
       const retryErrorCodes = [4999];
       getResolvedModel.mockReturnValue({
-        authType: AuthType.USE_ANTHROPIC,
-        envKey: 'ANTHROPIC_API_KEY',
+        ...fastModelConfig,
         generationConfig: {
           retryErrorCodes,
         },
@@ -1419,7 +1313,6 @@ describe('BaseLlmClient', () => {
       expect(retryWithBackoff).toHaveBeenCalledWith(
         expect.any(Function),
         expect.objectContaining({
-          authType: AuthType.USE_ANTHROPIC,
           extraRetryErrorCodes: retryErrorCodes,
         }),
       );
@@ -1431,7 +1324,7 @@ describe('BaseLlmClient', () => {
           return {
             id: 'shared-model',
             authType: AuthType.USE_OPENAI,
-            envKey: 'OPENAI_API_KEY',
+            envKey: 'LOCAL_API_KEY',
           };
         }
         return undefined;
@@ -1475,7 +1368,7 @@ describe('BaseLlmClient', () => {
           return {
             id: 'shared-model',
             authType: AuthType.USE_OPENAI,
-            envKey: 'OPENAI_API_KEY',
+            envKey: 'LOCAL_API_KEY',
           };
         }
         return undefined;
@@ -1512,11 +1405,8 @@ describe('BaseLlmClient', () => {
       );
     });
 
-    it('generateText routes through the per-model generator and forwards retry authType', async () => {
-      getResolvedModel.mockReturnValue({
-        authType: AuthType.USE_ANTHROPIC,
-        envKey: 'ANTHROPIC_API_KEY',
-      });
+    it('generateText routes through the per-model generator', async () => {
+      getResolvedModel.mockReturnValue(fastModelConfig);
       fastGenerateContent.mockResolvedValue({
         candidates: [
           { content: { role: 'model', parts: [{ text: 'hi' }] }, index: 0 },
@@ -1535,10 +1425,6 @@ describe('BaseLlmClient', () => {
       expect(result.text).toBe('hi');
       expect(fastGenerateContent).toHaveBeenCalledTimes(1);
       expect(mockGenerateContent).not.toHaveBeenCalled();
-      expect(retryWithBackoff).toHaveBeenCalledWith(
-        expect.any(Function),
-        expect.objectContaining({ authType: AuthType.USE_ANTHROPIC }),
-      );
     });
   });
 });

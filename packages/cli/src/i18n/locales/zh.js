@@ -1350,8 +1350,6 @@ export default {
   'Configured models: {{models}}.': '已配置模型：{{models}}。',
   "Voice model '{{modelName}}' cannot be used for transcription.":
     "语音模型 '{{modelName}}' 不能用于转写。",
-  'Configure an OpenAI-compatible model with baseUrl in settings.modelProviders.':
-    '请在 settings.modelProviders 中配置带 baseUrl 的 OpenAI 兼容模型。',
   'Content generator configuration not available.': '内容生成器配置不可用',
   'Authentication type not available.': '认证类型不可用',
   'No models available for the current authentication type ({{authType}}).':
@@ -1457,74 +1455,22 @@ export default {
   'Welcome back! (Last updated: {{timeAgo}})':
     '欢迎回来！（最后更新：{{timeAgo}}）',
   'Overall Goal:': '总体目标：',
-  'Connect a Provider': '连接服务商',
   'You must connect a provider to proceed. Press Ctrl+C again to exit.':
     '必须连接一个服务商才能继续。再次按 Ctrl+C 退出',
-  'Terms of Services and Privacy Notice': '服务条款和隐私声明',
-  'Qwen OAuth': 'Qwen OAuth (免费)',
-  'Discontinued — switch to Coding Plan or API Key':
-    '已停用 — 请切换到 Coding Plan 或 API Key',
-  'Qwen OAuth free tier was discontinued on 2026-04-15. Please select Coding Plan or API Key instead.':
-    'Qwen OAuth 免费额度已于 2026-04-15 停用。请选择 Coding Plan 或 API Key。',
-  'Qwen OAuth free tier was discontinued on 2026-04-15. Please select a model from another provider or run /auth to switch.':
-    'Qwen OAuth免费层已于2026-04-15停止服务。请选择其他提供商的模型或运行 /auth 切换。',
-  '\n⚠ Qwen OAuth free tier was discontinued on 2026-04-15. Please select another option.\n':
-    '\n⚠ Qwen OAuth 免费额度已于 2026-04-15 停用。请选择其他选项。\n',
-  'Paid \u00B7 Up to 6,000 requests/5 hrs \u00B7 All Alibaba Cloud Coding Plan Models':
-    '付费 \u00B7 每 5 小时最多 6,000 次请求 \u00B7 支持阿里云百炼 Coding Plan 全部模型',
-  'For teams \u00B7 Paid \u00B7 Up to 6,000 requests/5 hrs \u00B7 All Alibaba Cloud Coding Plan Models':
-    '适合团队 \u00B7 付费 \u00B7 每 5 小时最多 6,000 次请求 \u00B7 支持阿里云百炼 Coding Plan 全部模型',
   'For individual developers \u00B7 Pay per model call \u00B7 5-hour/weekly quotas':
     '适合个人开发场景 \u00B7 按模型调用次数计费 \u00B7 每 5 小时/每周限额',
   Subscribe: '订阅计划',
-  'Paid subscription plans from Alibaba Cloud ModelStudio':
-    'Alibaba Cloud ModelStudio 付费订阅计划',
   'Select Subscription Plan': '选择订阅计划',
-  'Alibaba Cloud Coding Plan': '阿里云百炼 Coding Plan',
-  'Alibaba Cloud Token Plan': '阿里云百炼 Token Plan',
-  'Pay-as-you-go tokens \u00B7 Configure ModelStudio standard API key':
-    '按 Token 付费 \u00B7 配置 ModelStudio 标准 API Key',
-  'For individuals \u00B7 Pay-as-you-go tokens \u00B7 Dedicated Token Plan endpoint':
-    '适合个人 \u00B7 按 Token 付费 \u00B7 使用独立 Token Plan Endpoint',
   'For teams/companies \u00B7 Credits deducted by token usage \u00B7 Dedicated API key and base URL':
     '适合一人公司/团队/企业 \u00B7 按 Token 消耗抵扣 Credits \u00B7 专属 API Key 和 Base URL',
-  'Token Plan documentation': 'Token Plan 参考文档',
   'Bring your own API key': '使用自己的 API Key',
-  'Browser-based authentication with third-party providers (e.g. OpenRouter, ModelScope)':
-    '基于浏览器的第三方提供商认证（例如 OpenRouter、ModelScope）',
-  'Authentication is enforced to be {{enforcedType}}, but you are currently using {{currentType}}.':
-    '认证方式被强制设置为 {{enforcedType}}，但您当前使用的是 {{currentType}}',
-  'Qwen OAuth Authentication': 'Qwen OAuth 认证',
-  'Please visit this URL to authorize:': '请访问此 URL 进行授权：',
-  'Waiting for authorization': '等待授权中',
-  'Time remaining:': '剩余时间：',
-  'Qwen OAuth Authentication Timeout': 'Qwen OAuth 认证超时',
-  'OAuth token expired (over {{seconds}} seconds). Please select authentication method again.':
-    'OAuth token 已过期（超过 {{seconds}} 秒）。请重新选择认证方法',
-  'Press any key to return to authentication type selection.':
-    '按任意键返回认证类型选择',
-  'Waiting for Qwen OAuth authentication...': '正在等待 Qwen OAuth 认证...',
-  'Authentication timed out. Please try again.': '认证超时。请重试。',
-  'Waiting for auth... (Press ESC or CTRL+C to cancel)':
-    '正在等待认证...（按 ESC 或 CTRL+C 取消）',
   'Missing API key for OpenAI-compatible auth. Set settings.security.auth.apiKey, or set the {{envKeyHint}} environment variable.':
     '缺少 OpenAI 兼容认证的 API Key。请设置 settings.security.auth.apiKey 或设置 {{envKeyHint}} 环境变量。',
-  '{{envKeyHint}} environment variable not found. Please set it in your .env file or environment variables.':
-    '未找到 {{envKeyHint}} 环境变量。请在 .env 文件或系统环境变量中进行设置。',
-  '{{envKeyHint}} environment variable not found (or set settings.security.auth.apiKey). Please set it in your .env file or environment variables.':
-    '未找到 {{envKeyHint}} 环境变量（或设置 settings.security.auth.apiKey）。请在 .env 文件或系统环境变量中进行设置。',
   'Missing API key for OpenAI-compatible auth. Set the {{envKeyHint}} environment variable.':
     '缺少 OpenAI 兼容认证的 API Key。请设置 {{envKeyHint}} 环境变量。',
-  'Anthropic provider missing required baseUrl in modelProviders[].baseUrl.':
-    'Anthropic 提供商缺少必需的 baseUrl，请在 modelProviders[].baseUrl 中配置。',
-  'ANTHROPIC_BASE_URL environment variable not found.':
-    '未找到 ANTHROPIC_BASE_URL 环境变量。',
-  'Invalid auth method selected.': '选择了无效的认证方式。',
   'Failed to authenticate. Message: {{message}}': '认证失败。消息：{{message}}',
   'Authenticated successfully with {{authType}} credentials.':
     '使用 {{authType}} 凭据成功认证。',
-  'Invalid QWEN_DEFAULT_AUTH_TYPE value: "{{value}}". Valid values are: {{validValues}}':
-    '无效的 QWEN_DEFAULT_AUTH_TYPE 值："{{value}}"。有效值为：{{validValues}}',
   // ============================================================================
   // Dialogs - Model
   // ============================================================================
@@ -1887,22 +1833,8 @@ export default {
   // Coding Plan Authentication
   // ============================================================================
   'API key cannot be empty.': 'API Key 不能为空。',
-  'Invalid API key. Coding Plan API keys start with "sk-sp-". Please check.':
-    '无效的 API Key。Coding Plan API Key 以 "sk-sp-" 开头，请检查。',
-  'You can get your Coding Plan API key here':
-    '您可以在这里获取 Coding Plan API Key',
-  'You can get your Token Plan API key here':
-    '您可以在这里获取 Token Plan API Key',
   'API key is stored in settings.env. You can migrate it to a .env file for better security.':
     'API Key 已存储在 settings.env 中。您可以将其迁移到 .env 文件以获得更好的安全性。',
-  'New model configurations are available for Alibaba Cloud Coding Plan. Update now?':
-    '阿里云百炼 Coding Plan 有新模型配置可用。是否立即更新？',
-  'Coding Plan configuration updated successfully. New models are now available.':
-    'Coding Plan 配置更新成功。新模型现已可用。',
-  'Coding Plan API key not found. Please re-authenticate with Coding Plan.':
-    '未找到 Coding Plan API Key。请重新通过 Coding Plan 认证。',
-  'Failed to update Coding Plan configuration: {{message}}':
-    '更新 Coding Plan 配置失败：{{message}}',
 
   // ============================================================================
   // Custom API Key Configuration
@@ -1914,13 +1846,9 @@ export default {
   // ============================================================================
   // Auth Dialog - View Titles and Labels
   // ============================================================================
-  'Coding Plan': 'Coding Plan',
   Custom: '自定义',
-  'Select Region for Coding Plan': '选择 Coding Plan 区域',
   'Choose based on where your account is registered':
     '请根据您的账号注册地区选择',
-  'Enter Coding Plan API Key': '输入 Coding Plan API Key',
-  'Enter Token Plan API Key': '输入 Token Plan API Key',
 
   // ============================================================================
   // Coding Plan International Updates
@@ -1965,8 +1893,6 @@ export default {
   '{{region}} configuration updated successfully.': '{{region}} 配置更新成功。',
   'Authenticated successfully with {{region}}. API key and model configs saved to settings.json.':
     '成功通过 {{region}} 认证。API Key 和模型配置已保存至 settings.json。',
-  'Tip: Use /model to switch between available Coding Plan models.':
-    '提示：使用 /model 切换可用的 Coding Plan 模型。',
   'Type something...': '输入内容...',
   Submit: '提交',
   'Submit answers': '提交答案',
@@ -1978,57 +1904,26 @@ export default {
     '↑/↓: 导航 | ←/→: 切换标签页 | Enter: 选择',
   '↑/↓: Navigate | Enter: Select | Esc: Cancel':
     '↑/↓: 导航 | Enter: 选择 | Esc: 取消',
-  'Authenticate using Qwen OAuth': '使用 Qwen OAuth 进行认证',
-  'Authenticate using Alibaba Cloud Coding Plan':
-    '使用阿里云百炼 Coding Plan 进行认证',
-  'Region for Coding Plan (china/global)': 'Coding Plan 区域 (china/global)',
-  'API key for Coding Plan': 'Coding Plan 的 API Key',
   'Show current authentication status': '显示当前认证状态',
   'Authentication completed successfully.': '认证完成。',
-  'Starting Qwen OAuth authentication...': '正在启动 Qwen OAuth 认证...',
-  'Successfully authenticated with Qwen OAuth.': '已成功通过 Qwen OAuth 认证。',
-  'Failed to authenticate with Qwen OAuth: {{error}}':
-    'Qwen OAuth 认证失败：{{error}}',
-  'Processing Alibaba Cloud Coding Plan authentication...':
-    '正在处理阿里云百炼 Coding Plan 认证...',
-  'Successfully authenticated with Alibaba Cloud Coding Plan.':
-    '已成功通过阿里云百炼 Coding Plan 认证。',
-  'Failed to authenticate with Coding Plan: {{error}}':
-    'Coding Plan 认证失败：{{error}}',
   Global: '全球',
-  'Alibaba Cloud (alibabacloud.com)': 'Alibaba Cloud (alibabacloud.com)',
-  'Select region for Coding Plan:': '选择 Coding Plan 区域：',
-  'Enter your Coding Plan API key: ': '请输入您的 Coding Plan API Key：',
-  'Select authentication method:': '选择认证方式：',
   '\n=== Authentication Status ===\n': '\n=== 认证状态 ===\n',
-  '⚠  No authentication method configured.\n': '⚠  未配置认证方式。\n',
   'Run one of the following commands to get started:\n':
     '运行以下命令之一开始配置：\n',
-  '  qwen auth qwen-oauth     - Authenticate with Qwen OAuth (discontinued)':
-    '  qwen auth qwen-oauth     - 使用 Qwen OAuth 登录（已停用）',
   'Or simply run:': '或者直接运行：',
   '  qwen auth                - Interactive authentication setup\n':
     '  qwen auth                - 交互式认证配置\n',
-  '✓ Authentication Method: Qwen OAuth': '✓ 认证方式：Qwen OAuth',
   '  Type: Free tier (discontinued 2026-04-15)':
     '  类型：免费额度（2026-04-15 已停用）',
   '  Limit: No longer available': '  限额：已不可用',
-  'Qwen OAuth free tier was discontinued on 2026-04-15. Run /auth to switch to Coding Plan, OpenRouter, Fireworks AI, or another provider.':
-    'Qwen OAuth 免费额度已于 2026-04-15 停用。请运行 /auth 切换到 Coding Plan、OpenRouter、Fireworks AI 或其他服务商。',
-  '✓ Authentication Method: Alibaba Cloud Coding Plan':
-    '✓ 认证方式：阿里云百炼 Coding Plan',
-  'Global - Alibaba Cloud': '全球 - Alibaba Cloud',
   '  Region: {{region}}': '  区域：{{region}}',
   '  Current Model: {{model}}': '  当前模型：{{model}}',
   '  Config Version: {{version}}': '  配置版本：{{version}}',
   '  Status: API key configured\n': '  状态：API Key 已配置\n',
-  '⚠  Authentication Method: Alibaba Cloud Coding Plan (Incomplete)':
-    '⚠  认证方式：阿里云百炼 Coding Plan（不完整）',
   '  Issue: API key not found in environment or settings\n':
     '  问题：在环境变量或设置中未找到 API Key\n',
   '  Run `qwen auth coding-plan` to re-configure.\n':
     '  运行 `qwen auth coding-plan` 重新配置。\n',
-  '✓ Authentication Method: {{type}}': '✓ 认证方式：{{type}}',
   '  Status: Configured\n': '  状态：已配置\n',
   'Failed to check authentication status: {{error}}':
     '检查认证状态失败：{{error}}',
@@ -2275,12 +2170,8 @@ export default {
   ' (not in model registry)': '（不在模型注册表中）',
   'start server': '启动服务器',
   '中国 (China)': '中国',
-  '中国 (China) - 阿里云百炼': '中国 - 阿里云百炼',
-  '阿里云百炼 (aliyun.com)': '阿里云百炼（aliyun.com）',
   'No compression needed.': '无需压缩。',
   // Update command
-  'Update successful! Please restart Qwen Code to use the new version. Switching model providers before restarting may not work correctly.':
-    '更新成功！请重启 Qwen Code 以使用新版本。重启前切换模型提供商可能无法正常工作。',
   'Standalone install detected. Please rerun the standalone installer to update:':
     '检测到独立安装。请重新运行独立安装程序以更新：',
   'Unable to auto-update this standalone installation. Please reinstall from:':

@@ -63,7 +63,6 @@ import {
   type BranchPoint,
   type CodeModeToolResult,
   type AdmissibleNotification,
-  AuthType,
   getGptReasoningCapabilities,
   parseModelReasoningCapabilities,
   ApprovalMode,
@@ -1974,20 +1973,16 @@ export async function buildAvailableCommandsSnapshot(
   };
 }
 
-// The two caller-caused `switchModel` refusals: the model is not
-// registered for the auth type, or it is media-only and cannot serve as
-// the primary model. Every other `switchModel` throw is a daemon-side
-// fault (auth refresh, credential, I/O) and must stay an internal error.
-// Message-keyed because core throws plain Errors; a reworded message
-// degrades to internal error, never to a false refusal. `[\s\S]`, not
-// `.`: a model id can carry a newline, which `.` refuses to match — that
-// would degrade a definite caller-caused refusal into an internal error.
+// The caller-caused `switchModel` refusal: the model is not registered for
+// the auth type. Every other `switchModel` throw is a daemon-side fault (auth
+// refresh, credential, I/O) and must stay an internal error. Message-keyed
+// because core throws plain Errors; a reworded message degrades to internal
+// error, never to a false refusal. `[\s\S]`, not `.`: a model id can carry a
+// newline, which `.` refuses to match — that would degrade a definite
+// caller-caused refusal into an internal error.
 function isCallerCausedModelRefusal(error: Error): boolean {
-  return (
-    /^Model '[\s\S]+' not found for authType '[\s\S]+'$/.test(error.message) ||
-    /^(?:Image|Voice|Realtime)-only model '[\s\S]+' cannot be used as the primary model$/.test(
-      error.message,
-    )
+  return /^Model '[\s\S]+' not found for authType '[\s\S]+'$/.test(
+    error.message,
   );
 }
 
@@ -3623,10 +3618,7 @@ export class Session implements SessionContext {
     ) {
       throw new Error('Unable to reload model-provider settings from disk.');
     }
-    this.config.reloadModelProvidersConfig(
-      this.settings.merged.modelProviders,
-      this.settings.merged.providerProtocol ?? {},
-    );
+    this.config.reloadModelProvidersConfig(this.settings.merged.modelProviders);
   }
 
   installPendingManagedConversationBinding(
@@ -11550,19 +11542,9 @@ export class Session implements SessionContext {
       );
     }
 
-    const requireCachedCredentials =
-      selectedAuthType !== previousAuthType &&
-      selectedAuthType === AuthType.QWEN_OAUTH;
     const switchOptions =
-      resolvedRoute?.baseUrl !== undefined || requireCachedCredentials
-        ? {
-            ...(resolvedRoute?.baseUrl !== undefined
-              ? { baseUrl: resolvedRoute.baseUrl }
-              : {}),
-            ...(requireCachedCredentials
-              ? { requireCachedCredentials: true }
-              : {}),
-          }
+      resolvedRoute?.baseUrl !== undefined
+        ? { baseUrl: resolvedRoute.baseUrl }
         : undefined;
     try {
       await this.config.switchModel(
@@ -11571,11 +11553,10 @@ export class Session implements SessionContext {
         switchOptions,
       );
     } catch (error) {
-      // `switchModel` throws plain Errors for its two caller-caused
-      // refusals (an unknown model for the auth type, a media-only model
-      // as primary) and for daemon-side faults (auth refresh, credential,
-      // I/O) alike. Only the former are client errors on this surface —
-      // keep every other failure an internal error.
+      // `switchModel` throws plain Errors for its caller-caused refusal (an
+      // unknown model for the auth type) and for daemon-side faults (auth
+      // refresh, credential, I/O) alike. Only the former is a client error on
+      // this surface — keep every other failure an internal error.
       if (error instanceof Error && isCallerCausedModelRefusal(error)) {
         throw RequestError.invalidParams(undefined, error.message);
       }

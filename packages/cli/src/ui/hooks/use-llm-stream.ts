@@ -2292,10 +2292,7 @@ export const useLlmStream = (
       const isShowingAutoRetry = retryCountdownTimerRef.current !== null;
       clearRetryCountdown();
 
-      const formattedErrorText = parseAndFormatApiError(
-        eventValue.error,
-        config.getContentGeneratorConfig()?.authType,
-      );
+      const formattedErrorText = parseAndFormatApiError(eventValue.error);
 
       if (!isShowingAutoRetry) {
         const retryHint =
@@ -4264,7 +4261,6 @@ export const useLlmStream = (
               type: 'error' as const,
               text: parseAndFormatApiError(
                 getErrorMessage(error) || 'Unknown error',
-                config.getContentGeneratorConfig()?.authType,
               ),
               hint: retryHint,
             });

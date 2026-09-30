@@ -64,35 +64,3 @@ export const DEFAULT_STREAM_MAX_LIFETIME_MS = 900000;
 // value falls back to the default with a warning.
 export const QWEN_STREAM_MAX_LIFETIME_MS_ENV = 'QWEN_STREAM_MAX_LIFETIME_MS';
 export const DEFAULT_MAX_RETRIES = 3;
-
-export const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1';
-export const DEFAULT_DASHSCOPE_BASE_URL =
-  'https://dashscope.aliyuncs.com/compatible-mode/v1';
-export const DEFAULT_DEEPSEEK_BASE_URL = 'https://api.deepseek.com/v1';
-export const DEFAULT_OPEN_ROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
-/**
- * Read at call time, not at module load: `.env` files and `settings.env` are
- * applied after this module is imported, and the CLI keeps running in the same
- * process when those files only hold values that are read per request.
- */
-export function getDashscopeProxyBaseUrl(): string | undefined {
-  return process.env['DASHSCOPE_PROXY_BASE_URL'];
-}
-
-/**
- * Normalize an OpenAI-family baseUrl to the origin the Responses wire dials:
- * the pipeline strips any trailing `/v1` and appends `/v1/responses` itself,
- * so a bare origin, a `/v1`-suffixed URL, and an unset/default URL are the
- * same endpoint. ModelsConfig's credential-reuse comparison imports this so
- * the wire and the credential-carry decision can never drift apart on what
- * "same origin" means. It lives in this dependency-free leaf (not the
- * streaming pipeline module) so config/model modules can import it without
- * dragging the Responses pipeline's SDK imports into their static closure.
- */
-export function normalizeOpenAiWireBaseUrl(
-  baseUrl: string | undefined,
-): string {
-  return (baseUrl || DEFAULT_OPENAI_BASE_URL)
-    .replace(/\/v1\/?$/, '')
-    .replace(/\/$/, '');
-}

@@ -9,7 +9,6 @@ import type {
   GenerateContentConfig,
   GenerateContentResponseUsageMetadata,
   Part,
-  EmbedContentParameters,
   FunctionDeclaration,
   Tool,
   Schema,
@@ -60,14 +59,12 @@ function splitModelBaseUrl(model: string): { model: string; baseUrl?: string } {
  * The pair of generator and retry-authType to use for a request targeting
  * a specific model. When the requested model differs from the main session
  * model, both fields are resolved against that model's provider so that
- * per-model `extra_body` / `samplingParams` / reasoning settings — and
- * provider-specific retry/quota behaviour — do not leak from the main
- * session.
+ * per-model `extra_body` / `samplingParams` / reasoning settings do not leak
+ * from the main session.
  */
 export interface ResolvedGeneratorForModel {
   contentGenerator: ContentGenerator;
   contentGeneratorConfig: ContentGeneratorConfig;
-  retryAuthType: string | undefined;
   retryErrorCodes?: readonly number[];
   model: string;
 }
@@ -261,7 +258,6 @@ export class BaseLlmClient {
     const {
       contentGenerator,
       contentGeneratorConfig,
-      retryAuthType,
       retryErrorCodes,
       model: requestModel,
     } = await this.resolveForModel(model);
@@ -295,7 +291,6 @@ export class BaseLlmClient {
 
       const result = await retryWithBackoff(apiCall, {
         maxAttempts: maxAttempts ?? DEFAULT_MAX_ATTEMPTS,
-        authType: retryAuthType,
         extraRetryErrorCodes: retryErrorCodes,
         persistentMode: isUnattendedMode(),
         signal: abortSignal,
@@ -393,7 +388,6 @@ export class BaseLlmClient {
     const {
       contentGenerator,
       contentGeneratorConfig,
-      retryAuthType,
       retryErrorCodes,
       model: requestModel,
     } = await this.resolveForModel(model, { failClosed: options.failClosed });
@@ -450,7 +444,6 @@ export class BaseLlmClient {
 
       const result = await retryWithBackoff(apiCall, {
         maxAttempts: maxAttempts ?? DEFAULT_MAX_ATTEMPTS,
-        authType: retryAuthType,
         extraRetryErrorCodes: retryErrorCodes,
         persistentMode: isUnattendedMode(),
         signal: abortSignal,
@@ -500,51 +493,15 @@ export class BaseLlmClient {
     }
   }
 
-  async generateEmbedding(texts: string[]): Promise<number[][]> {
-    if (!texts || texts.length === 0) {
-      return [];
-    }
-    const embedModelParams: EmbedContentParameters = {
-      model: this.config.getEmbeddingModel(),
-      contents: texts,
-    };
-
-    const embedContentResponse =
-      await this.contentGenerator.embedContent(embedModelParams);
-    if (
-      !embedContentResponse.embeddings ||
-      embedContentResponse.embeddings.length === 0
-    ) {
-      throw new Error('No embeddings found in API response.');
-    }
-
-    if (embedContentResponse.embeddings.length !== texts.length) {
-      throw new Error(
-        `API returned a mismatched number of embeddings. Expected ${texts.length}, got ${embedContentResponse.embeddings.length}.`,
-      );
-    }
-
-    return embedContentResponse.embeddings.map((embedding, index) => {
-      const values = embedding.values;
-      if (!values || values.length === 0) {
-        throw new Error(
-          `API returned an empty embedding for input text at index ${index}: "${texts[index]}"`,
-        );
-      }
-      return values;
-    });
-  }
-
   /**
    * Resolve the ContentGenerator and retry authType for a request targeting
    * a specific model.
    *
    * When the requested model matches the main session model, returns the
    * constructor-injected generator and the main session's authType. When it
-   * differs (e.g. a fast model on a different provider), constructs and caches
-   * a per-model generator with that provider's auth, baseUrl, sampling, and
-   * extra_body settings — and reports the target provider as the retry
-   * authType so quota detection and provider-specific retry logic line up.
+   * differs (e.g. a fast model), constructs and caches a per-model generator
+   * with that model's baseUrl, sampling, and extra_body settings. Every such
+   * generator passes the same loopback base URL validation.
    *
    * Falls back to the main generator when the target model is not registered
    * or generator creation fails (e.g. tests without full auth setup).
@@ -573,7 +530,6 @@ export class BaseLlmClient {
       return {
         contentGenerator: this.getCurrentContentGenerator(),
         contentGeneratorConfig: mainGeneratorConfig,
-        retryAuthType: mainAuthType,
         retryErrorCodes: mainRetryErrorCodes,
         model: requestModel,
       };
@@ -586,20 +542,16 @@ export class BaseLlmClient {
         opts?.failClosed ?? false,
         requested.baseUrl,
       );
-    const resolvedModel = this.resolveModelAcrossAuthTypes(
-      requested.model,
+    const resolvedModel = this.resolveRegisteredModel(
       selector,
       requested.baseUrl,
     );
-    const retryAuthType =
-      resolvedModel?.authType ?? mainAuthType ?? AuthType.USE_OPENAI;
     const retryErrorCodes =
       resolvedModel?.generationConfig?.retryErrorCodes ?? mainRetryErrorCodes;
 
     return {
       contentGenerator,
       contentGeneratorConfig,
-      retryAuthType,
       retryErrorCodes,
       model: resolvedModel?.id ?? requestModel,
     };
@@ -613,50 +565,20 @@ export class BaseLlmClient {
     this.perModelGeneratorCache.clear();
   }
 
-  /**
-   * Resolve a model across all authTypes. Handles the case where the target
-   * model is registered under a different authType than the main model
-   * (e.g. main=QWEN_OAUTH, fast=USE_ANTHROPIC).
-   */
-  private resolveModelAcrossAuthTypes(
-    model: string,
+  /** Resolve a model from the configured models of the local server. */
+  private resolveRegisteredModel(
     selector: ResolvedModelId | undefined,
     modelBaseUrl?: string,
   ): ResolvedModelConfig | undefined {
     const modelsConfig = this.config.getModelsConfig?.();
-    if (!modelsConfig) return undefined;
-    if (!selector) return undefined;
-    const modelId = selector.modelId;
-    const getResolvedModel = (authType: AuthType) =>
-      modelBaseUrl === undefined
-        ? modelsConfig.getResolvedModel(authType, modelId)
-        : modelsConfig.getResolvedModel(authType, modelId, modelBaseUrl);
-
-    if (selector.authType) {
-      return getResolvedModel(selector.authType);
-    }
-
-    const allAuthTypes: AuthType[] = [
-      AuthType.QWEN_OAUTH,
-      AuthType.USE_OPENAI,
-      AuthType.USE_VERTEX_AI,
-      AuthType.USE_ANTHROPIC,
-      AuthType.USE_GEMINI,
-    ];
-
-    const mainAuthType = this.config.getContentGeneratorConfig()?.authType;
-    if (mainAuthType) {
-      const resolved = getResolvedModel(mainAuthType);
-      if (resolved) return resolved;
-    }
-
-    for (const authType of allAuthTypes) {
-      if (authType === mainAuthType) continue;
-      const resolved = getResolvedModel(authType);
-      if (resolved) return resolved;
-    }
-
-    return undefined;
+    if (!modelsConfig || !selector) return undefined;
+    const authType =
+      selector.authType ??
+      this.config.getContentGeneratorConfig()?.authType ??
+      AuthType.USE_OPENAI;
+    return modelBaseUrl === undefined
+      ? modelsConfig.getResolvedModel(authType, selector.modelId)
+      : modelsConfig.getResolvedModel(authType, selector.modelId, modelBaseUrl);
   }
 
   private async createRuntimeViewForModel(
@@ -693,11 +615,7 @@ export class BaseLlmClient {
     };
     if (cached) return cached.catch(fallbackAfterGeneratorError);
 
-    const resolvedModel = this.resolveModelAcrossAuthTypes(
-      model,
-      selector,
-      modelBaseUrl,
-    );
+    const resolvedModel = this.resolveRegisteredModel(selector, modelBaseUrl);
 
     if (!resolvedModel) {
       // failClosed callers (vision bridge) must NOT silently run on the main
@@ -706,12 +624,12 @@ export class BaseLlmClient {
         const baseUrlMessage =
           modelBaseUrl === undefined ? '' : ` at baseUrl "${modelBaseUrl}"`;
         throw new Error(
-          `Model "${model}"${baseUrlMessage} is not registered across any auth type; ` +
+          `Model "${model}"${baseUrlMessage} is not configured; ` +
             `refusing to fall back to the main generator.`,
         );
       }
       debugLogger.warn(
-        `Model "${model}" not found in registry across all authTypes, falling back to main generator.`,
+        `Model "${model}" is not configured, falling back to main generator.`,
       );
       // Do not cache the fallback: getCurrentContentGenerator() reads the
       // runtime view from AsyncLocalStorage, which can differ between calls

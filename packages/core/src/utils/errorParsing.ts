@@ -9,31 +9,10 @@ import {
   isStructuredError,
   QUOTA_EXHAUSTED_PREFIX,
 } from './quotaErrorDetection.js';
-import { AuthType } from './auth-type.js';
 import { getErrorMessage } from './errors.js';
 
-const RATE_LIMIT_MESSAGE_BY_AUTH = {
-  [AuthType.USE_GEMINI]:
-    '\nPlease wait and try again later. To increase your limits, request a quota increase through AI Studio, or switch to another /auth method',
-  [AuthType.USE_VERTEX_AI]:
-    '\nPlease wait and try again later. To increase your limits, request a quota increase through Vertex, or switch to another /auth method',
-  default:
-    '\nPossible quota limitations in place or slow response times detected. Please wait and try again later.',
-} as const;
-
-const RATE_LIMIT_SUFFIXES = Object.values(RATE_LIMIT_MESSAGE_BY_AUTH);
-
-function getRateLimitMessage(authType?: AuthType): string {
-  if (authType === AuthType.USE_GEMINI) {
-    return RATE_LIMIT_MESSAGE_BY_AUTH[AuthType.USE_GEMINI];
-  }
-
-  if (authType === AuthType.USE_VERTEX_AI) {
-    return RATE_LIMIT_MESSAGE_BY_AUTH[AuthType.USE_VERTEX_AI];
-  }
-
-  return RATE_LIMIT_MESSAGE_BY_AUTH.default;
-}
+const RATE_LIMIT_MESSAGE =
+  '\nPossible quota limitations in place or slow response times detected. Please wait and try again later.';
 
 const API_ERROR_PREFIX = '[API Error: ';
 
@@ -43,11 +22,9 @@ const API_ERROR_PREFIX = '[API Error: ';
  *
  * Accepts:
  * 1) base format: "[API Error: ...]"
- * 2) 429 format: "[API Error: ...]" followed by one of the known quota
- *    guidance suffixes.
+ * 2) 429 format: "[API Error: ...]" followed by the quota guidance suffix.
  * 3) friendly quota-exhaustion messages ("Quota exhausted: ...") built by
- *    formatQuotaExhaustedMessage — these live here rather than in the
- *    Qwen-OAuth prefix list because they also arrive via the plain-string
+ *    formatQuotaExhaustedMessage — they also arrive via the plain-string
  *    path (a StreamContentError whose .message is the formatted text).
  *
  * Used as an idempotency guard: when an upstream caller has already passed an
@@ -72,22 +49,11 @@ function isAlreadyFormatted(value: string): boolean {
     return true;
   }
 
-  return RATE_LIMIT_SUFFIXES.some((suffix) => trimmed.includes(`]${suffix}`));
+  return trimmed.includes(`]${RATE_LIMIT_MESSAGE}`);
 }
 
-export function parseAndFormatApiError(
-  error: unknown,
-  authType?: AuthType,
-): string {
+export function parseAndFormatApiError(error: unknown): string {
   if (isStructuredError(error)) {
-    // Qwen OAuth quota errors have their own user-friendly message; don't wrap them
-    if (
-      error.message.startsWith('Qwen OAuth quota exceeded:') ||
-      error.message.startsWith('Qwen OAuth free tier has been discontinued')
-    ) {
-      return error.message;
-    }
-
     // If a previous pass through this function already wrapped this message
     // and stuffed it into Error.message, return it unchanged. Avoids the
     // "[API Error: [API Error: ...]]" double-wrap reported in non-interactive
@@ -100,7 +66,7 @@ export function parseAndFormatApiError(
       error instanceof Error ? getErrorMessage(error) : error.message;
     let text = `[API Error: ${message}]`;
     if (error.status === 429) {
-      text += getRateLimitMessage(authType);
+      text += RATE_LIMIT_MESSAGE;
     }
     return text;
   }
@@ -137,7 +103,7 @@ export function parseAndFormatApiError(
           : '';
         let text = `[API Error: ${finalMessage}${statusText}]`;
         if (parsedError.error.code === 429) {
-          text += getRateLimitMessage(authType);
+          text += RATE_LIMIT_MESSAGE;
         }
         return text;
       }

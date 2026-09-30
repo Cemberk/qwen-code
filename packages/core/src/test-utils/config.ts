@@ -12,7 +12,6 @@ import { Config } from '../config/config.js';
  */
 export const DEFAULT_CONFIG_PARAMETERS: ConfigParameters = {
   debugMode: false,
-  proxy: undefined,
   model: 'qwen-9001-super-duper',
   targetDir: '/',
   cwd: '/',

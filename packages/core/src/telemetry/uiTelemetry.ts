@@ -229,8 +229,7 @@ const getEventTotalTokenCount = (event: ApiResponseEvent): number => {
     event.input_token_count > 0
       ? event.input_token_count
       : event.cached_content_token_count;
-  const thoughtsIncludedInOutput =
-    event.auth_type === 'openai' || event.auth_type === 'qwen-oauth';
+  const thoughtsIncludedInOutput = event.auth_type === 'openai';
   return (
     input +
     event.output_token_count +

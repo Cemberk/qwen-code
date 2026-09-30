@@ -14,7 +14,7 @@ const useTerminalSizeMock = vi.mocked(useTerminalSize.useTerminalSize);
 
 const defaultProps = {
   version: '1.0.0',
-  authDisplayType: AuthDisplayType.QWEN_OAUTH,
+  authDisplayType: AuthDisplayType.API_KEY,
   model: 'qwen-coder-plus',
   workingDirectory: '/home/user/projects/test',
 };
@@ -63,32 +63,15 @@ describe('<Header />', () => {
 
   it('displays auth type and model', () => {
     const { lastFrame } = render(<Header {...defaultProps} />);
-    expect(lastFrame()).toContain('Qwen OAuth');
+    expect(lastFrame()).toContain('API Key');
     expect(lastFrame()).toContain('qwen-coder-plus');
   });
 
-  it('displays Coding Plan auth type', () => {
+  it('displays custom auth labels as-is', () => {
     const { lastFrame } = render(
-      <Header
-        {...defaultProps}
-        authDisplayType={AuthDisplayType.CODING_PLAN}
-      />,
+      <Header {...defaultProps} authDisplayType="Local server" />,
     );
-    expect(lastFrame()).toContain('Coding Plan');
-  });
-
-  it('displays API Key auth type', () => {
-    const { lastFrame } = render(
-      <Header {...defaultProps} authDisplayType={AuthDisplayType.API_KEY} />,
-    );
-    expect(lastFrame()).toContain('API Key');
-  });
-
-  it('displays custom provider auth labels as-is', () => {
-    const { lastFrame } = render(
-      <Header {...defaultProps} authDisplayType="OpenRouter" />,
-    );
-    expect(lastFrame()).toContain('OpenRouter');
+    expect(lastFrame()).toContain('Local server');
     expect(lastFrame()).not.toContain('Unknown');
   });
 
@@ -130,7 +113,7 @@ describe('<Header />', () => {
     // Subtitle sits between the title and the auth line.
     const titleIdx = frame.indexOf('>_ Qwen Code');
     const subtitleIdx = frame.indexOf('Built-in DataWorks Official Skills');
-    const authIdx = frame.indexOf('Qwen OAuth');
+    const authIdx = frame.indexOf('API Key');
     expect(titleIdx).toBeLessThan(subtitleIdx);
     expect(subtitleIdx).toBeLessThan(authIdx);
   });
@@ -142,7 +125,7 @@ describe('<Header />', () => {
     // spacer between them is just whitespace-padding, so we assert the
     // visible chrome the user sees.
     expect(frame).toContain('>_ Qwen Code');
-    expect(frame).toContain('Qwen OAuth');
+    expect(frame).toContain('API Key');
   });
 
   it('renders the custom banner title in place of the default brand', () => {
@@ -192,7 +175,7 @@ describe('<Header />', () => {
     expect(lastFrame()).not.toContain('X'.repeat(150));
     expect(lastFrame()).not.toContain('Y'.repeat(150));
     // Info panel still renders.
-    expect(lastFrame()).toContain('Qwen OAuth');
+    expect(lastFrame()).toContain('API Key');
   });
 
   it('falls back to the default Qwen logo when no custom art was provided at all', () => {

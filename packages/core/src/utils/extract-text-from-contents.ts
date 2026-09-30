@@ -24,11 +24,8 @@ const textOfParts = (parts: PartUnion[]): string =>
 
 /**
  * Extract the concatenated text of every text part across a `@google/genai`
- * `ContentListUnion`, used by the OpenAI-compatible generators' `embedContent`
- * to build the embedding input string. Shared so a change to how `Part` text
- * is shaped only needs to be made once -- this was previously duplicated
- * verbatim between `openaiContentGenerator.ts` and
- * `openaiResponsesContentGenerator/index.ts`.
+ * `ContentListUnion`, used by the OpenAI-compatible generator's `embedContent`
+ * to build the embedding input string.
  */
 export function extractTextFromContents(contents: ContentListUnion): string {
   let text = '';

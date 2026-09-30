@@ -117,8 +117,8 @@ function buildArenaExecutionInput(
         )}`,
         '',
         t('Examples:'),
-        '  /arena start --models openai:gpt-4o,anthropic:claude-3 "implement sorting"',
-        '  /arena start --models qwen-coder-plus,kimi-for-coding "fix the bug"',
+        '  /arena start --models openai:qwen3-coder:30b,openai:gpt-oss:20b "implement sorting"',
+        '  /arena start --models qwen2.5-coder-7b,llama-3.1-8b "fix the bug"',
       ].join('\n'),
     };
   }
@@ -150,16 +150,6 @@ function buildArenaExecutionInput(
       (parsedModel.authType as AuthType | undefined) ?? defaultAuthType;
     const registryModels = modelsConfig.getAvailableModelsForAuthType(authType);
     const resolved = registryModels.find((m) => m.id === parsedModel.modelId);
-    if (resolved?.imageOnly) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: t(
-          "Image-only model '{{model}}' cannot be used in an Arena session.",
-          { model: parsedModel.modelId },
-        ),
-      };
-    }
     models.push({
       modelId: parsedModel.modelId,
       authType,

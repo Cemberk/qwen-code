@@ -267,14 +267,14 @@ describe('acpModelUtils', () => {
       const config = makeConfig(
         {
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://provider-a.example/v1',
+          baseUrl: 'http://127.0.0.1:11434/v1',
           apiKeyEnvKey: 'PROVIDER_A_KEY',
         },
         [
           {
             id: 'shared-id',
             authType: AuthType.USE_OPENAI,
-            baseUrl: 'https://provider-a.example/v1',
+            baseUrl: 'http://127.0.0.1:11434/v1',
             envKey: 'PROVIDER_A_KEY',
           },
         ],
@@ -282,25 +282,32 @@ describe('acpModelUtils', () => {
       expect(isInlineModelOverrideAllowed(config, 'shared-id')).toBe(true);
     });
 
-    it('allows a model when both sides have no baseUrl/envKey (e.g. qwen-oauth)', () => {
-      const config = makeConfig({ authType: AuthType.QWEN_OAUTH }, [
-        { id: 'qwen-max', authType: AuthType.QWEN_OAUTH },
-      ]);
-      expect(isInlineModelOverrideAllowed(config, 'qwen-max')).toBe(true);
+    it('allows a model when both sides have no envKey', () => {
+      const config = makeConfig(
+        { authType: AuthType.USE_OPENAI, baseUrl: 'http://127.0.0.1:11434/v1' },
+        [
+          {
+            id: 'local-model',
+            authType: AuthType.USE_OPENAI,
+            baseUrl: 'http://127.0.0.1:11434/v1',
+          },
+        ],
+      );
+      expect(isInlineModelOverrideAllowed(config, 'local-model')).toBe(true);
     });
 
     it('rejects a same-id model with a different baseUrl', () => {
       const config = makeConfig(
         {
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://provider-a.example/v1',
+          baseUrl: 'http://127.0.0.1:11434/v1',
           apiKeyEnvKey: 'PROVIDER_A_KEY',
         },
         [
           {
             id: 'shared-id',
             authType: AuthType.USE_OPENAI,
-            baseUrl: 'https://provider-b.example/v1',
+            baseUrl: 'http://localhost:1234/v1',
             envKey: 'PROVIDER_A_KEY',
           },
         ],
@@ -312,14 +319,14 @@ describe('acpModelUtils', () => {
       const config = makeConfig(
         {
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://provider-a.example/v1',
+          baseUrl: 'http://127.0.0.1:11434/v1',
           apiKeyEnvKey: 'PROVIDER_A_KEY',
         },
         [
           {
             id: 'shared-id',
             authType: AuthType.USE_OPENAI,
-            baseUrl: 'https://provider-a.example/v1',
+            baseUrl: 'http://127.0.0.1:11434/v1',
             envKey: 'PROVIDER_B_KEY',
           },
         ],
@@ -328,21 +335,17 @@ describe('acpModelUtils', () => {
     });
 
     it('rejects an unknown model id', () => {
-      const config = makeConfig({ authType: AuthType.QWEN_OAUTH }, [
-        { id: 'qwen-max', authType: AuthType.QWEN_OAUTH },
+      const config = makeConfig({ authType: AuthType.USE_OPENAI }, [
+        { id: 'local-model', authType: AuthType.USE_OPENAI },
       ]);
       expect(isInlineModelOverrideAllowed(config, 'missing')).toBe(false);
     });
 
     it('does not match selector-only models', () => {
-      const config = makeConfig({ authType: AuthType.QWEN_OAUTH }, [
-        { id: 'qwen-fast', authType: AuthType.QWEN_OAUTH, fastOnly: true },
-        { id: 'qwen-voice', authType: AuthType.QWEN_OAUTH, voiceOnly: true },
-        { id: 'qwen-image', authType: AuthType.QWEN_OAUTH, imageOnly: true },
+      const config = makeConfig({ authType: AuthType.USE_OPENAI }, [
+        { id: 'local-fast', authType: AuthType.USE_OPENAI, fastOnly: true },
       ]);
-      expect(isInlineModelOverrideAllowed(config, 'qwen-fast')).toBe(false);
-      expect(isInlineModelOverrideAllowed(config, 'qwen-voice')).toBe(false);
-      expect(isInlineModelOverrideAllowed(config, 'qwen-image')).toBe(false);
+      expect(isInlineModelOverrideAllowed(config, 'local-fast')).toBe(false);
     });
 
     it('rejects when no active auth type is available', () => {

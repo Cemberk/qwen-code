@@ -14,7 +14,6 @@ import {
   GOAL_MAX_TURNS_CAP,
   GOAL_TOKEN_BUDGET_CAP,
   ToolNames,
-  DEFAULT_QWEN_MODEL,
   OutputFormat,
   NativeLspService,
   AuthType,
@@ -405,17 +404,35 @@ describe('parseArguments', () => {
     expect(argv.promptInteractive).toBeUndefined();
   });
 
-  it('accepts OpenAI Responses as an auth type', async () => {
-    process.argv = [
-      'node',
-      'script.js',
-      '--auth-type',
-      AuthType.USE_OPENAI_RESPONSES,
-    ];
+  it('accepts openai as an auth type', async () => {
+    process.argv = ['node', 'script.js', '--auth-type', AuthType.USE_OPENAI];
 
     const argv = await parseArguments();
 
-    expect(argv.authType).toBe(AuthType.USE_OPENAI_RESPONSES);
+    expect(argv.authType).toBe(AuthType.USE_OPENAI);
+  });
+
+  it.each([
+    'qwen-oauth',
+    'openai-responses',
+    'anthropic',
+    'gemini',
+    'vertex-ai',
+  ])('rejects the removed %s auth type', async (authType) => {
+    process.argv = ['node', 'script.js', '--auth-type', authType];
+
+    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit called');
+    });
+    mockWriteStderrLine.mockClear();
+
+    await expect(parseArguments()).rejects.toThrow('process.exit called');
+
+    expect(mockWriteStderrLine).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid values:'),
+    );
+
+    mockExit.mockRestore();
   });
 
   it('should allow --prompt-interactive without --prompt', async () => {
@@ -1105,7 +1122,6 @@ describe('loadCliConfig', () => {
       undefined,
     );
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
     resetMcpApprovalsForTesting();
   });
 
@@ -1146,21 +1162,20 @@ describe('loadCliConfig', () => {
     ]);
   });
 
-  it('passes the effective model API to Config at startup', async () => {
+  it('passes the selected provider model to Config at startup', async () => {
     process.argv = ['node', 'script.js'];
-    vi.stubEnv('RESPONSES_KEY', 'responses-key');
+    vi.stubEnv('LOCAL_KEY', 'local-key');
     const argv = await parseArguments();
     const config = await loadCliConfig(
       {
         security: { auth: { selectedType: AuthType.USE_OPENAI } },
-        model: { name: 'gpt-model' },
+        model: { name: 'local-model' },
         modelProviders: {
           openai: [
             {
-              id: 'gpt-model',
-              wireApi: 'responses',
-              envKey: 'RESPONSES_KEY',
-              baseUrl: 'https://example.test/v1',
+              id: 'local-model',
+              envKey: 'LOCAL_KEY',
+              baseUrl: 'http://127.0.0.1:11434/v1',
             },
           ],
         },
@@ -1170,61 +1185,20 @@ describe('loadCliConfig', () => {
 
     expect(mockConfigConstructorParams).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        authType: AuthType.USE_OPENAI_RESPONSES,
+        authType: AuthType.USE_OPENAI,
         generationConfig: expect.objectContaining({
-          authType: AuthType.USE_OPENAI_RESPONSES,
-          apiKey: 'responses-key',
+          authType: AuthType.USE_OPENAI,
+          apiKey: 'local-key',
+          baseUrl: 'http://127.0.0.1:11434/v1',
         }),
       }),
     );
     expect(config.getModelsConfig().getCurrentAuthType()).toBe(
-      AuthType.USE_OPENAI_RESPONSES,
+      AuthType.USE_OPENAI,
     );
   });
 
-  it.each<[Settings, AuthType | undefined]>([
-    [
-      { modelProviders: { 'openai-responses': [{ id: 'old' }] } },
-      AuthType.USE_OPENAI_RESPONSES,
-    ],
-    [{ modelProviders: { 'openai-responses': [] } }, undefined],
-    [
-      {
-        modelProviders: { gateway: [{ id: 'old' }] },
-        providerProtocol: { gateway: 'openai-responses' },
-      },
-      AuthType.USE_OPENAI_RESPONSES,
-    ],
-    [{ providerProtocol: { unused: 'openai-responses' } }, undefined],
-    [
-      {
-        modelProviders: { 'openai-responses': [{ id: 'old' }] },
-        providerProtocol: { 'openai-responses': 'openai' },
-      },
-      AuthType.USE_OPENAI,
-    ],
-  ])(
-    'loads released provider configuration without changing its declared route: %j',
-    async (settings, expectedProtocol) => {
-      process.argv = ['node', 'script.js'];
-      const before = structuredClone(settings);
-      const argv = await parseArguments();
-      const config = await loadCliConfig(settings, argv);
-      for (const authType of [
-        AuthType.USE_OPENAI,
-        AuthType.USE_OPENAI_RESPONSES,
-      ]) {
-        const oldModels = config
-          .getModelsConfig()
-          .getAvailableModelsForAuthType(authType)
-          .filter((model) => model.id === 'old');
-        expect(oldModels).toHaveLength(authType === expectedProtocol ? 1 : 0);
-      }
-      expect(settings).toEqual(before);
-    },
-  );
-
-  it('reports an invalid model api as a config error, not an unexpected crash', async () => {
+  it('reports a non-loopback modelProviders baseUrl as a config error', async () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments();
     const settings: Settings = {
@@ -1234,10 +1208,8 @@ describe('loadCliConfig', () => {
         openai: [
           {
             id: 'gpt-model',
-            // A hand-editable typo. This resolves before the TUI starts, so an
-            // unwrapped throw leaves the user a stack trace and no way back.
-            wireApi: 'resposnes' as 'responses',
-            envKey: 'RESPONSES_KEY',
+            envKey: 'OPENAI_API_KEY',
+            baseUrl: 'https://api.openai.com/v1',
           },
         ],
       },
@@ -1246,45 +1218,28 @@ describe('loadCliConfig', () => {
     const err = await loadCliConfig(settings, argv).catch((e: unknown) => e);
 
     expect(err).toBeInstanceOf(FatalConfigError);
-    expect((err as Error).message).toMatch(
-      /Invalid wireApi "resposnes" for provider "openai"/,
+    expect((err as Error).message).toContain(
+      '"https://api.openai.com/v1" (from modelProviders.openai[0] (gpt-model).baseUrl) is not allowed',
     );
   });
 
-  it('reports an invalid model api as a config error even with no model selected', async () => {
+  it('reports a non-openai modelProviders key as a config error even with no model selected', async () => {
     process.argv = ['node', 'script.js'];
     // Clear every auth env var getAuthTypeFromEnv can read so no selectedType
     // is inferred from the runner environment.
     for (const key of [
-      'QWEN_OAUTH',
       'OPENAI_API_KEY',
       'OPENAI_MODEL',
       'QWEN_MODEL',
       'OPENAI_BASE_URL',
-      'GEMINI_API_KEY',
-      'GEMINI_MODEL',
-      'GOOGLE_API_KEY',
-      'GOOGLE_MODEL',
-      'GOOGLE_CLOUD_PROJECT',
-      'ANTHROPIC_API_KEY',
-      'ANTHROPIC_MODEL',
-      'ANTHROPIC_BASE_URL',
     ]) {
       vi.stubEnv(key, undefined);
     }
     const argv = await parseArguments();
     const settings: Settings = {
-      // No security.auth.selectedType and no model.name: generation-config
-      // resolution never touches the model, so the invalid `wireApi` is caught by
-      // the up-front validation loop in loadCliConfig — still a config error,
-      // not an unexpected crash with a stack trace.
       modelProviders: {
-        openai: [
-          {
-            id: 'gpt-model',
-            wireApi: 'resposnes' as 'responses',
-            envKey: 'RESPONSES_KEY',
-          },
+        anthropic: [
+          { id: 'claude-model', baseUrl: 'http://127.0.0.1:11434/v1' },
         ],
       },
     };
@@ -1294,7 +1249,7 @@ describe('loadCliConfig', () => {
 
     expect(err).toBeInstanceOf(FatalConfigError);
     expect((err as Error).message).toMatch(
-      /Invalid wireApi "resposnes" for provider "openai"/,
+      /^modelProviders\.anthropic is not supported: only a local OpenAI-compatible server is supported\./,
     );
   });
 
@@ -1582,6 +1537,7 @@ describe('loadCliConfig', () => {
           openai: [
             {
               id: 'advisor-model',
+              baseUrl: 'http://127.0.0.1:11434/v1',
               apiKey: 'test-key',
               models: [{ id: 'advisor-model' }],
             },
@@ -1604,6 +1560,7 @@ describe('loadCliConfig', () => {
           openai: [
             {
               id: 'cli-advisor',
+              baseUrl: 'http://127.0.0.1:11434/v1',
               apiKey: 'test-key',
               models: [{ id: 'cli-advisor' }],
             },
@@ -1640,7 +1597,7 @@ describe('loadCliConfig', () => {
       '--openai-api-key',
       'test-key',
       '--openai-base-url',
-      'https://example.com/v1',
+      'http://127.0.0.1:11434/v1',
     ];
     const argv = await parseArguments();
 
@@ -3003,133 +2960,6 @@ describe('loadCliConfig', () => {
     const lspInstance = getLastLspInstance();
     expect(lspInstance?.getStatusSnapshot).not.toHaveBeenCalled();
   });
-
-  describe('Proxy configuration', () => {
-    const originalProxyEnv: { [key: string]: string | undefined } = {};
-    const proxyEnvVars = [
-      'HTTP_PROXY',
-      'HTTPS_PROXY',
-      'http_proxy',
-      'https_proxy',
-    ];
-
-    beforeEach(() => {
-      for (const key of proxyEnvVars) {
-        originalProxyEnv[key] = process.env[key];
-        delete process.env[key];
-      }
-    });
-
-    afterEach(() => {
-      for (const key of proxyEnvVars) {
-        if (originalProxyEnv[key]) {
-          process.env[key] = originalProxyEnv[key];
-        } else {
-          delete process.env[key];
-        }
-      }
-    });
-
-    it(`should leave proxy to empty by default`, async () => {
-      process.argv = ['node', 'script.js'];
-      const argv = await parseArguments();
-      const settings: Settings = {};
-      const config = await loadCliConfig(settings, argv);
-      expect(config.getProxy()).toBeFalsy();
-    });
-
-    const proxy_url = 'http://localhost:7890';
-    const testCases = [
-      {
-        input: {
-          env_name: 'https_proxy',
-          proxy_url,
-        },
-        expected: proxy_url,
-      },
-      {
-        input: {
-          env_name: 'http_proxy',
-          proxy_url,
-        },
-        expected: proxy_url,
-      },
-      {
-        input: {
-          env_name: 'HTTPS_PROXY',
-          proxy_url,
-        },
-        expected: proxy_url,
-      },
-      {
-        input: {
-          env_name: 'HTTP_PROXY',
-          proxy_url,
-        },
-        expected: proxy_url,
-      },
-    ];
-    testCases.forEach(({ input, expected }) => {
-      it(`should set proxy to ${expected} according to environment variable [${input.env_name}]`, async () => {
-        vi.stubEnv(input.env_name, input.proxy_url);
-        process.argv = ['node', 'script.js'];
-        const argv = await parseArguments();
-        const settings: Settings = {};
-        const config = await loadCliConfig(settings, argv);
-        expect(config.getProxy()).toBe(expected);
-      });
-    });
-
-    it('should set proxy when --proxy flag is present', async () => {
-      process.argv = ['node', 'script.js', '--proxy', 'http://localhost:7890'];
-      const argv = await parseArguments();
-      const settings: Settings = {};
-      const config = await loadCliConfig(settings, argv);
-      expect(config.getProxy()).toBe('http://localhost:7890');
-    });
-
-    it('should set proxy from settings when present', async () => {
-      process.argv = ['node', 'script.js'];
-      const argv = await parseArguments();
-      const settings: Settings = { proxy: 'http://localhost:7890' };
-      const config = await loadCliConfig(settings, argv);
-      expect(config.getProxy()).toBe('http://localhost:7890');
-    });
-
-    it('should normalize proxy from settings when scheme is omitted', async () => {
-      process.argv = ['node', 'script.js'];
-      const argv = await parseArguments();
-      const settings: Settings = { proxy: 'localhost:7890' };
-      const config = await loadCliConfig(settings, argv);
-      expect(config.getProxy()).toBe('http://localhost:7890');
-    });
-
-    it('should prioritize settings proxy over environment variable', async () => {
-      vi.stubEnv('HTTPS_PROXY', 'http://localhost:7891');
-      process.argv = ['node', 'script.js'];
-      const argv = await parseArguments();
-      const settings: Settings = { proxy: 'http://localhost:7890' };
-      const config = await loadCliConfig(settings, argv);
-      expect(config.getProxy()).toBe('http://localhost:7890');
-    });
-
-    it('should prioritize CLI flag over environment variable for proxy (CLI http://localhost:7890, environment variable http://localhost:7891)', async () => {
-      vi.stubEnv('http_proxy', 'http://localhost:7891');
-      process.argv = ['node', 'script.js', '--proxy', 'http://localhost:7890'];
-      const argv = await parseArguments();
-      const settings: Settings = {};
-      const config = await loadCliConfig(settings, argv);
-      expect(config.getProxy()).toBe('http://localhost:7890');
-    });
-
-    it('should prioritize CLI flag over settings proxy', async () => {
-      process.argv = ['node', 'script.js', '--proxy', 'http://localhost:7890'];
-      const argv = await parseArguments();
-      const settings: Settings = { proxy: 'http://localhost:7891' };
-      const config = await loadCliConfig(settings, argv);
-      expect(config.getProxy()).toBe('http://localhost:7890');
-    });
-  });
 });
 
 describe('loadCliConfig telemetry', () => {
@@ -3139,7 +2969,6 @@ describe('loadCliConfig telemetry', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
   });
 
   afterEach(() => {
@@ -3323,10 +3152,10 @@ describe('loadCliConfig telemetry', () => {
     );
   });
 
-  it.each(['--telemetry-otlp-endpoint', '--telemetry-target'])(
+  it.each(['--telemetry-otlp-endpoint', '--telemetry-target', '--proxy'])(
     'should reject the removed %s flag',
     async (flag) => {
-      process.argv = ['node', 'script.js', flag, 'http://collector:4317'];
+      process.argv = ['node', 'script.js', flag, 'http://127.0.0.1:4317'];
 
       const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
         throw new Error('process.exit called');
@@ -3858,7 +3687,6 @@ describe('loadCliConfig with allowed-mcp-server-names', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
   });
 
   afterEach(() => {
@@ -4130,18 +3958,10 @@ describe('loadCliConfig with --mcp-config', () => {
 describe('loadCliConfig model selection', () => {
   const originalArgv = process.argv;
   const authEnvKeys = [
-    'QWEN_OAUTH',
     'OPENAI_API_KEY',
     'OPENAI_MODEL',
     'OPENAI_BASE_URL',
     'QWEN_MODEL',
-    'GEMINI_API_KEY',
-    'GEMINI_MODEL',
-    'GOOGLE_API_KEY',
-    'GOOGLE_MODEL',
-    'ANTHROPIC_API_KEY',
-    'ANTHROPIC_MODEL',
-    'ANTHROPIC_BASE_URL',
   ] as const;
 
   beforeEach(() => {
@@ -4174,7 +3994,7 @@ describe('loadCliConfig model selection', () => {
     expect(config.getModel()).toBe('qwen3-coder-plus');
   });
 
-  it('uses the default Qwen model if nothing is set', async () => {
+  it('has no default model if nothing is set', async () => {
     process.argv = ['node', 'script.js']; // No model set.
     const argv = await parseArguments();
     const config = await loadCliConfig(
@@ -4186,7 +4006,7 @@ describe('loadCliConfig model selection', () => {
       [],
     );
 
-    expect(config.getModel()).toBe(DEFAULT_QWEN_MODEL);
+    expect(config.getModel()).toBe('');
   });
 
   it('always prefers model from argvs', async () => {
@@ -4242,7 +4062,6 @@ describe('loadCliConfig folderTrust', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
   });
 
   afterEach(() => {
@@ -4294,7 +4113,6 @@ describe('loadCliConfig with includeDirectories', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
     vi.spyOn(process, 'cwd').mockReturnValue(
       path.resolve(path.sep, 'home', 'user', 'project'),
     );
@@ -4630,7 +4448,6 @@ describe('loadCliConfig safe mode', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
     vi.spyOn(process, 'cwd').mockReturnValue(
       path.resolve(path.sep, 'home', 'user', 'project'),
     );
@@ -4838,7 +4655,6 @@ describe('loadCliConfig tools.eager wiring (#9827, #10075)', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
     vi.spyOn(process, 'cwd').mockReturnValue(
       path.resolve(path.sep, 'home', 'user', 'project'),
     );
@@ -4961,7 +4777,6 @@ describe('loadCliConfig chatCompression', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
   });
 
   afterEach(() => {
@@ -5003,7 +4818,6 @@ describe('loadCliConfig useRipgrep', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
   });
 
   afterEach(() => {
@@ -5043,7 +4857,6 @@ describe('loadCliConfig useBuiltinRipgrep', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
   });
 
   afterEach(() => {
@@ -5083,7 +4896,6 @@ describe('loadCliConfig workflowsEnabled', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
     vi.stubEnv('QWEN_CODE_ENABLE_WORKFLOWS', undefined);
     vi.stubEnv('QWEN_CODE_DISABLE_WORKFLOWS', undefined);
   });
@@ -5139,7 +4951,6 @@ describe('screenReader configuration', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
   });
 
   afterEach(() => {
@@ -5194,7 +5005,6 @@ describe('loadCliConfig tool exclusions', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
     process.stdin.isTTY = true;
     vi.mocked(isWorkspaceTrusted).mockReturnValue({
       isTrusted: true,
@@ -5257,7 +5067,6 @@ describe('loadCliConfig interactive', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
     process.stdin.isTTY = true;
   });
 
@@ -5404,7 +5213,6 @@ describe('loadCliConfig approval mode', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
     process.argv = ['node', 'script.js']; // Reset argv for each test
     vi.mocked(isWorkspaceTrusted).mockReturnValue({
       isTrusted: true,
@@ -5633,7 +5441,6 @@ describe('loadCliConfig fileFiltering', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
     process.argv = ['node', 'script.js']; // Reset argv for each test
   });
 
@@ -5974,7 +5781,6 @@ describe('sandbox image resolution precedence', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
     delete process.env['QWEN_SANDBOX_IMAGE'];
     // These cases measure image precedence, not platform-dependent backend
     // selection: on macOS the un-stubbed resolution picks sandbox-exec, an
@@ -6168,7 +5974,6 @@ describe('loadCliConfig skills.directories', () => {
   beforeEach(() => {
     process.argv = ['node', 'script.js'];
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
   });
 
   afterEach(() => {
@@ -6245,7 +6050,6 @@ describe('loadCliConfig skills.directories', () => {
 describe('loadCliConfig skills.disabledLevels', () => {
   beforeEach(() => {
     process.argv = ['node', 'script.js'];
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
   });
 
   afterEach(() => {
@@ -6303,7 +6107,6 @@ describe('loadCliConfig goals.modelProposed', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
   });
 
   afterEach(() => {

@@ -19,7 +19,8 @@ vi.mock('../../config/settings.js', () => ({
 
 vi.mock('../../config/advisor-model.js', () => ({
   checkAdvisorModelAvailability: mockCheckAvailability,
-  isAdvisorModelEligible: (model: { imageOnly?: boolean }) => !model.imageOnly,
+  isAdvisorModelEligible: (model: { visionOnly?: boolean }) =>
+    !model.visionOnly,
 }));
 
 vi.mock('../../i18n/index.js', () => ({
@@ -94,7 +95,7 @@ describe('advisorCommand', () => {
     getAdvisorMaxUses: () => 0,
     getAllConfiguredModels: () => [
       { id: 'advisor-model' },
-      { id: 'image-model', imageOnly: true },
+      { id: 'vision-model', visionOnly: true },
     ],
     setAdvisorModel,
     ...overrides,

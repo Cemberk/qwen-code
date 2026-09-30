@@ -146,21 +146,10 @@ describe('buildModelEntries', () => {
       fastOnly: true,
     },
     {
-      id: 'img1',
-      label: 'Image',
-      authType: AuthType.USE_OPENAI,
-      imageOnly: true,
-    },
-    {
       id: 'vision1',
       label: 'Vision',
       authType: AuthType.USE_OPENAI,
       visionOnly: true,
-    },
-    {
-      id: 'oauth1',
-      label: 'OAuth',
-      authType: AuthType.QWEN_OAUTH,
     },
     {
       id: 'rt1',
@@ -200,17 +189,6 @@ describe('buildModelEntries', () => {
     ).toEqual(['m1', 'fast1', 'rt1']);
   });
 
-  it('shows QWEN_OAUTH models only under that auth type', () => {
-    const config = stubConfig({
-      getAllConfiguredModels: (() =>
-        models) as Config['getAllConfiguredModels'],
-      getAuthType: () => AuthType.QWEN_OAUTH,
-    } as Partial<Config>);
-    expect(
-      buildModelEntries(config, 'primary').map((entry) => entry.modelId),
-    ).toContain('oauth1');
-  });
-
   it('keys runtime rows by their snapshot id and carries the raw model', () => {
     const config = stubConfig({
       getAllConfiguredModels: (() =>
@@ -242,9 +220,8 @@ describe('buildModelEntries', () => {
           isRuntimeModel: true,
           runtimeSnapshotId: '$runtime|openai|rt2',
         },
-        { id: 'oa', label: 'Oa', authType: AuthType.QWEN_OAUTH },
       ]) as Config['getAllConfiguredModels'],
-      getAuthType: () => AuthType.QWEN_OAUTH,
+      getAuthType: () => AuthType.USE_OPENAI,
     } as Partial<Config>);
     const byId = new Map(
       buildModelEntries(config, 'primary').map((entry) => [
@@ -254,12 +231,9 @@ describe('buildModelEntries', () => {
     );
     // A plain row keeps no line under its title…
     expect(byId.get('bare')).toBeUndefined();
-    // …a runtime row always gets one, and an OAuth row the switch-away notice.
+    // …a runtime row always gets one.
     expect(byId.get('rt')).toBe('Runtime model');
     expect(byId.get('rt2')).toBe('Served live (Runtime)');
-    expect(byId.get('oa')).toBe(
-      'Discontinued — switch to Coding Plan or API Key',
-    );
   });
 
   it('returns no entries without a config', () => {
@@ -435,32 +409,6 @@ describe('applyModelSelection', () => {
       expect(
         untrusted.written.every((write) => write.scope === SettingScope.User),
       ).toBe(true);
-    });
-
-    it('blocks discontinued qwen-oauth selections without switching', async () => {
-      const switchModel = vi.fn(async () => {});
-      const config = resolvedConfig({
-        switchModel: switchModel as Config['switchModel'],
-      });
-      const { settings, written } = createFakeSettings();
-      const entries = [
-        modelRow({ id: 'old-model', authType: AuthType.QWEN_OAUTH }),
-      ];
-
-      const outcome = await applyModelSelection({
-        config,
-        settings,
-        entries,
-        mode: 'primary',
-        selectionKey: entries[0].key,
-      });
-
-      expect(switchModel).not.toHaveBeenCalled();
-      expect(written).toEqual([]);
-      expect(outcome.ok).toBe(false);
-      if (!outcome.ok) {
-        expect(outcome.error).toContain('discontinued');
-      }
     });
 
     it('passes runtime snapshot ids straight to switchModel', async () => {

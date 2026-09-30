@@ -397,9 +397,9 @@ function settingPathExists(key: string, settings: Settings): boolean {
 
 /**
  * True if any dotted-path segment would let a write climb into the prototype
- * chain. Defense in depth at the utility level: callers like
- * migrateProviderMetadata feed `field` names straight from Object.entries on
- * user-editable settings.json, and JSON.parse preserves `__proto__` as an own
+ * chain. Defense in depth at the utility level: callers may feed `field`
+ * names straight from Object.entries on user-editable settings.json, and
+ * JSON.parse preserves `__proto__` as an own
  * property — a crafted file could otherwise pollute Object.prototype here.
  * Inline literal === comparisons (not Set.has) so CodeQL recognises this as a
  * prototype-pollution sanitiser.

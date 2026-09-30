@@ -479,12 +479,6 @@ describe('Storage – config paths remain at ~/.qwen regardless of runtime dir',
     );
   });
 
-  it('getOAuthCredsPath still uses ~/.qwen', () => {
-    expect(Storage.getOAuthCredsPath()).toBe(
-      path.join(globalQwenDir, 'oauth_creds.json'),
-    );
-  });
-
   it('getUserCommandsDir still uses ~/.qwen', () => {
     expect(Storage.getUserCommandsDir()).toBe(
       path.join(globalQwenDir, 'commands'),
@@ -546,9 +540,6 @@ describe('Storage – QWEN_HOME env var', () => {
       path.join(configDir, 'settings.json'),
     );
     expect(Storage.getUserCommandsDir()).toBe(path.join(configDir, 'commands'));
-    expect(Storage.getOAuthCredsPath()).toBe(
-      path.join(configDir, 'oauth_creds.json'),
-    );
     expect(Storage.getGlobalBinDir()).toBe(path.join(configDir, 'bin'));
     expect(Storage.getGlobalMemoryFilePath()).toBe(
       path.join(configDir, 'memory.md'),

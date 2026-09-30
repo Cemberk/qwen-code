@@ -10,7 +10,6 @@ import {
   ApprovalMode,
   type AuthType,
   Config,
-  DEFAULT_QWEN_EMBEDDING_MODEL,
   FileDiscoveryService,
   getAllMemoryFilenames,
   loadServerHierarchicalMemory,
@@ -174,7 +173,6 @@ export interface CliArgs {
   openaiApiKey: string | undefined;
   openaiBaseUrl: string | undefined;
   openaiLoggingDir: string | undefined;
-  proxy: string | undefined;
   insecure?: boolean | undefined;
   includeDirectories: string[] | undefined;
   screenReader: boolean | undefined;
@@ -569,7 +567,6 @@ export async function parseArguments(): Promise<CliArgs> {
     .option('debug', TOP_LEVEL_GLOBAL_OPTIONS.debug)
     .option('bare', TOP_LEVEL_GLOBAL_OPTIONS.bare)
     .option('safe-mode', TOP_LEVEL_GLOBAL_OPTIONS['safe-mode'])
-    .option('proxy', TOP_LEVEL_GLOBAL_OPTIONS.proxy)
     .option('insecure', TOP_LEVEL_GLOBAL_OPTIONS.insecure)
     .option('chat-recording', TOP_LEVEL_GLOBAL_OPTIONS['chat-recording'])
     .command(DEFAULT_COMMAND, DEFAULT_COMMAND_DESC, (yargsInstance: Argv) =>
@@ -1550,8 +1547,7 @@ export async function loadCliConfig(
   }
   // When opting out of TLS verification, also set NODE_TLS_REJECT_UNAUTHORIZED
   // process-wide. The custom undici dispatcher handles the Node path, but this
-  // makes the opt-out effective on runtimes/paths it does not cover (the Bun
-  // runtime, and the proxy-creation fallback that uses the built-in fetch), and
+  // makes the opt-out effective on runtimes it does not cover (Bun), and
   // surfaces a single explicit warning. Skipped when the user already set it,
   // since Node emits its own warning in that case.
   if (
@@ -1966,17 +1962,14 @@ export async function loadCliConfig(
     /* getAuthTypeFromEnv means no authType was explicitly provided, we infer the authType from env vars */
     getAuthTypeFromEnv();
 
-  // Validate provider protocols and per-model `wireApi` fields up front. The
-  // registry resolver throws a bare Error, and every startup shape passes
-  // through here, even without a selected model/auth type — classify it as a
-  // FatalConfigError so the user gets the message and the "please fix the
-  // configuration file(s)" hint instead of a stack trace before the TUI
-  // starts.
+  // Validate modelProviders up front (only `openai` entries with a loopback
+  // baseUrl are accepted). The registry validator throws a bare Error, and
+  // every startup shape passes through here, even without a selected
+  // model/auth type — classify it as a FatalConfigError so the user gets the
+  // message and the "please fix the configuration file(s)" hint instead of a
+  // stack trace before the TUI starts.
   try {
-    validateModelProvidersConfig(
-      settings.modelProviders,
-      settings.providerProtocol,
-    );
+    validateModelProvidersConfig(settings.modelProviders);
   } catch (err) {
     throw new FatalConfigError(
       err instanceof Error ? err.message : String(err),
@@ -2159,7 +2152,6 @@ export async function loadCliConfig(
   }
 
   const modelProvidersConfig = settings.modelProviders;
-  const providerProtocolConfig = settings.providerProtocol;
   const restoreSessionId = sessionId;
   const boundSessionRestoreProjectionSource =
     sessionRestoreProjectionSource && restoreSessionId
@@ -2216,7 +2208,6 @@ export async function loadCliConfig(
     sessionRestoreProjection,
     sessionRestoreProjectionSource: boundSessionRestoreProjectionSource,
     sessionExecutionEngine: hostPolicy?.executionEngine,
-    embeddingModel: DEFAULT_QWEN_EMBEDDING_MODEL,
     sandbox: sandboxConfig,
     targetDir: cwd,
     provisionalWorkspace,
@@ -2349,13 +2340,6 @@ export async function loadCliConfig(
     clearContextOnIdle: settings.context?.clearContextOnIdle,
     fileFiltering: settings.context?.fileFiltering,
     plansDirectory: settings.plansDirectory,
-    proxy:
-      argv.proxy ||
-      settings.proxy ||
-      process.env['HTTPS_PROXY'] ||
-      process.env['https_proxy'] ||
-      process.env['HTTP_PROXY'] ||
-      process.env['http_proxy'],
     cwd,
     fileDiscoveryService: fileService,
     model: resolvedModel,
@@ -2398,7 +2382,6 @@ export async function loadCliConfig(
     outputFormat,
     includePartialMessages,
     modelProvidersConfig,
-    providerProtocolConfig,
     generationConfigSources: resolvedCliConfig.sources,
     generationConfig: resolvedCliConfig.generationConfig,
     initialModelRegistryBaseUrl: resolvedCliConfig.registryBaseUrl,

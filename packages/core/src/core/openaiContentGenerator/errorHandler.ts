@@ -13,7 +13,6 @@ import {
 } from '../../utils/errors.js';
 import { getRateLimitErrorDetails } from '../../utils/rateLimit.js';
 import { getTransportCode } from '../../utils/retryErrorClassification.js';
-import { redactProxyError } from '../../utils/runtimeFetchOptions.js';
 import type { ErrorHandler, RequestContext } from './types.js';
 
 const debugLogger = createDebugLogger('OPENAI_ERROR');
@@ -43,20 +42,15 @@ export class EnhancedErrorHandler implements ErrorHandler {
     context: RequestContext,
     request: GenerateContentParameters,
   ): never {
-    const redactedError = redactProxyError(error);
-    const isTimeoutError = this.isTimeoutError(redactedError);
-    const errorMessage = this.buildErrorMessage(
-      redactedError,
-      context,
-      isTimeoutError,
-    );
+    const isTimeoutError = this.isTimeoutError(error);
+    const errorMessage = this.buildErrorMessage(error, context, isTimeoutError);
 
     // Allow subclasses to suppress error logging for specific scenarios
-    if (!this.shouldSuppressErrorLogging(redactedError, request)) {
+    if (!this.shouldSuppressErrorLogging(error, request)) {
       debugLogger.error(
         'OpenAI API Error:',
         errorMessage,
-        this.buildDiagnostics(redactedError, context),
+        this.buildDiagnostics(error, context),
       );
     }
 
@@ -64,14 +58,14 @@ export class EnhancedErrorHandler implements ErrorHandler {
     if (isTimeoutError) {
       const timeoutError = new Error(
         `${errorMessage}\n\n${this.getTimeoutTroubleshootingTips()}`,
-        { cause: redactedError },
+        { cause: error },
       );
-      const status = getErrorStatus(redactedError);
+      const status = getErrorStatus(error);
       // The OpenAI SDK throws APIConnectionTimeoutError bare — no code,
       // status, or cause — so the preserved cause alone cannot open the
       // transport retry gate. Stamp the wrapper with a timeout marker when
       // nothing more specific survives.
-      const transportCode = getTransportCode(redactedError);
+      const transportCode = getTransportCode(error);
       throw Object.assign(timeoutError, {
         ...(status !== undefined ? { status } : {}),
         ...(status === undefined && transportCode === undefined
@@ -80,7 +74,7 @@ export class EnhancedErrorHandler implements ErrorHandler {
       });
     }
 
-    throw redactedError;
+    throw error;
   }
 
   shouldSuppressErrorLogging(

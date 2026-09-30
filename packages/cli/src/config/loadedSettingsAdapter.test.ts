@@ -20,8 +20,10 @@ import {
   buildInstallPlan,
   customProvider,
   generateCustomEnvKey,
-  getModelsForProviderProtocol,
+  getProviderModels,
 } from '@qwen-code/qwen-code-core';
+
+const LOCAL_BASE_URL = 'http://127.0.0.1:11434/v1';
 
 const temporaryRoots: string[] = [];
 afterEach(() => {
@@ -101,34 +103,32 @@ function makeSettings(initial: SettingsShape = {}) {
 
 describe('createLoadedSettingsAdapter', () => {
   it.each([
-    { sameBucket: true, headers: false, rotate: true, urlPlaceholder: true },
-    { sameBucket: false, headers: false, rotate: true, urlPlaceholder: true },
-    { sameBucket: false, headers: true, rotate: false, urlPlaceholder: true },
-    { sameBucket: false, headers: true, rotate: true, urlPlaceholder: true },
-    { sameBucket: false, headers: true, rotate: true, urlPlaceholder: false },
+    { duplicate: true, headers: false, rotate: true, urlPlaceholder: true },
+    { duplicate: false, headers: false, rotate: true, urlPlaceholder: true },
+    { duplicate: false, headers: true, rotate: false, urlPlaceholder: true },
+    { duplicate: false, headers: true, rotate: true, urlPlaceholder: true },
+    { duplicate: false, headers: true, rotate: true, urlPlaceholder: false },
     {
-      sameBucket: false,
+      duplicate: false,
       headers: true,
       rotate: true,
       urlPlaceholder: true,
       failRefresh: true,
     },
   ])(
-    'preserves mapped placeholder winners and rejects same-bucket ambiguity (%j)',
-    async ({ sameBucket, headers, rotate, urlPlaceholder, failRefresh }) => {
-      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mapped-duplicates-'));
+    'preserves placeholders and rejects same-bucket ambiguity (%j)',
+    async ({ duplicate, headers, rotate, urlPlaceholder, failRefresh }) => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bucket-duplicates-'));
       temporaryRoots.push(root);
       vi.stubEnv('QWEN_HOME', root);
-      vi.stubEnv('FIRST_URL', 'https://duplicate.example/v1');
-      vi.stubEnv('SECOND_URL', 'https://duplicate.example/v1');
+      vi.stubEnv('FIRST_URL', LOCAL_BASE_URL);
+      vi.stubEnv('SECOND_URL', LOCAL_BASE_URL);
       vi.stubEnv('FIRST_KEY', 'test-only-first');
       vi.stubEnv('SECOND_KEY', 'test-only-second');
       const first = {
         id: 'same',
         name: 'same',
-        baseUrl: urlPlaceholder
-          ? '${FIRST_URL}'
-          : 'https://duplicate.example/v1',
+        baseUrl: urlPlaceholder ? '${FIRST_URL}' : LOCAL_BASE_URL,
         envKey: 'FIRST_KEY',
         ...(headers && {
           generationConfig: { customHeaders: { 'X-Key': '${FIRST_KEY}' } },
@@ -136,9 +136,7 @@ describe('createLoadedSettingsAdapter', () => {
       };
       const second = {
         ...first,
-        baseUrl: urlPlaceholder
-          ? '${SECOND_URL}'
-          : 'https://duplicate.example/v1',
+        baseUrl: urlPlaceholder ? '${SECOND_URL}' : LOCAL_BASE_URL,
         envKey: 'SECOND_KEY',
         ...(headers && {
           generationConfig: { customHeaders: { 'X-Key': '${SECOND_KEY}' } },
@@ -151,10 +149,7 @@ describe('createLoadedSettingsAdapter', () => {
         JSON.stringify({
           $version: 4,
           env: { FIRST_KEY: 'test-only-first', SECOND_KEY: 'test-only-second' },
-          modelProviders: sameBucket
-            ? { first: [first, second] }
-            : { first: [first], second: [second] },
-          providerProtocol: { first: 'openai', second: 'openai' },
+          modelProviders: { openai: duplicate ? [first, second] : [first] },
         }),
       );
       const before = fs.readFileSync(settingsPath, 'utf8');
@@ -170,11 +165,7 @@ describe('createLoadedSettingsAdapter', () => {
             modelIds: ['same'],
             apiKey,
           },
-          getModelsForProviderProtocol(
-            loaded.merged.modelProviders,
-            AuthType.USE_OPENAI,
-            loaded.merged.providerProtocol,
-          ),
+          getProviderModels(loaded.merged.modelProviders),
         );
         expect(plan.env).toEqual({ FIRST_KEY: apiKey });
         const originalMerged = structuredClone(loaded.merged);
@@ -185,9 +176,9 @@ describe('createLoadedSettingsAdapter', () => {
           reloadModelProviders,
           refreshAuth: vi.fn().mockRejectedValue(new Error('refresh failed')),
         });
-        if (sameBucket || failRefresh) {
+        if (duplicate || failRefresh) {
           await expect(install).rejects.toThrow(
-            sameBucket
+            duplicate
               ? 'Cannot preserve placeholders in an ambiguous model configuration'
               : 'refresh failed',
           );
@@ -197,7 +188,7 @@ describe('createLoadedSettingsAdapter', () => {
           if (failRefresh) {
             expect(reloadModelProviders).toHaveBeenCalledTimes(2);
             expect(
-              reloadModelProviders.mock.calls[0]?.[0].first[0],
+              reloadModelProviders.mock.calls[0]?.[0].openai[0],
             ).toMatchObject({
               generationConfig: { customHeaders: { 'X-Key': apiKey } },
             });
@@ -209,21 +200,13 @@ describe('createLoadedSettingsAdapter', () => {
         }
         const result = await install;
         const saved = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-        expect(saved.modelProviders.openai).toEqual([
-          { ...first, wireApi: 'chat-completions' },
-        ]);
-        expect(saved.modelProviders.first).toEqual([first]);
-        expect(saved.modelProviders.second).toEqual([second]);
+        expect(saved.modelProviders.openai).toEqual([first]);
         expect(saved.env).toEqual({
           FIRST_KEY: apiKey,
           SECOND_KEY: 'test-only-second',
         });
-        expect(saved.providerProtocol).toEqual({
-          first: 'openai',
-          second: 'openai',
-        });
         const expected = {
-          baseUrl: process.env['FIRST_URL'],
+          baseUrl: LOCAL_BASE_URL,
           envKey: 'FIRST_KEY',
           ...(headers && {
             generationConfig: { customHeaders: { 'X-Key': apiKey } },
@@ -232,15 +215,8 @@ describe('createLoadedSettingsAdapter', () => {
         expect(loaded.merged.modelProviders?.['openai']?.[0]).toMatchObject(
           expected,
         );
-        expect(loaded.merged.modelProviders?.['first']?.[0]).toMatchObject(
-          expected,
-        );
         expect(
-          getModelsForProviderProtocol(
-            result.updatedModelProviders,
-            AuthType.USE_OPENAI,
-            loaded.merged.providerProtocol,
-          )[0],
+          getProviderModels(result.updatedModelProviders)[0],
         ).toMatchObject(expected);
       } finally {
         vi.unstubAllEnvs();
@@ -248,249 +224,123 @@ describe('createLoadedSettingsAdapter', () => {
     },
   );
 
-  it.each([SettingScope.User, SettingScope.Workspace])(
-    'canonicalizes a released route in %s while preserving placeholders and the other scope',
-    async (scope) => {
-      const root = fs.mkdtempSync(
-        path.join(os.tmpdir(), 'released-provider-scope-'),
+  it('preserves each entry placeholder when a bucket is reordered', () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'provider-reorder-placeholders-'),
+    );
+    temporaryRoots.push(root);
+    vi.stubEnv('QWEN_HOME', root);
+    vi.stubEnv('TEST_FIRST_URL', LOCAL_BASE_URL);
+    vi.stubEnv('TEST_SECOND_URL', 'http://localhost:1234/v1');
+    vi.stubEnv('TEST_FIRST_HEADER', 'first-header');
+    vi.stubEnv('TEST_SECOND_HEADER', 'second-header');
+    const first = {
+      id: 'same',
+      baseUrl: '${TEST_FIRST_URL}',
+      generationConfig: {
+        customHeaders: { 'X-Test': '${TEST_FIRST_HEADER}' },
+      },
+    };
+    const second = {
+      id: 'same',
+      baseUrl: '${TEST_SECOND_URL}',
+      generationConfig: {
+        customHeaders: { 'X-Test': '${TEST_SECOND_HEADER}' },
+      },
+    };
+    fs.writeFileSync(
+      path.join(root, 'settings.json'),
+      JSON.stringify({
+        $version: 4,
+        modelProviders: { openai: [first, second] },
+      }),
+    );
+    try {
+      const loaded = loadSettings(root, {
+        skipLoadEnvironment: true,
+        skipWorkspaceSettings: true,
+      });
+      const models = loaded.merged.modelProviders!['openai']!;
+      createLoadedSettingsAdapter(loaded, SettingScope.User).setValue(
+        'modelProviders.openai',
+        [models[1], models[0]],
       );
-      temporaryRoots.push(root);
-      const userHome = path.join(root, 'home');
-      const workspace = path.join(root, 'workspace');
-      fs.mkdirSync(userHome);
-      fs.mkdirSync(path.join(workspace, '.qwen'), { recursive: true });
-      vi.stubEnv('QWEN_HOME', userHome);
-      vi.stubEnv('RELEASED_URL', 'https://released.example/v1');
-      vi.stubEnv('RELEASED_HEADER', 'test-only-header');
-      vi.stubEnv('RELEASED_KEY', 'test-only-old');
-      const userFile = path.join(userHome, 'settings.json');
-      const workspaceFile = path.join(workspace, '.qwen', 'settings.json');
-      const target = scope === SettingScope.User ? userFile : workspaceFile;
-      const other = scope === SettingScope.User ? workspaceFile : userFile;
-      const otherBytes = JSON.stringify({
+      const saved = JSON.parse(
+        fs.readFileSync(path.join(root, 'settings.json'), 'utf8'),
+      );
+      expect(saved.modelProviders.openai).toEqual([second, first]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('rejects a User install shadowed by the Workspace bucket without changing either scope', async () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'provider-shadow-placeholder-'),
+    );
+    temporaryRoots.push(root);
+    const userHome = path.join(root, 'home');
+    const workspace = path.join(root, 'workspace');
+    fs.mkdirSync(userHome);
+    fs.mkdirSync(path.join(workspace, '.qwen'), { recursive: true });
+    vi.stubEnv('QWEN_HOME', userHome);
+    vi.stubEnv('SHADOW_SIBLING_HEADER', 'test-only-secret');
+    const userFile = path.join(userHome, 'settings.json');
+    const workspaceFile = path.join(workspace, '.qwen', 'settings.json');
+    const sibling = {
+      id: 'keep',
+      baseUrl: 'http://localhost:1234/v1',
+      envKey: 'KEEP_KEY',
+      generationConfig: {
+        customHeaders: { 'X-Key': '${SHADOW_SIBLING_HEADER}' },
+      },
+    };
+    fs.writeFileSync(
+      userFile,
+      JSON.stringify({
         $version: 4,
         modelProviders: {
-          unrelated: [
-            {
-              id: 'same',
-              baseUrl: 'https://other.example/v1',
-              envKey: 'OTHER_KEY',
-            },
-          ],
+          openai: [{ id: 'selected', baseUrl: LOCAL_BASE_URL }, sibling],
         },
-        providerProtocol: { unrelated: 'openai-responses' },
+      }),
+    );
+    const workspaceBytes = JSON.stringify({
+      $version: 4,
+      modelProviders: {
+        openai: [{ id: 'workspace', baseUrl: LOCAL_BASE_URL }],
+      },
+    });
+    fs.writeFileSync(workspaceFile, workspaceBytes);
+    try {
+      const loaded = loadSettings(workspace, {
+        skipLoadEnvironment: true,
+        workspaceTrusted: true,
       });
-      const selected = {
-        id: 'same',
-        baseUrl: '${RELEASED_URL}',
-        envKey: 'RELEASED_KEY',
-        generationConfig: {
-          customHeaders: { 'X-Route': '${RELEASED_HEADER}' },
-        },
-      };
-      const sibling = {
-        id: 'keep',
-        baseUrl: '${RELEASED_URL}',
-        envKey: 'SIBLING_KEY',
-        generationConfig: {
-          customHeaders: { 'X-Rotated': '${RELEASED_KEY}' },
-        },
-      };
-      fs.writeFileSync(
-        target,
-        JSON.stringify({
-          $version: 4,
-          modelProviders: { gateway: [selected, sibling] },
-          providerProtocol: { gateway: 'openai-responses' },
-        }),
-      );
-      fs.writeFileSync(other, otherBytes);
-      try {
-        const loaded = loadSettings(workspace, {
-          skipLoadEnvironment: true,
-          workspaceTrusted: true,
-        });
-        const plan = buildInstallPlan(
-          customProvider,
-          {
-            baseUrl: process.env['RELEASED_URL']!,
-            wireApi: 'responses',
-            modelIds: ['same'],
-            apiKey: 'test-only-new',
-          },
-          getModelsForProviderProtocol(
-            loaded.merged.modelProviders,
-            AuthType.USE_OPENAI,
-            loaded.merged.providerProtocol,
-          ),
-        );
-        await applyProviderInstallPlan(plan, {
-          settings: createLoadedSettingsAdapter(loaded, scope),
+      const plan = buildInstallPlan(customProvider, {
+        baseUrl: LOCAL_BASE_URL,
+        modelIds: ['selected'],
+        apiKey: 'test-only-new',
+      });
+      const key = Object.keys(plan.env!)[0]!;
+      vi.stubEnv(key, 'test-only-old');
+      const before = fs.readFileSync(userFile, 'utf8');
+      await expect(
+        applyProviderInstallPlan(plan, {
+          settings: createLoadedSettingsAdapter(loaded, SettingScope.User),
           doRefreshAuth: false,
-        });
-        const saved = JSON.parse(fs.readFileSync(target, 'utf8'));
-        expect(saved.modelProviders.gateway).toEqual([sibling]);
-        expect(saved.modelProviders.openai[0]).toMatchObject({
-          ...selected,
-          wireApi: 'responses',
-        });
-        expect(saved.providerProtocol.gateway).toBe('openai-responses');
-        expect(saved.env.RELEASED_KEY).toBe('test-only-new');
-        expect(fs.readFileSync(other, 'utf8')).toBe(otherBytes);
-        expect(loaded.merged.modelProviders?.['gateway']?.[0]).toMatchObject({
-          generationConfig: {
-            customHeaders: { 'X-Rotated': 'test-only-new' },
-          },
-        });
-        expect(loaded.merged.modelProviders?.['openai']?.[0]?.baseUrl).toBe(
-          process.env['RELEASED_URL'],
-        );
-        expect(
-          loaded.merged.modelProviders?.['openai']?.[0]?.generationConfig
-            ?.customHeaders?.['X-Route'],
-        ).toBe('test-only-header');
-      } finally {
-        vi.unstubAllEnvs();
-      }
-    },
-  );
-
-  it.each(['responses', '${TEST_WIRE_API}'])(
-    'preserves each API route placeholder when a bucket is reordered (%s)',
-    (wireApi) => {
-      const root = fs.mkdtempSync(
-        path.join(os.tmpdir(), 'provider-wire-placeholders-'),
-      );
-      temporaryRoots.push(root);
-      vi.stubEnv('QWEN_HOME', root);
-      vi.stubEnv('TEST_WIRE_URL', 'https://gateway.example/v1');
-      vi.stubEnv('TEST_WIRE_API', 'responses');
-      vi.stubEnv('TEST_CHAT_HEADER', 'chat-header');
-      vi.stubEnv('TEST_RESPONSES_HEADER', 'responses-header');
-      const chat = {
-        id: 'same',
-        baseUrl: '${TEST_WIRE_URL}',
-        generationConfig: {
-          customHeaders: { 'X-Test': '${TEST_CHAT_HEADER}' },
-        },
-      };
-      const responses = {
-        ...chat,
-        wireApi,
-        generationConfig: {
-          customHeaders: { 'X-Test': '${TEST_RESPONSES_HEADER}' },
-        },
-      };
-      fs.writeFileSync(
-        path.join(root, 'settings.json'),
-        JSON.stringify({
-          $version: 4,
-          modelProviders: { openai: [chat, responses] },
         }),
+      ).rejects.toThrow('higher-precedence');
+      expect(fs.readFileSync(userFile, 'utf8')).toBe(before);
+      const saved = JSON.parse(fs.readFileSync(userFile, 'utf8'));
+      expect(saved.modelProviders.openai[1]).toEqual(sibling);
+      expect(fs.readFileSync(userFile, 'utf8')).not.toContain(
+        'test-only-secret',
       );
-      try {
-        const loaded = loadSettings(root, {
-          skipLoadEnvironment: true,
-          skipWorkspaceSettings: true,
-        });
-        const models = loaded.merged.modelProviders!['openai']!;
-        createLoadedSettingsAdapter(loaded, SettingScope.User).setValue(
-          'modelProviders.openai',
-          [models[1], { ...models[0], wireApi: 'chat-completions' }],
-        );
-        const saved = JSON.parse(
-          fs.readFileSync(path.join(root, 'settings.json'), 'utf8'),
-        );
-        expect(saved.modelProviders.openai).toEqual([
-          responses,
-          { ...chat, wireApi: 'chat-completions' },
-        ]);
-      } finally {
-        vi.unstubAllEnvs();
-      }
-    },
-  );
-
-  it.each(['bucket', 'mapping'])(
-    'rejects User legacy reconfiguration shadowed by Workspace %s without changing either scope',
-    async (shadow) => {
-      const root = fs.mkdtempSync(
-        path.join(os.tmpdir(), 'released-shadow-placeholder-'),
-      );
-      temporaryRoots.push(root);
-      const userHome = path.join(root, 'home');
-      const workspace = path.join(root, 'workspace');
-      fs.mkdirSync(userHome);
-      fs.mkdirSync(path.join(workspace, '.qwen'), { recursive: true });
-      vi.stubEnv('QWEN_HOME', userHome);
-      vi.stubEnv('LEGACY_SIBLING_HEADER', 'test-only-secret');
-      const userFile = path.join(userHome, 'settings.json');
-      const workspaceFile = path.join(workspace, '.qwen', 'settings.json');
-      const sibling = {
-        id: 'keep',
-        baseUrl: 'https://keep.example/v1',
-        envKey: 'KEEP_KEY',
-        generationConfig: {
-          customHeaders: { 'X-Key': '${LEGACY_SIBLING_HEADER}' },
-        },
-      };
-      fs.writeFileSync(
-        userFile,
-        JSON.stringify({
-          $version: 4,
-          modelProviders: {
-            'openai-responses': [
-              { id: 'selected', baseUrl: 'https://selected.example/v1' },
-              sibling,
-            ],
-          },
-        }),
-      );
-      const workspaceBytes = JSON.stringify({
-        $version: 4,
-        ...(shadow === 'bucket'
-          ? {
-              modelProviders: {
-                'openai-responses': [
-                  { id: 'workspace', baseUrl: 'https://workspace.example/v1' },
-                ],
-              },
-            }
-          : { providerProtocol: { 'openai-responses': 'anthropic' } }),
-      });
-      fs.writeFileSync(workspaceFile, workspaceBytes);
-      try {
-        const loaded = loadSettings(workspace, {
-          skipLoadEnvironment: true,
-          workspaceTrusted: true,
-        });
-        const plan = buildInstallPlan(customProvider, {
-          wireApi: 'responses',
-          baseUrl: 'https://selected.example/v1',
-          modelIds: ['selected'],
-          apiKey: 'test-only-new',
-        });
-        const key = Object.keys(plan.env!)[0]!;
-        vi.stubEnv(key, 'test-only-old');
-        const before = fs.readFileSync(userFile, 'utf8');
-        await expect(
-          applyProviderInstallPlan(plan, {
-            settings: createLoadedSettingsAdapter(loaded, SettingScope.User),
-            doRefreshAuth: false,
-          }),
-        ).rejects.toThrow('higher-precedence');
-        expect(fs.readFileSync(userFile, 'utf8')).toBe(before);
-        const saved = JSON.parse(fs.readFileSync(userFile, 'utf8'));
-        expect(saved.modelProviders['openai-responses'][1]).toEqual(sibling);
-        expect(fs.readFileSync(userFile, 'utf8')).not.toContain(
-          'test-only-secret',
-        );
-        expect(fs.readFileSync(workspaceFile, 'utf8')).toBe(workspaceBytes);
-      } finally {
-        vi.unstubAllEnvs();
-      }
-    },
-  );
+      expect(fs.readFileSync(workspaceFile, 'utf8')).toBe(workspaceBytes);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 
   it.each([true, false])(
     'restores actual file contents or absence after a shadowed install (existing: %s)',
@@ -504,10 +354,12 @@ describe('createLoadedSettingsAdapter', () => {
       const userFile = path.join(userHome, 'settings.json');
       const workspaceFile = path.join(workspace, '.qwen', 'settings.json');
       const originalUser =
-        '{"$version":4,"modelProviders":{"openai":[{"id":"old-user"}]}}\n';
+        '{"$version":4,"modelProviders":{"openai":[{"id":"old-user","baseUrl":"http://127.0.0.1:11434/v1"}]}}\n';
       const originalWorkspace = JSON.stringify({
         $version: 4,
-        modelProviders: { openai: [{ id: 'workspace-chat' }] },
+        modelProviders: {
+          openai: [{ id: 'workspace-chat', baseUrl: LOCAL_BASE_URL }],
+        },
       });
       if (existingFile) fs.writeFileSync(userFile, originalUser);
       fs.writeFileSync(workspaceFile, originalWorkspace);
@@ -520,7 +372,7 @@ describe('createLoadedSettingsAdapter', () => {
         const plan = buildInstallPlan(
           customProvider,
           {
-            baseUrl: 'https://rollback.example/v1',
+            baseUrl: LOCAL_BASE_URL,
             apiKey: 'test-only',
             modelIds: ['new-model'],
           },
@@ -560,7 +412,7 @@ describe('createLoadedSettingsAdapter', () => {
   );
 
   it.each([SettingScope.User, SettingScope.Workspace])(
-    'preserves placeholders on disk and resolved runtime values during service reconnect (%s)',
+    'preserves placeholders on disk and resolved runtime values during reconnect (%s)',
     async (scope) => {
       const root = fs.mkdtempSync(path.join(os.tmpdir(), 'provider-raw-'));
       const workspace = path.join(root, 'workspace');
@@ -569,9 +421,9 @@ describe('createLoadedSettingsAdapter', () => {
       fs.mkdirSync(userHome);
       vi.stubEnv('QWEN_HOME', userHome);
       vi.stubEnv('RECONNECT_TEST_TOKEN', 'resolved-private-token');
-      vi.stubEnv('RECONNECT_TEST_ID', 'image-model');
-      vi.stubEnv('RECONNECT_TEST_URL', 'https://media.example/v1');
-      const envKey = `${generateCustomEnvKey(AuthType.USE_OPENAI, 'https://media.example/v1')}_IMAGE`;
+      vi.stubEnv('RECONNECT_TEST_ID', 'local-model');
+      vi.stubEnv('RECONNECT_TEST_URL', LOCAL_BASE_URL);
+      const envKey = generateCustomEnvKey(AuthType.USE_OPENAI, LOCAL_BASE_URL);
       vi.stubEnv(envKey, 'old-service-key');
       const filename = path.join(
         scope === SettingScope.User ? userHome : path.join(workspace, '.qwen'),
@@ -581,7 +433,6 @@ describe('createLoadedSettingsAdapter', () => {
         id: '${RECONNECT_TEST_ID}',
         baseUrl: '${RECONNECT_TEST_URL}',
         envKey,
-        imageOnly: true,
         generationConfig: {
           contextWindowSize: 65536,
           customHeaders: {
@@ -602,9 +453,9 @@ describe('createLoadedSettingsAdapter', () => {
         const plan = buildInstallPlan(
           customProvider,
           {
-            baseUrl: 'https://media.example/v1',
+            baseUrl: LOCAL_BASE_URL,
             apiKey: 'new-service-key',
-            modelIds: ['image-model'],
+            modelIds: ['local-model'],
           },
           loaded.merged.modelProviders?.['openai'],
         );
@@ -616,8 +467,8 @@ describe('createLoadedSettingsAdapter', () => {
         expect(JSON.stringify(saved)).not.toContain('resolved-private-token');
         expect(saved.env[envKey]).toBe('new-service-key');
         expect(loaded.merged.modelProviders?.['openai']?.[0]).toMatchObject({
-          id: 'image-model',
-          baseUrl: 'https://media.example/v1',
+          id: 'local-model',
+          baseUrl: LOCAL_BASE_URL,
           generationConfig: {
             customHeaders: {
               Authorization: 'resolved-private-token',
@@ -743,57 +594,42 @@ describe('getRawModelProviders', () => {
         originalSettings: files[scope] ?? {},
       }),
     }) as unknown as LoadedSettings;
+  const userModel = {
+    id: 'gpt-5',
+    envKey: 'K',
+    generationConfig: { extra_body: { api_key: '${GATEWAY_KEY}' } },
+  };
   const files = {
-    [SettingScope.User]: {
-      modelProviders: {
-        openai: [
-          {
-            id: 'gpt-5',
-            envKey: 'K',
-            generationConfig: { extra_body: { api_key: '${GATEWAY_KEY}' } },
-          },
-        ],
-        anthropic: [{ id: 'claude', envKey: 'A' }],
-      },
-    },
+    [SettingScope.User]: { modelProviders: { openai: [userModel] } },
     [SettingScope.Workspace]: {
-      modelProviders: { anthropic: [{ id: 'claude-ws', envKey: '${WS_KEY}' }] },
+      modelProviders: { openai: [{ id: 'local-ws', envKey: '${WS_KEY}' }] },
     },
   };
 
   it('returns each merged bucket from the scope that defines it, unresolved', () => {
     const settings = scoped(files, {
-      modelProviders: {
-        openai: [
-          {
-            id: 'gpt-5',
-            envKey: 'K',
-            generationConfig: { extra_body: { api_key: 'sk-live' } },
-          },
-        ],
-        anthropic: [{ id: 'claude-ws', envKey: 'ws-live' }],
-      },
+      modelProviders: { openai: [{ id: 'local-ws', envKey: 'ws-live' }] },
     });
     expect(getRawModelProviders(settings)).toEqual({
-      openai: [
-        {
-          id: 'gpt-5',
-          envKey: 'K',
-          generationConfig: { extra_body: { api_key: '${GATEWAY_KEY}' } },
-        },
-      ],
-      anthropic: [{ id: 'claude-ws', envKey: '${WS_KEY}' }],
+      openai: [{ id: 'local-ws', envKey: '${WS_KEY}' }],
     });
   });
 
   it('skips workspace buckets while the workspace is untrusted', () => {
     const settings = scoped(
       files,
-      { modelProviders: { anthropic: [{ id: 'claude', envKey: 'A' }] } },
+      {
+        modelProviders: {
+          openai: [
+            {
+              ...userModel,
+              generationConfig: { extra_body: { api_key: 'sk-live' } },
+            },
+          ],
+        },
+      },
       false,
     );
-    expect(getRawModelProviders(settings)).toEqual({
-      anthropic: [{ id: 'claude', envKey: 'A' }],
-    });
+    expect(getRawModelProviders(settings)).toEqual({ openai: [userModel] });
   });
 });

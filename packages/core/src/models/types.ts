@@ -54,10 +54,6 @@ export type ModelGenerationConfig = Pick<
   | 'retryMaxDelayMs'
   | 'retryErrorCodes'
   | 'enableCacheControl'
-  | 'enableRequestMetadata'
-  | 'forceGlobalCacheScope'
-  | 'cacheRetention'
-  | 'cacheRetentionByBlock'
   | 'schemaCompliance'
   | 'reasoning'
   | 'customHeaders'
@@ -69,23 +65,22 @@ export type ModelGenerationConfig = Pick<
   | 'toolResultContentFormat'
 >;
 
-export type ModelWireApi = 'chat-completions' | 'responses';
-
 /**
  * Model configuration for a single model within an authType
  */
 export interface ModelConfig {
-  /** Unique model ID within authType (e.g., "qwen-coder", "gpt-4-turbo") */
+  /** Model ID served by the local server (e.g., "qwen3-coder:30b") */
   id: string;
-  /** OpenAI-compatible request API; omitted inherits the provider protocol. */
-  wireApi?: ModelWireApi;
   /** Display name (defaults to id) */
   name?: string;
   /** Model description */
   description?: string;
   /** Environment variable name to read API key from (e.g., "OPENAI_API_KEY") */
   envKey?: string;
-  /** API endpoint override */
+  /**
+   * Base URL of the local OpenAI-compatible server serving this model.
+   * Required; the host must be 127.0.0.1, ::1 or localhost.
+   */
   baseUrl?: string;
   /** Explicit model capabilities used for safe feature routing. */
   capabilities?: ModelCapabilities;
@@ -93,43 +88,16 @@ export interface ModelConfig {
   generationConfig?: ModelGenerationConfig;
   /** When true, this model only appears in the fast model selector, not the main model list */
   fastOnly?: boolean;
-  /** When true, this model only appears in the voice model selector, not the main model list */
-  voiceOnly?: boolean;
   /** When true, this model only appears in the vision model selector, not the main model list */
   visionOnly?: boolean;
-  /**
-   * When true, this route speaks a bidirectional Realtime (speech-to-speech)
-   * protocol and is only selectable as the Live Voice model, never as a chat
-   * model.
-   */
-  realtimeOnly?: boolean;
-  /** When true, this model is a service-role route and never a chat model */
-  imageOnly?: boolean;
 }
 
 /**
- * Model providers configuration grouped by provider id.
- *
- * The key is a provider identity. For built-in providers it equals a
- * public provider protocol (e.g. `openai`, `gemini`); custom providers may use any
- * id (e.g. `idealab`) as long as a {@link ProviderProtocolConfig} entry maps it
- * to an SDK protocol. Released `openai-responses` declarations remain readable;
- * configure Responses models under `openai` with `wireApi: 'responses'`.
+ * Model providers configuration. The only supported key is the protocol id
+ * `openai` (a local OpenAI-compatible server).
  */
 export type ModelProvidersConfig = {
   [providerId: string]: ModelConfig[];
-};
-
-/**
- * Maps a `modelProviders` provider id to the SDK protocol that should route its
- * requests. The value is a public protocol string (e.g. `openai`, `gemini`,
- * `anthropic`). Lets a custom provider id (e.g. `idealab`) declare which built-in
- * protocol it speaks, decoupling provider identity from SDK routing without
- * changing the `modelProviders` array shape. Both OpenAI wires map to `openai`;
- * released `openai-responses` mappings remain readable.
- */
-export type ProviderProtocolConfig = {
-  [providerId: string]: string;
 };
 
 /**
@@ -142,7 +110,7 @@ export interface ResolvedModelConfig extends ModelConfig {
   name: string;
   /** Environment variable name to read API key from (optional, provider-specific) */
   envKey?: string;
-  /** API base URL (always present, has default per authType) */
+  /** API base URL (always present; validated as a loopback URL) */
   baseUrl: string;
   /** Exact optional baseUrl used in the registry key, before defaults. */
   registryBaseUrl?: string;
@@ -171,12 +139,8 @@ export interface AvailableModel {
 
   /** When true, this model only appears in the fast model selector */
   fastOnly?: boolean;
-  /** When true, this model only appears in the voice model selector */
-  voiceOnly?: boolean;
   /** When true, this model only appears in the vision model selector */
   visionOnly?: boolean;
-  /** When true, this model is a service-role route and never a chat model */
-  imageOnly?: boolean;
 
   /** Whether this is a runtime model (not from modelProviders) */
   isRuntimeModel?: boolean;

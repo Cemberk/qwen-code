@@ -5,11 +5,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * The only supported model protocol: an OpenAI-compatible Chat Completions
+ * server on the loopback interface (Ollama, LM Studio, vLLM, llama.cpp, ...).
+ */
 export enum AuthType {
   USE_OPENAI = 'openai',
-  USE_OPENAI_RESPONSES = 'openai-responses',
-  QWEN_OAUTH = 'qwen-oauth',
-  USE_GEMINI = 'gemini',
-  USE_VERTEX_AI = 'vertex-ai',
-  USE_ANTHROPIC = 'anthropic',
 }

@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { tokenPlanProvider, type Config } from '@qwen-code/qwen-code-core';
+import type { Config, ModelSpec } from '@qwen-code/qwen-code-core';
 import { type CommandContext } from './types.js';
 import { effortCommand } from './effort-command.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
@@ -35,7 +35,6 @@ describe('effortCommand', () => {
         config: {
           getReasoningEffort,
           setReasoningEffort,
-          getReasoningEffortOverride: vi.fn().mockReturnValue(undefined),
         } as unknown as Config,
         settings: {
           setValue,
@@ -106,9 +105,18 @@ describe('effortCommand', () => {
   it.each(['high', 'max', 'low'] as const)(
     'reports the effective state for saved %s without changing settings',
     async (effort) => {
-      const spec = tokenPlanProvider.models!.find(
-        (m) => m.id === 'qwen3.8-max',
-      )!;
+      const spec: ModelSpec = {
+        id: 'local-reasoner',
+        capabilities: {
+          reasoning: {
+            thinking: true,
+            efforts: ['low', 'medium', 'xhigh'],
+            defaultEffort: 'xhigh',
+            canDisable: false,
+            disableField: 'reasoning_effort',
+          },
+        },
+      };
       Object.assign(context.services.config!, {
         getModel: () => spec.id,
         getAuthType: () => 'openai',
@@ -176,51 +184,6 @@ describe('effortCommand', () => {
     expect(res).toMatchObject({ messageType: 'info' });
     expect((res as { content: string }).content).toContain(
       'thinking is currently disabled',
-    );
-  });
-
-  it('reports a static override while thinking is disabled', async () => {
-    setReasoningEffort.mockImplementation(() => {});
-    getReasoningEffort.mockReturnValue(undefined);
-    const getReasoningEffortOverride = vi.fn().mockReturnValue({
-      source: 'extra_body',
-      field: 'thinking_budget',
-    });
-    (context.services.config as unknown as Record<string, unknown>)[
-      'getReasoningEffortOverride'
-    ] = getReasoningEffortOverride;
-
-    const res = await effortCommand.action!(context, 'high');
-
-    expect((res as { content: string }).content).toContain(
-      'thinking is currently disabled',
-    );
-    expect((res as { content: string }).content).toContain(
-      'will still have higher priority',
-    );
-  });
-
-  it('reports a higher-priority static thinking knob', async () => {
-    const getReasoningEffortOverride = vi.fn().mockReturnValue({
-      source: 'extra_body',
-      field: 'thinking_budget',
-    });
-    (context.services.config as unknown as Record<string, unknown>)[
-      'getReasoningEffortOverride'
-    ] = getReasoningEffortOverride;
-
-    const res = await effortCommand.action!(context, 'max');
-
-    expect(setReasoningEffort).toHaveBeenCalledWith('max');
-    expect(setValue).toHaveBeenCalledWith(
-      expect.anything(),
-      'model.reasoningEffort',
-      'max',
-    );
-    expect(res).toMatchObject({ messageType: 'info' });
-    expect((res as { content: string }).content).toContain('higher priority');
-    expect((res as { content: string }).content).toContain(
-      'will remain effective',
     );
   });
 

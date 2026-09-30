@@ -235,7 +235,6 @@ const PATTERNS: Array<[RegExp, TokenCount]> = [
   [/^qwen3\.\d/, LIMITS['1m']],
   [/^qwen-plus-latest$/, LIMITS['1m']],
   [/^qwen-flash-latest$/, LIMITS['1m']],
-  [/^coder-model$/, LIMITS['1m']],
   // Commercial API models (256K context)
   [/^qwen3-max/, LIMITS['256k']],
   // Open-source Qwen3 variants: 256K native
@@ -303,7 +302,6 @@ const OUTPUT_PATTERNS: Array<[RegExp, TokenCount]> = [
 
   // Alibaba / Qwen
   [/^qwen3\.\d/, LIMITS['64k']],
-  [/^coder-model$/, LIMITS['64k']],
   [/^qwen/, LIMITS['32k']], // Qwen fallback (VL, turbo, plus, etc.): 32K
 
   // DeepSeek

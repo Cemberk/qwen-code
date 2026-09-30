@@ -1148,63 +1148,17 @@ export default {
   'Welcome back! (Last updated: {{timeAgo}})':
     'С возвращением! (Последнее обновление: {{timeAgo}})',
   'Overall Goal:': 'Общая цель:',
-  'Connect a Provider': 'Подключить провайдера',
   'You must connect a provider to proceed. Press Ctrl+C again to exit.':
     'Необходимо подключить провайдера для продолжения. Нажмите Ctrl+C снова для выхода.',
-  'Terms of Services and Privacy Notice':
-    'Условия обслуживания и уведомление о конфиденциальности',
-  'Qwen OAuth': 'Qwen OAuth',
-  'Discontinued — switch to Coding Plan or API Key':
-    'Прекращено — переключитесь на Coding Plan или API Key',
-  'Qwen OAuth free tier was discontinued on 2026-04-15. Please select Coding Plan or API Key instead.':
-    'Бесплатный уровень Qwen OAuth прекращён 2026-04-15. Выберите Coding Plan или API Key.',
-  'Qwen OAuth free tier was discontinued on 2026-04-15. Please select a model from another provider or run /auth to switch.':
-    'Бесплатный уровень Qwen OAuth был прекращен 2026-04-15. Пожалуйста, выберите модель от другого провайдера или выполните /auth для переключения.',
-  '\n⚠ Qwen OAuth free tier was discontinued on 2026-04-15. Please select another option.\n':
-    '\n⚠ Бесплатный уровень Qwen OAuth прекращён 2026-04-15. Выберите другую опцию.\n',
-  'Paid \u00B7 Up to 6,000 requests/5 hrs \u00B7 All Alibaba Cloud Coding Plan Models':
-    'Платно \u00B7 До 6 000 запросов/5 часов \u00B7 Все модели Alibaba Cloud Coding Plan',
-  'Alibaba Cloud Coding Plan': 'Alibaba Cloud Coding Plan',
   'Bring your own API key': 'Используйте свой API Key',
-  'Browser-based authentication with third-party providers (e.g. OpenRouter, ModelScope)':
-    'Браузерная аутентификация с использованием сторонних провайдеров (например, OpenRouter, ModelScope)',
-  'Authentication is enforced to be {{enforcedType}}, but you are currently using {{currentType}}.':
-    'Авторизация должна быть {{enforcedType}}, но вы сейчас используете {{currentType}}.',
-  'Qwen OAuth Authentication': 'Авторизация Qwen OAuth',
-  'Please visit this URL to authorize:':
-    'Пожалуйста, посетите этот URL для авторизации:',
-  'Waiting for authorization': 'Ожидание авторизации',
-  'Time remaining:': 'Осталось времени:',
-  'Qwen OAuth Authentication Timeout': 'Таймаут авторизации Qwen OAuth',
-  'OAuth token expired (over {{seconds}} seconds). Please select authentication method again.':
-    'Токен OAuth истек (более {{seconds}} секунд). Пожалуйста, выберите метод авторизации снова.',
-  'Press any key to return to authentication type selection.':
-    'Нажмите любую клавишу для возврата к выбору типа авторизации.',
-  'Waiting for Qwen OAuth authentication...':
-    'Ожидание авторизации Qwen OAuth...',
-  'Authentication timed out. Please try again.':
-    'Время ожидания авторизации истекло. Пожалуйста, попробуйте снова.',
-  'Waiting for auth... (Press ESC or CTRL+C to cancel)':
-    'Ожидание авторизации... (Нажмите ESC или CTRL+C для отмены)',
   'Missing API key for OpenAI-compatible auth. Set settings.security.auth.apiKey, or set the {{envKeyHint}} environment variable.':
     'Отсутствует API Key для аутентификации, совместимой с OpenAI. Укажите settings.security.auth.apiKey или переменную окружения {{envKeyHint}}.',
-  '{{envKeyHint}} environment variable not found. Please set it in your .env file or environment variables.':
-    'Переменная окружения {{envKeyHint}} не найдена. Укажите её в файле .env или среди системных переменных.',
-  '{{envKeyHint}} environment variable not found (or set settings.security.auth.apiKey). Please set it in your .env file or environment variables.':
-    'Переменная окружения {{envKeyHint}} не найдена (или установите settings.security.auth.apiKey). Укажите её в файле .env или среди системных переменных.',
   'Missing API key for OpenAI-compatible auth. Set the {{envKeyHint}} environment variable.':
     'Отсутствует API Key для аутентификации, совместимой с OpenAI. Установите переменную окружения {{envKeyHint}}.',
-  'Anthropic provider missing required baseUrl in modelProviders[].baseUrl.':
-    'У провайдера Anthropic отсутствует обязательный baseUrl в modelProviders[].baseUrl.',
-  'ANTHROPIC_BASE_URL environment variable not found.':
-    'Переменная окружения ANTHROPIC_BASE_URL не найдена.',
-  'Invalid auth method selected.': 'Выбран недопустимый метод авторизации.',
   'Failed to authenticate. Message: {{message}}':
     'Не удалось авторизоваться. Сообщение: {{message}}',
   'Authenticated successfully with {{authType}} credentials.':
     'Успешно авторизовано с учетными данными {{authType}}.',
-  'Invalid QWEN_DEFAULT_AUTH_TYPE value: "{{value}}". Valid values are: {{validValues}}':
-    'Неверное значение QWEN_DEFAULT_AUTH_TYPE: "{{value}}". Допустимые значения: {{validValues}}',
   // ============================================================================
   // Диалоги - Модель
   // ============================================================================
@@ -1700,20 +1654,13 @@ export default {
   // Coding Plan Authentication
   // ============================================================================
   'API key cannot be empty.': 'API Key не может быть пустым.',
-  'You can get your Coding Plan API key here':
-    'Вы можете получить API Key Coding Plan здесь',
-  'Failed to update Coding Plan configuration: {{message}}':
-    'Не удалось обновить конфигурацию Coding Plan: {{message}}',
 
   // ============================================================================
   // Auth Dialog - View Titles and Labels
   // ============================================================================
-  'Coding Plan': 'Coding Plan',
   Custom: 'Пользовательский',
-  'Select Region for Coding Plan': 'Выберите регион Coding Plan',
   'Choose based on where your account is registered':
     'Выберите в зависимости от места регистрации вашего аккаунта',
-  'Enter Coding Plan API Key': 'Введите API Key Coding Plan',
 
   // ============================================================================
   // Coding Plan International Updates
@@ -1813,8 +1760,6 @@ export default {
     'Конфигурация {{region}} успешно обновлена.',
   'Authenticated successfully with {{region}}. API key and model configs saved to settings.json.':
     'Успешная аутентификация с {{region}}. API Key и конфигурации моделей сохранены в settings.json.',
-  'Tip: Use /model to switch between available Coding Plan models.':
-    'Совет: Используйте /model для переключения между доступными моделями Coding Plan.',
   'Type something...': 'Введите что-то...',
   Submit: 'Отправить',
   'Submit answers': 'Отправить ответы',
@@ -1826,63 +1771,27 @@ export default {
     '↑/↓: Навигация | ←/→: Переключение вкладок | Enter: Выбор',
   '↑/↓: Navigate | Enter: Select | Esc: Cancel':
     '↑/↓: Навигация | Enter: Выбор | Esc: Отмена',
-  'Authenticate using Qwen OAuth': 'Аутентификация через Qwen OAuth',
-  'Authenticate using Alibaba Cloud Coding Plan':
-    'Аутентификация через Alibaba Cloud Coding Plan',
-  'Region for Coding Plan (china/global)':
-    'Регион для Coding Plan (china/global)',
-  'API key for Coding Plan': 'API Key для Coding Plan',
   'Show current authentication status':
     'Показать текущий статус аутентификации',
   'Authentication completed successfully.': 'Аутентификация успешно завершена.',
-  'Starting Qwen OAuth authentication...':
-    'Запуск аутентификации Qwen OAuth...',
-  'Successfully authenticated with Qwen OAuth.':
-    'Успешная аутентификация через Qwen OAuth.',
-  'Failed to authenticate with Qwen OAuth: {{error}}':
-    'Ошибка аутентификации через Qwen OAuth: {{error}}',
-  'Processing Alibaba Cloud Coding Plan authentication...':
-    'Обработка аутентификации Alibaba Cloud Coding Plan...',
-  'Successfully authenticated with Alibaba Cloud Coding Plan.':
-    'Успешная аутентификация через Alibaba Cloud Coding Plan.',
-  'Failed to authenticate with Coding Plan: {{error}}':
-    'Ошибка аутентификации через Coding Plan: {{error}}',
-  '阿里云百炼 (aliyun.com)': '阿里云百炼 (aliyun.com)',
   Global: 'Глобальный',
-  'Alibaba Cloud (alibabacloud.com)': 'Alibaba Cloud (alibabacloud.com)',
-  'Select region for Coding Plan:': 'Выберите регион для Coding Plan:',
-  'Enter your Coding Plan API key: ': 'Введите ваш API Key Coding Plan: ',
-  'Select authentication method:': 'Выберите метод аутентификации:',
   '\n=== Authentication Status ===\n': '\n=== Статус аутентификации ===\n',
-  '⚠  No authentication method configured.\n':
-    '⚠  Метод аутентификации не настроен.\n',
   'Run one of the following commands to get started:\n':
     'Выполните одну из следующих команд для начала:\n',
-  '  qwen auth qwen-oauth     - Authenticate with Qwen OAuth (discontinued)':
-    '  qwen auth qwen-oauth     - Аутентификация через Qwen OAuth (прекращено)',
   'Or simply run:': 'Или просто выполните:',
   '  qwen auth                - Interactive authentication setup\n':
     '  qwen auth                - Интерактивная настройка аутентификации\n',
-  '✓ Authentication Method: Qwen OAuth': '✓ Метод аутентификации: Qwen OAuth',
   '  Type: Free tier (discontinued 2026-04-15)':
     '  Тип: Бесплатный уровень (прекращено 2026-04-15)',
   '  Limit: No longer available': '  Лимит: Больше не доступен',
-  'Qwen OAuth free tier was discontinued on 2026-04-15. Run /auth to switch to Coding Plan, OpenRouter, Fireworks AI, or another provider.':
-    'Бесплатный уровень Qwen OAuth прекращён 2026-04-15. Выполните /auth для переключения на Coding Plan, OpenRouter, Fireworks AI или другого провайдера.',
-  '✓ Authentication Method: Alibaba Cloud Coding Plan':
-    '✓ Метод аутентификации: Alibaba Cloud Coding Plan',
-  'Global - Alibaba Cloud': 'Глобальный - Alibaba Cloud',
   '  Region: {{region}}': '  Регион: {{region}}',
   '  Current Model: {{model}}': '  Текущая модель: {{model}}',
   '  Config Version: {{version}}': '  Версия конфигурации: {{version}}',
   '  Status: API key configured\n': '  Статус: API Key настроен\n',
-  '⚠  Authentication Method: Alibaba Cloud Coding Plan (Incomplete)':
-    '⚠  Метод аутентификации: Alibaba Cloud Coding Plan (Не завершён)',
   '  Issue: API key not found in environment or settings\n':
     '  Проблема: API Key не найден в окружении или настройках\n',
   '  Run `qwen auth coding-plan` to re-configure.\n':
     '  Выполните `qwen auth coding-plan` для повторной настройки.\n',
-  '✓ Authentication Method: {{type}}': '✓ Метод аутентификации: {{type}}',
   '  Status: Configured\n': '  Статус: Настроено\n',
   'Failed to check authentication status: {{error}}':
     'Не удалось проверить статус аутентификации: {{error}}',
@@ -2030,8 +1939,6 @@ export default {
   'Press Ctrl+Y to retry': 'Нажмите Ctrl+Y, чтобы повторить',
   'No failed request to retry.': 'Нет неудачного запроса для повтора.',
   'to retry last request': 'чтобы повторить последний запрос',
-  'Invalid API key. Coding Plan API keys start with "sk-sp-". Please check.':
-    'Недействительный API Key. Coding Plan API Keys начинаются с "sk-sp-". Проверьте.',
   'Lock release warning': 'Предупреждение о снятии блокировки',
   'Metadata write warning': 'Предупреждение о записи метаданных',
   "Subsequent dreams may be skipped as locked until the next session's staleness sweep cleans the file.":
@@ -2062,7 +1969,6 @@ export default {
   ' (not in model registry)': ' (не в реестре моделей)',
   'start server': 'запустить сервер',
   '中国 (China)': 'Китай',
-  '中国 (China) - 阿里云百炼': 'Китай - 阿里云百炼',
 
   // Stats Dashboard — Category 2
   'Activity Heatmap': 'Карта активности',
@@ -2099,8 +2005,6 @@ export default {
   out: 'вых.',
   'In/Out': 'Вх/Вых',
   // Update command
-  'Update successful! Please restart Qwen Code to use the new version. Switching model providers before restarting may not work correctly.':
-    'Обновление успешно! Перезапустите Qwen Code, чтобы использовать новую версию. Переключение поставщиков моделей до перезапуска может работать некорректно.',
   'Standalone install detected. Please rerun the standalone installer to update:':
     'Обнаружена автономная установка. Повторно запустите автономный установщик для обновления:',
   'Unable to auto-update this standalone installation. Please reinstall from:':

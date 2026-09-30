@@ -91,7 +91,7 @@ The AI automatically uses fork when it needs to:
 
 ### Prompt Cache Sharing
 
-All forks share the parent's exact API request prefix (system prompt, tools, conversation history), enabling DashScope prompt cache hits. When 3 forks run in parallel, the shared prefix is cached once and reused — saving 80%+ token costs compared to independent subagents.
+All forks share the parent's exact API request prefix (system prompt, tools, conversation history), enabling prompt-cache hits on servers that support prefix caching. When 3 forks run in parallel, the shared prefix is cached once and reused — saving 80%+ token costs compared to independent subagents.
 
 ### Recursive Delegation Prevention
 
@@ -237,12 +237,10 @@ Use the optional `model` frontmatter field to control which model a subagent use
 - Omit the field: Same as `inherit`.
 - `fast`: Use the configured `fastModel`. If no valid fast model is configured,
   the subagent falls back to `inherit`.
-- `glm-5`: Use that model ID. Qwen Code first checks the main conversation's
-  auth type; if the model is not available there, it can resolve the model from
-  another configured provider.
-- `openai:gpt-4o`: Use an explicit provider and model ID. This is useful when a
-  subagent should run on a model registered under a different auth type from the
-  main conversation.
+- `qwen3-coder:30b`: Use that model ID from your `modelProviders.openai`
+  entries. The model runs on the local server configured for that entry.
+- `openai:qwen3-coder:30b`: The explicit `authType:model-id` form. `openai` is
+  the only auth type, so this is equivalent to the bare model ID.
 
 For example:
 
@@ -259,9 +257,9 @@ tools:
 
 ```
 ---
-name: openai-researcher
-description: Uses an OpenAI-compatible provider for research tasks
-model: openai:gpt-4o
+name: local-researcher
+description: Uses a larger local model for research tasks
+model: qwen3-coder:30b
 tools:
   - read_file
   - grep_search
@@ -270,11 +268,9 @@ tools:
 ```
 
 The `fast` selector uses the same `fastModel` setting configured in
-`settings.json` or with `/model --fast`. That setting may itself refer to a
-model under another configured auth type, such as `openai:deepseek-v4-flash`.
-When the selector resolves to another auth type, Qwen Code creates a dedicated
-runtime provider for that subagent request and sends the provider only the bare
-model ID.
+`settings.json` or with `/model --fast`. A subagent model always runs on a local
+model server from your `modelProviders.openai` entries; there is no routing to
+other providers.
 
 The built-in Explore agent inherits the main session model by default. To
 select a different model for only that built-in agent, configure
@@ -306,7 +302,7 @@ model IDs, configure `agents.modelGrades` and optionally restrict them with
   "agents": {
     "modelGrades": {
       "small": "fast",
-      "high": "qwen-max"
+      "high": "qwen3-coder:30b"
     },
     "allowedGrades": ["small", "high"]
   }
@@ -843,10 +839,10 @@ Always follow these standards:
 
 - **Tool Restrictions**: Use `tools` to limit which tools a subagent can access, or `disallowedTools` to block specific tools while inheriting everything else
 - **Permission Mode**: Subagents inherit their parent's permission mode by default. Plan-mode sessions cannot escalate to auto-edit through delegated agents. Privileged modes (auto-edit, yolo) are blocked in untrusted folders.
-- **Provider Selection**: A subagent with `model: authType:modelId`, or
-  `model: fast` where `fastModel` resolves to another auth type, sends that
-  subagent's model requests to the selected provider. Make sure that provider is
-  appropriate for the subagent's task and data.
+- **Model Selection**: A subagent with an explicit `model:` (or `model: fast`)
+  sends its model requests to the local server configured for that model in
+  `modelProviders.openai`. Every model server is on loopback; there is no routing
+  to other providers.
 - **Sandboxing**: All tool execution follows the same security model as direct tool use
 - **Audit Trail**: All Subagents actions are logged and visible in real-time
 - **Access Control**: Project and user-level separation provides appropriate boundaries

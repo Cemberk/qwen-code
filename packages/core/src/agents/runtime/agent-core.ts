@@ -115,7 +115,6 @@ import { AgentStatistics, type AgentStatsSummary } from './agent-statistics.js';
 import { matchesToolPattern } from '../../permissions/rule-parser.js';
 import { canonicalToolName, ToolNames } from '../../tools/tool-names.js';
 import { getToolExposure, ToolMode } from '../../tools/code-mode.js';
-import { DEFAULT_QWEN_MODEL } from '../../config/models.js';
 import { type ContextState, templateString } from './agent-headless.js';
 import { getResponseText } from '../../utils/partUtils.js';
 import { getThoughtSummary } from '../../utils/thoughtUtils.js';
@@ -1066,9 +1065,7 @@ export class AgentCore {
 
         const roundStreamStart = Date.now();
         const responseStream = await chat.sendMessageStream(
-          this.modelConfig.model ||
-            this.runtimeContext.getModel() ||
-            DEFAULT_QWEN_MODEL,
+          this.modelConfig.model || this.runtimeContext.getModel(),
           messageParams,
           promptId,
         );

@@ -6,7 +6,6 @@
 /* global setTimeout, clearTimeout, console, process */
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { createServer } from 'node:http';
 import { mkdtemp, mkdir, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -40,38 +39,6 @@ const chat = await startFakeOpenAIServer(async ({ body }) => {
   }
   return { content: 'REASONING_OK' };
 });
-const native = createServer(async (req, res) => {
-  let input = '';
-  for await (const chunk of req) input += chunk;
-  const body = JSON.parse(input || '{}');
-  if (req.url.includes('countTokens')) return res.end('{"totalTokens":10}');
-  requests.push(body);
-  res.writeHead(200, { 'Content-Type': 'text/event-stream' });
-  const events = req.url.includes('GenerateContent')
-    ? [
-        '{"candidates":[{"content":{"role":"model","parts":[{"text":"REASONING_OK"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":1,"totalTokenCount":11}}',
-      ]
-    : req.url.includes('responses')
-      ? [
-          '{"type":"response.output_text.delta","delta":"REASONING_OK"}',
-          '{"type":"response.completed","response":{"id":"r1","status":"completed","output":[],"usage":{"input_tokens":10,"output_tokens":1}}}',
-        ]
-      : [
-          '{"type":"message_start","message":{"id":"m1","type":"message","role":"assistant","model":"alias","content":[],"usage":{"input_tokens":10,"output_tokens":0}}}',
-          '{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}',
-          '{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"REASONING_OK"}}',
-          '{"type":"content_block_stop","index":0}',
-          '{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}',
-          '{"type":"message_stop"}',
-        ];
-  for (const data of events) {
-    const type = JSON.parse(data).type;
-    res.write(`${type ? `event: ${type}\n` : ''}data: ${data}\n\n`);
-  }
-  res.end();
-});
-await new Promise((done) => native.listen(0, '127.0.0.1', done));
-const nativeUrl = `http://127.0.0.1:${native.address().port}`;
 const tiered = (profile, defaultEffort = 'medium') => ({
   profile,
   efforts: ['low', 'medium', 'high'],
@@ -147,38 +114,20 @@ const cases = [
   ['openai', 'openai-effort', 'reasoning_effort', 'medium'],
   ['openai', 'openai-reasoning', 'reasoning.effort', 'medium'],
   ['openai', 'deepseek-openai', 'thinking.type', 'enabled'],
-  ['openai', 'dashscope-effort', 'reasoning_effort', 'medium'],
-  ['openai', 'dashscope-thinking', 'enable_thinking', true],
   [
     'openai',
     'qwen-chat-template',
     'chat_template_kwargs.enable_thinking',
     true,
   ],
-  ['anthropic', 'anthropic-manual', 'thinking.type', 'enabled'],
-  ['anthropic', 'anthropic-adaptive', 'thinking.type', 'adaptive'],
-  ['anthropic', 'deepseek-anthropic', 'output_config.effort', 'medium'],
-  [
-    'gemini',
-    'gemini',
-    'generationConfig.thinkingConfig.thinkingLevel',
-    'MEDIUM',
-  ],
-  ['openai-responses', 'openai-reasoning', 'reasoning.effort', 'medium'],
 ];
 try {
   for (const [auth, profile, field, expected] of cases) {
     if (process.argv[2] && !profile.includes(process.argv[2])) continue;
     const declaration =
-      profile === 'dashscope-thinking' || profile === 'qwen-chat-template'
-        ? { profile }
-        : tiered(profile);
+      profile === 'qwen-chat-template' ? { profile } : tiered(profile);
     const f = await fixture(profile + auth, auth, [
-      model(
-        'company-alias',
-        declaration,
-        auth === 'openai' ? chat.baseUrl : nativeUrl,
-      ),
+      model('company-alias', declaration),
     ]);
     const before = requests.length;
     await headless(f);
@@ -187,12 +136,10 @@ try {
       field.split('.').reduce((value, key) => value?.[key], body),
       expected,
     );
-    if (profile === 'anthropic-manual')
-      assert.ok(body.thinking.budget_tokens > 0);
     console.log('PASS wire', auth, profile);
   }
   const f = await fixture('acp', 'openai', [
-    model('qwen3.8-max', tiered('dashscope-effort')),
+    model('qwen3.8-max', tiered('openai-effort')),
     model('deepseek-v4-flash', tiered('deepseek-openai', 'high')),
     model('kimi-k2.5', { profile: 'qwen-chat-template' }),
   ]);
@@ -264,7 +211,5 @@ try {
   await writeFile(join(root, 'requests.json'), JSON.stringify(requests));
   for (const child of children) child.kill('SIGTERM');
   await chat.close();
-  native.closeAllConnections();
-  native.close();
   console.log('ARTIFACT', root);
 }

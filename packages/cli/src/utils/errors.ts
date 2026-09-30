@@ -163,10 +163,7 @@ export async function handleError(
     throw error;
   }
 
-  const errorMessage = parseAndFormatApiError(
-    error,
-    config.getContentGeneratorConfig()?.authType,
-  );
+  const errorMessage = parseAndFormatApiError(error);
 
   if (config.getOutputFormat() === OutputFormat.JSON) {
     const formatter = new JsonFormatter();

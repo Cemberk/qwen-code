@@ -398,7 +398,6 @@ describe('Migration Framework Integration', () => {
         $version: 5,
         modelProviders: {
           openai: { protocol: 'openai', models: [{ id: 'gpt-4o' }] },
-          'vertex-ai': { protocol: 'gemini', models: [{ id: 'gemini-pro' }] },
         },
       };
 
@@ -412,7 +411,6 @@ describe('Migration Framework Integration', () => {
         (result.settings as Record<string, unknown>)['modelProviders'],
       ).toEqual({
         openai: [{ id: 'gpt-4o' }],
-        'vertex-ai': [{ id: 'gemini-pro' }],
       });
     });
 

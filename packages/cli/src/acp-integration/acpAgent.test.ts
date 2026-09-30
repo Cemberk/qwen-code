@@ -265,20 +265,35 @@ vi.mock('node:stream', async (importOriginal) => {
   };
 });
 
+// The single provider: a deterministic stand-in for core's local
+// OpenAI-compatible provider (its real env key carries a hash suffix).
+const { mockLocalProvider } = vi.hoisted(() => ({
+  mockLocalProvider: {
+    id: 'custom-openai-compatible',
+    label: 'Local OpenAI-compatible server',
+    description: 'Connect a model server on this machine',
+    protocol: 'openai' as AuthType,
+    envKey: (protocol: string, baseUrl: string) =>
+      `QWEN_CUSTOM_API_KEY_${protocol}_${baseUrl.replace(/[^A-Za-z0-9]/g, '_')}`,
+    supportsModelDiscovery: true,
+    showAdvancedConfig: true,
+    apiKeyPlaceholder: 'Optional for most local servers',
+    ownsModel: (model: { envKey?: string }) =>
+      typeof model.envKey === 'string' &&
+      model.envKey.startsWith('QWEN_CUSTOM_API_KEY_'),
+  },
+}));
+
 // Mock core dependencies
 vi.mock('@qwen-code/qwen-code-core', async (importOriginal) => ({
-  getModelsForProviderProtocol: (
+  // The real helpers: `qwen/providers/*` read the `modelProviders.openai`
+  // bucket and validate the connect base URL through them.
+  getProviderModels: (
     await importOriginal<typeof import('@qwen-code/qwen-code-core')>()
-  ).getModelsForProviderProtocol,
-  resolveModelSelectionAuthType: (
+  ).getProviderModels,
+  getLocalBaseUrlError: (
     await importOriginal<typeof import('@qwen-code/qwen-code-core')>()
-  ).resolveModelSelectionAuthType,
-  resolveModelProtocol: (
-    await importOriginal<typeof import('@qwen-code/qwen-code-core')>()
-  ).resolveModelProtocol,
-  tryResolveModelProtocol: (
-    await importOriginal<typeof import('@qwen-code/qwen-code-core')>()
-  ).tryResolveModelProtocol,
+  ).getLocalBaseUrlError,
 
   SessionSourceService: (
     await importOriginal<typeof import('@qwen-code/qwen-code-core')>()
@@ -323,11 +338,6 @@ vi.mock('@qwen-code/qwen-code-core', async (importOriginal) => ({
   emptyGoalSnapshot: (
     await importOriginal<typeof import('@qwen-code/qwen-code-core')>()
   ).emptyGoalSnapshot,
-  // The real predicate: the auth preflight cell must agree with the session
-  // validators on what counts as a configured Vertex project.
-  hasVertexProjectConfigured: (
-    await importOriginal<typeof import('@qwen-code/qwen-code-core')>()
-  ).hasVertexProjectConfigured,
   // The real class: `acpAgent` narrows on it with `instanceof`, so a stand-in
   // would make the goal get/clear fallbacks untestable.
   GoalPersistenceUnavailableError: (
@@ -454,9 +464,6 @@ vi.mock('@qwen-code/qwen-code-core', async (importOriginal) => ({
   isReasoningEffortPlaceholder: (
     await importOriginal<typeof import('@qwen-code/qwen-code-core')>()
   ).isReasoningEffortPlaceholder,
-  isOpenRouterHostname: (
-    await importOriginal<typeof import('@qwen-code/qwen-code-core')>()
-  ).isOpenRouterHostname,
   // The real parser: `model-configuration` gates every reasoning control on it,
   // and a stand-in would decide capability validity differently from the wire.
   parseModelReasoningCapabilities: (
@@ -473,12 +480,7 @@ vi.mock('@qwen-code/qwen-code-core', async (importOriginal) => ({
   matchesAnyServerPattern: (name: string, patterns: string[] | undefined) =>
     patterns?.includes(name) ?? false,
   AuthType: {
-    QWEN_OAUTH: 'qwen-oauth',
     USE_OPENAI: 'openai',
-    USE_OPENAI_RESPONSES: 'openai-responses',
-    USE_ANTHROPIC: 'anthropic',
-    USE_GEMINI: 'gemini',
-    USE_VERTEX_AI: 'vertex-ai',
   },
   ToolNames: {
     AGENT: 'agent',
@@ -537,118 +539,15 @@ vi.mock('@qwen-code/qwen-code-core', async (importOriginal) => ({
   findBoundaryAtOrBefore: (
     await importOriginal<typeof import('@qwen-code/qwen-code-core')>()
   ).findBoundaryAtOrBefore,
-  ALL_PROVIDERS: [
-    {
-      id: 'deepseek',
-      label: 'DeepSeek API Key',
-      description: 'Quick setup for DeepSeek',
-      protocol: 'openai',
-      baseUrl: 'https://api.deepseek.com',
-      envKey: 'DEEPSEEK_API_KEY',
-      models: [{ id: 'deepseek-chat' }],
-      modelsEditable: true,
-      modelNamePrefix: 'DeepSeek',
-      uiGroup: 'third-party',
-    },
-  ],
-  findProviderById: vi.fn((id: string) => {
-    if (id === 'deepseek') {
-      return {
-        id: 'deepseek',
-        label: 'DeepSeek API Key',
-        description: 'Quick setup for DeepSeek',
-        protocol: 'openai',
-        baseUrl: 'https://api.deepseek.com',
-        envKey: 'DEEPSEEK_API_KEY',
-        models: [{ id: 'deepseek-chat' }],
-        modelsEditable: true,
-        modelNamePrefix: 'DeepSeek',
-        uiGroup: 'third-party',
-      };
-    }
-    if (id === 'custom-openai-compatible') {
-      return {
-        id: 'custom-openai-compatible',
-        label: 'Custom Provider',
-        description: 'Manually connect a custom provider',
-        protocol: 'openai',
-        protocolOptions: ['openai', 'anthropic', 'gemini'],
-        baseUrl: undefined,
-        envKey: (protocol: string, baseUrl: string) =>
-          `QWEN_CUSTOM_API_KEY_${protocol}_${baseUrl.replace(
-            /[^A-Za-z0-9]/g,
-            '_',
-          )}`,
-        models: undefined,
-        modelsEditable: true,
-        modelNamePrefix: '',
-        uiGroup: 'third-party',
-        ownsModel: (model: { envKey?: string }) =>
-          typeof model.envKey === 'string' &&
-          model.envKey.startsWith('QWEN_CUSTOM_API_KEY_'),
-        mergeModelsByIdentity: true,
-      };
-    }
-    return undefined;
-  }),
-  getDefaultBaseUrlForProtocol: vi.fn(() => 'https://api.openai.com/v1'),
-  getDefaultModelIds: vi.fn(
-    (provider: { models?: Array<{ id: string }> }) =>
-      provider.models?.map((model) => model.id) ?? [],
+  ALL_PROVIDERS: [mockLocalProvider],
+  findProviderById: vi.fn((id: string) =>
+    id === mockLocalProvider.id ? mockLocalProvider : undefined,
   ),
-  resolveBaseUrl: vi.fn(
-    (
-      provider: { baseUrl?: string | Array<{ url: string }> },
-      selectedBaseUrl?: string,
-    ) =>
-      typeof provider.baseUrl === 'string'
-        ? provider.baseUrl
-        : Array.isArray(provider.baseUrl)
-          ? (provider.baseUrl[0]?.url ?? selectedBaseUrl ?? '')
-          : (selectedBaseUrl ?? ''),
-  ),
-  resolveOwnsModel: vi.fn(
-    (provider: {
-      envKey: string;
-      ownsModel?: (model: { envKey?: string }) => boolean;
-    }) =>
-      provider.ownsModel ??
-      ((model: { envKey?: string }) => model.envKey === provider.envKey),
-  ),
+  // The real lookup: the list prefill reads the provider's own models out of
+  // `modelProviders.openai` through `ownsModel`.
   findExistingProviderModels: vi.fn(
-    (
-      provider: {
-        envKey?: string | ((...args: unknown[]) => string);
-        protocol: string;
-        protocolOptions?: string[];
-        ownsModel?: (model: { envKey?: string }) => boolean;
-      },
-      modelProviders: Record<string, unknown> | undefined,
-    ) => {
-      const ownsModel =
-        provider.ownsModel ??
-        (typeof provider.envKey === 'string'
-          ? (model: { envKey?: string }) => model.envKey === provider.envKey
-          : undefined);
-      if (!ownsModel || !modelProviders) return undefined;
-      const protocols =
-        provider.protocolOptions && provider.protocolOptions.length > 0
-          ? provider.protocolOptions
-          : [provider.protocol];
-      for (const protocol of protocols) {
-        const raw = modelProviders[protocol];
-        if (!Array.isArray(raw)) continue;
-        const models = raw.filter(
-          (m): m is { id: string; envKey?: string } =>
-            typeof m === 'object' &&
-            m !== null &&
-            typeof (m as { id?: unknown }).id === 'string' &&
-            ownsModel(m),
-        );
-        if (models.length > 0) return { protocol, models };
-      }
-      return undefined;
-    },
+    (await importOriginal<typeof import('@qwen-code/qwen-code-core')>())
+      .findExistingProviderModels,
   ),
   ExtensionManager: vi.fn().mockImplementation(() => ({
     refreshCache: mockExtensionManagerState.refreshCache,
@@ -684,11 +583,8 @@ vi.mock('@qwen-code/qwen-code-core', async (importOriginal) => ({
     InstructionsLoaded: 'InstructionsLoaded',
   },
   buildInstallPlan: vi.fn((provider, inputs) => {
-    const authType = inputs.protocol ?? provider.protocol;
-    const envKey =
-      typeof provider.envKey === 'function'
-        ? provider.envKey(authType, inputs.baseUrl)
-        : provider.envKey;
+    const authType = provider.protocol;
+    const envKey = provider.envKey(authType, inputs.baseUrl);
     return {
       providerId: provider.id,
       authType,
@@ -725,14 +621,11 @@ vi.mock('@qwen-code/qwen-code-core', async (importOriginal) => ({
       }
     },
   ),
-  clearCachedCredentialFile: vi.fn(),
   getAllMemoryFilenames: vi.fn(() => ['QWEN.md', 'AGENTS.md']),
   getAutoMemoryRoot: vi.fn(
     (projectRoot: string) => `${projectRoot}/.qwen/memory`,
   ),
   getUserAutoMemoryRoot: vi.fn(() => '/tmp/user-memory'),
-  QwenOAuth2Event: {},
-  qwenOAuth2Events: { on: vi.fn(), off: vi.fn() },
   MCPDiscoveryState: {
     NOT_STARTED: 'not_started',
     IN_PROGRESS: 'in_progress',
@@ -1161,8 +1054,6 @@ import {
   tokenLimit,
   McpBudgetWouldExceedError,
   buildInstallPlan,
-  findExistingProviderModels,
-  getDefaultBaseUrlForProtocol,
   applyProviderInstallPlan,
   Storage,
   SessionTranscriptReader,
@@ -2446,7 +2337,6 @@ describe('QwenAgent MCP support', () => {
       reloadModelProvidersConfig: vi.fn(),
       syncModelSelection: vi.fn(),
       getModelProvidersConfig: vi.fn(),
-      getProviderProtocolConfig: vi.fn().mockReturnValue({}),
       refreshAuth: vi.fn().mockResolvedValue(undefined),
       getWorkspaceContext: vi.fn().mockReturnValue({}),
       getDebugMode: vi.fn().mockReturnValue(false),
@@ -4734,13 +4624,13 @@ describe('QwenAgent MCP support', () => {
     }
   });
 
-  it('does not return discontinued qwen-oauth as the only ACP auth option', async () => {
+  it('offers the local OpenAI-compatible auth method when authentication fails', async () => {
     const innerConfig = makeInnerConfig();
     vi.mocked(innerConfig.getModelsConfig).mockReturnValue({
-      getCurrentAuthType: vi.fn().mockReturnValue('qwen-oauth'),
+      getCurrentAuthType: vi.fn().mockReturnValue('openai'),
     } as unknown as ReturnType<Config['getModelsConfig']>);
     vi.mocked(innerConfig.refreshAuth).mockRejectedValue(
-      new Error('qwen-oauth token expired'),
+      new Error('model server unreachable'),
     );
     vi.mocked(loadSettings).mockReturnValue(makeSessionSettings());
     vi.mocked(loadCliConfig).mockResolvedValue(
@@ -4826,7 +4716,6 @@ describe('QwenAgent MCP support', () => {
 
   function makeInnerConfig() {
     let providers: ReturnType<Config['getModelProvidersConfig']>;
-    let protocols: ReturnType<Config['getProviderProtocolConfig']> = {};
     return {
       initialize: vi.fn().mockResolvedValue(undefined),
       shutdown: vi.fn().mockResolvedValue(undefined),
@@ -4847,11 +4736,9 @@ describe('QwenAgent MCP support', () => {
         syncAfterAuthRefresh: vi.fn(),
       }),
       getModelProvidersConfig: vi.fn(() => providers),
-      getProviderProtocolConfig: vi.fn(() => protocols),
       reloadModelProvidersConfig: vi.fn<Config['reloadModelProvidersConfig']>(
-        (next, mapping) => {
+        (next) => {
           providers = next;
-          protocols = mapping ?? protocols;
         },
       ),
       refreshAuth: vi.fn().mockResolvedValue(undefined),
@@ -4882,7 +4769,6 @@ describe('QwenAgent MCP support', () => {
       getApprovalMode: vi.fn().mockReturnValue('default'),
       setSessionWorkflowEnabledProvider: vi.fn(),
       getReasoningEffort: vi.fn().mockReturnValue(undefined),
-      getReasoningEffortOverride: vi.fn().mockReturnValue(undefined),
       setReasoningEffort: vi.fn(),
       getSessionId: vi.fn().mockReturnValue('test-session-id'),
       getAuthType: vi.fn().mockReturnValue('api-key'),
@@ -5478,7 +5364,6 @@ describe('QwenAgent MCP support', () => {
     const settings = makeSessionSettings({
       mcpServers: {},
       modelProviders: { openai: [{ id: 'old-model' }] },
-      providerProtocol: { openai: 'openai' },
     }) as LoadedSettings & {
       reloadScopesFromDiskAtomically: ReturnType<typeof vi.fn>;
     };
@@ -5489,10 +5374,9 @@ describe('QwenAgent MCP support', () => {
     await expect(
       agent.newSession({ cwd: '/tmp', mcpServers: [] }),
     ).resolves.toBeDefined();
-    expect(innerConfig.reloadModelProvidersConfig).toHaveBeenCalledWith(
-      { openai: [{ id: 'old-model' }] },
-      { openai: 'openai' },
-    );
+    expect(innerConfig.reloadModelProvidersConfig).toHaveBeenCalledWith({
+      openai: [{ id: 'old-model' }],
+    });
     expect(lastSessionMock?.dispose).not.toHaveBeenCalled();
 
     mockConnectionState.resolve();
@@ -8292,8 +8176,8 @@ describe('QwenAgent MCP support', () => {
           description: 'General coding model',
           authType: 'qwen',
           contextWindowSize: 65_536,
-          baseUrl: 'https://user:sk-secret@api.example.com',
-          envKey: 'DASHSCOPE_API_KEY',
+          baseUrl: 'http://user:sk-secret@127.0.0.1:11434/v1',
+          envKey: 'OPENAI_API_KEY',
         },
       ]),
       getActiveRuntimeModelSnapshot: vi.fn().mockReturnValue(undefined),
@@ -8770,8 +8654,8 @@ describe('QwenAgent MCP support', () => {
               name: 'Qwen Plus',
               description: 'General coding model',
               contextLimit: 65_536,
-              baseUrl: 'https://api.example.com',
-              envKey: 'DASHSCOPE_API_KEY',
+              baseUrl: 'http://127.0.0.1:11434/v1',
+              envKey: 'OPENAI_API_KEY',
               isCurrent: true,
               isRuntime: false,
             },
@@ -9142,12 +9026,12 @@ describe('QwenAgent MCP support', () => {
       ...mockConfig,
       getTargetDir: vi.fn().mockReturnValue('/work/status'),
       getMcpServers: vi.fn().mockReturnValue({}),
-      getAuthType: vi.fn().mockReturnValue('qwen'),
+      getAuthType: vi.fn().mockReturnValue('openai'),
       getActiveRuntimeModelSnapshot: vi.fn().mockReturnValue(undefined),
       getModel: vi.fn().mockReturnValue('qwen-plus'),
       getModelsConfig: vi.fn().mockReturnValue({
         getGenerationConfig: vi.fn().mockReturnValue({}),
-        getCurrentAuthType: vi.fn().mockReturnValue('qwen'),
+        getCurrentAuthType: vi.fn().mockReturnValue('openai'),
         syncAfterAuthRefresh: vi.fn(),
       }),
       getSkillManager: vi.fn().mockReturnValue({
@@ -9157,16 +9041,8 @@ describe('QwenAgent MCP support', () => {
         {
           id: 'qwen-plus',
           label: 'Qwen Plus',
-          authType: 'qwen',
-          baseUrl: 'https://api.example.com',
-          isRuntimeModel: false,
-        },
-        {
-          id: 'qwen-image-2.0',
-          label: 'Qwen Image 2.0',
-          authType: 'qwen',
-          baseUrl: 'https://api.example.com',
-          imageOnly: true,
+          authType: 'openai',
+          baseUrl: 'http://127.0.0.1:11434/v1',
           isRuntimeModel: false,
         },
       ]),
@@ -9214,24 +9090,8 @@ describe('QwenAgent MCP support', () => {
     ).toBe('ok');
     expect(preflight.cells.find((c) => c.kind === 'providers')).toMatchObject({
       status: 'ok',
-      detail: { count: 1, providers: ['qwen'] },
+      detail: { count: 1, providers: ['openai'] },
     });
-
-    vi.mocked(mockConfig.getAllConfiguredModels).mockReturnValue([
-      {
-        id: 'qwen-image-2.0',
-        label: 'Qwen Image 2.0',
-        authType: AuthType.QWEN_OAUTH,
-        imageOnly: true,
-      },
-    ]);
-    const imageOnlyPreflight = (await agent.extMethod(
-      SERVE_STATUS_EXT_METHODS.workspacePreflight,
-      {},
-    )) as { cells: Array<{ kind: string; status: string }> };
-    expect(
-      imageOnlyPreflight.cells.find((c) => c.kind === 'providers')?.status,
-    ).toBe('error');
 
     mockConnectionState.resolve();
     await agentPromise;
@@ -9401,75 +9261,6 @@ describe('QwenAgent MCP support', () => {
     }
   });
 
-  it('extMethod preflight auth cell reports unknown for keyless Vertex with a project', async () => {
-    const savedKey = process.env['GOOGLE_API_KEY'];
-    const savedProject = process.env['GOOGLE_CLOUD_PROJECT'];
-    delete process.env['GOOGLE_API_KEY'];
-    process.env['GOOGLE_CLOUD_PROJECT'] = 'my-project';
-    try {
-      mockConfig = {
-        ...mockConfig,
-        getTargetDir: vi.fn().mockReturnValue('/work/status'),
-        getMcpServers: vi.fn().mockReturnValue({}),
-        getAuthType: vi.fn().mockReturnValue('vertex-ai'),
-        getModel: vi.fn().mockReturnValue('gemini-2.5-pro'),
-        getModelsConfig: vi.fn().mockReturnValue({
-          getGenerationConfig: vi.fn().mockReturnValue({}),
-          getCurrentAuthType: vi.fn().mockReturnValue('vertex-ai'),
-          syncAfterAuthRefresh: vi.fn(),
-        }),
-        getSkillManager: vi.fn().mockReturnValue({
-          listSkills: vi.fn().mockResolvedValue([]),
-        }),
-        getAllConfiguredModels: vi.fn().mockReturnValue([]),
-        getToolRegistry: vi.fn().mockReturnValue({ getAllTools: () => [] }),
-      } as unknown as Config;
-
-      const agentPromise = runAcpAgent(
-        mockConfig,
-        makeSessionSettings(),
-        mockArgv,
-      );
-      await vi.waitFor(() => expect(capturedAgentFactory).toBeDefined());
-      const agent = capturedAgentFactory!({
-        get closed() {
-          return mockConnectionState.promise;
-        },
-      }) as AgentLike;
-
-      const preflight = (await agent.extMethod(
-        SERVE_STATUS_EXT_METHODS.workspacePreflight,
-        {},
-      )) as {
-        cells: Array<{
-          kind: string;
-          status: string;
-          errorKind?: string;
-          detail?: { hasToken: boolean | 'unknown' };
-        }>;
-      };
-
-      const authCell = preflight.cells.find((c) => c.kind === 'auth');
-      // A configured project is routing configuration, not proof that a
-      // credential exists, so this must not report a confirmed token.
-      expect(authCell?.status).toBe('unknown');
-      expect(authCell?.detail?.hasToken).toBe('unknown');
-      expect(authCell?.errorKind).toBeUndefined();
-
-      mockConnectionState.resolve();
-      await agentPromise;
-    } finally {
-      if (savedKey !== undefined) {
-        process.env['GOOGLE_API_KEY'] = savedKey;
-      }
-      if (savedProject === undefined) {
-        delete process.env['GOOGLE_CLOUD_PROJECT'];
-      } else {
-        process.env['GOOGLE_CLOUD_PROJECT'] = savedProject;
-      }
-    }
-  });
-
   it('extMethod preflight auth cell reports warning when no apiKey in env or generationConfig', async () => {
     const savedEnv = process.env['OPENAI_API_KEY'];
     delete process.env['OPENAI_API_KEY'];
@@ -9628,58 +9419,6 @@ describe('QwenAgent MCP support', () => {
     await agentPromise;
   });
 
-  it('extMethod preflight auth cell reports unknown for qwen-oauth even with placeholder apiKey', async () => {
-    mockConfig = {
-      ...mockConfig,
-      getTargetDir: vi.fn().mockReturnValue('/work/status'),
-      getMcpServers: vi.fn().mockReturnValue({}),
-      getAuthType: vi.fn().mockReturnValue('qwen-oauth'),
-      getModel: vi.fn().mockReturnValue('qwen-plus'),
-      getModelsConfig: vi.fn().mockReturnValue({
-        getGenerationConfig: vi
-          .fn()
-          .mockReturnValue({ apiKey: 'QWEN_OAUTH_DYNAMIC_TOKEN' }),
-        getCurrentAuthType: vi.fn().mockReturnValue('qwen-oauth'),
-        syncAfterAuthRefresh: vi.fn(),
-      }),
-      getSkillManager: vi.fn().mockReturnValue({
-        listSkills: vi.fn().mockResolvedValue([]),
-      }),
-      getAllConfiguredModels: vi.fn().mockReturnValue([]),
-      getToolRegistry: vi.fn().mockReturnValue({ getAllTools: () => [] }),
-    } as unknown as Config;
-
-    const agentPromise = runAcpAgent(
-      mockConfig,
-      makeSessionSettings(),
-      mockArgv,
-    );
-    await vi.waitFor(() => expect(capturedAgentFactory).toBeDefined());
-    const agent = capturedAgentFactory!({
-      get closed() {
-        return mockConnectionState.promise;
-      },
-    }) as AgentLike;
-
-    const preflight = (await agent.extMethod(
-      SERVE_STATUS_EXT_METHODS.workspacePreflight,
-      {},
-    )) as {
-      cells: Array<{
-        kind: string;
-        status: string;
-        detail?: { hasToken: boolean | 'unknown'; envVarCandidates: string[] };
-      }>;
-    };
-
-    const authCell = preflight.cells.find((c) => c.kind === 'auth');
-    expect(authCell?.status).toBe('unknown');
-    expect(authCell?.detail?.hasToken).toBe('unknown');
-
-    mockConnectionState.resolve();
-    await agentPromise;
-  });
-
   it('provider status marks current only for matching models', async () => {
     mockConfig = {
       ...mockConfig,
@@ -9733,7 +9472,7 @@ describe('QwenAgent MCP support', () => {
     await agentPromise;
   });
 
-  it('provider status filters fastOnly and voiceOnly models', async () => {
+  it('provider status filters fastOnly models', async () => {
     mockConfig = {
       ...mockConfig,
       getTargetDir: vi.fn().mockReturnValue('/work/status'),
@@ -9751,12 +9490,6 @@ describe('QwenAgent MCP support', () => {
           label: 'Qwen Flash',
           authType: 'qwen',
           fastOnly: true,
-        },
-        {
-          id: 'qwen-asr',
-          label: 'Qwen ASR',
-          authType: 'qwen',
-          voiceOnly: true,
         },
       ]),
     } as unknown as Config;
@@ -9800,7 +9533,7 @@ describe('QwenAgent MCP support', () => {
       }),
       getCurrentModelRegistryBaseUrl: vi
         .fn()
-        .mockReturnValue('https://stale.example/v1'),
+        .mockReturnValue('http://127.0.0.1:8080/v1'),
       getModel: vi.fn().mockReturnValue('qwen-plus'),
       getAllConfiguredModels: vi.fn().mockReturnValue([
         {
@@ -9880,13 +9613,13 @@ describe('QwenAgent MCP support', () => {
           id: 'qwen3.8-max',
           label: 'Qwen 3.8 Max Route One',
           authType: 'openai',
-          baseUrl: 'https://one.example/v1',
+          baseUrl: 'http://127.0.0.1:11434/v1',
         },
         {
           id: 'qwen3.8-max',
           label: 'Qwen 3.8 Max Route Two',
           authType: 'openai',
-          baseUrl: 'https://two.example/v1',
+          baseUrl: 'http://127.0.0.1:1234/v1',
         },
         {
           id: 'qwen3.8-max',
@@ -10038,7 +9771,7 @@ describe('QwenAgent MCP support', () => {
       getResolvedModelConfig: vi.fn((authType: string, modelId: string) =>
         authType === AuthType.USE_OPENAI && modelId === 'gpt-5.5'
           ? {
-              baseUrl: 'https://api.openai.com/v1',
+              baseUrl: 'http://127.0.0.1:11434/v1',
               generationConfig: {
                 extra_body: { reasoning: { effort: 'high' } },
               },
@@ -10097,7 +9830,7 @@ describe('QwenAgent MCP support', () => {
     }
   });
 
-  it('session model selectors filter fastOnly and voiceOnly models', async () => {
+  it('session model selectors filter fastOnly models', async () => {
     const sessionId = '11111111-1111-1111-1111-111111111111';
     const innerConfig = await setupSessionMocks(sessionId);
     Object.assign(innerConfig, {
@@ -10114,12 +9847,6 @@ describe('QwenAgent MCP support', () => {
           label: 'Fast Model',
           authType: 'api-key',
           fastOnly: true,
-        },
-        {
-          id: 'voice-model',
-          label: 'Voice Model',
-          authType: 'api-key',
-          voiceOnly: true,
         },
       ]),
     });
@@ -10305,20 +10032,6 @@ describe('QwenAgent MCP support', () => {
       'medium',
     ],
     [{ model: 'gpt-5.5', extra_body: { reasoning: false } }, 'medium'],
-    [
-      {
-        baseUrl: 'https://openrouter.ai/api/v1',
-        extra_body: { reasoning: { enabled: false } },
-      },
-      'none',
-    ],
-    [
-      {
-        baseUrl: 'https://openrouter.ai/api/v1',
-        extra_body: { reasoning: { effort: 'high' } },
-      },
-      'high',
-    ],
     [{ samplingParams: { reasoning_effort: null } }, 'none'],
     [{ samplingParams: { reasoning: {} } }, 'none'],
     [
@@ -10429,33 +10142,25 @@ describe('QwenAgent MCP support', () => {
       {
         layer,
         model: 'gpt-5.5',
-        baseUrl: 'https://api.openai.com/v1',
         raw: { reasoning_effort: 'none' },
       },
       {
         layer,
-        model: 'gpt-5.5',
-        baseUrl: 'https://openrouter.ai/api/v1',
-        raw: { reasoning: { enabled: false } },
-      },
-      {
-        layer,
         model: 'gpt-5.4',
-        baseUrl: 'https://api.openai.com/v1',
         raw: { reasoning: null },
       },
       {
         layer,
         model: 'gpt-5.5',
-        baseUrl: 'https://api.openai.com/v1',
         raw: { reasoning: { effort: 'high' } },
         disabledDefault: true,
       },
     ]),
   )(
-    'does not offer a reset as enable when $layer restores disabled thinking ($model, $baseUrl)',
+    'does not offer a reset as enable when $layer restores disabled thinking ($model)',
     async (testCase) => {
-      const { layer, model, baseUrl, raw } = testCase;
+      const { layer, model, raw } = testCase;
+      const baseUrl = 'http://127.0.0.1:11434/v1';
       const disabledDefault = 'disabledDefault' in testCase;
       const sessionId = 'gpt-raw-disable-switch';
       const innerConfig = await setupSessionMocks(sessionId);
@@ -10763,56 +10468,6 @@ describe('QwenAgent MCP support', () => {
       'high',
       false,
     ],
-    [
-      'OpenRouter sampling flat',
-      {
-        baseUrl: 'https://openrouter.ai/api/v1',
-        samplingParams: { reasoning_effort: 'high' },
-      },
-      'high',
-      false,
-    ],
-    [
-      'OpenRouter extra flat',
-      {
-        baseUrl: 'https://openrouter.ai/api/v1',
-        extra_body: { reasoning_effort: 'high' },
-      },
-      'low',
-      true,
-    ],
-    ...(['samplingParams', 'extra_body'] as const).flatMap(
-      (layer) =>
-        [
-          [
-            layer + ' OpenRouter effort',
-            {
-              baseUrl: 'https://openrouter.ai/api/v1',
-              [layer]: { reasoning: { effort: 'high' } },
-            },
-            'high',
-            false,
-          ],
-          [
-            layer + ' OpenRouter enabled',
-            {
-              baseUrl: 'https://openrouter.ai/api/v1',
-              [layer]: { reasoning: { enabled: true } },
-            },
-            'medium',
-            false,
-          ],
-          [
-            layer + ' OpenRouter budget',
-            {
-              baseUrl: 'https://openrouter.ai/api/v1',
-              [layer]: { reasoning: { max_tokens: 1024 } },
-            },
-            'medium',
-            false,
-          ],
-        ] as const,
-    ),
   ] as const)(
     'confirms only applied tiers with %s',
     async (_name, overrides, currentValue, allowed) => {
@@ -11335,14 +10990,6 @@ describe('QwenAgent MCP support', () => {
     innerConfig.getReasoningEffort = vi.fn(() =>
       generation.reasoning ? generation.reasoning.effort : undefined,
     );
-    innerConfig.getReasoningEffortOverride = vi.fn(() =>
-      generation.samplingParams?.['reasoning_effort'] === undefined
-        ? undefined
-        : {
-            source: 'samplingParams' as const,
-            field: 'reasoning_effort' as const,
-          },
-    );
 
     const { agent, agentPromise } = await bootAcpAgent();
     try {
@@ -11379,124 +11026,6 @@ describe('QwenAgent MCP support', () => {
     }
   });
 
-  it.each([
-    [false, 'none'],
-    [true, 'medium'],
-  ] as const)(
-    'projects a static budget over unified thinking disable with mandatory=%s as %s',
-    async (thinkingMandatory, expectedValue) => {
-      const sessionId = `qwen38-disabled-budget-${thinkingMandatory}`;
-      const innerConfig = await setupSessionMocks(sessionId);
-      const generation: {
-        thinkingMandatory?: true;
-        reasoning: false;
-        samplingParams: Record<string, unknown>;
-      } = {
-        ...(thinkingMandatory ? { thinkingMandatory: true as const } : {}),
-        reasoning: false,
-        samplingParams: { thinking_budget: 4097 },
-      };
-      innerConfig.getModel = vi.fn().mockReturnValue('qwen3.8-max');
-      innerConfig.getContentGeneratorConfig = vi.fn(() => generation);
-      innerConfig.getReasoningEffort = vi.fn().mockReturnValue(undefined);
-      innerConfig.getReasoningEffortOverride = vi.fn(() => ({
-        source: 'samplingParams' as const,
-        field: 'thinking_budget' as const,
-      }));
-
-      const { agent, agentPromise } = await bootAcpAgent();
-      try {
-        const session = (await agent.newSession({
-          cwd: '/tmp',
-          mcpServers: [],
-        })) as SetSessionConfigOptionResponse;
-        expect(
-          session.configOptions.find((item) => item.id === 'reasoning_effort')
-            ?.currentValue,
-        ).toBe(expectedValue);
-      } finally {
-        mockConnectionState.resolve();
-        await agentPromise;
-      }
-    },
-  );
-
-  it('re-enables qwen3.8-max after a static thinking disable', async () => {
-    const sessionId = 'qwen38-static-thinking-disable';
-    const innerConfig = await setupSessionMocks(sessionId);
-    const extraBody = { enable_thinking: false, seed: 7 };
-    const samplingParams = { thinking_budget: 2048, temperature: 0.2 };
-    const generation: {
-      reasoning?: false | { effort?: string };
-      extra_body?: Record<string, unknown>;
-      samplingParams?: Record<string, unknown>;
-    } = {
-      reasoning: { effort: 'low' },
-      extra_body: extraBody,
-      samplingParams,
-    };
-    innerConfig.getModel = vi.fn().mockReturnValue('qwen3.8-max');
-    innerConfig.getContentGeneratorConfig = vi.fn(() => generation);
-    innerConfig.getReasoningEffort = vi.fn(() =>
-      generation.reasoning ? generation.reasoning.effort : undefined,
-    );
-    innerConfig.getReasoningEffortOverride = vi.fn(() =>
-      generation.extra_body?.['enable_thinking'] === false
-        ? {
-            source: 'extra_body' as const,
-            field: 'enable_thinking' as const,
-          }
-        : generation.samplingParams?.['thinking_budget'] !== undefined
-          ? {
-              source: 'samplingParams' as const,
-              field: 'thinking_budget' as const,
-            }
-          : undefined,
-    );
-
-    const { agent, agentPromise } = await bootAcpAgent();
-    try {
-      const session = (await agent.newSession({
-        cwd: '/tmp',
-        mcpServers: [],
-      })) as SetSessionConfigOptionResponse;
-      expect(
-        session.configOptions.find((item) => item.id === 'reasoning_effort'),
-      ).toMatchObject({
-        currentValue: 'none',
-        options: [
-          { value: 'none' },
-          { value: 'low' },
-          { value: 'medium' },
-          { value: 'xhigh' },
-        ],
-      });
-
-      const selected = (await agent.setSessionConfigOption({
-        sessionId,
-        configId: 'reasoning_effort',
-        value: 'xhigh',
-      })) as SetSessionConfigOptionResponse;
-      expect(generation.extra_body).toEqual({ seed: 7 });
-      expect(generation.samplingParams).toEqual({ temperature: 0.2 });
-      expect(generation.extra_body).not.toBe(extraBody);
-      expect(generation.samplingParams).not.toBe(samplingParams);
-      expect(extraBody).toEqual({ enable_thinking: false, seed: 7 });
-      expect(samplingParams).toEqual({
-        thinking_budget: 2048,
-        temperature: 0.2,
-      });
-      expect(generation.reasoning).toEqual({ effort: 'xhigh' });
-      expect(
-        selected.configOptions.find((item) => item.id === 'reasoning_effort')
-          ?.currentValue,
-      ).toBe('xhigh');
-    } finally {
-      mockConnectionState.resolve();
-      await agentPromise;
-    }
-  });
-
   it('returns qwen3.8-max to default after a static thinking disable', async () => {
     const sessionId = 'qwen38-static-thinking-default';
     const innerConfig = await setupSessionMocks(sessionId);
@@ -11513,19 +11042,6 @@ describe('QwenAgent MCP support', () => {
     innerConfig.getContentGeneratorConfig = vi.fn(() => generation);
     innerConfig.getReasoningEffort = vi.fn(() =>
       generation.reasoning ? generation.reasoning.effort : undefined,
-    );
-    innerConfig.getReasoningEffortOverride = vi.fn(() =>
-      generation.extra_body?.['enable_thinking'] === false
-        ? {
-            source: 'extra_body' as const,
-            field: 'enable_thinking' as const,
-          }
-        : generation.samplingParams?.['thinking_budget'] !== undefined
-          ? {
-              source: 'samplingParams' as const,
-              field: 'thinking_budget' as const,
-            }
-          : undefined,
     );
 
     const { agent, agentPromise } = await bootAcpAgent();
@@ -11556,49 +11072,6 @@ describe('QwenAgent MCP support', () => {
   });
 
   it.each([
-    [4096, 'low'],
-    [4097, 'medium'],
-    [16384, 'medium'],
-    [16385, 'xhigh'],
-  ] as const)(
-    'projects a static qwen3.8-max thinking budget of %i as %s',
-    async (thinkingBudget, expectedEffort) => {
-      const sessionId = `qwen38-static-thinking-budget-${thinkingBudget}`;
-      const innerConfig = await setupSessionMocks(sessionId);
-      const generation: {
-        reasoning?: false | { effort?: string };
-        samplingParams?: Record<string, unknown>;
-      } = {
-        samplingParams: { thinking_budget: thinkingBudget },
-      };
-      innerConfig.getModel = vi.fn().mockReturnValue('qwen3.8-max');
-      innerConfig.getContentGeneratorConfig = vi.fn(() => generation);
-      innerConfig.getReasoningEffort = vi.fn(() =>
-        generation.reasoning ? generation.reasoning.effort : undefined,
-      );
-      innerConfig.getReasoningEffortOverride = vi.fn(() => ({
-        source: 'samplingParams' as const,
-        field: 'thinking_budget' as const,
-      }));
-
-      const { agent, agentPromise } = await bootAcpAgent();
-      try {
-        const session = (await agent.newSession({
-          cwd: '/tmp',
-          mcpServers: [],
-        })) as SetSessionConfigOptionResponse;
-        expect(
-          session.configOptions.find((item) => item.id === 'reasoning_effort')
-            ?.currentValue,
-        ).toBe(expectedEffort);
-      } finally {
-        mockConnectionState.resolve();
-        await agentPromise;
-      }
-    },
-  );
-
-  it.each([
     { modelId: 'qwen-plus', value: 'high', opaque: false },
     { modelId: 'qwen3.8-max', value: 'medium', opaque: true },
   ])(
@@ -11611,14 +11084,14 @@ describe('QwenAgent MCP support', () => {
         innerConfig.getAuthType = vi.fn().mockReturnValue('openai');
         innerConfig.getCurrentModelRegistryBaseUrl = vi
           .fn()
-          .mockReturnValue('https://one.example/v1');
+          .mockReturnValue('http://127.0.0.1:11434/v1');
         innerConfig.getAllConfiguredModels = vi.fn().mockReturnValue(
           ['one', 'two'].map((name) => ({
             id: modelId,
             label: name,
             authType: 'openai',
-            baseUrl: `https://${name}.example/v1`,
-            registryBaseUrl: `https://${name}.example/v1`,
+            baseUrl: `http://127.0.0.1:${name === 'one' ? 11434 : 1234}/v1`,
+            registryBaseUrl: `http://127.0.0.1:${name === 'one' ? 11434 : 1234}/v1`,
           })),
         );
       }
@@ -11792,42 +11265,6 @@ describe('QwenAgent MCP support', () => {
     }
   });
 
-  it('reports the model default when mandatory thinking strips a static disable', async () => {
-    const sessionId = 'qwen38-mandatory-static-disable-session';
-    const innerConfig = await setupSessionMocks(sessionId);
-    const generation: {
-      thinkingMandatory: true;
-      reasoning: { effort: string };
-      extra_body: Record<string, unknown>;
-    } = {
-      thinkingMandatory: true,
-      reasoning: { effort: 'low' },
-      extra_body: { enable_thinking: false },
-    };
-    innerConfig.getModel = vi.fn().mockReturnValue('qwen3.8-max');
-    innerConfig.getContentGeneratorConfig = vi.fn(() => generation);
-    innerConfig.getReasoningEffort = vi.fn(() => generation.reasoning.effort);
-    innerConfig.getReasoningEffortOverride = vi.fn(() => ({
-      source: 'extra_body' as const,
-      field: 'enable_thinking' as const,
-    }));
-
-    const { agent, agentPromise } = await bootAcpAgent();
-    try {
-      const session = (await agent.newSession({
-        cwd: '/tmp',
-        mcpServers: [],
-      })) as SetSessionConfigOptionResponse;
-      expect(
-        session.configOptions.find((item) => item.id === 'reasoning_effort')
-          ?.currentValue,
-      ).toBe('xhigh');
-    } finally {
-      mockConnectionState.resolve();
-      await agentPromise;
-    }
-  });
-
   it('reports the model default when mandatory thinking strips a static effort while disabled', async () => {
     const sessionId = 'qwen38-mandatory-disabled-static-effort-session';
     const innerConfig = await setupSessionMocks(sessionId);
@@ -11843,10 +11280,6 @@ describe('QwenAgent MCP support', () => {
     innerConfig.getModel = vi.fn().mockReturnValue('qwen3.8-max');
     innerConfig.getContentGeneratorConfig = vi.fn(() => generation);
     innerConfig.getReasoningEffort = vi.fn().mockReturnValue(undefined);
-    innerConfig.getReasoningEffortOverride = vi.fn(() => ({
-      source: 'samplingParams' as const,
-      field: 'reasoning_effort' as const,
-    }));
 
     const { agent, agentPromise } = await bootAcpAgent();
     try {
@@ -11863,100 +11296,6 @@ describe('QwenAgent MCP support', () => {
       await agentPromise;
     }
   });
-
-  it.each([
-    {
-      description: 'hide discontinued qwen-oauth for other auth types',
-      authType: 'openai',
-      model: 'qwen3.6-27b',
-      expectedCurrent: 'qwen3.6-27b(openai)',
-      expectedModels: ['qwen3.6-27b(openai)'],
-    },
-    {
-      description: 'keep qwen-oauth for existing qwen-oauth sessions',
-      authType: 'qwen-oauth',
-      model: 'coder-model',
-      expectedCurrent: 'coder-model(qwen-oauth)',
-      expectedModels: ['coder-model(qwen-oauth)', 'qwen3.6-27b(openai)'],
-    },
-  ])(
-    'session model selectors $description',
-    async ({ authType, model, expectedCurrent, expectedModels }) => {
-      const sessionId = '11111111-1111-1111-1111-111111111111';
-      const innerConfig = await setupSessionMocks(sessionId);
-      Object.assign(innerConfig, {
-        getModel: vi.fn().mockReturnValue(model),
-        getAuthType: vi.fn().mockReturnValue(authType),
-        getAllConfiguredModels: vi.fn().mockReturnValue([
-          {
-            id: 'coder-model',
-            label: 'coder-model',
-            authType: 'qwen-oauth',
-          },
-          {
-            id: 'qwen3.6-27b',
-            label: 'Qwen3.6-27B Local',
-            authType: 'openai',
-          },
-        ]),
-      });
-
-      const agentPromise = runAcpAgent(
-        mockConfig,
-        makeSessionSettings(),
-        mockArgv,
-      );
-      await vi.waitFor(() => expect(capturedAgentFactory).toBeDefined());
-
-      const agent = capturedAgentFactory!({
-        get closed() {
-          return mockConnectionState.promise;
-        },
-      }) as AgentLike;
-
-      const session = (await agent.newSession({
-        cwd: '/tmp',
-        mcpServers: [],
-      })) as {
-        models: {
-          currentModelId: string;
-          availableModels: Array<{ modelId: string }>;
-        };
-        configOptions: Array<{
-          id: string;
-          currentValue: string;
-          options: Array<{ value: string }>;
-        }>;
-      };
-      const context = (await agent.extMethod(
-        SERVE_STATUS_EXT_METHODS.sessionContext,
-        { sessionId },
-      )) as {
-        state: {
-          models: {
-            currentModelId: string;
-            availableModels: Array<{ modelId: string }>;
-          };
-        };
-      };
-      const modelOption = session.configOptions.find(
-        (option) => option.id === 'model',
-      );
-
-      expect(session.models.currentModelId).toBe(expectedCurrent);
-      expect(
-        session.models.availableModels.map((option) => option.modelId),
-      ).toEqual(expectedModels);
-      expect(modelOption?.currentValue).toBe(expectedCurrent);
-      expect(modelOption?.options.map((option) => option.value)).toEqual(
-        expectedModels,
-      );
-      expect(context.state.models).toMatchObject(session.models);
-
-      mockConnectionState.resolve();
-      await agentPromise;
-    },
-  );
 
   it('stores ACP session source metadata on the session config', async () => {
     const innerConfig = await setupSessionMocks('session-source');
@@ -12003,25 +11342,25 @@ describe('QwenAgent MCP support', () => {
       getContentGeneratorConfig: vi.fn().mockReturnValue({
         authType: 'api-key',
         model: 'shared-model',
-        baseUrl: 'https://two.example/v1',
+        baseUrl: 'http://127.0.0.1:1234/v1',
       }),
       getCurrentModelRegistryBaseUrl: vi
         .fn()
-        .mockReturnValue('https://two.example/v1'),
+        .mockReturnValue('http://127.0.0.1:1234/v1'),
       getAllConfiguredModels: vi.fn().mockReturnValue([
         {
           id: 'shared-model',
           label: 'Provider One',
           authType: 'api-key',
-          baseUrl: 'https://one.example/v1',
-          registryBaseUrl: 'https://one.example/v1',
+          baseUrl: 'http://127.0.0.1:11434/v1',
+          registryBaseUrl: 'http://127.0.0.1:11434/v1',
         },
         {
           id: 'shared-model',
           label: 'Provider Two',
           authType: 'api-key',
-          baseUrl: 'https://two.example/v1',
-          registryBaseUrl: 'https://two.example/v1',
+          baseUrl: 'http://127.0.0.1:1234/v1',
+          registryBaseUrl: 'http://127.0.0.1:1234/v1',
         },
       ]),
     });
@@ -21150,6 +20489,7 @@ describe('QwenAgent MCP support', () => {
   });
 
   it('qwen/providers extension methods list and connect model providers', async () => {
+    const baseUrl = 'http://127.0.0.1:11434/v1';
     const settings = makeSessionSettings();
     const agentPromise = runAcpAgent(mockConfig, settings, mockArgv);
 
@@ -21163,41 +20503,40 @@ describe('QwenAgent MCP support', () => {
 
     await expect(agent.extMethod('qwen/providers/list', {})).resolves.toEqual({
       providers: [
-        expect.objectContaining({
-          id: 'deepseek',
-          label: 'DeepSeek API Key',
-          defaultModelIds: ['deepseek-chat'],
-          uiGroup: 'third-party',
-        }),
+        {
+          id: 'custom-openai-compatible',
+          label: 'Local OpenAI-compatible server',
+          description: 'Connect a model server on this machine',
+          protocol: 'openai',
+          showAdvancedConfig: true,
+          supportsModelDiscovery: true,
+          apiKeyPlaceholder: 'Optional for most local servers',
+        },
       ],
     });
 
     await expect(
       agent.extMethod('qwen/providers/connect', {
-        providerId: 'deepseek',
+        providerId: 'custom-openai-compatible',
         apiKey: 'sk-test',
-        modelIds: ['deepseek-chat'],
+        baseUrl,
+        modelIds: ['qwen3-coder'],
       }),
     ).resolves.toEqual({
       success: true,
-      providerId: 'deepseek',
-      providerLabel: 'DeepSeek API Key',
+      providerId: 'custom-openai-compatible',
+      providerLabel: 'Local OpenAI-compatible server',
       authType: 'openai',
-      modelId: 'deepseek-chat',
+      modelId: 'qwen3-coder',
     });
 
     expect(buildInstallPlan).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'deepseek' }),
-      expect.objectContaining({
-        baseUrl: 'https://api.deepseek.com',
-        apiKey: 'sk-test',
-        modelIds: ['deepseek-chat'],
-      }),
-      settings.merged.modelProviders?.['openai'] ?? [],
-      { authType: undefined, id: undefined, baseUrl: undefined },
+      expect.objectContaining({ id: 'custom-openai-compatible' }),
+      { baseUrl, apiKey: 'sk-test', modelIds: ['qwen3-coder'] },
+      [],
     );
     expect(applyProviderInstallPlan).toHaveBeenCalledWith(
-      expect.objectContaining({ providerId: 'deepseek' }),
+      expect.objectContaining({ providerId: 'custom-openai-compatible' }),
       expect.objectContaining({ settings }),
     );
 
@@ -21205,148 +20544,75 @@ describe('QwenAgent MCP support', () => {
     await agentPromise;
   });
 
+  it('qwen/providers/connect rejects an unknown provider id', async () => {
+    const { agent, agentPromise } = await bootCoreSettingsAgent(
+      makeSessionSettings(),
+    );
+    try {
+      await expect(
+        agent.extMethod('qwen/providers/connect', {
+          providerId: 'deepseek',
+          apiKey: 'sk-test',
+          baseUrl: 'http://127.0.0.1:11434/v1',
+          modelIds: ['deepseek-chat'],
+        }),
+      ).rejects.toThrow('Unknown provider: deepseek');
+      expect(buildInstallPlan).not.toHaveBeenCalled();
+      expect(applyProviderInstallPlan).not.toHaveBeenCalled();
+    } finally {
+      mockConnectionState.resolve();
+      await agentPromise;
+    }
+  });
+
   it.each([
     {
-      label: 'canonical Responses only',
-      userAuthType: undefined,
-      providerId: 'openai',
-      initialAuthType: AuthType.USE_OPENAI,
-      withChat: false,
-      methodId: AuthType.USE_OPENAI,
-      expected: AuthType.USE_OPENAI_RESPONSES,
+      label: 'a missing baseUrl',
+      baseUrl: undefined,
+      error:
+        'No model server base URL is configured (from baseUrl). Set the base URL of a local OpenAI-compatible server, for example http://127.0.0.1:11434/v1.',
     },
     {
-      label: 'Responses with a Chat sibling',
-      userAuthType: undefined,
-      providerId: 'openai',
-      initialAuthType: AuthType.USE_OPENAI_RESPONSES,
-      withChat: true,
-      methodId: AuthType.USE_OPENAI,
-      expected: AuthType.USE_OPENAI_RESPONSES,
+      label: 'a blank baseUrl',
+      baseUrl: '   ',
+      error:
+        'No model server base URL is configured (from baseUrl). Set the base URL of a local OpenAI-compatible server, for example http://127.0.0.1:11434/v1.',
     },
     {
-      label: 'selected Chat with a Responses sibling',
-      userAuthType: undefined,
-      providerId: 'gateway',
-      initialAuthType: AuthType.USE_OPENAI,
-      withChat: true,
-      methodId: AuthType.USE_OPENAI,
-      expected: AuthType.USE_OPENAI,
+      label: 'a cloud baseUrl',
+      baseUrl: 'https://api.openai.com/v1',
+      error:
+        'Model server base URL "https://api.openai.com/v1" (from baseUrl) is not allowed: the host must be 127.0.0.1, ::1 or localhost.',
     },
     {
-      label: 'explicit legacy Responses method',
-      userAuthType: undefined,
-      providerId: 'openai',
-      initialAuthType: AuthType.USE_OPENAI,
-      withChat: true,
-      methodId: AuthType.USE_OPENAI_RESPONSES,
-      expected: AuthType.USE_OPENAI_RESPONSES,
-    },
-    {
-      label: 'User Responses preserved',
-      userAuthType: AuthType.USE_OPENAI_RESPONSES,
-      providerId: 'openai',
-      initialAuthType: AuthType.USE_OPENAI_RESPONSES,
-      withChat: true,
-      methodId: AuthType.USE_OPENAI,
-      expected: AuthType.USE_OPENAI_RESPONSES,
-    },
-    {
-      label: 'Workspace Responses does not leak to User Chat',
-      userAuthType: AuthType.USE_OPENAI,
-      providerId: 'openai',
-      initialAuthType: AuthType.USE_OPENAI_RESPONSES,
-      withChat: true,
-      methodId: AuthType.USE_OPENAI,
-      expected: AuthType.USE_OPENAI_RESPONSES,
-    },
-    {
-      label: 'Workspace Chat does not overwrite User Responses',
-      userAuthType: AuthType.USE_OPENAI_RESPONSES,
-      providerId: 'openai',
-      initialAuthType: AuthType.USE_OPENAI,
-      withChat: true,
-      methodId: AuthType.USE_OPENAI,
-      expected: AuthType.USE_OPENAI,
+      label: 'a LAN baseUrl',
+      baseUrl: 'http://192.168.1.5:8000/v1',
+      error:
+        'Model server base URL "http://192.168.1.5:8000/v1" (from baseUrl) is not allowed: the host must be 127.0.0.1, ::1 or localhost.',
     },
   ])(
-    'authenticate preserves API routing for $label',
-    async ({
-      initialAuthType,
-      userAuthType,
-      providerId,
-      withChat,
-      methodId,
-      expected,
-    }) => {
-      const actual = await vi.importActual<
-        typeof import('@qwen-code/qwen-code-core')
-      >('@qwen-code/qwen-code-core');
-      const baseUrl = 'https://api.example/v1';
-      const modelProviders = {
-        [providerId]: [
-          ...(withChat
-            ? [{ id: 'same', baseUrl, wireApi: 'chat-completions' as const }]
-            : []),
-          { id: 'same', baseUrl, wireApi: 'responses' as const },
-        ],
-      };
-      const providerProtocol = { gateway: 'openai' as const };
-      const models = new actual.ModelsConfig({
-        initialAuthType,
-        generationConfig: { model: 'same', baseUrl },
-        modelProvidersConfig: modelProviders,
-        providerProtocolConfig: providerProtocol,
-      });
-      const refreshAuth = vi.fn(async (authType: AuthType) => {
-        models.syncAfterAuthRefresh(authType, models.getModel());
-      });
-      mockConfig = {
-        ...mockConfig,
-        getModel: () => models.getModel(),
-        getAuthType: () => undefined,
-        getCurrentAuthType: () => models.getCurrentAuthType(),
-        getCurrentModelRegistryBaseUrl: () =>
-          models.getCurrentRegistryBaseUrl(),
-        refreshAuth,
-      } as unknown as Config;
+    'qwen/providers/connect rejects $label before writing',
+    async ({ baseUrl, error }) => {
       const settings = {
-        ...makeSessionSettings({ modelProviders, providerProtocol }),
-        forScope: vi.fn((scope: SettingScope) => ({
-          settings: {
-            security: {
-              auth: {
-                selectedType:
-                  scope === SettingScope.User ? userAuthType : initialAuthType,
-              },
-            },
-          },
-        })),
+        ...makeSessionSettings(),
         setValue: vi.fn(),
       } as unknown as LoadedSettings;
       const { agent, agentPromise } = await bootCoreSettingsAgent(settings);
       try {
-        expect(
-          await agent.initialize({ clientCapabilities: {} }),
-        ).toMatchObject({
-          authMethods: [
-            {
-              id: AuthType.USE_OPENAI,
-              name: 'Use OpenAI API key',
-              _meta: { args: ['--auth-type=openai'] },
-            },
-          ],
-        });
-        await agent.authenticate({ methodId });
-        expect(refreshAuth).toHaveBeenCalledWith(expected, undefined);
-        expect(models.getCurrentAuthType()).toBe(expected);
-        expect(settings.setValue).toHaveBeenCalledWith(
-          SettingScope.User,
-          'security.auth.selectedType',
-          userAuthType === AuthType.USE_OPENAI_RESPONSES
-            ? userAuthType
-            : methodId,
-        );
+        await expect(
+          agent.extMethod('qwen/providers/connect', {
+            providerId: 'custom-openai-compatible',
+            apiKey: 'sk-test',
+            ...(baseUrl === undefined ? {} : { baseUrl }),
+            modelIds: ['qwen3-coder'],
+          }),
+        ).rejects.toThrow(error);
+        expect(buildInstallPlan).not.toHaveBeenCalled();
+        expect(applyProviderInstallPlan).not.toHaveBeenCalled();
+        expect(createLoadedSettingsAdapter).not.toHaveBeenCalled();
+        expect(settings.setValue).not.toHaveBeenCalled();
+        expect(mockConfig.reloadModelProvidersConfig).not.toHaveBeenCalled();
+        expect(mockConfig.refreshAuth).not.toHaveBeenCalled();
       } finally {
         mockConnectionState.resolve();
         await agentPromise;
@@ -21354,60 +20620,46 @@ describe('QwenAgent MCP support', () => {
     },
   );
 
-  it('authenticate tolerates an invalid api elsewhere in modelProviders and stays on the session wire', async () => {
-    const actual = await vi.importActual<
-      typeof import('@qwen-code/qwen-code-core')
-    >('@qwen-code/qwen-code-core');
-    const baseUrl = 'https://api.example/v1';
-    // The session's own models are valid; an unrelated bucket carries a
-    // hand-edited invalid `wireApi`, so the wire resolver throws over the merged
-    // settings even though the session itself is healthy.
-    const cleanProviders = {
-      openai: [{ id: 'same', baseUrl, wireApi: 'responses' as const }],
-    };
-    const modelProviders = {
-      ...cleanProviders,
-      idealab: [
-        {
-          id: 'other',
-          baseUrl: 'https://other.example/v1',
-          wireApi: 'invalid' as never,
-        },
-      ],
-    };
-    const providerProtocol = { idealab: 'openai' as const };
-    const models = new actual.ModelsConfig({
-      initialAuthType: AuthType.USE_OPENAI_RESPONSES,
-      generationConfig: { model: 'same', baseUrl },
-      modelProvidersConfig: cleanProviders,
-    });
-    const refreshAuth = vi.fn(async (authType: AuthType) => {
-      models.syncAfterAuthRefresh(authType, models.getModel());
-    });
-    mockConfig = {
-      ...mockConfig,
-      getModel: () => models.getModel(),
-      getAuthType: () => undefined,
-      getCurrentAuthType: () => models.getCurrentAuthType(),
-      getCurrentModelRegistryBaseUrl: () => models.getCurrentRegistryBaseUrl(),
-      refreshAuth,
-    } as unknown as Config;
+  it('qwen/providers/connect requires model ids instead of defaulting them', async () => {
+    const { agent, agentPromise } = await bootCoreSettingsAgent(
+      makeSessionSettings(),
+    );
+    try {
+      await expect(
+        agent.extMethod('qwen/providers/connect', {
+          providerId: 'custom-openai-compatible',
+          apiKey: 'sk-test',
+          baseUrl: 'http://127.0.0.1:11434/v1',
+        }),
+      ).rejects.toThrow(
+        'Invalid or missing modelIds for provider "custom-openai-compatible"',
+      );
+      expect(buildInstallPlan).not.toHaveBeenCalled();
+      expect(applyProviderInstallPlan).not.toHaveBeenCalled();
+    } finally {
+      mockConnectionState.resolve();
+      await agentPromise;
+    }
+  });
+
+  it('authenticate refreshes the local OpenAI-compatible auth and persists it', async () => {
     const settings = {
-      ...makeSessionSettings({ modelProviders, providerProtocol }),
+      ...makeSessionSettings(),
       setValue: vi.fn(),
     } as unknown as LoadedSettings;
     const { agent, agentPromise } = await bootCoreSettingsAgent(settings);
     try {
-      await agent.initialize({ clientCapabilities: {} });
+      expect(await agent.initialize({ clientCapabilities: {} })).toMatchObject({
+        authMethods: [
+          {
+            id: AuthType.USE_OPENAI,
+            name: 'Local OpenAI-compatible server',
+            _meta: { args: ['--auth-type=openai'] },
+          },
+        ],
+      });
       await agent.authenticate({ methodId: AuthType.USE_OPENAI });
-      // The invalid unrelated entry must not re-authenticate the session onto
-      // the requested wire: the fallback preserves the wire the session's
-      // models actually live on.
-      expect(refreshAuth).toHaveBeenCalledWith(
-        AuthType.USE_OPENAI_RESPONSES,
-        undefined,
-      );
-      expect(models.getCurrentAuthType()).toBe(AuthType.USE_OPENAI_RESPONSES);
+      expect(mockConfig.refreshAuth).toHaveBeenCalledWith(AuthType.USE_OPENAI);
       expect(settings.setValue).toHaveBeenCalledWith(
         SettingScope.User,
         'security.auth.selectedType',
@@ -21419,90 +20671,22 @@ describe('QwenAgent MCP support', () => {
     }
   });
 
-  it.each([{ protocol: 'openai', wireApi: 'responses' }])(
-    'qwen/providers/connect forwards OpenAI API selection: %j',
-    async (selection) => {
-      const { agent, agentPromise } = await bootCoreSettingsAgent(
-        makeSessionSettings({
-          model: { name: 'saved', baseUrl: 'https://saved.example/v1' },
-          security: { auth: { selectedType: AuthType.USE_OPENAI_RESPONSES } },
-        }),
-      );
+  it.each(['qwen-oauth', 'openai-responses', 'anthropic', 'gemini'])(
+    'authenticate rejects the removed %s method without persisting it',
+    async (methodId) => {
+      const settings = {
+        ...makeSessionSettings(),
+        setValue: vi.fn(),
+      } as unknown as LoadedSettings;
+      const { agent, agentPromise } = await bootCoreSettingsAgent(settings);
       try {
-        await expect(
-          agent.extMethod('qwen/providers/connect', {
-            providerId: 'custom-openai-compatible',
-            apiKey: 'sk-test',
-            baseUrl: 'https://api.example/v1',
-            modelIds: ['same'],
-            ...selection,
-          }),
-        ).resolves.toMatchObject({ success: true });
-        expect(buildInstallPlan).toHaveBeenCalledWith(
-          expect.anything(),
-          expect.objectContaining(selection),
-          [],
-          {
-            authType: AuthType.USE_OPENAI_RESPONSES,
-            id: 'saved',
-            baseUrl: 'https://saved.example/v1',
-          },
-        );
+        await expect(agent.authenticate({ methodId })).rejects.toThrow();
+        expect(mockConfig.refreshAuth).not.toHaveBeenCalled();
+        expect(settings.setValue).not.toHaveBeenCalled();
       } finally {
         mockConnectionState.resolve();
         await agentPromise;
       }
-    },
-  );
-
-  it('qwen/providers/connect defaults a blank baseUrl to the effective route endpoint', async () => {
-    const { agent, agentPromise } = await bootCoreSettingsAgent(
-      makeSessionSettings(),
-    );
-    await expect(
-      agent.extMethod('qwen/providers/connect', {
-        providerId: 'custom-openai-compatible',
-        apiKey: 'sk-test',
-        modelIds: ['same'],
-        protocol: 'openai',
-        wireApi: 'responses',
-      }),
-    ).resolves.toMatchObject({ success: true });
-    // The Responses wire dials the /v1-less default endpoint; the blank-input
-    // default must be derived from the EFFECTIVE route, not the raw bucket
-    // protocol (which would hand the Chat Completions default).
-    expect(getDefaultBaseUrlForProtocol).toHaveBeenCalledWith(
-      AuthType.USE_OPENAI_RESPONSES,
-    );
-    mockConnectionState.resolve();
-    await agentPromise;
-  });
-
-  it.each([
-    { protocol: 'openai', wireApi: 'invalid' },
-    { protocol: 'openai', wireApi: null },
-    { protocol: 'anthropic', wireApi: 'responses' },
-  ])(
-    'qwen/providers/connect rejects invalid API before writing: %j',
-    async (selection) => {
-      const { agent, agentPromise } = await bootCoreSettingsAgent(
-        makeSessionSettings(),
-      );
-      vi.mocked(buildInstallPlan).mockClear();
-      vi.mocked(applyProviderInstallPlan).mockClear();
-      await expect(
-        agent.extMethod('qwen/providers/connect', {
-          providerId: 'custom-openai-compatible',
-          apiKey: 'sk-test',
-          baseUrl: 'https://api.example/v1',
-          modelIds: ['same'],
-          ...selection,
-        }),
-      ).rejects.toThrow(/api/i);
-      expect(buildInstallPlan).not.toHaveBeenCalled();
-      expect(applyProviderInstallPlan).not.toHaveBeenCalled();
-      mockConnectionState.resolve();
-      await agentPromise;
     },
   );
 
@@ -21511,7 +20695,7 @@ describe('QwenAgent MCP support', () => {
       (settings: unknown) => {
         (settings as Record<string, unknown>)['getValue'] = vi.fn(
           (key: string) =>
-            key === 'model.name' ? 'deepseek-flash' : undefined,
+            key === 'model.name' ? 'qwen3-coder:30b' : undefined,
         );
         return settings as unknown as ReturnType<
           typeof createLoadedSettingsAdapter
@@ -21531,77 +20715,42 @@ describe('QwenAgent MCP support', () => {
 
     await expect(
       agent.extMethod('qwen/providers/connect', {
-        providerId: 'deepseek',
+        providerId: 'custom-openai-compatible',
         apiKey: 'sk-test',
-        modelIds: ['deepseek-chat'],
+        baseUrl: 'http://127.0.0.1:11434/v1',
+        modelIds: ['qwen3-coder'],
       }),
     ).resolves.toMatchObject({
       success: true,
-      modelId: 'deepseek-flash',
+      modelId: 'qwen3-coder:30b',
     });
 
     mockConnectionState.resolve();
     await agentPromise;
   });
 
-  it.each(['openai'])(
-    'qwen/providers/list exposes API prefill for %s',
-    async (providerId) => {
-      const actual = await vi.importActual<
-        typeof import('@qwen-code/qwen-code-core')
-      >('@qwen-code/qwen-code-core');
-      vi.mocked(findExistingProviderModels).mockImplementationOnce(
-        actual.findExistingProviderModels,
-      );
-      const settings = makeSessionSettings({
-        env: { DEEPSEEK_API_KEY: 'sk-existing' },
-        modelProviders: {
-          [providerId]: [
-            {
-              id: 'same',
-              name: '[DeepSeek] same',
-              baseUrl: 'https://api.deepseek.com',
-              envKey: 'DEEPSEEK_API_KEY',
-              ...(providerId === 'openai' ? { wireApi: 'responses' } : {}),
-            },
-          ],
-        },
-      });
-      const { agent, agentPromise } = await bootCoreSettingsAgent(settings);
-      const result = await agent.extMethod('qwen/providers/list', {});
-      expect(result).toMatchObject({
-        providers: [
-          expect.objectContaining({
-            existingConfig: expect.objectContaining({
-              protocol: 'openai',
-              wireApi: 'responses',
-              hasApiKey: true,
-            }),
-          }),
-        ],
-      });
-      expect(JSON.stringify(result)).not.toContain('sk-existing');
-      mockConnectionState.resolve();
-      await agentPromise;
-    },
-  );
-
   it('qwen/providers/list includes existing provider settings', async () => {
+    const baseUrl = 'http://127.0.0.1:11434/v1';
+    const envKey = mockLocalProvider.envKey('openai', baseUrl);
     const settings = {
       ...makeSessionSettings(),
       merged: {
         mcpServers: {},
-        env: { DEEPSEEK_API_KEY: 'sk-existing' },
+        env: { [envKey]: 'sk-existing' },
         modelProviders: {
           openai: [
             {
-              id: 'deepseek-chat',
-              baseUrl: 'https://user:sk-provider@api.deepseek.com/v1',
-              envKey: 'DEEPSEEK_API_KEY',
+              id: 'qwen3-coder',
+              baseUrl: 'http://user:sk-provider@127.0.0.1:11434/v1',
+              envKey,
+              generationConfig: {
+                contextWindowSize: 32768,
+                extra_body: { enable_thinking: true },
+              },
             },
             {
               id: 'other-model',
-              baseUrl: 'https://api.other.com',
+              baseUrl: 'http://localhost:1234/v1',
               envKey: 'OTHER_API_KEY',
             },
           ],
@@ -21621,19 +20770,29 @@ describe('QwenAgent MCP support', () => {
     const providers = await agent.extMethod('qwen/providers/list', {});
     expect(providers).toEqual({
       providers: [
-        expect.objectContaining({
-          id: 'deepseek',
+        {
+          id: 'custom-openai-compatible',
+          label: 'Local OpenAI-compatible server',
+          description: 'Connect a model server on this machine',
+          protocol: 'openai',
+          showAdvancedConfig: true,
+          supportsModelDiscovery: true,
+          apiKeyPlaceholder: 'Optional for most local servers',
           existingConfig: {
             protocol: 'openai',
-            wireApi: 'chat-completions',
-            baseUrl: 'https://api.deepseek.com/v1',
+            baseUrl,
             hasApiKey: true,
-            modelIds: ['deepseek-chat'],
+            modelIds: ['qwen3-coder'],
+            advancedConfig: {
+              enableThinking: true,
+              contextWindowSize: 32768,
+            },
           },
-        }),
+        },
       ],
     });
     expect(JSON.stringify(providers)).not.toContain('sk-provider');
+    expect(JSON.stringify(providers)).not.toContain('sk-existing');
 
     mockConnectionState.resolve();
     await agentPromise;
@@ -21897,95 +21056,45 @@ describe('QwenAgent MCP support', () => {
     await agentPromise;
   });
 
-  it('qwen/providers/connect keeps a canonical Responses key for the same endpoint only', async () => {
-    const baseUrl = 'https://api.example/v1';
-    const settings = makeSessionSettings({
-      env: {
-        QWEN_CUSTOM_API_KEY_RESPONSES: 'sk-responses',
-        QWEN_CUSTOM_API_KEY_openai_https___api_example_v1: 'sk-chat',
-      },
-      modelProviders: {
-        openai: [
-          {
-            id: 'same',
-            baseUrl,
-            wireApi: 'responses',
-            envKey: 'QWEN_CUSTOM_API_KEY_RESPONSES',
-          },
-        ],
-      },
-    });
-    const { agent, agentPromise } = await bootCoreSettingsAgent(settings);
-    try {
-      await expect(
-        agent.extMethod('qwen/providers/connect', {
-          providerId: 'custom-openai-compatible',
-          protocol: 'openai',
-          wireApi: 'responses',
-          baseUrl,
-          modelIds: ['same'],
-        }),
-      ).resolves.toMatchObject({ success: true });
-      expect(buildInstallPlan).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          apiKey: 'sk-responses',
-          wireApi: 'responses',
-        }),
-        settings.merged.modelProviders!['openai'],
-        { authType: undefined, id: undefined, baseUrl: undefined },
-      );
-      await expect(
-        agent.extMethod('qwen/providers/connect', {
-          providerId: 'custom-openai-compatible',
-          protocol: 'openai',
-          wireApi: 'responses',
-          baseUrl: 'https://other.example/v1',
-          modelIds: ['same'],
-        }),
-      ).rejects.toThrow('Invalid or missing apiKey');
-    } finally {
-      mockConnectionState.resolve();
-      await agentPromise;
-    }
-  });
-
   it.each([
-    { order: ['openai', 'idealab'], expected: 'sk-mine' },
-    { order: ['idealab', 'openai'], expected: 'sk-team' },
+    {
+      order: ['QWEN_CUSTOM_API_KEY_MINE', 'TEAM_GATEWAY_KEY'],
+      expected: 'sk-mine',
+    },
+    {
+      order: ['TEAM_GATEWAY_KEY', 'QWEN_CUSTOM_API_KEY_MINE'],
+      expected: 'sk-team',
+    },
   ])(
-    'qwen/providers/connect reuses the first identity twin key across mapped buckets: $order',
+    'qwen/providers/connect reuses the first identity twin key: $order',
     async ({ order, expected }) => {
-      const baseUrl = 'https://gw.example/v1';
-      const buckets: Record<string, unknown> = {
-        openai: [{ id: 'gpt-4o', baseUrl, envKey: 'QWEN_CUSTOM_API_KEY_MINE' }],
-        idealab: [{ id: 'gpt-4o', baseUrl, envKey: 'TEAM_GATEWAY_KEY' }],
-      };
+      const baseUrl = 'http://127.0.0.1:11434/v1';
       const settings = makeSessionSettings({
         env: {
           QWEN_CUSTOM_API_KEY_MINE: 'sk-mine',
           TEAM_GATEWAY_KEY: 'sk-team',
         },
-        modelProviders: Object.fromEntries(
-          order.map((id) => [id, buckets[id]]),
-        ),
-        providerProtocol: { idealab: 'openai' },
+        modelProviders: {
+          openai: order.map((envKey) => ({
+            id: 'qwen3-coder',
+            baseUrl,
+            envKey,
+          })),
+        },
       });
       const { agent, agentPromise } = await bootCoreSettingsAgent(settings);
       try {
         await expect(
           agent.extMethod('qwen/providers/connect', {
             providerId: 'custom-openai-compatible',
-            protocol: 'openai',
             baseUrl,
-            modelIds: ['gpt-4o'],
+            modelIds: ['qwen3-coder'],
           }),
         ).resolves.toMatchObject({ success: true });
         expect(buildInstallPlan).toHaveBeenCalledWith(
           expect.objectContaining({ id: 'custom-openai-compatible' }),
           expect.objectContaining({ apiKey: expected, baseUrl }),
           expect.anything(),
-          { authType: undefined, id: undefined, baseUrl: undefined },
         );
       } finally {
         mockConnectionState.resolve();
@@ -21995,19 +21104,15 @@ describe('QwenAgent MCP support', () => {
   );
 
   it('qwen/providers/connect reuses the stored apiKey when the client omits it', async () => {
+    const baseUrl = 'http://127.0.0.1:11434/v1';
+    const envKey = mockLocalProvider.envKey('openai', baseUrl);
     const settings = {
       ...makeSessionSettings(),
       merged: {
         mcpServers: {},
-        env: { DEEPSEEK_API_KEY: 'sk-existing' },
+        env: { [envKey]: 'sk-existing' },
         modelProviders: {
-          openai: [
-            {
-              id: 'deepseek-chat',
-              baseUrl: 'https://api.deepseek.com',
-              envKey: 'DEEPSEEK_API_KEY',
-            },
-          ],
+          openai: [{ id: 'qwen3-coder', baseUrl, envKey }],
         },
       },
     } as unknown as LoadedSettings;
@@ -22023,92 +21128,30 @@ describe('QwenAgent MCP support', () => {
 
     await expect(
       agent.extMethod('qwen/providers/connect', {
-        providerId: 'deepseek',
-        modelIds: ['deepseek-chat'],
+        providerId: 'custom-openai-compatible',
+        baseUrl,
+        modelIds: ['qwen3-coder'],
       }),
-    ).resolves.toMatchObject({ success: true, providerId: 'deepseek' });
+    ).resolves.toMatchObject({
+      success: true,
+      providerId: 'custom-openai-compatible',
+    });
 
     expect(buildInstallPlan).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'deepseek' }),
+      expect.objectContaining({ id: 'custom-openai-compatible' }),
       expect.objectContaining({ apiKey: 'sk-existing' }),
       settings.merged.modelProviders?.['openai'],
-      { authType: undefined, id: undefined, baseUrl: undefined },
     );
 
     mockConnectionState.resolve();
     await agentPromise;
   });
 
-  it.each(['IMAGE', 'VOICE'])(
-    'qwen/providers/connect reuses the stored %s credential without sharing it with new chat models',
-    async (purpose) => {
-      const baseUrl = 'https://media.example/v1';
-      const envKey = `QWEN_CUSTOM_API_KEY_openai_${baseUrl.replace(/[^A-Za-z0-9]/g, '_')}_${purpose}`;
-      const models = [
-        {
-          id: 'service',
-          baseUrl,
-          envKey,
-          ...(purpose === 'IMAGE' ? { imageOnly: true } : { voiceOnly: true }),
-        },
-      ];
-      const settings = {
-        ...makeSessionSettings(),
-        merged: {
-          mcpServers: {},
-          env: { [envKey]: 'stored-service-secret' },
-          modelProviders: { openai: models },
-        },
-      } as unknown as LoadedSettings;
-      const agentPromise = runAcpAgent(mockConfig, settings, mockArgv);
-      await vi.waitFor(() => expect(capturedAgentFactory).toBeDefined());
-      const agent = capturedAgentFactory!({
-        get closed() {
-          return mockConnectionState.promise;
-        },
-      }) as AgentLike;
-      try {
-        await expect(
-          agent.extMethod('qwen/providers/connect', {
-            providerId: 'custom-openai-compatible',
-            protocol: 'openai',
-            baseUrl,
-            modelIds: ['service'],
-          }),
-        ).resolves.toMatchObject({ success: true });
-        expect(buildInstallPlan).toHaveBeenCalledWith(
-          expect.objectContaining({ id: 'custom-openai-compatible' }),
-          expect.objectContaining({ apiKey: 'stored-service-secret' }),
-          models,
-          { authType: undefined, id: undefined, baseUrl: undefined },
-        );
-        vi.mocked(buildInstallPlan).mockClear();
-        await expect(
-          agent.extMethod('qwen/providers/connect', {
-            providerId: 'custom-openai-compatible',
-            protocol: 'openai',
-            baseUrl,
-            modelIds: ['service', 'new-chat'],
-          }),
-        ).rejects.toThrow('Invalid or missing apiKey');
-        expect(buildInstallPlan).not.toHaveBeenCalled();
-      } finally {
-        mockConnectionState.resolve();
-        await agentPromise;
-      }
-    },
-  );
-
   it('qwen/providers/connect reuses the custom apiKey for the requested baseUrl only', async () => {
-    const customEnvKey = (protocol: string, baseUrl: string) =>
-      `QWEN_CUSTOM_API_KEY_${protocol}_${baseUrl.replace(
-        /[^A-Za-z0-9]/g,
-        '_',
-      )}`;
-    const firstBaseUrl = 'https://api.first.example/v1';
-    const secondBaseUrl = 'https://api.second.example/v1';
-    const firstEnvKey = customEnvKey('openai', firstBaseUrl);
-    const secondEnvKey = customEnvKey('openai', secondBaseUrl);
+    const firstBaseUrl = 'http://127.0.0.1:11434/v1';
+    const secondBaseUrl = 'http://localhost:1234/v1';
+    const firstEnvKey = mockLocalProvider.envKey('openai', firstBaseUrl);
+    const secondEnvKey = mockLocalProvider.envKey('openai', secondBaseUrl);
     const settings = {
       ...makeSessionSettings(),
       merged: {
@@ -22146,7 +21189,6 @@ describe('QwenAgent MCP support', () => {
     await expect(
       agent.extMethod('qwen/providers/connect', {
         providerId: 'custom-openai-compatible',
-        protocol: 'openai',
         baseUrl: secondBaseUrl,
         modelIds: ['custom-model'],
       }),
@@ -22162,12 +21204,19 @@ describe('QwenAgent MCP support', () => {
         baseUrl: secondBaseUrl,
       }),
       settings.merged.modelProviders?.['openai'],
-      { authType: undefined, id: undefined, baseUrl: undefined },
     );
     expect(buildInstallPlan).not.toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ apiKey: 'sk-first' }),
     );
+
+    await expect(
+      agent.extMethod('qwen/providers/connect', {
+        providerId: 'custom-openai-compatible',
+        baseUrl: 'http://[::1]:8080/v1',
+        modelIds: ['custom-model'],
+      }),
+    ).rejects.toThrow('Invalid or missing apiKey');
 
     mockConnectionState.resolve();
     await agentPromise;
@@ -22411,7 +21460,7 @@ describe('QwenAgent MCP support', () => {
     }
   });
 
-  it('bootstraps ACP config without initializing Gemini chat', async () => {
+  it('bootstraps ACP config without initializing the LLM chat', async () => {
     await setupSessionMocks('session-bootstrap-skip');
 
     const agentPromise = runAcpAgent(
@@ -24136,7 +23185,6 @@ describe('QwenAgent session-management routing (rename / delete / list / branch 
   ) {
     return {
       getModelProvidersConfig: vi.fn(),
-      getProviderProtocolConfig: vi.fn().mockReturnValue({}),
       setArtifactSnapshotsEnabled: vi.fn(),
       initialize: vi.fn().mockResolvedValue(undefined),
       shutdown: vi.fn().mockResolvedValue(undefined),
@@ -26102,7 +25150,6 @@ describe('QwenAgent loadSession / unstable_resumeSession', () => {
     };
     return {
       getModelProvidersConfig: vi.fn(),
-      getProviderProtocolConfig: vi.fn().mockReturnValue({}),
       ...registrySeams,
       initialize: vi.fn().mockResolvedValue(undefined),
       shutdown: vi.fn().mockResolvedValue(undefined),
@@ -30764,7 +29811,6 @@ describe('sessionLanguage multi-session propagation', () => {
 
   function makeConfig(overrides: Record<string, unknown> = {}) {
     let providers: ReturnType<Config['getModelProvidersConfig']>;
-    let protocols: ReturnType<Config['getProviderProtocolConfig']> = {};
     return {
       setArtifactSnapshotsEnabled: vi.fn(),
       initialize: vi.fn().mockResolvedValue(undefined),
@@ -30775,11 +29821,9 @@ describe('sessionLanguage multi-session propagation', () => {
         syncAfterAuthRefresh: vi.fn(),
       }),
       getModelProvidersConfig: vi.fn(() => providers),
-      getProviderProtocolConfig: vi.fn(() => protocols),
       reloadModelProvidersConfig: vi.fn<Config['reloadModelProvidersConfig']>(
-        (next, mapping) => {
+        (next) => {
           providers = next;
-          protocols = mapping ?? protocols;
         },
       ),
       refreshAuth: vi.fn().mockResolvedValue(undefined),
@@ -31111,27 +30155,23 @@ describe('sessionLanguage multi-session propagation', () => {
 
   it('reloads model providers for busy sessions without running full reload work', async () => {
     const providerConfig = {
-      idealab: [
+      openai: [
         {
           id: 'qwen3',
           name: 'Qwen 3',
-          baseUrl: 'https://idealab.example/v1',
+          baseUrl: 'http://127.0.0.1:11434/v1',
         },
       ],
     };
     let mergedSettings: Record<string, unknown> = {
       modelProviders: providerConfig,
-      providerProtocol: { idealab: 'openai' },
     };
     const settings = {
       get merged() {
         return mergedSettings;
       },
       reloadScopesFromDiskAtomically: vi.fn(() => {
-        mergedSettings = {
-          modelProviders: providerConfig,
-          providerProtocol: { idealab: 'openai' },
-        };
+        mergedSettings = { modelProviders: providerConfig };
         return true;
       }),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
@@ -31145,7 +30185,7 @@ describe('sessionLanguage multi-session propagation', () => {
       getSessionId: vi.fn().mockReturnValue('provider-2'),
     });
     const reload1 = vi.fn(() =>
-      cfg1.reloadModelProvidersConfig(providerConfig, { idealab: 'openai' }),
+      cfg1.reloadModelProvidersConfig(providerConfig),
     );
     const reload2 = vi.fn(() => {
       throw new Error('broken registry');
@@ -31203,8 +30243,7 @@ describe('sessionLanguage multi-session propagation', () => {
     vi.mocked(cfg2.refreshAuth).mockClear();
     vi.mocked(settings.reloadScopesFromDiskAtomically).mockClear();
     mergedSettings = {
-      modelProviders: { stale: [{ id: 'old-model' }] },
-      providerProtocol: { stale: 'openai' },
+      modelProviders: { openai: [{ id: 'old-model' }] },
     };
 
     const result = await agent.extMethod(
@@ -31222,7 +30261,6 @@ describe('sessionLanguage multi-session propagation', () => {
     ]);
     expect(bootConfig.reloadModelProvidersConfig).toHaveBeenCalledWith(
       providerConfig,
-      { idealab: 'openai' },
     );
     expect(reload1).toHaveBeenCalledOnce();
     expect(reload2).toHaveBeenCalledOnce();
@@ -31252,26 +30290,34 @@ describe('sessionLanguage multi-session propagation', () => {
     await agentPromise;
   });
 
-  it('clears removed providerProtocol mappings and refreshes auth on workspace reload', async () => {
+  it('reloads model providers and refreshes auth on workspace reload', async () => {
     const providerConfig = {
-      idealab: [
+      openai: [
         {
           id: 'qwen3',
           name: 'Qwen 3',
-          baseUrl: 'https://idealab.example/v1',
+          baseUrl: 'http://127.0.0.1:11434/v1',
+        },
+      ],
+    };
+    const nextProviderConfig = {
+      openai: [
+        {
+          id: 'qwen3-coder',
+          name: 'Qwen 3 Coder',
+          baseUrl: 'http://127.0.0.1:11434/v1',
         },
       ],
     };
     let mergedSettings: Record<string, unknown> = {
       modelProviders: providerConfig,
-      providerProtocol: { idealab: 'openai' },
     };
     const settings = {
       get merged() {
         return mergedSettings;
       },
       reloadScopeFromDisk: vi.fn(() => {
-        mergedSettings = { modelProviders: providerConfig };
+        mergedSettings = { modelProviders: nextProviderConfig };
       }),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
@@ -31324,19 +30370,14 @@ describe('sessionLanguage multi-session propagation', () => {
     });
 
     await agent.newSession({ cwd: '/reload', mcpServers: [] });
-    mergedSettings = {
-      modelProviders: providerConfig,
-      providerProtocol: { idealab: 'openai' },
-    };
     vi.mocked(cfg.refreshAuth).mockClear();
     vi.mocked(cfg.reloadModelProvidersConfig).mockClear();
     await agent.extMethod(SERVE_CONTROL_EXT_METHODS.workspaceReload, {});
 
     expect(cfg.reloadModelProvidersConfig).toHaveBeenCalledWith(
-      providerConfig,
-      {},
+      nextProviderConfig,
     );
-    expect(cfg.refreshAuth).toHaveBeenCalledWith('openai', undefined);
+    expect(cfg.refreshAuth).toHaveBeenCalledWith('openai');
     expect(getSessionReasoningSelection).toHaveBeenCalledOnce();
     expect(reloadReasoningSelection).toHaveBeenCalledOnce();
 

@@ -12,7 +12,6 @@ import type {
   Part,
 } from '@google/genai';
 import type { Config } from '../config/config.js';
-import { DEFAULT_QWEN_MODEL } from './default-qwen-model.js';
 import { SchemaValidator } from './schemaValidator.js';
 
 export interface SideQueryJsonOptions<TResponse> {
@@ -21,9 +20,8 @@ export interface SideQueryJsonOptions<TResponse> {
   abortSignal: AbortSignal;
   /**
    * Override the model used for this query. Defaults to
-   * `config.getFastModel?.() ?? config.getModel() ?? DEFAULT_QWEN_MODEL`
-   * — side queries run on the fast model when one is configured, including
-   * fast models registered under a different authType than the main session.
+   * `config.getFastModel?.() ?? config.getModel()`
+   * — side queries run on the fast model when one is configured.
    * Pass an explicit value to pin a specific model.
    */
   model?: string;
@@ -68,9 +66,8 @@ export interface SideQueryTextOptions {
   abortSignal: AbortSignal;
   /**
    * Override the model used for this query. Defaults to
-   * `config.getFastModel?.() ?? config.getModel() ?? DEFAULT_QWEN_MODEL`
-   * — side queries run on the fast model when one is configured, including
-   * fast models registered under a different authType than the main session.
+   * `config.getFastModel?.() ?? config.getModel()`
+   * — side queries run on the fast model when one is configured.
    * Pass an explicit value to pin a specific model.
    */
   model?: string;
@@ -127,12 +124,7 @@ function buildDefaultPromptId(purpose?: string): string {
 }
 
 function resolveDefaultModel(config: Config, override?: string): string {
-  return (
-    override ??
-    config.getFastModel?.() ??
-    config.getModel() ??
-    DEFAULT_QWEN_MODEL
-  );
+  return override ?? config.getFastModel?.() ?? config.getModel();
 }
 
 function applyThinkingDefault(

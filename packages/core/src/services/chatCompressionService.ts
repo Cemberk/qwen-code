@@ -8,7 +8,6 @@ import type { Content, GenerateContentConfig } from '@google/genai';
 import type { Config } from '../config/config.js';
 import { ApprovalMode } from '../config/config.js';
 import type { GenerateTextResult } from '../core/baseLlmClient.js';
-import { AuthType } from '../core/contentGenerator.js';
 import type { LlmChat } from '../core/llm-chat.js';
 import {
   type ChatCompressionInfo,
@@ -19,7 +18,6 @@ import { DEFAULT_TOKEN_LIMIT } from '../core/tokenLimits.js';
 import { getCompressionPrompt } from '../core/prompts.js';
 import { runSideQuery } from '../utils/sideQuery.js';
 import { resolveModelId } from '../utils/modelId.js';
-import { supportsOpenAIPrefixCaching } from '../core/openaiContentGenerator/prefix-caching.js';
 import { logChatCompression } from '../telemetry/loggers.js';
 import { makeChatCompressionEvent } from '../telemetry/types.js';
 import { PreCompactTrigger, PostCompactTrigger } from '../hooks/types.js';
@@ -47,11 +45,8 @@ import {
 const debugLogger = createDebugLogger('COMPRESSION');
 
 /**
- * Hard cap on compression generation. The cold path asks providers to omit
- * returned thoughts. The cache-sharing path preserves Anthropic's
- * cache-sensitive thinking setting and makes the same returned-thought request
- * for Google GenAI. On Google this does not disable thinking or prevent its
- * tokens from sharing the output budget. Mirrors claude-code's
+ * Hard cap on compression generation. The cold path asks the model to omit
+ * returned thoughts. Mirrors claude-code's
  * MAX_OUTPUT_TOKENS_FOR_SUMMARY (autoCompact.ts:30), which is based on p99.99
  * of real compaction outputs.
  */
@@ -378,19 +373,7 @@ function buildCompressionSystemPrompt(
 }
 
 function supportsCompressionCacheSharing(config: Config): boolean {
-  const provider = config.getContentGeneratorConfig();
-  // Google GenAI prefix caching is implicit. `enableCacheControl` configures
-  // explicit provider cache markers, so it must not disable Gemini/Vertex
-  // cache sharing as an unrelated side effect.
-  if (
-    provider.authType === AuthType.USE_GEMINI ||
-    provider.authType === AuthType.USE_VERTEX_AI
-  ) {
-    return true;
-  }
-  if (provider.enableCacheControl === false) return false;
-  if (provider.authType === AuthType.USE_ANTHROPIC) return true;
-  return supportsOpenAIPrefixCaching(provider);
+  return config.getContentGeneratorConfig().enableCacheControl !== false;
 }
 
 function hasStateSnapshot(summary: string): boolean {
@@ -840,7 +823,6 @@ export class ChatCompressionService {
         const mainSystemInstruction = generationConfig.systemInstruction;
         delete generationConfig.systemInstruction;
         delete generationConfig.abortSignal;
-        const authType = config.getContentGeneratorConfig().authType;
         const sharedResult = await config.getBaseLlmClient().generateText({
           contents: [
             ...sideQueryHistory,
@@ -857,25 +839,6 @@ export class ChatCompressionService {
           systemInstruction: mainSystemInstruction,
           config: {
             ...generationConfig,
-            ...(authType === AuthType.USE_ANTHROPIC
-              ? {
-                  thinkingConfig: {
-                    ...generationConfig.thinkingConfig,
-                    // Manual Anthropic thinking requires budget_tokens to be
-                    // strictly below max_tokens. Preserve thinking for cache
-                    // compatibility while keeping this bounded request valid.
-                    thinkingBudget: COMPACT_MAX_OUTPUT_TOKENS - 1,
-                  },
-                }
-              : authType === AuthType.USE_GEMINI ||
-                  authType === AuthType.USE_VERTEX_AI
-                ? {
-                    thinkingConfig: {
-                      ...generationConfig.thinkingConfig,
-                      includeThoughts: false,
-                    },
-                  }
-                : {}),
             maxOutputTokens: COMPACT_MAX_OUTPUT_TOKENS,
           },
           abortSignal,

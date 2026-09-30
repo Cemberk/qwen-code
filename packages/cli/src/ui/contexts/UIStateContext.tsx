@@ -34,7 +34,6 @@ import type { ExtensionUpdateState } from '../state/extensions.js';
 
 import { type UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 import { type HelpTab } from './UIActionsContext.js';
-import { type ProviderUpdateRequest } from '../hooks/useProviderUpdates.js';
 import { type ArenaDialogType } from '../hooks/useArenaCommand.js';
 import type { StatusLinePresetConfig } from '../statusLinePresets.js';
 
@@ -89,7 +88,6 @@ export interface UIState {
   shellConfirmationRequest: ShellConfirmationRequest | null;
   confirmationRequest: ConfirmationRequest | null;
   confirmUpdateExtensionRequests: ConfirmationRequest[];
-  providerUpdateRequest: ProviderUpdateRequest | undefined;
   settingInputRequests: SettingInputRequest[];
   pluginChoiceRequests: PluginChoiceRequest[];
   loopDetectionConfirmationRequest: LoopDetectionConfirmationRequest | null;

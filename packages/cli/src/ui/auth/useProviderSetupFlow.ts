@@ -6,34 +6,27 @@
 
 import { useState, useCallback } from 'react';
 import {
-  AuthType,
-  shouldShowStep,
-  resolveBaseUrl,
-  getDefaultBaseUrlForProtocol,
-  getDefaultModelIds,
   buildInstallPlan,
-  getModelsForProviderProtocol,
+  getLocalBaseUrlError,
+  getProviderModels,
+  preserveModelProviderPlaceholders,
 } from '@qwen-code/qwen-code-core';
 import type {
+  AuthType,
   InputModalities,
-  ModelWireApi,
   ModelProvidersConfig,
   ProviderModelConfig,
-  ProviderProtocolConfig,
   ProviderConfig,
   ProviderSetupInputs,
 } from '@qwen-code/qwen-code-core';
-import { preserveModelProviderPlaceholders } from '@qwen-code/qwen-code-core/providers/model-config-serialization.js';
 import { t } from '../../i18n/index.js';
 import { normalizeModelIds, maskApiKey } from './useAuth.js';
 
 // ---------------------------------------------------------------------------
-// Setup step names (generic, config-driven)
+// Setup step names
 // ---------------------------------------------------------------------------
 
 export type SetupStep =
-  | 'protocol'
-  | 'wireApi'
   | 'baseUrl'
   | 'apiKey'
   | 'models'
@@ -41,8 +34,6 @@ export type SetupStep =
   | 'review';
 
 const STEP_ORDER: SetupStep[] = [
-  'protocol',
-  'wireApi',
   'baseUrl',
   'apiKey',
   'models',
@@ -50,20 +41,12 @@ const STEP_ORDER: SetupStep[] = [
   'review',
 ];
 
-function getVisibleSteps(
-  config: ProviderConfig,
-  protocol: AuthType,
-): SetupStep[] {
-  return STEP_ORDER.filter((step) => {
-    if (step === 'review') return config.showAdvancedConfig === true;
-    return shouldShowStep(config, step, protocol);
-  });
+function getVisibleSteps(config: ProviderConfig): SetupStep[] {
+  if (config.showAdvancedConfig === true) return STEP_ORDER;
+  return STEP_ORDER.filter(
+    (step) => step !== 'advancedConfig' && step !== 'review',
+  );
 }
-
-// The effective wire route of an OpenAI-family selection: a `responses` API
-// rides the Responses wire even though the provider bucket stays `openai`.
-const routeProtocol = (proto: AuthType, wireApi: ModelWireApi): AuthType =>
-  wireApi === 'responses' ? AuthType.USE_OPENAI_RESPONSES : proto;
 
 // ---------------------------------------------------------------------------
 // State type
@@ -75,14 +58,8 @@ export interface ProviderSetupState {
   stepIndex: number;
   totalSteps: number;
 
-  // Protocol (for custom provider)
-  protocol: AuthType;
-  wireApi: ModelWireApi;
-
   // BaseUrl
   baseUrl: string;
-  baseUrlPlaceholder: string;
-  baseUrlOptionIndex: number;
   baseUrlError: string | null;
 
   // API Key
@@ -120,19 +97,13 @@ export function useProviderSetupFlow(
     inputs: ProviderSetupInputs,
   ) => Promise<void>,
   modelProviders?: ModelProvidersConfig,
-  providerProtocol?: ProviderProtocolConfig,
-  selection?: Parameters<typeof buildInstallPlan>[3],
   rawModelProviders?: ModelProvidersConfig,
 ) {
   const [provider, setProvider] = useState<ProviderConfig | null>(null);
   const [visibleSteps, setVisibleSteps] = useState<SetupStep[]>([]);
   const [stepIndex, setStepIndex] = useState(0);
 
-  const [protocol, setProtocol] = useState<AuthType>(AuthType.USE_OPENAI);
-  const [wireApi, setWireApi] = useState<ModelWireApi>('chat-completions');
   const [baseUrl, setBaseUrl] = useState('');
-  const [baseUrlPlaceholder, setBaseUrlPlaceholder] = useState('');
-  const [baseUrlOptionIndex, setBaseUrlOptionIndex] = useState(0);
   const [baseUrlError, setBaseUrlError] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState('');
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
@@ -152,56 +123,18 @@ export function useProviderSetupFlow(
   // -- Lifecycle ------------------------------------------------------------
 
   const start = useCallback(
-    (
-      config: ProviderConfig,
-      initialProtocol?: AuthType,
-      existingEnv?: Record<string, string>,
-      existingModelIds?: string[],
-    ) => {
+    (config: ProviderConfig, existingModelIds?: string[]) => {
       setProvider(config);
-      const initial = initialProtocol ?? config.protocol;
-      const proto =
-        initial === AuthType.USE_OPENAI_RESPONSES
-          ? AuthType.USE_OPENAI
-          : initial;
-      const steps = getVisibleSteps(config, proto);
-      setVisibleSteps(steps);
+      setVisibleSteps(getVisibleSteps(config));
       setStepIndex(0);
 
-      setProtocol(proto);
-      setWireApi(
-        initial === AuthType.USE_OPENAI_RESPONSES
-          ? 'responses'
-          : 'chat-completions',
-      );
-      // For presets the baseUrl is fixed (string) or selected from options;
-      // for the custom provider it's empty and the placeholder hints at the
-      // default endpoint for the effective route.
-      const resolved = resolveBaseUrl(config);
-      setBaseUrl(resolved);
-      setBaseUrlPlaceholder(
-        resolved ? '' : getDefaultBaseUrlForProtocol(initial),
-      );
-      setBaseUrlOptionIndex(0);
+      // There is no default endpoint: the user must type the local server's
+      // base URL.
+      setBaseUrl('');
       setBaseUrlError(null);
-
-      let prefillKey = '';
-      if (existingEnv) {
-        const envKeyName =
-          typeof config.envKey === 'function'
-            ? config.envKey(proto, resolved)
-            : config.envKey;
-        prefillKey = existingEnv[envKeyName] ?? '';
-      }
-      setApiKey(prefillKey);
-
+      setApiKey('');
       setApiKeyError(null);
-      // Built-in defaults go to the recommended list (checked), user-added
-      // custom IDs go to the input box. The ModelIdsStep component splits
-      // flow.state.modelIds automatically based on config.models.
-      const defaultIds = getDefaultModelIds(config);
-      const customIds = existingModelIds ?? [];
-      setModelIds([...defaultIds, ...customIds].join(', '));
+      setModelIds((existingModelIds ?? []).join(', '));
       setModelIdsError(null);
       setThinkingEnabled(false);
       setModalityEnabled(false);
@@ -236,80 +169,22 @@ export function useProviderSetupFlow(
 
   // -- Step handlers --------------------------------------------------------
 
-  const selectProtocol = useCallback(
-    (selectedProtocol: AuthType) => {
-      const proto =
-        selectedProtocol === AuthType.USE_OPENAI_RESPONSES
-          ? AuthType.USE_OPENAI
-          : selectedProtocol;
-      const nextWireApi: ModelWireApi =
-        selectedProtocol === AuthType.USE_OPENAI_RESPONSES
-          ? 'responses'
-          : proto === protocol
-            ? wireApi
-            : 'chat-completions';
-      setProtocol(proto);
-      setWireApi(nextWireApi);
-      if (provider) setVisibleSteps(getVisibleSteps(provider, proto));
-      // Clear baseUrl so the user types fresh; show the default endpoint of
-      // the effective route as a placeholder (used if they submit blank).
-      setBaseUrl('');
-      setBaseUrlPlaceholder(
-        getDefaultBaseUrlForProtocol(routeProtocol(proto, nextWireApi)),
-      );
-      setApiKey('');
-      setApiKeyError(null);
-      goNext();
-    },
-    [goNext, provider, protocol, wireApi],
-  );
-
-  const selectWireApi = useCallback(
-    (selectedApi: ModelWireApi) => {
-      setWireApi(selectedApi);
-      const nextPlaceholder = getDefaultBaseUrlForProtocol(
-        routeProtocol(protocol, selectedApi),
-      );
-      if (baseUrl === baseUrlPlaceholder) setBaseUrl(nextPlaceholder);
-      setBaseUrlPlaceholder(nextPlaceholder);
-      goNext();
-    },
-    [goNext, protocol, baseUrl, baseUrlPlaceholder],
-  );
-
-  const selectBaseUrl = useCallback(
-    (selectedUrl: string) => {
-      setBaseUrl(selectedUrl);
-      setBaseUrlError(null);
-      goNext();
-    },
-    [goNext],
-  );
-
   const submitBaseUrl = useCallback(
     (valueOverride?: string): boolean => {
       // The caller's live field text, when it has one: a keystroke burst can leave
       // `baseUrl` a whole batch behind.
-      const current = valueOverride ?? baseUrl;
-      // Empty input falls back to the placeholder default so the visible hint
-      // matches what gets written.
-      const effective = current.trim() || baseUrlPlaceholder.trim();
-      if (!effective) {
-        setBaseUrlError(t('Base URL cannot be empty.'));
+      const current = (valueOverride ?? baseUrl).trim();
+      const error = getLocalBaseUrlError(current);
+      if (error) {
+        setBaseUrlError(error);
         return false;
       }
-      if (!/^https?:\/\//i.test(effective)) {
-        setBaseUrlError(t('Base URL must start with http:// or https://.'));
-        return false;
-      }
-      if (!current.trim()) {
-        setBaseUrl(effective);
-      }
+      setBaseUrl(current);
       setBaseUrlError(null);
       goNext();
       return true;
     },
-    [baseUrl, baseUrlPlaceholder, goNext],
+    [baseUrl, goNext],
   );
 
   const changeBaseUrl = useCallback((value: string) => {
@@ -337,10 +212,6 @@ export function useProviderSetupFlow(
       // TODO: add maxTokens input field — type and buildInstallPlan support it but UI is deferred
       const hasAdvanced = thinkingEnabled || modalityEnabled || ctxSize > 0;
       return {
-        protocol: provider?.protocolOptions ? protocol : undefined,
-        ...(provider && shouldShowStep(provider, 'wireApi', protocol)
-          ? { wireApi }
-          : {}),
         baseUrl: baseUrl.trim(),
         apiKey: apiKey.trim(),
         modelIds: normalizeModelIds(modelIds),
@@ -355,9 +226,6 @@ export function useProviderSetupFlow(
       };
     },
     [
-      provider,
-      protocol,
-      wireApi,
       baseUrl,
       apiKey,
       modelIds,
@@ -389,29 +257,12 @@ export function useProviderSetupFlow(
         setApiKeyError(t('API key cannot be empty.'));
         return false;
       }
-      if (provider?.validateApiKey) {
-        const err = provider.validateApiKey(trimmed, baseUrl);
-        if (err) {
-          setApiKeyError(err);
-          return false;
-        }
-      }
       setApiKeyError(null);
       setApiKey(trimmed);
       submitOrNext({ apiKey: trimmed });
       return true;
     },
-    [apiKey, provider, baseUrl, submitOrNext],
-  );
-
-  const highlightBaseUrl = useCallback(
-    (url: string) => {
-      if (provider && Array.isArray(provider.baseUrl)) {
-        const idx = provider.baseUrl.findIndex((o) => o.url === url);
-        setBaseUrlOptionIndex(idx >= 0 ? idx : 0);
-      }
-    },
-    [provider],
+    [apiKey, submitOrNext],
   );
 
   const changeModelIds = useCallback((value: string) => {
@@ -523,7 +374,6 @@ export function useProviderSetupFlow(
           patch.authType,
           modelProviders,
           rawModelProviders,
-          providerProtocol,
         )
       : patch.models
     ).map(maskCustomHeaders);
@@ -539,12 +389,7 @@ export function useProviderSetupFlow(
       const plan = buildInstallPlan(
         provider,
         { ...inputs, apiKey: maskApiKey(inputs.apiKey) },
-        getModelsForProviderProtocol(
-          modelProviders,
-          inputs.protocol ?? provider.protocol,
-          providerProtocol,
-        ),
-        selection,
+        getProviderModels(modelProviders),
       );
       return {
         json: JSON.stringify(
@@ -585,11 +430,7 @@ export function useProviderSetupFlow(
     step: currentStep,
     stepIndex: stepIndex + 1, // 1-based for display
     totalSteps: visibleSteps.length,
-    protocol,
-    wireApi,
     baseUrl,
-    baseUrlPlaceholder,
-    baseUrlOptionIndex,
     baseUrlError,
     apiKey,
     apiKeyError,
@@ -612,10 +453,6 @@ export function useProviderSetupFlow(
     start,
     reset,
     goBack,
-    selectProtocol,
-    selectWireApi,
-    selectBaseUrl,
-    highlightBaseUrl,
     submitBaseUrl,
     changeBaseUrl,
     changeApiKey,

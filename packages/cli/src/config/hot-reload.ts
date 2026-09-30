@@ -279,14 +279,11 @@ export function registerMcpHotReload(
  *
  * Diffing against applied state (not a listener-local snapshot) keeps the
  * gate correct when other paths rewrite the registry without a watcher event
- * (provider-template updates, ACP session reloads), and means a throwing
+ * (ACP session reloads), and means a throwing
  * reload retries on the next event — applied state never advanced. A
  * rejected `refreshAuth` is the one exception: the registry reload has
  * already advanced applied state by then, so a listener-local flag retries
  * only the auth refresh on subsequent events (never the registry reload).
- *
- * `providerProtocol` stays boot-frozen: it is `requiresRestart` in the
- * schema, so this listener does not pass it to the reload primitive.
  */
 export function registerModelProvidersHotReload(
   watcher: SettingsWatcher,
@@ -332,15 +329,7 @@ export function registerModelProvidersHotReload(
       return;
     }
     try {
-      // `isInitialAuth=true` keeps a watcher-triggered refresh
-      // non-interactive: with it, a QWEN_OAUTH session whose cached
-      // credentials are unavailable (expired/rotated refresh token,
-      // transient network error) rejects with "credentials expired" into the
-      // catch below instead of falling through to `authWithQwenDeviceFlow` —
-      // an unrequested device-auth prompt mid-session that also stalls
-      // ACP/headless runs, where there is no terminal to answer it. Mirrors
-      // boot (`performInitialAuth`, packages/cli/src/core/auth.ts).
-      await config.refreshAuth(authType, true);
+      await config.refreshAuth(authType);
       refreshAuthRetryPending = false;
     } catch (err) {
       // The registry reload above already advanced applied state, so the
@@ -357,11 +346,10 @@ export function registerModelProvidersHotReload(
       );
       // …but also surface a concise, user-visible notice, mirroring the MCP
       // listener above: `debugLogger.error` only shows under `--debug`, so
-      // e.g. a `wireApi` edit on the active model (the registry now holds it
-      // under the other route, and refreshing the old route rejects) would
-      // otherwise silently leave the session on the stale client. This does
-      // NOT auto-resolve or switch routes — a running session must never
-      // change APIs unasked; the user selects the new route explicitly.
+      // e.g. a baseUrl edit on the active model that no longer validates
+      // would otherwise silently leave the session on the stale client. This
+      // does NOT auto-resolve or switch routes; the user selects the new
+      // route explicitly.
       // Emit once per failure episode: the retry flag re-enters this catch on
       // every later settings event while the failure persists, and repeating
       // the same notice on each unrelated edit would only be noise. A

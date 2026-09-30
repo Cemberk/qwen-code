@@ -10,7 +10,6 @@ import type {
   AuthType,
   ChatCompressionSettings,
   ModelProvidersConfig,
-  ProviderProtocolConfig,
 } from '@qwen-code/qwen-code-core';
 import {
   ApprovalMode,
@@ -298,20 +297,7 @@ const SETTINGS_SCHEMA = {
     requiresRestart: false,
     default: {} as ModelProvidersConfig,
     description:
-      'Model providers configuration keyed by provider id (a built-in provider protocol such as "openai" or "gemini", or a custom id mapped via providerProtocol). Each entry is an array of model configurations. OpenAI-compatible models can select wireApi: "chat-completions" or "responses"; omitting wireApi keeps the declared protocol (Chat Completions under openai). Released openai-responses declarations remain readable; new setup writes openai plus wireApi.',
-    showInDialog: false,
-    mergeStrategy: MergeStrategy.REPLACE,
-  },
-
-  // Maps a custom modelProviders provider id to its SDK protocol (AuthType).
-  providerProtocol: {
-    type: 'object',
-    label: 'Provider Protocols',
-    category: 'Model',
-    requiresRestart: true,
-    default: {} as ProviderProtocolConfig,
-    description:
-      'Maps a custom modelProviders provider id to the SDK protocol that routes its requests (e.g. {"idealab": "openai"}). Lets a custom provider id reuse a built-in protocol. Built-in provider ids (openai, gemini, anthropic, vertex-ai, qwen-oauth) are routed automatically and need no entry. New OpenAI configurations map to openai and select wireApi per model; released openai-responses mappings remain readable.',
+      'Models served by the local OpenAI-compatible server. The only supported key is "openai", an array of model configurations; every entry needs a baseUrl whose host is 127.0.0.1, ::1 or localhost.',
     showInDialog: false,
     mergeStrategy: MergeStrategy.REPLACE,
   },
@@ -338,17 +324,6 @@ const SETTINGS_SCHEMA = {
       'Environment variables to set as fallback defaults. These are loaded with the lowest priority: system environment variables > .env files > settings.json env field.',
     showInDialog: false,
     mergeStrategy: MergeStrategy.SHALLOW_MERGE,
-  },
-
-  proxy: {
-    type: 'string',
-    label: 'Proxy',
-    category: 'Advanced',
-    requiresRestart: true,
-    default: undefined as string | undefined,
-    description:
-      'Proxy URL for CLI HTTP requests. Takes precedence over proxy environment variables when --proxy is not provided.',
-    showInDialog: false,
   },
 
   general: {
@@ -1173,7 +1148,7 @@ const SETTINGS_SCHEMA = {
     requiresRestart: true,
     default: '' as string,
     description:
-      'Model selector for the Advisor tool. Leave empty to disable Advisor. Enabling it sends the active conversation to that model, even when it uses another provider.',
+      'Model selector for the Advisor tool. Leave empty to disable Advisor. Enabling it sends the active conversation to that model on the local model server.',
     showInDialog: false,
   },
 
@@ -1184,7 +1159,7 @@ const SETTINGS_SCHEMA = {
     requiresRestart: false,
     default: '',
     description:
-      'Image-capable model used as the vision bridge: when a text-only main model receives an image, it is transcribed by this model first. Set with /model --vision. Leave empty to auto-pick a same-provider vision model.',
+      'Image-capable model used as the vision bridge: when a text-only main model receives an image, it is transcribed by this model first. Set with /model --vision. Leave empty to auto-pick a configured vision model.',
     showInDialog: true,
   },
 
@@ -1210,7 +1185,7 @@ const SETTINGS_SCHEMA = {
     minimum: 1,
     maximum: 2_147_483_647,
     description:
-      'Per-attempt timeout in milliseconds for the vision bridge image transcription call (a positive integer up to 2147483647). Unset uses the built-in 30s. Raise for slow or proxied vision endpoints.',
+      'Per-attempt timeout in milliseconds for the vision bridge image transcription call (a positive integer up to 2147483647). Unset uses the built-in 30s. Raise for slow vision models.',
     showInDialog: false,
   },
 
@@ -1260,7 +1235,7 @@ const SETTINGS_SCHEMA = {
         requiresRestart: false,
         default: undefined as string | undefined,
         description:
-          'How hard reasoning-capable models think, applied across all providers. Set with /effort. Each provider maps and clamps this to what the active model supports (e.g. Gemini caps at "high"; Anthropic clamps tiers a model lacks). Leave unset to use the model/provider default.',
+          'How hard reasoning-capable models think. Set with /effort. The tier is clamped to what the active model supports. Leave unset to use the model default.',
         showInDialog: true,
         options: [
           { value: 'low', label: 'Low' },
@@ -1488,7 +1463,7 @@ const SETTINGS_SCHEMA = {
             requiresRestart: false,
             default: undefined as number | undefined,
             description:
-              'Maximum inactivity between streamed chunks for OpenAI-compatible and Anthropic models, in milliseconds. Set to 0 to disable the idle guard. For provider-backed models, configure this field in the selected modelProviders entry.',
+              'Maximum inactivity between streamed chunks, in milliseconds. Set to 0 to disable the idle guard. For provider-backed models, configure this field in the selected modelProviders entry.',
             minimum: 0,
             maximum: 2_147_483_647,
             parentKey: 'generationConfig',
@@ -1534,59 +1509,10 @@ const SETTINGS_SCHEMA = {
             category: 'Generation Configuration',
             requiresRestart: false,
             default: true,
-            description: 'Enable provider prompt-cache controls.',
-            parentKey: 'generationConfig',
-            showInDialog: false,
-          },
-          forceGlobalCacheScope: {
-            type: 'boolean',
-            label: 'Force Global Cache Scope',
-            category: 'Generation Configuration',
-            requiresRestart: false,
-            default: false,
             description:
-              "Force scope:'global' on Anthropic cache_control entries even when the base URL is not an Anthropic-native origin (e.g. proxy providers like Routify, OpenRouter). Requires the proxy to forward cache_control fields and the prompt-caching-scope-2026-01-05 beta.",
+              'Let compaction side queries reuse the main conversation prefix so a prefix-caching server can serve them from cache.',
             parentKey: 'generationConfig',
             showInDialog: false,
-          },
-          cacheRetention: {
-            type: 'enum',
-            label: 'Anthropic Cache Retention',
-            category: 'Generation Configuration',
-            requiresRestart: false,
-            default: undefined as 'ephemeral' | '1h' | undefined,
-            description:
-              "Default Anthropic cache_control retention. 'ephemeral' uses the spec 5-minute default (no ttl on the wire). '1h' requests the extended cache tier (ttl: '1h') -- note the 1h tier writes at 2x base input token cost (vs 1.25x for the 5-minute default; cached reads stay 0.1x for both), so it only pays off when a prefix survives long enough between requests to outlast several 5-minute windows.",
-            parentKey: 'generationConfig',
-            showInDialog: false,
-            options: [
-              { value: 'ephemeral', label: 'Ephemeral (5m, Default)' },
-              { value: '1h', label: 'Extended (1h)' },
-            ],
-          },
-          cacheRetentionByBlock: {
-            type: 'object',
-            label: 'Anthropic Cache Retention By Block',
-            category: 'Generation Configuration',
-            requiresRestart: false,
-            default: undefined as
-              | Partial<
-                  Record<'system' | 'tool' | 'user.last', 'ephemeral' | '1h'>
-                >
-              | undefined,
-            description:
-              "Optional per-anchor override for Anthropic cache retention. Keys (system, tool, user.last) override generationConfig.cacheRetention when present. Resolution is normalized so retention is monotonically non-increasing in wire order (tool -> system -> user.last, per Anthropic's 'longer TTL must precede shorter TTL' rule): setting one anchor to '1h' promotes every anchor before it on the wire to '1h' as well, so any combination here is valid.",
-            parentKey: 'generationConfig',
-            showInDialog: false,
-            jsonSchemaOverride: {
-              type: 'object',
-              properties: {
-                system: { type: 'string', enum: ['ephemeral', '1h'] },
-                tool: { type: 'string', enum: ['ephemeral', '1h'] },
-                'user.last': { type: 'string', enum: ['ephemeral', '1h'] },
-              },
-              additionalProperties: false,
-            },
           },
           splitToolMedia: {
             type: 'boolean',
@@ -1595,7 +1521,7 @@ const SETTINGS_SCHEMA = {
             requiresRestart: false,
             default: true,
             description:
-              'When true, media (images / audio / video / files) returned by tool calls — including the built-in read_file and MCP tools — is split into a follow-up user message instead of being embedded in the `role: "tool"` message. The OpenAI Chat Completions spec only permits text on tool messages, so strict OpenAI-compatible servers (e.g., doubao / new-api / LM Studio) silently drop or reject embedded media and the model never sees an image read via read_file (QwenLM/qwen-code#4876, #3616). Default true is spec-compliant and safe for permissive providers; set false only to restore the legacy embed-in-tool-message behavior.',
+              'When true, media (images / audio / video / files) returned by tool calls — including the built-in read_file and MCP tools — is split into a follow-up user message instead of being embedded in the `role: "tool"` message. The OpenAI Chat Completions spec only permits text on tool messages, so strict OpenAI-compatible servers (e.g., LM Studio) silently drop or reject embedded media and the model never sees an image read via read_file (QwenLM/qwen-code#4876, #3616). Default true is spec-compliant and safe for permissive providers; set false only to restore the legacy embed-in-tool-message behavior.',
             parentKey: 'generationConfig',
             showInDialog: false,
           },
@@ -1621,7 +1547,7 @@ const SETTINGS_SCHEMA = {
             requiresRestart: false,
             default: 'auto',
             description:
-              'The compliance mode for tool schemas sent to the model. Use "openapi_30" for strict OpenAPI 3.0 compatibility (e.g., for Gemini).',
+              'The compliance mode for tool schemas sent to the model. Use "openapi_30" for strict OpenAPI 3.0 compatibility.',
             parentKey: 'generationConfig',
             showInDialog: false,
             options: [
@@ -2846,26 +2772,8 @@ const SETTINGS_SCHEMA = {
             category: 'Security',
             requiresRestart: true,
             default: undefined as AuthType | undefined,
-            description: 'The currently selected authentication type.',
-            showInDialog: false,
-          },
-          enforcedType: {
-            type: 'string',
-            label: 'Enforced Auth Type',
-            category: 'Advanced',
-            requiresRestart: true,
-            default: undefined as AuthType | undefined,
             description:
-              'The required auth type. If this does not match the selected auth type, the user will be prompted to re-authenticate.',
-            showInDialog: false,
-          },
-          useExternal: {
-            type: 'boolean',
-            label: 'Use External Auth',
-            category: 'Security',
-            requiresRestart: true,
-            default: false,
-            description: 'Whether to use an external authentication flow.',
+              'The selected authentication type. Only "openai" (a local OpenAI-compatible server) is supported.',
             showInDialog: false,
           },
           apiKey: {
@@ -2874,7 +2782,7 @@ const SETTINGS_SCHEMA = {
             category: 'Security',
             requiresRestart: true,
             default: undefined as string | undefined,
-            description: 'API key for OpenAI compatible authentication.',
+            description: 'API key for the local OpenAI-compatible server.',
             showInDialog: false,
           },
           baseUrl: {
@@ -2883,7 +2791,8 @@ const SETTINGS_SCHEMA = {
             category: 'Security',
             requiresRestart: true,
             default: undefined as string | undefined,
-            description: 'Base URL for OpenAI compatible API.',
+            description:
+              'Base URL of the local OpenAI-compatible server. The host must be 127.0.0.1, ::1 or localhost.',
             showInDialog: false,
           },
         },

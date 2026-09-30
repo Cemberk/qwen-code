@@ -6,28 +6,6 @@
 
 import { getErrorMessage } from './errors.js';
 import { delay } from './retry.js';
-import { isTlsVerificationDisabled } from './runtimeFetchOptions.js';
-import { URL } from 'node:url';
-
-const TLS_ERROR_CODES = new Set([
-  'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
-  'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
-  'SELF_SIGNED_CERT_IN_CHAIN',
-  'DEPTH_ZERO_SELF_SIGNED_CERT',
-  'CERT_HAS_EXPIRED',
-  'ERR_TLS_CERT_ALTNAME_INVALID',
-]);
-
-const FETCH_TROUBLESHOOTING_ERROR_CODES = new Set([
-  ...TLS_ERROR_CODES,
-  'ECONNRESET',
-  'ETIMEDOUT',
-  'ECONNREFUSED',
-  'ENOTFOUND',
-  'EAI_AGAIN',
-  'EHOSTUNREACH',
-  'ENETUNREACH',
-]);
 
 export class FetchError extends Error {
   constructor(
@@ -39,63 +17,24 @@ export class FetchError extends Error {
   }
 }
 
-const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
-
-/**
- * A redirect is followed silently only when it stays on the same host
- * (allowing a leading "www." to be added or removed), same protocol and
- * port, and carries no credentials. Anything else is surfaced to the
- * caller rather than followed.
- */
-export function isPermittedRedirect(
-  originalUrl: string,
-  redirectUrl: string,
-): boolean {
-  try {
-    const original = new URL(originalUrl);
-    const redirect = new URL(redirectUrl);
-    if (redirect.protocol !== original.protocol) return false;
-    if (redirect.port !== original.port) return false;
-    if (redirect.username || redirect.password) return false;
-    const stripWww = (hostname: string) => hostname.replace(/^www\./, '');
-    return stripWww(original.hostname) === stripWww(redirect.hostname);
-  } catch {
-    return false;
-  }
-}
-
 export interface FetchPolicyOptions {
   /** Budget for the entire transfer — headers AND body. */
   timeoutMs: number;
   /** Reject responses larger than this, before or during body read. */
   maxBytes: number;
-  /** Same-host redirect hops to follow before erroring. */
-  maxRedirects: number;
   headers?: Record<string, string>;
   /** Caller cancellation (e.g. the tool's abort signal). */
   signal?: AbortSignal;
 }
 
 export interface FetchPolicyResponse {
-  kind: 'response';
   status: number;
   statusText: string;
   contentType: string;
   /** Content-Disposition header, if any — carries the server's filename. */
   contentDisposition: string;
   body: Buffer;
-  /** URL after any followed same-host redirects. */
-  finalUrl: string;
 }
-
-export interface FetchPolicyRedirect {
-  kind: 'cross-host-redirect';
-  originalUrl: string;
-  redirectUrl: string;
-  status: number;
-}
-
-export type FetchPolicyResult = FetchPolicyResponse | FetchPolicyRedirect;
 
 // One retry, narrow triggers: transient blocks/rate limits and connection
 // resets. Not 404s (deterministic), not timeouts (budget already spent).
@@ -110,16 +49,15 @@ const RETRYABLE_ERROR_CODES = new Set([
 const RETRY_DELAY_MS = 500;
 
 /**
- * Fetch with manual redirect handling, a full-transfer timeout, a byte cap
- * enforced while streaming, caller-abort wiring, and a single retry on
- * transient failures (403/429 statuses, connection resets). Uses the global
- * fetch so the process-wide proxy dispatcher (setGlobalDispatcher) applies.
- * The timeout budget spans both attempts.
+ * Fetch with a full-transfer timeout, a byte cap enforced while streaming,
+ * caller-abort wiring, and a single retry on transient failures (403/429
+ * statuses, connection resets). Redirects are never followed: a 3xx response
+ * fails the request. The timeout budget spans both attempts.
  */
 export async function fetchWithPolicy(
   url: string,
   options: FetchPolicyOptions,
-): Promise<FetchPolicyResult> {
+): Promise<FetchPolicyResponse> {
   const timeoutSignal = AbortSignal.timeout(options.timeoutMs);
   const signal = options.signal
     ? AbortSignal.any([options.signal, timeoutSignal])
@@ -142,7 +80,7 @@ export async function fetchWithPolicy(
     return undefined;
   };
 
-  let first: FetchPolicyResult;
+  let first: FetchPolicyResponse;
   try {
     first = await fetchPolicyAttempt(url, options, signal, timeoutSignal);
   } catch (error) {
@@ -162,11 +100,7 @@ export async function fetchWithPolicy(
     throw error;
   }
 
-  if (
-    first.kind === 'response' &&
-    RETRYABLE_STATUSES.has(first.status) &&
-    !signal.aborted
-  ) {
+  if (RETRYABLE_STATUSES.has(first.status) && !signal.aborted) {
     try {
       await delay(RETRY_DELAY_MS, signal);
       return await fetchPolicyAttempt(url, options, signal, timeoutSignal);
@@ -188,7 +122,7 @@ async function fetchPolicyAttempt(
   options: FetchPolicyOptions,
   signal: AbortSignal,
   timeoutSignal: AbortSignal,
-): Promise<FetchPolicyResult> {
+): Promise<FetchPolicyResponse> {
   const wrapAbort = (error: unknown): never => {
     if (options.signal?.aborted) {
       throw options.signal.reason instanceof Error
@@ -210,115 +144,78 @@ async function fetchPolicyAttempt(
     throw new FetchError(getErrorMessage(error), code);
   };
 
-  let currentUrl = url;
-  for (let hop = 0; hop <= options.maxRedirects; hop++) {
-    let response: Response;
-    try {
-      response = await fetch(currentUrl, {
-        signal,
-        headers: options.headers,
-        redirect: 'manual',
-      });
-    } catch (error) {
-      return wrapAbort(error);
-    }
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      signal,
+      headers: options.headers,
+      redirect: 'error',
+    });
+  } catch (error) {
+    return wrapAbort(error);
+  }
 
-    if (REDIRECT_STATUSES.has(response.status)) {
-      const location = response.headers.get('location');
-      await response.body?.cancel().catch(() => {});
-      if (!location) {
-        throw new FetchError('Redirect response missing Location header');
-      }
-      let redirectUrl: string;
-      try {
-        redirectUrl = new URL(location, currentUrl).toString();
-      } catch {
-        throw new FetchError(
-          `Redirect response has a malformed Location header: ${location}`,
-        );
-      }
-      if (!isPermittedRedirect(currentUrl, redirectUrl)) {
-        return {
-          kind: 'cross-host-redirect',
-          originalUrl: currentUrl,
-          redirectUrl,
-          status: response.status,
-        };
-      }
-      currentUrl = redirectUrl;
-      continue;
-    }
-
-    // The sole caller discards the body of every non-2xx response (only the
-    // status/statusText feed its failure message, and the 403/429 retry path
-    // inspects the status alone). Cancel the body without buffering it:
-    // otherwise an oversized error page reports EMSGSIZE instead of its real
-    // status, and a slow-trickling error body can burn the whole timeout for
-    // bytes that are never read.
-    if (response.status < 200 || response.status >= 300) {
-      await response.body?.cancel().catch(() => {});
-      return {
-        kind: 'response',
-        status: response.status,
-        statusText: response.statusText,
-        contentType: response.headers.get('content-type') ?? '',
-        contentDisposition: response.headers.get('content-disposition') ?? '',
-        body: Buffer.alloc(0),
-        finalUrl: currentUrl,
-      };
-    }
-
-    const contentLength = Number(response.headers.get('content-length'));
-    if (Number.isFinite(contentLength) && contentLength > options.maxBytes) {
-      await response.body?.cancel().catch(() => {});
-      throw new FetchError(
-        `Response too large: ${contentLength} bytes exceeds the ${options.maxBytes}-byte limit`,
-        'EMSGSIZE',
-      );
-    }
-
-    // Chunks are retained as-is (undici yields a fresh Uint8Array per read);
-    // Buffer.concat below performs the single necessary copy.
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    if (response.body) {
-      const reader = response.body.getReader();
-      try {
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          total += value.byteLength;
-          if (total > options.maxBytes) {
-            throw new FetchError(
-              `Response too large: exceeded the ${options.maxBytes}-byte limit while streaming`,
-              'EMSGSIZE',
-            );
-          }
-          chunks.push(value);
-        }
-      } catch (error) {
-        await reader.cancel().catch(() => {});
-        if (error instanceof FetchError) throw error;
-        return wrapAbort(error);
-      } finally {
-        reader.releaseLock();
-      }
-    }
-
+  // The sole caller discards the body of every non-2xx response (only the
+  // status/statusText feed its failure message, and the 403/429 retry path
+  // inspects the status alone). Cancel the body without buffering it:
+  // otherwise an oversized error page reports EMSGSIZE instead of its real
+  // status, and a slow-trickling error body can burn the whole timeout for
+  // bytes that are never read.
+  if (response.status < 200 || response.status >= 300) {
+    await response.body?.cancel().catch(() => {});
     return {
-      kind: 'response',
       status: response.status,
       statusText: response.statusText,
       contentType: response.headers.get('content-type') ?? '',
       contentDisposition: response.headers.get('content-disposition') ?? '',
-      body: Buffer.concat(chunks, total),
-      finalUrl: currentUrl,
+      body: Buffer.alloc(0),
     };
   }
-  throw new FetchError(
-    `Too many redirects (exceeded ${options.maxRedirects})`,
-    'EMAXREDIRECTS',
-  );
+
+  const contentLength = Number(response.headers.get('content-length'));
+  if (Number.isFinite(contentLength) && contentLength > options.maxBytes) {
+    await response.body?.cancel().catch(() => {});
+    throw new FetchError(
+      `Response too large: ${contentLength} bytes exceeds the ${options.maxBytes}-byte limit`,
+      'EMSGSIZE',
+    );
+  }
+
+  // Chunks are retained as-is (undici yields a fresh Uint8Array per read);
+  // Buffer.concat below performs the single necessary copy.
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  if (response.body) {
+    const reader = response.body.getReader();
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > options.maxBytes) {
+          throw new FetchError(
+            `Response too large: exceeded the ${options.maxBytes}-byte limit while streaming`,
+            'EMSGSIZE',
+          );
+        }
+        chunks.push(value);
+      }
+    } catch (error) {
+      await reader.cancel().catch(() => {});
+      if (error instanceof FetchError) throw error;
+      return wrapAbort(error);
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  return {
+    status: response.status,
+    statusText: response.statusText,
+    contentType: response.headers.get('content-type') ?? '',
+    contentDisposition: response.headers.get('content-disposition') ?? '',
+    body: Buffer.concat(chunks, total),
+  };
 }
 
 function getErrorCode(error: unknown): string | undefined {
@@ -334,109 +231,4 @@ function getErrorCode(error: unknown): string | undefined {
   }
 
   return undefined;
-}
-
-function formatUnknownErrorMessage(error: unknown): string | undefined {
-  if (typeof error === 'string') {
-    return error;
-  }
-
-  if (
-    typeof error === 'number' ||
-    typeof error === 'boolean' ||
-    typeof error === 'bigint'
-  ) {
-    return String(error);
-  }
-
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  if (!error || typeof error !== 'object') {
-    return undefined;
-  }
-
-  const message = (error as Record<string, unknown>)['message'];
-  if (typeof message === 'string') {
-    return message;
-  }
-
-  return undefined;
-}
-
-function formatErrorCause(error: unknown): string | undefined {
-  if (!(error instanceof Error)) {
-    return undefined;
-  }
-
-  const cause = (error as Error & { cause?: unknown }).cause;
-  if (!cause) {
-    return undefined;
-  }
-
-  const causeCode = getErrorCode(cause);
-  const causeMessage = formatUnknownErrorMessage(cause);
-
-  if (!causeCode && !causeMessage) {
-    return undefined;
-  }
-
-  if (causeCode && causeMessage && !causeMessage.includes(causeCode)) {
-    return `${causeCode}: ${causeMessage}`;
-  }
-
-  return causeMessage ?? causeCode;
-}
-
-export function formatFetchErrorForUser(
-  error: unknown,
-  options: { url?: string } = {},
-): string {
-  const errorMessage = getErrorMessage(error);
-
-  const code =
-    error instanceof Error
-      ? (getErrorCode((error as Error & { cause?: unknown }).cause) ??
-        getErrorCode(error))
-      : getErrorCode(error);
-
-  const cause = formatErrorCause(error);
-  const fullErrorMessage = [
-    errorMessage,
-    cause ? `(cause: ${cause})` : undefined,
-  ]
-    .filter(Boolean)
-    .join(' ');
-
-  const shouldShowFetchHints =
-    errorMessage.toLowerCase().includes('fetch failed') ||
-    (code != null && FETCH_TROUBLESHOOTING_ERROR_CODES.has(code));
-
-  const shouldShowTlsHint = code != null && TLS_ERROR_CODES.has(code);
-
-  if (!shouldShowFetchHints) {
-    return fullErrorMessage;
-  }
-
-  const hintLines = [
-    '',
-    'Troubleshooting:',
-    ...(options.url
-      ? [`- Confirm you can reach ${options.url} from this machine.`]
-      : []),
-    '- If you are behind a proxy, pass `--proxy <url>` (or set `proxy` in settings).',
-    ...(shouldShowTlsHint
-      ? isTlsVerificationDisabled()
-        ? [
-            '- TLS verification is already disabled (`--insecure` / `QWEN_TLS_INSECURE`), so this is likely a network or protocol issue rather than a certificate trust problem.',
-          ]
-        : [
-            '- If your network uses a corporate TLS inspection CA, set `NODE_EXTRA_CA_CERTS` to your CA bundle.',
-            '- For a trusted self-signed endpoint, pass `--insecure` (or set `QWEN_TLS_INSECURE=1`) to skip certificate verification.',
-          ]
-      : []),
-  ];
-
-  return `${fullErrorMessage}${hintLines.join('\n')}`;
 }

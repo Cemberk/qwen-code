@@ -169,7 +169,7 @@ import type { Config } from '@qwen-code/qwen-code-core';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { InitializationResult } from '../../core/initializer.js';
 
-function buildConfig(authType: 'qwen-oauth' | 'none' = 'qwen-oauth'): Config {
+function buildConfig(authType: 'openai' | 'none' = 'openai'): Config {
   return {
     getSessionId: () => 'test-session-id',
     getTargetDir: () => '/tmp/project',

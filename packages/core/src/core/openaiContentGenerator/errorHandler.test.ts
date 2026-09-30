@@ -167,10 +167,9 @@ describe('EnhancedErrorHandler', () => {
     });
 
     it('preserves transport metadata when enhancing timeout errors', () => {
-      const timeoutError = Object.assign(
-        new Error('socket timed out via token@proxy.local:8080'),
-        { code: 'ETIMEDOUT' },
-      );
+      const timeoutError = Object.assign(new Error('socket timed out'), {
+        code: 'ETIMEDOUT',
+      });
       let thrown: unknown;
 
       try {
@@ -184,10 +183,7 @@ describe('EnhancedErrorHandler', () => {
         /Request timeout after 5s.*Troubleshooting tips:/s,
       );
       expect((thrown as Error).cause).toBe(timeoutError);
-      expect((thrown as Error).cause).toMatchObject({
-        code: 'ETIMEDOUT',
-        message: 'socket timed out via <redacted>@proxy.local:8080',
-      });
+      expect((thrown as Error).cause).toMatchObject({ code: 'ETIMEDOUT' });
       expect(classifyRetryError(thrown)).toMatchObject({
         kind: 'transport',
         diagnosis: 'retryable',
@@ -240,29 +236,6 @@ describe('EnhancedErrorHandler', () => {
       });
     });
 
-    it('attaches the redacted clone, not the raw original, when redaction clones', () => {
-      const original = Object.freeze(
-        Object.assign(
-          new Error('socket timed out via token@proxy.local:8080'),
-          {
-            code: 'ETIMEDOUT',
-          },
-        ),
-      );
-      let thrown: unknown;
-
-      try {
-        errorHandler.handle(original, mockContext, mockRequest);
-      } catch (error) {
-        thrown = error;
-      }
-
-      expect((thrown as Error).cause).not.toBe(original);
-      expect(((thrown as Error).cause as Error).message).toContain(
-        '<redacted>@proxy.local:8080',
-      );
-    });
-
     it('should use custom suppression function', () => {
       const suppressLogging = vi.fn(() => true);
       errorHandler = new EnhancedErrorHandler(suppressLogging);
@@ -286,27 +259,6 @@ describe('EnhancedErrorHandler', () => {
         stringError,
         expect.objectContaining({ model: 'test-model' }),
       );
-    });
-
-    it('should redact proxy credentials before throwing request-time errors', () => {
-      const proxyError = new Error(
-        'connect ECONNREFUSED token@proxy.local:8080',
-      );
-
-      expect(() => {
-        errorHandler.handle(proxyError, mockContext, mockRequest);
-      }).toThrow('connect ECONNREFUSED <redacted>@proxy.local:8080');
-      expect(proxyError.message).not.toContain('token@');
-    });
-
-    it('should redact proxy credentials from string errors', () => {
-      expect(() => {
-        errorHandler.handle(
-          '407 via http://user:pass@proxy.local',
-          mockContext,
-          mockRequest,
-        );
-      }).toThrow('407 via http://<redacted>@proxy.local');
     });
 
     it('should handle null/undefined errors', () => {

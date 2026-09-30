@@ -70,11 +70,6 @@ import {
   retryContext,
   type RetryAttemptContext,
 } from '../../utils/retryContext.js';
-import {
-  resolveGenAiOperationName,
-  resolveGenAiOutputType,
-  resolveGenAiProviderName,
-} from '../../telemetry/gen-ai-provider.js';
 import { getGenAiUsageProvenance } from '../../telemetry/gen-ai-usage.js';
 import {
   createGenAiExchange,
@@ -175,8 +170,6 @@ export class LoggingContentGenerator implements ContentGenerator {
   private splitToolMedia?: boolean;
   private toolResultContentFormat?: ContentGeneratorConfig['toolResultContentFormat'];
   private readonly generatorAuthType: ContentGeneratorConfig['authType'];
-  private readonly genAiProviderName: string;
-  private readonly genAiOperationName: 'chat' | 'generate_content';
 
   constructor(
     private readonly wrapped: ContentGenerator,
@@ -187,13 +180,6 @@ export class LoggingContentGenerator implements ContentGenerator {
     this.splitToolMedia = generatorConfig.splitToolMedia;
     this.toolResultContentFormat = generatorConfig.toolResultContentFormat;
     this.generatorAuthType = generatorConfig.authType;
-    this.genAiProviderName = resolveGenAiProviderName(
-      generatorConfig,
-      process.env['DASHSCOPE_PROXY_BASE_URL'],
-    );
-    this.genAiOperationName = resolveGenAiOperationName(
-      generatorConfig.authType,
-    );
 
     // Extract fields needed for initialization from passed config
     // (config.getContentGeneratorConfig() may not be available yet during refreshAuth)
@@ -398,9 +384,8 @@ export class LoggingContentGenerator implements ContentGenerator {
     const ownerUserId = this.config.getTelemetryUserId();
     const { span: llmSpan, context: llmContext } =
       startLLMRequestSpanWithContext(req.model, userPromptId, {
-        operationName: this.genAiOperationName,
-        providerName: this.genAiProviderName,
-        outputType: resolveGenAiOutputType(this.generatorAuthType, req.config),
+        operationName: 'chat',
+        providerName: 'openai',
         sessionId: ownerSessionId,
         userId: ownerUserId,
         contextUsage,
@@ -563,9 +548,8 @@ export class LoggingContentGenerator implements ContentGenerator {
     const ownerUserId = this.config.getTelemetryUserId();
     const { span: llmSpan, context: llmContext } =
       startLLMRequestSpanWithContext(req.model, userPromptId, {
-        operationName: this.genAiOperationName,
-        providerName: this.genAiProviderName,
-        outputType: resolveGenAiOutputType(this.generatorAuthType, req.config),
+        operationName: 'chat',
+        providerName: 'openai',
         sessionId: ownerSessionId,
         userId: ownerUserId,
         contextUsage,

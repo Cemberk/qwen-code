@@ -11,8 +11,9 @@ export function buildAuthMethods(): AuthMethod[] {
   return [
     {
       id: AuthType.USE_OPENAI,
-      name: 'Use OpenAI API key',
-      description: 'Requires setting the `OPENAI_API_KEY` environment variable',
+      name: 'Local OpenAI-compatible server',
+      description:
+        'Requires `OPENAI_BASE_URL` (host 127.0.0.1, ::1 or localhost), `OPENAI_API_KEY` and `OPENAI_MODEL`, or a configured modelProviders entry',
       _meta: {
         type: 'terminal',
         args: ['--auth-type=openai'],

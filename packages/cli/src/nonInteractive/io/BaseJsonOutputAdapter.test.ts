@@ -1801,8 +1801,7 @@ describe('BaseJsonOutputAdapter', () => {
           resultDisplay: {
             type: 'vision_bridge_notice' as const,
             summary: 'Transcribed PDF pages 20-23; remaining pages 24-25',
-            notice:
-              'Converted 4 images via qwen3-vl-plus (dashscope.aliyuncs.com).',
+            notice: 'Converted 4 images via qwen3-vl-plus (127.0.0.1).',
           },
           responseParts: [
             {
@@ -1817,7 +1816,7 @@ describe('BaseJsonOutputAdapter', () => {
 
         expect(toolResultContent(response)).toBe(
           'Transcribed PDF pages 20-23; remaining pages 24-25\n' +
-            'Converted 4 images via qwen3-vl-plus (dashscope.aliyuncs.com).\n' +
+            'Converted 4 images via qwen3-vl-plus (127.0.0.1).\n' +
             'Page 20: transcribed content',
         );
       });
@@ -1827,7 +1826,7 @@ describe('BaseJsonOutputAdapter', () => {
           callId: 'image-tool',
           resultDisplay: 'captured screen',
           visionBridgeNotice:
-            'Converted 1 image via qwen3-vl-plus (dashscope.aliyuncs.com).',
+            'Converted 1 image via qwen3-vl-plus (127.0.0.1).',
           responseParts: [
             {
               functionResponse: {
@@ -1840,7 +1839,7 @@ describe('BaseJsonOutputAdapter', () => {
         };
 
         expect(toolResultContent(response)).toBe(
-          'Converted 1 image via qwen3-vl-plus (dashscope.aliyuncs.com).\n' +
+          'Converted 1 image via qwen3-vl-plus (127.0.0.1).\n' +
             'captured screen',
         );
       });

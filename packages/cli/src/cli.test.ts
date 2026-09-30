@@ -140,7 +140,7 @@ describe('resolveBootstrapRoute', () => {
     expect(resolveBootstrapRoute(['--approval-mode', 'auto', '--help'])).toBe(
       'help',
     );
-    expect(resolveBootstrapRoute(['--auth-type', 'qwen-oauth', '--help'])).toBe(
+    expect(resolveBootstrapRoute(['--auth-type', 'openai', '--help'])).toBe(
       'help',
     );
     expect(
@@ -274,19 +274,19 @@ describe('resolveBootstrapRoute', () => {
   it('intercepts version tokens in derived-only value-flag slots (base parity)', () => {
     // Base's hasFlag skipped value slots only for its hardcoded
     // 11-spelling set (BASE_VALUE_FLAGS). Flags added by the derived
-    // VALUE_FLAGS (--worktree, --proxy, -e, --auth-type, --session-id,
+    // VALUE_FLAGS (--worktree, -e, --auth-type, --session-id,
     // --exclude-tools, --append-system-prompt, the hidden
     // --sandbox-session-id) did not consume their value slot in the base
     // scan, so a `-v`/`--version` sitting there WAS counted and base
     // printed the version. Skipping those slots here would drop the
     // intercept and corrupt real runs: `mcp add srv cmd --exclude-tools
     // -v` persisted excludeTools:["-v"], `mcp add srv cmd -e -v`
-    // swallowed the `-v` env value, `--proxy -v mcp remove victim`
+    // swallowed the `-v` env value, `--worktree -v mcp remove victim`
     // became an exit-1 Unknown argument instead of an exit-0 version
     // print, and `--worktree -v --help` printed help instead of the
     // version.
     expect(
-      resolveBootstrapRoute(['--proxy', '-v', 'mcp', 'remove', 'victim']),
+      resolveBootstrapRoute(['--worktree', '-v', 'mcp', 'remove', 'victim']),
     ).toBe('version');
     expect(
       resolveBootstrapRoute(['mcp', 'add', 'name', 'cmd', '-e', '-v']),
@@ -770,9 +770,8 @@ describe('runCliEntry', () => {
     for (const [name] of TOP_LEVEL_HELP_OPTIONS) {
       expect(helpText).toContain(`--${name}`);
     }
-    expect(helpText).toContain(
-      '"openai", "openai-responses", "anthropic", "qwen-oauth", "gemini", "vertex-ai"',
-    );
+    expect(helpText).toContain('[string] [choices: "openai"]');
+    expect(helpText).not.toContain('--proxy');
     // The fast path mirrors config.ts and wraps help at the terminal width;
     // in a non-TTY (columns unset) that disables wrapping, so a description
     // longer than yargs' 80-column fallback renders on one unbroken line.

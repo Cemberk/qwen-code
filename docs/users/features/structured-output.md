@@ -104,7 +104,7 @@ Validation at parse time:
   (e.g. `required` without listing every key in `properties`) are
   accepted.
 - The schema root must accept object-typed values. Function-calling
-  APIs (Gemini, OpenAI, Anthropic) all require tool arguments to be
+  APIs (including OpenAI-compatible servers) require tool arguments to be
   JSON objects, so a non-object root would register an unusable tool.
 
 The root-acceptance check walks `type`, `const`, `enum`, `anyOf`,

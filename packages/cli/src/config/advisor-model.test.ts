@@ -20,13 +20,13 @@ describe('checkAdvisorModelAvailability', () => {
         {
           id: 'advisor',
           authType: AuthType.USE_OPENAI,
-          registryBaseUrl: 'https://a.example/v1',
-          voiceOnly: true,
+          registryBaseUrl: 'http://127.0.0.1:8001/v1',
+          visionOnly: true,
         },
         {
           id: 'advisor',
           authType: AuthType.USE_OPENAI,
-          registryBaseUrl: 'https://b.example/v1',
+          registryBaseUrl: 'http://127.0.0.1:8002/v1',
         },
         { id: 'advisor', authType: AuthType.USE_OPENAI, isRuntimeModel: true },
       ],
@@ -34,19 +34,19 @@ describe('checkAdvisorModelAvailability', () => {
     expect(
       checkAdvisorModelAvailability(
         config,
-        'openai:advisor\0https://b.example/v1',
+        'openai:advisor\0http://127.0.0.1:8002/v1',
       ).available,
     ).toBe(true);
     expect(
       checkAdvisorModelAvailability(
         config,
-        'openai:advisor\0https://a.example/v1',
+        'openai:advisor\0http://127.0.0.1:8001/v1',
       ).available,
     ).toBe(false);
     expect(
       checkAdvisorModelAvailability(
         config,
-        'openai:advisor\0https://missing.example/v1',
+        'openai:advisor\0http://127.0.0.1:8003/v1',
       ).available,
     ).toBe(false);
     expect(

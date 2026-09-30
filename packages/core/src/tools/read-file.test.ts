@@ -714,7 +714,7 @@ describe('ReadFileTool', () => {
           getEffectiveInputModalities: () => ({}),
           getDefaultVisionBridgeModel: () => ({
             id: 'qwen3-vl-plus',
-            baseUrl: 'https://dashscope.aliyuncs.com/v1',
+            baseUrl: 'http://127.0.0.1:1234/v1',
           }),
           storage: {
             getProjectTempDir: () => path.join(tempRootDir, '.temp'),
@@ -774,7 +774,7 @@ describe('ReadFileTool', () => {
           convertedCount: 4,
           omittedCount: 0,
           modelId: 'qwen3-vl-plus',
-          modelEndpoint: 'dashscope.aliyuncs.com',
+          modelEndpoint: '127.0.0.1:1234',
           egressOccurred: true,
         });
 
@@ -796,7 +796,7 @@ describe('ReadFileTool', () => {
           'transcribed PDF pages 20-23; remaining pages 24-25',
         );
         expect(display.notice).toContain('qwen3-vl-plus');
-        expect(display.notice).toContain('dashscope.aliyuncs.com');
+        expect(display.notice).toContain('127.0.0.1:1234');
         expect(visionBridgeMocks.runVisionBridge).toHaveBeenCalledWith(
           expect.objectContaining({
             sourceContext: {
@@ -825,7 +825,7 @@ describe('ReadFileTool', () => {
           convertedCount: 4,
           omittedCount: 0,
           modelId: 'qwen3-vl-plus',
-          modelEndpoint: 'dashscope.aliyuncs.com',
+          modelEndpoint: '127.0.0.1:1234',
           egressOccurred: true,
         });
 
@@ -861,7 +861,7 @@ describe('ReadFileTool', () => {
           convertedCount: 0,
           omittedCount: 0,
           modelId: 'qwen3-vl-plus',
-          modelEndpoint: 'dashscope.aliyuncs.com',
+          modelEndpoint: '127.0.0.1:1234',
           egressOccurred: true,
           error,
         });
@@ -877,7 +877,7 @@ describe('ReadFileTool', () => {
         expect(display.summary).toContain(
           'rendered PDF pages 20-23; remaining pages 24-25',
         );
-        expect(display.notice).toContain('dashscope.aliyuncs.com');
+        expect(display.notice).toContain('127.0.0.1:1234');
       });
 
       it('restores the PDF error for an unusable successful bridge result', async () => {
@@ -887,7 +887,7 @@ describe('ReadFileTool', () => {
           convertedCount: 4,
           omittedCount: 0,
           modelId: 'qwen3-vl-plus',
-          modelEndpoint: 'dashscope.aliyuncs.com',
+          modelEndpoint: '127.0.0.1:1234',
           egressOccurred: true,
         });
 
@@ -895,9 +895,7 @@ describe('ReadFileTool', () => {
 
         expect(result.error?.type).toBe(ToolErrorType.READ_CONTENT_FAILURE);
         expect(JSON.stringify(result.llmContent)).not.toContain('inlineData');
-        expect(bridgeDisplay(result).notice).toContain(
-          'dashscope.aliyuncs.com',
-        );
+        expect(bridgeDisplay(result).notice).toContain('127.0.0.1:1234');
       });
 
       it.each([
@@ -924,7 +922,7 @@ describe('ReadFileTool', () => {
             convertedCount: 4,
             omittedCount: 0,
             modelId: 'qwen3-vl-plus',
-            modelEndpoint: 'dashscope.aliyuncs.com',
+            modelEndpoint: '127.0.0.1:1234',
             egressOccurred: true,
           });
 
@@ -935,7 +933,7 @@ describe('ReadFileTool', () => {
           expect(JSON.stringify(result.llmContent)).not.toContain(mediaKey);
           const display = bridgeDisplay(result);
           expect(display.notice).toContain('qwen3-vl-plus');
-          expect(display.notice).toContain('dashscope.aliyuncs.com');
+          expect(display.notice).toContain('127.0.0.1:1234');
           expect(display.notice).toContain('transcription was discarded');
           expect(display.notice).not.toContain('vision model request failed');
         },
@@ -949,7 +947,7 @@ describe('ReadFileTool', () => {
           convertedCount: 3,
           omittedCount: 1,
           modelId: 'qwen3-vl-plus',
-          modelEndpoint: 'dashscope.aliyuncs.com',
+          modelEndpoint: '127.0.0.1:1234',
           egressOccurred: true,
         });
 
@@ -957,9 +955,7 @@ describe('ReadFileTool', () => {
 
         expect(result.error?.type).toBe(ToolErrorType.READ_CONTENT_FAILURE);
         expect(result.llmContent).toContain('Cannot extract text from PDF');
-        expect(bridgeDisplay(result).notice).toContain(
-          'dashscope.aliyuncs.com',
-        );
+        expect(bridgeDisplay(result).notice).toContain('127.0.0.1:1234');
         expect(bridgeDisplay(result).notice).toContain(
           'transcription was discarded',
         );

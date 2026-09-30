@@ -6,7 +6,6 @@
 
 import type { InputModalities } from './contentGenerator.js';
 import { normalize } from './tokenLimits.js';
-import { parseModelReasoningCapabilities } from './reasoning-effort.js';
 
 const FULL_MULTIMODAL: InputModalities = {
   image: true,
@@ -54,7 +53,6 @@ const MODALITY_PATTERNS: Array<[RegExp, InputModalities]> = [
   [/^qwen3\.8-flash/, { image: true, video: true }],
   [/^qwen3\.8-plus/, { image: true, video: true }],
   [/^qwen3\.8-max/, { image: true }],
-  [/^coder-model$/, { image: true, video: true }],
 
   // Qwen VL (vision-language) models: image + video
   [/^qwen-vl-/, { image: true, video: true }],
@@ -127,40 +125,9 @@ export function defaultModalities(model: string): InputModalities {
 }
 
 /**
- * True for wire model ids in the qwen family: any `qwen*` id plus
- * `coder-model`, the QWEN_OAUTH default (DEFAULT_QWEN_MODEL in
- * config/models.ts, aliased to a Qwen 3.6 Plus hybrid), which doesn't
- * start with `qwen` but is the most common hybrid-thinking model for
- * first-time users. Shared by the pipeline's disable/tool-choice gates
- * and the DashScope provider's effort mapping so the family fact lives
- * in one place.
+ * True for wire model ids in the qwen family (any `qwen*` id). Used by the
+ * pipeline's reasoning-disable gate so the family fact lives in one place.
  */
 export function isQwenFamilyWireModel(model: string | undefined): boolean {
-  if (!model) {
-    return false;
-  }
-  const normalized = model.toLowerCase();
-  return normalized.startsWith('qwen') || normalized === 'coder-model';
-}
-
-/**
- * A configured Qwen reasoning protocol takes precedence over the legacy
- * qwen3.8-max family fallback. Other providers use independent wire rules.
- */
-export function isTieredEffortWireModel(
-  model: string | undefined,
-  configuredReasoning?: unknown,
-): boolean {
-  if (!model) {
-    return false;
-  }
-  const reasoning = parseModelReasoningCapabilities(configuredReasoning);
-  if (reasoning) {
-    return (
-      isQwenFamilyWireModel(model) &&
-      !reasoning.toggleOnly &&
-      reasoning.disableField === 'reasoning_effort'
-    );
-  }
-  return model.toLowerCase().startsWith('qwen3.8-max');
+  return !!model && model.toLowerCase().startsWith('qwen');
 }

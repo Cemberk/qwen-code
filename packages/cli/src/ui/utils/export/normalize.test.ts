@@ -504,8 +504,8 @@ describe('normalizeSessionData', () => {
           ? 'Failed to read PDF after rendering pages 20-23'
           : 'Transcribed PDF pages 20-23; remaining pages 24-25',
         notice: failed
-          ? 'Vision bridge (qwen3-vl-plus) failed after sending images to dashscope.aliyuncs.com.'
-          : 'Converted 4 images via qwen3-vl-plus (dashscope.aliyuncs.com).',
+          ? 'Vision bridge (qwen3-vl-plus) failed after sending images to 127.0.0.1:11434.'
+          : 'Converted 4 images via qwen3-vl-plus (127.0.0.1:11434).',
       };
       const output = failed
         ? 'Cannot extract text from PDF'

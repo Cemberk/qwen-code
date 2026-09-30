@@ -4,102 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import {
-  FetchError,
-  fetchWithPolicy,
-  formatFetchErrorForUser,
-  isPermittedRedirect,
-} from './fetch.js';
-
-function makeTlsError(): Error {
-  const tlsCause = new Error('unable to verify the first certificate');
-  (tlsCause as Error & { code?: string }).code =
-    'UNABLE_TO_VERIFY_LEAF_SIGNATURE';
-  const fetchError = new TypeError('fetch failed') as TypeError & {
-    cause?: unknown;
-  };
-  fetchError.cause = tlsCause;
-  return fetchError;
-}
-
-describe('formatFetchErrorForUser', () => {
-  const saved = {
-    QWEN_TLS_INSECURE: process.env['QWEN_TLS_INSECURE'],
-    NODE_TLS_REJECT_UNAUTHORIZED: process.env['NODE_TLS_REJECT_UNAUTHORIZED'],
-  };
-
-  beforeEach(() => {
-    delete process.env['QWEN_TLS_INSECURE'];
-    delete process.env['NODE_TLS_REJECT_UNAUTHORIZED'];
-  });
-
-  afterEach(() => {
-    for (const [key, value] of Object.entries(saved)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
-  });
-
-  it('includes troubleshooting hints for TLS errors', () => {
-    const message = formatFetchErrorForUser(makeTlsError(), {
-      url: 'https://chat.qwen.ai',
-    });
-
-    expect(message).toContain('fetch failed');
-    expect(message).toContain('UNABLE_TO_VERIFY_LEAF_SIGNATURE');
-    expect(message).toContain('Troubleshooting:');
-    expect(message).toContain('Confirm you can reach https://chat.qwen.ai');
-    expect(message).toContain('--proxy');
-    expect(message).toContain('NODE_EXTRA_CA_CERTS');
-    expect(message).toContain('--insecure');
-  });
-
-  it('omits the --insecure hint when verification is already disabled', () => {
-    process.env['QWEN_TLS_INSECURE'] = '1';
-    const message = formatFetchErrorForUser(makeTlsError());
-
-    expect(message).toContain('already disabled');
-    expect(message).not.toContain('NODE_EXTRA_CA_CERTS');
-    expect(message).not.toContain('pass `--insecure`');
-  });
-
-  it('includes troubleshooting hints for network codes', () => {
-    const fetchError = new FetchError(
-      'Request timed out after 100ms',
-      'ETIMEDOUT',
-    );
-    const message = formatFetchErrorForUser(fetchError, {
-      url: 'https://example.com',
-    });
-
-    expect(message).toContain('Request timed out after 100ms');
-    expect(message).toContain('Troubleshooting:');
-    expect(message).toContain('Confirm you can reach https://example.com');
-    expect(message).toContain('--proxy');
-    expect(message).not.toContain('NODE_EXTRA_CA_CERTS');
-  });
-
-  it('does not include troubleshooting for non-fetch errors', () => {
-    expect(formatFetchErrorForUser(new Error('boom'))).toBe('boom');
-  });
-});
-
-describe('isPermittedRedirect', () => {
-  it.each([
-    ['https://example.com/a', 'https://example.com/b', true],
-    ['https://example.com/a', 'https://www.example.com/a', true],
-    ['https://www.example.com/a', 'https://example.com/a', true],
-    ['https://example.com/a', 'https://other.example.org/a', false],
-    ['https://example.com/a', 'http://example.com/a', false],
-    ['https://example.com/a', 'https://example.com:8443/a', false],
-    ['https://example.com/a', 'https://user:pw@example.com/a', false],
-    ['https://example.com/a', 'not a url', false],
-    ['http://127.0.0.1:8080/a', 'http://localhost:8080/a', false],
-  ])('%s -> %s => %s', (original, redirect, expected) => {
-    expect(isPermittedRedirect(original, redirect)).toBe(expected);
-  });
-});
+import { once } from 'node:events';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { FetchError, fetchWithPolicy } from './fetch.js';
 
 describe('fetchWithPolicy', () => {
   const realFetch = globalThis.fetch;
@@ -108,7 +17,7 @@ describe('fetchWithPolicy', () => {
     globalThis.fetch = realFetch;
   });
 
-  const opts = { timeoutMs: 5000, maxBytes: 1000, maxRedirects: 3 };
+  const opts = { timeoutMs: 5000, maxBytes: 1000 };
 
   function stubFetch(
     handler: (url: string, init?: RequestInit) => Response | Promise<Response>,
@@ -123,7 +32,7 @@ describe('fetchWithPolicy', () => {
     ) as typeof fetch;
   }
 
-  it('returns the response body, status and final URL', async () => {
+  it('returns the response body and status without following redirects', async () => {
     stubFetch(
       () =>
         new Response('hello', {
@@ -132,75 +41,13 @@ describe('fetchWithPolicy', () => {
         }),
     );
     const result = await fetchWithPolicy('https://example.com/x', opts);
-    expect(result.kind).toBe('response');
-    if (result.kind === 'response') {
-      expect(result.status).toBe(200);
-      expect(result.contentType).toBe('text/plain');
-      expect(result.body.toString()).toBe('hello');
-      expect(result.finalUrl).toBe('https://example.com/x');
-    }
-  });
-
-  it('follows same-host redirects and reports the final URL', async () => {
-    stubFetch((url) => {
-      if (url.endsWith('/start')) {
-        return new Response(null, {
-          status: 302,
-          headers: { location: '/target' },
-        });
-      }
-      return new Response('landed', { status: 200 });
-    });
-    const result = await fetchWithPolicy('https://example.com/start', opts);
-    expect(result.kind).toBe('response');
-    if (result.kind === 'response') {
-      expect(result.finalUrl).toBe('https://example.com/target');
-      expect(result.body.toString()).toBe('landed');
-    }
-  });
-
-  it('wraps a malformed Location header in a FetchError', async () => {
-    stubFetch(
-      () =>
-        new Response(null, {
-          status: 301,
-          headers: { location: 'http://[invalid' },
-        }),
+    expect(result.status).toBe(200);
+    expect(result.contentType).toBe('text/plain');
+    expect(result.body.toString()).toBe('hello');
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      'https://example.com/x',
+      expect.objectContaining({ redirect: 'error' }),
     );
-    await expect(
-      fetchWithPolicy('https://example.com/bad-redirect', opts),
-    ).rejects.toThrow(/malformed Location header/);
-  });
-
-  it('surfaces cross-host redirects without following them', async () => {
-    stubFetch(
-      () =>
-        new Response(null, {
-          status: 301,
-          headers: { location: 'https://other.example.org/t' },
-        }),
-    );
-    const result = await fetchWithPolicy('https://example.com/start', opts);
-    expect(result).toEqual({
-      kind: 'cross-host-redirect',
-      originalUrl: 'https://example.com/start',
-      redirectUrl: 'https://other.example.org/t',
-      status: 301,
-    });
-  });
-
-  it('errors after exceeding the redirect hop limit', async () => {
-    let n = 0;
-    stubFetch(
-      () =>
-        new Response(null, {
-          status: 302,
-          headers: { location: `/hop-${n++}` },
-        }),
-    );
-    await expect(
-      fetchWithPolicy('https://example.com/start', opts),
-    ).rejects.toThrow(/Too many redirects/);
   });
 
   it('rejects oversized responses via Content-Length before reading', async () => {
@@ -261,12 +108,9 @@ describe('fetchWithPolicy', () => {
         }),
     );
     const result = await fetchWithPolicy('https://example.com/boom', opts);
-    expect(result.kind).toBe('response');
-    if (result.kind === 'response') {
-      expect(result.status).toBe(500);
-      expect(result.statusText).toBe('Internal Server Error');
-      expect(result.body.length).toBe(0);
-    }
+    expect(result.status).toBe(500);
+    expect(result.statusText).toBe('Internal Server Error');
+    expect(result.body.length).toBe(0);
     expect(cancelled).toBe(true);
   });
 
@@ -282,11 +126,8 @@ describe('fetchWithPolicy', () => {
         }),
     );
     const result = await fetchWithPolicy('https://example.com/missing', opts);
-    expect(result.kind).toBe('response');
-    if (result.kind === 'response') {
-      expect(result.status).toBe(404);
-      expect(result.body.length).toBe(0);
-    }
+    expect(result.status).toBe(404);
+    expect(result.body.length).toBe(0);
   });
 });
 
@@ -297,7 +138,7 @@ describe('fetchWithPolicy retry', () => {
     globalThis.fetch = realFetch;
   });
 
-  const opts = { timeoutMs: 10_000, maxBytes: 1000, maxRedirects: 3 };
+  const opts = { timeoutMs: 10_000, maxBytes: 1000 };
 
   it('retries once on 403 and returns the successful second response', async () => {
     let calls = 0;
@@ -310,11 +151,8 @@ describe('fetchWithPolicy retry', () => {
 
     const result = await fetchWithPolicy('https://example.com/flaky', opts);
     expect(calls).toBe(2);
-    expect(result.kind).toBe('response');
-    if (result.kind === 'response') {
-      expect(result.status).toBe(200);
-      expect(result.body.toString()).toBe('recovered');
-    }
+    expect(result.status).toBe(200);
+    expect(result.body.toString()).toBe('recovered');
   });
 
   it('retries once on 429 and returns the successful second response', async () => {
@@ -328,11 +166,8 @@ describe('fetchWithPolicy retry', () => {
 
     const result = await fetchWithPolicy('https://example.com/limited', opts);
     expect(calls).toBe(2);
-    expect(result.kind).toBe('response');
-    if (result.kind === 'response') {
-      expect(result.status).toBe(200);
-      expect(result.body.toString()).toBe('recovered');
-    }
+    expect(result.status).toBe(200);
+    expect(result.body.toString()).toBe('recovered');
   });
 
   it('returns the original 403 when the retry also fails', async () => {
@@ -344,7 +179,7 @@ describe('fetchWithPolicy retry', () => {
 
     const result = await fetchWithPolicy('https://example.com/blocked', opts);
     expect(calls).toBe(2);
-    if (result.kind === 'response') expect(result.status).toBe(403);
+    expect(result.status).toBe(403);
   });
 
   it.each(['ECONNRESET', 'EAI_AGAIN'])(
@@ -365,7 +200,7 @@ describe('fetchWithPolicy retry', () => {
 
       const result = await fetchWithPolicy('https://example.com/reset', opts);
       expect(calls).toBe(2);
-      if (result.kind === 'response') expect(result.status).toBe(200);
+      expect(result.status).toBe(200);
     },
   );
 
@@ -378,7 +213,7 @@ describe('fetchWithPolicy retry', () => {
 
     const result = await fetchWithPolicy('https://example.com/missing', opts);
     expect(calls).toBe(1);
-    if (result.kind === 'response') expect(result.status).toBe(404);
+    expect(result.status).toBe(404);
   });
 
   it('does not retry non-transient network errors', async () => {
@@ -408,7 +243,7 @@ describe('fetchWithPolicy retry abort handling', () => {
     globalThis.fetch = realFetch;
   });
 
-  const opts = { timeoutMs: 10_000, maxBytes: 1000, maxRedirects: 3 };
+  const opts = { timeoutMs: 10_000, maxBytes: 1000 };
 
   it('retries once on undici socket errors (UND_ERR_SOCKET)', async () => {
     let calls = 0;
@@ -428,7 +263,7 @@ describe('fetchWithPolicy retry abort handling', () => {
 
     const result = await fetchWithPolicy('https://example.com/reset', opts);
     expect(calls).toBe(2);
-    if (result.kind === 'response') expect(result.status).toBe(200);
+    expect(result.status).toBe(200);
   });
 
   it('propagates caller abort over the original 403 during the retry window', async () => {
@@ -464,32 +299,42 @@ describe('fetchWithPolicy retry abort handling', () => {
   });
 });
 
-describe('fetchWithPolicy same-host redirects', () => {
-  const realFetch = globalThis.fetch;
+describe('fetchWithPolicy against a loopback server', () => {
+  let server: Server | undefined;
 
-  afterEach(() => {
-    globalThis.fetch = realFetch;
-  });
-
-  const opts = { timeoutMs: 5000, maxBytes: 1000, maxRedirects: 3 };
-
-  it('follows same-host redirects to completion', async () => {
-    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
-      const url = input.toString();
-      if (url.endsWith('/QwenLM/old')) {
-        return new Response(null, {
-          status: 302,
-          headers: { location: '/QwenLM/new' },
-        });
-      }
-      return new Response('landed', { status: 200 });
-    }) as typeof fetch;
-
-    const result = await fetchWithPolicy('https://github.com/QwenLM/old', opts);
-    expect(result.kind).toBe('response');
-    if (result.kind === 'response') {
-      expect(result.finalUrl).toBe('https://github.com/QwenLM/new');
-      expect(result.body.toString()).toBe('landed');
+  afterEach(async () => {
+    if (server) {
+      const closed = once(server, 'close');
+      server.closeAllConnections();
+      server.close();
+      await closed;
+      server = undefined;
     }
   });
+
+  it.each([301, 302])(
+    'rejects a %i redirect without requesting the Location target',
+    async (status) => {
+      const requested: string[] = [];
+      server = createServer((request, response) => {
+        requested.push(request.url ?? '');
+        if (request.url === '/start') {
+          response.writeHead(status, { Location: '/target' }).end();
+          return;
+        }
+        response.end('target');
+      });
+      server.listen(0, '127.0.0.1');
+      await once(server, 'listening');
+      const { port } = server.address() as AddressInfo;
+
+      const error = await fetchWithPolicy(`http://127.0.0.1:${port}/start`, {
+        timeoutMs: 5000,
+        maxBytes: 1000,
+      }).catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(FetchError);
+      expect(requested).toEqual(['/start']);
+    },
+  );
 });

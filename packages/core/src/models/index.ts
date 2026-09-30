@@ -5,12 +5,10 @@
  */
 
 export {
-  type ModelWireApi,
   type ModelCapabilities,
   type ModelGenerationConfig,
   type ModelConfig,
   type ModelProvidersConfig,
-  type ProviderProtocolConfig,
   type ResolvedModelConfig,
   type AvailableModel,
   type ModelSwitchMetadata,
@@ -20,11 +18,7 @@ export {
 export {
   ModelRegistry,
   modelRegistryKey,
-  resolveProviderProtocol,
-  resolveModelProtocol,
-  tryResolveModelProtocol,
   validateModelProvidersConfig,
-  resolveModelSelectionAuthType,
 } from './modelRegistry.js';
 
 export {
@@ -33,16 +27,11 @@ export {
   type OnModelChangeCallback,
 } from './modelsConfig.js';
 
-export { VERTEX_ADC_HINT } from './modelConfigErrors.js';
-
 export {
-  AUTH_ENV_MAPPINGS,
   CREDENTIAL_FIELDS,
-  DEFAULT_MODELS,
   MODEL_GENERATION_CONFIG_FIELDS,
+  OPENAI_ENV_MAPPING,
   PROVIDER_SOURCED_FIELDS,
-  QWEN_OAUTH_ALLOWED_MODELS,
-  QWEN_OAUTH_MODELS,
 } from './constants.js';
 
 // Model configuration resolver

@@ -9,6 +9,8 @@ import { vi } from 'vitest';
 import { validateAuthMethod } from './auth.js';
 import * as settings from './settings.js';
 
+const LOCAL_BASE_URL = 'http://127.0.0.1:11434/v1';
+
 vi.mock('./settings.js', () => ({
   loadEnvironment: vi.fn(),
   loadSettings: vi.fn().mockReturnValue({
@@ -23,38 +25,20 @@ describe('validateAuthMethod', () => {
     vi.mocked(settings.loadSettings).mockReturnValue({
       merged: {},
     } as ReturnType<typeof settings.loadSettings>);
+    vi.stubEnv('OPENAI_BASE_URL', LOCAL_BASE_URL);
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
     delete process.env['OPENAI_API_KEY'];
     delete process.env['CUSTOM_API_KEY'];
-    delete process.env['GEMINI_API_KEY'];
-    delete process.env['GEMINI_API_KEY_ALTERED'];
-    delete process.env['ANTHROPIC_API_KEY'];
-    delete process.env['ANTHROPIC_BASE_URL'];
-    delete process.env['GOOGLE_API_KEY'];
-    delete process.env['GOOGLE_API_KEY_VERTEX'];
-    delete process.env['GOOGLE_CLOUD_PROJECT'];
-    delete process.env['IDEALAB_KEY'];
-    delete process.env['TOKEN_PLAN_KEY'];
+    delete process.env['LMSTUDIO_KEY'];
+    delete process.env['OLLAMA_KEY'];
   });
 
   it('should return null for USE_OPENAI with default env key', () => {
     process.env['OPENAI_API_KEY'] = 'fake-key';
     expect(validateAuthMethod(AuthType.USE_OPENAI)).toBeNull();
-  });
-
-  it('validates USE_OPENAI_RESPONSES with the default OpenAI API key', () => {
-    process.env['OPENAI_API_KEY'] = 'fake-key';
-
-    expect(validateAuthMethod(AuthType.USE_OPENAI_RESPONSES)).toBeNull();
-  });
-
-  it('reports the OpenAI API key requirement for USE_OPENAI_RESPONSES', () => {
-    expect(validateAuthMethod(AuthType.USE_OPENAI_RESPONSES)).toBe(
-      "Missing API key for OpenAI-compatible auth. Set settings.security.auth.apiKey, or set the 'OPENAI_API_KEY' environment variable.",
-    );
   });
 
   it('should return an error message for USE_OPENAI if no API key is available', () => {
@@ -91,69 +75,6 @@ describe('validateAuthMethod', () => {
     expect(validateAuthMethod(AuthType.USE_OPENAI)).toBeNull();
   });
 
-  it('uses providerProtocol mappings to find custom provider env keys', () => {
-    vi.mocked(settings.loadSettings).mockReturnValue({
-      merged: {
-        model: { name: 'qwen3' },
-        modelProviders: {
-          idealab: [{ id: 'qwen3', envKey: 'IDEALAB_KEY' }],
-        },
-        providerProtocol: { idealab: 'openai' },
-      },
-    } as unknown as ReturnType<typeof settings.loadSettings>);
-    process.env['IDEALAB_KEY'] = 'idealab-key';
-
-    expect(validateAuthMethod(AuthType.USE_OPENAI)).toBeNull();
-  });
-
-  it('finds the canonical Responses entry during OpenAI preflight', () => {
-    vi.mocked(settings.loadSettings).mockReturnValue({
-      merged: {
-        model: { name: 'gpt-model' },
-        modelProviders: {
-          openai: [
-            { id: 'gpt-model', wireApi: 'responses', envKey: 'CUSTOM_API_KEY' },
-          ],
-        },
-      },
-    } as unknown as ReturnType<typeof settings.loadSettings>);
-    vi.stubEnv('CUSTOM_API_KEY', 'responses-key');
-
-    expect(validateAuthMethod(AuthType.USE_OPENAI)).toBeNull();
-    expect(validateAuthMethod(AuthType.USE_OPENAI_RESPONSES)).toBeNull();
-  });
-
-  it('checks the effective API credential when both API routes share an id and URL', () => {
-    vi.mocked(settings.loadSettings).mockReturnValue({
-      merged: {
-        model: { name: 'gpt-model', baseUrl: 'https://example.test/v1' },
-        modelProviders: {
-          openai: [
-            {
-              id: 'gpt-model',
-              baseUrl: 'https://example.test/v1',
-              wireApi: 'chat-completions',
-              envKey: 'CHAT_KEY',
-            },
-            {
-              id: 'gpt-model',
-              baseUrl: 'https://example.test/v1',
-              wireApi: 'responses',
-              envKey: 'RESPONSES_KEY',
-            },
-          ],
-        },
-      },
-    } as unknown as ReturnType<typeof settings.loadSettings>);
-    vi.stubEnv('CHAT_KEY', 'chat-key');
-    vi.stubEnv('RESPONSES_KEY', '');
-
-    expect(validateAuthMethod(AuthType.USE_OPENAI)).toBeNull();
-    expect(validateAuthMethod(AuthType.USE_OPENAI_RESPONSES)).toContain(
-      "'RESPONSES_KEY'",
-    );
-  });
-
   it('disambiguates by settings.model.baseUrl when providers share a model id', () => {
     // Two providers with the same id; the persisted baseUrl selects the second.
     // Only the second provider's env key is set, so validation passes only if
@@ -161,26 +82,26 @@ describe('validateAuthMethod', () => {
     vi.mocked(settings.loadSettings).mockReturnValue({
       merged: {
         model: {
-          name: 'qwen3.7-max',
-          baseUrl: 'https://idealab.example.com/v1',
+          name: 'qwen3-coder',
+          baseUrl: 'http://localhost:1234/v1',
         },
         modelProviders: {
           openai: [
             {
-              id: 'qwen3.7-max',
-              baseUrl: 'https://token-plan.example.com/v1',
-              envKey: 'TOKEN_PLAN_KEY',
+              id: 'qwen3-coder',
+              baseUrl: 'http://127.0.0.1:11434/v1',
+              envKey: 'OLLAMA_KEY',
             },
             {
-              id: 'qwen3.7-max',
-              baseUrl: 'https://idealab.example.com/v1',
-              envKey: 'IDEALAB_KEY',
+              id: 'qwen3-coder',
+              baseUrl: 'http://localhost:1234/v1',
+              envKey: 'LMSTUDIO_KEY',
             },
           ],
         },
       },
     } as unknown as ReturnType<typeof settings.loadSettings>);
-    process.env['IDEALAB_KEY'] = 'idealab-key';
+    process.env['LMSTUDIO_KEY'] = 'lmstudio-key';
 
     expect(validateAuthMethod(AuthType.USE_OPENAI)).toBeNull();
   });
@@ -189,30 +110,30 @@ describe('validateAuthMethod', () => {
     vi.mocked(settings.loadSettings).mockReturnValue({
       merged: {
         model: {
-          name: 'qwen3.7-max',
-          baseUrl: 'https://idealab.example.com/v1',
+          name: 'qwen3-coder',
+          baseUrl: 'http://localhost:1234/v1',
         },
         modelProviders: {
           openai: [
             {
-              id: 'qwen3.7-max',
-              baseUrl: 'https://token-plan.example.com/v1',
-              envKey: 'TOKEN_PLAN_KEY',
+              id: 'qwen3-coder',
+              baseUrl: 'http://127.0.0.1:11434/v1',
+              envKey: 'OLLAMA_KEY',
             },
             {
-              id: 'qwen3.7-max',
-              baseUrl: 'https://idealab.example.com/v1',
-              envKey: 'IDEALAB_KEY',
+              id: 'qwen3-coder',
+              baseUrl: 'http://localhost:1234/v1',
+              envKey: 'LMSTUDIO_KEY',
             },
           ],
         },
       },
     } as unknown as ReturnType<typeof settings.loadSettings>);
 
-    // No env keys set → error must name the selected (IdeaLab) provider's key.
+    // No env keys set → error must name the selected (LM Studio) provider's key.
     const result = validateAuthMethod(AuthType.USE_OPENAI);
-    expect(result).toContain('IDEALAB_KEY');
-    expect(result).not.toContain('TOKEN_PLAN_KEY');
+    expect(result).toContain('LMSTUDIO_KEY');
+    expect(result).not.toContain('OLLAMA_KEY');
   });
 
   it('should return error with custom envKey hint when modelProviders envKey is set but env var is missing', () => {
@@ -227,156 +148,6 @@ describe('validateAuthMethod', () => {
 
     const result = validateAuthMethod(AuthType.USE_OPENAI);
     expect(result).toContain('CUSTOM_API_KEY');
-  });
-
-  it('should return null for USE_GEMINI with custom envKey', () => {
-    vi.mocked(settings.loadSettings).mockReturnValue({
-      merged: {
-        model: { name: 'gemini-1.5-flash' },
-        modelProviders: {
-          gemini: [
-            { id: 'gemini-1.5-flash', envKey: 'GEMINI_API_KEY_ALTERED' },
-          ],
-        },
-      },
-    } as unknown as ReturnType<typeof settings.loadSettings>);
-    process.env['GEMINI_API_KEY_ALTERED'] = 'altered-key';
-
-    expect(validateAuthMethod(AuthType.USE_GEMINI)).toBeNull();
-  });
-
-  it('should return error with custom envKey for USE_GEMINI when env var is missing', () => {
-    vi.mocked(settings.loadSettings).mockReturnValue({
-      merged: {
-        model: { name: 'gemini-1.5-flash' },
-        modelProviders: {
-          gemini: [
-            { id: 'gemini-1.5-flash', envKey: 'GEMINI_API_KEY_ALTERED' },
-          ],
-        },
-      },
-    } as unknown as ReturnType<typeof settings.loadSettings>);
-
-    const result = validateAuthMethod(AuthType.USE_GEMINI);
-    expect(result).toContain('GEMINI_API_KEY_ALTERED');
-  });
-
-  it('should return an error for QWEN_OAUTH (free tier discontinued)', () => {
-    const result = validateAuthMethod(AuthType.QWEN_OAUTH);
-    expect(result).toContain('discontinued on 2026-04-15');
-  });
-
-  it('should return an error message for an invalid auth method', () => {
-    expect(validateAuthMethod('invalid-method')).toBe(
-      'Invalid auth method selected.',
-    );
-  });
-
-  it('should return null for USE_ANTHROPIC with custom envKey and baseUrl', () => {
-    vi.mocked(settings.loadSettings).mockReturnValue({
-      merged: {
-        model: { name: 'claude-3' },
-        modelProviders: {
-          anthropic: [
-            {
-              id: 'claude-3',
-              envKey: 'CUSTOM_ANTHROPIC_KEY',
-              baseUrl: 'https://api.anthropic.com',
-            },
-          ],
-        },
-      },
-    } as unknown as ReturnType<typeof settings.loadSettings>);
-    process.env['CUSTOM_ANTHROPIC_KEY'] = 'custom-anthropic-key';
-
-    expect(validateAuthMethod(AuthType.USE_ANTHROPIC)).toBeNull();
-  });
-
-  it('should return error for USE_ANTHROPIC when baseUrl is missing', () => {
-    vi.mocked(settings.loadSettings).mockReturnValue({
-      merged: {
-        model: { name: 'claude-3' },
-        modelProviders: {
-          anthropic: [{ id: 'claude-3', envKey: 'CUSTOM_ANTHROPIC_KEY' }],
-        },
-      },
-    } as unknown as ReturnType<typeof settings.loadSettings>);
-    process.env['CUSTOM_ANTHROPIC_KEY'] = 'custom-key';
-
-    const result = validateAuthMethod(AuthType.USE_ANTHROPIC);
-    expect(result).toContain('modelProviders[].baseUrl');
-  });
-
-  it('should return null for USE_VERTEX_AI with custom envKey', () => {
-    vi.mocked(settings.loadSettings).mockReturnValue({
-      merged: {
-        model: { name: 'vertex-model' },
-        modelProviders: {
-          'vertex-ai': [
-            { id: 'vertex-model', envKey: 'GOOGLE_API_KEY_VERTEX' },
-          ],
-        },
-      },
-    } as unknown as ReturnType<typeof settings.loadSettings>);
-    process.env['GOOGLE_API_KEY_VERTEX'] = 'vertex-key';
-
-    expect(validateAuthMethod(AuthType.USE_VERTEX_AI)).toBeNull();
-  });
-
-  it('should return null for USE_VERTEX_AI with a project and no API key', () => {
-    process.env['GOOGLE_CLOUD_PROJECT'] = 'my-project';
-
-    expect(validateAuthMethod(AuthType.USE_VERTEX_AI)).toBeNull();
-  });
-
-  it('should return null for a keyless USE_VERTEX_AI modelProviders entry when a project is set', () => {
-    vi.mocked(settings.loadSettings).mockReturnValue({
-      merged: {
-        env: { GOOGLE_CLOUD_PROJECT: 'my-project' },
-        model: { name: 'vertex-model' },
-        modelProviders: {
-          'vertex-ai': [{ id: 'vertex-model' }],
-        },
-      },
-    } as unknown as ReturnType<typeof settings.loadSettings>);
-
-    expect(validateAuthMethod(AuthType.USE_VERTEX_AI)).toBeNull();
-  });
-
-  it('should return an error for USE_VERTEX_AI with neither an API key nor a project', () => {
-    const result = validateAuthMethod(AuthType.USE_VERTEX_AI);
-
-    expect(result).toContain('GOOGLE_API_KEY');
-    // The first error a Vertex user hits must name the keyless alternative,
-    // otherwise the advice is "set a key", which forces Express mode.
-    expect(result).toContain('GOOGLE_CLOUD_PROJECT');
-  });
-
-  it('should keep requiring the declared envKey for USE_VERTEX_AI even when a project is set', () => {
-    vi.mocked(settings.loadSettings).mockReturnValue({
-      merged: {
-        env: { GOOGLE_CLOUD_PROJECT: 'my-project' },
-        model: { name: 'vertex-model' },
-        modelProviders: {
-          'vertex-ai': [{ id: 'vertex-model', envKey: 'MY_VERTEX_KEY' }],
-        },
-      },
-    } as unknown as ReturnType<typeof settings.loadSettings>);
-
-    const result = validateAuthMethod(AuthType.USE_VERTEX_AI);
-
-    expect(result).toContain('MY_VERTEX_KEY');
-    // The entry never takes the ADC path, so pointing at a project would be
-    // advice that cannot work.
-    expect(result).not.toContain('GOOGLE_CLOUD_PROJECT');
-  });
-
-  it('should not treat a whitespace-only project as configured', () => {
-    process.env['GOOGLE_CLOUD_PROJECT'] = '   ';
-
-    expect(validateAuthMethod(AuthType.USE_VERTEX_AI)).toContain(
-      'GOOGLE_API_KEY',
-    );
   });
 
   it('should use config.getModelsConfig().getModel() when Config is provided', () => {
@@ -397,7 +168,9 @@ describe('validateAuthMethod', () => {
     const mockConfig = {
       getModelsConfig: vi.fn().mockReturnValue({
         getModel: vi.fn().mockReturnValue('cli-model'),
-        getGenerationConfig: vi.fn().mockReturnValue({}),
+        getGenerationConfig: vi
+          .fn()
+          .mockReturnValue({ baseUrl: LOCAL_BASE_URL }),
       }),
     } as unknown as import('@qwen-code/qwen-code-core').Config;
 
@@ -431,7 +204,9 @@ describe('validateAuthMethod', () => {
     const mockConfig = {
       getModelsConfig: vi.fn().mockReturnValue({
         getModel: vi.fn().mockReturnValue('cli-model'),
-        getGenerationConfig: vi.fn().mockReturnValue({}),
+        getGenerationConfig: vi
+          .fn()
+          .mockReturnValue({ baseUrl: LOCAL_BASE_URL }),
       }),
     } as unknown as import('@qwen-code/qwen-code-core').Config;
 
@@ -453,9 +228,10 @@ describe('validateAuthMethod', () => {
     const mockConfig = {
       getModelsConfig: vi.fn().mockReturnValue({
         getModel: vi.fn().mockReturnValue('gpt-4'),
-        getGenerationConfig: vi
-          .fn()
-          .mockReturnValue({ apiKey: 'cli-provided-key' }),
+        getGenerationConfig: vi.fn().mockReturnValue({
+          apiKey: 'cli-provided-key',
+          baseUrl: LOCAL_BASE_URL,
+        }),
       }),
     } as unknown as import('@qwen-code/qwen-code-core').Config;
 
@@ -481,9 +257,10 @@ describe('validateAuthMethod', () => {
     const mockConfig = {
       getModelsConfig: vi.fn().mockReturnValue({
         getModel: vi.fn().mockReturnValue('custom-model'),
-        getGenerationConfig: vi
-          .fn()
-          .mockReturnValue({ apiKey: 'cli-provided-key' }),
+        getGenerationConfig: vi.fn().mockReturnValue({
+          apiKey: 'cli-provided-key',
+          baseUrl: LOCAL_BASE_URL,
+        }),
       }),
     } as unknown as import('@qwen-code/qwen-code-core').Config;
 
@@ -506,9 +283,10 @@ describe('validateAuthMethod', () => {
     const mockConfig = {
       getModelsConfig: vi.fn().mockReturnValue({
         getModel: vi.fn().mockReturnValue('custom-model'),
-        getGenerationConfig: vi
-          .fn()
-          .mockReturnValue({ apiKey: 'settings-fallback-key' }),
+        getGenerationConfig: vi.fn().mockReturnValue({
+          apiKey: 'settings-fallback-key',
+          baseUrl: LOCAL_BASE_URL,
+        }),
       }),
     } as unknown as import('@qwen-code/qwen-code-core').Config;
 
@@ -530,5 +308,112 @@ describe('validateAuthMethod', () => {
 
     const result = validateAuthMethod(AuthType.USE_OPENAI);
     expect(result).toContain('CUSTOM_API_KEY');
+  });
+
+  it.each([
+    'qwen-oauth',
+    'gemini',
+    'vertex-ai',
+    'anthropic',
+    'openai-responses',
+    'invalid-method',
+  ])('rejects the unsupported %s auth type', (authType) => {
+    process.env['OPENAI_API_KEY'] = 'fake-key';
+
+    expect(validateAuthMethod(authType)).toBe(
+      `Auth type "${authType}" is not supported. Only a local OpenAI-compatible server is supported: run /auth, or set security.auth.selectedType to "openai".`,
+    );
+  });
+
+  describe('base URL', () => {
+    beforeEach(() => {
+      process.env['OPENAI_API_KEY'] = 'fake-key';
+    });
+
+    it.each(['http://127.0.0.1:11434/v1', 'http://localhost:1234/v1'])(
+      'accepts the loopback base URL %s',
+      (baseUrl) => {
+        vi.stubEnv('OPENAI_BASE_URL', baseUrl);
+
+        expect(validateAuthMethod(AuthType.USE_OPENAI)).toBeNull();
+      },
+    );
+
+    it.each(['https://api.openai.com/v1', 'http://192.168.1.5:8000/v1'])(
+      'rejects OPENAI_BASE_URL %s',
+      (baseUrl) => {
+        vi.stubEnv('OPENAI_BASE_URL', baseUrl);
+
+        expect(validateAuthMethod(AuthType.USE_OPENAI)).toBe(
+          `Model server base URL "${baseUrl}" is not allowed: the host must be 127.0.0.1, ::1 or localhost.`,
+        );
+      },
+    );
+
+    it.each(['https://api.openai.com/v1', 'http://192.168.1.5:8000/v1'])(
+      'rejects settings.security.auth.baseUrl %s',
+      (baseUrl) => {
+        vi.stubEnv('OPENAI_BASE_URL', '');
+        vi.mocked(settings.loadSettings).mockReturnValue({
+          merged: { security: { auth: { baseUrl } } },
+        } as unknown as ReturnType<typeof settings.loadSettings>);
+
+        expect(validateAuthMethod(AuthType.USE_OPENAI)).toContain(
+          `"${baseUrl}" is not allowed`,
+        );
+      },
+    );
+
+    it('rejects a non-loopback base URL on the selected modelProviders entry', () => {
+      vi.mocked(settings.loadSettings).mockReturnValue({
+        merged: {
+          model: { name: 'gpt-4o' },
+          modelProviders: {
+            openai: [{ id: 'gpt-4o', baseUrl: 'https://api.openai.com/v1' }],
+          },
+        },
+      } as unknown as ReturnType<typeof settings.loadSettings>);
+
+      expect(validateAuthMethod(AuthType.USE_OPENAI)).toContain(
+        '"https://api.openai.com/v1" is not allowed',
+      );
+    });
+
+    it('rejects a non-loopback base URL resolved into the live Config', () => {
+      const mockConfig = {
+        getModelsConfig: vi.fn().mockReturnValue({
+          getModel: vi.fn().mockReturnValue('gpt-4o'),
+          getGenerationConfig: vi.fn().mockReturnValue({
+            apiKey: 'key',
+            baseUrl: 'https://api.openai.com/v1',
+          }),
+        }),
+      } as unknown as import('@qwen-code/qwen-code-core').Config;
+
+      expect(validateAuthMethod(AuthType.USE_OPENAI, mockConfig)).toContain(
+        '"https://api.openai.com/v1" is not allowed',
+      );
+    });
+
+    it('never defaults the base URL when none is configured', () => {
+      vi.stubEnv('OPENAI_BASE_URL', '');
+
+      expect(validateAuthMethod(AuthType.USE_OPENAI)).toBe(
+        'No model server base URL is configured. Set the base URL of a local OpenAI-compatible server, for example http://127.0.0.1:11434/v1.',
+      );
+    });
+
+    it('reports a missing base URL even when the live Config has an API key', () => {
+      const mockConfig = {
+        getModelsConfig: vi.fn().mockReturnValue({
+          getModel: vi.fn().mockReturnValue('local-model'),
+          getGenerationConfig: vi.fn().mockReturnValue({ apiKey: 'key' }),
+        }),
+      } as unknown as import('@qwen-code/qwen-code-core').Config;
+
+      expect(validateAuthMethod(AuthType.USE_OPENAI, mockConfig)).toContain(
+        'No model server base URL is configured',
+      );
+    });
   });
 });

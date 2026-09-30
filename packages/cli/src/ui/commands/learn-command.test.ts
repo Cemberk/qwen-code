@@ -5,7 +5,7 @@
  */
 
 import { beforeEach, describe, it, expect, vi } from 'vitest';
-import { AuthType, expandHomeDir } from '@qwen-code/qwen-code-core';
+import { expandHomeDir } from '@qwen-code/qwen-code-core';
 import { learnCommand } from './learn-command.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import type { SubmitPromptActionReturn } from './types.js';
@@ -26,9 +26,6 @@ function createVideoCapableContext() {
       config: {
         getProjectRoot: () => '/tmp/test-project',
         getEffectiveInputModalities: () => ({ video: true }),
-        getContentGeneratorConfig: () => ({
-          authType: AuthType.USE_OPENAI,
-        }),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any,
     },
@@ -230,16 +227,12 @@ describe('learnCommand', () => {
     );
   });
 
-  it.each([
-    ['a text-only model', AuthType.USE_OPENAI, false],
-    ['a non-OpenAI-compatible provider', AuthType.USE_ANTHROPIC, true],
-  ])('rejects native video input for %s', async (_label, authType, video) => {
+  it('rejects native video input for a text-only model', async () => {
     const ctx = createMockCommandContext({
       services: {
         config: {
           getProjectRoot: () => '/tmp/test-project',
-          getEffectiveInputModalities: () => ({ video }),
-          getContentGeneratorConfig: () => ({ authType }),
+          getEffectiveInputModalities: () => ({ video: false }),
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any,
       },

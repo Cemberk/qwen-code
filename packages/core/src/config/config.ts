@@ -6,7 +6,6 @@
 
 import type { SessionSourceService } from '../services/session-sources.js';
 
-import { resolveProviderProtocol } from '../models/modelRegistry.js';
 import {
   captureReasoningSnapshot,
   validateReasoningCapabilities,
@@ -51,7 +50,7 @@ import { LlmClient } from '../core/client.js';
 import { resolveInteractionMode } from '../core/prompts.js';
 import type { OutputStyleDefinition } from '../core/output-styles.js';
 import {
-  AuthType,
+  type AuthType,
   createContentGenerator,
   resetPreloadedContentGenerator,
   resolveContentGeneratorConfigWithSources,
@@ -63,11 +62,6 @@ import type {
   ExecutionEnvironmentFactory,
 } from '../services/execution-environment.js';
 import { ExecutionCleanupError } from '../services/execution-environment.js';
-import { isTieredEffortWireModel } from '../core/modalityDefaults.js';
-import {
-  DashScopeOpenAICompatibleProvider,
-  selectDashScopeThinkingKnob,
-} from '../core/openaiContentGenerator/provider/dashscope.js';
 
 // Services
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
@@ -235,8 +229,6 @@ import { shouldDefaultToNodePty } from '../utils/shell-utils.js';
 import { WorkspaceContext } from '../utils/workspaceContext.js';
 import { type ToolName } from '../tools/tool-utils.js';
 import { FatalConfigError, getErrorMessage } from '../utils/errors.js';
-import { normalizeProxyUrl } from '../utils/proxyUtils.js';
-import { loadUndici, redactProxyError } from '../utils/runtimeFetchOptions.js';
 
 // Local config modules
 import type { FileFilteringOptions } from '../utils/file-filtering-options.js';
@@ -246,7 +238,6 @@ import {
 } from '../utils/file-filtering-options.js';
 import { DEFAULT_QWEN_CUSTOM_IGNORE_FILE_NAMES } from '../utils/qwenIgnoreParser.js';
 import { DEFAULT_TOOL_RESULTS_TOTAL_CHARS_THRESHOLD } from './clearContextDefaults.js';
-import { DEFAULT_QWEN_EMBEDDING_MODEL } from './models.js';
 import type {
   MCPServerConfig,
   McpServerUnavailableReason,
@@ -373,7 +364,6 @@ const DEFAULT_TOOL_SEARCH_THRESHOLD = 0;
 import {
   ModelsConfig,
   type ModelProvidersConfig,
-  type ProviderProtocolConfig,
   type AvailableModel,
   type ResolvedModelConfig,
   type RuntimeModelSnapshot,
@@ -900,7 +890,6 @@ export interface ConfigParameters {
    * prove it, before hooks, MCP or tools start.
    */
   sessionExecutionEngine?: SessionExecutionEngine;
-  embeddingModel?: string;
   sandbox?: SandboxConfig;
   targetDir: string;
   /**
@@ -1067,7 +1056,6 @@ export interface ConfigParameters {
   fileCheckpointingEnabled?: boolean;
   /** Directory where approved plan files are stored. Must resolve inside targetDir. */
   plansDirectory?: string;
-  proxy?: string;
   cwd: string;
   fileDiscoveryService?: FileDiscoveryService;
   includeDirectories?: string[];
@@ -1281,8 +1269,6 @@ export interface ConfigParameters {
   inputFile?: string;
   /** Model providers configuration grouped by provider id */
   modelProvidersConfig?: ModelProvidersConfig;
-  /** Maps custom provider ids to their SDK protocol (AuthType) */
-  providerProtocolConfig?: ProviderProtocolConfig;
   /** Agent and multi-agent collaboration settings */
   agents?: AgentsCollabSettings;
   /** General-purpose worktree settings (Phase D-2). */
@@ -2091,15 +2077,6 @@ export type CurrentSessionScheduledTaskCreator = (
   req: CurrentSessionScheduledTaskCreateRequest,
 ) => Promise<CurrentSessionScheduledTaskCreateResult>;
 
-/**
- * A higher-priority static DashScope thinking knob that shadows the global
- * reasoning-effort tier on the wire (see getReasoningEffortOverride).
- */
-export type ReasoningEffortOverride = {
-  source: 'extra_body' | 'samplingParams';
-  field: 'enable_thinking' | 'reasoning_effort' | 'thinking_budget';
-};
-
 class SessionWriterShutdownError extends SessionWriterUnavailableError {}
 
 function containsErrorByIdentity(error: unknown, candidate: unknown): boolean {
@@ -2521,11 +2498,9 @@ export class Config {
   private contentGenerator!: ContentGenerator;
   private readonly initialAuthType?: AuthType;
   private initialResolvedAuthType?: AuthType;
-  private readonly embeddingModel: string;
 
   private modelsConfig!: ModelsConfig;
   private readonly modelProvidersConfig?: ModelProvidersConfig;
-  private readonly providerProtocolConfig?: ProviderProtocolConfig;
   private readonly sandbox: SandboxConfig | undefined;
   private targetDir: string;
   private workspaceContext: WorkspaceContext;
@@ -2711,7 +2686,6 @@ export class Config {
   // lookup so every agent contributes to the same session budget.
   private readonly toolResultBudget = { bytesWritten: 0 };
   private fileHistoryService: FileHistoryService | undefined;
-  private readonly proxy: string | undefined;
   private cwd: string;
   private readonly explicitIncludeDirectories: string[];
   private outputLanguageFilePath?: string;
@@ -2829,7 +2803,6 @@ export class Config {
   private shutdownRequested = false;
   private resourceShutdownAfterInitializationScheduled = false;
   private resourceShutdownPromise?: Promise<void>;
-  private proxyDispatcherReady?: Promise<void>;
   storage: Storage;
   private runtimeStatusWrite: Promise<void> = Promise.resolve();
   private sessionRegistryWrite: Promise<void> = Promise.resolve();
@@ -2939,7 +2912,6 @@ export class Config {
       setDebugLogSession(this);
     }
     this.debugLogger = createDebugLogger();
-    this.embeddingModel = params.embeddingModel ?? DEFAULT_QWEN_EMBEDDING_MODEL;
     this.fileSystemService = new StandardFileSystemService();
     this.sandbox = params.sandbox;
     this.targetDir = path.resolve(params.targetDir);
@@ -3063,7 +3035,6 @@ export class Config {
     this.fileCheckpointingEnabled =
       params.fileCheckpointingEnabled ??
       (!params.sdkMode && (params.interactive ?? false));
-    this.proxy = params.proxy;
     this.cwd = params.cwd ?? process.cwd();
     this.fileDiscoveryService = params.fileDiscoveryService ?? null;
     this.maxSessionTurns = validateMaxSessionTurns(params.maxSessionTurns);
@@ -3153,7 +3124,6 @@ export class Config {
     this.folderTrustFeature = params.folderTrustFeature ?? false;
     this.folderTrust = params.folderTrust ?? false;
     this.modelProvidersConfig = params.modelProvidersConfig;
-    this.providerProtocolConfig = params.providerProtocolConfig;
     this.cliVersion = params.cliVersion;
 
     this.chatRecordingEnabled = params.chatRecording ?? true;
@@ -3291,7 +3261,6 @@ export class Config {
     this.modelsConfig = new ModelsConfig({
       initialAuthType: this.initialAuthType,
       modelProvidersConfig: this.modelProvidersConfig,
-      providerProtocolConfig: this.providerProtocolConfig,
       generationConfig: {
         model: params.model,
         ...(params.generationConfig || {}),
@@ -3331,45 +3300,6 @@ export class Config {
       });
     }
 
-    const proxyUrl = this.getProxy();
-    if (proxyUrl) {
-      // Use EnvHttpProxyAgent (not a bare ProxyAgent) so `NO_PROXY` is
-      // honored. A bare ProxyAgent tunnels EVERY request — including local
-      // MCP servers reached over `http://localhost:...` — through the proxy,
-      // which typically can't route back to localhost and fails with an
-      // opaque `fetch failed`. EnvHttpProxyAgent connects hosts listed in
-      // `NO_PROXY` (e.g. `localhost,127.0.0.1`) directly while still proxying
-      // everything else (LLM API calls, remote MCP). The explicit
-      // `--proxy` / `settings.proxy` value (resolved by `getProxy()`)
-      // overrides env `http(s)_proxy`; `NO_PROXY` continues to come from the
-      // environment. See issue #3696 (local MCP + corporate proxy).
-      //
-      // undici loads behind a dynamic import to keep it out of the eager
-      // startup closure (issue #7264); initialize() awaits this promise so
-      // the dispatcher is installed before any network activity.
-      this.proxyDispatcherReady = loadUndici()
-        .then(({ EnvHttpProxyAgent, setGlobalDispatcher }) => {
-          setGlobalDispatcher(
-            new EnvHttpProxyAgent({
-              httpProxy: proxyUrl,
-              httpsProxy: proxyUrl,
-            }),
-          );
-        })
-        .catch((error) => {
-          // Redact before logging: the error can embed the proxy URL with
-          // credentials. Rethrow so initialize() fails loudly, matching the
-          // old synchronous constructor behavior.
-          this.debugLogger.error(
-            'Failed to install proxy dispatcher:',
-            redactProxyError(error),
-          );
-          throw error;
-        });
-      // Swallow an early rejection so it cannot become an unhandledRejection
-      // before initialize() awaits (and surfaces) the stored promise.
-      this.proxyDispatcherReady.catch(() => {});
-    }
     this.llmClient = new LlmClient(this);
     this.chatRecordingService = this.chatRecordingEnabled
       ? this.createChatRecordingService()
@@ -3611,7 +3541,6 @@ export class Config {
     options?: ConfigInitializeOptions,
   ): Promise<void> {
     this.debugLogger.info('Config initialization started');
-    await this.proxyDispatcherReady;
     options?.signal?.throwIfAborted();
     if (options?.skipFileCheckpointing === true || this.shellExecutionSandbox) {
       this.fileCheckpointingEnabled = false;
@@ -4848,17 +4777,11 @@ export class Config {
    * Should be called before refreshAuth when settings.json has been updated.
    *
    * @param modelProvidersConfig - The updated model providers configuration
-   * @param providerProtocolConfig - Updated provider->protocol map; `undefined`
-   *   preserves the existing map (see {@link ModelRegistry.reloadModels}).
    */
   reloadModelProvidersConfig(
     modelProvidersConfig?: ModelProvidersConfig,
-    providerProtocolConfig?: ProviderProtocolConfig,
   ): void {
-    this.modelsConfig.reloadModelProvidersConfig(
-      modelProvidersConfig,
-      providerProtocolConfig,
-    );
+    this.modelsConfig.reloadModelProvidersConfig(modelProvidersConfig);
     this.captureLatestReasoning();
     this.baseLlmClient?.clearPerModelGeneratorCache();
   }
@@ -4871,7 +4794,6 @@ export class Config {
 
   stageReasoningOverrides(
     providers: ModelProvidersConfig | undefined,
-    protocols: ProviderProtocolConfig = {},
   ): string | undefined {
     const previous =
       this.latestReasoningSnapshot ?? this.getReasoningSnapshot();
@@ -4882,18 +4804,11 @@ export class Config {
           row.authType === model.authType &&
           row.registryBaseUrl === model.registryBaseUrl,
       );
-      const configured = Object.entries(providers ?? {})
-        .flatMap(([provider, entries]) =>
-          model.authType !== AuthType.QWEN_OAUTH &&
-          resolveProviderProtocol(provider, protocols) === model.authType &&
-          Array.isArray(entries)
-            ? entries
-            : [],
-        )
-        .find(
-          (entry) =>
-            entry?.id === model.id && entry.baseUrl === model.registryBaseUrl,
-        );
+      const entries = providers?.[model.authType];
+      const configured = (Array.isArray(entries) ? entries : []).find(
+        (entry) =>
+          entry?.id === model.id && entry.baseUrl === model.registryBaseUrl,
+      );
       return {
         ...model,
         capabilities: {
@@ -4915,12 +4830,10 @@ export class Config {
     try {
       const next = captureReasoningSnapshot(models);
       for (const row of next) {
-        if (row.authType !== AuthType.QWEN_OAUTH || row.reasoning?.profile) {
-          validateReasoningCapabilities(
-            { model: row.id, authType: row.authType, baseUrl: row.baseUrl },
-            row.reasoning,
-          );
-        }
+        validateReasoningCapabilities(
+          { model: row.id, authType: row.authType, baseUrl: row.baseUrl },
+          row.reasoning,
+        );
       }
       const generation = this.getContentGeneratorConfig();
       if (generation)
@@ -4968,10 +4881,6 @@ export class Config {
     return this.modelsConfig.getModelProvidersConfig();
   }
 
-  getProviderProtocolConfig(): ProviderProtocolConfig {
-    return this.modelsConfig.getProviderProtocolConfig();
-  }
-
   syncModelSelection(
     authType: AuthType,
     modelId: string,
@@ -4984,7 +4893,7 @@ export class Config {
   /**
    * Refresh authentication and rebuild ContentGenerator.
    */
-  async refreshAuth(authMethod: AuthType, isInitialAuth?: boolean) {
+  async refreshAuth(authMethod: AuthType) {
     if (!this.contentGenerator && authMethod === this.initialAuthType) {
       authMethod = this.initialResolvedAuthType ?? authMethod;
     }
@@ -5006,10 +4915,6 @@ export class Config {
     const modelId = this.modelsConfig.getModel();
     this.modelsConfig.syncAfterAuthRefresh(authMethod, modelId);
 
-    // Check and consume cached credentials flag
-    const requireCached =
-      this.modelsConfig.consumeRequireCachedCredentialsFlag();
-
     const { config, sources } = resolveContentGeneratorConfigWithSources(
       this,
       authMethod,
@@ -5029,7 +4934,6 @@ export class Config {
     this.contentGenerator = await createContentGenerator(
       newContentGeneratorConfig,
       this,
-      requireCached ? true : isInitialAuth,
     );
     // Only assign to instance properties after successful initialization
     this.contentGeneratorConfig = newContentGeneratorConfig;
@@ -5738,11 +5642,7 @@ export class Config {
       : this.getAllConfiguredModels();
     if (
       !available.some(
-        (model) =>
-          model.id === selector.modelId &&
-          !model.voiceOnly &&
-          !model.imageOnly &&
-          !model.visionOnly,
+        (model) => model.id === selector.modelId && !model.visionOnly,
       )
     ) {
       return undefined;
@@ -5769,11 +5669,7 @@ export class Config {
         return undefined;
       }
 
-      return resolveModelId(this.fastModel, {
-        currentAuthType,
-        getAvailableModels: () =>
-          this.getAllConfiguredModels([currentAuthType]),
-      });
+      return resolveModelId(this.fastModel, { currentAuthType });
     } catch {
       return undefined;
     }
@@ -5846,12 +5742,7 @@ export class Config {
         : this.getAllConfiguredModels();
       if (
         !available.some(
-          (m) =>
-            m.id === selector.modelId &&
-            !m.fastOnly &&
-            !m.voiceOnly &&
-            !m.imageOnly &&
-            !m.visionOnly,
+          (m) => m.id === selector.modelId && !m.fastOnly && !m.visionOnly,
         )
       ) {
         return undefined;
@@ -5879,11 +5770,7 @@ export class Config {
         return undefined;
       }
 
-      return resolveModelId(this.compactionModel, {
-        currentAuthType,
-        getAvailableModels: () =>
-          this.getAllConfiguredModels([currentAuthType]),
-      });
+      return resolveModelId(this.compactionModel, { currentAuthType });
     } catch {
       return undefined;
     }
@@ -5919,65 +5806,6 @@ export class Config {
       return undefined;
     }
     return reasoning.effort;
-  }
-
-  /**
-   * Return a higher-priority static DashScope knob that shadows the current
-   * global effort on qwen3.8-max, so interactive callers can report the
-   * effective outcome instead of confirming a tier that will not reach the
-   * wire. The provider resolves extra_body before samplingParams before the
-   * unified reasoning setting; same-layer explicit effort still wins budget.
-   */
-  getReasoningEffortOverride(): ReasoningEffortOverride | undefined {
-    const cfg = this.getContentGeneratorConfig();
-    if (!cfg || !DashScopeOpenAICompatibleProvider.isDashScopeProvider(cfg)) {
-      return undefined;
-    }
-
-    const configuredReasoning = resolveReasoningForModel(this, cfg);
-    const tieredModel = isTieredEffortWireModel(cfg.model, configuredReasoning);
-    if (!tieredModel) return undefined;
-
-    const currentEffort = this.getReasoningEffort();
-    const selected = selectDashScopeThinkingKnob(
-      cfg.model,
-      cfg.extra_body,
-      cfg.samplingParams,
-      currentEffort,
-      tieredModel,
-    );
-    if (
-      !selected ||
-      selected.source === 'reasoning' ||
-      (selected.field === 'reasoning_effort' &&
-        selected.value === currentEffort)
-    ) {
-      return undefined;
-    }
-    if (selected.field === 'enable_thinking' && selected.value === true) {
-      // An on-switch never blocks the tier — the wire drops the switch and
-      // ships it — so only a request-level effort override can still shadow
-      // the current tier from under it.
-      if (selected.source !== 'extra_body') {
-        return undefined;
-      }
-      const below = selectDashScopeThinkingKnob(
-        cfg.model,
-        undefined,
-        cfg.samplingParams,
-        currentEffort,
-        tieredModel,
-      );
-      if (
-        below?.source === 'samplingParams' &&
-        below.field === 'reasoning_effort' &&
-        below.value !== currentEffort
-      ) {
-        return { source: below.source, field: below.field };
-      }
-      return undefined;
-    }
-    return { source: selected.source, field: selected.field };
   }
 
   /**
@@ -6081,8 +5909,6 @@ export class Config {
         (!selector.authType || m.authType === selector.authType) &&
         (!parsedSetting.baseUrl || m.baseUrl === parsedSetting.baseUrl) &&
         !m.fastOnly &&
-        !m.voiceOnly &&
-        !m.imageOnly &&
         !this.isCurrentPrimaryModel(m),
     );
     if (routeMatches.length > 1) {
@@ -6161,10 +5987,7 @@ export class Config {
    * Handle model change from ModelsConfig.
    * This updates the content generator config with the new model settings.
    */
-  private async handleModelChange(
-    authType: AuthType,
-    requiresRefresh: boolean,
-  ): Promise<void> {
+  private async handleModelChange(authType: AuthType): Promise<void> {
     this.initialResolvedAuthType = undefined;
     if (!this.contentGeneratorConfig) {
       return;
@@ -6180,105 +6003,6 @@ export class Config {
     // Keep full history (including thought parts) on model switch.
     // Some OpenAI-compatible reasoning models (e.g. DeepSeek) require
     // reasoning_content to be preserved across turns.
-
-    // Hot update path: only supported for qwen-oauth.
-    // For other auth types we always refresh to recreate the ContentGenerator.
-    //
-    // Rationale:
-    // - Non-qwen providers may need to re-validate credentials / baseUrl / envKey.
-    // - ModelsConfig.applyResolvedModelDefaults can clear or change credentials sources.
-    // - Refresh keeps runtime behavior consistent and centralized.
-    if (authType === AuthType.QWEN_OAUTH && !requiresRefresh) {
-      const { config, sources } = resolveContentGeneratorConfigWithSources(
-        this,
-        authType,
-        this.modelsConfig.getGenerationConfig(),
-        this.modelsConfig.getGenerationConfigSources(),
-        {
-          strictModelProvider:
-            this.modelsConfig.isStrictModelProviderSelection(),
-        },
-      );
-
-      // Hot-update fields (qwen-oauth models share the same auth + client).
-      // Deliberately does NOT copy `reasoning`: it is a global, model-independent
-      // preference captured in `priorReasoningEffort` above and re-applied via
-      // setReasoningEffort() below. Do not add `reasoning` here — that would
-      // overwrite the live tier with the new model's default and make the
-      // restore a no-op.
-      this.contentGeneratorConfig.reasoningRouteBaseUrl =
-        config.reasoningRouteBaseUrl;
-      this.contentGeneratorConfig.model = config.model;
-      this.contentGeneratorConfig.samplingParams = config.samplingParams;
-      this.contentGeneratorConfig.contextWindowSize = config.contextWindowSize;
-      this.contentGeneratorConfig.enableCacheControl =
-        config.enableCacheControl;
-      // Read by the DashScope metadata gate off this same object, so a
-      // per-model override has to travel with the switch like the cache flags.
-      this.contentGeneratorConfig.enableRequestMetadata =
-        config.enableRequestMetadata;
-      this.contentGeneratorConfig.forceGlobalCacheScope =
-        config.forceGlobalCacheScope;
-      this.contentGeneratorConfig.cacheRetention = config.cacheRetention;
-      this.contentGeneratorConfig.cacheRetentionByBlock =
-        config.cacheRetentionByBlock;
-      this.contentGeneratorConfig.splitToolMedia = config.splitToolMedia;
-      this.contentGeneratorConfig.toolResultContentFormat =
-        config.toolResultContentFormat;
-      // Modalities are model-derived: a hot switch between oauth models with
-      // different image support must update them, or the vision-bridge gate and
-      // image-stripping read the previous model's modalities.
-      this.contentGeneratorConfig.modalities = config.modalities;
-
-      if ('model' in sources) {
-        this.contentGeneratorConfigSources['model'] = sources['model'];
-      }
-      if ('modalities' in sources) {
-        this.contentGeneratorConfigSources['modalities'] =
-          sources['modalities'];
-      }
-      if ('samplingParams' in sources) {
-        this.contentGeneratorConfigSources['samplingParams'] =
-          sources['samplingParams'];
-      }
-      if ('enableCacheControl' in sources) {
-        this.contentGeneratorConfigSources['enableCacheControl'] =
-          sources['enableCacheControl'];
-      }
-      if ('enableRequestMetadata' in sources) {
-        this.contentGeneratorConfigSources['enableRequestMetadata'] =
-          sources['enableRequestMetadata'];
-      }
-      if ('forceGlobalCacheScope' in sources) {
-        this.contentGeneratorConfigSources['forceGlobalCacheScope'] =
-          sources['forceGlobalCacheScope'];
-      }
-      if ('cacheRetention' in sources) {
-        this.contentGeneratorConfigSources['cacheRetention'] =
-          sources['cacheRetention'];
-      }
-      if ('cacheRetentionByBlock' in sources) {
-        this.contentGeneratorConfigSources['cacheRetentionByBlock'] =
-          sources['cacheRetentionByBlock'];
-      }
-      if ('contextWindowSize' in sources) {
-        this.contentGeneratorConfigSources['contextWindowSize'] =
-          sources['contextWindowSize'];
-      }
-      if ('splitToolMedia' in sources) {
-        this.contentGeneratorConfigSources['splitToolMedia'] =
-          sources['splitToolMedia'];
-      }
-      if ('toolResultContentFormat' in sources) {
-        this.contentGeneratorConfigSources['toolResultContentFormat'] =
-          sources['toolResultContentFormat'];
-      }
-      if (priorReasoningEffort) {
-        this.setReasoningEffort(priorReasoningEffort);
-      }
-      resetPreloadedContentGenerator(this.contentGenerator);
-      return;
-    }
 
     // Full refresh path. `refreshAuth` re-applies the reasoning effort it
     // captures, but on a model *switch* that capture is already stale: the
@@ -6345,17 +6069,16 @@ export class Config {
    * Supports both registry-backed models and runtime model snapshots.
    *
    * For runtime models, the modelId should be in format `$runtime|${authType}|${modelId}`.
-   * This triggers a refresh of the ContentGenerator when required (always on authType changes).
-   * For qwen-oauth model switches that are hot-update safe, this may update in place.
+   * This triggers a refresh of the ContentGenerator.
    *
    * @param authType - Target authentication type
    * @param modelId - Target model ID (or `$runtime|${authType}|${modelId}` for runtime models)
-   * @param options - Additional options like requireCachedCredentials
+   * @param options - Additional options like the model's baseUrl
    */
   async switchModel(
     authType: AuthType,
     modelId: string,
-    options?: { requireCachedCredentials?: boolean; baseUrl?: string },
+    options?: { baseUrl?: string },
   ): Promise<void> {
     await this.modelsConfig.switchModel(authType, modelId, options);
     this.notifyModelChangeListeners();
@@ -6410,10 +6133,6 @@ export class Config {
 
   getSessionTokenLimit(): number {
     return this.sessionTokenLimit;
-  }
-
-  getEmbeddingModel(): string {
-    return this.embeddingModel;
   }
 
   getSandbox(): SandboxConfig | undefined {
@@ -9259,10 +8978,6 @@ export class Config {
       }
     }
     return this.fileHistoryService;
-  }
-
-  getProxy(): string | undefined {
-    return normalizeProxyUrl(this.proxy);
   }
 
   getWorkingDir(): string {

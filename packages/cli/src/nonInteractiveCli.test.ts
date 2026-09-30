@@ -417,9 +417,7 @@ describe('runNonInteractive', () => {
       setValue: vi.fn(),
       merged: {
         security: {
-          auth: {
-            enforcedType: undefined,
-          },
+          auth: {},
         },
       },
       isTrusted: true,
@@ -5357,10 +5355,10 @@ describe('runNonInteractive', () => {
     await mockHeadlessImageInput();
     const { resolveForModel, runtimeView } = configureHeadlessVisionModel({
       id: 'vision-agent',
-      baseUrl: 'https://vision.example/v1',
+      baseUrl: 'http://127.0.0.1:8080/v1',
       agentCapable: true,
     });
-    const selector = 'vision-agent\0https://vision.example/v1\0';
+    const selector = 'vision-agent\0http://127.0.0.1:8080/v1\0';
     let acceptedSameSelector = false;
     let rejectedDifferentSelector = false;
     const toolCallEvent: ServerLlmStreamEvent = {
@@ -5379,7 +5377,7 @@ describe('runNonInteractive', () => {
           options.onToolResultFullTurnModel?.(selector) ?? false;
         rejectedDifferentSelector =
           options.onToolResultFullTurnModel?.(
-            'different-model\0https://vision.example/v1\0',
+            'different-model\0http://127.0.0.1:8080/v1\0',
           ) === false;
         return {
           responseParts: [{ text: 'tool response' }],

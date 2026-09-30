@@ -57,7 +57,6 @@ describe('Configuration Integration Tests', () => {
     tempDir = fs.mkdtempSync(path.join(tmpdir(), 'qwen-code-test-'));
     server.resetHandlers(http.post(CLEARCUT_URL, () => HttpResponse.text()));
 
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
     vi.clearAllMocks();
   });
 
@@ -73,7 +72,6 @@ describe('Configuration Integration Tests', () => {
       const configParams: ConfigParameters = {
         cwd: '/tmp',
         generationConfig: TEST_CONTENT_GENERATOR_CONFIG,
-        embeddingModel: 'test-embedding-model',
         targetDir: tempDir,
         debugMode: false,
       };
@@ -91,7 +89,6 @@ describe('Configuration Integration Tests', () => {
       const configParams: ConfigParameters = {
         cwd: '/tmp',
         generationConfig: TEST_CONTENT_GENERATOR_CONFIG,
-        embeddingModel: 'test-embedding-model',
         targetDir: tempDir,
         debugMode: false,
         fileFiltering: {
@@ -108,7 +105,6 @@ describe('Configuration Integration Tests', () => {
       const configParams: ConfigParameters = {
         cwd: '/tmp',
         generationConfig: TEST_CONTENT_GENERATOR_CONFIG,
-        embeddingModel: 'test-embedding-model',
         targetDir: tempDir,
         debugMode: false,
         fileFiltering: {
@@ -130,7 +126,6 @@ describe('Configuration Integration Tests', () => {
       const configParams: ConfigParameters = {
         cwd: '/tmp',
         generationConfig: TEST_CONTENT_GENERATOR_CONFIG,
-        embeddingModel: 'test-embedding-model',
         targetDir: tempDir,
         debugMode: false,
       };
@@ -146,7 +141,6 @@ describe('Configuration Integration Tests', () => {
       const configParams: ConfigParameters = {
         cwd: '/tmp',
         generationConfig: TEST_CONTENT_GENERATOR_CONFIG,
-        embeddingModel: 'test-embedding-model',
         targetDir: tempDir,
         debugMode: false,
         fileFiltering: {
@@ -164,7 +158,6 @@ describe('Configuration Integration Tests', () => {
       const configParams: ConfigParameters = {
         cwd: '/tmp',
         generationConfig: TEST_CONTENT_GENERATOR_CONFIG,
-        embeddingModel: 'test-embedding-model',
         targetDir: tempDir,
         debugMode: false,
       };
@@ -179,7 +172,6 @@ describe('Configuration Integration Tests', () => {
       const configParams: ConfigParameters = {
         cwd: '/tmp',
         generationConfig: TEST_CONTENT_GENERATOR_CONFIG,
-        embeddingModel: 'test-embedding-model',
         targetDir: tempDir,
         debugMode: false,
         // Missing fileFiltering configuration
@@ -197,7 +189,6 @@ describe('Configuration Integration Tests', () => {
       const configParams: ConfigParameters = {
         cwd: '/tmp',
         generationConfig: TEST_CONTENT_GENERATOR_CONFIG,
-        embeddingModel: 'test-embedding-model',
         targetDir: tempDir,
         debugMode: false,
       };
@@ -211,7 +202,6 @@ describe('Configuration Integration Tests', () => {
       const configParams: ConfigParameters = {
         cwd: '/tmp',
         generationConfig: TEST_CONTENT_GENERATOR_CONFIG,
-        embeddingModel: 'test-embedding-model',
         targetDir: tempDir,
         debugMode: false,
         fileFiltering: {
@@ -230,7 +220,6 @@ describe('Configuration Integration Tests', () => {
       const configParams: ConfigParameters = {
         cwd: '/tmp',
         generationConfig: TEST_CONTENT_GENERATOR_CONFIG,
-        embeddingModel: 'test-embedding-model',
         targetDir: tempDir,
         debugMode: false,
       };
@@ -243,7 +232,6 @@ describe('Configuration Integration Tests', () => {
       const configParams: ConfigParameters = {
         cwd: '/tmp',
         generationConfig: TEST_CONTENT_GENERATOR_CONFIG,
-        embeddingModel: 'test-embedding-model',
         targetDir: tempDir,
         debugMode: false,
         outputLanguageFilePath,

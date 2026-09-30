@@ -271,7 +271,6 @@ describe('SubagentValidator', () => {
         'glm-5',
         'claude-sonnet-4-6',
         'openai:glm-5',
-        'anthropic:sonnet',
       ];
 
       for (const model of validModels) {

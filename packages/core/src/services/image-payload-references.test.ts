@@ -12,7 +12,6 @@ import {
   countAllInlineImages,
   prepareImagePayloadsForRequest,
   replaceImagePayloadsInPlace,
-  trailingReattachPartCount,
 } from './image-payload-references.js';
 
 function toolImageTurn(data: string): Content {
@@ -483,43 +482,5 @@ describe('buildReattachParts', () => {
     ];
 
     expect(buildReattachParts([], 1, referencedContents, store)).toEqual([]);
-  });
-});
-
-describe('trailingReattachPartCount', () => {
-  it('counts the trailing reattach region when reattach is appended to the last content', () => {
-    const store = new InMemoryImagePayloadStore();
-    const replaced = replaceImagePayloadsInPlace([toolImageTurn('a')], store);
-    const reattachParts = buildReattachParts(replaced, 1);
-    expect(reattachParts).toHaveLength(3); // marker, label, image
-
-    const contents: Content[] = [
-      { role: 'user', parts: [{ text: 'stable prefix' }] },
-      { role: 'user', parts: [...reattachParts] },
-    ];
-
-    expect(trailingReattachPartCount(contents)).toBe(3);
-  });
-
-  it('counts only the reattach suffix when other parts precede it', () => {
-    const store = new InMemoryImagePayloadStore();
-    const replaced = replaceImagePayloadsInPlace([toolImageTurn('a')], store);
-    const reattachParts = buildReattachParts(replaced, 1);
-
-    const contents: Content[] = [
-      {
-        role: 'user',
-        parts: [{ text: 'stable prefix' }, ...reattachParts],
-      },
-    ];
-
-    expect(trailingReattachPartCount(contents)).toBe(3);
-  });
-
-  it('returns 0 when the last content carries no reattach marker', () => {
-    expect(
-      trailingReattachPartCount([{ role: 'user', parts: [{ text: 'plain' }] }]),
-    ).toBe(0);
-    expect(trailingReattachPartCount([])).toBe(0);
   });
 });

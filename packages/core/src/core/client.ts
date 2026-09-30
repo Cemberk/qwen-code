@@ -5247,13 +5247,10 @@ export class LlmClient {
       // side queries for session recap / title / summary), resolve the target
       // model's own ContentGeneratorConfig so that per-model settings like
       // extra_body, samplingParams, and reasoning are not inherited from the
-      // main model's config. The retry authType is resolved alongside so that
-      // provider-specific checks (e.g. QWEN_OAUTH quota detection) reference
-      // the target model's provider.
+      // main model's config.
       const {
         contentGenerator,
         contentGeneratorConfig,
-        retryAuthType,
         retryErrorCodes,
         model: requestModel,
       } = await this.config.getBaseLlmClient().resolveForModel(model);
@@ -5275,7 +5272,6 @@ export class LlmClient {
         );
       };
       const result = await retryWithBackoff(apiCall, {
-        authType: retryAuthType,
         extraRetryErrorCodes: retryErrorCodes,
         persistentMode: isUnattendedMode(),
         signal: abortSignal,

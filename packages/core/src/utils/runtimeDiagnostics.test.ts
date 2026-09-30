@@ -8,7 +8,6 @@ import { describe, expect, it } from 'vitest';
 import type { GenerateContentParameters } from '@google/genai';
 import {
   RuntimeDiagnosticsCollector,
-  summarizeAnthropicWireRequest,
   summarizeOpenAIWireRequest,
 } from './runtimeDiagnostics.js';
 
@@ -127,64 +126,6 @@ describe('RuntimeDiagnosticsCollector', () => {
     });
     expect(JSON.stringify(summary)).not.toContain('secret system');
     expect(JSON.stringify(summary)).not.toContain('secret user');
-  });
-
-  it('summarizes Anthropic wire requests by size and role only', () => {
-    const summary = summarizeAnthropicWireRequest({
-      model: 'anthropic-wire-model',
-      stream: true,
-      system: [{ type: 'text', text: 'secret system' }],
-      messages: [
-        { role: 'user', content: 'secret user' },
-        {
-          role: 'assistant',
-          content: [
-            {
-              type: 'tool_use',
-              id: 'tool-1',
-              name: 'run_shell_command',
-              input: { command: 'secret command' },
-            },
-          ],
-        },
-      ],
-      tools: [
-        {
-          name: 'run_shell_command',
-          description: 'Run shell command',
-          input_schema: {
-            type: 'object',
-            properties: { command: { type: 'string' } },
-          },
-        },
-      ],
-      max_tokens: 1024,
-    });
-
-    expect(summary).toMatchObject({
-      model: 'anthropic-wire-model',
-      stream: true,
-      messageCount: 2,
-      messageBytesByRole: {
-        user: Buffer.byteLength('secret user'),
-        assistant: expect.any(Number),
-      },
-      systemBytes: expect.any(Number),
-      toolsCount: 1,
-      toolSchemaBytes: expect.any(Number),
-      bodyBytes: expect.any(Number),
-      topLevelKeys: [
-        'max_tokens',
-        'messages',
-        'model',
-        'stream',
-        'system',
-        'tools',
-      ],
-    });
-    expect(JSON.stringify(summary)).not.toContain('secret system');
-    expect(JSON.stringify(summary)).not.toContain('secret user');
-    expect(JSON.stringify(summary)).not.toContain('secret command');
   });
 
   it('aggregates tool use and tool result sizes without retaining payloads', () => {

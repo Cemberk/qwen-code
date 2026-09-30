@@ -58,11 +58,9 @@ import type {
   ContentGeneratorConfig,
 } from '../core/contentGenerator.js';
 import { InputFormat } from '../output/types.js';
-import { DEFAULT_DASHSCOPE_BASE_URL } from '../core/openaiContentGenerator/constants.js';
 import {
   AuthType,
   createContentGenerator,
-  createContentGeneratorConfig,
   resetPreloadedContentGenerator,
   resolveContentGeneratorConfigWithSources,
 } from '../core/contentGenerator.js';
@@ -870,10 +868,8 @@ describe('Server Config (config.ts)', () => {
   const QUESTION = 'test question';
   const USER_MEMORY = 'Test User Memory';
   const TELEMETRY_SETTINGS = { enabled: false };
-  const EMBEDDING_MODEL = 'gemini-embedding';
   const baseParams: ConfigParameters = {
     cwd: '/tmp',
-    embeddingModel: EMBEDDING_MODEL,
     sandbox: SANDBOX,
     targetDir: TARGET_DIR,
     debugMode: DEBUG_MODE,
@@ -2452,33 +2448,12 @@ describe('Server Config (config.ts)', () => {
       vi.spyOn(config, 'getModel').mockReturnValue('text-primary');
       vi.spyOn(config, 'getContentGeneratorConfig').mockReturnValue({
         authType: AuthType.USE_OPENAI,
-        baseUrl: 'https://primary.example.com',
+        baseUrl: 'http://127.0.0.1:11434/v1',
       } as ContentGeneratorConfig);
       vi.spyOn(config, 'getAllConfiguredModels').mockReturnValue(
         models as never,
       );
     };
-
-    it('keeps a bare cross-provider namesake on its exact agent route', () => {
-      const config = new Config({ ...baseParams, visionModel: 'text-primary' });
-      stubProvider(config, [
-        {
-          id: 'text-primary',
-          authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://primary.example.com',
-        },
-        {
-          id: 'text-primary',
-          authType: AuthType.USE_ANTHROPIC,
-          isVision: true,
-          capabilities: { vision: true, agent: true },
-        },
-      ]);
-      expect(config.getDefaultVisionBridgeModel()).toEqual({
-        id: 'anthropic:text-primary',
-        agentCapable: true,
-      });
-    });
 
     it('falls back to same-provider auto-select when the explicit model is not configured', () => {
       const config = new Config({ ...baseParams, visionModel: 'ghost-model' });
@@ -2486,7 +2461,7 @@ describe('Server Config (config.ts)', () => {
         {
           id: 'vl-same-provider',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://primary.example.com',
+          baseUrl: 'http://127.0.0.1:11434/v1',
           isVision: true,
         },
       ]);
@@ -2494,7 +2469,7 @@ describe('Server Config (config.ts)', () => {
       // same-provider candidate is auto-picked instead.
       expect(config.getDefaultVisionBridgeModel()).toEqual({
         id: 'openai:vl-same-provider',
-        baseUrl: 'https://primary.example.com',
+        baseUrl: 'http://127.0.0.1:11434/v1',
       });
     });
 
@@ -2504,72 +2479,45 @@ describe('Server Config (config.ts)', () => {
         {
           id: 'vl-same-provider',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://primary.example.com',
+          baseUrl: 'http://127.0.0.1:11434/v1',
           isVision: true,
         },
       ]);
       expect(config.getDefaultVisionBridgeModel()).toEqual({
         id: 'openai:vl-same-provider',
-        baseUrl: 'https://primary.example.com',
-      });
-    });
-
-    it('honors an authType-qualified visionModel against the matching provider only', () => {
-      // Same model id on two providers; the 'anthropic:' qualifier must bind to
-      // the anthropic row, not the same-provider openai one.
-      const config = new Config({
-        ...baseParams,
-        visionModel: 'anthropic:vl-shared',
-      });
-      stubProvider(config, [
-        {
-          id: 'vl-shared',
-          authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://primary.example.com',
-          isVision: true,
-        },
-        {
-          id: 'vl-shared',
-          authType: AuthType.USE_ANTHROPIC,
-          baseUrl: 'https://api.anthropic.com',
-          isVision: true,
-        },
-      ]);
-      expect(config.getDefaultVisionBridgeModel()).toEqual({
-        id: 'anthropic:vl-shared',
-        baseUrl: 'https://api.anthropic.com',
+        baseUrl: 'http://127.0.0.1:11434/v1',
       });
     });
 
     it('uses the visionModel selector baseUrl to disambiguate duplicate same-provider vision models', () => {
       const config = new Config({
         ...baseParams,
-        visionModel: 'openai:qwen3.7-plus\0https://token-plan.example.com/v1',
+        visionModel: 'openai:qwen3.7-plus\0http://127.0.0.1:1234/v1',
       });
       stubProvider(config, [
         {
           id: 'qwen3.7-plus',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+          baseUrl: 'http://127.0.0.1:8000/v1',
           isVision: true,
         },
         {
           id: 'qwen3.7-plus',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://token-plan.example.com/v1',
+          baseUrl: 'http://127.0.0.1:1234/v1',
           isVision: true,
         },
       ]);
       expect(config.getDefaultVisionBridgeModel()).toEqual({
         id: 'openai:qwen3.7-plus',
-        baseUrl: 'https://token-plan.example.com/v1',
+        baseUrl: 'http://127.0.0.1:1234/v1',
       });
     });
 
     it.each([false, true])(
       'honors an exact visionModel route with ignored fast-only namesakes (reversed=%s)',
       (reversed) => {
-        const baseUrl = 'https://vision.example.com/v1';
+        const baseUrl = 'http://127.0.0.1:8080/v1';
         const routeEntries = [
           {
             id: 'vision-agent',
@@ -2608,25 +2556,25 @@ describe('Server Config (config.ts)', () => {
         {
           id: 'qwen3.7-plus',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+          baseUrl: 'http://127.0.0.1:8000/v1',
           isVision: true,
         },
         {
           id: 'qwen3.7-plus',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://token-plan.example.com/v1',
+          baseUrl: 'http://127.0.0.1:1234/v1',
           isVision: true,
         },
         {
           id: 'vl-same-provider',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://primary.example.com',
+          baseUrl: 'http://127.0.0.1:11434/v1',
           isVision: true,
         },
       ]);
       expect(config.getDefaultVisionBridgeModel()).toEqual({
         id: 'openai:vl-same-provider',
-        baseUrl: 'https://primary.example.com',
+        baseUrl: 'http://127.0.0.1:11434/v1',
       });
     });
 
@@ -2638,38 +2586,38 @@ describe('Server Config (config.ts)', () => {
         {
           id: 'vl-same-provider',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://primary.example.com',
+          baseUrl: 'http://127.0.0.1:11434/v1',
           isVision: true,
         },
       ]);
       expect(() => config.getDefaultVisionBridgeModel()).not.toThrow();
       expect(config.getDefaultVisionBridgeModel()).toEqual({
         id: 'openai:vl-same-provider',
-        baseUrl: 'https://primary.example.com',
+        baseUrl: 'http://127.0.0.1:11434/v1',
       });
     });
 
     it('falls back to auto-select on a visionModel with no selector before the baseUrl delimiter', () => {
       const config = new Config({
         ...baseParams,
-        visionModel: '\0https://example.com/v1',
+        visionModel: '\0http://127.0.0.1:9000/v1',
       });
       const warn = vi.spyOn(config.getDebugLogger(), 'warn');
       stubProvider(config, [
         {
           id: 'vl-same-provider',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://primary.example.com',
+          baseUrl: 'http://127.0.0.1:11434/v1',
           isVision: true,
         },
       ]);
 
       expect(config.getDefaultVisionBridgeModel()).toEqual({
         id: 'openai:vl-same-provider',
-        baseUrl: 'https://primary.example.com',
+        baseUrl: 'http://127.0.0.1:11434/v1',
       });
       expect(warn).toHaveBeenCalledWith(
-        expect.stringContaining("'\\0https://example.com/v1'"),
+        expect.stringContaining("'\\0http://127.0.0.1:9000/v1'"),
       );
     });
 
@@ -2685,54 +2633,54 @@ describe('Server Config (config.ts)', () => {
           // pin would resolve straight back to this row.
           id: 'text-primary',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://primary.example.com',
+          baseUrl: 'http://127.0.0.1:11434/v1',
         },
         {
           id: 'vl-same-provider',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://primary.example.com',
+          baseUrl: 'http://127.0.0.1:11434/v1',
           isVision: true,
         },
       ]);
       expect(config.getDefaultVisionBridgeModel()).toEqual({
         id: 'openai:vl-same-provider',
-        baseUrl: 'https://primary.example.com',
+        baseUrl: 'http://127.0.0.1:11434/v1',
       });
     });
 
     it('setVisionModel("") clears the pin and reverts to same-provider auto-select', () => {
-      const config = new Config({ ...baseParams, visionModel: 'vl-anthropic' });
+      const config = new Config({ ...baseParams, visionModel: 'vl-pinned' });
       stubProvider(config, [
         {
-          id: 'vl-anthropic',
-          authType: AuthType.USE_ANTHROPIC,
-          baseUrl: 'https://api.anthropic.com',
+          id: 'vl-pinned',
+          authType: AuthType.USE_OPENAI,
+          baseUrl: 'http://127.0.0.1:8080/v1',
           isVision: true,
         },
         {
           id: 'vl-same-provider',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://primary.example.com',
+          baseUrl: 'http://127.0.0.1:11434/v1',
           isVision: true,
         },
       ]);
       // Pinned first.
       expect(config.getDefaultVisionBridgeModel()).toEqual({
-        id: 'anthropic:vl-anthropic',
-        baseUrl: 'https://api.anthropic.com',
+        id: 'openai:vl-pinned',
+        baseUrl: 'http://127.0.0.1:8080/v1',
       });
       // Cleared with '' — JSDoc promises a fall back to auto-select.
       config.setVisionModel('');
       expect(config.getDefaultVisionBridgeModel()).toEqual({
         id: 'openai:vl-same-provider',
-        baseUrl: 'https://primary.example.com',
+        baseUrl: 'http://127.0.0.1:11434/v1',
       });
       // undefined clears too.
-      config.setVisionModel('vl-anthropic');
+      config.setVisionModel('vl-pinned');
       config.setVisionModel(undefined);
       expect(config.getDefaultVisionBridgeModel()).toEqual({
         id: 'openai:vl-same-provider',
-        baseUrl: 'https://primary.example.com',
+        baseUrl: 'http://127.0.0.1:11434/v1',
       });
     });
   });
@@ -7662,334 +7610,10 @@ describe('Server Config (config.ts)', () => {
     });
   });
 
-  describe('reasoning effort override', () => {
-    it('reports static overrides for the resolved configured tiered route', () => {
-      const config = new Config({ ...baseParams });
-      const cfg: ContentGeneratorConfig = {
-        model: 'qwen3.8-flash',
-        authType: AuthType.USE_OPENAI,
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        reasoning: { effort: 'low' },
-        extra_body: { thinking_budget: 4096 },
-      };
-      vi.spyOn(config, 'getContentGeneratorConfig').mockReturnValue(cfg);
-      const resolve = vi
-        .spyOn(config, 'getResolvedModelConfig')
-        .mockReturnValue({
-          id: cfg.model,
-          name: cfg.model,
-          authType: AuthType.USE_OPENAI,
-          baseUrl: cfg.baseUrl!,
-          generationConfig: {},
-          capabilities: {
-            reasoning: {
-              thinking: true,
-              efforts: ['low', 'medium', 'xhigh'],
-              defaultEffort: 'xhigh',
-              disableField: 'reasoning_effort',
-            },
-          },
-        });
-      expect(config.getReasoningEffortOverride()).toEqual({
-        source: 'extra_body',
-        field: 'thinking_budget',
-      });
-      expect(resolve).toHaveBeenCalledWith(
-        cfg.authType,
-        cfg.model,
-        cfg.baseUrl,
-      );
-      resolve.mockReturnValue(undefined);
-      expect(config.getReasoningEffortOverride()).toBeUndefined();
-    });
-    it('reports a higher-priority DashScope knob that shadows reasoning effort', () => {
-      const config = new Config({
-        ...baseParams,
-      });
-      (
-        config as unknown as {
-          contentGeneratorConfig: ContentGeneratorConfig;
-        }
-      ).contentGeneratorConfig = {
-        model: 'qwen3.8-max',
-        authType: AuthType.QWEN_OAUTH,
-        reasoning: { effort: 'max' },
-        extra_body: { thinking_budget: 4096 },
-      };
-
-      expect(config.getReasoningEffortOverride()).toEqual({
-        source: 'extra_body',
-        field: 'thinking_budget',
-      });
-    });
-
-    it('does not report an identical static effort or a non-tiered model', () => {
-      const config = new Config({
-        ...baseParams,
-      });
-      (
-        config as unknown as {
-          contentGeneratorConfig: ContentGeneratorConfig;
-        }
-      ).contentGeneratorConfig = {
-        model: 'qwen3.8-max',
-        authType: AuthType.QWEN_OAUTH,
-        reasoning: { effort: 'max' },
-        extra_body: { reasoning_effort: 'max' },
-      };
-      expect(config.getReasoningEffortOverride()).toBeUndefined();
-
-      config.getContentGeneratorConfig().model = 'qwen3.7-max';
-      config.getContentGeneratorConfig().extra_body = {
-        thinking_budget: 4096,
-      };
-      expect(config.getReasoningEffortOverride()).toBeUndefined();
-    });
-
-    it.each([
-      {
-        name: 'extra_body enable_thinking disable',
-        extra_body: { enable_thinking: false },
-        expected: { source: 'extra_body', field: 'enable_thinking' },
-      },
-      {
-        name: 'different extra_body effort',
-        extra_body: { reasoning_effort: 'high' },
-        expected: { source: 'extra_body', field: 'reasoning_effort' },
-      },
-      {
-        name: 'samplingParams enable_thinking disable',
-        samplingParams: { enable_thinking: false },
-        expected: { source: 'samplingParams', field: 'enable_thinking' },
-      },
-      {
-        name: 'samplingParams budget',
-        samplingParams: { thinking_budget: 2048 },
-        expected: { source: 'samplingParams', field: 'thinking_budget' },
-      },
-      {
-        name: 'different samplingParams effort',
-        samplingParams: { reasoning_effort: 'high' },
-        expected: { source: 'samplingParams', field: 'reasoning_effort' },
-      },
-      {
-        name: 'identical samplingParams effort',
-        samplingParams: { reasoning_effort: 'max' },
-        expected: undefined,
-      },
-      {
-        name: 'extra_body enable_thinking on-switch',
-        extra_body: { enable_thinking: true },
-        expected: undefined,
-      },
-      {
-        name: 'extra_body enable_thinking on-switch over a samplingParams disable',
-        extra_body: { enable_thinking: true },
-        samplingParams: { enable_thinking: false },
-        expected: undefined,
-      },
-      {
-        name: 'samplingParams enable_thinking on-switch',
-        samplingParams: { enable_thinking: true },
-        expected: undefined,
-      },
-      {
-        name: 'samplingParams effort under an extra_body enable_thinking on-switch',
-        extra_body: { enable_thinking: true },
-        samplingParams: { reasoning_effort: 'high' },
-        expected: { source: 'samplingParams', field: 'reasoning_effort' },
-      },
-      {
-        name: 'samplingParams budget under an extra_body enable_thinking on-switch',
-        extra_body: { enable_thinking: true },
-        samplingParams: { thinking_budget: 2048 },
-        expected: { source: 'samplingParams', field: 'thinking_budget' },
-      },
-    ])('resolves $name', ({ extra_body, samplingParams, expected }) => {
-      const config = new Config({
-        ...baseParams,
-      });
-      (
-        config as unknown as {
-          contentGeneratorConfig: ContentGeneratorConfig;
-        }
-      ).contentGeneratorConfig = {
-        model: 'qwen3.8-max',
-        authType: AuthType.QWEN_OAUTH,
-        reasoning: { effort: 'max' },
-        extra_body,
-        samplingParams,
-      };
-
-      expect(config.getReasoningEffortOverride()).toEqual(expected);
-    });
-
-    it('does not report an override for a non-DashScope endpoint', () => {
-      const config = new Config({
-        ...baseParams,
-      });
-      (
-        config as unknown as {
-          contentGeneratorConfig: ContentGeneratorConfig;
-        }
-      ).contentGeneratorConfig = {
-        model: 'qwen3.8-max',
-        authType: AuthType.USE_OPENAI,
-        baseUrl: 'https://api.openai.com/v1',
-        reasoning: { effort: 'max' },
-        samplingParams: { thinking_budget: 2048 },
-      };
-
-      expect(config.getReasoningEffortOverride()).toBeUndefined();
-    });
-  });
-
   describe('refreshAuth', () => {
-    it('creates the initial generator with the model API resolved from raw OpenAI settings', async () => {
-      const config = new Config({
-        ...baseParams,
-        authType: AuthType.USE_OPENAI,
-        model: 'responses-model',
-        modelProvidersConfig: {
-          openai: [{ id: 'responses-model', wireApi: 'responses' }],
-        },
-      });
-      vi.mocked(resolveContentGeneratorConfigWithSources).mockImplementation(
-        (_config, authType, generationConfig) => ({
-          config: { ...generationConfig, model: 'responses-model', authType },
-          sources: {},
-        }),
-      );
-
-      await config.refreshAuth(AuthType.USE_OPENAI, true);
-
-      expect(resolveContentGeneratorConfigWithSources).toHaveBeenLastCalledWith(
-        config,
-        AuthType.USE_OPENAI_RESPONSES,
-        expect.objectContaining({ model: 'responses-model' }),
-        expect.anything(),
-        expect.anything(),
-      );
-      expect(createContentGenerator).toHaveBeenLastCalledWith(
-        expect.objectContaining({ authType: AuthType.USE_OPENAI_RESPONSES }),
-        config,
-        true,
-      );
-      expect(config.getAuthType()).toBe(AuthType.USE_OPENAI_RESPONSES);
-    });
-
-    it.each(['retry', 'install', 'switch', 'invalid-switch'] as const)(
-      'honors %s after initial Responses authentication fails',
-      async (action) => {
-        const baseUrl = 'https://gateway.example/v1';
-        const config = new Config({
-          ...baseParams,
-          authType: AuthType.USE_OPENAI,
-          model: 'same',
-          modelProvidersConfig: {
-            openai: [{ id: 'same', baseUrl, wireApi: 'responses' }],
-          },
-        });
-        vi.mocked(resolveContentGeneratorConfigWithSources).mockImplementation(
-          (_config, authType, generationConfig) => ({
-            config: { ...generationConfig, model: 'same', authType },
-            sources: {},
-          }),
-        );
-        vi.mocked(createContentGenerator).mockRejectedValueOnce(
-          new Error('missing key'),
-        );
-        await expect(
-          config.refreshAuth(AuthType.USE_OPENAI, true),
-        ).rejects.toThrow('missing key');
-        config.reloadModelProvidersConfig({
-          openai: [
-            { id: 'same', baseUrl },
-            { id: 'same', baseUrl, wireApi: 'responses' },
-          ],
-        });
-        if (action === 'install') {
-          config.syncModelSelection(AuthType.USE_OPENAI, 'same', baseUrl);
-        } else if (action === 'switch') {
-          await config.switchModel(AuthType.USE_OPENAI, 'same', { baseUrl });
-        } else if (action === 'invalid-switch') {
-          await expect(
-            config.switchModel(AuthType.USE_OPENAI, 'missing', { baseUrl }),
-          ).rejects.toThrow();
-        }
-        await config.refreshAuth(AuthType.USE_OPENAI, true);
-        const expectedAuth =
-          action === 'install' || action === 'switch'
-            ? AuthType.USE_OPENAI
-            : AuthType.USE_OPENAI_RESPONSES;
-        expect(createContentGenerator).toHaveBeenLastCalledWith(
-          expect.objectContaining({ model: 'same', authType: expectedAuth }),
-          config,
-          true,
-        );
-        expect(config.getAuthType()).toBe(expectedAuth);
-      },
-    );
-
-    it('does not redirect an OpenAI retry after the first Gemini refresh fails', async () => {
-      const config = new Config({
-        ...baseParams,
-        authType: AuthType.USE_OPENAI,
-      });
-      vi.mocked(resolveContentGeneratorConfigWithSources).mockImplementation(
-        (_config, authType, generationConfig) => ({
-          config: { ...generationConfig, model: 'test-model', authType },
-          sources: {},
-        }),
-      );
-      vi.mocked(createContentGenerator).mockRejectedValueOnce(
-        new Error('test generator failure'),
-      );
-      await expect(config.refreshAuth(AuthType.USE_GEMINI)).rejects.toThrow(
-        'test generator failure',
-      );
-      await config.refreshAuth(AuthType.USE_OPENAI, true);
-      expect(createContentGenerator).toHaveBeenLastCalledWith(
-        expect.objectContaining({ authType: AuthType.USE_OPENAI }),
-        config,
-        true,
-      );
-      expect(config.getAuthType()).toBe(AuthType.USE_OPENAI);
-    });
-
-    it('requires explicit selection after hot reload removes the selected API route', async () => {
-      const config = new Config({
-        ...baseParams,
-        authType: AuthType.USE_OPENAI_RESPONSES,
-        model: 'shared',
-        modelProvidersConfig: {
-          openai: [{ id: 'shared', wireApi: 'responses' }],
-        },
-      });
-      vi.mocked(resolveContentGeneratorConfigWithSources).mockImplementation(
-        (_config, authType, generationConfig) => ({
-          config: { ...generationConfig, model: 'shared', authType },
-          sources: {},
-        }),
-      );
-      await config.refreshAuth(AuthType.USE_OPENAI_RESPONSES);
-      vi.mocked(createContentGenerator).mockClear();
-      config.reloadModelProvidersConfig({ openai: [{ id: 'shared' }] });
-
-      await expect(
-        config.refreshAuth(AuthType.USE_OPENAI_RESPONSES, true),
-      ).rejects.toThrow('is no longer configured');
-      await expect(
-        config.refreshAuth(AuthType.USE_OPENAI_RESPONSES, true),
-      ).rejects.toThrow('is no longer configured');
-      expect(createContentGenerator).not.toHaveBeenCalled();
-      expect(config.getAuthType()).toBe(AuthType.USE_OPENAI_RESPONSES);
-      expect(config.getModel()).toBe('shared');
-    });
-
     it('should refresh auth and update config', async () => {
       const config = new Config(baseParams);
-      const authType = AuthType.USE_GEMINI;
+      const authType = AuthType.USE_OPENAI;
       const mockContentConfig = {
         apiKey: 'test-key',
         model: 'qwen3-coder-plus',
@@ -8036,8 +7660,8 @@ describe('Server Config (config.ts)', () => {
           }),
         );
 
-        for (const initial of [true, undefined]) {
-          await config.refreshAuth(AuthType.USE_OPENAI, initial);
+        for (let attempt = 0; attempt < 2; attempt++) {
+          await config.refreshAuth(AuthType.USE_OPENAI);
           expect(config.getContentGeneratorConfig().reasoning).toEqual(
             thinkingMandatory ? { effort: 'high' } : false,
           );
@@ -8064,7 +7688,7 @@ describe('Server Config (config.ts)', () => {
         ...baseParams,
         generationConfig: { reasoning: { effort: 'max' } },
       });
-      const authType = AuthType.USE_GEMINI;
+      const authType = AuthType.USE_OPENAI;
 
       // The rebuilt config comes back WITHOUT reasoning (simulating the wipe).
       vi.mocked(resolveContentGeneratorConfigWithSources).mockReturnValue({
@@ -8096,7 +7720,7 @@ describe('Server Config (config.ts)', () => {
         ...baseParams,
         generationConfig: { reasoning: { effort: 'high' } },
       });
-      const authType = AuthType.USE_GEMINI;
+      const authType = AuthType.USE_OPENAI;
 
       // Initial auth seeds the live config with the effort.
       vi.mocked(resolveContentGeneratorConfigWithSources).mockReturnValue({
@@ -8151,7 +7775,7 @@ describe('Server Config (config.ts)', () => {
       // Set messageBus using the setter
       config.setMessageBus(mockMessageBus as unknown as MessageBus);
 
-      const authType = AuthType.USE_GEMINI;
+      const authType = AuthType.USE_OPENAI;
       const mockContentConfig = {
         apiKey: 'test-key',
         model: 'qwen3-coder-plus',
@@ -8179,7 +7803,7 @@ describe('Server Config (config.ts)', () => {
         ...baseParams,
         disableAllHooks: true,
       });
-      const authType = AuthType.USE_GEMINI;
+      const authType = AuthType.USE_OPENAI;
       const mockContentConfig = {
         apiKey: 'test-key',
         model: 'qwen3-coder-plus',
@@ -8199,123 +7823,36 @@ describe('Server Config (config.ts)', () => {
       // Verify that fireNotificationHook was not called
       expect(fireNotificationHook).not.toHaveBeenCalled();
     });
-
-    it('should not strip thoughts when switching from Vertex to GenAI', async () => {
-      const config = new Config(baseParams);
-
-      vi.mocked(createContentGeneratorConfig).mockImplementation(
-        (_: Config, authType: AuthType | undefined) =>
-          ({ authType }) as unknown as ContentGeneratorConfig,
-      );
-
-      await config.refreshAuth(AuthType.USE_VERTEX_AI);
-
-      await config.refreshAuth(AuthType.USE_GEMINI);
-    });
   });
 
-  describe('model switching optimization (QWEN_OAUTH)', () => {
-    it('should switch qwen-oauth model in-place without refreshing auth when safe', async () => {
-      const config = new Config(baseParams);
-
-      const mockContentConfig: ContentGeneratorConfig = {
-        authType: AuthType.QWEN_OAUTH,
-        model: 'coder-model',
-        apiKey: 'QWEN_OAUTH_DYNAMIC_TOKEN',
-        baseUrl: DEFAULT_DASHSCOPE_BASE_URL,
-        timeout: 60000,
-        maxRetries: 3,
-      } as ContentGeneratorConfig;
-
-      vi.mocked(resolveContentGeneratorConfigWithSources).mockImplementation(
-        (_config, authType, generationConfig) => ({
-          config: {
-            ...mockContentConfig,
-            authType,
-            model: generationConfig?.model ?? mockContentConfig.model,
-          } as ContentGeneratorConfig,
-          sources: {},
-        }),
-      );
-      vi.mocked(createContentGenerator).mockResolvedValue({
-        generateContent: vi.fn(),
-        generateContentStream: vi.fn(),
-        embedContent: vi.fn(),
-      } as unknown as ContentGenerator);
-
-      // Establish initial qwen-oauth content generator config/content generator.
-      await config.refreshAuth(AuthType.QWEN_OAUTH);
-
-      // Spy after initial refresh to ensure model switch does not re-trigger refreshAuth.
-      const refreshSpy = vi.spyOn(config, 'refreshAuth');
-      vi.mocked(resetPreloadedContentGenerator).mockClear();
-
-      await config.switchModel(AuthType.QWEN_OAUTH, 'coder-model');
-
-      expect(config.getModel()).toBe('coder-model');
-      expect(refreshSpy).not.toHaveBeenCalled();
-      // Called once during initial refreshAuth + once during handleModelChange diffing.
-      expect(
-        vi.mocked(resolveContentGeneratorConfigWithSources),
-      ).toHaveBeenCalledTimes(2);
-      expect(vi.mocked(createContentGenerator)).toHaveBeenCalledTimes(1);
-      expect(resetPreloadedContentGenerator).toHaveBeenCalledOnce();
-      expect(resetPreloadedContentGenerator).toHaveBeenCalledWith(
-        config.getContentGenerator(),
-      );
-    });
-
-    it('should preserve thoughts from history on model switch', async () => {
-      const config = new Config(baseParams);
-
-      const mockContentConfig: ContentGeneratorConfig = {
-        authType: AuthType.QWEN_OAUTH,
-        model: 'coder-model',
-        apiKey: 'QWEN_OAUTH_DYNAMIC_TOKEN',
-        baseUrl: DEFAULT_DASHSCOPE_BASE_URL,
-        timeout: 60000,
-        maxRetries: 3,
-      } as ContentGeneratorConfig;
-
-      vi.mocked(resolveContentGeneratorConfigWithSources).mockImplementation(
-        (_config, authType, generationConfig) => ({
-          config: {
-            ...mockContentConfig,
-            authType,
-            model: generationConfig?.model ?? mockContentConfig.model,
-          } as ContentGeneratorConfig,
-          sources: {},
-        }),
-      );
-      vi.mocked(createContentGenerator).mockResolvedValue({
-        generateContent: vi.fn(),
-        generateContentStream: vi.fn(),
-        embedContent: vi.fn(),
-      } as unknown as ContentGenerator);
-
-      await config.refreshAuth(AuthType.QWEN_OAUTH);
-
-      await config.switchModel(AuthType.QWEN_OAUTH, 'coder-model');
-    });
-
+  describe('model switching', () => {
     it('should notify model change listeners after switchModel', async () => {
-      const config = new Config(baseParams);
-
-      const mockContentConfig: ContentGeneratorConfig = {
-        authType: AuthType.QWEN_OAUTH,
-        model: 'coder-model',
-        apiKey: 'QWEN_OAUTH_DYNAMIC_TOKEN',
-        baseUrl: DEFAULT_DASHSCOPE_BASE_URL,
-        timeout: 60000,
-        maxRetries: 3,
-      } as ContentGeneratorConfig;
+      const config = new Config({
+        ...baseParams,
+        authType: AuthType.USE_OPENAI,
+        modelProvidersConfig: {
+          openai: [
+            {
+              id: 'model-a',
+              name: 'Model A',
+              baseUrl: 'http://127.0.0.1:11434/v1',
+            },
+            {
+              id: 'model-b',
+              name: 'Model B',
+              baseUrl: 'http://127.0.0.1:11434/v1',
+            },
+          ],
+        },
+      });
 
       vi.mocked(resolveContentGeneratorConfigWithSources).mockImplementation(
         (_config, authType, generationConfig) => ({
           config: {
-            ...mockContentConfig,
             authType,
-            model: generationConfig?.model ?? mockContentConfig.model,
+            model: generationConfig?.model ?? 'model-a',
+            apiKey: 'test-key',
+            baseUrl: 'http://127.0.0.1:11434/v1',
           } as ContentGeneratorConfig,
           sources: {},
         }),
@@ -8323,17 +7860,16 @@ describe('Server Config (config.ts)', () => {
       vi.mocked(createContentGenerator).mockResolvedValue({
         generateContent: vi.fn(),
         generateContentStream: vi.fn(),
-        embedContent: vi.fn(),
       } as unknown as ContentGenerator);
 
-      await config.refreshAuth(AuthType.QWEN_OAUTH);
+      await config.refreshAuth(AuthType.USE_OPENAI);
 
       const listener = vi.fn();
       const unsubscribe = config.onModelChange(listener);
 
-      await config.switchModel(AuthType.QWEN_OAUTH, 'coder-model');
+      await config.switchModel(AuthType.USE_OPENAI, 'model-b');
 
-      expect(listener).toHaveBeenCalledWith('coder-model');
+      expect(listener).toHaveBeenCalledWith('model-b');
 
       unsubscribe();
     });
@@ -8369,99 +7905,25 @@ describe('Server Config (config.ts)', () => {
   });
 
   describe('model switching with different credentials (OpenAI)', () => {
-    it('returns undefined for bare Qwen OAuth fast models under active OpenAI auth', async () => {
-      const config = new Config({
-        ...baseParams,
-        authType: AuthType.USE_OPENAI,
-        model: 'qwen3.7-max',
-        fastModel: 'coder-model',
-        modelProvidersConfig: {
-          [AuthType.USE_OPENAI]: [
-            {
-              id: 'qwen3.7-max',
-              name: 'qwen3.7-max',
-              baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-              envKey: 'DASHSCOPE_API_KEY',
-            },
-          ],
-        },
-      });
-
-      await config.refreshAuth(AuthType.USE_OPENAI);
-
-      expect(config.getFastModel()).toBeUndefined();
-    });
-
-    it('returns an authType-qualified fast model selector', () => {
-      const config = new Config({
-        ...baseParams,
-        authType: AuthType.USE_ANTHROPIC,
-        model: 'shared-model',
-        fastModel: 'openai:shared-model',
-        modelProvidersConfig: {
-          [AuthType.USE_OPENAI]: [
-            {
-              id: 'shared-model',
-              name: 'OpenAI shared model',
-              baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-              envKey: 'DASHSCOPE_API_KEY',
-            },
-          ],
-          [AuthType.USE_ANTHROPIC]: [
-            {
-              id: 'shared-model',
-              name: 'Anthropic shared model',
-              baseUrl: 'https://idealab.alibaba-inc.com/api/anthropic',
-              envKey: 'IDEALAB_OPUS_API_KEY',
-            },
-          ],
-        },
-      });
-
-      expect(config.getFastModel()).toBe('openai:shared-model');
-    });
-
-    it('preserves authType-qualified fast model selectors across auth types', () => {
-      const config = new Config({
-        ...baseParams,
-        authType: AuthType.USE_OPENAI,
-        model: 'qwen3.7-max',
-        fastModel: 'qwen-oauth:coder-model',
-        modelProvidersConfig: {
-          [AuthType.USE_OPENAI]: [
-            {
-              id: 'qwen3.7-max',
-              name: 'qwen3.7-max',
-              baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-              envKey: 'DASHSCOPE_API_KEY',
-            },
-          ],
-        },
-      });
-
-      expect(config.getFastModel()).toBe('qwen-oauth:coder-model');
+    const LOCAL_BASE_URL = 'http://127.0.0.1:11434/v1';
+    const localModel = (id: string, extra: Record<string, unknown> = {}) => ({
+      id,
+      name: id,
+      baseUrl: LOCAL_BASE_URL,
+      envKey: 'OPENAI_API_KEY',
+      ...extra,
     });
 
     it('resolves a bare fast model under the current auth type', async () => {
       const config = new Config({
         ...baseParams,
         authType: AuthType.USE_OPENAI,
-        model: 'qwen3.7-max',
+        model: 'main-model',
         fastModel: 'fast-model',
         modelProvidersConfig: {
           [AuthType.USE_OPENAI]: [
-            {
-              id: 'qwen3.7-max',
-              name: 'qwen3.7-max',
-              baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-              envKey: 'DASHSCOPE_API_KEY',
-            },
-            {
-              id: 'fast-model',
-              name: 'fast-model',
-              baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-              envKey: 'DASHSCOPE_API_KEY',
-            },
+            localModel('main-model'),
+            localModel('fast-model'),
           ],
         },
       });
@@ -8475,21 +7937,14 @@ describe('Server Config (config.ts)', () => {
       const config = new Config({
         ...baseParams,
         authType: AuthType.USE_OPENAI,
-        model: 'gpt-4',
-        fastModel: 'openai:deepseek-v4-flash',
+        model: 'main-model',
+        fastModel: 'openai:local-flash',
         modelProvidersConfig: {
-          [AuthType.USE_OPENAI]: [
-            {
-              id: 'deepseek-v4-flash',
-              name: 'deepseek-v4-flash',
-              baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-              envKey: 'DASHSCOPE_API_KEY',
-            },
-          ],
+          [AuthType.USE_OPENAI]: [localModel('local-flash')],
         },
       });
 
-      expect(config.getFastModel()).toBe('openai:deepseek-v4-flash');
+      expect(config.getFastModel()).toBe('openai:local-flash');
     });
 
     it('accepts runtime fast models for authType-qualified selectors', () => {
@@ -8500,7 +7955,7 @@ describe('Server Config (config.ts)', () => {
         fastModel: 'openai:runtime-fast-model',
         generationConfig: {
           apiKey: 'sk-runtime-key',
-          baseUrl: 'https://runtime.example.com/v1',
+          baseUrl: 'http://127.0.0.1:8000/v1',
         },
         generationConfigSources: {
           model: { kind: 'programmatic', detail: 'test' },
@@ -8508,14 +7963,7 @@ describe('Server Config (config.ts)', () => {
           baseUrl: { kind: 'programmatic', detail: 'test' },
         },
         modelProvidersConfig: {
-          [AuthType.USE_OPENAI]: [
-            {
-              id: 'registry-model',
-              name: 'Registry Model',
-              baseUrl: 'https://api.openai.com/v1',
-              envKey: 'OPENAI_API_KEY',
-            },
-          ],
+          [AuthType.USE_OPENAI]: [localModel('registry-model')],
         },
       });
       config.getModelsConfig().detectAndCaptureRuntimeModel();
@@ -8526,17 +7974,13 @@ describe('Server Config (config.ts)', () => {
     it('returns undefined when no active auth type is available for a bare fast model', () => {
       const config = new Config({
         ...baseParams,
-        authType: AuthType.USE_ANTHROPIC,
-        model: 'claude-opus-4-7',
-        fastModel: 'missing-fast-model',
+        authType: AuthType.USE_OPENAI,
+        model: 'main-model',
+        fastModel: 'fast-model',
         modelProvidersConfig: {
-          [AuthType.USE_ANTHROPIC]: [
-            {
-              id: 'claude-opus-4-7',
-              name: 'claude-opus-4-7',
-              baseUrl: 'https://idealab.alibaba-inc.com/api/anthropic',
-              envKey: 'IDEALAB_OPUS_API_KEY',
-            },
+          [AuthType.USE_OPENAI]: [
+            localModel('main-model'),
+            localModel('fast-model'),
           ],
         },
       });
@@ -8547,22 +7991,15 @@ describe('Server Config (config.ts)', () => {
     it('returns undefined when the fast model is not configured for the current auth type', async () => {
       const config = new Config({
         ...baseParams,
-        authType: AuthType.USE_ANTHROPIC,
-        model: 'claude-opus-4-7',
+        authType: AuthType.USE_OPENAI,
+        model: 'main-model',
         fastModel: 'missing-fast-model',
         modelProvidersConfig: {
-          [AuthType.USE_ANTHROPIC]: [
-            {
-              id: 'claude-opus-4-7',
-              name: 'claude-opus-4-7',
-              baseUrl: 'https://idealab.alibaba-inc.com/api/anthropic',
-              envKey: 'IDEALAB_OPUS_API_KEY',
-            },
-          ],
+          [AuthType.USE_OPENAI]: [localModel('main-model')],
         },
       });
 
-      await config.refreshAuth(AuthType.USE_ANTHROPIC);
+      await config.refreshAuth(AuthType.USE_OPENAI);
 
       expect(config.getFastModel()).toBeUndefined();
     });
@@ -8570,18 +8007,11 @@ describe('Server Config (config.ts)', () => {
     it('returns undefined when the fast model selector is malformed', () => {
       const config = new Config({
         ...baseParams,
-        authType: AuthType.USE_ANTHROPIC,
-        model: 'claude-opus-4-7',
+        authType: AuthType.USE_OPENAI,
+        model: 'main-model',
         fastModel: 'openai:',
         modelProvidersConfig: {
-          [AuthType.USE_OPENAI]: [
-            {
-              id: 'deepseek-v4-flash',
-              name: 'deepseek-v4-flash',
-              baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-              envKey: 'DASHSCOPE_API_KEY',
-            },
-          ],
+          [AuthType.USE_OPENAI]: [localModel('main-model')],
         },
       });
 
@@ -8591,18 +8021,11 @@ describe('Server Config (config.ts)', () => {
     it('returns undefined when fastModel points back to the fast selector', () => {
       const config = new Config({
         ...baseParams,
-        authType: AuthType.USE_ANTHROPIC,
-        model: 'claude-opus-4-7',
+        authType: AuthType.USE_OPENAI,
+        model: 'main-model',
         fastModel: 'fast',
         modelProvidersConfig: {
-          [AuthType.USE_ANTHROPIC]: [
-            {
-              id: 'claude-opus-4-7',
-              name: 'claude-opus-4-7',
-              baseUrl: 'https://idealab.alibaba-inc.com/api/anthropic',
-              envKey: 'IDEALAB_OPUS_API_KEY',
-            },
-          ],
+          [AuthType.USE_OPENAI]: [localModel('main-model')],
         },
       });
 
@@ -8614,22 +8037,12 @@ describe('Server Config (config.ts)', () => {
         const config = new Config({
           ...baseParams,
           authType: AuthType.USE_OPENAI,
-          model: 'gpt-4',
+          model: 'main-model',
           compactionModel: 'compaction-model',
           modelProvidersConfig: {
             [AuthType.USE_OPENAI]: [
-              {
-                id: 'gpt-4',
-                name: 'GPT-4',
-                baseUrl: 'https://api.openai.com/v1',
-                envKey: 'OPENAI_API_KEY',
-              },
-              {
-                id: 'compaction-model',
-                name: 'Compaction Model',
-                baseUrl: 'https://api.openai.com/v1',
-                envKey: 'OPENAI_API_KEY',
-              },
+              localModel('main-model'),
+              localModel('compaction-model'),
             ],
           },
         });
@@ -8642,30 +8055,18 @@ describe('Server Config (config.ts)', () => {
       it('resolves an authType-qualified compaction model selector', async () => {
         const config = new Config({
           ...baseParams,
-          authType: AuthType.USE_ANTHROPIC,
-          model: 'claude-opus-4-7',
+          authType: AuthType.USE_OPENAI,
+          model: 'main-model',
           compactionModel: 'openai:compaction-model',
           modelProvidersConfig: {
             [AuthType.USE_OPENAI]: [
-              {
-                id: 'compaction-model',
-                name: 'Compaction Model',
-                baseUrl: 'https://api.openai.com/v1',
-                envKey: 'OPENAI_API_KEY',
-              },
-            ],
-            [AuthType.USE_ANTHROPIC]: [
-              {
-                id: 'claude-opus-4-7',
-                name: 'claude-opus-4-7',
-                baseUrl: 'https://idealab.alibaba-inc.com/api/anthropic',
-                envKey: 'IDEALAB_OPUS_API_KEY',
-              },
+              localModel('main-model'),
+              localModel('compaction-model'),
             ],
           },
         });
 
-        await config.refreshAuth(AuthType.USE_ANTHROPIC);
+        await config.refreshAuth(AuthType.USE_OPENAI);
 
         expect(config.getCompactionModel()).toBe('openai:compaction-model');
       });
@@ -8674,22 +8075,12 @@ describe('Server Config (config.ts)', () => {
         const config = new Config({
           ...baseParams,
           authType: AuthType.USE_OPENAI,
-          model: 'gpt-4',
+          model: 'main-model',
           fastModel: 'fast-model',
           modelProvidersConfig: {
             [AuthType.USE_OPENAI]: [
-              {
-                id: 'gpt-4',
-                name: 'GPT-4',
-                baseUrl: 'https://api.openai.com/v1',
-                envKey: 'OPENAI_API_KEY',
-              },
-              {
-                id: 'fast-model',
-                name: 'Fast Model',
-                baseUrl: 'https://api.openai.com/v1',
-                envKey: 'OPENAI_API_KEY',
-              },
+              localModel('main-model'),
+              localModel('fast-model'),
             ],
           },
         });
@@ -8697,80 +8088,32 @@ describe('Server Config (config.ts)', () => {
         await config.refreshAuth(AuthType.USE_OPENAI);
 
         // fastModel is intentionally ignored — compaction falls back to main
-        expect(config.getCompactionModel()).toBe('gpt-4');
+        expect(config.getCompactionModel()).toBe('main-model');
       });
 
       it('falls back to main model when neither compactionModel nor fastModel is set', () => {
         const config = new Config({
           ...baseParams,
           authType: AuthType.USE_OPENAI,
-          model: 'gpt-4',
+          model: 'main-model',
           modelProvidersConfig: {
-            [AuthType.USE_OPENAI]: [
-              {
-                id: 'gpt-4',
-                name: 'GPT-4',
-                baseUrl: 'https://api.openai.com/v1',
-                envKey: 'OPENAI_API_KEY',
-              },
-            ],
+            [AuthType.USE_OPENAI]: [localModel('main-model')],
           },
         });
 
-        expect(config.getCompactionModel()).toBe('gpt-4');
-      });
-
-      it('returns undefined when the compaction model is voiceOnly', async () => {
-        const config = new Config({
-          ...baseParams,
-          authType: AuthType.USE_OPENAI,
-          model: 'gpt-4',
-          compactionModel: 'voice-model',
-          modelProvidersConfig: {
-            [AuthType.USE_OPENAI]: [
-              {
-                id: 'gpt-4',
-                name: 'GPT-4',
-                baseUrl: 'https://api.openai.com/v1',
-                envKey: 'OPENAI_API_KEY',
-              },
-              {
-                id: 'voice-model',
-                name: 'Voice Model',
-                voiceOnly: true,
-                baseUrl: 'https://api.openai.com/v1',
-                envKey: 'OPENAI_API_KEY',
-              },
-            ],
-          },
-        });
-
-        await config.refreshAuth(AuthType.USE_OPENAI);
-
-        expect(config.getCompactionModel()).toBeUndefined();
+        expect(config.getCompactionModel()).toBe('main-model');
       });
 
       it('returns undefined when the compaction model is visionOnly', async () => {
         const config = new Config({
           ...baseParams,
           authType: AuthType.USE_OPENAI,
-          model: 'gpt-4',
+          model: 'main-model',
           compactionModel: 'vision-model',
           modelProvidersConfig: {
             [AuthType.USE_OPENAI]: [
-              {
-                id: 'gpt-4',
-                name: 'GPT-4',
-                baseUrl: 'https://api.openai.com/v1',
-                envKey: 'OPENAI_API_KEY',
-              },
-              {
-                id: 'vision-model',
-                name: 'Vision Model',
-                visionOnly: true,
-                baseUrl: 'https://api.openai.com/v1',
-                envKey: 'OPENAI_API_KEY',
-              },
+              localModel('main-model'),
+              localModel('vision-model', { visionOnly: true }),
             ],
           },
         });
@@ -8783,45 +8126,31 @@ describe('Server Config (config.ts)', () => {
       it('falls back to the main model when the compaction model selector is malformed', async () => {
         const config = new Config({
           ...baseParams,
-          authType: AuthType.USE_ANTHROPIC,
-          model: 'claude-opus-4-7',
+          authType: AuthType.USE_OPENAI,
+          model: 'main-model',
           compactionModel: 'openai:',
           modelProvidersConfig: {
-            [AuthType.USE_OPENAI]: [
-              {
-                id: 'deepseek-v4-flash',
-                name: 'deepseek-v4-flash',
-                baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-                envKey: 'DASHSCOPE_API_KEY',
-              },
-            ],
+            [AuthType.USE_OPENAI]: [localModel('main-model')],
           },
         });
 
-        await config.refreshAuth(AuthType.USE_ANTHROPIC);
+        await config.refreshAuth(AuthType.USE_OPENAI);
 
-        expect(config.getCompactionModel()).toBe('claude-opus-4-7');
+        expect(config.getCompactionModel()).toBe('main-model');
       });
 
       it('returns undefined when the compaction model is not configured for the current auth type', async () => {
         const config = new Config({
           ...baseParams,
-          authType: AuthType.USE_ANTHROPIC,
-          model: 'claude-opus-4-7',
+          authType: AuthType.USE_OPENAI,
+          model: 'main-model',
           compactionModel: 'missing-model',
           modelProvidersConfig: {
-            [AuthType.USE_ANTHROPIC]: [
-              {
-                id: 'claude-opus-4-7',
-                name: 'Claude Opus 4',
-                baseUrl: 'https://idealab.alibaba-inc.com/api/anthropic',
-                envKey: 'IDEALAB_OPUS_API_KEY',
-              },
-            ],
+            [AuthType.USE_OPENAI]: [localModel('main-model')],
           },
         });
 
-        await config.refreshAuth(AuthType.USE_ANTHROPIC);
+        await config.refreshAuth(AuthType.USE_OPENAI);
 
         expect(config.getCompactionModel()).toBeUndefined();
       });
@@ -8838,13 +8167,13 @@ describe('Server Config (config.ts)', () => {
             {
               id: 'model-a',
               name: 'Model A',
-              baseUrl: 'https://api.example.com/v1',
+              baseUrl: 'http://127.0.0.1:11434/v1',
               envKey: 'API_KEY_A',
             },
             {
               id: 'model-b',
               name: 'Model B',
-              baseUrl: 'https://api.example.com/v1',
+              baseUrl: 'http://127.0.0.1:11434/v1',
               envKey: 'API_KEY_B',
             },
           ],
@@ -8855,14 +8184,14 @@ describe('Server Config (config.ts)', () => {
         authType: AuthType.USE_OPENAI,
         model: 'model-a',
         apiKey: 'key-a',
-        baseUrl: 'https://api.example.com/v1',
+        baseUrl: 'http://127.0.0.1:11434/v1',
       } as ContentGeneratorConfig;
 
       const mockContentConfigB: ContentGeneratorConfig = {
         authType: AuthType.USE_OPENAI,
         model: 'model-b',
         apiKey: 'key-b',
-        baseUrl: 'https://api.example.com/v1',
+        baseUrl: 'http://127.0.0.1:11434/v1',
       } as ContentGeneratorConfig;
 
       vi.mocked(resolveContentGeneratorConfigWithSources).mockImplementation(
@@ -13591,10 +12920,8 @@ describe('BaseLlmClient Lifecycle', () => {
   const QUESTION = 'test question';
   const USER_MEMORY = 'Test User Memory';
   const TELEMETRY_SETTINGS = { enabled: false };
-  const EMBEDDING_MODEL = 'gemini-embedding';
   const baseParams: ConfigParameters = {
     cwd: '/tmp',
-    embeddingModel: EMBEDDING_MODEL,
     sandbox: SANDBOX,
     targetDir: TARGET_DIR,
     debugMode: DEBUG_MODE,
@@ -13614,7 +12941,7 @@ describe('BaseLlmClient Lifecycle', () => {
 
   it('should successfully initialize BaseLlmClient after refreshAuth is called', async () => {
     const config = new Config(baseParams);
-    const authType = AuthType.USE_GEMINI;
+    const authType = AuthType.USE_OPENAI;
     const mockContentConfig = { model: 'gemini-flash', apiKey: 'test-key' };
 
     vi.mocked(resolveContentGeneratorConfigWithSources).mockReturnValue({
@@ -13633,31 +12960,13 @@ describe('BaseLlmClient Lifecycle', () => {
     );
   });
 
-  it('reads current provider protocols through the reloaded model registry', () => {
-    const providers = { alternate: [{ id: 'test-model' }] };
-    const config = new Config({
-      ...baseParams,
-      modelProvidersConfig: providers,
-      providerProtocolConfig: { alternate: 'openai' },
-    });
-    expect(config.getProviderProtocolConfig()).toEqual({ alternate: 'openai' });
-    config.reloadModelProvidersConfig(providers, { alternate: 'gemini' });
-    expect(config.getProviderProtocolConfig()).toEqual({ alternate: 'gemini' });
-    config.reloadModelProvidersConfig({});
-    expect(config.getProviderProtocolConfig()).toEqual({ alternate: 'gemini' });
-    expect(config.getModelProvidersConfig()).toEqual({});
-    config.reloadModelProvidersConfig(providers, {});
-    expect(config.getProviderProtocolConfig()).toEqual({});
-    expect(config.getModelProvidersConfig()).toEqual(providers);
-  });
-
   it('clears per-model generators when provider config is reloaded', async () => {
     const config = new Config(baseParams);
     vi.mocked(resolveContentGeneratorConfigWithSources).mockReturnValue({
       config: { model: 'gemini-flash', apiKey: 'test-key' },
       sources: {},
     });
-    await config.refreshAuth(AuthType.USE_GEMINI);
+    await config.refreshAuth(AuthType.USE_OPENAI);
 
     const llmService = config.getBaseLlmClient();
     const activeGenerator = config.getContentGenerator();
@@ -13682,18 +12991,17 @@ describe('Model Switching and Config Updates', () => {
     vi.clearAllMocks();
   });
 
-  it('should update contextWindowSize when switching models with hot-update', async () => {
+  it('should update contextWindowSize when switching models', async () => {
     const config = new Config(baseParams);
 
     // Initialize with first model
     const initialConfig: ContentGeneratorConfig = {
       ['model']: 'qwen3-coder-plus',
-      ['authType']: AuthType.QWEN_OAUTH,
+      ['authType']: AuthType.USE_OPENAI,
       ['apiKey']: 'test-key',
       ['contextWindowSize']: 1_000_000,
       ['samplingParams']: { temperature: 0.7 },
       ['enableCacheControl']: true,
-      ['forceGlobalCacheScope']: true,
     };
 
     vi.mocked(resolveContentGeneratorConfigWithSources).mockReturnValue({
@@ -13704,7 +13012,7 @@ describe('Model Switching and Config Updates', () => {
       },
     });
 
-    await config.refreshAuth(AuthType.QWEN_OAUTH);
+    await config.refreshAuth(AuthType.USE_OPENAI);
 
     // Verify initial config
     const contentGenConfig = config.getContentGeneratorConfig();
@@ -13714,12 +13022,11 @@ describe('Model Switching and Config Updates', () => {
     // Switch to a different model with different token limits
     const newConfig: ContentGeneratorConfig = {
       ['model']: 'qwen-max',
-      ['authType']: AuthType.QWEN_OAUTH,
+      ['authType']: AuthType.USE_OPENAI,
       ['apiKey']: 'test-key',
       ['contextWindowSize']: 128_000,
       ['samplingParams']: { temperature: 0.8 },
       ['enableCacheControl']: false,
-      ['forceGlobalCacheScope']: false,
       ['toolResultContentFormat']: 'string',
       ['modalities']: { image: true },
     };
@@ -13731,7 +13038,6 @@ describe('Model Switching and Config Updates', () => {
         contextWindowSize: { kind: 'computed', detail: 'auto' },
         samplingParams: { kind: 'settings' },
         enableCacheControl: { kind: 'settings' },
-        forceGlobalCacheScope: { kind: 'settings' },
         toolResultContentFormat: { kind: 'settings' },
         modalities: { kind: 'computed', detail: 'auto' },
       },
@@ -13745,7 +13051,7 @@ describe('Model Switching and Config Updates', () => {
           requiresRefresh: boolean,
         ) => Promise<void>;
       }
-    ).handleModelChange(AuthType.QWEN_OAUTH, false);
+    ).handleModelChange(AuthType.USE_OPENAI, false);
 
     // Verify all fields are updated
     const updatedConfig = config.getContentGeneratorConfig();
@@ -13753,9 +13059,8 @@ describe('Model Switching and Config Updates', () => {
     expect(updatedConfig['contextWindowSize']).toBe(128_000);
     expect(updatedConfig['samplingParams']?.temperature).toBe(0.8);
     expect(updatedConfig['enableCacheControl']).toBe(false);
-    expect(updatedConfig['forceGlobalCacheScope']).toBe(false);
     expect(updatedConfig['toolResultContentFormat']).toBe('string');
-    // Modalities are model-derived; a hot switch must refresh them so the
+    // Modalities are model-derived; a switch must refresh them so the
     // vision-bridge gate reflects the new model (it reads getEffectiveInputModalities()).
     expect(updatedConfig['modalities']).toEqual({ image: true });
     expect(config.getEffectiveInputModalities()).toEqual({ image: true });
@@ -13768,73 +13073,16 @@ describe('Model Switching and Config Updates', () => {
     expect(sources['contextWindowSize']?.detail).toBe('auto');
     expect(sources['samplingParams']?.kind).toBe('settings');
     expect(sources['enableCacheControl']?.kind).toBe('settings');
-    expect(sources['forceGlobalCacheScope']?.kind).toBe('settings');
     expect(sources['toolResultContentFormat']?.kind).toBe('settings');
     expect(sources['modalities']?.kind).toBe('computed');
   });
 
-  it('carries enableRequestMetadata across a qwen-oauth hot model switch', async () => {
-    // The DashScope provider reads enableRequestMetadata off its own
-    // contentGeneratorConfig, which on the main route is this same object. A
-    // hot switch rebuilds it field by field, so a per-model override that is
-    // not copied would leave the gate reading the previous model's value.
+  it('should run a full refresh when switching models', async () => {
     const config = new Config(baseParams);
 
-    vi.mocked(resolveContentGeneratorConfigWithSources).mockReturnValue({
-      config: {
-        ['model']: 'qwen3-coder-plus',
-        ['authType']: AuthType.QWEN_OAUTH,
-        ['apiKey']: 'test-key',
-        ['enableRequestMetadata']: false,
-      },
-      sources: {
-        model: { kind: 'settings' },
-        enableRequestMetadata: { kind: 'settings' },
-      },
-    });
-
-    await config.refreshAuth(AuthType.QWEN_OAUTH);
-    expect(config.getContentGeneratorConfig()['enableRequestMetadata']).toBe(
-      false,
-    );
-
-    vi.mocked(resolveContentGeneratorConfigWithSources).mockReturnValue({
-      config: {
-        ['model']: 'qwen-max',
-        ['authType']: AuthType.QWEN_OAUTH,
-        ['apiKey']: 'test-key',
-        ['enableRequestMetadata']: true,
-      },
-      sources: {
-        model: { kind: 'programmatic', detail: 'user' },
-        enableRequestMetadata: { kind: 'settings', detail: 'model' },
-      },
-    });
-
-    await (
-      config as unknown as {
-        handleModelChange: (
-          authType: AuthType,
-          requiresRefresh: boolean,
-        ) => Promise<void>;
-      }
-    ).handleModelChange(AuthType.QWEN_OAUTH, false);
-
-    expect(config.getContentGeneratorConfig()['enableRequestMetadata']).toBe(
-      true,
-    );
-    const sources = config.getContentGeneratorConfigSources();
-    expect(sources['enableRequestMetadata']?.kind).toBe('settings');
-    expect(sources['enableRequestMetadata']?.detail).toBe('model');
-  });
-
-  it('should trigger full refresh when switching to non-qwen-oauth provider', async () => {
-    const config = new Config(baseParams);
-
-    // Initialize with qwen-oauth
     const initialConfig: ContentGeneratorConfig = {
       ['model']: 'qwen3-coder-plus',
-      ['authType']: AuthType.QWEN_OAUTH,
+      ['authType']: AuthType.USE_OPENAI,
       ['apiKey']: 'test-key',
       ['contextWindowSize']: 1_000_000,
     };
@@ -13844,13 +13092,12 @@ describe('Model Switching and Config Updates', () => {
       sources: {},
     });
 
-    await config.refreshAuth(AuthType.QWEN_OAUTH);
+    await config.refreshAuth(AuthType.USE_OPENAI);
 
-    // Switch to different auth type (should trigger full refresh)
     const newConfig: ContentGeneratorConfig = {
-      ['model']: 'gemini-flash',
-      ['authType']: AuthType.USE_GEMINI,
-      ['apiKey']: 'gemini-key',
+      ['model']: 'other-model',
+      ['authType']: AuthType.USE_OPENAI,
+      ['apiKey']: 'other-key',
       ['contextWindowSize']: 32_000,
     };
 
@@ -13866,7 +13113,6 @@ describe('Model Switching and Config Updates', () => {
       'refreshAuth',
     );
 
-    // Simulate model switch with different auth type
     await (
       config as unknown as {
         handleModelChange: (
@@ -13874,10 +13120,10 @@ describe('Model Switching and Config Updates', () => {
           requiresRefresh: boolean,
         ) => Promise<void>;
       }
-    ).handleModelChange(AuthType.USE_GEMINI, true);
+    ).handleModelChange(AuthType.USE_OPENAI, false);
 
-    // Verify refreshAuth was called (full refresh path)
-    expect(refreshAuthSpy).toHaveBeenCalledWith(AuthType.USE_GEMINI);
+    expect(refreshAuthSpy).toHaveBeenCalledWith(AuthType.USE_OPENAI);
+    expect(config.getContentGeneratorConfig()['model']).toBe('other-model');
   });
 
   it('should handle model switch when contextWindowSize is undefined', async () => {
@@ -13886,7 +13132,7 @@ describe('Model Switching and Config Updates', () => {
     // Initialize with config that has undefined token limits
     const initialConfig: ContentGeneratorConfig = {
       ['model']: 'qwen3-coder-plus',
-      ['authType']: AuthType.QWEN_OAUTH,
+      ['authType']: AuthType.USE_OPENAI,
       ['apiKey']: 'test-key',
       ['contextWindowSize']: undefined,
     };
@@ -13896,12 +13142,12 @@ describe('Model Switching and Config Updates', () => {
       sources: {},
     });
 
-    await config.refreshAuth(AuthType.QWEN_OAUTH);
+    await config.refreshAuth(AuthType.USE_OPENAI);
 
     // Switch to model with defined limits
     const newConfig: ContentGeneratorConfig = {
       ['model']: 'qwen-max',
-      ['authType']: AuthType.QWEN_OAUTH,
+      ['authType']: AuthType.USE_OPENAI,
       ['apiKey']: 'test-key',
       ['contextWindowSize']: 128_000,
     };
@@ -13918,7 +13164,7 @@ describe('Model Switching and Config Updates', () => {
           requiresRefresh: boolean,
         ) => Promise<void>;
       }
-    ).handleModelChange(AuthType.QWEN_OAUTH, false);
+    ).handleModelChange(AuthType.USE_OPENAI, false);
 
     // Verify limits are now defined
     const updatedConfig = config.getContentGeneratorConfig();
@@ -13991,7 +13237,7 @@ describe('Model Switching and Config Updates', () => {
       } as unknown as ContentGenerator;
       const parentGeneratorConfig: ContentGeneratorConfig = {
         model: 'parent-model',
-        authType: AuthType.QWEN_OAUTH,
+        authType: AuthType.USE_OPENAI,
         apiKey: 'parent-key',
       };
       setInstanceFields(config, parentGenerator, parentGeneratorConfig);
@@ -14009,7 +13255,7 @@ describe('Model Switching and Config Updates', () => {
       expect(config.getContentGenerator()).toBe(parentGenerator);
       expect(config.getContentGeneratorConfig()).toBe(parentGeneratorConfig);
       expect(config.getModel()).toBe('parent-model');
-      expect(config.getAuthType()).toBe(AuthType.QWEN_OAUTH);
+      expect(config.getAuthType()).toBe(AuthType.USE_OPENAI);
 
       // Inside the frame, every getter resolves to the agent's view.
       await runWithRuntimeContentGenerator(
@@ -14040,7 +13286,7 @@ describe('Model Switching and Config Updates', () => {
         { generateContentStream: vi.fn() } as unknown as ContentGenerator,
         {
           model: 'parent-model',
-          authType: AuthType.QWEN_OAUTH,
+          authType: AuthType.USE_OPENAI,
         } as ContentGeneratorConfig,
       );
 
@@ -14157,7 +13403,7 @@ describe('Model Switching and Config Updates', () => {
             {
               id: 'gpt-4o',
               name: 'GPT-4o',
-              baseUrl: 'https://api.openai.example.com/v1',
+              baseUrl: 'http://127.0.0.1:11434/v1',
               envKey: 'OPENAI_API_KEY',
             },
           ],
@@ -14177,7 +13423,7 @@ describe('Model Switching and Config Updates', () => {
             {
               id: 'gpt-4o',
               name: 'GPT-4o',
-              baseUrl: 'https://api.openai.example.com/v1',
+              baseUrl: 'http://127.0.0.1:11434/v1',
               envKey: 'OPENAI_API_KEY',
             },
           ],

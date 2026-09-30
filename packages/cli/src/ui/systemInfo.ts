@@ -46,7 +46,6 @@ export interface SystemInfo {
   modelVersion: string;
   selectedAuthType: string;
   sessionId: string;
-  proxy?: string;
 }
 
 /**
@@ -57,7 +56,6 @@ export interface ExtendedSystemInfo extends SystemInfo {
   baseUrl?: string;
   apiKeyEnvKey?: string;
   gitCommit?: string;
-  proxy?: string;
   fastModel?: string;
   lspStatus?: string;
 }
@@ -161,7 +159,6 @@ export async function getSystemInfo(
   const cliVersion = await getCliVersion();
   const selectedAuthType = context.services.config?.getAuthType() || '';
   const sessionId = context.services.config?.getSessionId() || 'unknown';
-  const proxy = context.services.config?.getProxy();
 
   return {
     cliVersion,
@@ -174,7 +171,6 @@ export async function getSystemInfo(
     modelVersion,
     selectedAuthType,
     sessionId,
-    proxy,
   };
 }
 
@@ -195,11 +191,9 @@ export async function getExtendedSystemInfo(
   const sandboxEnv =
     formatExecutionSandbox(context.services.config) ?? getSandboxEnv(true);
 
-  // Get base URL and apiKeyEnvKey if using OpenAI or Anthropic auth
+  // Get base URL and apiKeyEnvKey of the model server
   const contentGeneratorConfig =
-    baseInfo.selectedAuthType === AuthType.USE_OPENAI ||
-    baseInfo.selectedAuthType === AuthType.USE_OPENAI_RESPONSES ||
-    baseInfo.selectedAuthType === AuthType.USE_ANTHROPIC
+    baseInfo.selectedAuthType === AuthType.USE_OPENAI
       ? context.services.config?.getContentGeneratorConfig()
       : undefined;
   const baseUrl = contentGeneratorConfig?.baseUrl;

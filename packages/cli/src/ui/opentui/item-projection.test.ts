@@ -710,22 +710,22 @@ describe('projectMcpStatus line spellings (R1-86)', () => {
   });
 });
 
-describe('projectAbout proxy redaction (R1-6)', () => {
-  it('masks credentials in parseable proxy URLs', () => {
+describe('projectAbout auth fields', () => {
+  it('prints the auth type and base URL of the configured local server', () => {
     const text = projectAbout({
-      proxy: 'http://user:pass@example.com:3128',
+      selectedAuthType: 'openai',
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      apiKeyEnvKey: 'QWEN_CUSTOM_API_KEY_OPENAI_HTTP_127_0_0_1_11434_V1_X',
     });
-    expect(text).toContain('Proxy: http://***:***@example.com:3128/');
-    expect(text).not.toContain('user');
-    expect(text).not.toContain('pass');
+    expect(text).toContain('Auth: API Key - openai');
+    expect(text).toContain('Base URL: http://127.0.0.1:11434/v1');
+    expect(text).not.toContain('Proxy');
   });
 
-  it('falls back to regex redaction when URL parsing fails', () => {
-    // Realistic proxy-env typos (a space in the host) must not leak the
-    // raw credentials into the shareable transcript.
-    const text = projectAbout({ proxy: 'http://user:pass@inv alid' });
-    expect(text).toContain('Proxy: http://***@inv alid');
-    expect(text).not.toContain('user');
+  it('omits the auth and base URL lines without an auth type', () => {
+    const text = projectAbout({ baseUrl: 'http://127.0.0.1:11434/v1' });
+    expect(text).not.toContain('Auth:');
+    expect(text).not.toContain('Base URL:');
   });
 });
 

@@ -702,10 +702,7 @@ export abstract class BaseJsonOutputAdapter {
       case LlmEventType.Error: {
         // Format the error message using parseAndFormatApiError for consistency
         // with interactive mode error display
-        const errorText = parseAndFormatApiError(
-          event.value.error,
-          this.config.getContentGeneratorConfig()?.authType,
-        );
+        const errorText = parseAndFormatApiError(event.value.error);
         this.appendText(state, errorText, null);
         break;
       }

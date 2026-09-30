@@ -7,34 +7,19 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, Text } from 'ink';
-import Link from 'ink-link';
-import { DescriptiveRadioButtonSelect } from '../components/shared/DescriptiveRadioButtonSelect.js';
 import { TextInput } from '../components/shared/TextInput.js';
 import { theme } from '../semantic-colors.js';
 import { ICON } from '../constants.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { t } from '../../i18n/index.js';
-import { AuthType, discoverProviderModels } from '@qwen-code/qwen-code-core';
-import type {
-  ModelWireApi,
-  ProviderConfig,
-  BaseUrlOption,
-  ModelSpec,
-} from '@qwen-code/qwen-code-core';
+import { discoverProviderModels } from '@qwen-code/qwen-code-core';
+import type { ProviderConfig, ModelSpec } from '@qwen-code/qwen-code-core';
 import type { ProviderSetupFlow } from './useProviderSetupFlow.js';
 import { normalizeModelIds } from './useAuth.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-const NAV_HINT_SELECT = () => (
-  <Box marginTop={1}>
-    <Text color={theme?.text?.secondary}>
-      {t('Enter to select, ↑↓ to navigate, Esc to go back')}
-    </Text>
-  </Box>
-);
 
 const NAV_HINT_INPUT = () => (
   <Box marginTop={1}>
@@ -44,68 +29,25 @@ const NAV_HINT_INPUT = () => (
   </Box>
 );
 
-function resolveDocumentationUrl(
-  config: ProviderConfig,
-  baseUrl: string,
-): string | undefined {
-  if (!config.documentationUrl) return undefined;
-  return typeof config.documentationUrl === 'function'
-    ? config.documentationUrl(baseUrl)
-    : config.documentationUrl;
-}
-
 // ---------------------------------------------------------------------------
-// Step: Select BaseURL from options
-// ---------------------------------------------------------------------------
-
-function BaseUrlSelectStep({
-  config,
-  flow,
-}: {
-  config: ProviderConfig;
-  flow: ProviderSetupFlow;
-}): React.JSX.Element {
-  const options = config.baseUrl as BaseUrlOption[];
-  const items = options.map((opt) => ({
-    key: opt.id,
-    title: t(opt.label),
-    label: t(opt.label),
-    description: <Text color={theme.text.secondary}>{opt.url}</Text>,
-    value: opt.url,
-  }));
-
-  return (
-    <>
-      <Box marginTop={1}>
-        <DescriptiveRadioButtonSelect
-          items={items}
-          initialIndex={flow.state.baseUrlOptionIndex}
-          onSelect={flow.selectBaseUrl}
-          onHighlight={flow.highlightBaseUrl}
-          itemGap={1}
-        />
-      </Box>
-      <NAV_HINT_SELECT />
-    </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Step: Free-form BaseURL input (custom provider)
+// Step: BaseURL input
 // ---------------------------------------------------------------------------
 
 function BaseUrlInputStep({
   flow,
-  documentationUrl,
 }: {
   flow: ProviderSetupFlow;
-  documentationUrl?: string;
 }): React.JSX.Element {
   return (
     <Box marginTop={1} flexDirection="column">
       <Box marginTop={1}>
         <Text color={theme.text.primary}>
-          {t('Enter the API endpoint for this protocol.')}
+          {t('Enter the base URL of the local OpenAI-compatible server.')}
+        </Text>
+      </Box>
+      <Box>
+        <Text color={theme.text.secondary}>
+          {t('The host must be 127.0.0.1, ::1 or localhost.')}
         </Text>
       </Box>
       <Box marginTop={1}>
@@ -114,21 +56,11 @@ function BaseUrlInputStep({
           value={flow.state.baseUrl}
           onChange={flow.changeBaseUrl}
           onSubmit={flow.submitBaseUrl}
-          placeholder={
-            flow.state.baseUrlPlaceholder || 'https://api.openai.com/v1'
-          }
         />
       </Box>
       {flow.state.baseUrlError && (
         <Box marginTop={1}>
           <Text color={theme.status.error}>{flow.state.baseUrlError}</Text>
-        </Box>
-      )}
-      {documentationUrl && (
-        <Box marginTop={1}>
-          <Link url={documentationUrl} fallback={false}>
-            <Text color={theme.text.link}>{t('Documentation')}</Text>
-          </Link>
         </Box>
       )}
       <NAV_HINT_INPUT />
@@ -147,19 +79,8 @@ function ApiKeyStep({
   config: ProviderConfig;
   flow: ProviderSetupFlow;
 }): React.JSX.Element {
-  const docUrl = resolveDocumentationUrl(config, flow.state.baseUrl);
-
   return (
     <Box marginTop={1} flexDirection="column">
-      {docUrl && (
-        <Box marginTop={1}>
-          <Link url={docUrl} fallback={false}>
-            <Text color={theme.text.link}>
-              {t('Documentation')}: {docUrl}
-            </Text>
-          </Link>
-        </Box>
-      )}
       <Box marginTop={1}>
         <TextInput
           key="api-key-input"
@@ -195,111 +116,41 @@ export interface ModelOption {
   label: string;
 }
 
-type ModelRecommendationSource = 'provider' | 'fallback';
-
 export function formatModelOptionLabel(model: ModelSpec): string {
   const details: string[] = [];
   if (model.contextWindowSize) {
     details.push(`${model.contextWindowSize.toLocaleString('en-US')} tokens`);
   }
-  if (model.enableThinking) {
-    details.push('thinking');
-  }
   const modalities = MODALITY_DISPLAY_ORDER.filter(
     (name) => model.modalities?.[name],
   );
   details.push(['text', ...modalities].join('/'));
-  const suffix = details.length > 0 ? ` ${details.join(', ')}` : '';
-  return `${model.id.padEnd(MODEL_DESCRIPTION_COLUMN)}${suffix}`;
+  return `${model.id.padEnd(MODEL_DESCRIPTION_COLUMN)} ${details.join(', ')}`;
 }
 
 export function modelOptionSearchText(item: ModelOption): string {
   return `${item.key} ${item.label} ${item.value}`.toLowerCase();
 }
 
-function uniqueModelIds(ids: string[]): string[] {
-  const seen = new Set<string>();
-  const unique: string[] = [];
-  for (const id of ids) {
-    if (seen.has(id)) {
-      continue;
-    }
-    seen.add(id);
-    unique.push(id);
-  }
-  return unique;
-}
-
 function mergeModelIds(
   customModelIdsText: string,
-  selectedRecommendationKeys: string[],
+  selectedModelKeys: string[],
 ): string[] {
-  // Checked recommendations lead: models[0] becomes the active model on
-  // first-time setup, and checked ids are catalog-served while free-form ids
-  // can include defaults the account's catalog does not serve.
-  return uniqueModelIds([
-    ...selectedRecommendationKeys,
-    ...normalizeModelIds(customModelIdsText),
-  ]);
-}
-
-function orderSelectedModelKeys(
-  selectedKeys: Iterable<string>,
-  modelOptions: ModelOption[],
-  builtInModelIds: string[],
-): string[] {
-  const selected = new Set(selectedKeys);
-  const builtIns = builtInModelIds.filter((id) => selected.has(id));
-  const builtInSet = new Set(builtIns);
-  return [
-    ...builtIns,
-    ...modelOptions
-      .map((item) => item.key)
-      .filter((id) => selected.has(id) && !builtInSet.has(id)),
-  ];
-}
-
-function getRecommendedSelections(
-  selectedModelIds: string[],
-  modelOptions: ModelOption[],
-  builtInModelIds: string[],
-): string[] {
-  const selectedSet = new Set(selectedModelIds);
-  const servedIds = new Set(modelOptions.map((item) => item.key));
-  return builtInModelIds.filter(
-    (id) => selectedSet.has(id) && servedIds.has(id),
+  // Checked served models lead: models[0] becomes the active model on
+  // first-time setup.
+  return normalizeModelIds(
+    [...selectedModelKeys, customModelIdsText].join(', '),
   );
 }
 
-function getCustomModelIdsText(
-  selectedModelIds: string[],
-  selectedRecommendationKeys: string[],
-): string {
-  const recommendedSelections = new Set(selectedRecommendationKeys);
-  return selectedModelIds
-    .filter((id) => !recommendedSelections.has(id))
-    .join(', ');
-}
-
-function ModelIdsStep({
-  config,
+/** Pick from the models the server reported, or type ids directly. */
+function ServedModelIdsStep({
   flow,
-  models = config.models ?? [],
-  recommendationSource,
-  syncChangesToFlow = true,
+  models,
 }: {
-  config: ProviderConfig;
   flow: ProviderSetupFlow;
-  models?: ModelSpec[];
-  recommendationSource?: ModelRecommendationSource;
-  syncChangesToFlow?: boolean;
+  models: ModelSpec[];
 }): React.JSX.Element {
-  const defaultIds = config.models?.map((m) => m.id).join(', ') ?? '';
-  const hasSelectableModels = models.length > 0;
-  const selectedModelIds = useMemo(
-    () => normalizeModelIds(flow.state.modelIds),
-    [flow.state.modelIds],
-  );
   const modelOptions = useMemo<ModelOption[]>(
     () =>
       models.map((model) => ({
@@ -309,19 +160,13 @@ function ModelIdsStep({
       })),
     [models],
   );
-  const builtInModelIds = useMemo(
-    () => config.models?.map((model) => model.id) ?? [],
-    [config.models],
-  );
   const [focusedModelIndex, setFocusedModelIndex] = useState(
     MODEL_CUSTOM_INPUT_FOCUS_INDEX,
   );
-  const [selectedRecommendationKeys, setSelectedRecommendationKeys] = useState(
-    () =>
-      getRecommendedSelections(selectedModelIds, modelOptions, builtInModelIds),
-  );
-  const [customModelIdsText, setCustomModelIdsText] = useState(() =>
-    getCustomModelIdsText(selectedModelIds, selectedRecommendationKeys),
+  const [selectedModelKeys, setSelectedModelKeys] = useState<string[]>([]);
+  // Saved ids from a previous setup start in the free-form input.
+  const [customModelIdsText, setCustomModelIdsText] = useState(
+    () => flow.state.modelIds,
   );
   const [modelSearchQuery, setModelSearchQuery] = useState('');
   const filteredModelOptions = useMemo(() => {
@@ -333,7 +178,7 @@ function ModelIdsStep({
       modelOptionSearchText(item).includes(normalizedQuery),
     );
   }, [modelOptions, modelSearchQuery]);
-  const recommendedScrollOffset =
+  const scrollOffset =
     focusedModelIndex < 0
       ? 0
       : Math.max(
@@ -344,68 +189,43 @@ function ModelIdsStep({
           ),
         );
   const visibleModelOptions = filteredModelOptions.slice(
-    recommendedScrollOffset,
-    recommendedScrollOffset + MAX_MODELS_TO_SHOW,
-  );
-
-  const syncModelIds = useCallback(
-    (customText: string, recommendationKeys: string[]) => {
-      if (syncChangesToFlow) {
-        flow.changeModelIds(
-          mergeModelIds(customText, recommendationKeys).join(', '),
-        );
-      } else {
-        // Edits commit only on Enter here, but a stale submit error must
-        // still clear on edit, as changeModelIds does on the synced path.
-        flow.clearModelIdsError();
-      }
-    },
-    [flow, syncChangesToFlow],
+    scrollOffset,
+    scrollOffset + MAX_MODELS_TO_SHOW,
   );
 
   const handleSubmitModelIds = useCallback(() => {
     flow.submitModelIds({
-      modelIds: mergeModelIds(customModelIdsText, selectedRecommendationKeys),
+      modelIds: mergeModelIds(customModelIdsText, selectedModelKeys),
     });
-  }, [customModelIdsText, flow, selectedRecommendationKeys]);
+  }, [customModelIdsText, flow, selectedModelKeys]);
 
   const handleCustomModelIdsChange = useCallback(
     (value: string) => {
       setCustomModelIdsText(value);
-      syncModelIds(value, selectedRecommendationKeys);
+      // Edits commit only on Enter, but a stale submit error must still clear.
+      flow.clearModelIdsError();
     },
-    [selectedRecommendationKeys, syncModelIds],
+    [flow],
   );
 
-  const toggleRecommendationAtIndex = useCallback(
+  const toggleModelAtIndex = useCallback(
     (index: number) => {
       const item = filteredModelOptions[index];
       if (!item) {
         return;
       }
-
-      const nextSet = new Set(selectedRecommendationKeys);
+      const nextSet = new Set(selectedModelKeys);
       if (nextSet.has(item.key)) {
         nextSet.delete(item.key);
       } else {
         nextSet.add(item.key);
       }
-      const nextKeys = orderSelectedModelKeys(
-        nextSet,
-        modelOptions,
-        builtInModelIds,
+      setSelectedModelKeys(
+        modelOptions.map((option) => option.key).filter((k) => nextSet.has(k)),
       );
-      setSelectedRecommendationKeys(nextKeys);
-      syncModelIds(customModelIdsText, nextKeys);
+      flow.clearModelIdsError();
     },
-    [
-      customModelIdsText,
-      filteredModelOptions,
-      builtInModelIds,
-      modelOptions,
-      selectedRecommendationKeys,
-      syncModelIds,
-    ],
+    [filteredModelOptions, flow, modelOptions, selectedModelKeys],
   );
 
   useKeypress(
@@ -434,7 +254,7 @@ function ModelIdsStep({
       }
 
       if (key.name === 'space' || key.sequence === ' ') {
-        toggleRecommendationAtIndex(focusedModelIndex);
+        toggleModelAtIndex(focusedModelIndex);
         return;
       }
 
@@ -443,139 +263,126 @@ function ModelIdsStep({
         return;
       }
     },
-    { isActive: hasSelectableModels && focusedModelIndex >= 0 },
+    { isActive: focusedModelIndex >= 0 },
   );
-
-  if (hasSelectableModels) {
-    return (
-      <Box marginTop={1} flexDirection="column">
-        <Box marginTop={1}>
-          <Text color={theme.text.secondary}>
-            {t(
-              'Enter model IDs directly. Use commas to configure multiple models.',
-            )}
-          </Text>
-        </Box>
-        <Box marginTop={1}>
-          <TextInput
-            key="model-ids-input"
-            value={customModelIdsText}
-            onChange={handleCustomModelIdsChange}
-            onSubmit={handleSubmitModelIds}
-            onDown={() => {
-              setFocusedModelIndex(MODEL_SEARCH_INPUT_FOCUS_INDEX);
-            }}
-            onTab={() => {
-              setFocusedModelIndex(MODEL_SEARCH_INPUT_FOCUS_INDEX);
-            }}
-            placeholder="model-id"
-            height={3}
-            isActive={focusedModelIndex === MODEL_CUSTOM_INPUT_FOCUS_INDEX}
-          />
-        </Box>
-        <Box marginTop={0}>
-          <Text color={theme.text.secondary}>
-            {t(
-              recommendationSource === 'provider'
-                ? 'Checked models are applied on submit but not copied into the input.'
-                : 'Checked recommended models are applied on submit but not copied into the input.',
-            )}
-          </Text>
-        </Box>
-        <Box marginTop={1}>
-          <Text color={theme.text.secondary}>
-            {recommendationSource === 'provider'
-              ? t('Models · from the provider · {{count}} checked', {
-                  count: String(selectedRecommendationKeys.length),
-                })
-              : t('Recommended models')}
-            {recommendationSource === 'fallback' &&
-              t(' · provider list unavailable, showing built-ins')}
-          </Text>
-        </Box>
-        <Box marginTop={0} flexDirection="column">
-          <Text color={theme.text.secondary}>{t('Search')}</Text>
-          <TextInput
-            key="model-search-input"
-            value={modelSearchQuery}
-            onChange={setModelSearchQuery}
-            onSubmit={handleSubmitModelIds}
-            onUp={() => setFocusedModelIndex(MODEL_CUSTOM_INPUT_FOCUS_INDEX)}
-            onDown={() => {
-              if (filteredModelOptions.length > 0) {
-                setFocusedModelIndex(0);
-              }
-            }}
-            onTab={() => {
-              if (filteredModelOptions.length > 0) {
-                setFocusedModelIndex(0);
-              }
-            }}
-            placeholder="search"
-            isActive={focusedModelIndex === MODEL_SEARCH_INPUT_FOCUS_INDEX}
-          />
-        </Box>
-        <Box marginTop={1} flexDirection="column">
-          {visibleModelOptions.length > 0 ? (
-            visibleModelOptions.map((item, visibleIndex) => {
-              const modelIndex = recommendedScrollOffset + visibleIndex;
-              const isFocused = focusedModelIndex === modelIndex;
-              const isSelected = selectedRecommendationKeys.includes(item.key);
-              const textColor = isFocused
-                ? theme.status.success
-                : isSelected
-                  ? theme.text.accent
-                  : theme.text.primary;
-              return (
-                <Box key={item.key} alignItems="flex-start">
-                  <Box minWidth={4} flexShrink={0}>
-                    <Text color={textColor}>
-                      {isSelected ? ICON.RADIO_FILLED : ICON.CIRCLE_EMPTY}
-                    </Text>
-                  </Box>
-                  <Box flexGrow={1}>
-                    <Text color={textColor}>{item.label}</Text>
-                  </Box>
-                </Box>
-              );
-            })
-          ) : (
-            <Text color={theme.text.secondary}>
-              {t(
-                recommendationSource === 'provider'
-                  ? 'No models match.'
-                  : 'No recommended models match.',
-              )}
-            </Text>
-          )}
-        </Box>
-        {flow.state.modelIdsError && (
-          <Box marginTop={1}>
-            <Text color={theme.status.error}>{flow.state.modelIdsError}</Text>
-          </Box>
-        )}
-        <Box marginTop={1}>
-          <Text color={theme.text.secondary}>
-            {t(
-              recommendationSource === 'provider'
-                ? 'Enter to submit, ↑↓/Tab to switch input, search, and models, Space to toggle models, Esc to go back'
-                : 'Enter to submit, ↑↓/Tab to switch input, search, and recommendations, Space to toggle recommendations, Esc to go back',
-            )}
-          </Text>
-        </Box>
-      </Box>
-    );
-  }
 
   return (
     <Box marginTop={1} flexDirection="column">
       <Box marginTop={1}>
         <Text color={theme.text.secondary}>
-          {defaultIds
-            ? t('Enter model IDs separated by commas. Examples: {{modelIds}}', {
-                modelIds: defaultIds,
-              })
-            : t('Enter model IDs separated by commas.')}
+          {t(
+            'Enter model IDs directly. Use commas to configure multiple models.',
+          )}
+        </Text>
+      </Box>
+      <Box marginTop={1}>
+        <TextInput
+          key="model-ids-input"
+          value={customModelIdsText}
+          onChange={handleCustomModelIdsChange}
+          onSubmit={handleSubmitModelIds}
+          onDown={() => {
+            setFocusedModelIndex(MODEL_SEARCH_INPUT_FOCUS_INDEX);
+          }}
+          onTab={() => {
+            setFocusedModelIndex(MODEL_SEARCH_INPUT_FOCUS_INDEX);
+          }}
+          placeholder="model-id"
+          height={3}
+          isActive={focusedModelIndex === MODEL_CUSTOM_INPUT_FOCUS_INDEX}
+        />
+      </Box>
+      <Box marginTop={0}>
+        <Text color={theme.text.secondary}>
+          {t(
+            'Checked models are applied on submit but not copied into the input.',
+          )}
+        </Text>
+      </Box>
+      <Box marginTop={1}>
+        <Text color={theme.text.secondary}>
+          {t('Models · from the provider · {{count}} checked', {
+            count: String(selectedModelKeys.length),
+          })}
+        </Text>
+      </Box>
+      <Box marginTop={0} flexDirection="column">
+        <Text color={theme.text.secondary}>{t('Search')}</Text>
+        <TextInput
+          key="model-search-input"
+          value={modelSearchQuery}
+          onChange={setModelSearchQuery}
+          onSubmit={handleSubmitModelIds}
+          onUp={() => setFocusedModelIndex(MODEL_CUSTOM_INPUT_FOCUS_INDEX)}
+          onDown={() => {
+            if (filteredModelOptions.length > 0) {
+              setFocusedModelIndex(0);
+            }
+          }}
+          onTab={() => {
+            if (filteredModelOptions.length > 0) {
+              setFocusedModelIndex(0);
+            }
+          }}
+          placeholder="search"
+          isActive={focusedModelIndex === MODEL_SEARCH_INPUT_FOCUS_INDEX}
+        />
+      </Box>
+      <Box marginTop={1} flexDirection="column">
+        {visibleModelOptions.length > 0 ? (
+          visibleModelOptions.map((item, visibleIndex) => {
+            const modelIndex = scrollOffset + visibleIndex;
+            const isFocused = focusedModelIndex === modelIndex;
+            const isSelected = selectedModelKeys.includes(item.key);
+            const textColor = isFocused
+              ? theme.status.success
+              : isSelected
+                ? theme.text.accent
+                : theme.text.primary;
+            return (
+              <Box key={item.key} alignItems="flex-start">
+                <Box minWidth={4} flexShrink={0}>
+                  <Text color={textColor}>
+                    {isSelected ? ICON.RADIO_FILLED : ICON.CIRCLE_EMPTY}
+                  </Text>
+                </Box>
+                <Box flexGrow={1}>
+                  <Text color={textColor}>{item.label}</Text>
+                </Box>
+              </Box>
+            );
+          })
+        ) : (
+          <Text color={theme.text.secondary}>{t('No models match.')}</Text>
+        )}
+      </Box>
+      {flow.state.modelIdsError && (
+        <Box marginTop={1}>
+          <Text color={theme.status.error}>{flow.state.modelIdsError}</Text>
+        </Box>
+      )}
+      <Box marginTop={1}>
+        <Text color={theme.text.secondary}>
+          {t(
+            'Enter to submit, ↑↓/Tab to switch input, search, and models, Space to toggle models, Esc to go back',
+          )}
+        </Text>
+      </Box>
+    </Box>
+  );
+}
+
+/** Manual entry, used when the server's model list is unavailable. */
+function ManualModelIdsStep({
+  flow,
+}: {
+  flow: ProviderSetupFlow;
+}): React.JSX.Element {
+  return (
+    <Box marginTop={1} flexDirection="column">
+      <Box marginTop={1}>
+        <Text color={theme.text.secondary}>
+          {t('Enter model IDs separated by commas.')}
         </Text>
       </Box>
       <Box marginTop={1}>
@@ -584,7 +391,7 @@ function ModelIdsStep({
           value={flow.state.modelIds}
           onChange={flow.changeModelIds}
           onSubmit={() => flow.submitModelIds()}
-          placeholder={defaultIds || 'model-id-1, model-id-2'}
+          placeholder="model-id-1, model-id-2"
         />
       </Box>
       {flow.state.modelIdsError && (
@@ -597,36 +404,30 @@ function ModelIdsStep({
   );
 }
 
+/** Lists the served models from `{baseUrl}/models`, then lets the user pick. */
 function DiscoveringModelIdsStep({
-  config,
   flow,
 }: {
-  config: ProviderConfig;
   flow: ProviderSetupFlow;
 }): React.JSX.Element {
-  const [snapshot, setSnapshot] = useState<{
-    models: ModelSpec[];
-    source: ModelRecommendationSource;
-  } | null>(null);
+  const [discovered, setDiscovered] = useState<ModelSpec[] | null | undefined>(
+    undefined,
+  );
   const baseUrl = flow.state.baseUrl;
   const apiKey = flow.state.apiKey;
 
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
-    const builtInModels = config.models ?? [];
 
     void discoverProviderModels({
       baseUrl,
       apiKey,
-      staticModels: builtInModels,
+      staticModels: [],
       signal: controller.signal,
     }).then((models) => {
       if (active) {
-        setSnapshot({
-          models: models ?? builtInModels,
-          source: models ? 'provider' : 'fallback',
-        });
+        setDiscovered(models);
       }
     });
 
@@ -634,9 +435,9 @@ function DiscoveringModelIdsStep({
       active = false;
       controller.abort();
     };
-  }, [apiKey, baseUrl, config.models]);
+  }, [apiKey, baseUrl]);
 
-  if (!snapshot) {
+  if (discovered === undefined) {
     return (
       <Box marginTop={1} flexDirection="column">
         <Text color={theme.text.secondary}>
@@ -649,15 +450,11 @@ function DiscoveringModelIdsStep({
     );
   }
 
-  return (
-    <ModelIdsStep
-      config={config}
-      flow={flow}
-      models={snapshot.models}
-      recommendationSource={snapshot.source}
-      syncChangesToFlow={false}
-    />
-  );
+  if (!discovered || discovered.length === 0) {
+    return <ManualModelIdsStep flow={flow} />;
+  }
+
+  return <ServedModelIdsStep flow={flow} models={discovered} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -801,34 +598,6 @@ function ReviewStep({ flow }: { flow: ProviderSetupFlow }): React.JSX.Element {
 }
 
 // ---------------------------------------------------------------------------
-// Protocol options
-// ---------------------------------------------------------------------------
-
-const PROTOCOL_ITEMS = [
-  {
-    key: AuthType.USE_OPENAI,
-    title: t('OpenAI-compatible'),
-    label: t('OpenAI-compatible'),
-    description: t('Standard OpenAI API format (most common)'),
-    value: AuthType.USE_OPENAI,
-  },
-  {
-    key: AuthType.USE_ANTHROPIC,
-    title: t('Anthropic-compatible'),
-    label: t('Anthropic-compatible'),
-    description: t('Anthropic Messages API format'),
-    value: AuthType.USE_ANTHROPIC,
-  },
-  {
-    key: AuthType.USE_GEMINI,
-    title: t('Gemini-compatible'),
-    label: t('Gemini-compatible'),
-    description: t('Google Gemini API format'),
-    value: AuthType.USE_GEMINI,
-  },
-];
-
-// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
@@ -880,81 +649,17 @@ export function ProviderSetupSteps({
   if (!provider || !step) return null;
 
   switch (step) {
-    case 'protocol': {
-      const protocolOpts = provider.protocolOptions ?? [provider.protocol];
-      const items = PROTOCOL_ITEMS.filter((p) =>
-        protocolOpts.includes(p.value as AuthType),
-      );
-      return (
-        <>
-          <Box marginTop={1}>
-            <DescriptiveRadioButtonSelect
-              items={items}
-              initialIndex={Math.max(
-                0,
-                items.findIndex((item) => item.value === flow.state.protocol),
-              )}
-              onSelect={flow.selectProtocol}
-              itemGap={1}
-            />
-          </Box>
-          <NAV_HINT_SELECT />
-        </>
-      );
-    }
-
-    case 'wireApi':
-      return (
-        <>
-          <Box marginTop={1}>
-            <DescriptiveRadioButtonSelect
-              items={[
-                {
-                  key: 'chat-completions',
-                  title: t('Chat Completions'),
-                  description: t('Standard OpenAI API format (most common)'),
-                  value: 'chat-completions' as ModelWireApi,
-                },
-                {
-                  key: 'responses',
-                  title: t('Responses'),
-                  description: t(
-                    'OpenAI Responses API — streaming reasoning + tool use',
-                  ),
-                  value: 'responses' as ModelWireApi,
-                },
-              ]}
-              initialIndex={flow.state.wireApi === 'responses' ? 1 : 0}
-              onSelect={flow.selectWireApi}
-              itemGap={1}
-            />
-          </Box>
-          <NAV_HINT_SELECT />
-        </>
-      );
-
     case 'baseUrl':
-      if (Array.isArray(provider.baseUrl)) {
-        return <BaseUrlSelectStep config={provider} flow={flow} />;
-      }
-      return (
-        <BaseUrlInputStep
-          flow={flow}
-          documentationUrl={resolveDocumentationUrl(
-            provider,
-            flow.state.baseUrl,
-          )}
-        />
-      );
+      return <BaseUrlInputStep flow={flow} />;
 
     case 'apiKey':
       return <ApiKeyStep config={provider} flow={flow} />;
 
     case 'models':
       if (provider.supportsModelDiscovery) {
-        return <DiscoveringModelIdsStep config={provider} flow={flow} />;
+        return <DiscoveringModelIdsStep flow={flow} />;
       }
-      return <ModelIdsStep config={provider} flow={flow} />;
+      return <ManualModelIdsStep flow={flow} />;
 
     case 'advancedConfig':
       return <AdvancedConfigStep flow={flow} />;

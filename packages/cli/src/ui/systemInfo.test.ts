@@ -89,9 +89,8 @@ describe('systemInfo', () => {
           getModel: vi.fn().mockReturnValue('test-model'),
           getSessionId: vi.fn().mockReturnValue('test-session-id'),
           getAuthType: vi.fn().mockReturnValue('test-auth'),
-          getProxy: vi.fn().mockReturnValue(undefined),
           getContentGeneratorConfig: vi.fn().mockReturnValue({
-            baseUrl: 'https://api.openai.com',
+            baseUrl: 'http://127.0.0.1:11434/v1',
           }),
         },
         settings: {
@@ -215,7 +214,6 @@ describe('systemInfo', () => {
         modelVersion: 'test-model',
         selectedAuthType: 'test-auth',
         sessionId: 'test-session-id',
-        proxy: undefined,
       });
     });
 
@@ -245,28 +243,7 @@ describe('systemInfo', () => {
 
       expect(extendedInfo.memoryUsage).toBeDefined();
       expect(extendedInfo.memoryUsage).toMatch(/\d+\.\d+ (KB|MB|GB)/);
-      expect(extendedInfo.baseUrl).toBe('https://api.openai.com');
-    });
-
-    it('should include provider diagnostics for OpenAI Responses auth', async () => {
-      setExecFileStdout('10.0.0');
-
-      const { AuthType } = await import('@qwen-code/qwen-code-core');
-      vi.mocked(mockContext.services.config!.getAuthType).mockReturnValue(
-        AuthType.USE_OPENAI_RESPONSES,
-      );
-      vi.mocked(
-        mockContext.services.config!.getContentGeneratorConfig,
-      ).mockReturnValue({
-        model: 'gpt-5',
-        baseUrl: 'https://api.example.com',
-        apiKeyEnvKey: 'OPENAI_API_KEY',
-      });
-
-      const extendedInfo = await getExtendedSystemInfo(mockContext);
-
-      expect(extendedInfo.baseUrl).toBe('https://api.example.com');
-      expect(extendedInfo.apiKeyEnvKey).toBe('OPENAI_API_KEY');
+      expect(extendedInfo.baseUrl).toBe('http://127.0.0.1:11434/v1');
     });
 
     it('should use sandbox env without prefix for bug reports', async () => {

@@ -4,14 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { AuthType } from '../core/contentGenerator.js';
-import { tryResolveModelProtocol } from '../models/modelRegistry.js';
-import type {
-  ModelConfig,
-  ModelProvidersConfig,
-  ProviderProtocolConfig,
-} from '../models/types.js';
-import { getModelsForProviderProtocol } from './provider-config.js';
+import type { ModelConfig, ModelProvidersConfig } from '../models/types.js';
 
 function preservePlaceholders(
   value: unknown,
@@ -53,57 +46,32 @@ function preservePlaceholders(
   return value;
 }
 
+/**
+ * Map resolved model entries (env placeholders expanded) back onto the raw
+ * settings entries so `${VAR}` placeholders survive a rewrite.
+ */
 export function preserveModelProviderPlaceholders(
   models: ModelConfig[],
   provider: string,
   resolvedProviders: ModelProvidersConfig,
   rawProviders: ModelProvidersConfig,
-  mapping?: ProviderProtocolConfig,
 ): ModelConfig[] {
-  const pairs = Object.entries(resolvedProviders).flatMap(
-    ([providerId, entries]) => {
-      if (!Array.isArray(entries)) return [];
-      return entries.flatMap((entry, index) => {
-        const resolved =
-          provider === AuthType.USE_OPENAI
-            ? getModelsForProviderProtocol(
-                { [providerId]: [entry] },
-                AuthType.USE_OPENAI,
-                mapping,
-              )[0]
-            : providerId === provider
-              ? entry
-              : undefined;
-        return resolved
-          ? [
-              {
-                providerId,
-                resolved,
-                source: entry,
-                raw: rawProviders[providerId]?.[index] ?? entry,
-              },
-            ]
-          : [];
-      });
-    },
-  );
+  const resolvedEntries = resolvedProviders[provider];
+  const pairs = Array.isArray(resolvedEntries)
+    ? resolvedEntries.map((resolved, index) => ({
+        resolved,
+        raw: rawProviders[provider]?.[index] ?? resolved,
+      }))
+    : [];
   return models.map((model) => {
     const matches = pairs.filter(
       ({ resolved }) =>
-        resolved.id === model.id &&
-        resolved.baseUrl === model.baseUrl &&
-        tryResolveModelProtocol(provider, resolved, mapping) ===
-          tryResolveModelProtocol(provider, model, mapping),
-    );
-    // The registry uses the first bucket for duplicate identities. Only
-    // duplicates inside that winning bucket make placeholder recovery ambiguous.
-    const sourceMatches = matches.filter(
-      (pair) => pair.providerId === matches[0]?.providerId,
+        resolved.id === model.id && resolved.baseUrl === model.baseUrl,
     );
     if (
-      sourceMatches.length > 1 &&
-      sourceMatches.some(
-        (pair) => JSON.stringify(pair.raw) !== JSON.stringify(pair.source),
+      matches.length > 1 &&
+      matches.some(
+        (pair) => JSON.stringify(pair.raw) !== JSON.stringify(pair.resolved),
       )
     ) {
       throw new Error(

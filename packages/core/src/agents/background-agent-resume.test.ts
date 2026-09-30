@@ -1859,8 +1859,8 @@ describe('BackgroundAgentResumeService', () => {
         sandbox: { command: 'docker', image: 'qwen-code-sandbox' },
         screenReader: true,
         model: 'agent-model',
-        authType: 'anthropic',
-        baseUrl: 'https://launch-provider.example.com',
+        authType: 'openai',
+        baseUrl: 'http://127.0.0.1:8080/v1',
         maxSessionTurns: 7,
         maxToolCalls: 11,
         // Deliberately out of range: the resume path must re-normalize
@@ -1939,8 +1939,8 @@ describe('BackgroundAgentResumeService', () => {
       model: 'agent-model',
     });
     expect(createOptions.runtimeAuthOverrides).toEqual({
-      authType: 'anthropic',
-      baseUrl: 'https://launch-provider.example.com',
+      authType: 'openai',
+      baseUrl: 'http://127.0.0.1:8080/v1',
     });
     expect(overriddenConfig.getMaxSessionTurns()).toBe(7);
     expect(overriddenConfig.getMaxToolCalls()).toBe(11);

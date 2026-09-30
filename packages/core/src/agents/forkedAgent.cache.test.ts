@@ -542,93 +542,6 @@ describe('runForkedAgent (cache path)', () => {
     expect(result.jsonResult).toEqual({ suggestion: 'run tests' });
   });
 
-  it('routes a cross-auth fast model through a runtime content-generator view', async () => {
-    const fastModel = 'deepseek-v4-flash';
-    const runtimeView = makeRuntimeView(fastModel);
-    vi.mocked(createRuntimeContentGeneratorView).mockResolvedValue(runtimeView);
-
-    saveCacheSafeParams(
-      {
-        systemInstruction: 'You are helpful',
-      },
-      [{ role: 'user', parts: [{ text: 'hello' }] }],
-      'claude-main',
-    );
-
-    const mockSendMessageStream = vi.fn(
-      (_model: string, _params: unknown, _promptId: string) => {
-        async function* generate() {
-          yield {
-            type: StreamEventType.CHUNK,
-            value: {
-              candidates: [
-                {
-                  content: {
-                    role: 'model',
-                    parts: [{ text: 'commit this' }],
-                  },
-                },
-              ],
-            },
-          };
-        }
-        return Promise.resolve(generate());
-      },
-    );
-
-    vi.mocked(LlmChat).mockImplementation(
-      () =>
-        ({
-          sendMessageStream: mockSendMessageStream,
-        }) as unknown as LlmChat,
-    );
-
-    const mockConfig = {
-      getModel: vi.fn().mockReturnValue('claude-main'),
-      getContentGeneratorConfig: vi.fn().mockReturnValue({
-        model: 'claude-main',
-        authType: AuthType.USE_ANTHROPIC,
-      }),
-      getFastModel: vi
-        .fn()
-        .mockReturnValue(`${AuthType.USE_OPENAI}:${fastModel}`),
-      getAllConfiguredModels: vi.fn((authTypes?: AuthType[]) =>
-        authTypes?.includes(AuthType.USE_OPENAI)
-          ? [
-              {
-                id: fastModel,
-                label: fastModel,
-                authType: AuthType.USE_OPENAI,
-              },
-            ]
-          : [],
-      ),
-    } as unknown as Config;
-
-    const result = await runForkedAgent({
-      config: mockConfig,
-      userMessage: 'suggest something',
-      cacheSafeParams: getCacheSafeParams()!,
-      model: 'fast',
-    });
-
-    expect(result.text).toBe('commit this');
-    expect(result.model).toBe(fastModel);
-    expect(createRuntimeContentGeneratorView).toHaveBeenCalledWith(
-      mockConfig,
-      mockConfig,
-      fastModel,
-      { authType: AuthType.USE_OPENAI },
-    );
-    expect(mockSendMessageStream).toHaveBeenCalledWith(
-      fastModel,
-      expect.objectContaining({
-        message: [{ text: 'suggest something' }],
-      }),
-      'forked_query',
-    );
-  });
-
   it('routes a same-auth fast model through a runtime content-generator view when the model differs', async () => {
     const fastModel = 'deepseek-v4-flash';
     const runtimeView = makeRuntimeView(fastModel);
@@ -679,22 +592,6 @@ describe('runForkedAgent (cache path)', () => {
       getFastModel: vi
         .fn()
         .mockReturnValue(`${AuthType.USE_OPENAI}:${fastModel}`),
-      getAllConfiguredModels: vi.fn((authTypes?: AuthType[]) =>
-        authTypes?.includes(AuthType.USE_OPENAI)
-          ? [
-              {
-                id: 'gpt-4',
-                label: 'gpt-4',
-                authType: AuthType.USE_OPENAI,
-              },
-              {
-                id: fastModel,
-                label: fastModel,
-                authType: AuthType.USE_OPENAI,
-              },
-            ]
-          : [],
-      ),
     } as unknown as Config;
 
     const result = await runForkedAgent({
@@ -766,10 +663,9 @@ describe('runForkedAgent (cache path)', () => {
       getModel: vi.fn().mockReturnValue('parent-model'),
       getContentGeneratorConfig: vi.fn().mockReturnValue({
         model: 'parent-model',
-        authType: AuthType.QWEN_OAUTH,
+        authType: AuthType.USE_OPENAI,
       }),
       getFastModel: vi.fn().mockReturnValue(undefined),
-      getAllConfiguredModels: vi.fn(() => []),
     } as unknown as Config;
 
     const result = await runForkedAgent({

@@ -14,18 +14,10 @@ import type {
   PromptCacheSharingParameters,
 } from '../contentGenerator.js';
 import { OpenAIContentConverter } from './converter.js';
-import { DashScopeOpenAICompatibleProvider } from './provider/dashscope.js';
-import {
-  applyOfficialOpenAIPromptCaching,
-  isOfficialOpenAIEndpoint,
-} from './prefix-caching.js';
-import { isDeepSeekHostname } from './provider/deepseek.js';
-import { isOpenRouterHostname } from './provider/openrouter.js';
 import { openaiRequestCaptureContext } from './requestCaptureContext.js';
 import { StreamingToolCallParser } from './streamingToolCallParser.js';
 import { TaggedThinkingParser } from './taggedThinkingParser.js';
 import type { PipelineConfig, RequestContext } from './types.js';
-import { redactProxyError } from '../../utils/runtimeFetchOptions.js';
 import { runtimeDiagnostics } from '../../utils/runtimeDiagnostics.js';
 import { createChildAbortController } from '../../utils/abortController.js';
 import { reconcileMaxTokens } from '../tokenLimits.js';
@@ -33,10 +25,7 @@ import {
   getGptReasoningCapabilities,
   isReasoningEffortPlaceholder,
 } from '../reasoning-effort.js';
-import {
-  isQwenFamilyWireModel,
-  isTieredEffortWireModel,
-} from '../modalityDefaults.js';
+import { isQwenFamilyWireModel } from '../modalityDefaults.js';
 import {
   resolveStreamIdleTimeoutMs,
   resolveStreamMaxLifetimeMs,
@@ -58,9 +47,6 @@ import {
   reportOpenAiResponse,
   type GenAiAttemptHandle,
 } from '../../telemetry/gen-ai-request.js';
-import { getCurrentAgentId } from '../../agents/runtime/agent-context.js';
-import { isInForkExecution } from '../../tools/agent/fork-subagent.js';
-import { trailingReattachPartCount } from '../../services/image-payload-references.js';
 import type { ResolvedReasoning } from '../reasoning-overrides.js';
 import { ensureReasoningContentOnAssistantMessage } from './provider/utils.js';
 import {
@@ -69,23 +55,6 @@ import {
 } from '../reasoning-overrides.js';
 
 const debugLogger = createDebugLogger('OPENAI_PIPELINE');
-const OPENAI_STRICT_SCHEMA_KEYS = new Set([
-  'type',
-  'properties',
-  'required',
-  'additionalProperties',
-  'items',
-  'description',
-  'enum',
-]);
-const OPENAI_STRICT_UNSUPPORTED_SCHEMA_KEYS = new Set([
-  'minLength',
-  'maxLength',
-  'minItems',
-  'maxItems',
-  'uniqueItems',
-]);
-
 function asObject(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
@@ -104,7 +73,6 @@ function profileReasoning(
     case 'openai-reasoning':
       return { reasoning: enabled ? reasoning : { enabled: false } };
     case 'openai-effort':
-    case 'dashscope-effort':
       return effort || !enabled
         ? { reasoning_effort: enabled ? effort : 'none' }
         : {};
@@ -113,8 +81,6 @@ function profileReasoning(
         thinking: { type: enabled ? 'enabled' : 'disabled' },
         ...(effort ? { reasoning_effort: effort } : {}),
       };
-    case 'dashscope-thinking':
-      return { enable_thinking: enabled };
     case 'qwen-chat-template':
       return { chat_template_kwargs: { enable_thinking: enabled } };
     default:
@@ -164,78 +130,6 @@ function applyConfiguredReasoningEffort(
     next['reasoning_effort'] = effort;
   }
   return next as unknown as OpenAI.Chat.ChatCompletionCreateParams;
-}
-
-function normalizeSchemaType(value: unknown): string | undefined {
-  if (typeof value !== 'string') return undefined;
-  const normalized = value.toLowerCase();
-  return [
-    'object',
-    'array',
-    'string',
-    'number',
-    'integer',
-    'boolean',
-    'null',
-  ].includes(normalized)
-    ? normalized
-    : undefined;
-}
-
-function normalizeOpenAIStrictSchema(
-  schema: unknown,
-): Record<string, unknown> | undefined {
-  const source = asObject(schema);
-  if (!source) return undefined;
-
-  const type = normalizeSchemaType(source['type']);
-  if (!type) return undefined;
-
-  const normalized: Record<string, unknown> = { type };
-  for (const [key, value] of Object.entries(source)) {
-    if (
-      key === 'type' ||
-      OPENAI_STRICT_UNSUPPORTED_SCHEMA_KEYS.has(key) ||
-      !OPENAI_STRICT_SCHEMA_KEYS.has(key)
-    ) {
-      continue;
-    }
-    normalized[key] = value;
-  }
-
-  if (type === 'object') {
-    const properties = asObject(source['properties']);
-    if (!properties) return undefined;
-
-    const normalizedProperties: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(properties)) {
-      const property = normalizeOpenAIStrictSchema(value);
-      if (!property) return undefined;
-      normalizedProperties[key] = property;
-    }
-
-    const propertyKeys = Object.keys(normalizedProperties);
-    const required = source['required'];
-    if (
-      !Array.isArray(required) ||
-      !propertyKeys.every((key) => required.includes(key)) ||
-      required.length !== propertyKeys.length
-    ) {
-      return undefined;
-    }
-
-    normalized['properties'] = normalizedProperties;
-    normalized['required'] = required;
-    normalized['additionalProperties'] = false;
-  }
-
-  if (type === 'array') {
-    const items = normalizeOpenAIStrictSchema(source['items']);
-    if (!items) return undefined;
-    normalized['items'] = items;
-  }
-
-  return normalized;
 }
 
 function isRequiredThinkingError(error: unknown): boolean {
@@ -289,9 +183,8 @@ export class StreamContentError extends Error {
   }
 }
 
-// Stream watchdog errors are shared with the Anthropic wire — see
-// ../stream-guards.ts (issue #9005 finding 4). Re-exported so existing
-// imports from this module keep working.
+// Stream watchdog errors live in ../stream-guards.ts (issue #9005 finding 4).
+// Re-exported so existing imports from this module keep working.
 export {
   StreamInactivityTimeoutError,
   StreamLifetimeExceededError,
@@ -403,8 +296,8 @@ function clampProviderOutputBudgetKeys(
   return samplingParams;
 }
 
-// The stream-guard timeout resolvers and `withStreamGuards` are shared with
-// the Anthropic wire — see ../stream-guards.ts (issue #9005 finding 4).
+// The stream-guard timeout resolvers and `withStreamGuards` live in
+// ../stream-guards.ts (issue #9005 finding 4).
 
 export type { PipelineConfig } from './types.js';
 
@@ -846,9 +739,8 @@ export class ContentGenerationPipeline {
       // the model's decided tool call: LlmChat would see prose, no
       // functionCall, and no finish reason, so the continuation arm would
       // resume over the delivered prose while the call never reaches
-      // error-path persistence or the scheduler's repair flow. Releasing it
-      // here puts the cut on the same footing as the Anthropic
-      // deferred-batch release gate.
+      // error-path persistence or the scheduler's repair flow, so release it
+      // here.
       // TypeScript narrows pendingFinishResponse to null here (its only
       // assignments sit inside the handleChunkMerging callback), so the
       // property access needs the same explicit cast as the finishYielded
@@ -888,7 +780,7 @@ export class ContentGenerationPipeline {
       // Re-throw StreamContentError directly so it can be handled by
       // the caller's retry logic (e.g., TPM throttling retry in sendMessageStream)
       if (error instanceof StreamContentError) {
-        throw redactProxyError(error);
+        throw error;
       }
 
       // Bypass handleError so callers retain the dedicated timeout type and
@@ -921,7 +813,7 @@ export class ContentGenerationPipeline {
               : { idleMs: (error as StreamInactivityTimeoutError).idleMs }),
           },
         );
-        throw redactProxyError(error);
+        throw error;
       }
 
       if (
@@ -962,8 +854,8 @@ export class ContentGenerationPipeline {
 
     if (isFinishChunk) {
       if (pendingFinishResponse) {
-        // Duplicate finish chunk (e.g. from OpenRouter providers that send two
-        // finish_reason chunks for tool calls). The first finish response owns
+        // Duplicate finish chunk (some servers send two finish_reason chunks
+        // for tool calls). The first finish response owns
         // the candidates, including functionCall parts. Merge only usageMetadata
         // from later finish chunks.
         if (response.usageMetadata) {
@@ -1035,7 +927,6 @@ export class ContentGenerationPipeline {
       model: context.model,
       messages,
       ...this.buildGenerateContentConfig(request),
-      ...this.buildResponseFormat(request),
     };
 
     if (isStreaming) {
@@ -1071,9 +962,7 @@ export class ContentGenerationPipeline {
     if (
       this.contentGeneratorConfig.samplingParams?.['reasoning'] === undefined &&
       (!reasoningCapabilities?.profile ||
-        this.contentGeneratorConfig.extra_body?.['reasoning'] === undefined) &&
-      (reasoningCapabilities?.profile ||
-        !isOpenRouterHostname(this.contentGeneratorConfig))
+        this.contentGeneratorConfig.extra_body?.['reasoning'] === undefined)
     ) {
       baseRequest = applyConfiguredReasoningEffort(
         baseRequest,
@@ -1105,22 +994,10 @@ export class ContentGenerationPipeline {
     }
 
     // Let provider enhance the request (e.g., add metadata, cache control)
-    let providerRequest = this.config.provider.buildRequest(
+    const providerRequest = this.config.provider.buildRequest(
       baseRequest,
       userPromptId,
-      trailingReattachPartCount(request.contents),
     );
-    if (
-      this.contentGeneratorConfig.enableCacheControl !== false &&
-      isOfficialOpenAIEndpoint(this.contentGeneratorConfig)
-    ) {
-      providerRequest = applyOfficialOpenAIPromptCaching(
-        providerRequest,
-        this.config.cliConfig.getSessionId?.(),
-        request.promptCacheSharing === true,
-        isInForkExecution() ? undefined : (getCurrentAgentId() ?? undefined),
-      );
-    }
 
     // Reasoning is disabled when either:
     //   - the per-request opt-out is set (forked queries for suggestions),
@@ -1131,15 +1008,11 @@ export class ContentGenerationPipeline {
     // latency/cost.
     //
     // Exception: `thinkingMandatory` marks models that reject
-    // `enable_thinking: false` with a 400 (e.g. qwen3.8-max-preview on
-    // DashScope Token Plan gateways — set by the preset, or by users via
-    // model generation config). For these, never emit the disable on the
-    // wire: a "disabled" shape is a guaranteed request failure, so the flag
-    // also overrides the config-level `reasoning: false` opt-out.
+    // `enable_thinking: false` with a 400 (set by users via model generation
+    // config). For these, never emit the disable on the wire: a "disabled"
+    // shape is a guaranteed request failure, so the flag also overrides the
+    // config-level `reasoning: false` opt-out.
     const model = (context.model ?? '').toLowerCase();
-    const isDashScope = DashScopeOpenAICompatibleProvider.isDashScopeProvider(
-      this.contentGeneratorConfig,
-    );
     const explicitThinkingMandatory =
       reasoningCapabilities?.canDisable === false ||
       this.requiresThinking(model);
@@ -1152,7 +1025,7 @@ export class ContentGenerationPipeline {
       request.config?.thinkingConfig?.includeThoughts === false ||
       this.contentGeneratorConfig.reasoning === false;
     if (
-      (profile === 'openai-effort' || profile === 'dashscope-effort') &&
+      profile === 'openai-effort' &&
       isReasoningEffortPlaceholder(providerRequest.reasoning_effort) &&
       effectiveReasoning &&
       this.contentGeneratorConfig.samplingParams?.['reasoning'] === undefined &&
@@ -1170,10 +1043,6 @@ export class ContentGenerationPipeline {
         delete typed['reasoning_effort'];
       }
       if (!thinkingMandatory) {
-        if (isDashScope && profile === 'dashscope-effort') {
-          delete typed['thinking_budget'];
-          delete typed['enable_thinking'];
-        }
         const template = asObject(typed['chat_template_kwargs']);
         Object.assign(typed, profileReasoning(profile, false));
         if (profile === 'qwen-chat-template') {
@@ -1189,61 +1058,33 @@ export class ContentGenerationPipeline {
       }
     } else if (reasoningDisabled) {
       const typed = providerRequest as unknown as Record<string, unknown>;
-      // Provider buildRequest doesn't auto-inject `enable_thinking`, so a
-      // guarded `in typed` check would never fire for default qwen3 configs.
-      // Hostname + model-name gate avoids leaking this qwen-specific field
-      // to non-qwen routings on the same DashScope hostname (GLM uses
-      // `extra_body.thinking.enabled`, DeepSeek-on-DashScope uses
-      // `thinking: { type: 'disabled' }`; sending `enable_thinking` to them
-      // is at best a no-op, at worst forwarded upstream and rejected).
-      //
       // Gate on the *wire* model (`context.model`, i.e.
       // `request.model || contentGeneratorConfig.model` — the same value
-      // baseRequest.model is built from above), not on the config model. A
-      // request-level model override would otherwise desync the gate from
-      // what actually ships: a qwen config with a non-qwen request model
-      // would leak the field, and a non-qwen config with a qwen request
-      // model would miss the disable signal (the regression).
+      // baseRequest.model is built from above), not on the config model, so a
+      // request-level model override cannot desync the gate from what ships.
       if (!thinkingMandatory && isQwenFamilyWireModel(model)) {
-        if (isDashScope) {
-          if (isTieredEffortWireModel(model)) {
-            // The tier-native family reads reasoning_effort, not the
-            // boolean: emit the canonical disable in the knob it reads
-            // (the strip below preserves 'none'). Drop a user-supplied
-            // thinking_budget too — DashScope rejects it alongside
-            // reasoning_effort.
-            delete typed['enable_thinking'];
-            delete typed['thinking_budget'];
-            typed['reasoning_effort'] = 'none';
-          } else {
-            typed['enable_thinking'] = false;
-          }
-        } else {
-          // Non-DashScope OpenAI-compatible servers (vLLM, SGLang, ...) render
-          // the model's chat template server-side and read the thinking switch
-          // from `chat_template_kwargs`, not a top-level `enable_thinking`
-          // (which they silently ignore). Send it there so hybrid qwen models
-          // actually stop emitting <think> when reasoning is disabled — e.g.
-          // the auto-mode permission classifier's short structured-output
-          // calls, which otherwise spend their small token budget on thinking
-          // and fail closed. Servers that don't recognise `chat_template_kwargs`
-          // ignore the unknown field, so the switch is a harmless no-op there.
-          //
-          // Drop any top-level `enable_thinking` a provider preset injected via
-          // extra_body (provider-config.ts emits it for models configured with
-          // `enableThinking: true`): leaving it would contradict the
-          // `chat_template_kwargs` opt-out on servers that honour both, and
-          // keeps this path from leaking the qwen-specific field top-level.
-          delete typed['enable_thinking'];
-          const existing = (typed['chat_template_kwargs'] ?? {}) as Record<
-            string,
-            unknown
-          >;
-          typed['chat_template_kwargs'] = {
-            ...existing,
-            enable_thinking: false,
-          };
-        }
+        // OpenAI-compatible servers (vLLM, SGLang, llama.cpp, ...) render the
+        // model's chat template server-side and read the thinking switch from
+        // `chat_template_kwargs`, not a top-level `enable_thinking` (which
+        // they silently ignore). Send it there so hybrid qwen models actually
+        // stop emitting <think> when reasoning is disabled — e.g. the
+        // auto-mode permission classifier's short structured-output calls,
+        // which otherwise spend their small token budget on thinking and fail
+        // closed. Servers that don't recognise `chat_template_kwargs` ignore
+        // the unknown field, so the switch is a harmless no-op there.
+        //
+        // Drop any top-level `enable_thinking` injected via extra_body:
+        // leaving it would contradict the `chat_template_kwargs` opt-out on
+        // servers that honour both.
+        delete typed['enable_thinking'];
+        const existing = (typed['chat_template_kwargs'] ?? {}) as Record<
+          string,
+          unknown
+        >;
+        typed['chat_template_kwargs'] = {
+          ...existing,
+          enable_thinking: false,
+        };
       }
       if (!thinkingMandatory) {
         if (reasoningCapabilities?.disableField === 'reasoning_effort') {
@@ -1256,10 +1097,9 @@ export class ContentGenerationPipeline {
       }
       // Strip reasoning config — extra_body could inject it, overriding
       // buildReasoningConfig's decision to return {} for disabled thinking.
-      // The provider hook (e.g. DeepSeekOpenAICompatibleProvider.buildRequest
-      // → translateReasoningEffort) runs earlier in this same pass and may
-      // have flattened the nested `reasoning` into a top-level
-      // `reasoning_effort`, so we strip both shapes here.
+      // The provider hook runs earlier in this same pass and may have
+      // flattened the nested `reasoning` into a top-level `reasoning_effort`,
+      // so we strip both shapes here.
       if ('reasoning' in typed) {
         delete typed['reasoning'];
       }
@@ -1271,46 +1111,14 @@ export class ContentGenerationPipeline {
         gptReasoning &&
         !reasoningCapabilities &&
         !gptReasoning.thinkingMandatory &&
-        !thinkingMandatory &&
-        !isOpenRouterHostname(this.contentGeneratorConfig)
+        !thinkingMandatory
       ) {
         typed['reasoning_effort'] = 'none';
       }
-      // DeepSeek V4+ defaults `thinking.type` to `'enabled'`, so removing
-      // the effort knob alone leaves thinking on. Emit the explicit
-      // `thinking: { type: 'disabled' }` shape from DeepSeek's API spec.
-      // Hostname-gated: self-hosted DeepSeek (sglang/vllm) or older
-      // DeepSeek versions may not accept the V4 thinking parameter, so
-      // we don't push it there. See https://api-docs.deepseek.com/.
-      if (
-        isDeepSeekHostname(this.contentGeneratorConfig) ||
-        reasoningCapabilities?.disableField === 'thinking'
-      ) {
+      // Models declaring `disableField: 'thinking'` default `thinking.type`
+      // to `'enabled'`, so removing the effort knob alone leaves thinking on.
+      if (reasoningCapabilities?.disableField === 'thinking') {
         typed['thinking'] = { type: 'disabled' };
-      }
-      // OpenRouter's thinking switch is the provider-level `reasoning`
-      // parameter (`reasoning: { enabled: false }`, see
-      // https://openrouter.ai/docs/features/reasoning-tokens). The shapes
-      // emitted above are ignored by the gateway, and the strip just above
-      // removes any `reasoning` object a provider hook injected — so
-      // thinking-capable models routed through OpenRouter keep thinking on.
-      // That breaks the AUTO-mode classifier's stage-1 side query (#9757):
-      // the 256-token budget is spent on reasoning, the forced
-      // respond_in_schema tool call never ships, and the classifier
-      // fail-closes. Must be emitted after the strip, which runs later
-      // than the provider buildRequest hook.
-      //
-      // Provider-level, not model-family-gated: unlike `enable_thinking`
-      // (a qwen-family wire field that leaks upstream on non-qwen
-      // routings), `reasoning` is an OpenRouter API parameter the gateway
-      // applies to whatever model supports it. `thinkingMandatory` models
-      // stay exempt: a disable shape they reject would be a guaranteed
-      // request failure.
-      if (
-        !thinkingMandatory &&
-        isOpenRouterHostname(this.contentGeneratorConfig)
-      ) {
-        typed['reasoning'] = { enabled: false };
       }
     }
 
@@ -1346,66 +1154,7 @@ export class ContentGenerationPipeline {
       }
     }
 
-    const typed = providerRequest as unknown as Record<string, unknown>;
-    const reasoningEffort = typed['reasoning_effort'];
-    const thinkingBudget = typed['thinking_budget'];
-    // DashScope rejects forced tool selection while thinking is enabled
-    // ("The tool_choice parameter does not support being set to required or
-    // object in thinking mode"). Both field clauses are family-gated like
-    // the disable path above: `enable_thinking` and `reasoning_effort` are
-    // qwen thinking switches, but on non-qwen models sharing the endpoint
-    // they are opaque parameters that do not put the request in thinking
-    // mode (GLM reads `thinking.enabled`, DeepSeek `thinking.type`), and
-    // dropping `required` there only degrades their forced-tool side
-    // queries. `explicitThinkingMandatory` stays ungated: it is explicit
-    // "thinking is on" knowledge, model-agnostic by design.
-    if (
-      isDashScope &&
-      typed['tool_choice'] === 'required' &&
-      (explicitThinkingMandatory ||
-        (isQwenFamilyWireModel(model) &&
-          (typed['enable_thinking'] === true ||
-            (thinkingBudget != null && typed['enable_thinking'] !== false) ||
-            (typeof reasoningEffort === 'string' &&
-              reasoningEffort !== 'none'))))
-    ) {
-      debugLogger.debug(
-        'DashScope: dropping tool_choice=required while thinking is enabled',
-        { model, reasoningEffort, thinkingBudget, explicitThinkingMandatory },
-      );
-      delete typed['tool_choice'];
-    }
-
     return providerRequest;
-  }
-
-  private buildResponseFormat(
-    request: PromptCacheSharingParameters,
-  ): Pick<OpenAI.Chat.ChatCompletionCreateParams, 'response_format'> {
-    // `response_format` (both `json_object` and the strict `json_schema`
-    // variant) is official-OpenAI-specific wire shape. Third-party
-    // OpenAI-compatible endpoints reject it (DeepSeek accepts only
-    // text/json_object; older vLLM builds and validating gateways refuse
-    // unknown fields), and this pipeline never sent the field before this
-    // feature. Gate on the official endpoint, same precedent as the
-    // prompt-caching feature above.
-    if (!isOfficialOpenAIEndpoint(this.contentGeneratorConfig)) return {};
-    if (request.config?.responseMimeType !== 'application/json') return {};
-    const schema =
-      request.config.responseJsonSchema ?? request.config.responseSchema;
-    if (!schema) return { response_format: { type: 'json_object' } };
-    const strictSchema = normalizeOpenAIStrictSchema(schema);
-    if (!strictSchema) return { response_format: { type: 'json_object' } };
-    return {
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
-          name: 'response',
-          schema: strictSchema,
-          strict: true,
-        },
-      },
-    };
   }
 
   private requiresThinking(model: string): boolean {
@@ -1467,8 +1216,7 @@ export class ContentGenerationPipeline {
     //     also inject max_tokens, since sending the pair double-specifies the
     //     budget and some endpoints (o-series) reject it. Its value only shrinks
     //     when the window is tight; when there is room it passes through as-is.
-    // So `prompt + max_tokens ≤ window` holds for samplingParams users too,
-    // matching the Anthropic path.
+    // So `prompt + max_tokens ≤ window` holds for samplingParams users too.
     if (configSamplingParams !== undefined) {
       const rawEffort = {
         ...configSamplingParams,
@@ -1541,8 +1289,9 @@ export class ContentGenerationPipeline {
     //   - glm-4.7 — thinking is enabled by default; can be disabled via `extra_body.thinking.enabled`
     //   - kimi-k2-thinking — thinking is enabled by default and cannot be disabled
     //   - gpt-5.x / gpt-6-astra — defaults and disable support depend on the model
-    //   - qwen3 series — model-dependent; emitted as `enable_thinking: false`
-    //                           on DashScope endpoints when reasoning is disabled
+    //   - qwen3 series — model-dependent; emitted as
+    //                    `chat_template_kwargs.enable_thinking: false`
+    //                    when reasoning is disabled
     //
     // Given this inconsistency, we avoid mapping values and only pass through the
     // configured reasoning object when explicitly enabled. This keeps provider- and
@@ -1668,7 +1417,7 @@ export class ContentGenerationPipeline {
     context: RequestContext,
     request: GenerateContentParameters,
   ): Promise<never> {
-    this.config.errorHandler.handle(redactProxyError(error), context, request);
+    this.config.errorHandler.handle(error, context, request);
   }
 
   /**
@@ -1679,8 +1428,6 @@ export class ContentGenerationPipeline {
     isStreaming: boolean,
   ): RequestContext {
     const effectiveModel = request.model || this.contentGeneratorConfig.model;
-    const providerOverrides =
-      this.config.provider.getRequestContextOverrides?.() ?? {};
     const toolCallParser = isStreaming
       ? new StreamingToolCallParser()
       : undefined;
@@ -1696,20 +1443,17 @@ export class ContentGenerationPipeline {
       modalities: this.contentGeneratorConfig.modalities ?? {},
       startTime: Date.now(),
       splitToolMedia:
-        providerOverrides.splitToolMedia ??
         this.contentGeneratorConfig.splitToolMedia ??
         // Default true: the OpenAI Chat Completions spec only permits text on
         // `role: "tool"` messages, so tool-returned media (e.g. an image read
         // by read_file) embedded there is silently dropped or rejected by
-        // strict providers (doubao / new-api / LM Studio) and the model never
+        // strict servers (e.g. LM Studio) and the model never
         // sees it (QwenLM/qwen-code#4876). Splitting it into a follow-up user
         // message is spec-compliant and safe for permissive providers too.
         // Opt out via generationConfig.splitToolMedia = false.
         true,
       toolResultContentFormat:
-        providerOverrides.toolResultContentFormat ??
-        this.contentGeneratorConfig.toolResultContentFormat ??
-        'parts',
+        this.contentGeneratorConfig.toolResultContentFormat ?? 'parts',
       ...(toolCallParser ? { toolCallParser } : {}),
       ...(responseParsingOptions ? { responseParsingOptions } : {}),
       ...(taggedThinkingParser ? { taggedThinkingParser } : {}),

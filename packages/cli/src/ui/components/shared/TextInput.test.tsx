@@ -146,14 +146,14 @@ describe('TextInput', () => {
     it('ellipsizes long single-line values in the middle when enabled', () => {
       const { lastFrame } = render(
         <TextInput
-          value="sk-token-plan-abcdefghijklmnopqrstuvwxyz0123456789"
+          value="sk-local-server-abcdefghijklmnopqrstuvwxyz0123"
           onChange={onChange}
           inputWidth={20}
           ellipsizeOverflow
         />,
       );
 
-      expect(lastFrame()).toContain('sk-token-...23456789');
+      expect(lastFrame()).toContain('sk-local-...wxyz0123');
     });
   });
 });

@@ -91,12 +91,12 @@ VALUE_FLAGS.add('--sandbox-session-id');
 
 // The exact value-taking-flag spellings the pre-PR hasFlag scan hardcoded.
 // hasVersionToken must skip value slots for THIS set only: flags that only
-// the derived VALUE_FLAGS knows (--worktree, --proxy, -e, --auth-type,
+// the derived VALUE_FLAGS knows (--worktree, -e, --auth-type,
 // --session-id, --exclude-tools, ...) were absent from the base scan, so base
 // COUNTED a `-v`/`--version` sitting in their value slot and printed the
 // version. Skipping those slots here would drop the intercept and hand the
 // argv to the full parser (corrupted `mcp add` settings writes, swallowed
-// `-e` values, exit-1 Unknown-argument on `--proxy -v mcp remove ...`).
+// `-e` values, exit-1 Unknown-argument on `--worktree -v mcp remove ...`).
 const BASE_VALUE_FLAGS = new Set([
   '--model',
   '-m',
@@ -224,7 +224,7 @@ function hasFlag(
 // counted — `qwen -p -v -h` and `qwen --resume -v --help` printed
 // top-level help on base, not the version. The derived VALUE_FLAGS set is
 // deliberately NOT used here: flags it adds were absent from the base
-// scan, which counted a version token in their value slot (`qwen --proxy
+// scan, which counted a version token in their value slot (`qwen --worktree
 // -v ...` printed the version), so this scan must count it too. Tokens
 // after `--` are positional data and never count.
 function hasVersionToken(argv: readonly string[]): boolean {
@@ -333,7 +333,7 @@ export function resolveBootstrapRoute(
   // sitting in one of those slots is NOT counted (`qwen -p -v -h` and
   // `qwen --resume -v --help` printed top-level help on base, and
   // `qwen --model -v` demoted to the full parser). Flags the base scan
-  // did not know (--worktree, --proxy, -e, --auth-type, ...) never
+  // did not know (--worktree, -e, --auth-type, ...) never
   // consumed a value slot there, so a version token in their value slot
   // WAS counted and IS intercepted here. The scan models no help state
   // (base printed the version for every other help-token sibling probed).

@@ -35,7 +35,7 @@ const SENSITIVE_KEY_PATTERNS = [
   /private[_-]?key/i,
 ];
 
-const SENSITIVE_URL_PATTERNS = [/baseurl/i, /base_url/i, /proxy/i];
+const SENSITIVE_URL_PATTERNS = [/baseurl/i, /base_url/i];
 
 function isSensitiveKey(key: string): boolean {
   return (

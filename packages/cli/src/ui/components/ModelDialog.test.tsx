@@ -15,10 +15,9 @@ import { ConfigContext } from '../contexts/ConfigContext.js';
 import { SettingsContext } from '../contexts/SettingsContext.js';
 import { UIStateContext, type UIState } from '../contexts/UIStateContext.js';
 import type { Config } from '@qwen-code/qwen-code-core';
-import { AuthType, DEFAULT_QWEN_MODEL } from '@qwen-code/qwen-code-core';
+import { AuthType } from '@qwen-code/qwen-code-core';
 import type { LoadedSettings } from '../../config/settings.js';
 import { SettingScope } from '../../config/settings.js';
-import { getFilteredQwenModels } from '../models/availableModels.js';
 
 vi.mock('../hooks/useKeypress.js', () => ({
   useKeypress: vi.fn(),
@@ -29,18 +28,21 @@ vi.mock('./shared/DescriptiveRadioButtonSelect.js', () => ({
   DescriptiveRadioButtonSelect: vi.fn(() => null),
 }));
 
-// Helper to create getAvailableModelsForAuthType mock
-const createMockGetAvailableModelsForAuthType = () =>
-  vi.fn((t: AuthType) => {
-    if (t === AuthType.QWEN_OAUTH) {
-      return getFilteredQwenModels().map((m) => ({
-        id: m.id,
-        label: m.label,
-        authType: AuthType.QWEN_OAUTH,
-      }));
-    }
-    return [];
-  });
+const LOCAL_BASE_URL = 'http://127.0.0.1:11434/v1';
+const OTHER_LOCAL_BASE_URL = 'http://localhost:1234/v1';
+const DEFAULT_MODEL_ID = 'qwen3-coder';
+
+// The single model the default mock config exposes.
+const createDefaultModels = () => [
+  {
+    id: DEFAULT_MODEL_ID,
+    label: DEFAULT_MODEL_ID,
+    description: 'Local coder model',
+    authType: AuthType.USE_OPENAI,
+    baseUrl: LOCAL_BASE_URL,
+  },
+];
+const DEFAULT_MODEL_KEY = `${AuthType.USE_OPENAI}::${DEFAULT_MODEL_ID}\0${LOCAL_BASE_URL}`;
 const mockedSelect = vi.mocked(DescriptiveRadioButtonSelect);
 
 const renderComponent = (
@@ -65,20 +67,13 @@ const renderComponent = (
 
   const mockConfig = {
     // --- Functions used by ModelDialog ---
-    getModel: vi.fn(() => DEFAULT_QWEN_MODEL),
+    getModel: vi.fn(() => DEFAULT_MODEL_ID),
     setModel: vi.fn().mockResolvedValue(undefined),
     switchModel: vi.fn().mockResolvedValue(undefined),
-    getAuthType: vi.fn(() => 'qwen-oauth'),
-    getAllConfiguredModels: vi.fn(() =>
-      getFilteredQwenModels().map((m) => ({
-        id: m.id,
-        label: m.label,
-        description: m.description || '',
-        authType: AuthType.QWEN_OAUTH,
-      })),
-    ),
+    getAuthType: vi.fn(() => AuthType.USE_OPENAI),
+    getAllConfiguredModels: vi.fn(createDefaultModels),
     getModelsConfig: vi.fn(() => ({
-      getGenerationConfig: vi.fn(() => ({ baseUrl: undefined })),
+      getGenerationConfig: vi.fn(() => ({ baseUrl: LOCAL_BASE_URL })),
     })),
     getActiveRuntimeModelSnapshot: vi.fn(() => undefined),
     getAdvisorModel: vi.fn(() => undefined),
@@ -90,11 +85,11 @@ const renderComponent = (
     getSessionId: vi.fn(() => 'mock-session-id'),
     getDebugMode: vi.fn(() => false),
     getContentGeneratorConfig: vi.fn(() => ({
-      authType: AuthType.QWEN_OAUTH,
-      model: DEFAULT_QWEN_MODEL,
+      authType: AuthType.USE_OPENAI,
+      model: DEFAULT_MODEL_ID,
+      baseUrl: LOCAL_BASE_URL,
     })),
     getUseModelRouter: vi.fn(() => false),
-    getProxy: vi.fn(() => undefined),
 
     // --- Spread test-specific overrides ---
     ...(contextValue ?? {}),
@@ -133,7 +128,6 @@ describe('<ModelDialog />', () => {
     vi.clearAllMocks();
     // Ensure env-based fallback models don't leak into this suite from the developer environment.
     delete process.env['OPENAI_MODEL'];
-    delete process.env['ANTHROPIC_MODEL'];
   });
 
   afterEach(() => {
@@ -150,11 +144,8 @@ describe('<ModelDialog />', () => {
     expect(mockedSelect).toHaveBeenCalledTimes(1);
 
     const props = mockedSelect.mock.calls[0][0];
-    expect(props.items).toHaveLength(getFilteredQwenModels().length);
-    // coder-model is the only model and it has vision capability
-    expect(props.items[0].value).toBe(
-      `${AuthType.QWEN_OAUTH}::${DEFAULT_QWEN_MODEL}`,
-    );
+    expect(props.items).toHaveLength(1);
+    expect(props.items[0].value).toBe(DEFAULT_MODEL_KEY);
     expect(props.showNumbers).toBe(true);
   });
 
@@ -183,7 +174,7 @@ describe('<ModelDialog />', () => {
   });
 
   it('persists and highlights the selected Advisor registry endpoint', async () => {
-    const endpoint = 'https://advisor.example/v1';
+    const endpoint = LOCAL_BASE_URL;
     const selector = `openai:advisor\0${endpoint}`;
     const { mockSettings, mockConfig } = renderComponent(
       { isAdvisorModelMode: true },
@@ -610,82 +601,39 @@ describe('<ModelDialog />', () => {
     expect(propsAfterError.maxItemsToShow).toBe(1);
   });
 
-  it('hides discontinued qwen-oauth models for other auth types', () => {
+  it('initializes with the model from ConfigContext', () => {
+    const mockGetModel = vi.fn(() => 'second-model');
     renderComponent(
       {},
       {
-        getAuthType: vi.fn(() => AuthType.USE_OPENAI),
+        getModel: mockGetModel,
         getAllConfiguredModels: vi.fn(() => [
+          ...createDefaultModels(),
           {
-            id: DEFAULT_QWEN_MODEL,
-            label: DEFAULT_QWEN_MODEL,
-            authType: AuthType.QWEN_OAUTH,
-          },
-          {
-            id: 'gpt-4',
-            label: 'GPT-4',
+            id: 'second-model',
+            label: 'second-model',
+            description: '',
             authType: AuthType.USE_OPENAI,
+            baseUrl: LOCAL_BASE_URL,
           },
         ]),
       },
     );
 
-    const items = mockedSelect.mock.calls[0][0].items;
-    expect(items).toHaveLength(1);
-    expect(items[0].value).toBe(`${AuthType.USE_OPENAI}::gpt-4`);
-  });
-
-  it('initializes with the model from ConfigContext', () => {
-    const mockGetModel = vi.fn(() => DEFAULT_QWEN_MODEL);
-    renderComponent(
-      {},
-      {
-        getModel: mockGetModel,
-        getAvailableModelsForAuthType:
-          createMockGetAvailableModelsForAuthType(),
-      },
-    );
-
     expect(mockGetModel).toHaveBeenCalled();
-    // Calculate expected index dynamically based on model list
-    const qwenModels = getFilteredQwenModels();
-    const expectedIndex = qwenModels.findIndex(
-      (m) => m.id === DEFAULT_QWEN_MODEL,
-    );
     expect(mockedSelect).toHaveBeenCalledWith(
       expect.objectContaining({
-        initialIndex: expectedIndex,
+        initialIndex: 1,
       }),
       undefined,
     );
   });
 
-  it('initializes with default coder model if context is not provided', () => {
-    renderComponent({}, undefined);
-
-    expect(mockedSelect).toHaveBeenCalledWith(
-      expect.objectContaining({
-        initialIndex: 0,
-      }),
-      undefined,
-    );
-  });
-
-  it('initializes with default coder model if getModel returns undefined', () => {
+  it('initializes with the first model if getModel returns undefined', () => {
     const mockGetModel = vi.fn(() => undefined as unknown as string);
-    renderComponent(
-      {},
-      {
-        getModel: mockGetModel,
-        getAvailableModelsForAuthType:
-          createMockGetAvailableModelsForAuthType(),
-      },
-    );
+    renderComponent({}, { getModel: mockGetModel });
 
     expect(mockGetModel).toHaveBeenCalled();
-
-    // When getModel returns undefined, preferredModel falls back to DEFAULT_QWEN_MODEL
-    // which has index 0, so initialIndex should be 0
     expect(mockedSelect).toHaveBeenCalledWith(
       expect.objectContaining({
         initialIndex: 0,
@@ -695,63 +643,16 @@ describe('<ModelDialog />', () => {
     expect(mockedSelect).toHaveBeenCalledTimes(1);
   });
 
-  it('blocks qwen-oauth model selection with an error message (discontinued)', async () => {
-    const { props, mockConfig } = renderComponent(
-      {},
-      {
-        getAvailableModelsForAuthType: vi.fn((t: AuthType) => {
-          if (t === AuthType.QWEN_OAUTH) {
-            return getFilteredQwenModels().map((m) => ({
-              id: m.id,
-              label: m.label,
-              authType: AuthType.QWEN_OAUTH,
-            }));
-          }
-          return [];
-        }),
-      },
-    );
-
-    const childOnSelect = mockedSelect.mock.calls[0][0].onSelect;
-    expect(childOnSelect).toBeDefined();
-
-    await childOnSelect(`${AuthType.QWEN_OAUTH}::${DEFAULT_QWEN_MODEL}`);
-
-    // qwen-oauth is discontinued — switchModel should NOT be called
-    expect(mockConfig?.switchModel).not.toHaveBeenCalled();
-    // Dialog should NOT close (user stays in the dialog to see the error)
-    expect(props.onClose).not.toHaveBeenCalled();
-  });
-
-  it('calls config.switchModel and onClose when selecting a non-OAuth model', async () => {
+  it('calls config.switchModel and onClose when selecting a model', async () => {
     const switchModel = vi.fn().mockResolvedValue(undefined);
     const getAuthType = vi.fn(() => AuthType.USE_OPENAI);
-    const getAvailableModelsForAuthType = vi.fn((t: AuthType) => {
-      if (t === AuthType.USE_OPENAI) {
-        return [{ id: 'gpt-4', label: 'GPT-4', authType: t }];
-      }
-      if (t === AuthType.QWEN_OAUTH) {
-        return getFilteredQwenModels().map((m) => ({
-          id: m.id,
-          label: m.label,
-          authType: AuthType.QWEN_OAUTH,
-        }));
-      }
-      return [];
-    });
 
     const { props, mockSettings } = renderComponent({}, {
       getModel: vi.fn(() => 'gpt-4'),
       getAuthType,
       switchModel,
-      getAvailableModelsForAuthType,
       getAllConfiguredModels: vi.fn(() => [
-        ...getFilteredQwenModels().map((m) => ({
-          id: m.id,
-          label: m.label,
-          description: m.description || '',
-          authType: AuthType.QWEN_OAUTH,
-        })),
+        ...createDefaultModels(),
         {
           id: 'gpt-4',
           label: 'GPT-4',
@@ -768,7 +669,6 @@ describe('<ModelDialog />', () => {
     const childOnSelect = mockedSelect.mock.calls[0][0].onSelect;
     expect(childOnSelect).toBeDefined();
 
-    // Select a non-OAuth model (USE_OPENAI)
     await childOnSelect(`${AuthType.USE_OPENAI}::gpt-4`);
 
     expect(switchModel).toHaveBeenCalledWith(AuthType.USE_OPENAI, 'gpt-4', {
@@ -803,39 +703,39 @@ describe('<ModelDialog />', () => {
       getAllConfiguredModels: vi.fn(() => [
         {
           id: 'qwen3.7-max',
-          label: '[Token Plan] qwen3.7-max',
+          label: '[Ollama] qwen3.7-max',
           description: '',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://token-plan.example.com/v1',
-          envKey: 'TOKEN_PLAN_KEY',
+          baseUrl: LOCAL_BASE_URL,
+          envKey: 'OLLAMA_API_KEY',
         },
         {
           id: 'qwen3.7-max',
-          label: '[IdeaLab] qwen3.7-max',
+          label: '[LM Studio] qwen3.7-max',
           description: '',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://idealab.example.com/v1',
-          envKey: 'IDEALAB_KEY',
+          baseUrl: OTHER_LOCAL_BASE_URL,
+          envKey: 'LM_STUDIO_API_KEY',
         },
       ]),
       getContentGeneratorConfig: vi.fn(() => ({
         authType: AuthType.USE_OPENAI,
         model: 'qwen3.7-max',
-        baseUrl: 'https://idealab.example.com/v1',
+        baseUrl: OTHER_LOCAL_BASE_URL,
       })),
     } as unknown as Partial<Config>);
 
     const childOnSelect = mockedSelect.mock.calls[0][0].onSelect;
-    // Select the IdeaLab entry (second provider with the same id).
+    // Select the LM Studio entry (second server with the same id).
     await childOnSelect(
-      `${AuthType.USE_OPENAI}::qwen3.7-max\0https://idealab.example.com/v1`,
+      `${AuthType.USE_OPENAI}::qwen3.7-max\0${OTHER_LOCAL_BASE_URL}`,
     );
 
     expect(switchModel).toHaveBeenCalledWith(
       AuthType.USE_OPENAI,
       'qwen3.7-max',
       {
-        baseUrl: 'https://idealab.example.com/v1',
+        baseUrl: OTHER_LOCAL_BASE_URL,
       },
     );
     expect(mockSettings.setValue).toHaveBeenCalledWith(
@@ -846,7 +746,7 @@ describe('<ModelDialog />', () => {
     expect(mockSettings.setValue).toHaveBeenCalledWith(
       SettingScope.User,
       'model.baseUrl',
-      'https://idealab.example.com/v1',
+      OTHER_LOCAL_BASE_URL,
     );
     expect(props.onClose).toHaveBeenCalledTimes(1);
   });
@@ -865,19 +765,19 @@ describe('<ModelDialog />', () => {
       getAllConfiguredModels: vi.fn(() => [
         {
           id: 'qwen3.7-max',
-          label: '[Token Plan] qwen3.7-max',
+          label: '[Ollama] qwen3.7-max',
           description: '',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://token-plan.example.com/v1',
-          envKey: 'TOKEN_PLAN_KEY',
+          baseUrl: LOCAL_BASE_URL,
+          envKey: 'OLLAMA_API_KEY',
         },
         {
           id: 'qwen3.7-max',
-          label: '[IdeaLab] qwen3.7-max',
+          label: '[LM Studio] qwen3.7-max',
           description: '',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://idealab.example.com/v1',
-          envKey: 'IDEALAB_KEY',
+          baseUrl: OTHER_LOCAL_BASE_URL,
+          envKey: 'LM_STUDIO_API_KEY',
         },
       ]),
       // Resolved config has NO baseUrl, so `after?.baseUrl` is undefined and the
@@ -889,9 +789,9 @@ describe('<ModelDialog />', () => {
     } as unknown as Partial<Config>);
 
     const childOnSelect = mockedSelect.mock.calls[0][0].onSelect;
-    // Select the IdeaLab entry (second provider with the same id).
+    // Select the LM Studio entry (second server with the same id).
     await childOnSelect(
-      `${AuthType.USE_OPENAI}::qwen3.7-max\0https://idealab.example.com/v1`,
+      `${AuthType.USE_OPENAI}::qwen3.7-max\0${OTHER_LOCAL_BASE_URL}`,
     );
 
     expect(mockSettings.setValue).toHaveBeenCalledWith(
@@ -903,30 +803,30 @@ describe('<ModelDialog />', () => {
     expect(mockSettings.setValue).toHaveBeenCalledWith(
       SettingScope.User,
       'model.baseUrl',
-      'https://idealab.example.com/v1',
+      OTHER_LOCAL_BASE_URL,
     );
     expect(props.onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('shows MiniMax-M3 image + video modality and 1M context details', () => {
+  it('shows image + video modality and 1M context details', () => {
     const { getByText } = renderComponent({}, {
-      getModel: vi.fn(() => 'MiniMax-M3'),
+      getModel: vi.fn(() => 'qwen3-vl'),
       getAuthType: vi.fn(() => AuthType.USE_OPENAI),
       getAllConfiguredModels: vi.fn(() => [
         {
-          id: 'MiniMax-M3',
-          label: '[MiniMax] MiniMax-M3',
+          id: 'qwen3-vl',
+          label: 'qwen3-vl',
           description: '',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://api.minimaxi.com/v1',
-          envKey: 'MINIMAX_API_KEY',
+          baseUrl: LOCAL_BASE_URL,
+          envKey: 'LOCAL_SERVER_API_KEY',
           modalities: { image: true, video: true },
           contextWindowSize: 1000000,
         },
       ]),
       getModelsConfig: vi.fn(() => ({
         getGenerationConfig: vi.fn(() => ({
-          baseUrl: 'https://api.minimaxi.com/v1',
+          baseUrl: LOCAL_BASE_URL,
         })),
       })),
     } as unknown as Partial<Config>);
@@ -938,47 +838,49 @@ describe('<ModelDialog />', () => {
   });
 
   it('hydrates provider API key env from settings.env before switching', async () => {
-    const previousMinimaxKey = process.env['MINIMAX_API_KEY'];
-    delete process.env['MINIMAX_API_KEY'];
+    const previousApiKey = process.env['LOCAL_SERVER_API_KEY'];
+    delete process.env['LOCAL_SERVER_API_KEY'];
 
     try {
       const switchModel = vi.fn().mockImplementation(async () => {
-        expect(process.env['MINIMAX_API_KEY']).toBe('sk-minimax-from-settings');
+        expect(process.env['LOCAL_SERVER_API_KEY']).toBe(
+          'sk-local-from-settings',
+        );
       });
 
       renderComponent(
         {},
         {
-          getModel: vi.fn(() => 'MiniMax-M2.7'),
+          getModel: vi.fn(() => 'qwen3-coder'),
           getAuthType: vi.fn(() => AuthType.USE_OPENAI),
           switchModel,
           getAllConfiguredModels: vi.fn(() => [
             {
-              id: 'MiniMax-M3',
-              label: '[MiniMax] MiniMax-M3',
+              id: 'qwen3-vl',
+              label: 'qwen3-vl',
               description: '',
               authType: AuthType.USE_OPENAI,
-              baseUrl: 'https://api.minimaxi.com/v1',
-              envKey: 'MINIMAX_API_KEY',
+              baseUrl: LOCAL_BASE_URL,
+              envKey: 'LOCAL_SERVER_API_KEY',
               modalities: { image: true, video: true },
               contextWindowSize: 1000000,
             },
           ]),
           getModelsConfig: vi.fn(() => ({
             getGenerationConfig: vi.fn(() => ({
-              baseUrl: 'https://api.minimaxi.com/v1',
+              baseUrl: LOCAL_BASE_URL,
             })),
           })),
           getContentGeneratorConfig: vi.fn(() => ({
             authType: AuthType.USE_OPENAI,
-            model: 'MiniMax-M3',
-            apiKey: 'sk-minimax-from-settings',
-            baseUrl: 'https://api.minimaxi.com/v1',
+            model: 'qwen3-vl',
+            apiKey: 'sk-local-from-settings',
+            baseUrl: LOCAL_BASE_URL,
           })),
         } as unknown as Partial<Config>,
         {
           merged: {
-            env: { MINIMAX_API_KEY: 'sk-minimax-from-settings' },
+            env: { LOCAL_SERVER_API_KEY: 'sk-local-from-settings' },
           },
         } as unknown as Partial<LoadedSettings>,
       );
@@ -988,14 +890,14 @@ describe('<ModelDialog />', () => {
 
       expect(switchModel).toHaveBeenCalledWith(
         AuthType.USE_OPENAI,
-        'MiniMax-M3',
-        { baseUrl: 'https://api.minimaxi.com/v1' },
+        'qwen3-vl',
+        { baseUrl: LOCAL_BASE_URL },
       );
     } finally {
-      if (previousMinimaxKey === undefined) {
-        delete process.env['MINIMAX_API_KEY'];
+      if (previousApiKey === undefined) {
+        delete process.env['LOCAL_SERVER_API_KEY'];
       } else {
-        process.env['MINIMAX_API_KEY'] = previousMinimaxKey;
+        process.env['LOCAL_SERVER_API_KEY'] = previousApiKey;
       }
     }
   });
@@ -1005,8 +907,8 @@ describe('<ModelDialog />', () => {
     const { props, mockSettings, recordSlashCommand } = renderComponent(
       { isFastModelMode: true },
       {
-        getAuthType: vi.fn(() => AuthType.USE_ANTHROPIC),
-        getModel: vi.fn(() => 'claude-opus-4-7'),
+        getAuthType: vi.fn(() => AuthType.USE_OPENAI),
+        getModel: vi.fn(() => 'qwen3-coder'),
         getAllConfiguredModels: vi.fn(() => [
           {
             id: 'deepseek-v4-flash',
@@ -1014,14 +916,14 @@ describe('<ModelDialog />', () => {
             authType: AuthType.USE_OPENAI,
           },
           {
-            id: 'claude-opus-4-7',
-            label: 'claude-opus-4-7',
-            authType: AuthType.USE_ANTHROPIC,
+            id: 'qwen3-coder',
+            label: 'qwen3-coder',
+            authType: AuthType.USE_OPENAI,
           },
         ]),
         getContentGeneratorConfig: vi.fn(() => ({
-          authType: AuthType.USE_ANTHROPIC,
-          model: 'claude-opus-4-7',
+          authType: AuthType.USE_OPENAI,
+          model: 'qwen3-coder',
         })),
         setFastModel,
       } as unknown as Partial<Config>,
@@ -1052,8 +954,8 @@ describe('<ModelDialog />', () => {
     const { props, mockSettings, recordSlashCommand } = renderComponent(
       { isVisionModelMode: true },
       {
-        getAuthType: vi.fn(() => AuthType.USE_ANTHROPIC),
-        getModel: vi.fn(() => 'claude-opus-4-7'),
+        getAuthType: vi.fn(() => AuthType.USE_OPENAI),
+        getModel: vi.fn(() => 'qwen3-coder'),
         switchModel,
         getAllConfiguredModels: vi.fn(() => [
           {
@@ -1062,17 +964,17 @@ describe('<ModelDialog />', () => {
             authType: AuthType.USE_OPENAI,
           },
           {
-            id: 'claude-opus-4-7',
-            label: 'claude-opus-4-7',
-            authType: AuthType.USE_ANTHROPIC,
+            id: 'qwen3-coder',
+            label: 'qwen3-coder',
+            authType: AuthType.USE_OPENAI,
           },
         ]),
         getContentGeneratorConfig: vi.fn(() => ({
-          authType: AuthType.USE_ANTHROPIC,
-          model: 'claude-opus-4-7',
+          authType: AuthType.USE_OPENAI,
+          model: 'qwen3-coder',
         })),
         isCurrentPrimaryModel: (m: { id: string; authType?: string }) =>
-          m.id === 'claude-opus-4-7' && m.authType === AuthType.USE_ANTHROPIC,
+          m.id === 'qwen3-coder' && m.authType === AuthType.USE_OPENAI,
         setVisionModel,
       } as unknown as Partial<Config>,
     );
@@ -1156,63 +1058,10 @@ describe('<ModelDialog />', () => {
     expect(props.onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('excludes image-only models from the main dialog', () => {
-    renderComponent({}, {
-      getAuthType: vi.fn(() => AuthType.USE_OPENAI),
-      getAllConfiguredModels: vi.fn(() => [
-        {
-          id: 'chat-model',
-          label: 'Chat model',
-          authType: AuthType.USE_OPENAI,
-        },
-        {
-          id: 'qwen-image-2.0',
-          label: 'Qwen Image 2.0',
-          authType: AuthType.USE_OPENAI,
-          imageOnly: true,
-        },
-      ]),
-    } as unknown as Partial<Config>);
-
-    const items = mockedSelect.mock.calls[0][0].items;
-    expect(items).toHaveLength(1);
-    expect(items[0].value).toBe(`${AuthType.USE_OPENAI}::chat-model`);
-  });
-
-  it.each([
-    ['fast', { isFastModelMode: true }],
-    ['vision', { isVisionModelMode: true }],
-    ['compaction', { isCompactionModelMode: true }],
-  ] as const)(
-    'excludes image-only models from the %s dialog',
-    (_mode, modeProps) => {
-      renderComponent(modeProps, {
-        getAuthType: vi.fn(() => AuthType.USE_OPENAI),
-        getAllConfiguredModels: vi.fn(() => [
-          {
-            id: 'chat-model',
-            label: 'Chat model',
-            authType: AuthType.USE_OPENAI,
-          },
-          {
-            id: 'qwen-image-2.0',
-            label: 'Qwen Image 2.0',
-            authType: AuthType.USE_OPENAI,
-            imageOnly: true,
-          },
-        ]),
-      } as unknown as Partial<Config>);
-
-      const items = mockedSelect.mock.calls[0][0].items;
-      expect(items).toHaveLength(1);
-      expect(items[0].value).toBe(`${AuthType.USE_OPENAI}::chat-model`);
-    },
-  );
-
-  it('keeps the selected baseUrl for same-provider duplicate vision model ids', async () => {
+  it('keeps the selected baseUrl for duplicate vision model ids', async () => {
     const switchModel = vi.fn();
     const setVisionModel = vi.fn();
-    const selectedBaseUrl = 'https://token-plan.example.com/v1';
+    const selectedBaseUrl = OTHER_LOCAL_BASE_URL;
     const { props, mockSettings } = renderComponent(
       { isVisionModelMode: true },
       {
@@ -1222,14 +1071,14 @@ describe('<ModelDialog />', () => {
         getAllConfiguredModels: vi.fn(() => [
           {
             id: 'qwen3.7-plus',
-            label: '[ModelStudio Standard] qwen3.7-plus',
+            label: '[Ollama] qwen3.7-plus',
             authType: AuthType.USE_OPENAI,
-            baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+            baseUrl: LOCAL_BASE_URL,
             modalities: { image: true, video: true },
           },
           {
             id: 'qwen3.7-plus',
-            label: '[ModelStudio Token Plan] qwen3.7-plus',
+            label: '[LM Studio] qwen3.7-plus',
             authType: AuthType.USE_OPENAI,
             baseUrl: selectedBaseUrl,
             modalities: { image: true, video: true },
@@ -1238,7 +1087,7 @@ describe('<ModelDialog />', () => {
         getContentGeneratorConfig: vi.fn(() => ({
           authType: AuthType.USE_OPENAI,
           model: 'qwen3.7-max',
-          baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+          baseUrl: LOCAL_BASE_URL,
         })),
         isCurrentPrimaryModel: (m: { id: string }) => m.id === 'qwen3.7-max',
         setVisionModel,
@@ -1300,12 +1149,11 @@ describe('<ModelDialog />', () => {
     );
   });
 
-  it('highlights the cross-auth row for a bare fast-model setting', () => {
-    // `/model --fast deepseek-v4-flash` validates across all providers and
-    // persists the bare model id. When the dialog re-opens, it must locate
-    // the right row even though the setting carries no authType prefix —
-    // otherwise the highlight falls back to the current auth's first row
-    // and Enter would silently overwrite the setting.
+  it('highlights the row for a bare fast-model setting', () => {
+    // `/model --fast deepseek-v4-flash` persists the bare model id. When the
+    // dialog re-opens, it must locate the right row even though the setting
+    // carries no authType prefix — otherwise the highlight falls back to the
+    // first row and Enter would silently overwrite the setting.
     const mockSettings = {
       isTrusted: true,
       user: { settings: {} },
@@ -1316,10 +1164,10 @@ describe('<ModelDialog />', () => {
 
     const allModels = [
       {
-        id: 'claude-opus-4-7',
-        label: 'claude-opus-4-7',
+        id: 'qwen3-coder',
+        label: 'qwen3-coder',
         description: '',
-        authType: AuthType.USE_ANTHROPIC,
+        authType: AuthType.USE_OPENAI,
       },
       {
         id: 'deepseek-v4-flash',
@@ -1334,12 +1182,12 @@ describe('<ModelDialog />', () => {
         <ConfigContext.Provider
           value={
             {
-              getModel: vi.fn(() => 'claude-opus-4-7'),
-              getAuthType: vi.fn(() => AuthType.USE_ANTHROPIC),
+              getModel: vi.fn(() => 'qwen3-coder'),
+              getAuthType: vi.fn(() => AuthType.USE_OPENAI),
               getAllConfiguredModels: vi.fn(() => allModels),
               getContentGeneratorConfig: vi.fn(() => ({
-                authType: AuthType.USE_ANTHROPIC,
-                model: 'claude-opus-4-7',
+                authType: AuthType.USE_OPENAI,
+                model: 'qwen3-coder',
               })),
               getModelsConfig: vi.fn(() => ({
                 getGenerationConfig: vi.fn(() => ({ baseUrl: undefined })),
@@ -1349,7 +1197,6 @@ describe('<ModelDialog />', () => {
               getSessionId: vi.fn(() => 'session'),
               getDebugMode: vi.fn(() => false),
               getUseModelRouter: vi.fn(() => false),
-              getProxy: vi.fn(() => undefined),
             } as unknown as Config
           }
         >
@@ -1366,12 +1213,12 @@ describe('<ModelDialog />', () => {
     expect(mockedSelect.mock.calls[0][0].initialIndex).toBe(deepseekIndex);
   });
 
-  it('highlights the cross-auth row for a bare vision-model setting', () => {
-    // `/model --vision qwen-vl-max` validates across all providers and persists
-    // the bare model id. When the dialog re-opens in vision mode, the
-    // preferred-entry resolution must locate that row even though the setting
-    // carries no authType prefix — otherwise the highlight falls back to the
-    // current auth's first row and Enter would silently overwrite the setting.
+  it('highlights the row for a bare vision-model setting', () => {
+    // `/model --vision qwen-vl-max` persists the bare model id. When the dialog
+    // re-opens in vision mode, the preferred-entry resolution must locate that
+    // row even though the setting carries no authType prefix — otherwise the
+    // highlight falls back to the first row and Enter would silently overwrite
+    // the setting.
     const mockSettings = {
       isTrusted: true,
       user: { settings: {} },
@@ -1382,10 +1229,10 @@ describe('<ModelDialog />', () => {
 
     const allModels = [
       {
-        id: 'claude-opus-4-7',
-        label: 'claude-opus-4-7',
+        id: 'qwen3-coder',
+        label: 'qwen3-coder',
         description: '',
-        authType: AuthType.USE_ANTHROPIC,
+        authType: AuthType.USE_OPENAI,
       },
       {
         id: 'qwen-vl-max',
@@ -1400,12 +1247,12 @@ describe('<ModelDialog />', () => {
         <ConfigContext.Provider
           value={
             {
-              getModel: vi.fn(() => 'claude-opus-4-7'),
-              getAuthType: vi.fn(() => AuthType.USE_ANTHROPIC),
+              getModel: vi.fn(() => 'qwen3-coder'),
+              getAuthType: vi.fn(() => AuthType.USE_OPENAI),
               getAllConfiguredModels: vi.fn(() => allModels),
               getContentGeneratorConfig: vi.fn(() => ({
-                authType: AuthType.USE_ANTHROPIC,
-                model: 'claude-opus-4-7',
+                authType: AuthType.USE_OPENAI,
+                model: 'qwen3-coder',
               })),
               getModelsConfig: vi.fn(() => ({
                 getGenerationConfig: vi.fn(() => ({ baseUrl: undefined })),
@@ -1415,7 +1262,6 @@ describe('<ModelDialog />', () => {
               getSessionId: vi.fn(() => 'session'),
               getDebugMode: vi.fn(() => false),
               getUseModelRouter: vi.fn(() => false),
-              getProxy: vi.fn(() => undefined),
             } as unknown as Config
           }
         >
@@ -1433,7 +1279,7 @@ describe('<ModelDialog />', () => {
   });
 
   it('highlights the matching baseUrl for duplicate vision-model settings', () => {
-    const selectedBaseUrl = 'https://token-plan.example.com/v1';
+    const selectedBaseUrl = OTHER_LOCAL_BASE_URL;
     const mockSettings = {
       isTrusted: true,
       user: { settings: {} },
@@ -1447,14 +1293,14 @@ describe('<ModelDialog />', () => {
     const allModels = [
       {
         id: 'qwen3.7-plus',
-        label: '[ModelStudio Standard] qwen3.7-plus',
+        label: '[Ollama] qwen3.7-plus',
         description: '',
         authType: AuthType.USE_OPENAI,
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        baseUrl: LOCAL_BASE_URL,
       },
       {
         id: 'qwen3.7-plus',
-        label: '[ModelStudio Token Plan] qwen3.7-plus',
+        label: '[LM Studio] qwen3.7-plus',
         description: '',
         authType: AuthType.USE_OPENAI,
         baseUrl: selectedBaseUrl,
@@ -1472,11 +1318,11 @@ describe('<ModelDialog />', () => {
               getContentGeneratorConfig: vi.fn(() => ({
                 authType: AuthType.USE_OPENAI,
                 model: 'qwen3.7-max',
-                baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+                baseUrl: LOCAL_BASE_URL,
               })),
               getModelsConfig: vi.fn(() => ({
                 getGenerationConfig: vi.fn(() => ({
-                  baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+                  baseUrl: LOCAL_BASE_URL,
                 })),
               })),
               getActiveRuntimeModelSnapshot: vi.fn(() => undefined),
@@ -1484,7 +1330,6 @@ describe('<ModelDialog />', () => {
               getSessionId: vi.fn(() => 'session'),
               getDebugMode: vi.fn(() => false),
               getUseModelRouter: vi.fn(() => false),
-              getProxy: vi.fn(() => undefined),
             } as unknown as Config
           }
         >
@@ -1532,7 +1377,7 @@ describe('<ModelDialog />', () => {
     expect(mockHistoryManager.addItem).toHaveBeenCalledWith(
       {
         type: 'info',
-        text: `Kept model as ${DEFAULT_QWEN_MODEL}`,
+        text: `Kept model as ${DEFAULT_MODEL_ID}`,
       },
       expect.any(Number),
     );
@@ -1583,7 +1428,7 @@ describe('<ModelDialog />', () => {
       phase: 'result',
       rawCommand: '/model',
       outputHistoryItems: [
-        { type: 'info', text: `Kept model as ${DEFAULT_QWEN_MODEL}` },
+        { type: 'info', text: `Kept model as ${DEFAULT_MODEL_ID}` },
       ],
     });
   });
@@ -1636,8 +1481,8 @@ describe('<ModelDialog />', () => {
     const { mockHistoryManager } = renderComponent({}, {
       getModel: vi.fn(() => 'configured-model'),
       getActiveRuntimeModelSnapshot: vi.fn(() => ({
-        id: '$runtime|qwen-oauth|runtime-model',
-        authType: AuthType.QWEN_OAUTH,
+        id: '$runtime|openai|runtime-model',
+        authType: AuthType.USE_OPENAI,
         modelId: 'runtime-model',
       })),
     } as unknown as Partial<Config>);
@@ -1928,12 +1773,22 @@ describe('<ModelDialog />', () => {
   });
 
   it('updates initialIndex when config context changes', () => {
-    const mockGetModel = vi.fn(() => DEFAULT_QWEN_MODEL);
-    const mockGetAuthType = vi.fn(() => 'qwen-oauth');
+    const mockGetModel = vi.fn(() => DEFAULT_MODEL_ID);
+    const mockGetAuthType = vi.fn(() => AuthType.USE_OPENAI);
     const mockGetModelsConfig = vi.fn(() => ({
-      getGenerationConfig: vi.fn(() => ({ baseUrl: undefined })),
+      getGenerationConfig: vi.fn(() => ({ baseUrl: LOCAL_BASE_URL })),
     }));
     const mockGetActiveRuntimeModelSnapshot = vi.fn(() => undefined);
+    const models = [
+      ...createDefaultModels(),
+      {
+        id: 'second-model',
+        label: 'second-model',
+        description: '',
+        authType: AuthType.USE_OPENAI,
+        baseUrl: LOCAL_BASE_URL,
+      },
+    ];
     const mockSettings = {
       isTrusted: true,
       user: { settings: {} },
@@ -1947,16 +1802,7 @@ describe('<ModelDialog />', () => {
             {
               getModel: mockGetModel,
               getAuthType: mockGetAuthType,
-              getAvailableModelsForAuthType:
-                createMockGetAvailableModelsForAuthType(),
-              getAllConfiguredModels: vi.fn(() =>
-                getFilteredQwenModels().map((m) => ({
-                  id: m.id,
-                  label: m.label,
-                  description: m.description || '',
-                  authType: AuthType.QWEN_OAUTH,
-                })),
-              ),
+              getAllConfiguredModels: vi.fn(() => models),
               getModelsConfig: mockGetModelsConfig,
               getActiveRuntimeModelSnapshot: mockGetActiveRuntimeModelSnapshot,
             } as unknown as Config
@@ -1967,22 +1813,13 @@ describe('<ModelDialog />', () => {
       </SettingsContext.Provider>,
     );
 
-    // DEFAULT_QWEN_MODEL (coder-model) is at index 0
     expect(mockedSelect.mock.calls[0][0].initialIndex).toBe(0);
 
-    mockGetModel.mockReturnValue(DEFAULT_QWEN_MODEL);
+    mockGetModel.mockReturnValue('second-model');
     const newMockConfig = {
       getModel: mockGetModel,
       getAuthType: mockGetAuthType,
-      getAvailableModelsForAuthType: createMockGetAvailableModelsForAuthType(),
-      getAllConfiguredModels: vi.fn(() =>
-        getFilteredQwenModels().map((m) => ({
-          id: m.id,
-          label: m.label,
-          description: m.description || '',
-          authType: AuthType.QWEN_OAUTH,
-        })),
-      ),
+      getAllConfiguredModels: vi.fn(() => models),
       getModelsConfig: mockGetModelsConfig,
       getActiveRuntimeModelSnapshot: mockGetActiveRuntimeModelSnapshot,
     } as unknown as Config;
@@ -1995,22 +1832,17 @@ describe('<ModelDialog />', () => {
       </SettingsContext.Provider>,
     );
 
-    // Should be called at least twice: initial render + re-render after context change
+    // Initial render + re-render after the context change.
     expect(mockedSelect).toHaveBeenCalledTimes(2);
-    // Calculate expected index for DEFAULT_QWEN_MODEL dynamically
-    const qwenModels = getFilteredQwenModels();
-    const expectedCoderIndex = qwenModels.findIndex(
-      (m) => m.id === DEFAULT_QWEN_MODEL,
-    );
-    expect(mockedSelect.mock.calls[1][0].initialIndex).toBe(expectedCoderIndex);
+    expect(mockedSelect.mock.calls[1][0].initialIndex).toBe(1);
   });
 });
 
 describe('encodeAuxModelSelector', () => {
   it('encodes the "authType::modelId" key, dropping the baseUrl', () => {
-    expect(
-      encodeAuxModelSelector('openai::gpt-4o\0https://api.example.com'),
-    ).toBe('openai:gpt-4o');
+    expect(encodeAuxModelSelector(`openai::gpt-4o\0${LOCAL_BASE_URL}`)).toBe(
+      'openai:gpt-4o',
+    );
     expect(encodeAuxModelSelector('openai::gpt-4o')).toBe('openai:gpt-4o');
   });
 

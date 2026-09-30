@@ -1387,14 +1387,14 @@ describe('runForkedAgent (AgentHeadless path) bound-tool isolation', () => {
     }
   });
 
-  it('uses a runtime content-generator view for cross-auth fast models', async () => {
+  it('uses a runtime content-generator view for a fast model that differs from the parent', async () => {
     const fastModel = 'deepseek-v4-flash';
     const runtimeView = makeRuntimeView(fastModel);
     vi.mocked(createRuntimeContentGeneratorView).mockResolvedValue(runtimeView);
 
     const parent = new ConfigImpl({
       ...baseParams,
-      model: 'claude-main',
+      model: 'main-model',
     });
     const parentRegistry = await parent.createToolRegistry(undefined, {
       skipDiscovery: true,
@@ -1403,23 +1403,11 @@ describe('runForkedAgent (AgentHeadless path) bound-tool isolation', () => {
     (parent as any).toolRegistry = parentRegistry;
 
     vi.spyOn(parent, 'getContentGeneratorConfig').mockReturnValue({
-      model: 'claude-main',
-      authType: AuthType.USE_ANTHROPIC,
+      model: 'main-model',
+      authType: AuthType.USE_OPENAI,
     });
     vi.spyOn(parent, 'getFastModel').mockReturnValue(
       `${AuthType.USE_OPENAI}:${fastModel}`,
-    );
-    vi.spyOn(parent, 'getAllConfiguredModels').mockImplementation(
-      (authTypes?: AuthType[]) =>
-        authTypes?.includes(AuthType.USE_OPENAI)
-          ? [
-              {
-                id: fastModel,
-                label: fastModel,
-                authType: AuthType.USE_OPENAI,
-              },
-            ]
-          : [],
     );
 
     const captured: {

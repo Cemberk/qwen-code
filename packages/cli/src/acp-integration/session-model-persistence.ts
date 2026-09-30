@@ -175,17 +175,7 @@ export async function applyRestoredSessionModel(
   const switchModelId = useRuntimeSnapshot
     ? buildRuntimeSnapshotId(authType, targetModel)
     : targetModel;
-  const requireCachedCredentials =
-    authType === AuthType.QWEN_OAUTH && currentAuth !== authType;
-  const switchOptions =
-    targetBaseUrl || requireCachedCredentials
-      ? {
-          ...(targetBaseUrl ? { baseUrl: targetBaseUrl } : {}),
-          ...(requireCachedCredentials
-            ? { requireCachedCredentials: true }
-            : {}),
-        }
-      : undefined;
+  const switchOptions = targetBaseUrl ? { baseUrl: targetBaseUrl } : undefined;
   try {
     await config.switchModel(authType, switchModelId, switchOptions);
   } catch (error) {

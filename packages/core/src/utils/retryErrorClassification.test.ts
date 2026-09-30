@@ -4,10 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { APIError as AnthropicAPIError } from '@anthropic-ai/sdk';
 import { APIError, APIUserAbortError } from 'openai';
 import { describe, expect, it } from 'vitest';
-import { AuthType } from '../core/contentGenerator.js';
 import {
   classifyRetryError,
   isFallbackEligible,
@@ -98,7 +96,6 @@ describe('classifyRetryError', () => {
 
     expect(
       classifyRetryError(error, {
-        authType: AuthType.USE_OPENAI,
         extraRetryErrorCodes: [4999],
       }),
     ).toMatchObject({
@@ -147,25 +144,6 @@ describe('classifyRetryError', () => {
       kind: 'unknown',
       diagnosis: 'unknown',
       reason: 'unclassified',
-    });
-  });
-
-  it('marks Qwen OAuth free-tier quota errors as fail-fast', () => {
-    expect(
-      classifyRetryError(
-        {
-          status: 429,
-          code: 'insufficient_quota',
-          message: 'Free allocated quota exceeded',
-        },
-        { authType: AuthType.QWEN_OAUTH },
-      ),
-    ).toMatchObject({
-      kind: 'provider-business',
-      diagnosis: 'fail-fast',
-      statusCode: 429,
-      providerCode: 'insufficient_quota',
-      reason: 'qwen-oauth-free-tier-quota',
     });
   });
 
@@ -641,89 +619,6 @@ describe('classifyRetryError', () => {
     expect(isRetryableUpstreamError(untraced)).toBe(false);
   });
 
-  it('classifies the error an Anthropic mid-stream frame actually produces', () => {
-    // The Anthropic SDK raises a mid-stream SSE failure with
-    // `APIError.generate(undefined, ..., sse.data, createResponseHeaders(...))`
-    // (streaming.mjs). `generate` short-circuits on the missing status and
-    // builds an `APIConnectionError` *without* headers, so the `request-id`
-    // the call site passed never reaches `request_id` — a native frame cannot
-    // open the status-less gate on a header id the way the OpenAI SDK's can.
-    // What still can is a gateway relaying its own id inside the frame body,
-    // which is what an Anthropic-compatible `baseUrl` route sees, and the body
-    // reaches the classifier because `generate` keeps the raw frame as the
-    // message.
-    const tracedFrame = JSON.stringify({
-      type: 'error',
-      error: { type: 'api_error', message: 'Internal server error' },
-      request_id: 'gw-trace-1',
-    });
-    const error = AnthropicAPIError.generate(
-      undefined,
-      `SSE Error: ${tracedFrame}`,
-      tracedFrame,
-      // `createResponseHeaders` hands `generate` a plain lower-cased record,
-      // not a `Headers` instance.
-      { 'request-id': 'header-trace-1' },
-    );
-
-    // The header id is dropped even though the call site supplied it; the body
-    // id survives through the message.
-    expect(error.request_id).toBeUndefined();
-    expect(classifyRetryError(error)).toMatchObject({
-      kind: 'provider',
-      diagnosis: 'retryable',
-      reason: 'upstream-error-without-status',
-      requestId: 'gw-trace-1',
-    });
-    expect(isRetryableUpstreamError(error)).toBe(true);
-
-    // The same body channel cannot smuggle a permanent rejection into a retry:
-    // Anthropic puts `invalid_request_error` in `type`, the payload reader
-    // folds that into the provider code, and the permanence guard runs before
-    // the request-id branch.
-    const permanentFrame = JSON.stringify({
-      type: 'error',
-      error: {
-        type: 'invalid_request_error',
-        message: 'max_tokens: field required',
-      },
-      request_id: 'gw-trace-2',
-    });
-    const permanent = AnthropicAPIError.generate(
-      undefined,
-      `SSE Error: ${permanentFrame}`,
-      permanentFrame,
-      { 'request-id': 'header-trace-2' },
-    );
-
-    expect(classifyRetryError(permanent)).toMatchObject({
-      diagnosis: 'fail-fast',
-      reason: 'permanent-provider-code',
-    });
-    expect(isRetryableUpstreamError(permanent)).toBe(false);
-
-    // The credential member of the same union, which the SDK maps to 401 when
-    // a status survives: relaying it status-less must not change the verdict,
-    // or a dead key costs the whole ladder before it surfaces.
-    const authFrame = JSON.stringify({
-      type: 'error',
-      error: { type: 'authentication_error', message: 'invalid x-api-key' },
-      request_id: 'gw-trace-3',
-    });
-    const unauthenticated = AnthropicAPIError.generate(
-      undefined,
-      `SSE Error: ${authFrame}`,
-      authFrame,
-      { 'request-id': 'header-trace-3' },
-    );
-
-    expect(classifyRetryError(unauthenticated)).toMatchObject({
-      diagnosis: 'fail-fast',
-      reason: 'permanent-provider-code',
-    });
-    expect(isRetryableUpstreamError(unauthenticated)).toBe(false);
-  });
-
   it('classifies a status-less provider body embedded in the message as retryable', () => {
     // The same upstream failure can arrive with the provider's JSON body pasted
     // into the message rather than on SDK properties. With no `:HTTP_STATUS/`
@@ -1024,9 +919,9 @@ describe('classifyRetryError', () => {
     // The transport branch runs first, and that ordering is load-bearing:
     // isRetryableStreamTransportError admits mid-stream replay only on
     // `kind === 'transport'` plus an allow-listed code, so reclassifying a
-    // traced socket cut as a provider error would silently disable replay,
-    // continuation recovery, and Anthropic's release of deferred tool calls
-    // while the whole suite stayed green. `transportCode` is asserted because
+    // traced socket cut as a provider error would silently disable replay and
+    // continuation recovery while the whole suite stayed green.
+    // `transportCode` is asserted because
     // that predicate reads it, and no request id is asserted because the
     // transport return deliberately does not spread the provider fields.
     const error = Object.assign(new Error('upstream failed'), {

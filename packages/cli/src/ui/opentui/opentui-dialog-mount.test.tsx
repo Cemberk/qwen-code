@@ -607,14 +607,14 @@ describe('OpenTuiDialogMount routing', () => {
     },
     {
       request: { dialog: 'auth', openedViaCommand: true },
-      args: ['Authenticated with Qwen OAuth.'],
+      args: ['Successfully configured Local OpenAI-compatible server.'],
       rawCommand: '/auth',
       type: 'info',
     },
     {
       // The boot auth-error open is not a command, so ink records nothing.
       request: { dialog: 'auth', initialError: 'Token expired.' },
-      args: ['Authenticated with Qwen OAuth.'],
+      args: ['Successfully configured Local OpenAI-compatible server.'],
       rawCommand: null,
       type: 'info',
     },

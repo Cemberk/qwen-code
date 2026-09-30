@@ -447,7 +447,7 @@ function setupVisionRouteOverrideMocks(
   mockConfig.getEffectiveInputModalities = vi.fn().mockReturnValue({});
   mockConfig.getDefaultVisionBridgeModel = vi.fn().mockReturnValue({
     id: 'vision-agent',
-    baseUrl: 'https://vision.example.com/v1',
+    baseUrl: 'http://127.0.0.1:8081/v1',
     agentCapable: true,
   });
   mockConfig.getBaseLlmClient = vi.fn().mockReturnValue({
@@ -1355,12 +1355,9 @@ describe('Session', () => {
 
   it('reloads model providers from the session-owned settings', async () => {
     const modelProviders = {
-      idealab: [{ id: 'qwen3', baseUrl: 'https://idealab.example/v1' }],
+      openai: [{ id: 'qwen3', baseUrl: 'http://127.0.0.1:11434/v1' }],
     };
-    Object.assign(mockSettings.merged, {
-      modelProviders,
-      providerProtocol: { idealab: 'openai' },
-    });
+    Object.assign(mockSettings.merged, { modelProviders });
 
     await session.reloadModelProvidersFromDisk();
 
@@ -1370,7 +1367,6 @@ describe('Session', () => {
     ]);
     expect(mockConfig.reloadModelProvidersConfig).toHaveBeenCalledWith(
       modelProviders,
-      { idealab: 'openai' },
     );
   });
 
@@ -8222,7 +8218,7 @@ describe('Session', () => {
           id: 'qwen3-coder-plus',
           label: 'Qwen3 Coder Plus',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://default.example/v1',
+          baseUrl: 'http://127.0.0.1:8080/v1',
         },
       ]);
       await session.setModel({
@@ -8293,18 +8289,18 @@ describe('Session', () => {
           id: 'shared-model',
           label: 'Provider One',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://one.example/v1',
-          registryBaseUrl: 'https://one.example/v1',
+          baseUrl: 'http://127.0.0.1:11434/v1',
+          registryBaseUrl: 'http://127.0.0.1:11434/v1',
         },
         {
           id: 'shared-model',
           label: 'Provider Two',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://two.example/v1',
-          registryBaseUrl: 'https://two.example/v1',
+          baseUrl: 'http://localhost:1234/v1',
+          registryBaseUrl: 'http://localhost:1234/v1',
         },
       ];
-      let activeBaseUrl = 'https://one.example/v1';
+      let activeBaseUrl = 'http://127.0.0.1:11434/v1';
       vi.mocked(mockConfig.getAllConfiguredModels).mockReturnValue(models);
       vi.mocked(mockConfig.getContentGeneratorConfig).mockImplementation(
         () =>
@@ -8335,7 +8331,7 @@ describe('Session', () => {
       expect(mockConfig.switchModel).toHaveBeenCalledWith(
         AuthType.USE_OPENAI,
         'shared-model',
-        { baseUrl: 'https://two.example/v1' },
+        { baseUrl: 'http://localhost:1234/v1' },
       );
       expect(mockSettings.setValue).toHaveBeenCalledWith(
         SettingScope.User,
@@ -8345,7 +8341,7 @@ describe('Session', () => {
       expect(mockSettings.setValue).toHaveBeenCalledWith(
         SettingScope.User,
         'model.baseUrl',
-        'https://two.example/v1',
+        'http://localhost:1234/v1',
       );
       expect(mockClient.extNotification).toHaveBeenCalledWith(
         'qwen/notify/session/model-update',
@@ -8355,14 +8351,14 @@ describe('Session', () => {
         _meta: {
           qwenModelSwitch: {
             modelId: 'shared-model',
-            baseUrl: 'https://two.example/v1',
+            baseUrl: 'http://localhost:1234/v1',
           },
         },
       });
       expect(mockChatRecordingService.recordSessionModel).toHaveBeenCalledWith({
         modelId: 'shared-model',
         authType: AuthType.USE_OPENAI,
-        baseUrl: 'https://two.example/v1',
+        baseUrl: 'http://localhost:1234/v1',
       });
     });
 
@@ -8372,14 +8368,14 @@ describe('Session', () => {
           id: 'shared-model',
           label: 'Implicit Default',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://default.example/v1',
+          baseUrl: 'http://127.0.0.1:8080/v1',
         },
         {
           id: 'shared-model',
           label: 'Explicit Route',
           authType: AuthType.USE_OPENAI,
-          baseUrl: 'https://default.example/v1',
-          registryBaseUrl: 'https://default.example/v1',
+          baseUrl: 'http://127.0.0.1:8080/v1',
+          registryBaseUrl: 'http://127.0.0.1:8080/v1',
         },
       ];
       vi.mocked(mockConfig.getAllConfiguredModels).mockReturnValue(models);
@@ -8435,9 +8431,6 @@ describe('Session', () => {
     it.each([
       "Model 'qwen-typo' not found for authType 'openai'",
       "Model 'qwen\ntypo' not found for authType 'openai'",
-      "Image-only model 'qwen-image' cannot be used as the primary model",
-      "Voice-only model 'qwen-voice' cannot be used as the primary model",
-      "Realtime-only model 'qwen-realtime' cannot be used as the primary model",
     ])(
       'maps the caller-caused switchModel refusal to invalid params: %s',
       async (message) => {
@@ -8467,31 +8460,26 @@ describe('Session', () => {
       // the definite caller rejection into an internal error.
       const realModels = new ModelsConfig({
         modelProvidersConfig: {
-          openai: [
-            { id: 'chat-model' },
-            { id: 'image-model', imageOnly: true },
-          ],
+          openai: [{ id: 'chat-model', baseUrl: 'http://127.0.0.1:11434/v1' }],
         },
       });
       switchModelSpy.mockImplementation((authType: AuthType, modelId: string) =>
         realModels.switchModel(authType, modelId),
       );
 
-      for (const modelId of ['qwen-typo', 'image-model']) {
-        const rejection: unknown = await session
-          .setModel({
-            sessionId: 'test-session-id',
-            modelId: `${modelId}(${AuthType.USE_OPENAI})`,
-          })
-          .then(
-            () => {
-              throw new Error('expected setModel to reject');
-            },
-            (error: unknown) => error,
-          );
-        expect(rejection).toBeInstanceOf(RequestError);
-        expect((rejection as RequestError).code).toBe(-32602);
-      }
+      const rejection: unknown = await session
+        .setModel({
+          sessionId: 'test-session-id',
+          modelId: `qwen-typo(${AuthType.USE_OPENAI})`,
+        })
+        .then(
+          () => {
+            throw new Error('expected setModel to reject');
+          },
+          (error: unknown) => error,
+        );
+      expect(rejection).toBeInstanceOf(RequestError);
+      expect((rejection as RequestError).code).toBe(-32602);
       expect(mockSettings.setValue).not.toHaveBeenCalled();
     });
 
@@ -8888,8 +8876,8 @@ describe('Session', () => {
           id: 'qwen3.8-max',
           label: name,
           authType: AuthType.USE_OPENAI,
-          baseUrl: `https://${name}.example/v1`,
-          registryBaseUrl: `https://${name}.example/v1`,
+          baseUrl: `http://127.0.0.1:${name === 'one' ? 11434 : 1234}/v1`,
+          registryBaseUrl: `http://127.0.0.1:${name === 'one' ? 11434 : 1234}/v1`,
         }));
         vi.mocked(mockConfig.getAllConfiguredModels).mockReturnValue(models);
         await session.setModel({
@@ -8899,7 +8887,7 @@ describe('Session', () => {
         expect(mockConfig.switchModel).toHaveBeenCalledWith(
           AuthType.USE_OPENAI,
           'qwen3.8-max',
-          { baseUrl: 'https://two.example/v1' },
+          { baseUrl: 'http://127.0.0.1:1234/v1' },
         );
         expect(state.user.settings.model.reasoningEffort).toBe(selection);
         expect(state.live.reasoning).toEqual(
@@ -16500,7 +16488,7 @@ describe('Session', () => {
       mockConfig.getEffectiveInputModalities = vi.fn().mockReturnValue({});
       mockConfig.getDefaultVisionBridgeModel = vi.fn().mockReturnValue({
         id: 'vision-agent',
-        baseUrl: 'https://vision.example.com/v1',
+        baseUrl: 'http://127.0.0.1:8081/v1',
         agentCapable: true,
       });
       const resolveForModel = vi.fn().mockResolvedValue(runtimeView);
@@ -16545,18 +16533,18 @@ describe('Session', () => {
       );
       expect(mockChat.sendMessageStream).toHaveBeenNthCalledWith(
         1,
-        'vision-agent\0https://vision.example.com/v1\0',
+        'vision-agent\0http://127.0.0.1:8081/v1\0',
         expect.any(Object),
         expect.any(String),
       );
       expect(mockChat.sendMessageStream).toHaveBeenNthCalledWith(
         2,
-        'vision-agent\0https://vision.example.com/v1\0',
+        'vision-agent\0http://127.0.0.1:8081/v1\0',
         expect.any(Object),
         expect.any(String),
       );
       expect(resolveForModel).toHaveBeenCalledWith(
-        'vision-agent\0https://vision.example.com/v1',
+        'vision-agent\0http://127.0.0.1:8081/v1',
         { failClosed: true },
       );
       expect(executeSpy).toHaveBeenCalledOnce();
@@ -16588,7 +16576,7 @@ describe('Session', () => {
         mockConfig.getEffectiveInputModalities = vi.fn().mockReturnValue({});
         mockConfig.getDefaultVisionBridgeModel = vi.fn().mockReturnValue({
           id: 'vision-agent',
-          baseUrl: 'https://vision.example.com/v1',
+          baseUrl: 'http://127.0.0.1:8081/v1',
           agentCapable: true,
         });
         mockChat.sendMessageStream = vi
@@ -16625,7 +16613,7 @@ describe('Session', () => {
 
         const secondCall = vi.mocked(mockChat.sendMessageStream).mock.calls[1];
         expect(secondCall?.[0]).toBe(
-          'vision-agent\0https://vision.example.com/v1\0',
+          'vision-agent\0http://127.0.0.1:8081/v1\0',
         );
         const sentParts = secondCall?.[1].message;
         if (!Array.isArray(sentParts)) {
@@ -16660,8 +16648,8 @@ describe('Session', () => {
         status: 'skipped',
         convertedCount: 0,
         omittedCount: 0,
-        modelId: 'idealab:qwen3.7-plus',
-        modelEndpoint: 'idealab.alibaba-inc.com',
+        modelId: 'openai:qwen3.7-plus',
+        modelEndpoint: '127.0.0.1:11434',
         egressOccurred: true,
       });
       mockChat.sendMessageStream = vi
@@ -16691,7 +16679,7 @@ describe('Session', () => {
           sessionUpdate: 'agent_message_chunk',
           content: {
             type: 'text',
-            text: 'Vision bridge cancelled. Your image and prompt/context were sent to qwen3.7-plus (idealab.alibaba-inc.com).',
+            text: 'Vision bridge cancelled. Your image and prompt/context were sent to qwen3.7-plus (127.0.0.1:11434).',
           },
           _meta: {
             source: 'vision_bridge_notice',
@@ -16701,7 +16689,7 @@ describe('Session', () => {
               convertedCount: 0,
               omittedCount: 0,
               modelName: 'qwen3.7-plus',
-              modelEndpoint: 'idealab.alibaba-inc.com',
+              modelEndpoint: '127.0.0.1:11434',
               egressOccurred: true,
             },
           },
@@ -20629,7 +20617,7 @@ describe('Session', () => {
         ).resolves.toEqual({ stopReason: 'end_turn' });
 
         expect(resolveForModel).toHaveBeenCalledWith(
-          'vision-agent\0https://vision.example.com/v1',
+          'vision-agent\0http://127.0.0.1:8081/v1',
           {
             failClosed: true,
           },
@@ -20687,7 +20675,7 @@ describe('Session', () => {
           stopReason: 'end_turn',
         });
         expect(mockChat.sendMessageStream).toHaveBeenCalledWith(
-          'vision-agent\0https://vision.example.com/v1\0',
+          'vision-agent\0http://127.0.0.1:8081/v1\0',
           expect.any(Object),
           expect.any(String),
         );
@@ -20801,7 +20789,7 @@ describe('Session', () => {
         });
         // Both sends went out under the \0 exact-route override.
         expect(mockChat.sendMessageStream).toHaveBeenCalledWith(
-          'vision-agent\0https://vision.example.com/v1\0',
+          'vision-agent\0http://127.0.0.1:8081/v1\0',
           expect.any(Object),
           expect.any(String),
         );
@@ -21670,7 +21658,7 @@ describe('Session', () => {
         mockConfig.getEffectiveInputModalities = vi.fn().mockReturnValue({});
         mockConfig.getDefaultVisionBridgeModel = vi.fn().mockReturnValue({
           id: 'vision-agent',
-          baseUrl: 'https://vision.example.com/v1',
+          baseUrl: 'http://127.0.0.1:8081/v1',
           agentCapable: true,
         });
         mockClient.extMethod = vi.fn().mockResolvedValue({
@@ -21846,7 +21834,7 @@ describe('Session', () => {
         ];
         const secondCall = vi.mocked(mockChat.sendMessageStream).mock.calls[1];
         expect(secondCall?.[0]).toBe(
-          'vision-agent\0https://vision.example.com/v1\0',
+          'vision-agent\0http://127.0.0.1:8081/v1\0',
         );
         expect(secondCall?.[1].message).toEqual(
           expect.arrayContaining(midTurnParts),
@@ -22059,7 +22047,7 @@ describe('Session', () => {
               .mockReturnValue({});
             mockConfig.getDefaultVisionBridgeModel = vi.fn().mockReturnValue({
               id: 'vision-bridge',
-              baseUrl: 'https://vision.example.com/v1',
+              baseUrl: 'http://127.0.0.1:8081/v1',
             });
             mockClient.extMethod = vi.fn().mockResolvedValue({
               items: [
@@ -22164,7 +22152,7 @@ describe('Session', () => {
         mockConfig.getEffectiveInputModalities = vi.fn().mockReturnValue({});
         mockConfig.getDefaultVisionBridgeModel = vi.fn().mockReturnValue({
           id: 'vision-agent',
-          baseUrl: 'https://vision.example.com/v1',
+          baseUrl: 'http://127.0.0.1:8081/v1',
           agentCapable: true,
         });
         mockClient.extMethod = vi.fn().mockResolvedValue({
@@ -22251,7 +22239,7 @@ describe('Session', () => {
         mockConfig.getEffectiveInputModalities = vi.fn().mockReturnValue({});
         mockConfig.getDefaultVisionBridgeModel = vi.fn().mockReturnValue({
           id: 'vision-agent',
-          baseUrl: 'https://vision.example.com/v1',
+          baseUrl: 'http://127.0.0.1:8081/v1',
           agentCapable: true,
         });
         mockClient.extMethod = vi.fn().mockResolvedValue({
@@ -22833,7 +22821,7 @@ describe('Session', () => {
         mockConfig.getEffectiveInputModalities = vi.fn().mockReturnValue({});
         mockConfig.getDefaultVisionBridgeModel = vi.fn().mockReturnValue({
           id: 'vision-bridge',
-          baseUrl: 'https://vision.example.com/v1',
+          baseUrl: 'http://127.0.0.1:8081/v1',
         });
         runVisionBridgeSpy.mockImplementation(async () => {
           const pendingPrompt = (
@@ -45605,7 +45593,7 @@ describe('Session', () => {
           events.push('vision');
           return {
             id: 'vision-agent',
-            baseUrl: 'https://vision.example.com/v1',
+            baseUrl: 'http://127.0.0.1:8081/v1',
             agentCapable: true,
           };
         });
@@ -45663,7 +45651,7 @@ describe('Session', () => {
       for (const call of vi
         .mocked(mockChat.sendMessageStream)
         .mock.calls.slice(1)) {
-        expect(call[0]).toBe('vision-agent\0https://vision.example.com/v1\0');
+        expect(call[0]).toBe('vision-agent\0http://127.0.0.1:8081/v1\0');
       }
     });
 

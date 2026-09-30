@@ -6,11 +6,6 @@
 
 import { useMemo } from 'react';
 import { Box } from 'ink';
-import {
-  AuthType,
-  findProviderByCredentials,
-  resolveMetadataKey,
-} from '@qwen-code/qwen-code-core';
 import { Header, AuthDisplayType } from './Header.js';
 import { Tips } from './Tips.js';
 import { useSettings } from '../contexts/SettingsContext.js';
@@ -20,31 +15,6 @@ import { resolveCustomBanner } from '../utils/customBanner.js';
 
 interface AppHeaderProps {
   version: string;
-}
-
-/**
- * Determine the auth display type based on auth type and configuration.
- */
-function getAuthDisplayType(
-  authType?: AuthType,
-  baseUrl?: string,
-  apiKeyEnvKey?: string,
-): AuthDisplayType | string {
-  if (!authType) {
-    return AuthDisplayType.UNKNOWN;
-  }
-
-  const matched = findProviderByCredentials(baseUrl, apiKeyEnvKey);
-  if (matched && resolveMetadataKey(matched)) {
-    return matched.label;
-  }
-
-  switch (authType) {
-    case AuthType.QWEN_OAUTH:
-      return AuthDisplayType.QWEN_OAUTH;
-    default:
-      return AuthDisplayType.API_KEY;
-  }
 }
 
 export const AppHeader = ({ version }: AppHeaderProps) => {
@@ -59,11 +29,9 @@ export const AppHeader = ({ version }: AppHeaderProps) => {
     !config.getScreenReader() && !settings.merged.ui?.hideBanner;
   const showTips = !(settings.merged.ui?.hideTips || config.getScreenReader());
 
-  const authDisplayType = getAuthDisplayType(
-    authType,
-    contentGeneratorConfig?.baseUrl,
-    contentGeneratorConfig?.apiKeyEnvKey,
-  );
+  const authDisplayType = authType
+    ? AuthDisplayType.API_KEY
+    : AuthDisplayType.UNKNOWN;
 
   // Resolve once per (settings identity) — file reads and sanitization are
   // not free, and the merged settings reference is stable across renders

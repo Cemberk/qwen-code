@@ -5,7 +5,6 @@
  */
 
 import type { GenerateContentParameters } from '@google/genai';
-import type Anthropic from '@anthropic-ai/sdk';
 import type OpenAI from 'openai';
 
 export interface RuntimeDiagnosticsSnapshot {
@@ -13,7 +12,6 @@ export interface RuntimeDiagnosticsSnapshot {
   startedAt: string;
   requests: GenerateContentRequestDiagnostics[];
   openaiWireRequests: OpenAIWireRequestDiagnostics[];
-  anthropicWireRequests: AnthropicWireRequestDiagnostics[];
   tools: RuntimeToolDiagnostics;
 }
 
@@ -58,20 +56,6 @@ export interface OpenAIWireRequestDiagnostics {
   bodyBytes: number;
   messageCount: number;
   messageBytesByRole: Record<string, number>;
-  toolsCount: number;
-  toolSchemaBytes: number;
-  topLevelKeys: string[];
-}
-
-export interface AnthropicWireRequestDiagnostics {
-  index?: number;
-  timestamp?: string;
-  model: string;
-  stream: boolean;
-  bodyBytes: number;
-  messageCount: number;
-  messageBytesByRole: Record<string, number>;
-  systemBytes: number;
   toolsCount: number;
   toolSchemaBytes: number;
   topLevelKeys: string[];
@@ -124,10 +108,8 @@ export class RuntimeDiagnosticsCollector {
   private startedAt: string;
   private requestIndex = 0;
   private openAIWireRequestIndex = 0;
-  private anthropicWireRequestIndex = 0;
   private requests: GenerateContentRequestDiagnostics[] = [];
   private openaiWireRequests: OpenAIWireRequestDiagnostics[] = [];
-  private anthropicWireRequests: AnthropicWireRequestDiagnostics[] = [];
   private tools: RuntimeToolDiagnostics = createInitialToolDiagnostics();
 
   constructor(options: RuntimeDiagnosticsCollectorOptions = {}) {
@@ -141,10 +123,8 @@ export class RuntimeDiagnosticsCollector {
     this.startedAt = this.now();
     this.requestIndex = 0;
     this.openAIWireRequestIndex = 0;
-    this.anthropicWireRequestIndex = 0;
     this.requests = [];
     this.openaiWireRequests = [];
-    this.anthropicWireRequests = [];
     this.tools = createInitialToolDiagnostics();
   }
 
@@ -192,23 +172,6 @@ export class RuntimeDiagnosticsCollector {
       index: this.openAIWireRequestIndex,
       timestamp: this.now(),
       ...summarizeOpenAIWireRequest(request),
-    });
-  }
-
-  recordAnthropicWireRequest(
-    request:
-      | Anthropic.MessageCreateParamsNonStreaming
-      | Anthropic.MessageCreateParamsStreaming,
-  ): void {
-    if (!this.enabled) {
-      return;
-    }
-
-    this.anthropicWireRequestIndex += 1;
-    this.anthropicWireRequests.push({
-      index: this.anthropicWireRequestIndex,
-      timestamp: this.now(),
-      ...summarizeAnthropicWireRequest(request),
     });
   }
 
@@ -268,11 +231,6 @@ export class RuntimeDiagnosticsCollector {
         messageBytesByRole: { ...request.messageBytesByRole },
         topLevelKeys: [...request.topLevelKeys],
       })),
-      anthropicWireRequests: this.anthropicWireRequests.map((request) => ({
-        ...request,
-        messageBytesByRole: { ...request.messageBytesByRole },
-        topLevelKeys: [...request.topLevelKeys],
-      })),
       tools: {
         ...this.tools,
         byName: Object.fromEntries(
@@ -328,45 +286,6 @@ export function summarizeOpenAIWireRequest(
     bodyBytes: utf8Bytes(request),
     messageCount: messages.length,
     messageBytesByRole,
-    toolsCount: tools.length,
-    toolSchemaBytes: utf8Bytes(tools),
-    topLevelKeys: Object.keys(requestRecord).sort(),
-  };
-}
-
-export function summarizeAnthropicWireRequest(
-  request:
-    | Anthropic.MessageCreateParamsNonStreaming
-    | Anthropic.MessageCreateParamsStreaming,
-): AnthropicWireRequestDiagnostics {
-  const requestRecord = asRecord(request);
-  const messages = Array.isArray(requestRecord['messages'])
-    ? requestRecord['messages']
-    : [];
-  const tools = Array.isArray(requestRecord['tools'])
-    ? requestRecord['tools']
-    : [];
-  const messageBytesByRole: Record<string, number> = {};
-  for (const message of messages) {
-    const messageRecord = asRecord(message);
-    const role =
-      typeof messageRecord['role'] === 'string'
-        ? messageRecord['role']
-        : 'unknown';
-    messageBytesByRole[role] =
-      (messageBytesByRole[role] ?? 0) + utf8Bytes(messageRecord['content']);
-  }
-
-  return {
-    model:
-      typeof requestRecord['model'] === 'string'
-        ? requestRecord['model']
-        : 'unknown',
-    stream: requestRecord['stream'] === true,
-    bodyBytes: utf8Bytes(request),
-    messageCount: messages.length,
-    messageBytesByRole,
-    systemBytes: utf8Bytes(requestRecord['system']),
     toolsCount: tools.length,
     toolSchemaBytes: utf8Bytes(tools),
     topLevelKeys: Object.keys(requestRecord).sort(),

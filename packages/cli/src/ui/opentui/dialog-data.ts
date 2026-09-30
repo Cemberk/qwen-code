@@ -29,7 +29,6 @@ import {
 } from '../../config/advisor-model.js';
 import process from 'node:process';
 import {
-  AuthType,
   checkForExtensionUpdate,
   ExtensionUpdateState,
   getMCPServerStatus,
@@ -45,6 +44,7 @@ import {
   SettingScope as CoreSettingScope,
 } from '@qwen-code/qwen-code-core';
 import type {
+  AuthType,
   Config,
   ContentGeneratorConfig,
   Extension,
@@ -92,8 +92,7 @@ function advisorSelector(
 
 /**
  * Model list parity of ModelDialog's `availableModelEntries`: runtime entries
- * are listed (tagged), QWEN_OAUTH models only under that auth type,
- * voiceOnly and imageOnly entries never, fastOnly/visionOnly entries only in
+ * are listed (tagged), fastOnly/visionOnly entries only in
  * their own selector modes. Rows are keyed like ink's option
  * values: runtime rows by their `$runtime|...` snapshot id, registry rows by
  * `authType::modelId[\0baseUrl]`. The raw registry entry travels on `model`
@@ -104,7 +103,6 @@ export function buildModelEntries(
   mode: ModelDialogMode,
 ): OpenTuiModelEntry[] {
   const allModels = config?.getAllConfiguredModels?.() ?? [];
-  const authType = config?.getAuthType?.();
   const entries: OpenTuiModelEntry[] =
     mode === 'advisor'
       ? [
@@ -127,16 +125,8 @@ export function buildModelEntries(
           .available)
     )
       continue;
-    if (model.imageOnly) continue;
     if (!model.isRuntimeModel) {
-      if (
-        model.authType === AuthType.QWEN_OAUTH &&
-        authType !== AuthType.QWEN_OAUTH
-      ) {
-        continue;
-      }
       if (mode !== 'fast' && mode !== 'advisor' && model.fastOnly) continue;
-      if (model.voiceOnly) continue;
       // ink keeps visionOnly models in vision mode
       // (ModelDialog.tsx: isVisionModelMode || !m.visionOnly).
       if (mode !== 'vision' && model.visionOnly) continue;
@@ -152,16 +142,12 @@ export function buildModelEntries(
               model.baseUrl,
             );
     const isRuntime = model.isRuntimeModel ?? false;
-    const isQwenOAuth = model.authType === AuthType.QWEN_OAUTH;
-    // ink folds the runtime / discontinued markers into the row description as
-    // well as its title, so a runtime model with no description of its own still
-    // gets an explanatory line under the title.
+    // ink folds the runtime marker into the row description as well as its
+    // title, so a runtime model with no description of its own still gets an
+    // explanatory line under the title.
     let description = model.description ?? '';
     if (isRuntime) {
       description = description ? `${description} (Runtime)` : 'Runtime model';
-    }
-    if (isQwenOAuth && !isRuntime) {
-      description = t('Discontinued — switch to Coding Plan or API Key');
     }
     entries.push({
       key,
@@ -171,7 +157,6 @@ export function buildModelEntries(
       modelId: model.id,
       ...(description ? { description } : {}),
       isRuntime,
-      isQwenOAuth,
       ...(model.modalities ? { modalities: model.modalities } : {}),
       ...(model.contextWindowSize
         ? { contextWindowSize: model.contextWindowSize }
@@ -449,25 +434,7 @@ export async function applyModelSelection(
     };
   }
 
-  // Primary mode. Block selection of discontinued qwen-oauth models
-  // (only block non-runtime OAuth; runtime OAuth models from existing
-  // cached tokens are still allowed to work until the server rejects them).
-  const isQwenOAuthSelection =
-    selectionKey.startsWith(`${AuthType.QWEN_OAUTH}::`) ||
-    (selectionKey.startsWith('$runtime|') &&
-      selectionKey.split('|')[1] === AuthType.QWEN_OAUTH);
-  const isRuntimeOAuthSelection = selectionKey.startsWith(
-    `$runtime|${AuthType.QWEN_OAUTH}|`,
-  );
-  if (isQwenOAuthSelection && !isRuntimeOAuthSelection) {
-    return {
-      ok: false,
-      error: t(
-        'Qwen OAuth free tier was discontinued on 2026-04-15. Please select a model from another provider or run /auth to switch.',
-      ),
-    };
-  }
-
+  // Primary mode.
   if (!config) {
     return { ok: true };
   }
@@ -494,10 +461,6 @@ export async function applyModelSelection(
   let after: ContentGeneratorConfig | undefined;
   try {
     await config.switchModel(selectedAuthType, modelId, {
-      ...(selectedAuthType !== authType &&
-      selectedAuthType === AuthType.QWEN_OAUTH
-        ? { requireCachedCredentials: true }
-        : {}),
       baseUrl: selectedBaseUrl,
     });
     if (!isRuntime) {

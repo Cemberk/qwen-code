@@ -33,18 +33,18 @@ vi.mock('../utils/debugLogger.js', () => ({
 }));
 
 describe('Persistent 401 reproduction — issue #5979 / #6129 / #6283', () => {
-  const ENV_KEY_DASHSCOPE = 'TEST_DASHSCOPE_API_KEY_REPRO';
-  const ENV_KEY_TOKEN_PLAN = 'TEST_TOKEN_PLAN_API_KEY_REPRO';
+  const ENV_KEY_A = 'TEST_SERVER_A_API_KEY_REPRO';
+  const ENV_KEY_B = 'TEST_SERVER_B_API_KEY_REPRO';
 
   beforeEach(() => {
     debugLoggerDebug.mockClear();
-    delete process.env[ENV_KEY_DASHSCOPE];
-    delete process.env[ENV_KEY_TOKEN_PLAN];
+    delete process.env[ENV_KEY_A];
+    delete process.env[ENV_KEY_B];
   });
 
   afterEach(() => {
-    delete process.env[ENV_KEY_DASHSCOPE];
-    delete process.env[ENV_KEY_TOKEN_PLAN];
+    delete process.env[ENV_KEY_A];
+    delete process.env[ENV_KEY_B];
   });
 
   /**
@@ -60,15 +60,15 @@ describe('Persistent 401 reproduction — issue #5979 / #6129 / #6283', () => {
 
     // Simulate .env file loading old value into process.env before
     // settings.env had a chance to override it
-    process.env[ENV_KEY_DASHSCOPE] = OLD_KEY;
+    process.env[ENV_KEY_A] = OLD_KEY;
 
     const modelProvidersConfig: ModelProvidersConfig = {
       openai: [
         {
           id: 'qwen3-coder',
           name: 'Qwen3 Coder',
-          baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-          envKey: ENV_KEY_DASHSCOPE,
+          baseUrl: 'http://127.0.0.1:8001/v1',
+          envKey: ENV_KEY_A,
         },
       ],
     };
@@ -95,22 +95,21 @@ describe('Persistent 401 reproduction — issue #5979 / #6129 / #6283', () => {
    * expected.
    */
   it('loses apiKey when switching to model with different envKey', async () => {
-    process.env[ENV_KEY_DASHSCOPE] = 'sk-dashscope-valid';
+    process.env[ENV_KEY_A] = 'sk-server-a-valid';
 
     const modelProvidersConfig: ModelProvidersConfig = {
       openai: [
         {
           id: 'qwen3-coder',
-          name: 'Qwen3 Coder (DashScope)',
-          baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-          envKey: ENV_KEY_DASHSCOPE,
+          name: 'Qwen3 Coder (server A)',
+          baseUrl: 'http://127.0.0.1:8001/v1',
+          envKey: ENV_KEY_A,
         },
         {
           id: 'qwen3-coder-tp',
-          name: 'Qwen3 Coder (Token Plan)',
-          baseUrl:
-            'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
-          envKey: ENV_KEY_TOKEN_PLAN,
+          name: 'Qwen3 Coder (server B)',
+          baseUrl: 'http://127.0.0.1:8002/v1',
+          envKey: ENV_KEY_B,
         },
       ],
     };
@@ -121,9 +120,7 @@ describe('Persistent 401 reproduction — issue #5979 / #6129 / #6283', () => {
     });
 
     await modelsConfig.switchModel(AuthType.USE_OPENAI, 'qwen3-coder');
-    expect(modelsConfig.getGenerationConfig().apiKey).toBe(
-      'sk-dashscope-valid',
-    );
+    expect(modelsConfig.getGenerationConfig().apiKey).toBe('sk-server-a-valid');
 
     await modelsConfig.switchModel(AuthType.USE_OPENAI, 'qwen3-coder-tp');
 
@@ -131,9 +128,7 @@ describe('Persistent 401 reproduction — issue #5979 / #6129 / #6283', () => {
     expect(gc.apiKey).toBeUndefined();
     expect(gc.model).toBe('qwen3-coder-tp');
     expect(debugLoggerDebug).toHaveBeenCalledWith(
-      expect.stringContaining(
-        `process.env["${ENV_KEY_TOKEN_PLAN}"] is not set`,
-      ),
+      expect.stringContaining(`process.env["${ENV_KEY_B}"] is not set`),
     );
   });
 
@@ -147,15 +142,15 @@ describe('Persistent 401 reproduction — issue #5979 / #6129 / #6283', () => {
    *   falsy and applyResolvedModelDefaults correctly skips it.
    */
   it('treats empty-string env var as unset (apiKey stays undefined at model layer)', async () => {
-    process.env[ENV_KEY_DASHSCOPE] = '';
+    process.env[ENV_KEY_A] = '';
 
     const modelProvidersConfig: ModelProvidersConfig = {
       openai: [
         {
           id: 'qwen3-coder',
           name: 'Qwen3 Coder',
-          baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-          envKey: ENV_KEY_DASHSCOPE,
+          baseUrl: 'http://127.0.0.1:8001/v1',
+          envKey: ENV_KEY_A,
         },
       ],
     };
@@ -174,9 +169,7 @@ describe('Persistent 401 reproduction — issue #5979 / #6129 / #6283', () => {
     // what process.env contains right now (empty string).
     expect(gc.apiKey).toBeUndefined();
     expect(debugLoggerDebug).toHaveBeenCalledWith(
-      expect.stringContaining(
-        `process.env["${ENV_KEY_DASHSCOPE}"] is empty string`,
-      ),
+      expect.stringContaining(`process.env["${ENV_KEY_A}"] is empty string`),
     );
   });
 });

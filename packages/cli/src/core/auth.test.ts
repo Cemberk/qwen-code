@@ -48,7 +48,7 @@ describe('performInitialAuth', () => {
     );
 
     expect(result).toBeNull();
-    expect(mockConfig.refreshAuth).toHaveBeenCalledWith('api_key', true);
+    expect(mockConfig.refreshAuth).toHaveBeenCalledWith('api_key');
     expect(mockLogAuth).toHaveBeenCalledTimes(1);
   });
 

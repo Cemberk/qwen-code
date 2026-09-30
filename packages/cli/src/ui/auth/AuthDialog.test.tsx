@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { setTimeout as settleInput } from 'node:timers/promises';
 import { AuthDialog } from './AuthDialog.js';
 import { LoadedSettings } from '../../config/settings.js';
@@ -26,93 +26,74 @@ vi.mock('@qwen-code/qwen-code-core', async (importOriginal) => ({
   discoverProviderModels: discoverProviderModelsMock,
 }));
 
-type UIStateOverrides = Partial<UIState> & Partial<UIState['auth']>;
+const TITLE = 'Local OpenAI-compatible server';
+const LOCAL_BASE_URL = 'http://127.0.0.1:11434/v1';
 
-type UIActionsOverrides = Partial<UIActions> & Partial<UIActions['auth']>;
-
-const createMockUIState = (overrides: UIStateOverrides = {}): UIState => {
-  const baseState = {
+const createMockUIState = (authError: string | null = null): UIState =>
+  ({
     auth: {
-      authError: null,
-      isAuthDialogOpen: false,
+      authError,
+      isAuthDialogOpen: true,
       isAuthenticating: false,
-      pendingAuthType: undefined,
-      externalAuthState: null,
-      qwenAuthState: {
-        deviceAuth: null,
-        authStatus: 'idle',
-        authMessage: null,
-      },
     },
-  } as Partial<UIState>;
+  }) as UIState;
 
-  return {
-    ...baseState,
-    ...overrides,
+const createMockUIActions = (
+  overrides: Partial<UIActions['auth']> = {},
+): UIActions =>
+  ({
     auth: {
-      ...baseState.auth,
-      ...(overrides.auth ?? {}),
-      authError: overrides.auth?.authError ?? overrides.authError ?? null,
-      pendingAuthType:
-        overrides.auth?.pendingAuthType ?? overrides.pendingAuthType,
+      closeAuthDialog: vi.fn(),
+      handleProviderSubmit: vi.fn().mockResolvedValue(undefined),
+      onAuthError: vi.fn(),
+      openAuthDialog: vi.fn(),
+      ...overrides,
     },
-  } as UIState;
-};
-
-const createMockUIActions = (overrides: UIActionsOverrides = {}): UIActions => {
-  const { auth, ...topLevelOverrides } = overrides;
-  const authActions = {
-    closeAuthDialog: vi.fn(),
-    handleProviderSubmit: vi.fn(),
-    setAuthState: vi.fn(),
-    onAuthError: vi.fn(),
-    openAuthDialog: vi.fn(),
-    cancelAuthentication: vi.fn(),
-    ...auth,
-  } as UIActions['auth'];
-
-  for (const key of Object.keys(topLevelOverrides) as Array<
-    keyof UIActions['auth']
-  >) {
-    if (key in authActions) {
-      Object.assign(authActions, {
-        [key]: topLevelOverrides[key],
-      });
-      delete topLevelOverrides[key];
-    }
-  }
-
-  return {
-    auth: authActions,
     handleRetryLastPrompt: vi.fn(),
-    ...topLevelOverrides,
-  } as UIActions;
+  }) as unknown as UIActions;
+
+const createSettings = (userSettings: Settings = {}): LoadedSettings => {
+  const empty = { ui: { customThemes: {} }, mcpServers: {} } as Settings;
+  const user = { ...empty, ...userSettings };
+  return new LoadedSettings(
+    { settings: empty, originalSettings: empty, path: '' },
+    { settings: {}, originalSettings: {}, path: '' },
+    { settings: user, originalSettings: user, path: '' },
+    { settings: empty, originalSettings: empty, path: '' },
+    true,
+    new Set(),
+  );
 };
 
-const renderAuthDialog = (
-  settings: LoadedSettings,
-  uiStateOverrides: UIStateOverrides = {},
-  uiActionsOverrides: UIActionsOverrides = {},
-  configAuthType: AuthType | undefined = undefined,
-  configApiKey: string | undefined = undefined,
-) => {
-  const uiState = createMockUIState(uiStateOverrides);
-  const uiActions = createMockUIActions(uiActionsOverrides);
-
+const renderAuthDialog = ({
+  settings = createSettings(),
+  authError = null,
+  actions = {},
+  configAuthType,
+}: {
+  settings?: LoadedSettings;
+  authError?: string | null;
+  actions?: Partial<UIActions['auth']>;
+  configAuthType?: AuthType;
+} = {}) => {
+  const uiActions = createMockUIActions(actions);
   const mockConfig = {
     getAuthType: vi.fn(() => configAuthType),
-    getContentGeneratorConfig: vi.fn(() => ({ apiKey: configApiKey })),
+    getContentGeneratorConfig: vi.fn(() => ({})),
   } as unknown as Config;
 
-  return renderWithProviders(
-    <UIStateContext.Provider value={uiState}>
+  const view = renderWithProviders(
+    <UIStateContext.Provider value={createMockUIState(authError)}>
       <UIActionsContext.Provider value={uiActions}>
         <AuthDialog />
       </UIActionsContext.Provider>
     </UIStateContext.Provider>,
     { settings, config: mockConfig },
   );
+  return { ...view, uiActions };
 };
+
+const WAIT_FOR_TIMEOUT = 5000;
 
 /**
  * Type text into the terminal one character at a time.
@@ -130,30 +111,6 @@ const typeText = async (
     await delay(5);
   }
   await delay(30);
-};
-
-const escapeRegExp = (text: string) =>
-  text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-const WAIT_FOR_TIMEOUT = 5000;
-
-const expectSelectedOption = (frame: string | undefined, label: string) => {
-  expect(frame).toMatch(
-    new RegExp(`›\\s*(?:\\d+\\.\\s*)?${escapeRegExp(label)}`),
-  );
-};
-
-const waitForSelectedOption = async (
-  lastFrame: () => string | undefined,
-  label: string,
-) => {
-  await vi.waitFor(
-    () => {
-      expectSelectedOption(lastFrame(), label);
-    },
-    { timeout: WAIT_FOR_TIMEOUT },
-  );
-  await settleInput(150);
 };
 
 const waitForText = async (
@@ -175,97 +132,39 @@ const pressEnterAndWaitFor = async (
 ) => {
   await settleInput(150);
   stdin.write('\r');
-  await vi.waitFor(
-    () => {
-      expect(lastFrame()).toContain(expectedText);
-    },
-    { timeout: WAIT_FOR_TIMEOUT },
-  );
+  await waitForText(lastFrame, expectedText);
   await settleInput(150);
 };
 
-const moveDownAndWaitForSelection = async (
-  stdin: { write: (s: string) => void },
-  lastFrame: () => string | undefined,
-  label: string,
-) => {
-  await settleInput(150);
-  stdin.write('\u001b[B');
-  await waitForSelectedOption(lastFrame, label);
-};
+const stepTitle = (step: number, label: string) =>
+  `${TITLE} · Step ${step}/5 · ${label}`;
 
-const navigateToCustomProtocolSelect = async (
-  stdin: { write: (s: string) => void },
-  lastFrame: () => string | undefined,
-) => {
-  await waitForSelectedOption(lastFrame, 'Alibaba ModelStudio');
-  await moveDownAndWaitForSelection(stdin, lastFrame, 'Third-party Providers');
-  await moveDownAndWaitForSelection(stdin, lastFrame, 'Custom Provider');
-  await pressEnterAndWaitFor(
-    stdin,
-    lastFrame,
-    'Custom Provider · Step 1/7 · Protocol',
-  );
-};
-
-const navigateToCustomBaseUrlInput = async (
-  stdin: { write: (s: string) => void },
-  lastFrame: () => string | undefined,
-) => {
-  await navigateToCustomProtocolSelect(stdin, lastFrame);
-  await pressEnterAndWaitFor(
-    stdin,
-    lastFrame,
-    'Custom Provider · Step 2/7 · API',
-  );
-  await pressEnterAndWaitFor(
-    stdin,
-    lastFrame,
-    'Custom Provider · Step 3/7 · Base URL',
-  );
-};
-
-const navigateToCustomApiKeyInput = async (
-  stdin: { write: (s: string) => void },
-  lastFrame: () => string | undefined,
-) => {
-  await navigateToCustomBaseUrlInput(stdin, lastFrame);
-  await pressEnterAndWaitFor(
-    stdin,
-    lastFrame,
-    'Custom Provider · Step 4/7 · API Key',
-  );
-};
-
-const navigateToCustomModelIdInput = async (
+const navigateToModelIds = async (
   stdin: { write: (s: string) => void },
   lastFrame: () => string | undefined,
   apiKey = 'sk-test',
 ) => {
-  await navigateToCustomApiKeyInput(stdin, lastFrame);
+  await waitForText(lastFrame, stepTitle(1, 'Base URL'));
+  await typeText(stdin, LOCAL_BASE_URL);
+  await pressEnterAndWaitFor(stdin, lastFrame, stepTitle(2, 'API Key'));
   await typeText(stdin, apiKey);
-  await pressEnterAndWaitFor(
-    stdin,
-    lastFrame,
-    'Custom Provider · Step 5/7 · Model IDs',
-  );
+  await pressEnterAndWaitFor(stdin, lastFrame, stepTitle(3, 'Model IDs'));
 };
 
-const navigateToCustomAdvancedConfig = async (
+const navigateToAdvancedConfig = async (
   stdin: { write: (s: string) => void },
   lastFrame: () => string | undefined,
-  apiKey = 'sk-test',
   modelIds = 'model-1,model-2',
 ) => {
-  await navigateToCustomModelIdInput(stdin, lastFrame, apiKey);
+  await navigateToModelIds(stdin, lastFrame);
+  await waitForText(lastFrame, 'Enter model IDs separated by commas');
   await typeText(stdin, modelIds);
-  await pressEnterAndWaitFor(
-    stdin,
-    lastFrame,
-    'Custom Provider · Step 6/7 · Advanced Config',
-  );
+  await pressEnterAndWaitFor(stdin, lastFrame, stepTitle(4, 'Advanced Config'));
 };
 
+// TUI input simulation tests use stdin.write() to drive multi-step flows. On
+// slower CI runners the timing between simulated key presses and React
+// re-renders is unreliable, so they are skipped there.
 const isUnreliableTuiInputEnvironment =
   process.platform === 'win32' || process.env['CI'] === 'true';
 const itWhenTuiInputReliable = isUnreliableTuiInputEnvironment ? it.skip : it;
@@ -273,391 +172,45 @@ const itWhenTuiInputReliable = isUnreliableTuiInputEnvironment ? it.skip : it;
 describe('AuthDialog', { timeout: 15000 }, () => {
   const wait = (ms = 50) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  let originalEnv: NodeJS.ProcessEnv;
-
   beforeEach(() => {
-    originalEnv = { ...process.env };
-    process.env['GEMINI_API_KEY'] = '';
-    process.env['QWEN_DEFAULT_AUTH_TYPE'] = '';
     vi.clearAllMocks();
+    discoverProviderModelsMock.mockResolvedValue(null);
   });
 
-  afterEach(() => {
-    process.env = originalEnv;
+  it('shows the auth error from the UI state', () => {
+    const { lastFrame } = renderAuthDialog({
+      authError: 'No model server base URL is configured.',
+    });
+
+    expect(lastFrame()).toContain('No model server base URL is configured.');
   });
 
-  it('should show an error if the initial auth type is invalid', () => {
-    process.env['GEMINI_API_KEY'] = '';
+  it('opens directly on the local server base URL step', async () => {
+    const { lastFrame, unmount } = renderAuthDialog();
 
-    const settings: LoadedSettings = new LoadedSettings(
-      {
-        settings: { ui: { customThemes: {} }, mcpServers: {} },
-        originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-        path: '',
-      },
-      {
-        settings: {},
-        originalSettings: {},
-        path: '',
-      },
-      {
-        settings: {
-          security: {
-            auth: {
-              selectedType: AuthType.USE_GEMINI,
-            },
-          },
-        },
-        originalSettings: {
-          security: {
-            auth: {
-              selectedType: AuthType.USE_GEMINI,
-            },
-          },
-        },
-        path: '',
-      },
-      {
-        settings: { ui: { customThemes: {} }, mcpServers: {} },
-        originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-        path: '',
-      },
-      true,
-      new Set(),
-    );
-
-    const { lastFrame } = renderAuthDialog(settings, {
-      auth: {
-        ...createMockUIState().auth,
-        authError: 'GEMINI_API_KEY  environment variable not found',
-      },
-    });
-
-    expect(lastFrame()).toContain(
-      'GEMINI_API_KEY  environment variable not found',
-    );
+    await waitForText(lastFrame, stepTitle(1, 'Base URL'));
+    const frame = lastFrame() ?? '';
+    expect(frame).toContain('The host must be 127.0.0.1, ::1 or localhost.');
+    expect(frame).not.toContain('Alibaba');
+    expect(frame).not.toContain('Third-party');
+    expect(frame).not.toContain('Custom Provider');
+    expect(frame).not.toContain('Terms of Services');
+    expect(frame).not.toMatch(/https?:\/\//);
+    unmount();
   });
-
-  describe('GEMINI_API_KEY environment variable', () => {
-    it('should detect GEMINI_API_KEY environment variable', () => {
-      process.env['GEMINI_API_KEY'] = 'foobar';
-
-      const settings: LoadedSettings = new LoadedSettings(
-        {
-          settings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          originalSettings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          path: '',
-        },
-        {
-          settings: {},
-          originalSettings: {},
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        true,
-        new Set(),
-      );
-
-      const { lastFrame } = renderAuthDialog(settings);
-
-      // Since the auth dialog shows a third-party provider flow now,
-      // it won't show GEMINI_API_KEY messages
-      expect(lastFrame()).toContain('Third-party Providers');
-    });
-
-    it('should not show the GEMINI_API_KEY message if QWEN_DEFAULT_AUTH_TYPE is set to something else', () => {
-      process.env['GEMINI_API_KEY'] = 'foobar';
-      process.env['QWEN_DEFAULT_AUTH_TYPE'] = AuthType.USE_OPENAI;
-
-      const settings: LoadedSettings = new LoadedSettings(
-        {
-          settings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          originalSettings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          path: '',
-        },
-        {
-          settings: {},
-          originalSettings: {},
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        true,
-        new Set(),
-      );
-
-      const { lastFrame } = renderAuthDialog(settings);
-
-      expect(lastFrame()).not.toContain(
-        'Existing API key detected (GEMINI_API_KEY)',
-      );
-    });
-
-    it('should show the GEMINI_API_KEY message if QWEN_DEFAULT_AUTH_TYPE is set to use api key', () => {
-      process.env['GEMINI_API_KEY'] = 'foobar';
-      process.env['QWEN_DEFAULT_AUTH_TYPE'] = AuthType.USE_OPENAI;
-
-      const settings: LoadedSettings = new LoadedSettings(
-        {
-          settings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          originalSettings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          path: '',
-        },
-        {
-          settings: {},
-          originalSettings: {},
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        true,
-        new Set(),
-      );
-
-      const { lastFrame } = renderAuthDialog(settings);
-
-      // Since the auth dialog shows a third-party provider flow now,
-      // it won't show GEMINI_API_KEY messages
-      expect(lastFrame()).toContain('Third-party Providers');
-    });
-  });
-
-  describe('QWEN_DEFAULT_AUTH_TYPE environment variable', () => {
-    it('should select the auth type specified by QWEN_DEFAULT_AUTH_TYPE', () => {
-      // QWEN_OAUTH is the only valid AuthType that can be selected via env var
-      // API-KEY is not an AuthType enum value, so it cannot be selected this way
-      process.env['QWEN_DEFAULT_AUTH_TYPE'] = AuthType.QWEN_OAUTH;
-
-      const settings: LoadedSettings = new LoadedSettings(
-        {
-          settings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          originalSettings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          path: '',
-        },
-        {
-          settings: {},
-          originalSettings: {},
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        true,
-        new Set(),
-      );
-
-      const { lastFrame } = renderAuthDialog(settings);
-
-      // QWEN OAuth no longer has a UI entry; the dialog falls back to the
-      // default Alibaba ModelStudio option.
-      expect(lastFrame()).toContain('Alibaba ModelStudio');
-    });
-
-    it('should fall back to default if QWEN_DEFAULT_AUTH_TYPE is not set', () => {
-      const settings: LoadedSettings = new LoadedSettings(
-        {
-          settings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          originalSettings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          path: '',
-        },
-        {
-          settings: {},
-          originalSettings: {},
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        true,
-        new Set(),
-      );
-
-      const { lastFrame } = renderAuthDialog(settings);
-
-      // Default is Alibaba ModelStudio (first option).
-      expect(lastFrame()).toContain('Alibaba ModelStudio');
-    });
-
-    it('should show an error and fall back to default if QWEN_DEFAULT_AUTH_TYPE is invalid', () => {
-      process.env['QWEN_DEFAULT_AUTH_TYPE'] = 'invalid-auth-type';
-
-      const settings: LoadedSettings = new LoadedSettings(
-        {
-          settings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          originalSettings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          path: '',
-        },
-        {
-          settings: {},
-          originalSettings: {},
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        true,
-        new Set(),
-      );
-
-      const { lastFrame } = renderAuthDialog(settings);
-
-      // Since the auth dialog doesn't show QWEN_DEFAULT_AUTH_TYPE errors anymore,
-      // it will just show the default Alibaba ModelStudio option.
-      expect(lastFrame()).toContain('Alibaba ModelStudio');
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // TUI input simulation tests — skipped on CI (process.env.CI=true)
-  // These tests use stdin.write() to simulate keyboard navigation through
-  // multi-step UI flows. On slower CI runners the timing between simulated
-  // key presses and React re-renders is unreliable, causing flaky failures.
-  // Local dev (macOS) retains full coverage.
-  // ---------------------------------------------------------------------------
 
   itWhenTuiInputReliable(
-    'should prevent exiting when no auth method is selected and show error message',
+    'prevents exiting while no provider is connected',
     async () => {
       const closeAuthDialog = vi.fn();
-      const settings: LoadedSettings = new LoadedSettings(
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        {
-          settings: {},
-          originalSettings: {},
-          path: '',
-        },
-        {
-          settings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          originalSettings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        true,
-        new Set(),
-      );
+      const { lastFrame, stdin, unmount } = renderAuthDialog({
+        actions: { closeAuthDialog },
+      });
+      await waitForText(lastFrame, stepTitle(1, 'Base URL'));
+      await settleInput(150);
 
-      const { lastFrame, stdin, unmount } = renderAuthDialog(
-        settings,
-        {},
-        { closeAuthDialog },
-        undefined, // config.getAuthType() returns undefined
-      );
-      await waitForSelectedOption(lastFrame, 'Alibaba ModelStudio');
+      stdin.write('\u001b');
 
-      // Simulate pressing escape key
-      stdin.write('\u001b'); // ESC key
-
-      // Should show error message instead of calling closeAuthDialog
       await vi.waitFor(
         () => {
           const frame = lastFrame();
@@ -672,1051 +225,129 @@ describe('AuthDialog', { timeout: 15000 }, () => {
   );
 
   itWhenTuiInputReliable(
-    'should not exit if there is already an error message',
+    'closes on Escape when a provider is already connected',
     async () => {
       const closeAuthDialog = vi.fn();
-      const settings: LoadedSettings = new LoadedSettings(
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        {
-          settings: {},
-          originalSettings: {},
-          path: '',
-        },
-        {
-          settings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          originalSettings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        true,
-        new Set(),
-      );
+      const { lastFrame, stdin, unmount } = renderAuthDialog({
+        actions: { closeAuthDialog },
+        configAuthType: AuthType.USE_OPENAI,
+      });
+      await waitForText(lastFrame, stepTitle(1, 'Base URL'));
+      await settleInput(150);
 
-      const { lastFrame, stdin, unmount } = renderAuthDialog(
-        settings,
-        {
-          auth: {
-            ...createMockUIState().auth,
-            authError: 'Initial error',
-          },
-        },
-        { closeAuthDialog },
-        undefined, // config.getAuthType() returns undefined
-      );
-      await vi.waitFor(
-        () => {
-          expect(lastFrame()).toContain('Initial error');
-        },
-        { timeout: WAIT_FOR_TIMEOUT },
-      );
-
-      // Simulate pressing escape key
-      stdin.write('\u001b'); // ESC key
+      stdin.write('\u001b');
       await wait();
 
-      // Should not call closeAuthDialog
-      expect(closeAuthDialog).not.toHaveBeenCalled();
+      await vi.waitFor(() => expect(closeAuthDialog).toHaveBeenCalled(), {
+        timeout: WAIT_FOR_TIMEOUT,
+      });
       unmount();
     },
   );
 
   itWhenTuiInputReliable(
-    'should allow exiting when auth method is already selected',
+    'keeps a non-loopback base URL on the base URL step',
     async () => {
-      const closeAuthDialog = vi.fn();
-      const settings: LoadedSettings = new LoadedSettings(
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        {
-          settings: {},
-          originalSettings: {},
-          path: '',
-        },
-        {
-          settings: {
-            security: { auth: { selectedType: AuthType.USE_OPENAI } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          originalSettings: {
-            security: { auth: { selectedType: AuthType.USE_OPENAI } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        true,
-        new Set(),
-      );
+      const { lastFrame, stdin, unmount } = renderAuthDialog();
+      await waitForText(lastFrame, stepTitle(1, 'Base URL'));
 
-      const { stdin, lastFrame, unmount } = renderAuthDialog(
-        settings,
-        {},
-        { closeAuthDialog },
-        AuthType.USE_OPENAI, // config.getAuthType() returns USE_OPENAI
-      );
-      await vi.waitFor(
-        () => {
-          expect(lastFrame()).toBeTruthy();
-        },
-        { timeout: WAIT_FOR_TIMEOUT },
-      );
+      await typeText(stdin, 'https://api.openai.com/v1');
+      await pressEnterAndWaitFor(stdin, lastFrame, 'is not allowed');
 
-      // Simulate pressing escape key
-      stdin.write('\u001b'); // ESC key
-      await wait();
-
-      // Should call closeAuthDialog to exit
-      expect(closeAuthDialog).toHaveBeenCalled();
+      expect(lastFrame()).toContain(stepTitle(1, 'Base URL'));
       unmount();
     },
   );
 
-  itWhenTuiInputReliable(
-    'should preserve the selected main entry when returning from each top-level flow',
-    async () => {
-      const createSettings = () =>
-        new LoadedSettings(
-          {
-            settings: { ui: { customThemes: {} }, mcpServers: {} },
-            originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-            path: '',
-          },
-          {
-            settings: {},
-            originalSettings: {},
-            path: '',
-          },
-          {
-            settings: {
-              security: { auth: { selectedType: undefined } },
-              ui: { customThemes: {} },
-              mcpServers: {},
-            },
-            originalSettings: {
-              security: { auth: { selectedType: undefined } },
-              ui: { customThemes: {} },
-              mcpServers: {},
-            },
-            path: '',
-          },
-          {
-            settings: { ui: { customThemes: {} }, mcpServers: {} },
-            originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-            path: '',
-          },
-          true,
-          new Set(),
-        );
+  itWhenTuiInputReliable('shows an error for an empty base URL', async () => {
+    const { lastFrame, stdin, unmount } = renderAuthDialog();
+    await waitForText(lastFrame, stepTitle(1, 'Base URL'));
 
-      const cases = [
-        {
-          label: 'Alibaba ModelStudio',
-          childTitle: 'Alibaba ModelStudio · Access Method',
-        },
-        {
-          label: 'Third-party Providers',
-          childTitle: 'Third-party Providers · Provider',
-        },
-        {
-          label: 'Custom Provider',
-          childTitle: 'Custom Provider · Step 1/7 · Protocol',
-        },
-      ];
+    await pressEnterAndWaitFor(
+      stdin,
+      lastFrame,
+      'No model server base URL is configured',
+    );
 
-      for (const testCase of cases) {
-        const { stdin, lastFrame, unmount } =
-          renderAuthDialog(createSettings());
-
-        await waitForSelectedOption(lastFrame, 'Alibaba ModelStudio');
-        while (
-          !lastFrame()?.match(
-            new RegExp(`›\\s*(?:\\d+\\.\\s*)?${escapeRegExp(testCase.label)}`),
-          )
-        ) {
-          stdin.write('\u001b[B');
-          await wait();
-        }
-        await pressEnterAndWaitFor(stdin, lastFrame, testCase.childTitle);
-        stdin.write('\u001b');
-        await waitForSelectedOption(lastFrame, testCase.label);
-
-        unmount();
-      }
-    },
-  );
+    expect(lastFrame()).toContain(stepTitle(1, 'Base URL'));
+    unmount();
+  });
 
   itWhenTuiInputReliable(
-    'should go back from Coding Plan region selection to Alibaba ModelStudio',
+    'goes back from the API key step to the base URL step',
     async () => {
-      const settings: LoadedSettings = new LoadedSettings(
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        {
-          settings: {},
-          originalSettings: {},
-          path: '',
-        },
-        {
-          settings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          originalSettings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        true,
-        new Set(),
-      );
+      const { lastFrame, stdin, unmount } = renderAuthDialog();
+      await waitForText(lastFrame, stepTitle(1, 'Base URL'));
+      await typeText(stdin, LOCAL_BASE_URL);
+      await pressEnterAndWaitFor(stdin, lastFrame, stepTitle(2, 'API Key'));
 
-      const { stdin, lastFrame, unmount } = renderAuthDialog(settings);
-
-      await waitForSelectedOption(lastFrame, 'Alibaba ModelStudio');
-      await pressEnterAndWaitFor(
-        stdin,
-        lastFrame,
-        'Alibaba ModelStudio · Access Method',
-      );
-      await waitForSelectedOption(lastFrame, 'Coding Plan');
-      await pressEnterAndWaitFor(
-        stdin,
-        lastFrame,
-        'Alibaba ModelStudio · Step 1/3 · Region',
-      );
       stdin.write('\u001b');
 
-      await vi.waitFor(
-        () => {
-          const frame = lastFrame();
-          expect(frame).toContain('Alibaba ModelStudio');
-          expect(frame).toContain('Coding Plan');
-          expect(frame).toContain('Token Plan');
-        },
-        { timeout: WAIT_FOR_TIMEOUT },
-      );
-
+      await waitForText(lastFrame, stepTitle(1, 'Base URL'));
       unmount();
     },
   );
 
   itWhenTuiInputReliable(
-    'should go back from third-party provider API key input to provider list',
+    'pre-fills the Model IDs step with previously saved model IDs',
     async () => {
-      const settings: LoadedSettings = new LoadedSettings(
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        {
-          settings: {},
-          originalSettings: {},
-          path: '',
-        },
-        {
-          settings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          originalSettings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        true,
-        new Set(),
-      );
-
-      const { stdin, lastFrame, unmount } = renderAuthDialog(settings);
-
-      await waitForSelectedOption(lastFrame, 'Alibaba ModelStudio');
-      await moveDownAndWaitForSelection(
-        stdin,
-        lastFrame,
-        'Third-party Providers',
-      );
-      await pressEnterAndWaitFor(
-        stdin,
-        lastFrame,
-        'Third-party Providers · Provider',
-      );
-      await waitForSelectedOption(lastFrame, 'DeepSeek API Key');
-      await pressEnterAndWaitFor(
-        stdin,
-        lastFrame,
-        'DeepSeek API Key · Step 1/2 · API Key',
-      );
-      stdin.write('\u001b');
-
-      await vi.waitFor(
-        () => {
-          const frame = lastFrame();
-          expect(frame).toContain('Third-party Providers · Provider');
-          expect(frame).toContain('DeepSeek API Key');
-        },
-        { timeout: WAIT_FOR_TIMEOUT },
-      );
-
-      unmount();
-    },
-  );
-
-  itWhenTuiInputReliable(
-    'should show preset providers in third-party provider options',
-    async () => {
-      const settings: LoadedSettings = new LoadedSettings(
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        {
-          settings: {},
-          originalSettings: {},
-          path: '',
-        },
-        {
-          settings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          originalSettings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        true,
-        new Set(),
-      );
-
-      const { stdin, lastFrame, unmount } = renderAuthDialog(settings);
-
-      await waitForSelectedOption(lastFrame, 'Alibaba ModelStudio');
-      await moveDownAndWaitForSelection(
-        stdin,
-        lastFrame,
-        'Third-party Providers',
-      );
-      await pressEnterAndWaitFor(
-        stdin,
-        lastFrame,
-        'Third-party Providers · Provider',
-      );
-
-      await vi.waitFor(
-        () => {
-          const frame = lastFrame();
-          expect(frame).toContain('DeepSeek API Key');
-          expect(frame).toContain('MiniMax API Key');
-          expect(frame).toContain('Z.AI API Key');
-          expect(frame).not.toContain('OpenAI API Key');
-          expect(frame).not.toContain('HuggingFace API Key');
-          expect(frame).not.toContain('Standard API Key');
-        },
-        { timeout: WAIT_FOR_TIMEOUT },
-      );
-
-      unmount();
-    },
-  );
-
-  itWhenTuiInputReliable(
-    'drives API key provider steps from endpoint options metadata',
-    async () => {
-      const settings: LoadedSettings = new LoadedSettings(
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        {
-          settings: {},
-          originalSettings: {},
-          path: '',
-        },
-        {
-          settings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          originalSettings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        true,
-        new Set(),
-      );
-
-      const { stdin, lastFrame, unmount } = renderAuthDialog(settings);
-
-      await waitForSelectedOption(lastFrame, 'Alibaba ModelStudio');
-      await moveDownAndWaitForSelection(
-        stdin,
-        lastFrame,
-        'Third-party Providers',
-      );
-      await pressEnterAndWaitFor(
-        stdin,
-        lastFrame,
-        'Third-party Providers · Provider',
-      );
-      await waitForSelectedOption(lastFrame, 'DeepSeek API Key');
-      await pressEnterAndWaitFor(
-        stdin,
-        lastFrame,
-        'DeepSeek API Key · Step 1/2 · API Key',
-      );
-      stdin.write('\u001b');
-      await vi.waitFor(
-        () => {
-          expect(lastFrame()).toContain('Third-party Providers · Provider');
-        },
-        { timeout: WAIT_FOR_TIMEOUT },
-      );
-      await moveDownAndWaitForSelection(stdin, lastFrame, 'Grok (xAI) API Key');
-      await moveDownAndWaitForSelection(stdin, lastFrame, 'MiniMax API Key');
-      await pressEnterAndWaitFor(
-        stdin,
-        lastFrame,
-        'MiniMax API Key · Step 1/3 · Endpoint',
-      );
-
-      await vi.waitFor(
-        () => {
-          const frame = lastFrame();
-          expect(frame).toContain('International');
-          expect(frame).toContain('China');
-        },
-        { timeout: WAIT_FOR_TIMEOUT },
-      );
-
-      unmount();
-    },
-  );
-
-  itWhenTuiInputReliable(
-    'should show Alibaba ModelStudio access methods after selecting Alibaba ModelStudio',
-    async () => {
-      const settings: LoadedSettings = new LoadedSettings(
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        {
-          settings: {},
-          originalSettings: {},
-          path: '',
-        },
-        {
-          settings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          originalSettings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        true,
-        new Set(),
-      );
-
-      const { stdin, lastFrame, unmount } = renderAuthDialog(settings);
-
-      await waitForSelectedOption(lastFrame, 'Alibaba ModelStudio');
-      await pressEnterAndWaitFor(
-        stdin,
-        lastFrame,
-        'Alibaba ModelStudio · Access Method',
-      );
-
-      await vi.waitFor(
-        () => {
-          const frame = lastFrame();
-          expect(frame).toContain('Coding Plan');
-          expect(frame).toContain('Token Plan');
-          expect(frame).toContain(
-            'Usage-based billing with dedicated endpoint',
-          );
-        },
-        { timeout: WAIT_FOR_TIMEOUT },
-      );
-
-      unmount();
-    },
-  );
-
-  itWhenTuiInputReliable(
-    'should submit Token Plan through the shared subscription handler',
-    async () => {
-      const handleProviderSubmit = vi.fn().mockResolvedValue(undefined);
-      const settings: LoadedSettings = new LoadedSettings(
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        {
-          settings: {},
-          originalSettings: {},
-          path: '',
-        },
-        {
-          settings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          originalSettings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        true,
-        new Set(),
-      );
-
-      const { stdin, lastFrame, unmount } = renderAuthDialog(
-        settings,
-        {},
-        { handleProviderSubmit },
-      );
-
-      await waitForSelectedOption(lastFrame, 'Alibaba ModelStudio');
-      stdin.write('\r');
-      await waitForSelectedOption(lastFrame, 'Coding Plan');
-      await moveDownAndWaitForSelection(stdin, lastFrame, 'Token Plan');
-      await pressEnterAndWaitFor(
-        stdin,
-        lastFrame,
-        'Alibaba ModelStudio · Step 1/3 · Region',
-      );
-      await pressEnterAndWaitFor(
-        stdin,
-        lastFrame,
-        'Alibaba ModelStudio · Step 2/3 · API Key',
-      );
-
-      await typeText(stdin, 'sk-token-plan');
-
-      await pressEnterAndWaitFor(
-        stdin,
-        lastFrame,
-        'Alibaba ModelStudio · Step 3/3 · Model IDs',
-      );
-      await waitForText(lastFrame, 'Enter model IDs directly');
-      stdin.write('\r');
-      await vi.waitFor(
-        () => {
-          expect(handleProviderSubmit).toHaveBeenCalled();
-        },
-        { timeout: WAIT_FOR_TIMEOUT },
-      );
-
-      unmount();
-    },
-  );
-
-  itWhenTuiInputReliable(
-    'should pre-fill the Model IDs step with previously saved custom model IDs',
-    async () => {
-      // User previously saved a custom model ID for Token Plan in settings.
-      const savedSettings = {
-        security: { auth: { selectedType: undefined } },
-        ui: { customThemes: {} },
-        mcpServers: {},
+      const settings = createSettings({
         modelProviders: {
           openai: [
             {
-              id: 'my-custom-token-model',
-              name: '[ModelStudio Token Plan] my-custom-token-model',
-              baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-              envKey: 'BAILIAN_TOKEN_PLAN_API_KEY',
+              id: 'my-saved-model',
+              baseUrl: LOCAL_BASE_URL,
+              envKey: 'QWEN_CUSTOM_API_KEY_OPENAI_SAVED',
             },
           ],
         },
-      } as unknown as Settings;
-      const settings: LoadedSettings = new LoadedSettings(
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        {
-          settings: {},
-          originalSettings: {},
-          path: '',
-        },
-        {
-          settings: savedSettings,
-          originalSettings: savedSettings,
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        true,
-        new Set(),
-      );
+      } as unknown as Settings);
+      const { lastFrame, stdin, unmount } = renderAuthDialog({ settings });
 
-      const { stdin, lastFrame, unmount } = renderAuthDialog(settings);
-
-      await waitForSelectedOption(lastFrame, 'Alibaba ModelStudio');
-      stdin.write('\r');
-      await waitForSelectedOption(lastFrame, 'Coding Plan');
-      await moveDownAndWaitForSelection(stdin, lastFrame, 'Token Plan');
-      await pressEnterAndWaitFor(
-        stdin,
-        lastFrame,
-        'Alibaba ModelStudio · Step 1/3 · Region',
-      );
-      await pressEnterAndWaitFor(
-        stdin,
-        lastFrame,
-        'Alibaba ModelStudio · Step 2/3 · API Key',
-      );
-
-      await typeText(stdin, 'sk-token-plan');
-
-      await pressEnterAndWaitFor(
-        stdin,
-        lastFrame,
-        'Alibaba ModelStudio · Step 3/3 · Model IDs',
-      );
-      await waitForText(lastFrame, 'Enter model IDs directly');
-
-      // The Model IDs input is pre-filled with the saved custom model id
-      // (which only exists in settings, never among the built-in defaults).
-      expect(lastFrame()).toContain('my-custom-token-model');
-
+      await navigateToModelIds(stdin, lastFrame);
+      await waitForText(lastFrame, 'Enter model IDs separated by commas');
+      expect(lastFrame()).toContain('my-saved-model');
       unmount();
     },
   );
 
   itWhenTuiInputReliable(
-    'should return from Token Plan API key input to Token Plan selection',
+    'shows review JSON and submits the local server setup',
     async () => {
-      const settings: LoadedSettings = new LoadedSettings(
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        {
-          settings: {},
-          originalSettings: {},
-          path: '',
-        },
-        {
-          settings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          originalSettings: {
-            security: { auth: { selectedType: undefined } },
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        true,
-        new Set(),
-      );
-
-      const { stdin, lastFrame, unmount } = renderAuthDialog(settings);
-
-      await waitForSelectedOption(lastFrame, 'Alibaba ModelStudio');
-      stdin.write('\r');
-      await waitForSelectedOption(lastFrame, 'Coding Plan');
-      await moveDownAndWaitForSelection(stdin, lastFrame, 'Token Plan');
-      await pressEnterAndWaitFor(
-        stdin,
-        lastFrame,
-        'Alibaba ModelStudio · Step 1/3 · Region',
-      );
-      await pressEnterAndWaitFor(
-        stdin,
-        lastFrame,
-        'Alibaba ModelStudio · Step 2/3 · API Key',
-      );
-      stdin.write('\u001b');
-
-      await vi.waitFor(
-        () => {
-          expect(lastFrame()).toContain(
-            'Alibaba ModelStudio · Step 1/3 · Region',
-          );
-        },
-        { timeout: WAIT_FOR_TIMEOUT },
-      );
-      stdin.write('\u001b');
-
-      await vi.waitFor(
-        () => {
-          expect(lastFrame()).toContain('Alibaba ModelStudio');
-          expectSelectedOption(lastFrame(), 'Token Plan');
-        },
-        { timeout: WAIT_FOR_TIMEOUT },
-      );
-
-      unmount();
-    },
-  );
-});
-
-describe('AuthDialog Custom API Key Wizard', { timeout: 15000 }, () => {
-  const wait = (ms = 50) => new Promise((resolve) => setTimeout(resolve, ms));
-
-  const createStandardSettings = (): LoadedSettings =>
-    new LoadedSettings(
-      {
-        settings: { ui: { customThemes: {} }, mcpServers: {} },
-        originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-        path: '',
-      },
-      {
-        settings: {},
-        originalSettings: {},
-        path: '',
-      },
-      {
-        settings: {
-          security: { auth: { selectedType: undefined } },
-          ui: { customThemes: {} },
-          mcpServers: {},
-        },
-        originalSettings: {
-          security: { auth: { selectedType: undefined } },
-          ui: { customThemes: {} },
-          mcpServers: {},
-        },
-        path: '',
-      },
-      {
-        settings: { ui: { customThemes: {} }, mcpServers: {} },
-        originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-        path: '',
-      },
-      true,
-      new Set(),
-    );
-
-  itWhenTuiInputReliable(
-    'navigates to protocol selection when Custom API Key is selected',
-    async () => {
-      const settings = createStandardSettings();
-
-      const mockUIState = createMockUIState();
-      const mockUIActions = createMockUIActions();
-
-      const mockConfig = {
-        getAuthType: vi.fn(() => undefined),
-        getContentGeneratorConfig: vi.fn(() => ({})),
-      } as unknown as Config;
-
-      const { stdin, lastFrame, unmount } = renderWithProviders(
-        <UIStateContext.Provider value={mockUIState}>
-          <UIActionsContext.Provider value={mockUIActions}>
-            <AuthDialog />
-          </UIActionsContext.Provider>
-        </UIStateContext.Provider>,
-        { settings, config: mockConfig },
-      );
-
-      await navigateToCustomProtocolSelect(stdin, lastFrame);
-
-      await vi.waitFor(
-        () => {
-          const frame = lastFrame();
-          expect(frame).toContain('Custom Provider · Step 1/7 · Protocol');
-          expect(frame).toContain('OpenAI-compatible');
-          expect(frame).toContain('Anthropic-compatible');
-          expect(frame).toContain('Gemini-compatible');
-        },
-        { timeout: WAIT_FOR_TIMEOUT },
-      );
-
-      unmount();
-    },
-  );
-
-  itWhenTuiInputReliable(
-    'navigates to base URL input after selecting a protocol',
-    async () => {
-      const settings = createStandardSettings();
-
-      const mockUIState = createMockUIState();
-      const mockUIActions = createMockUIActions();
-
-      const mockConfig = {
-        getAuthType: vi.fn(() => undefined),
-        getContentGeneratorConfig: vi.fn(() => ({})),
-      } as unknown as Config;
-
-      const { stdin, lastFrame, unmount } = renderWithProviders(
-        <UIStateContext.Provider value={mockUIState}>
-          <UIActionsContext.Provider value={mockUIActions}>
-            <AuthDialog />
-          </UIActionsContext.Provider>
-        </UIStateContext.Provider>,
-        { settings, config: mockConfig },
-      );
-
-      await navigateToCustomBaseUrlInput(stdin, lastFrame);
-
-      await vi.waitFor(
-        () => {
-          const frame = lastFrame();
-          expect(frame).toContain('Custom Provider · Step 3/7 · Base URL');
-          expect(frame).toContain('Enter the API endpoint');
-        },
-        { timeout: WAIT_FOR_TIMEOUT },
-      );
-
-      unmount();
-    },
-  );
-
-  itWhenTuiInputReliable(
-    'shows review screen with JSON after entering model IDs',
-    async () => {
-      const settings = createStandardSettings();
-
-      const mockUIState = createMockUIState();
-      const mockUIActions = createMockUIActions();
-
-      const mockConfig = {
-        getAuthType: vi.fn(() => undefined),
-        getContentGeneratorConfig: vi.fn(() => ({})),
-      } as unknown as Config;
-
-      const { stdin, lastFrame, unmount } = renderWithProviders(
-        <UIStateContext.Provider value={mockUIState}>
-          <UIActionsContext.Provider value={mockUIActions}>
-            <AuthDialog />
-          </UIActionsContext.Provider>
-        </UIStateContext.Provider>,
-        { settings, config: mockConfig },
-      );
-
-      await navigateToCustomAdvancedConfig(
-        stdin,
-        lastFrame,
-        'sk-test-key-12345',
-        'qwen/qwen3-coder,gpt-4.1',
-      );
-      await pressEnterAndWaitFor(
-        stdin,
-        lastFrame,
-        'Custom Provider · Step 7/7 · Review',
-      );
-
-      await vi.waitFor(
-        () => {
-          const frame = lastFrame();
-          expect(frame).toContain('Custom Provider · Step 7/7 · Review');
-          expect(frame).toContain('The following JSON will be saved');
-          expect(frame).toContain('QWEN_CUSTOM_API_KEY_');
-          expect(frame).toContain('qwen/qwen3-coder');
-          expect(frame).toContain('gpt-4.1');
-          expect(frame).toContain('Enter to save');
-        },
-        { timeout: WAIT_FOR_TIMEOUT },
-      );
-
-      unmount();
-    },
-  );
-
-  itWhenTuiInputReliable(
-    'calls handleProviderSubmit on Enter in review view',
-    async () => {
-      const settings = createStandardSettings();
       const handleProviderSubmit = vi.fn().mockResolvedValue(undefined);
+      const { lastFrame, stdin, unmount } = renderAuthDialog({
+        actions: { handleProviderSubmit },
+      });
 
-      const mockUIState = createMockUIState();
-      const mockUIActions = createMockUIActions({ handleProviderSubmit });
-
-      const mockConfig = {
-        getAuthType: vi.fn(() => undefined),
-        getContentGeneratorConfig: vi.fn(() => ({})),
-      } as unknown as Config;
-
-      const { stdin, lastFrame, unmount } = renderWithProviders(
-        <UIStateContext.Provider value={mockUIState}>
-          <UIActionsContext.Provider value={mockUIActions}>
-            <AuthDialog />
-          </UIActionsContext.Provider>
-        </UIStateContext.Provider>,
-        { settings, config: mockConfig },
+      await navigateToAdvancedConfig(stdin, lastFrame, 'model-1,model-2');
+      expect(lastFrame()).toContain(
+        'Optional: configure advanced generation settings',
       );
+      await pressEnterAndWaitFor(stdin, lastFrame, stepTitle(5, 'Review'));
 
-      await navigateToCustomAdvancedConfig(
-        stdin,
-        lastFrame,
-        'sk-test',
-        'model-1,model-2',
-      );
-      await pressEnterAndWaitFor(
-        stdin,
-        lastFrame,
-        'Custom Provider · Step 7/7 · Review',
-      );
+      const frame = lastFrame() ?? '';
+      expect(frame).toContain('The following JSON will be saved');
+      expect(frame).toContain('QWEN_CUSTOM_API_KEY_');
+      expect(frame).toContain('model-1');
+      expect(frame).toContain(LOCAL_BASE_URL);
+      expect(frame).toContain('Enter to save');
 
-      await vi.waitFor(
-        () => {
-          const frame = lastFrame();
-          expect(frame).toContain('Enter to save');
-        },
-        { timeout: WAIT_FOR_TIMEOUT },
-      );
-
-      stdin.write('\r'); // Enter to save
+      stdin.write('\r');
 
       await vi.waitFor(
         () => {
           expect(handleProviderSubmit).toHaveBeenCalledWith(
             expect.objectContaining({ id: 'custom-openai-compatible' }),
-            expect.objectContaining({
-              protocol: AuthType.USE_OPENAI,
+            {
+              baseUrl: LOCAL_BASE_URL,
               apiKey: 'sk-test',
               modelIds: ['model-1', 'model-2'],
-            }),
+              advancedConfig: undefined,
+            },
           );
         },
         { timeout: WAIT_FOR_TIMEOUT },
       );
-
-      unmount();
-    },
-  );
-
-  itWhenTuiInputReliable(
-    'shows advanced config screen after entering model IDs',
-    async () => {
-      const settings = createStandardSettings();
-
-      const mockUIState = createMockUIState();
-      const mockUIActions = createMockUIActions();
-
-      const mockConfig = {
-        getAuthType: vi.fn(() => undefined),
-        getContentGeneratorConfig: vi.fn(() => ({})),
-      } as unknown as Config;
-
-      const { stdin, lastFrame, unmount } = renderWithProviders(
-        <UIStateContext.Provider value={mockUIState}>
-          <UIActionsContext.Provider value={mockUIActions}>
-            <AuthDialog />
-          </UIActionsContext.Provider>
-        </UIStateContext.Provider>,
-        { settings, config: mockConfig },
-      );
-
-      await navigateToCustomAdvancedConfig(
-        stdin,
-        lastFrame,
-        'sk-test',
-        'model-1,model-2',
-      );
-
-      await vi.waitFor(() => {
-        const frame = lastFrame();
-        expect(frame).toContain('Custom Provider · Step 6/7 · Advanced Config');
-        expect(frame).toContain(
-          'Optional: configure advanced generation settings',
-        );
-        expect(frame).toContain('Enable thinking');
-        expect(frame).toContain('Enable modality');
-        expect(frame).toContain('Enter to continue');
-      });
-
       unmount();
     },
   );
@@ -1724,148 +355,21 @@ describe('AuthDialog Custom API Key Wizard', { timeout: 15000 }, () => {
   itWhenTuiInputReliable(
     'passes generationConfig when advanced options are toggled',
     async () => {
-      const settings = createStandardSettings();
       const handleProviderSubmit = vi.fn().mockResolvedValue(undefined);
-
-      const mockUIState = createMockUIState();
-      const mockUIActions = createMockUIActions({ handleProviderSubmit });
-
-      const mockConfig = {
-        getAuthType: vi.fn(() => undefined),
-        getContentGeneratorConfig: vi.fn(() => ({})),
-      } as unknown as Config;
-
-      const { stdin, lastFrame, unmount } = renderWithProviders(
-        <UIStateContext.Provider value={mockUIState}>
-          <UIActionsContext.Provider value={mockUIActions}>
-            <AuthDialog />
-          </UIActionsContext.Provider>
-        </UIStateContext.Provider>,
-        { settings, config: mockConfig },
-      );
-
-      await navigateToCustomAdvancedConfig(
-        stdin,
-        lastFrame,
-        'sk-test',
-        'model-1',
-      );
-
-      await vi.waitFor(() => {
-        const frame = lastFrame();
-        expect(frame).toContain('Custom Provider · Step 6/7 · Advanced Config');
+      const { lastFrame, stdin, unmount } = renderAuthDialog({
+        actions: { handleProviderSubmit },
       });
 
-      // Toggle thinking (press Space — thinking is initially focused)
+      await navigateToAdvancedConfig(stdin, lastFrame, 'model-1');
+
+      // Toggle thinking (initially focused), then modality.
       stdin.write(' ');
       await wait();
-
-      // Navigate down to modality, toggle (press ↓ then Space)
       stdin.write('\u001b[B');
       await wait();
       stdin.write(' ');
       await wait();
 
-      // Press Enter to continue to review
-      stdin.write('\r');
-      await wait();
-
-      // Verify review includes generationConfig (audio is off by default)
-      await vi.waitFor(() => {
-        const frame = lastFrame();
-        expect(frame).toContain('"generationConfig"');
-        expect(frame).toContain('"enable_thinking"');
-        expect(frame).toContain('"image": true');
-        expect(frame).toContain('"video": true');
-        expect(frame).not.toContain('"audio"');
-      });
-
-      // Press Enter to save
-      stdin.write('\r');
-      await wait();
-
-      await vi.waitFor(() => {
-        expect(handleProviderSubmit).toHaveBeenCalledWith(
-          expect.objectContaining({ id: 'custom-openai-compatible' }),
-          expect.objectContaining({
-            protocol: AuthType.USE_OPENAI,
-            advancedConfig: {
-              enableThinking: true,
-              multimodal: {
-                image: true,
-                video: true,
-              },
-            },
-          }),
-        );
-      });
-
-      unmount();
-    },
-  );
-
-  itWhenTuiInputReliable(
-    'previews the persisted reasoning shape for the OpenAI Responses protocol',
-    async () => {
-      // The review screen promises "the following JSON will be saved", but
-      // provider persistence normalizes enable_thinking to
-      // `generationConfig.reasoning.effort` on this protocol
-      // (provider-config.ts: buildAdvancedGenerationConfig), so the preview
-      // was showing a shape that never reaches settings.json.
-      const settings = createStandardSettings();
-
-      const mockUIState = createMockUIState();
-      const mockUIActions = createMockUIActions();
-
-      const mockConfig = {
-        getAuthType: vi.fn(() => undefined),
-        getContentGeneratorConfig: vi.fn(() => ({})),
-      } as unknown as Config;
-
-      const { stdin, lastFrame, unmount } = renderWithProviders(
-        <UIStateContext.Provider value={mockUIState}>
-          <UIActionsContext.Provider value={mockUIActions}>
-            <AuthDialog />
-          </UIActionsContext.Provider>
-        </UIStateContext.Provider>,
-        { settings, config: mockConfig },
-      );
-
-      await navigateToCustomProtocolSelect(stdin, lastFrame);
-      await pressEnterAndWaitFor(
-        stdin,
-        lastFrame,
-        'Custom Provider · Step 2/7 · API',
-      );
-      await moveDownAndWaitForSelection(stdin, lastFrame, 'Responses');
-      await pressEnterAndWaitFor(
-        stdin,
-        lastFrame,
-        'Custom Provider · Step 3/7 · Base URL',
-      );
-      // Submit the placeholder default endpoint for this protocol.
-      await wait();
-      await pressEnterAndWaitFor(
-        stdin,
-        lastFrame,
-        'Custom Provider · Step 4/7 · API Key',
-      );
-      await typeText(stdin, 'sk-test');
-      await pressEnterAndWaitFor(
-        stdin,
-        lastFrame,
-        'Custom Provider · Step 5/7 · Model IDs',
-      );
-      await typeText(stdin, 'model-1');
-      await pressEnterAndWaitFor(
-        stdin,
-        lastFrame,
-        'Custom Provider · Step 6/7 · Advanced Config',
-      );
-
-      // Toggle thinking (initially focused), then continue to review.
-      stdin.write(' ');
-      await wait();
       stdin.write('\r');
       await wait();
 
@@ -1873,65 +377,31 @@ describe('AuthDialog Custom API Key Wizard', { timeout: 15000 }, () => {
         () => {
           const frame = lastFrame();
           expect(frame).toContain('"generationConfig"');
-          expect(frame).toContain('"reasoning"');
-          expect(frame).toContain('"effort": "medium"');
-          expect(frame).not.toContain('"enable_thinking"');
+          expect(frame).toContain('"enable_thinking"');
+          expect(frame).toContain('"image": true');
+          expect(frame).toContain('"video": true');
+          expect(frame).not.toContain('"audio"');
         },
         { timeout: WAIT_FOR_TIMEOUT },
       );
 
-      unmount();
-    },
-  );
+      stdin.write('\r');
+      await wait();
 
-  itWhenTuiInputReliable(
-    'reopens a saved Responses install with the API step on Responses',
-    async () => {
-      // The Custom Provider entry prefills the ids of the saved install, so
-      // the API step has to open on the same wire — otherwise Save restamps
-      // those ids onto Chat Completions and leaves a duplicate route behind.
-      const savedSettings = {
-        security: { auth: { selectedType: undefined } },
-        ui: { customThemes: {} },
-        mcpServers: {},
-        modelProviders: {
-          openai: [
-            {
-              id: 'm1',
-              baseUrl: 'https://gw.example/v1',
-              envKey: 'QWEN_CUSTOM_API_KEY_X',
-              wireApi: 'responses',
-            },
-          ],
+      await vi.waitFor(
+        () => {
+          expect(handleProviderSubmit).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 'custom-openai-compatible' }),
+            expect.objectContaining({
+              advancedConfig: {
+                enableThinking: true,
+                multimodal: { image: true, video: true },
+              },
+            }),
+          );
         },
-      } as unknown as Settings;
-      const settings: LoadedSettings = new LoadedSettings(
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        { settings: {}, originalSettings: {}, path: '' },
-        { settings: savedSettings, originalSettings: savedSettings, path: '' },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          originalSettings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        true,
-        new Set(),
+        { timeout: WAIT_FOR_TIMEOUT },
       );
-
-      const { stdin, lastFrame, unmount } = renderAuthDialog(settings);
-
-      await navigateToCustomProtocolSelect(stdin, lastFrame);
-      await pressEnterAndWaitFor(
-        stdin,
-        lastFrame,
-        'Custom Provider · Step 2/7 · API',
-      );
-      await waitForSelectedOption(lastFrame, 'Responses');
-
       unmount();
     },
   );

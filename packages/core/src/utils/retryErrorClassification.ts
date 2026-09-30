@@ -4,11 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { AuthType } from './auth-type.js';
 import { isAbortError } from './errors.js';
-import { isQwenQuotaExceededError } from './quotaErrorDetection.js';
 import { getRateLimitErrorDetails, isRateLimitError } from './rateLimit.js';
-import { ResponsesHttpError } from './responses-http-error.js';
 
 export type RetryErrorKind =
   | 'http'
@@ -22,7 +19,6 @@ export type RetryErrorKind =
 export type RetryErrorDiagnosis = 'retryable' | 'fail-fast' | 'unknown';
 
 export interface RetryErrorClassificationContext {
-  authType?: AuthType | string;
   extraRetryErrorCodes?: readonly number[];
 }
 
@@ -78,39 +74,11 @@ export function classifyRetryError(
     ...(requestId !== undefined ? { requestId } : {}),
   };
 
-  if (
-    context.authType === AuthType.QWEN_OAUTH &&
-    isQwenQuotaExceededError(error)
-  ) {
-    return {
-      kind: 'provider-business',
-      diagnosis: 'fail-fast',
-      reason: 'qwen-oauth-free-tier-quota',
-      ...common,
-    };
-  }
-
   if (isAllocatedQuotaExceeded(providerCode)) {
     return {
       kind: 'provider-business',
       diagnosis: 'fail-fast',
       reason: 'allocated-quota-exceeded',
-      ...common,
-    };
-  }
-
-  if (
-    error instanceof ResponsesHttpError &&
-    (error.headers.has('x-should-retry') ||
-      statusCode === 408 ||
-      statusCode === 409)
-  ) {
-    return {
-      kind: 'http',
-      diagnosis: error.shouldRetry(context.extraRetryErrorCodes)
-        ? 'retryable'
-        : 'fail-fast',
-      reason: 'responses-http-retry-policy',
       ...common,
     };
   }

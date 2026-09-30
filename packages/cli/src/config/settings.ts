@@ -79,7 +79,6 @@ export {
   reloadEnvironment,
   resetEnvironmentTrackingForTesting,
   resetHomeEnvBootstrapForTesting,
-  setUpCloudShellEnvironment,
   SETTINGS_DIRECTORY_NAME,
 } from './environment.js';
 export { getSystemDefaultsPath, getSystemSettingsPath };

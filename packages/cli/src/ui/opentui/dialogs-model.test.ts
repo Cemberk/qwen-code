@@ -130,17 +130,10 @@ describe('formatModelOptionLabel', () => {
     );
   });
 
-  it('marks runtime and discontinued rows', () => {
+  it('marks runtime rows', () => {
     expect(formatModelOptionLabel({ ...base, isRuntime: true })).toBe(
       '[use-openai] GPT X (gpt-x) (Runtime)',
     );
-    expect(formatModelOptionLabel({ ...base, isQwenOAuth: true })).toBe(
-      '[use-openai] GPT X (gpt-x) (Discontinued)',
-    );
-    // Runtime wins over the discontinued marker (original behavior).
-    expect(
-      formatModelOptionLabel({ ...base, isRuntime: true, isQwenOAuth: true }),
-    ).toBe('[use-openai] GPT X (gpt-x) (Runtime)');
   });
 });
 

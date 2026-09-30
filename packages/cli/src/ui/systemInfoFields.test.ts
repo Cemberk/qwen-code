@@ -9,7 +9,7 @@ import { getSystemInfoFields } from './systemInfoFields.js';
 import type { ExtendedSystemInfo } from './systemInfo.js';
 
 describe('getAboutSystemInfoFields', () => {
-  it('orders sandbox/proxy after session id', () => {
+  it('orders sandbox after session id', () => {
     const info: ExtendedSystemInfo = {
       cliVersion: '1.0.0',
       osPlatform: 'darwin',
@@ -25,7 +25,6 @@ describe('getAboutSystemInfoFields', () => {
       memoryUsage: '100 MB',
       baseUrl: undefined,
       gitCommit: undefined,
-      proxy: 'http://user:pass@localhost:7890',
     };
 
     const fields = getSystemInfoFields(info);
@@ -41,42 +40,14 @@ describe('getAboutSystemInfoFields', () => {
       'Fast Model',
       'Session ID',
       'Sandbox',
-      'Proxy',
       'Memory Usage',
     ]);
 
     expect(labels.indexOf('Session ID')).toBeLessThan(
       labels.indexOf('Sandbox'),
     );
-    expect(labels.indexOf('Session ID')).toBeLessThan(labels.indexOf('Proxy'));
 
     const lspField = fields.find((f) => f.label === 'LSP');
     expect(lspField?.value).toBe('enabled, 1/1 ready');
-
-    const proxyField = fields.find((f) => f.label === 'Proxy');
-    expect(proxyField?.value).toBe('http://***:***@localhost:7890/');
-  });
-
-  it('always includes Proxy with "no proxy" when unset', () => {
-    const info: ExtendedSystemInfo = {
-      cliVersion: '1.0.0',
-      osPlatform: 'darwin',
-      osArch: 'arm64',
-      osRelease: '23.0.0',
-      nodeVersion: 'v20.0.0',
-      npmVersion: '10.0.0',
-      sandboxEnv: 'no sandbox',
-      modelVersion: 'test-model',
-      selectedAuthType: 'test-auth',
-      sessionId: 'test-session-id',
-      memoryUsage: '100 MB',
-      baseUrl: undefined,
-      gitCommit: undefined,
-      proxy: undefined,
-    };
-
-    const fields = getSystemInfoFields(info);
-    const proxyField = fields.find((f) => f.label === 'Proxy');
-    expect(proxyField?.value).toBe('no proxy');
   });
 });

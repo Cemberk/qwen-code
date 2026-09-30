@@ -30,8 +30,6 @@ import {
 
 const TRACKED_ENV = [
   AGENT_EXECUTION_BACKEND_ENV,
-  'CLOUD_SHELL',
-  'GOOGLE_CLOUD_PROJECT',
   'RUNTIME_DOTENV',
   'RUNTIME_EMPTY',
   'RUNTIME_EXCLUDED',
@@ -114,7 +112,7 @@ const TRACKED_ENV = [
   'QWEN_SANDBOX_NET',
   'OPENAI_API_KEY',
   'OPENAI_BASE_URL',
-  'DASHSCOPE_PROXY_BASE_URL',
+  'ANTHROPIC_API_KEY',
   'QWEN_TEST_PROVIDER_KEY',
   'DEMO_VAR',
 ] as const;
@@ -600,19 +598,6 @@ describe('buildRuntimeEnvironment', () => {
     });
     expect(process.env['RUNTIME_DOTENV']).toBeUndefined();
     expect(process.env['RUNTIME_SETTINGS_ONLY']).toBeUndefined();
-  });
-
-  it('applies Cloud Shell project defaults to the runtime env only', () => {
-    const workspace = makeWorkspace();
-    const snapshot = buildRuntimeEnvironment(testSettings({}), workspace, {
-      CLOUD_SHELL: 'true',
-    });
-
-    expect(snapshot.effectiveEnv['GOOGLE_CLOUD_PROJECT']).toBe(
-      'cloudshell-gca',
-    );
-    expect(snapshot.overlayKeys).toContain('GOOGLE_CLOUD_PROJECT');
-    expect(process.env['GOOGLE_CLOUD_PROJECT']).toBeUndefined();
   });
 
   it('surfaces env file read failures in the runtime snapshot', () => {
@@ -1666,7 +1651,7 @@ describe('hasLoadedEnvironmentValues', () => {
     fs.mkdirSync(path.dirname(envFile), { recursive: true });
     fs.writeFileSync(
       envFile,
-      'OPENAI_API_KEY=sk-file\nOPENAI_BASE_URL=https://api.example/v1\n',
+      'OPENAI_API_KEY=sk-file\nOPENAI_BASE_URL=http://127.0.0.1:11434/v1\n',
     );
     loadEnvironment(testSettings({}), workspace);
 
@@ -1701,7 +1686,7 @@ describe('hasLoadedEnvironmentValues', () => {
         env: { OPENAI_API_KEY: 'sk-settings' },
         modelProviders: {
           openai: { id: 'not-a-list' },
-          anthropic: [null, { id: 'no-env-key' }],
+          custom: [null, { id: 'no-env-key' }],
         } as unknown as Settings['modelProviders'],
       }),
       workspace,
@@ -1711,7 +1696,7 @@ describe('hasLoadedEnvironmentValues', () => {
   });
 
   it.each([
-    ['DASHSCOPE_PROXY_BASE_URL', 'https://proxy.example'],
+    ['ANTHROPIC_API_KEY', 'sk-removed-provider'],
     ['DEMO_VAR', '1'],
   ])('still reports any other value, such as %s', (key, value) => {
     resetEnvironmentTrackingForTesting();

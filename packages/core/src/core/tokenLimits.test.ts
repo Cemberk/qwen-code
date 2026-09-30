@@ -233,7 +233,6 @@ describe('tokenLimit', () => {
       expect(tokenLimit('qwen3-coder-plus-20250601')).toBe(1000000);
       expect(tokenLimit('qwen3-coder-flash')).toBe(1000000);
       expect(tokenLimit('qwen3.5-plus')).toBe(1000000);
-      expect(tokenLimit('coder-model')).toBe(1000000);
     });
 
     it('should return 256K for Qwen3 non-commercial models', () => {
@@ -469,7 +468,6 @@ describe('tokenLimit with output type', () => {
     it('should return correct output limits for Qwen models', () => {
       expect(tokenLimit('qwen3.5-plus', 'output')).toBe(65536);
       expect(tokenLimit('qwen3.6-plus', 'output')).toBe(65536);
-      expect(tokenLimit('coder-model', 'output')).toBe(65536);
       // Models without specific output limits fall back to Qwen default (32K)
       expect(tokenLimit('qwen3-max', 'output')).toBe(32768);
       expect(tokenLimit('qwen3-max-2026-01-23', 'output')).toBe(32768);

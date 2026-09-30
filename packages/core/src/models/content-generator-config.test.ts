@@ -8,13 +8,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   buildAgentContentGeneratorConfig,
   createRuntimeContentGeneratorView,
-  resolveCredentialField,
 } from './content-generator-config.js';
 import { createContentGenerator } from '../core/contentGenerator.js';
 import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
 import type { Config } from '../config/config.js';
 import type { ResolvedModelConfig } from './types.js';
 import { ModelsConfig } from './modelsConfig.js';
+import { getLocalBaseUrlError } from '../utils/local-base-url.js';
 
 vi.mock('../core/contentGenerator.js', async (importOriginal) => {
   const actual =
@@ -24,6 +24,10 @@ vi.mock('../core/contentGenerator.js', async (importOriginal) => {
     createContentGenerator: vi.fn(),
   };
 });
+
+const PARENT_URL = 'http://127.0.0.1:11434/v1';
+const SECOND_URL = 'http://localhost:1234/v1';
+const REGISTRY_URL = 'http://127.0.0.1:8080/v1';
 
 function createMockConfig(
   parentConfig: ContentGeneratorConfig,
@@ -43,7 +47,7 @@ describe('buildAgentContentGeneratorConfig', () => {
     authType: 'openai' as ContentGeneratorConfig['authType'],
     apiKey: 'parent-key',
     apiKeyEnvKey: 'PARENT_KEY_ENV',
-    baseUrl: 'https://parent.example.com',
+    baseUrl: PARENT_URL,
     samplingParams: { temperature: 0.7, top_p: 0.9 },
     reasoning: { effort: 'high' as const },
     timeout: 30000,
@@ -60,15 +64,14 @@ describe('buildAgentContentGeneratorConfig', () => {
       const models = new ModelsConfig({
         modelProvidersConfig: {
           openai: [
-            { id: 'shared', envKey: 'IMPLICIT_KEY' },
             {
               id: 'shared',
-              baseUrl: 'https://parent.example.com',
+              baseUrl: PARENT_URL,
               envKey: 'PARENT_KEY_ENV',
             },
             {
               id: 'shared',
-              baseUrl: 'https://second.example/v1',
+              baseUrl: SECOND_URL,
               envKey: 'SECOND_KEY',
             },
           ],
@@ -91,12 +94,12 @@ describe('buildAgentContentGeneratorConfig', () => {
         'shared',
         {
           authType: 'openai',
-          registryBaseUrl: 'https://second.example/v1',
+          registryBaseUrl: SECOND_URL,
         },
       );
       expect(result).toMatchObject({
         model: 'shared',
-        baseUrl: 'https://second.example/v1',
+        baseUrl: SECOND_URL,
         apiKey: 'second-key',
         apiKeyEnvKey: 'SECOND_KEY',
       });
@@ -110,7 +113,7 @@ describe('buildAgentContentGeneratorConfig', () => {
         'shared',
         {
           authType: 'openai',
-          registryBaseUrl: 'https://second.example/v1',
+          registryBaseUrl: SECOND_URL,
         },
       );
       expect(result.apiKey).toBeUndefined();
@@ -124,32 +127,27 @@ describe('buildAgentContentGeneratorConfig', () => {
         'shared',
         {
           authType: 'openai',
-          registryBaseUrl: 'https://parent.example.com',
+          registryBaseUrl: PARENT_URL,
         },
       );
       expect(result.apiKey).toBe('parent-key');
       expect(result.customHeaders).toEqual({ Authorization: 'parent-secret' });
     });
 
-    it('selects an implicit endpoint exactly and rejects a removed explicit endpoint', () => {
-      vi.stubEnv('IMPLICIT_KEY', 'implicit-key');
-      const config = endpointConfig();
-      expect(
-        buildAgentContentGeneratorConfig(config, 'shared', {
-          authType: 'openai',
-          registryBaseUrl: null,
-        }),
-      ).toMatchObject({ apiKey: 'implicit-key' });
-      expect(() =>
-        buildAgentContentGeneratorConfig(config, 'shared', {
-          authType: 'openai',
-          registryBaseUrl: 'https://api.openai.com/v1',
-        }),
-      ).toThrow('no longer configured');
-    });
+    it.each([null, 'http://127.0.0.1:9999/v1', 'https://api.openai.com/v1'])(
+      'rejects an endpoint that is not configured: %s',
+      (registryBaseUrl) => {
+        expect(() =>
+          buildAgentContentGeneratorConfig(endpointConfig(), 'shared', {
+            authType: 'openai',
+            registryBaseUrl,
+          }),
+        ).toThrow('no longer configured');
+      },
+    );
   });
 
-  describe('same-provider, bare model ID, no registry match', () => {
+  describe('bare model ID, no registry match', () => {
     it('should override the model but keep parent generation config', () => {
       const config = createMockConfig(parentConfig);
 
@@ -160,7 +158,7 @@ describe('buildAgentContentGeneratorConfig', () => {
       expect(result.model).toBe('custom-model');
       expect(result.authType).toBe('openai');
       expect(result.apiKey).toBe('parent-key');
-      expect(result.baseUrl).toBe('https://parent.example.com');
+      expect(result.baseUrl).toBe(PARENT_URL);
       expect(result.apiKeyEnvKey).toBe('PARENT_KEY_ENV');
       // Generation config inherited from parent
       expect(result.samplingParams).toEqual({ temperature: 0.7, top_p: 0.9 });
@@ -184,62 +182,74 @@ describe('buildAgentContentGeneratorConfig', () => {
 
       expect(result.thinkingMandatory).toBeUndefined();
     });
-  });
-
-  describe('cross-provider, no registry match', () => {
-    it('should clear generation config fields to prevent leaking', () => {
-      const config = createMockConfig(parentConfig);
-
-      const result = buildAgentContentGeneratorConfig(config, 'claude-sonnet', {
-        authType: 'anthropic',
-      });
-
-      expect(result.model).toBe('claude-sonnet');
-      expect(result.authType).toBe('anthropic');
-      // Generation config cleared
-      expect(result.samplingParams).toBeUndefined();
-      expect(result.reasoning).toBeUndefined();
-      expect(result.timeout).toBeUndefined();
-      expect(result.streamIdleTimeoutMs).toBeUndefined();
-      expect(result.maxRetries).toBeUndefined();
-      expect(result.contextWindowSize).toBeUndefined();
-      expect(result.extra_body).toBeUndefined();
-      // Parent credentials NOT inherited (different provider)
-      expect(result.apiKeyEnvKey).toBeUndefined();
-    });
 
     it('should use explicit auth overrides', () => {
       const config = createMockConfig(parentConfig);
 
-      const result = buildAgentContentGeneratorConfig(config, 'claude-sonnet', {
-        authType: 'anthropic',
+      const result = buildAgentContentGeneratorConfig(config, 'custom-model', {
+        authType: 'openai',
         apiKey: 'explicit-key',
-        baseUrl: 'https://explicit.example.com',
+        baseUrl: SECOND_URL,
       });
 
       expect(result.apiKey).toBe('explicit-key');
-      expect(result.baseUrl).toBe('https://explicit.example.com');
+      expect(result.baseUrl).toBe(SECOND_URL);
     });
   });
 
-  describe('cross-provider with env var fallback', () => {
-    beforeEach(() => {
-      vi.stubEnv('ANTHROPIC_API_KEY', 'env-anthropic-key');
-      vi.stubEnv('ANTHROPIC_BASE_URL', 'https://env-anthropic.example.com');
-    });
+  describe('side models stay on the local server', () => {
+    afterEach(() => vi.unstubAllEnvs());
 
-    afterEach(() => {
-      vi.unstubAllEnvs();
-    });
-
-    it('should resolve credentials from provider env vars', () => {
-      const config = createMockConfig(parentConfig);
-
-      const result = buildAgentContentGeneratorConfig(config, 'claude-sonnet', {
-        authType: 'anthropic',
+    function localOnlyConfig() {
+      const models = new ModelsConfig({
+        initialAuthType: 'openai' as ContentGeneratorConfig['authType'],
+        modelProvidersConfig: {
+          openai: [
+            { id: 'parent-model', baseUrl: PARENT_URL, envKey: 'PARENT_KEY' },
+          ],
+        },
       });
+      return {
+        getContentGeneratorConfig: () => parentConfig,
+        getModelsConfig: () => models,
+      } as unknown as Config;
+    }
 
-      expect(result.apiKey).toBe('env-anthropic-key');
+    it.each(['claude-sonnet-4', 'anthropic:claude-3', 'gpt-4o', 'gemini-pro'])(
+      'resolves the unconfigured side model %s to the parent loopback baseUrl',
+      (modelId) => {
+        const result = buildAgentContentGeneratorConfig(
+          localOnlyConfig(),
+          modelId,
+          { authType: 'openai' },
+        );
+
+        expect(result.model).toBe(modelId);
+        expect(result.authType).toBe('openai');
+        expect(result.baseUrl).toBe(PARENT_URL);
+        expect(getLocalBaseUrlError(result.baseUrl)).toBeNull();
+        expect(result.apiKey).toBe('parent-key');
+      },
+    );
+
+    it('does not pick up ANTHROPIC_* or GEMINI_* env credentials', () => {
+      vi.stubEnv('ANTHROPIC_API_KEY', 'env-anthropic-key');
+      vi.stubEnv('ANTHROPIC_BASE_URL', 'https://api.anthropic.com');
+      vi.stubEnv('ANTHROPIC_MODEL', 'claude-sonnet-4');
+      vi.stubEnv('GEMINI_API_KEY', 'env-gemini-key');
+      vi.stubEnv('GOOGLE_API_KEY', 'env-google-key');
+
+      for (const modelId of ['claude-sonnet-4', 'gemini-pro', undefined]) {
+        const result = buildAgentContentGeneratorConfig(
+          localOnlyConfig(),
+          modelId,
+          { authType: 'openai' },
+        );
+
+        expect(result.apiKey).toBe('parent-key');
+        expect(result.apiKeyEnvKey).toBe('PARENT_KEY_ENV');
+        expect(result.baseUrl).toBe(PARENT_URL);
+      }
     });
   });
 
@@ -247,8 +257,8 @@ describe('buildAgentContentGeneratorConfig', () => {
     const resolvedModel: ResolvedModelConfig = {
       id: 'registry-model-id',
       name: 'Registry Model',
-      authType: 'anthropic' as ResolvedModelConfig['authType'],
-      baseUrl: 'https://registry.example.com',
+      authType: 'openai' as ResolvedModelConfig['authType'],
+      baseUrl: REGISTRY_URL,
       envKey: 'REGISTRY_API_KEY',
       generationConfig: {
         samplingParams: { temperature: 0.5 },
@@ -267,18 +277,18 @@ describe('buildAgentContentGeneratorConfig', () => {
       vi.unstubAllEnvs();
     });
 
-    it('should apply registry generation config over cleared parent config', () => {
+    it('should apply registry generation config over the inherited parent config', () => {
       const config = createMockConfig(parentConfig, resolvedModel);
 
       const result = buildAgentContentGeneratorConfig(
         config,
         'registry-model-id',
-        { authType: 'anthropic' },
+        { authType: 'openai' },
       );
 
       expect(result.model).toBe('registry-model-id');
-      expect(result.authType).toBe('anthropic');
-      expect(result.baseUrl).toBe('https://registry.example.com');
+      expect(result.authType).toBe('openai');
+      expect(result.baseUrl).toBe(REGISTRY_URL);
       expect(result.apiKey).toBe('registry-key-from-env');
       expect(result.apiKeyEnvKey).toBe('REGISTRY_API_KEY');
       // Registry generation config applied
@@ -286,8 +296,9 @@ describe('buildAgentContentGeneratorConfig', () => {
       expect(result.streamIdleTimeoutMs).toBe(600000);
       expect(result.contextWindowSize).toBe(200000);
       expect(result.reasoning).toEqual({ effort: 'medium' });
-      // Fields not in registry stay cleared (cross-provider)
-      expect(result.extra_body).toBeUndefined();
+      // Fields the registry does not set are inherited from the parent
+      expect(result.timeout).toBe(30000);
+      expect(result.extra_body).toEqual({ custom: 'value' });
     });
 
     it('should preserve a zero stream idle timeout from the registry', () => {
@@ -302,7 +313,7 @@ describe('buildAgentContentGeneratorConfig', () => {
       const result = buildAgentContentGeneratorConfig(
         config,
         'registry-model-id',
-        { authType: 'anthropic' },
+        { authType: 'openai' },
       );
 
       expect(result.streamIdleTimeoutMs).toBe(0);
@@ -315,14 +326,14 @@ describe('buildAgentContentGeneratorConfig', () => {
         config,
         'registry-model-id',
         {
-          authType: 'anthropic',
+          authType: 'openai',
           apiKey: 'explicit-key',
-          baseUrl: 'https://explicit.example.com',
+          baseUrl: SECOND_URL,
         },
       );
 
       expect(result.apiKey).toBe('explicit-key');
-      expect(result.baseUrl).toBe('https://explicit.example.com');
+      expect(result.baseUrl).toBe(SECOND_URL);
     });
 
     it('should use explicit baseUrl when looking up a registry model', () => {
@@ -333,24 +344,21 @@ describe('buildAgentContentGeneratorConfig', () => {
       } as unknown as Config;
 
       buildAgentContentGeneratorConfig(config, 'registry-model-id', {
-        authType: 'anthropic',
-        baseUrl: 'https://registry.example.com',
+        authType: 'openai',
+        baseUrl: REGISTRY_URL,
       });
 
       expect(getResolvedModel).toHaveBeenCalledWith(
-        'anthropic',
+        'openai',
         'registry-model-id',
-        'https://registry.example.com',
+        REGISTRY_URL,
       );
     });
 
-    it('does not inherit mandatory thinking from another same-provider model', () => {
+    it('does not inherit mandatory thinking from another model', () => {
       const config = createMockConfig(
         { ...parentConfig, thinkingMandatory: true },
-        {
-          ...resolvedModel,
-          authType: 'openai' as ResolvedModelConfig['authType'],
-        },
+        resolvedModel,
       );
 
       const result = buildAgentContentGeneratorConfig(
@@ -361,45 +369,6 @@ describe('buildAgentContentGeneratorConfig', () => {
 
       expect(result.thinkingMandatory).toBeUndefined();
     });
-
-    it('does not inherit enableRequestMetadata from another same-provider model', () => {
-      // A per-model decision: an inherited true would ship the DashScope
-      // tracing object to a vendor-forwarded side model and get the 400 the
-      // gate exists to avoid, so an unset side model falls back to the gate.
-      const config = createMockConfig(
-        { ...parentConfig, enableRequestMetadata: true },
-        {
-          ...resolvedModel,
-          authType: 'openai' as ResolvedModelConfig['authType'],
-        },
-      );
-
-      const result = buildAgentContentGeneratorConfig(
-        config,
-        'registry-model-id',
-        { authType: 'openai' },
-      );
-
-      expect(result.enableRequestMetadata).toBeUndefined();
-    });
-
-    it.each(['image', 'voice'] as const)(
-      'rejects %s-only models for agent content generation',
-      (purpose) => {
-        const config = createMockConfig(parentConfig, {
-          ...resolvedModel,
-          ...(purpose === 'image' ? { imageOnly: true } : { voiceOnly: true }),
-        });
-
-        expect(() =>
-          buildAgentContentGeneratorConfig(config, 'registry-model-id', {
-            authType: 'anthropic',
-          }),
-        ).toThrow(
-          `${purpose === 'image' ? 'Image' : 'Voice'}-only model 'registry-model-id' cannot be used for content generation`,
-        );
-      },
-    );
   });
 
   // A workflow `agent({ effort })` gets its tier through this builder. It has
@@ -439,20 +408,6 @@ describe('buildAgentContentGeneratorConfig', () => {
       );
 
       expect(result.reasoning).toBe(false);
-    });
-
-    it('applies after a cross-provider switch cleared the generation config', () => {
-      const config = createMockConfig(parentConfig);
-
-      const result = buildAgentContentGeneratorConfig(
-        config,
-        'claude-sonnet',
-        { authType: 'anthropic' },
-        { reasoningEffort: 'xhigh' },
-      );
-
-      expect(result.samplingParams).toBeUndefined();
-      expect(result.reasoning).toEqual({ effort: 'xhigh' });
     });
 
     it('changes nothing when no effort is requested', () => {
@@ -525,7 +480,7 @@ describe('buildAgentContentGeneratorConfig', () => {
         id: 'registry-model',
         authType: 'openai',
         name: 'registry-model',
-        baseUrl: 'https://registry.example.com',
+        baseUrl: REGISTRY_URL,
         generationConfig: { reasoning: { budget_tokens: 32000 } },
         capabilities: {},
       } as unknown as ResolvedModelConfig;
@@ -542,19 +497,17 @@ describe('buildAgentContentGeneratorConfig', () => {
       expect(result.reasoning).toEqual({ effort: 'low' });
     });
 
-    // A provider switch clears the session's `reasoning: false` from the copy;
-    // the tier must still not switch thinking back on.
-    it('never re-enables thinking the session turned off, even across providers', () => {
+    it('never re-enables thinking the session turned off, even for another model', () => {
       const config = createMockConfig({ ...parentConfig, reasoning: false });
 
       const result = buildAgentContentGeneratorConfig(
         config,
-        'claude-sonnet',
-        { authType: 'anthropic' },
+        'other-model',
+        { authType: 'openai' },
         { reasoningEffort: 'max' },
       );
 
-      expect(result.reasoning).toBeUndefined();
+      expect(result.reasoning).toBe(false);
     });
 
     // Registry stubs that answer only for the arguments they are given, so a
@@ -593,7 +546,7 @@ describe('buildAgentContentGeneratorConfig', () => {
       const config = configWithRegistry(parentConfig, {
         authType: 'openai',
         model: 'agent-model',
-        baseUrl: 'https://agent.example.com',
+        baseUrl: REGISTRY_URL,
       });
 
       const result = buildAgentContentGeneratorConfig(
@@ -607,13 +560,13 @@ describe('buildAgentContentGeneratorConfig', () => {
       expect(result.reasoning).toEqual({ effort: 'high' });
     });
 
-    it('finds the declared tiers behind a gateway base URL', () => {
+    it('finds the declared tiers behind a different base URL', () => {
       const config = configWithRegistry(
-        { ...parentConfig, baseUrl: 'https://gw.internal/v1' },
+        { ...parentConfig, baseUrl: SECOND_URL },
         {
           authType: 'openai',
           model: 'parent-model',
-          baseUrl: 'https://api.openai.com/v1',
+          baseUrl: PARENT_URL,
         },
       );
 
@@ -638,27 +591,6 @@ describe('buildAgentContentGeneratorConfig', () => {
       );
 
       expect(result.reasoning).toEqual({ effort: 'high' });
-    });
-
-    it('refuses an interactive login when asked to', async () => {
-      const config = createMockConfig(parentConfig);
-      vi.mocked(createContentGenerator).mockResolvedValue(
-        {} as Awaited<ReturnType<typeof createContentGenerator>>,
-      );
-
-      await createRuntimeContentGeneratorView(
-        config,
-        config,
-        undefined,
-        { authType: 'openai' },
-        { reasoningEffort: 'low', requireCachedCredentials: true },
-      );
-
-      expect(createContentGenerator).toHaveBeenCalledWith(
-        expect.objectContaining({ reasoning: { effort: 'low' } }),
-        config,
-        true,
-      );
     });
 
     it('carries the effort through createRuntimeContentGeneratorView', async () => {
@@ -696,19 +628,16 @@ describe('buildAgentContentGeneratorConfig', () => {
       expect(result.model).toBe('parent-model');
     });
 
-    it('should keep proxy and userAgent from parent regardless of provider', () => {
-      const configWithProxy: ContentGeneratorConfig = {
+    it('should keep userAgent from parent', () => {
+      const config = createMockConfig({
         ...parentConfig,
-        proxy: 'http://proxy.example.com',
         userAgent: 'custom-agent/1.0',
-      };
-      const config = createMockConfig(configWithProxy);
-
-      const result = buildAgentContentGeneratorConfig(config, 'claude-sonnet', {
-        authType: 'anthropic',
       });
 
-      expect(result.proxy).toBe('http://proxy.example.com');
+      const result = buildAgentContentGeneratorConfig(config, 'other-model', {
+        authType: 'openai',
+      });
+
       expect(result.userAgent).toBe('custom-agent/1.0');
     });
   });
@@ -719,7 +648,7 @@ describe('createRuntimeContentGeneratorView', () => {
     model: 'parent-model',
     authType: 'openai' as ContentGeneratorConfig['authType'],
     apiKey: 'parent-key',
-    baseUrl: 'https://parent.example.com',
+    baseUrl: PARENT_URL,
   };
 
   beforeEach(() => {
@@ -750,35 +679,34 @@ describe('createRuntimeContentGeneratorView', () => {
     expect(view.contentGenerator).toBe(fakeGenerator);
     expect(view.contentGeneratorConfig.model).toBe('custom-model');
   });
-});
 
-describe('resolveCredentialField', () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
+  it.each([
+    [
+      'a cloud base URL override',
+      { authType: 'openai', baseUrl: 'https://api.openai.com/v1' },
+      'is not allowed',
+    ],
+    [
+      'a removed auth type',
+      { authType: 'anthropic' },
+      "Auth type 'anthropic' is not supported",
+    ],
+  ])('refuses %s for a side model', async (_label, authOverrides, message) => {
+    const actual = await vi.importActual<
+      typeof import('../core/contentGenerator.js')
+    >('../core/contentGenerator.js');
+    vi.mocked(createContentGenerator).mockImplementationOnce(
+      actual.createContentGenerator,
+    );
+    const config = createMockConfig(parentConfig);
 
-  it('should prefer explicit value', () => {
-    expect(
-      resolveCredentialField('explicit', 'inherited', 'openai', 'apiKey'),
-    ).toBe('explicit');
-  });
-
-  it('should fall back to inherited value', () => {
-    expect(
-      resolveCredentialField(undefined, 'inherited', 'openai', 'apiKey'),
-    ).toBe('inherited');
-  });
-
-  it('should fall back to env var', () => {
-    vi.stubEnv('OPENAI_API_KEY', 'env-key');
-    expect(
-      resolveCredentialField(undefined, undefined, 'openai', 'apiKey'),
-    ).toBe('env-key');
-  });
-
-  it('should return undefined when nothing matches', () => {
-    expect(
-      resolveCredentialField(undefined, undefined, 'unknown', 'apiKey'),
-    ).toBeUndefined();
+    await expect(
+      createRuntimeContentGeneratorView(
+        config,
+        config,
+        'claude-sonnet-4',
+        authOverrides,
+      ),
+    ).rejects.toThrow(message);
   });
 });

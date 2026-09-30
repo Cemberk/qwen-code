@@ -77,14 +77,14 @@ The label is generated using the [fast model](./followup-suggestions#fast-model)
 ### Via command
 
 ```
-/model --fast qwen3-coder-flash
+/model --fast qwen3:4b
 ```
 
 ### Via `settings.json`
 
 ```json
 {
-  "fastModel": "qwen3-coder-flash"
+  "fastModel": "qwen3:4b"
 }
 ```
 
@@ -111,7 +111,7 @@ These settings can be configured in `settings.json`:
 
 ```json
 {
-  "fastModel": "qwen3-coder-flash",
+  "fastModel": "qwen3:4b",
   "experimental": {
     "emitToolUseSummaries": true
   }
@@ -136,7 +136,7 @@ The main view already folds a completed collapsible batch into a single labeled 
 
 ```json
 {
-  "fastModel": "qwen3-coder-flash",
+  "fastModel": "qwen3:4b",
   "experimental": {
     "emitToolUseSummaries": true
   }
@@ -153,12 +153,9 @@ Summary model usage appears in `/stats` output under the fast-model token totals
 
 The summary call sends each successful tool's name, truncated `args`, and truncated result (each field capped at 300 characters) to the **fast model**, plus the first 200 characters of the assistant's most recent text as an intent prefix.
 
-If your fast model is configured for the same provider/auth as your main session model, the data flows along the same boundary your main session already uses — no change in trust scope. If you have configured a fast model from a **different provider**, tool inputs and outputs (potentially including file contents read by `read_file`, command output from shell calls, or values surfaced through MCP tools) will be sent to that other provider as part of the summarization prompt. That is a strictly larger data-sharing scope than the main session alone.
+The fast model always runs on a local model server from your `modelProviders.openai` entries (loopback only), so this data stays on your machine, within the same boundary as your main session. If the fast model is served by a different local server than the main model, that server also receives tool inputs and outputs (potentially including file contents read by `read_file`, command output from shell calls, or values surfaced through MCP tools) as part of the summarization prompt.
 
-If this matters for your workflow, you have two clean options:
-
-- Configure `fastModel` to a model under the same provider as your main session, so the summary call doesn't cross any new auth/data boundary.
-- Disable the feature entirely with `experimental.emitToolUseSummaries: false` (or `QWEN_CODE_EMIT_TOOL_USE_SUMMARIES=0`).
+If this matters for your workflow, disable the feature entirely with `experimental.emitToolUseSummaries: false` (or `QWEN_CODE_EMIT_TOOL_USE_SUMMARIES=0`).
 
 The 300-character per-field cap limits exposure but does not eliminate it — secrets discovered in tool output during the cap window can still be sent. Treat the fast model's data boundary the same way you treat the main model's.
 

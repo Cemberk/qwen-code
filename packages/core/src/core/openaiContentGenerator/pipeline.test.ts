@@ -32,9 +32,7 @@ import {
   type PromptCacheSharingParameters,
 } from '../contentGenerator.js';
 import type { OpenAICompatibleProvider } from './provider/index.js';
-import { determineProvider } from './index.js';
 import { DefaultOpenAICompatibleProvider } from './provider/default.js';
-import { DashScopeOpenAICompatibleProvider } from './provider/dashscope.js';
 import {
   DEFAULT_STREAM_IDLE_TIMEOUT_MS,
   DEFAULT_STREAM_MAX_LIFETIME_MS,
@@ -48,14 +46,6 @@ import {
   setGenAiUsageProvenance,
 } from '../../telemetry/gen-ai-usage.js';
 import { setToolCallPreparations } from '../tool-call-preparation.js';
-import { runWithAgentContext } from '../../agents/runtime/agent-context.js';
-import { runInForkContext } from '../../tools/agent/fork-subagent.js';
-import { findProviderById } from '../../providers/all-providers.js';
-import {
-  buildInstallPlan,
-  resolveBaseUrl,
-} from '../../providers/provider-config.js';
-import { DeepSeekOpenAICompatibleProvider } from './provider/deepseek.js';
 
 // Mock dependencies
 const mockReportOpenAiRequest = vi.hoisted(() => vi.fn());
@@ -127,10 +117,8 @@ describe('ContentGenerationPipeline', () => {
     mockCliConfig = {} as Config;
     mockContentGeneratorConfig = {
       model: 'test-model',
-      authType: 'openai' as AuthType,
-      // Official endpoint so response_format assertions exercise the
-      // buildResponseFormat gate (custom endpoints suppress it).
-      baseUrl: 'https://api.openai.com/v1',
+      authType: AuthType.USE_OPENAI,
+      baseUrl: 'http://127.0.0.1:11434/v1',
       samplingParams: {
         temperature: 0.7,
         top_p: 0.9,
@@ -280,7 +268,7 @@ describe('ContentGenerationPipeline', () => {
       );
     });
 
-    it('should apply provider request context overrides', async () => {
+    it('should default splitToolMedia to true when the content generator config does not set it (issue #4876)', async () => {
       const request: GenerateContentParameters = {
         model: 'test-model',
         contents: [{ parts: [{ text: 'Hello' }], role: 'user' }],
@@ -299,95 +287,9 @@ describe('ContentGenerationPipeline', () => {
       } as OpenAI.Chat.ChatCompletion;
       const mockLlmResponse = new GenerateContentResponse();
 
-      mockProvider.getRequestContextOverrides = vi.fn().mockReturnValue({
-        splitToolMedia: true,
-      });
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue(
-        mockMessages,
-      );
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        mockLlmResponse,
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue(
-        mockOpenAIResponse,
-      );
-
-      await pipeline.execute(request, userPromptId);
-
-      expect(mockConverter.convertLlmRequestToOpenAI).toHaveBeenCalledWith(
-        request,
-        expect.objectContaining({
-          splitToolMedia: true,
-        }),
-      );
-    });
-
-    it('should let provider request context overrides take precedence over content generator config', async () => {
-      const request: GenerateContentParameters = {
-        model: 'test-model',
-        contents: [{ parts: [{ text: 'Hello' }], role: 'user' }],
-      };
-      const userPromptId = 'test-prompt-id';
-      const mockMessages = [
-        { role: 'user', content: 'Hello' },
-      ] as OpenAI.Chat.ChatCompletionMessageParam[];
-      const mockOpenAIResponse = {
-        id: 'response-id',
-        choices: [
-          { message: { content: 'Hello response' }, finish_reason: 'stop' },
-        ],
-        created: Date.now(),
-        model: 'test-model',
-      } as OpenAI.Chat.ChatCompletion;
-      const mockLlmResponse = new GenerateContentResponse();
-
-      mockContentGeneratorConfig.splitToolMedia = true;
-      mockProvider.getRequestContextOverrides = vi.fn().mockReturnValue({
-        splitToolMedia: false,
-      });
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue(
-        mockMessages,
-      );
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        mockLlmResponse,
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue(
-        mockOpenAIResponse,
-      );
-
-      await pipeline.execute(request, userPromptId);
-
-      expect(mockConverter.convertLlmRequestToOpenAI).toHaveBeenCalledWith(
-        request,
-        expect.objectContaining({
-          splitToolMedia: false,
-        }),
-      );
-    });
-
-    it('should default splitToolMedia to true when neither provider override nor content generator config sets it (issue #4876)', async () => {
-      const request: GenerateContentParameters = {
-        model: 'test-model',
-        contents: [{ parts: [{ text: 'Hello' }], role: 'user' }],
-      };
-      const userPromptId = 'test-prompt-id';
-      const mockMessages = [
-        { role: 'user', content: 'Hello' },
-      ] as OpenAI.Chat.ChatCompletionMessageParam[];
-      const mockOpenAIResponse = {
-        id: 'response-id',
-        choices: [
-          { message: { content: 'Hello response' }, finish_reason: 'stop' },
-        ],
-        created: Date.now(),
-        model: 'test-model',
-      } as OpenAI.Chat.ChatCompletion;
-      const mockLlmResponse = new GenerateContentResponse();
-
-      // Neither the provider nor the content generator config sets
-      // splitToolMedia — it must default to true so tool-returned images are
-      // moved out of the spec-violating `role: "tool"` message (#4876).
-      mockProvider.getRequestContextOverrides = vi.fn().mockReturnValue({});
+      // The content generator config does not set splitToolMedia — it must
+      // default to true so tool-returned images are moved out of the
+      // spec-violating `role: "tool"` message (#4876).
       mockContentGeneratorConfig.splitToolMedia = undefined;
       (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue(
         mockMessages,
@@ -428,51 +330,7 @@ describe('ContentGenerationPipeline', () => {
       } as OpenAI.Chat.ChatCompletion;
       const mockLlmResponse = new GenerateContentResponse();
 
-      mockProvider.getRequestContextOverrides = vi.fn().mockReturnValue({});
       mockContentGeneratorConfig.toolResultContentFormat = 'string';
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue(
-        mockMessages,
-      );
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        mockLlmResponse,
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue(
-        mockOpenAIResponse,
-      );
-
-      await pipeline.execute(request, userPromptId);
-
-      expect(mockConverter.convertLlmRequestToOpenAI).toHaveBeenCalledWith(
-        request,
-        expect.objectContaining({
-          toolResultContentFormat: 'string',
-        }),
-      );
-    });
-
-    it('should let provider tool result content format overrides take precedence', async () => {
-      const request: GenerateContentParameters = {
-        model: 'test-model',
-        contents: [{ parts: [{ text: 'Hello' }], role: 'user' }],
-      };
-      const userPromptId = 'test-prompt-id';
-      const mockMessages = [
-        { role: 'user', content: 'Hello' },
-      ] as OpenAI.Chat.ChatCompletionMessageParam[];
-      const mockOpenAIResponse = {
-        id: 'response-id',
-        choices: [
-          { message: { content: 'Hello response' }, finish_reason: 'stop' },
-        ],
-        created: Date.now(),
-        model: 'test-model',
-      } as OpenAI.Chat.ChatCompletion;
-      const mockLlmResponse = new GenerateContentResponse();
-
-      mockContentGeneratorConfig.toolResultContentFormat = 'parts';
-      mockProvider.getRequestContextOverrides = vi.fn().mockReturnValue({
-        toolResultContentFormat: 'string',
-      });
       (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue(
         mockMessages,
       );
@@ -654,307 +512,82 @@ describe('ContentGenerationPipeline', () => {
       expect(apiCall.tools).toBeUndefined();
     });
 
-    it('should override enable_thinking when thinkingConfig disables it', async () => {
-      // Arrange — provider injects enable_thinking: true via extra_body
-      // (e.g. user configured `enableThinking: true` via setup wizard,
-      // see provider-config.ts), but request explicitly disables thinking.
-      // DashScope hostname + qwen model name are both required: the gate
-      // is hostname + model-name to avoid leaking the qwen-specific
-      // `enable_thinking` field to non-qwen routings (off-DashScope, or
-      // GLM/DeepSeek on the same DashScope hostname).
-      mockContentGeneratorConfig = {
-        ...mockContentGeneratorConfig,
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        model: 'qwen3.5-flash',
-      } as ContentGeneratorConfig;
-      mockConfig = {
-        ...mockConfig,
-        contentGeneratorConfig: mockContentGeneratorConfig,
-      };
-      pipeline = new ContentGenerationPipeline(mockConfig);
-
-      (mockProvider.buildRequest as Mock).mockImplementation((req) => ({
-        ...req,
-        enable_thinking: true, // Simulates extra_body injection
-      }));
-
-      const request: GenerateContentParameters = {
-        model: 'qwen3.5-flash',
-        contents: [{ parts: [{ text: 'Suggest next' }], role: 'user' }],
-        config: { thinkingConfig: { includeThoughts: false } },
-      };
-      const userPromptId = 'forked_query';
-
-      const mockMessages = [
-        { role: 'user', content: 'Suggest next' },
-      ] as OpenAI.Chat.ChatCompletionMessageParam[];
-      const mockOpenAIResponse = {
-        id: 'response-id',
-        choices: [
-          {
-            message: { content: '{"suggestion":"run tests"}' },
-            finish_reason: 'stop',
-          },
-        ],
-      } as OpenAI.Chat.ChatCompletion;
-      const mockLlmResponse = new GenerateContentResponse();
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue(
-        mockMessages,
-      );
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        mockLlmResponse,
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue(
-        mockOpenAIResponse,
-      );
-
-      // Act
-      await pipeline.execute(request, userPromptId);
-
-      // Assert — enable_thinking should be overridden to false
-      const apiCall = (mockClient.chat.completions.create as Mock).mock
-        .calls[0][0];
-      expect(apiCall.enable_thinking).toBe(false);
-    });
-
     it.each([
       {
-        name: 'keep thinking for a thinkingMandatory model on Token Plan side queries',
-        baseUrl:
-          'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+        name: 'keep thinking on for a thinkingMandatory model on side queries',
         model: 'qwen3.8-max-preview',
         extraBody: { enable_thinking: true },
         thinkingMandatory: true,
         reasoning: undefined,
         includeThoughts: false,
         expectedThinking: true,
-        expectedToolChoice: undefined,
+        expectedTemplateKwargs: undefined,
       },
       {
-        name: 'apply thinkingMandatory to any qwen model on any DashScope endpoint',
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        model: 'qwen3.9-turbo',
-        extraBody: { enable_thinking: true },
-        thinkingMandatory: true,
-        reasoning: undefined,
-        includeThoughts: false,
-        expectedThinking: true,
-        expectedToolChoice: undefined,
-      },
-      {
-        name: 'remove required tool selection when thinking is enabled on the wire',
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        model: 'qwen3.7-max',
-        extraBody: { enable_thinking: true },
-        thinkingMandatory: undefined,
-        reasoning: undefined,
-        includeThoughts: true,
-        expectedThinking: true,
-        expectedToolChoice: undefined,
-      },
-      {
-        name: 'remove required tool selection when reasoning effort enables thinking',
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        model: 'qwen3.8-max',
-        extraBody: { reasoning_effort: 'high' },
-        thinkingMandatory: undefined,
-        reasoning: undefined,
-        includeThoughts: true,
-        expectedThinking: undefined,
-        expectedToolChoice: undefined,
-      },
-      {
-        name: 'remove required tool selection when thinking budget enables thinking',
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        model: 'qwen3.8-max',
-        extraBody: { thinking_budget: 4096 },
-        thinkingMandatory: undefined,
-        reasoning: undefined,
-        includeThoughts: true,
-        expectedThinking: undefined,
-        expectedToolChoice: undefined,
-      },
-      {
-        name: 'remove required tool selection when a string thinking budget enables thinking',
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        model: 'qwen3.8-max',
-        extraBody: { thinking_budget: '4096' },
-        thinkingMandatory: undefined,
-        reasoning: { effort: 'high' },
-        includeThoughts: true,
-        expectedThinking: undefined,
-        expectedToolChoice: undefined,
-      },
-      {
-        name: 'preserve required tool selection when thinking is explicitly disabled alongside a budget',
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        model: 'qwen3-max',
-        extraBody: { thinking_budget: 4096 },
-        thinkingMandatory: undefined,
-        reasoning: undefined,
-        includeThoughts: false,
-        expectedThinking: false,
-        expectedToolChoice: 'required',
-      },
-      {
-        name: 'preserve required tool selection when reasoning effort is none',
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        model: 'qwen3.8-max',
-        extraBody: { reasoning_effort: 'none' },
-        thinkingMandatory: undefined,
-        reasoning: undefined,
-        includeThoughts: true,
-        expectedThinking: undefined,
-        expectedToolChoice: 'required',
-      },
-      {
-        name: 'preserve required tool selection for a non-qwen model with a user reasoning_effort',
-        baseUrl:
-          'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
-        model: 'glm-5.2',
-        extraBody: { reasoning_effort: 'high' },
-        thinkingMandatory: undefined,
-        reasoning: undefined,
-        includeThoughts: true,
-        expectedThinking: undefined,
-        expectedToolChoice: 'required',
-      },
-      ...['gpt-5-pro', 'gpt-6-astra'].map((model) => ({
-        name: `preserve required tool selection for name-derived mandatory ${model}`,
-        baseUrl: 'https://idealab.alibaba-inc.com/api/openai/v1',
-        model,
-        extraBody: undefined,
-        thinkingMandatory: undefined,
-        reasoning: undefined,
-        includeThoughts: false,
-        expectedThinking: undefined,
-        expectedToolChoice: 'required',
-      })),
-      {
-        name: 'preserve required tool selection when thinking is not enabled',
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        model: 'qwen3.7-max',
-        extraBody: undefined,
-        thinkingMandatory: undefined,
-        reasoning: undefined,
-        includeThoughts: true,
-        expectedThinking: undefined,
-        expectedToolChoice: 'required',
-      },
-      {
-        name: 'emit the tier-native disable shape under the config-level reasoning opt-out',
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        model: 'qwen3.8-max',
-        extraBody: { reasoning_effort: 'high' },
-        thinkingMandatory: undefined,
-        reasoning: false,
-        includeThoughts: true,
-        expectedThinking: undefined,
-        expectedReasoningEffort: 'none',
-        expectedToolChoice: 'required',
-      },
-      {
-        name: 'emit the tier-native disable shape under the per-request thinking opt-out',
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        model: 'qwen3.8-max',
-        extraBody: { reasoning_effort: 'high' },
-        thinkingMandatory: undefined,
-        reasoning: undefined,
-        includeThoughts: false,
-        expectedThinking: undefined,
-        expectedReasoningEffort: 'none',
-        expectedToolChoice: 'required',
-      },
-      {
-        name: 'never emit the disable even under the reasoning opt-out',
-        baseUrl:
-          'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+        name: 'never emit the disable for a thinkingMandatory model under the reasoning opt-out',
         model: 'qwen3.8-max-preview',
         extraBody: { enable_thinking: true },
         thinkingMandatory: true,
         reasoning: false,
         includeThoughts: false,
         expectedThinking: true,
-        expectedToolChoice: undefined,
+        expectedTemplateKwargs: undefined,
       },
       {
-        name: 'still force-disable hybrid models that only declare extra_body.enable_thinking',
-        baseUrl:
-          'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+        name: 'force-disable hybrid models that only declare extra_body.enable_thinking',
         model: 'qwen3.7-max',
         extraBody: { enable_thinking: true },
         thinkingMandatory: undefined,
         reasoning: undefined,
         includeThoughts: false,
-        expectedThinking: false,
-        expectedToolChoice: 'required',
-      },
-      {
-        name: 'allow automatic tool selection when mandatory thinking stays on',
-        baseUrl:
-          'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
-        model: 'qwen3.8-max-preview',
-        extraBody: { enable_thinking: true },
-        thinkingMandatory: true,
-        reasoning: undefined,
-        includeThoughts: true,
-        expectedThinking: true,
-        expectedToolChoice: undefined,
+        expectedThinking: undefined,
+        expectedTemplateKwargs: { enable_thinking: false },
       },
       {
         name: 'not inherit mandatory thinking through request.model overrides',
-        baseUrl:
-          'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
         model: 'qwen3.8-max-preview',
         requestModel: 'qwen3.7-max',
         extraBody: { enable_thinking: true },
         thinkingMandatory: true,
         reasoning: undefined,
         includeThoughts: false,
-        expectedThinking: false,
-        expectedToolChoice: 'required',
+        expectedThinking: undefined,
+        expectedTemplateKwargs: { enable_thinking: false },
       },
       {
         name: 'drop a contradictory thinking disable for aliased mandatory models',
-        baseUrl:
-          'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
-        model: 'token-plan-model-alias',
+        model: 'local-model-alias',
         extraBody: { enable_thinking: false },
         thinkingMandatory: true,
         reasoning: undefined,
         includeThoughts: false,
         expectedThinking: undefined,
-        expectedToolChoice: undefined,
+        expectedTemplateKwargs: undefined,
       },
       {
-        name: 'preserve required tool selection when a null thinking budget means unset',
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        model: 'qwen3-max',
-        extraBody: { thinking_budget: null },
-        thinkingMandatory: undefined,
-        reasoning: undefined,
-        includeThoughts: true,
-        expectedThinking: undefined,
-        expectedToolChoice: 'required',
-      },
-      {
-        name: 'strip the tier-native disable shape for thinkingMandatory models',
-        baseUrl:
-          'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+        name: 'strip the effort disable shape for thinkingMandatory models',
         model: 'qwen3.8-max-preview',
         extraBody: { reasoning_effort: 'none' },
         thinkingMandatory: true,
         reasoning: undefined,
         includeThoughts: true,
         expectedThinking: undefined,
+        expectedTemplateKwargs: undefined,
         expectedReasoningEffort: undefined,
-        expectedToolChoice: undefined,
       },
+      ...['gpt-5-pro', 'gpt-6-astra'].map((model) => ({
+        name: `keep thinking on for name-derived mandatory ${model}`,
+        model,
+        extraBody: undefined,
+        thinkingMandatory: undefined,
+        reasoning: undefined,
+        includeThoughts: false,
+        expectedThinking: undefined,
+        expectedTemplateKwargs: undefined,
+      })),
     ])('should $name', async (testCase) => {
       mockContentGeneratorConfig = {
         ...mockContentGeneratorConfig,
-        baseUrl: testCase.baseUrl,
         model: testCase.model,
         extra_body: testCase.extraBody,
         thinkingMandatory: testCase.thinkingMandatory,
@@ -966,7 +599,7 @@ describe('ContentGenerationPipeline', () => {
       };
       pipeline = new ContentGenerationPipeline(mockConfig);
 
-      // Simulate the provider merging user extra_body last (see dashscope.ts).
+      // Simulate the provider merging user extra_body last.
       (mockProvider.buildRequest as Mock).mockImplementation((req) => ({
         ...req,
         ...(testCase.extraBody ?? {}),
@@ -1019,150 +652,22 @@ describe('ContentGenerationPipeline', () => {
       const apiCall = (mockClient.chat.completions.create as Mock).mock
         .calls[0][0];
       expect(apiCall.enable_thinking).toBe(testCase.expectedThinking);
-      expect(apiCall.tool_choice).toBe(testCase.expectedToolChoice);
+      expect(apiCall.chat_template_kwargs).toEqual(
+        testCase.expectedTemplateKwargs,
+      );
+      expect(apiCall.tool_choice).toBe('required');
       if ('expectedReasoningEffort' in testCase) {
         expect(apiCall.reasoning_effort).toBe(testCase.expectedReasoningEffort);
       }
     });
 
-    it('keeps forced tool selection for a non-qwen preset shape end to end', async () => {
-      // The table above mocks buildRequest as a plain extra_body merge, so
-      // the real provider never executes there. Run the actual DashScope
-      // provider instead: its family-gated drop keeps the glm preset's
-      // enable_thinking, and the pipeline's enable_thinking clause is
-      // family-gated too — on glm the field is an opaque no-op (GLM reads
-      // thinking.enabled), not a thinking switch, so tool_choice=required
-      // must survive for its forced-tool side queries.
-      mockContentGeneratorConfig = {
-        ...mockContentGeneratorConfig,
-        baseUrl:
-          'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
-        model: 'glm-5.2',
-        authType: AuthType.QWEN_OAUTH,
-        extra_body: { enable_thinking: true, reasoning_effort: 'high' },
-      } as ContentGeneratorConfig;
-      mockConfig = {
-        ...mockConfig,
-        contentGeneratorConfig: mockContentGeneratorConfig,
-      };
-      pipeline = new ContentGenerationPipeline(mockConfig);
-
-      const realProvider = new DashScopeOpenAICompatibleProvider(
-        mockContentGeneratorConfig,
-        {
-          getContentGeneratorConfig: () => ({ enableCacheControl: false }),
-        } as unknown as Config,
-      );
-      (mockProvider.buildRequest as Mock).mockImplementation((req) =>
-        realProvider.buildRequest(req, 'side-query:combined-shape'),
-      );
-
-      const request: GenerateContentParameters = {
-        model: 'glm-5.2',
-        contents: [{ parts: [{ text: 'Summarize' }], role: 'user' }],
-        config: {
-          thinkingConfig: { includeThoughts: true },
-          tools: [
-            {
-              functionDeclarations: [
-                {
-                  name: 'respond_in_schema',
-                  parameters: { type: Type.OBJECT, properties: {} },
-                },
-              ],
-            },
-          ],
-          toolConfig: {
-            functionCallingConfig: { mode: FunctionCallingConfigMode.ANY },
-          },
-        },
-      };
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'user', content: 'Summarize' },
-      ]);
-      (mockConverter.convertLlmToolsToOpenAI as Mock).mockResolvedValue([
-        { type: 'function', function: { name: 'respond_in_schema' } },
-      ]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'r',
-        choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-      } as OpenAI.Chat.ChatCompletion);
-
-      await pipeline.execute(request, 'side-query:combined-shape');
-
-      const apiCall = (mockClient.chat.completions.create as Mock).mock
-        .calls[0][0];
-      expect(apiCall.enable_thinking).toBe(true);
-      expect(apiCall.reasoning_effort).toBe('high');
-      expect(apiCall.tool_choice).toBe('required');
-    });
-
-    it('never ships the max tier to the tiered DashScope family end to end', async () => {
-      // `/effort max` writes the tier into config, so a raw pass-through
-      // 400s on this request and on every later one in the session. Drive
-      // the real provider through pipeline.execute and assert on the wire
-      // body the SDK is handed: the tier must arrive capped at xhigh.
-      mockContentGeneratorConfig = {
-        ...mockContentGeneratorConfig,
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        model: 'qwen3.8-max',
-        authType: AuthType.QWEN_OAUTH,
-        reasoning: { effort: 'max' },
-      } as ContentGeneratorConfig;
-      mockConfig = {
-        ...mockConfig,
-        contentGeneratorConfig: mockContentGeneratorConfig,
-      };
-      pipeline = new ContentGenerationPipeline(mockConfig);
-
-      const realProvider = new DashScopeOpenAICompatibleProvider(
-        mockContentGeneratorConfig,
-        {
-          getContentGeneratorConfig: () => ({ enableCacheControl: false }),
-        } as unknown as Config,
-      );
-      (mockProvider.buildRequest as Mock).mockImplementation((req) =>
-        realProvider.buildRequest(req, 'prompt-id'),
-      );
-
-      const request: GenerateContentParameters = {
-        model: 'qwen3.8-max',
-        contents: [{ parts: [{ text: 'Summarize' }], role: 'user' }],
-        config: { thinkingConfig: { includeThoughts: true } },
-      };
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'user', content: 'Summarize' },
-      ]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'r',
-        choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-      } as OpenAI.Chat.ChatCompletion);
-
-      await pipeline.execute(request, 'prompt-id');
-
-      const apiCall = (mockClient.chat.completions.create as Mock).mock
-        .calls[0][0];
-      expect(apiCall.reasoning_effort).toBe('xhigh');
-      // The tier ships alone — no competing nested knob.
-      expect(apiCall.reasoning).toBeUndefined();
-    });
-
     it('never ships the max tier to a generic OpenAI-compatible endpoint end to end', async () => {
-      // Same failure as the DashScope case, one layer up: the tier is
-      // persisted, so an endpoint that rejects it 400s every later request
-      // too. Assert on the body the SDK is handed, through the real default
+      // The tier is persisted, so an endpoint that rejects it 400s every
+      // later request too. Assert on the body the SDK is handed, through the real default
       // provider.
       mockContentGeneratorConfig = {
         ...mockContentGeneratorConfig,
-        baseUrl: 'https://llm.example.com/v1',
+        baseUrl: 'http://127.0.0.1:11434/v1',
         model: 'gpt-5.4',
         // Exercise the configured-tier path without sampling overrides.
         samplingParams: undefined,
@@ -1330,14 +835,6 @@ describe('ContentGenerationPipeline', () => {
         },
       },
       {
-        name: 'a non-mandatory GPT model on OpenRouter',
-        model: 'openai/gpt-5.4',
-        baseUrl: 'https://openrouter.ai/api/v1',
-        reasoning: false,
-        samplingParams: {},
-        expected: { reasoning: { enabled: false } },
-      },
-      {
         name: 'configured model fallback with a token budget',
         model: '',
         configuredModel: 'gpt-5.4',
@@ -1357,14 +854,6 @@ describe('ContentGenerationPipeline', () => {
         model: 'gpt-6-astra',
         reasoning: { effort: 'high' },
         samplingParams: { reasoning_effort: 'none' },
-        expected: {},
-      },
-      {
-        name: 'GPT-6 mandatory thinking on OpenRouter',
-        model: 'openai/gpt-6-astra',
-        baseUrl: 'https://openrouter.ai/api/v1',
-        reasoning: false,
-        samplingParams: {},
         expected: {},
       },
       {
@@ -1502,87 +991,10 @@ describe('ContentGenerationPipeline', () => {
       );
     });
 
-    it('never ships the escape-hatch disable shape to a thinkingMandatory model end to end', async () => {
-      // The provider canonicalizes the documented extra_body
-      // `enable_thinking: false` escape hatch into the tiered family's
-      // canonical disable shape (`reasoning_effort: 'none'`) even when no
-      // effort tier ships. The thinkingMandatory strip must catch that
-      // shape too: on a mandatory-thinking model it is a guaranteed
-      // request failure, exactly like the boolean it replaced.
-      mockContentGeneratorConfig = {
-        ...mockContentGeneratorConfig,
-        baseUrl:
-          'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
-        model: 'qwen3.8-max-preview',
-        authType: AuthType.QWEN_OAUTH,
-        thinkingMandatory: true,
-        extra_body: { enable_thinking: false },
-      } as ContentGeneratorConfig;
-      mockConfig = {
-        ...mockConfig,
-        contentGeneratorConfig: mockContentGeneratorConfig,
-      };
-      pipeline = new ContentGenerationPipeline(mockConfig);
-
-      const realProvider = new DashScopeOpenAICompatibleProvider(
-        mockContentGeneratorConfig,
-        {
-          getContentGeneratorConfig: () => ({ enableCacheControl: false }),
-        } as unknown as Config,
-      );
-      (mockProvider.buildRequest as Mock).mockImplementation((req) =>
-        realProvider.buildRequest(req, 'side-query:escape-hatch'),
-      );
-
-      const request: GenerateContentParameters = {
-        model: 'qwen3.8-max-preview',
-        contents: [{ parts: [{ text: 'Summarize' }], role: 'user' }],
-        config: {
-          thinkingConfig: { includeThoughts: true },
-          tools: [
-            {
-              functionDeclarations: [
-                {
-                  name: 'respond_in_schema',
-                  parameters: { type: Type.OBJECT, properties: {} },
-                },
-              ],
-            },
-          ],
-          toolConfig: {
-            functionCallingConfig: { mode: FunctionCallingConfigMode.ANY },
-          },
-        },
-      };
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'user', content: 'Summarize' },
-      ]);
-      (mockConverter.convertLlmToolsToOpenAI as Mock).mockResolvedValue([
-        { type: 'function', function: { name: 'respond_in_schema' } },
-      ]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'r',
-        choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-      } as OpenAI.Chat.ChatCompletion);
-
-      await pipeline.execute(request, 'side-query:escape-hatch');
-
-      const apiCall = (mockClient.chat.completions.create as Mock).mock
-        .calls[0][0];
-      expect(apiCall.enable_thinking).toBeUndefined();
-      expect(apiCall.reasoning_effort).toBeUndefined();
-      expect(apiCall.tool_choice).toBeUndefined();
-    });
-
     it('learns required thinking from a provider error and retries once', async () => {
       mockContentGeneratorConfig = {
         ...mockContentGeneratorConfig,
-        baseUrl:
-          'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+        baseUrl: 'http://127.0.0.1:11434/v1',
         model: 'qwen3.8-max-preview',
         extra_body: { enable_thinking: true },
       } as ContentGeneratorConfig;
@@ -1645,18 +1057,15 @@ describe('ContentGenerationPipeline', () => {
 
       const calls = (mockClient.chat.completions.create as Mock).mock.calls;
       expect(calls).toHaveLength(3);
-      // The tier-native disable shape is reasoning_effort: 'none' (the
-      // boolean is not a knob this family reads), and the retry trigger
-      // must recognise it.
       expect(calls[0][0]).toMatchObject({
-        reasoning_effort: 'none',
+        chat_template_kwargs: { enable_thinking: false },
         tool_choice: 'required',
       });
       expect(calls[0][0].enable_thinking).toBeUndefined();
       expect(calls[1][0].enable_thinking).toBe(true);
-      expect(calls[1][0].tool_choice).toBeUndefined();
+      expect(calls[1][0].chat_template_kwargs).toBeUndefined();
       expect(calls[2][0].enable_thinking).toBe(true);
-      expect(calls[2][0].tool_choice).toBeUndefined();
+      expect(calls[2][0].chat_template_kwargs).toBeUndefined();
       expect(mockErrorHandler.handle).not.toHaveBeenCalled();
     });
 
@@ -1687,7 +1096,7 @@ describe('ContentGenerationPipeline', () => {
         retryChatTemplateKwargs: undefined,
       },
     ])(
-      'retries without provider-configured thinking opt-outs on non-DashScope endpoints: $name',
+      'retries without provider-configured thinking opt-outs: $name',
       async ({
         extraBody,
         initialChatTemplateKwargs,
@@ -1695,7 +1104,7 @@ describe('ContentGenerationPipeline', () => {
       }) => {
         mockContentGeneratorConfig = {
           ...mockContentGeneratorConfig,
-          baseUrl: 'https://llm.example.com/v1',
+          baseUrl: 'http://127.0.0.1:11434/v1',
           model: 'Qwen3.6-27B',
           extra_body: extraBody,
         } as ContentGeneratorConfig;
@@ -1758,8 +1167,7 @@ describe('ContentGenerationPipeline', () => {
     it('handles the retry error when required-thinking retry fails', async () => {
       mockContentGeneratorConfig = {
         ...mockContentGeneratorConfig,
-        baseUrl:
-          'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+        baseUrl: 'http://127.0.0.1:11434/v1',
         model: 'qwen3.8-max-preview',
         extra_body: { enable_thinking: true },
       } as ContentGeneratorConfig;
@@ -1852,8 +1260,7 @@ describe('ContentGenerationPipeline', () => {
       async (message) => {
         mockContentGeneratorConfig = {
           ...mockContentGeneratorConfig,
-          baseUrl:
-            'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+          baseUrl: 'http://127.0.0.1:11434/v1',
           model: 'qwen3.8-max-preview',
         } as ContentGeneratorConfig;
         mockConfig = {
@@ -2024,7 +1431,7 @@ describe('ContentGenerationPipeline', () => {
         mockContentGeneratorConfig = {
           ...mockContentGeneratorConfig,
           model: 'deepseek-v4-pro',
-          baseUrl: 'https://example.com/v1',
+          baseUrl: 'http://127.0.0.1:11434/v1',
           reasoning,
         } as ContentGeneratorConfig;
         mockCliConfig = {
@@ -2065,173 +1472,6 @@ describe('ContentGenerationPipeline', () => {
       },
     );
 
-    it.each([
-      ['moonshot', 'kimi-k3', 'max', undefined, true],
-      ['moonshot', 'kimi-k2.7-code', undefined, undefined, true],
-      ['moonshot', 'kimi-k2.7-code-highspeed', undefined, undefined, true],
-      ['moonshot', 'kimi-k2.6', undefined, 'thinking', false],
-      ['deepseek', 'deepseek-v4-pro', 'low', 'thinking', false],
-      ['deepseek', 'deepseek-v4-flash', 'low', 'thinking', false],
-      ['alibabaStandard', 'qwen3.8-max', 'low', 'reasoning_effort', false],
-      [
-        'alibabaStandard',
-        'qwen3.8-max-0902',
-        'medium',
-        'reasoning_effort',
-        false,
-      ],
-      ['alibabaStandard', 'qwen3.8-flash', 'xhigh', 'reasoning_effort', false],
-      ['alibabaStandard', 'qwen3.7-plus', undefined, 'enable_thinking', false],
-      ['alibabaStandard', 'deepseek-v4-pro', 'high', 'enable_thinking', false],
-      ['alibabaStandard', 'deepseek-v4-pro', 'max', 'enable_thinking', false],
-      [
-        'alibabaStandard',
-        'deepseek-v4-flash',
-        'high',
-        'enable_thinking',
-        false,
-      ],
-      [
-        'alibabaStandard',
-        'deepseek-v4-pro-0813',
-        'low',
-        'enable_thinking',
-        false,
-      ],
-      [
-        'alibabaStandard',
-        'deepseek-v4-flash-0731',
-        'low',
-        'enable_thinking',
-        false,
-      ],
-      ['alibabaStandard', 'kimi-k3', 'low', undefined, true],
-      ['alibabaStandard', 'kimi-k2.7-code', undefined, undefined, true],
-      ['alibabaStandard', 'kimi-k2.6', undefined, 'enable_thinking', false],
-      ['token-plan', 'qwen3.8-max', 'low', undefined, true],
-      ['token-plan', 'qwen3.8-max-preview', 'medium', undefined, true],
-      ['token-plan', 'qwen3.8-flash', 'low', 'reasoning_effort', false],
-      ['token-plan', 'deepseek-v4-pro-0813', 'low', 'enable_thinking', false],
-      ['coding-plan', 'qwen3.5-plus', undefined, 'enable_thinking', false],
-      ['coding-plan', 'kimi-k2.5', undefined, 'enable_thinking', false],
-    ] as const)(
-      'sends installed %s / %s reasoning through the real provider hook',
-      async (providerId, model, effort, disableField, mandatory) => {
-        const preset = findProviderById(providerId)!;
-        const baseUrl = resolveBaseUrl(preset);
-        const installed = buildInstallPlan(preset, {
-          baseUrl,
-          apiKey: 'test-key',
-          modelIds: [model],
-        }).modelProviders![0].models[0];
-        expect(installed.capabilities?.reasoning).toBeDefined();
-
-        for (const [mode, partial] of (
-          ['enabled', 'disabled', 'side-query'] as const
-        ).flatMap((mode) => [
-          [mode, false] as const,
-          ...(effort ? [[mode, true] as const] : []),
-        ])) {
-          mockContentGeneratorConfig = {
-            ...mockContentGeneratorConfig,
-            ...installed.generationConfig,
-            authType: AuthType.USE_OPENAI,
-            model,
-            baseUrl,
-            enableCacheControl: false,
-            reasoning:
-              mode === 'disabled' ? false : effort ? { effort } : undefined,
-          };
-          mockCliConfig = {
-            ...mockCliConfig,
-            getResolvedModelConfig: vi.fn().mockReturnValue(
-              partial
-                ? {
-                    ...installed,
-                    capabilities: { reasoning: { defaultEffort: effort } },
-                  }
-                : installed,
-            ),
-            getContentGeneratorConfig: () => mockContentGeneratorConfig,
-            getCliVersion: () => 'test',
-          } as unknown as Config;
-          const Provider =
-            providerId === 'moonshot'
-              ? DefaultOpenAICompatibleProvider
-              : providerId === 'deepseek'
-                ? DeepSeekOpenAICompatibleProvider
-                : DashScopeOpenAICompatibleProvider;
-          const provider = new Provider(
-            mockContentGeneratorConfig,
-            mockCliConfig,
-          );
-          vi.spyOn(provider, 'buildClient').mockReturnValue(mockClient);
-          pipeline = new ContentGenerationPipeline({
-            ...mockConfig,
-            provider,
-            cliConfig: mockCliConfig,
-            contentGeneratorConfig: mockContentGeneratorConfig,
-          });
-          (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-            { role: 'user', content: 'Hello' },
-          ]);
-          (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-            new GenerateContentResponse(),
-          );
-          (mockClient.chat.completions.create as Mock).mockResolvedValue({
-            id: 'r',
-            choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-          });
-          await pipeline.execute(
-            {
-              model,
-              contents: [{ role: 'user', parts: [{ text: 'Hello' }] }],
-              ...(mode === 'side-query'
-                ? { config: { thinkingConfig: { includeThoughts: false } } }
-                : {}),
-            },
-            'preset-test',
-          );
-          const wire = (
-            mockClient.chat.completions.create as Mock
-          ).mock.calls.at(-1)![0];
-          expect(wire.reasoning).toBeUndefined();
-          if (partial && mandatory && mode === 'side-query')
-            expect(wire.reasoning_effort).toBeUndefined();
-          if (mode === 'enabled') {
-            expect(wire.reasoning_effort).toBe(effort);
-            if (
-              providerId === 'alibabaStandard' &&
-              model === 'deepseek-v4-pro'
-            ) {
-              expect(wire.enable_thinking).toBeUndefined();
-              expect(wire.thinking).toBeUndefined();
-            }
-          } else if (!mandatory) {
-            expect(wire.reasoning_effort).toBe(
-              disableField === 'reasoning_effort' ? 'none' : undefined,
-            );
-            expect(wire.enable_thinking).toBe(
-              disableField === 'enable_thinking' ? false : undefined,
-            );
-            expect(wire.thinking).toEqual(
-              disableField === 'thinking' ? { type: 'disabled' } : undefined,
-            );
-          } else {
-            expect(wire.reasoning_effort).not.toBe('none');
-            expect(wire.enable_thinking).not.toBe(false);
-            expect(wire.thinking?.type).not.toBe('disabled');
-          }
-          if (
-            providerId === 'moonshot' ||
-            disableField === 'reasoning_effort'
-          ) {
-            expect(wire.enable_thinking).toBeUndefined();
-          }
-        }
-      },
-    );
-
     // Shared wiring for the capability cases below: an identity provider hook
     // so the assertions read the pipeline's own output, and a resolved model
     // config carrying whatever capability the case declares.
@@ -2243,7 +1483,7 @@ describe('ContentGenerationPipeline', () => {
       mockContentGeneratorConfig = {
         ...mockContentGeneratorConfig,
         model,
-        baseUrl: 'https://example.com/v1',
+        baseUrl: 'http://127.0.0.1:11434/v1',
         ...configOverrides,
       } as ContentGeneratorConfig;
       mockCliConfig = {
@@ -2292,16 +1532,6 @@ describe('ContentGenerationPipeline', () => {
         { thinking: { type: 'disabled' } },
       ],
       [
-        'dashscope-effort',
-        { reasoning_effort: 'medium' },
-        { reasoning_effort: 'none' },
-      ],
-      [
-        'dashscope-thinking',
-        { enable_thinking: true },
-        { enable_thinking: false },
-      ],
-      [
         'qwen-chat-template',
         { chat_template_kwargs: { enable_thinking: true } },
         { chat_template_kwargs: { enable_thinking: false } },
@@ -2317,8 +1547,7 @@ describe('ContentGenerationPipeline', () => {
         );
         const capability = {
           profile,
-          ...(profile === 'dashscope-thinking' ||
-          profile === 'qwen-chat-template'
+          ...(profile === 'qwen-chat-template'
             ? {}
             : { efforts: ['low', 'medium', 'high'], defaultEffort: 'medium' }),
         };
@@ -2347,7 +1576,7 @@ describe('ContentGenerationPipeline', () => {
       },
     );
 
-    it('preserves template siblings and clears incompatible budget on declared off requests', async () => {
+    it('preserves template siblings on declared off requests', async () => {
       (mockProvider.buildRequest as Mock).mockImplementation((request) =>
         new DefaultOpenAICompatibleProvider(
           mockContentGeneratorConfig,
@@ -2370,117 +1599,7 @@ describe('ContentGenerationPipeline', () => {
         enable_thinking: false,
       });
       expect(template['enable_thinking']).toBeUndefined();
-      const effort = await executeWithCapability(
-        { defaultEffort: 'medium' },
-        {
-          baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-          reasoning: false,
-          extra_body: { thinking_budget: 4096, enable_thinking: true },
-        },
-        'qwen3.8-max',
-      );
-      expect(effort['reasoning_effort']).toBe('none');
-      expect(effort['thinking_budget']).toBeUndefined();
-      expect(effort['enable_thinking']).toBeUndefined();
     });
-
-    it.each(['samplingParams', 'extra_body'] as const)(
-      'keeps native DeepSeek %s reasoning projection with a profile',
-      async (source) => {
-        (mockProvider.buildRequest as Mock).mockImplementation((request) =>
-          new DeepSeekOpenAICompatibleProvider(
-            mockContentGeneratorConfig,
-            mockCliConfig,
-          ).buildRequest(request, 'test'),
-        );
-        const wire = await executeWithCapability(
-          {
-            profile: 'deepseek-openai',
-            efforts: ['high', 'max'],
-            defaultEffort: 'high',
-          },
-          {
-            baseUrl: 'https://api.deepseek.com/v1',
-            [source]: { reasoning: { effort: 'max' } },
-          },
-        );
-        expect(wire['reasoning_effort']).toBe('max');
-        expect(wire['reasoning']).toBeUndefined();
-      },
-    );
-
-    it.each([
-      ['https://api.deepseek.com/v1', 'openai-effort', 'reasoning_content', ''],
-      [
-        'https://api.cerebras.ai/v1',
-        'deepseek-openai',
-        'reasoning_content',
-        undefined,
-      ],
-      [
-        'https://api.mistral.ai/v1',
-        'deepseek-openai',
-        'reasoning_content',
-        undefined,
-      ],
-      [
-        'https://api.fireworks.ai/inference/v1',
-        'qwen-chat-template',
-        'reasoning',
-        undefined,
-      ],
-      [
-        'https://api.xiaomimimo.com/v1',
-        'openai-effort',
-        'reasoning_content',
-        '',
-      ],
-    ] as const)(
-      'preserves native history constraints on %s with %s',
-      (baseUrl, profile, field, expected) => {
-        const config = {
-          ...mockContentGeneratorConfig,
-          authType: AuthType.USE_OPENAI,
-          model: 'alias',
-          baseUrl,
-        };
-        const cli = {
-          ...mockCliConfig,
-          getResolvedModelConfig: vi.fn().mockReturnValue({
-            capabilities: {
-              reasoning: {
-                profile,
-                ...(profile === 'qwen-chat-template'
-                  ? {}
-                  : {
-                      efforts: ['low', 'medium', 'high'],
-                      defaultEffort: 'medium',
-                    }),
-              },
-            },
-          }),
-        };
-        const provider = determineProvider(config, cli as unknown as Config);
-        const result = provider.buildRequest(
-          {
-            model: 'alias',
-            messages: [
-              {
-                role: 'assistant',
-                content: 'answer',
-                ...(expected === undefined
-                  ? { reasoning_content: 'trace' }
-                  : {}),
-              },
-            ],
-          } as OpenAI.Chat.ChatCompletionCreateParams,
-          'test',
-        );
-        if (expected === undefined)
-          expect(result.messages[0]).not.toHaveProperty(field);
-        else expect(result.messages[0]).toHaveProperty(field, expected);
-      },
-    );
 
     it('keeps explicit sampling reasoning above a configured default', async () => {
       const capability = {
@@ -2507,31 +1626,6 @@ describe('ContentGenerationPipeline', () => {
         reasoning: { budget_tokens: 8192 },
       });
     });
-
-    it.each([
-      ['qwen3.8-max', 'https://dashscope.aliyuncs.com/compatible-mode/v1'],
-      ['openai/gpt-5.4', 'https://openrouter.ai/api/v1'],
-    ])(
-      'resolves %s default before shaping its request',
-      async (model, baseUrl) => {
-        const wire = await executeWithCapability(
-          { defaultEffort: 'medium' },
-          {
-            baseUrl,
-            extra_body: model.startsWith('openai/')
-              ? undefined
-              : { reasoning_effort: null },
-          },
-          model,
-        );
-        if (model.startsWith('openai/'))
-          expect(wire['reasoning']).toEqual({ effort: 'medium' });
-        else {
-          expect(wire['reasoning_effort']).toBe('medium');
-          expect(wire['reasoning']).toBeUndefined();
-        }
-      },
-    );
 
     it.each([
       ['enable_thinking', false, undefined, undefined],
@@ -2628,141 +1722,13 @@ describe('ContentGenerationPipeline', () => {
       });
       expect(apiCall['reasoning']).toEqual({ effort: 'xhigh' });
       expect(apiCall['reasoning_effort']).toBeUndefined();
-
-      const openRouterCall = await executeWithCapability(capability, {
-        baseUrl: 'https://openrouter.ai/api/v1',
-        reasoning: { effort: 'high' },
-        samplingParams: undefined,
-      });
-      expect(openRouterCall['reasoning']).toEqual({ effort: 'high' });
-      expect(openRouterCall['reasoning_effort']).toBeUndefined();
     });
 
-    it('emits thinking:disabled on DeepSeek hostname when includeThoughts is false', async () => {
-      // DeepSeek V4+ defaults thinking.type to 'enabled' — just stripping
-      // the effort knob keeps thinking on, leaking latency/cost into side
-      // queries. Verify the explicit disable signal is emitted.
+    it('does NOT emit thinking:disabled for a DeepSeek model without a declared disable field', async () => {
+      // The thinking param is a wire shape some servers (sglang/vllm) may
+      // not accept, so the model name alone never triggers it.
       mockContentGeneratorConfig = {
         ...mockContentGeneratorConfig,
-        baseUrl: 'https://api.deepseek.com/v1',
-        model: 'deepseek-v4-pro',
-      } as ContentGeneratorConfig;
-      mockConfig = {
-        ...mockConfig,
-        contentGeneratorConfig: mockContentGeneratorConfig,
-      };
-      pipeline = new ContentGenerationPipeline(mockConfig);
-
-      const request: GenerateContentParameters = {
-        model: 'test-model',
-        contents: [{ parts: [{ text: 'Suggest next' }], role: 'user' }],
-        config: { thinkingConfig: { includeThoughts: false } },
-      };
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'user', content: 'Suggest next' },
-      ]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'r',
-        choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-      } as OpenAI.Chat.ChatCompletion);
-
-      await pipeline.execute(request, 'forked_query');
-
-      const apiCall = (mockClient.chat.completions.create as Mock).mock
-        .calls[0][0];
-      expect(apiCall.thinking).toEqual({ type: 'disabled' });
-      expect(apiCall.reasoning_effort).toBeUndefined();
-    });
-
-    it('emits thinking:disabled on DeepSeek hostname when reasoning is configured to false', async () => {
-      // Config-level opt-out should also disable DeepSeek thinking, not
-      // just remove the effort knob.
-      mockContentGeneratorConfig = {
-        ...mockContentGeneratorConfig,
-        baseUrl: 'https://api.deepseek.com/v1',
-        model: 'deepseek-v4-pro',
-        reasoning: false,
-      } as ContentGeneratorConfig;
-      mockConfig = {
-        ...mockConfig,
-        contentGeneratorConfig: mockContentGeneratorConfig,
-      };
-      pipeline = new ContentGenerationPipeline(mockConfig);
-
-      const request: GenerateContentParameters = {
-        model: 'test-model',
-        contents: [{ parts: [{ text: 'Hello' }], role: 'user' }],
-      };
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'user', content: 'Hello' },
-      ]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'r',
-        choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-      } as OpenAI.Chat.ChatCompletion);
-
-      await pipeline.execute(request, 'main');
-
-      const apiCall = (mockClient.chat.completions.create as Mock).mock
-        .calls[0][0];
-      expect(apiCall.thinking).toEqual({ type: 'disabled' });
-      expect(apiCall.reasoning_effort).toBeUndefined();
-    });
-
-    it('does NOT emit thinking:disabled on a non-DeepSeek hostname', async () => {
-      // The disable shape is DeepSeek-specific. Pushing it at strict
-      // OpenAI-compat backends could trip an unknown-key 400.
-      mockContentGeneratorConfig = {
-        ...mockContentGeneratorConfig,
-        baseUrl: 'https://api.openai.com/v1',
-        model: 'gpt-5',
-      } as ContentGeneratorConfig;
-      mockConfig = {
-        ...mockConfig,
-        contentGeneratorConfig: mockContentGeneratorConfig,
-      };
-      pipeline = new ContentGenerationPipeline(mockConfig);
-
-      const request: GenerateContentParameters = {
-        model: 'test-model',
-        contents: [{ parts: [{ text: 'Suggest' }], role: 'user' }],
-        config: { thinkingConfig: { includeThoughts: false } },
-      };
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'user', content: 'Suggest' },
-      ]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'r',
-        choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-      } as OpenAI.Chat.ChatCompletion);
-
-      await pipeline.execute(request, 'forked_query');
-
-      const apiCall = (mockClient.chat.completions.create as Mock).mock
-        .calls[0][0];
-      expect(apiCall.thinking).toBeUndefined();
-    });
-
-    it('does NOT emit thinking:disabled on self-hosted DeepSeek (model-name fallback only)', async () => {
-      // Mirror of the round-7 reasoning_effort decision: the broader
-      // model-name detection covers self-hosted DeepSeek for content
-      // flattening, but the V4 thinking param is a wire-shape that
-      // self-hosted infra (sglang/vllm) may not accept. Hostname-only.
-      mockContentGeneratorConfig = {
-        ...mockContentGeneratorConfig,
-        baseUrl: 'https://my-sglang.example.com:8000/v1',
         model: 'deepseek-v4-pro',
       } as ContentGeneratorConfig;
       mockConfig = {
@@ -2795,494 +1761,12 @@ describe('ContentGenerationPipeline', () => {
       expect(apiCall.thinking).toBeUndefined();
     });
 
-    it('emits reasoning.enabled=false on OpenRouter hostname when includeThoughts is false', async () => {
-      // Regression for #9757: OpenRouter's native thinking switch is the
-      // provider-level `reasoning` parameter. The disable path emits only
-      // shapes OpenRouter ignores (chat_template_kwargs for qwen-family
-      // models) and strips any `reasoning` object, so thinking-capable
-      // models routed through OpenRouter keep thinking enabled. The
-      // AUTO-mode classifier's stage-1 side query (256-token budget,
-      // forced respond_in_schema tool call, includeThoughts: false) then
-      // spends its whole budget on reasoning, never emits the tool call,
-      // and fail-closes with "Classifier stage 1 unavailable". Verify the
-      // OpenRouter-native disable shape is emitted.
-      mockContentGeneratorConfig = {
-        ...mockContentGeneratorConfig,
-        baseUrl: 'https://openrouter.ai/api/v1',
-        model: 'qwen/qwen3.8-27b',
-      } as ContentGeneratorConfig;
-      mockConfig = {
-        ...mockConfig,
-        contentGeneratorConfig: mockContentGeneratorConfig,
-      };
-      pipeline = new ContentGenerationPipeline(mockConfig);
-
-      const request: GenerateContentParameters = {
-        model: 'qwen/qwen3.8-27b',
-        contents: [{ parts: [{ text: 'Classify action' }], role: 'user' }],
-        config: { thinkingConfig: { includeThoughts: false } },
-      };
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'user', content: 'Classify action' },
-      ]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'r',
-        choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-      } as OpenAI.Chat.ChatCompletion);
-
-      await pipeline.execute(request, 'side-query:permission-classifier');
-
-      const apiCall = (mockClient.chat.completions.create as Mock).mock
-        .calls[0][0];
-      expect(apiCall.reasoning).toEqual({ enabled: false });
-    });
-
-    it('does NOT emit reasoning.enabled=false on OpenRouter when thinking is enabled', async () => {
-      mockContentGeneratorConfig = {
-        ...mockContentGeneratorConfig,
-        baseUrl: 'https://openrouter.ai/api/v1',
-        model: 'qwen/qwen3.8-27b',
-      } as ContentGeneratorConfig;
-      mockConfig = {
-        ...mockConfig,
-        contentGeneratorConfig: mockContentGeneratorConfig,
-      };
-      pipeline = new ContentGenerationPipeline(mockConfig);
-
-      const request: GenerateContentParameters = {
-        model: 'qwen/qwen3.8-27b',
-        contents: [{ parts: [{ text: 'Hello' }], role: 'user' }],
-      };
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'user', content: 'Hello' },
-      ]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'r',
-        choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-      } as OpenAI.Chat.ChatCompletion);
-
-      await pipeline.execute(request, 'main');
-
-      const apiCall = (mockClient.chat.completions.create as Mock).mock
-        .calls[0][0];
-      expect(apiCall.reasoning).toBeUndefined();
-    });
-
-    it('emits reasoning.enabled=false on OpenRouter hostname when reasoning is configured to false', async () => {
-      // Config-level opt-out (`reasoning: false`) must also land OpenRouter's
-      // native disable shape, matching the DeepSeek hostname branch.
-      mockContentGeneratorConfig = {
-        ...mockContentGeneratorConfig,
-        baseUrl: 'https://openrouter.ai/api/v1',
-        model: 'qwen/qwen3.8-27b',
-        reasoning: false,
-      } as ContentGeneratorConfig;
-      mockConfig = {
-        ...mockConfig,
-        contentGeneratorConfig: mockContentGeneratorConfig,
-      };
-      pipeline = new ContentGenerationPipeline(mockConfig);
-
-      const request: GenerateContentParameters = {
-        model: 'qwen/qwen3.8-27b',
-        contents: [{ parts: [{ text: 'Hello' }], role: 'user' }],
-      };
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'user', content: 'Hello' },
-      ]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'r',
-        choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-      } as OpenAI.Chat.ChatCompletion);
-
-      await pipeline.execute(request, 'main');
-
-      const apiCall = (mockClient.chat.completions.create as Mock).mock
-        .calls[0][0];
-      expect(apiCall.reasoning).toEqual({ enabled: false });
-    });
-
-    it('emits reasoning.enabled=false on OpenRouter for non-qwen models too', async () => {
-      // `reasoning` is an OpenRouter provider-level parameter the gateway
-      // routes to any model that supports it — not a qwen-family wire field
-      // like `enable_thinking`. Gating on the model family would leave every
-      // other thinking model on OpenRouter broken the same way.
-      mockContentGeneratorConfig = {
-        ...mockContentGeneratorConfig,
-        baseUrl: 'https://openrouter.ai/api/v1',
-        model: 'deepseek/deepseek-r1',
-      } as ContentGeneratorConfig;
-      mockConfig = {
-        ...mockConfig,
-        contentGeneratorConfig: mockContentGeneratorConfig,
-      };
-      pipeline = new ContentGenerationPipeline(mockConfig);
-
-      const request: GenerateContentParameters = {
-        model: 'deepseek/deepseek-r1',
-        contents: [{ parts: [{ text: 'Classify action' }], role: 'user' }],
-        config: { thinkingConfig: { includeThoughts: false } },
-      };
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'user', content: 'Classify action' },
-      ]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'r',
-        choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-      } as OpenAI.Chat.ChatCompletion);
-
-      await pipeline.execute(request, 'side-query:permission-classifier');
-
-      const apiCall = (mockClient.chat.completions.create as Mock).mock
-        .calls[0][0];
-      expect(apiCall.reasoning).toEqual({ enabled: false });
-    });
-
-    it('does NOT emit reasoning.enabled=false for thinking-mandatory models on OpenRouter', async () => {
-      // thinkingMandatory marks models that reject a thinking-disable shape
-      // with a 400; the exemption must hold on OpenRouter too.
-      mockContentGeneratorConfig = {
-        ...mockContentGeneratorConfig,
-        baseUrl: 'https://openrouter.ai/api/v1',
-        model: 'qwen/qwen3.8-27b',
-        thinkingMandatory: true,
-      } as ContentGeneratorConfig;
-      mockConfig = {
-        ...mockConfig,
-        contentGeneratorConfig: mockContentGeneratorConfig,
-      };
-      pipeline = new ContentGenerationPipeline(mockConfig);
-
-      const request: GenerateContentParameters = {
-        model: 'qwen/qwen3.8-27b',
-        contents: [{ parts: [{ text: 'Classify action' }], role: 'user' }],
-        config: { thinkingConfig: { includeThoughts: false } },
-      };
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'user', content: 'Classify action' },
-      ]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'r',
-        choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-      } as OpenAI.Chat.ChatCompletion);
-
-      await pipeline.execute(request, 'forked_query');
-
-      const apiCall = (mockClient.chat.completions.create as Mock).mock
-        .calls[0][0];
-      expect(apiCall.reasoning).toBeUndefined();
-    });
-
-    it('does NOT emit reasoning on a non-OpenRouter OpenAI-compatible endpoint', async () => {
-      // The disable shape is OpenRouter-specific wire shape; other
-      // OpenAI-compatible gateways (vLLM/SGLang/strict-compat) must not
-      // receive the extra `reasoning` field.
-      mockContentGeneratorConfig = {
-        ...mockContentGeneratorConfig,
-        baseUrl: 'https://my-vllm.example.com:8000/v1',
-        model: 'qwen/qwen3-32b',
-      } as ContentGeneratorConfig;
-      mockConfig = {
-        ...mockConfig,
-        contentGeneratorConfig: mockContentGeneratorConfig,
-      };
-      pipeline = new ContentGenerationPipeline(mockConfig);
-
-      const request: GenerateContentParameters = {
-        model: 'qwen/qwen3-32b',
-        contents: [{ parts: [{ text: 'Classify action' }], role: 'user' }],
-        config: { thinkingConfig: { includeThoughts: false } },
-      };
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'user', content: 'Classify action' },
-      ]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'r',
-        choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-      } as OpenAI.Chat.ChatCompletion);
-
-      await pipeline.execute(request, 'forked_query');
-
-      const apiCall = (mockClient.chat.completions.create as Mock).mock
-        .calls[0][0];
-      expect(apiCall.reasoning).toBeUndefined();
-    });
-
-    it('does NOT treat lookalike hostnames as OpenRouter', async () => {
-      // Hostname match must be exact (openrouter.ai or *.openrouter.ai); a
-      // substring check would false-positive on hostile hosts.
-      mockContentGeneratorConfig = {
-        ...mockContentGeneratorConfig,
-        baseUrl: 'https://openrouter.ai.evil.com/v1',
-        model: 'qwen/qwen3.8-27b',
-      } as ContentGeneratorConfig;
-      mockConfig = {
-        ...mockConfig,
-        contentGeneratorConfig: mockContentGeneratorConfig,
-      };
-      pipeline = new ContentGenerationPipeline(mockConfig);
-
-      const request: GenerateContentParameters = {
-        model: 'qwen/qwen3.8-27b',
-        contents: [{ parts: [{ text: 'Classify action' }], role: 'user' }],
-        config: { thinkingConfig: { includeThoughts: false } },
-      };
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'user', content: 'Classify action' },
-      ]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'r',
-        choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-      } as OpenAI.Chat.ChatCompletion);
-
-      await pipeline.execute(request, 'forked_query');
-
-      const apiCall = (mockClient.chat.completions.create as Mock).mock
-        .calls[0][0];
-      expect(apiCall.reasoning).toBeUndefined();
-    });
-
-    it('does NOT emit reasoning on the official OpenAI endpoint when includeThoughts is false', async () => {
-      // The new OpenRouter branch must not leak onto api.openai.com, which
-      // has its own reasoning shapes and rejects unknown fields.
-      mockContentGeneratorConfig = {
-        ...mockContentGeneratorConfig,
-        baseUrl: 'https://api.openai.com/v1',
-        model: 'gpt-5',
-      } as ContentGeneratorConfig;
-      mockConfig = {
-        ...mockConfig,
-        contentGeneratorConfig: mockContentGeneratorConfig,
-      };
-      pipeline = new ContentGenerationPipeline(mockConfig);
-
-      const request: GenerateContentParameters = {
-        model: 'gpt-5',
-        contents: [{ parts: [{ text: 'Classify action' }], role: 'user' }],
-        config: { thinkingConfig: { includeThoughts: false } },
-      };
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'user', content: 'Classify action' },
-      ]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'r',
-        choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-      } as OpenAI.Chat.ChatCompletion);
-
-      await pipeline.execute(request, 'forked_query');
-
-      const apiCall = (mockClient.chat.completions.create as Mock).mock
-        .calls[0][0];
-      expect(apiCall.reasoning).toBeUndefined();
-    });
-
-    it('emits enable_thinking:false on DashScope hostname when includeThoughts is false', async () => {
-      // Regression for #4501: qwen3 hybrid models (e.g. qwen3.5-flash)
-      // default to thinking-on. Provider buildRequest never auto-injects
-      // `enable_thinking`, so a previous guarded `'enable_thinking' in typed`
-      // check never fired and side-queries burned reasoning tokens (24-95x
-      // output bloat in production). The disable must be emitted explicitly.
-      mockContentGeneratorConfig = {
-        ...mockContentGeneratorConfig,
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        model: 'qwen3.5-flash',
-      } as ContentGeneratorConfig;
-      mockConfig = {
-        ...mockConfig,
-        contentGeneratorConfig: mockContentGeneratorConfig,
-      };
-      pipeline = new ContentGenerationPipeline(mockConfig);
-
-      // Provider passes the request through unchanged — simulates the
-      // common case where the user has not configured
-      // `extra_body.enable_thinking` (so the field never appears on the
-      // wire body unless we add it here).
-      const request: GenerateContentParameters = {
-        model: 'qwen3.5-flash',
-        contents: [{ parts: [{ text: 'Summarize' }], role: 'user' }],
-        config: { thinkingConfig: { includeThoughts: false } },
-      };
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'user', content: 'Summarize' },
-      ]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'r',
-        choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-      } as OpenAI.Chat.ChatCompletion);
-
-      await pipeline.execute(request, 'forked_query');
-
-      const apiCall = (mockClient.chat.completions.create as Mock).mock
-        .calls[0][0];
-      expect(apiCall.enable_thinking).toBe(false);
-    });
-
-    it('emits enable_thinking:false on DashScope hostname when reasoning is configured to false', async () => {
-      // Config-level opt-out (`reasoning: false`) should also disable
-      // qwen3 thinking, mirroring the DeepSeek pair above.
-      mockContentGeneratorConfig = {
-        ...mockContentGeneratorConfig,
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        model: 'qwen3.5-flash',
-        reasoning: false,
-      } as ContentGeneratorConfig;
-      mockConfig = {
-        ...mockConfig,
-        contentGeneratorConfig: mockContentGeneratorConfig,
-      };
-      pipeline = new ContentGenerationPipeline(mockConfig);
-
-      const request: GenerateContentParameters = {
-        model: 'qwen3.5-flash',
-        contents: [{ parts: [{ text: 'Hello' }], role: 'user' }],
-      };
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'user', content: 'Hello' },
-      ]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'r',
-        choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-      } as OpenAI.Chat.ChatCompletion);
-
-      await pipeline.execute(request, 'main');
-
-      const apiCall = (mockClient.chat.completions.create as Mock).mock
-        .calls[0][0];
-      expect(apiCall.enable_thinking).toBe(false);
-    });
-
-    it('emits enable_thinking:false on QWEN_OAUTH with the default coder-model', async () => {
-      // QWEN_OAUTH is the default auth flow for first-time users and
-      // ships with `model: 'coder-model'` (DEFAULT_QWEN_MODEL in
-      // config/models.ts — aliased to Qwen 3.6 Plus hybrid). The string
-      // doesn't start with `qwen`, so the gate must special-case it;
-      // otherwise the exact regression that #4501 fixes (side-queries
-      // burning reasoning tokens on the default flow) remains live.
-      mockContentGeneratorConfig = {
-        ...mockContentGeneratorConfig,
-        authType: AuthType.QWEN_OAUTH,
-        baseUrl: 'https://some-oauth-issued-endpoint.example/v1',
-        model: 'coder-model',
-      } as ContentGeneratorConfig;
-      mockConfig = {
-        ...mockConfig,
-        contentGeneratorConfig: mockContentGeneratorConfig,
-      };
-      pipeline = new ContentGenerationPipeline(mockConfig);
-
-      const request: GenerateContentParameters = {
-        model: 'coder-model',
-        contents: [{ parts: [{ text: 'Hi' }], role: 'user' }],
-        config: { thinkingConfig: { includeThoughts: false } },
-      };
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'user', content: 'Hi' },
-      ]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'r',
-        choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-      } as OpenAI.Chat.ChatCompletion);
-
-      await pipeline.execute(request, 'forked_query');
-
-      const apiCall = (mockClient.chat.completions.create as Mock).mock
-        .calls[0][0];
-      expect(apiCall.enable_thinking).toBe(false);
-    });
-
-    it('emits enable_thinking:false on internal alibaba-inc.com hostname', async () => {
-      // Internal Alibaba domains proxy to DashScope-compatible APIs and
-      // are treated as DashScope by design (provider/dashscope.ts:75-78).
-      // Cover the internal-origin path explicitly so a future tightening
-      // of the hostname rules does not silently drop coverage for
-      // internal users.
-      mockContentGeneratorConfig = {
-        ...mockContentGeneratorConfig,
-        baseUrl: 'https://gateway.alibaba-inc.com/v1',
-        model: 'qwen3.5-flash',
-      } as ContentGeneratorConfig;
-      mockConfig = {
-        ...mockConfig,
-        contentGeneratorConfig: mockContentGeneratorConfig,
-      };
-      pipeline = new ContentGenerationPipeline(mockConfig);
-
-      const request: GenerateContentParameters = {
-        model: 'qwen3.5-flash',
-        contents: [{ parts: [{ text: 'Hi' }], role: 'user' }],
-        config: { thinkingConfig: { includeThoughts: false } },
-      };
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'user', content: 'Hi' },
-      ]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'r',
-        choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-      } as OpenAI.Chat.ChatCompletion);
-
-      await pipeline.execute(request, 'forked_query');
-
-      const apiCall = (mockClient.chat.completions.create as Mock).mock
-        .calls[0][0];
-      expect(apiCall.enable_thinking).toBe(false);
-    });
-
-    it('does NOT emit enable_thinking on a non-DashScope hostname', async () => {
+    it('does NOT emit a thinking switch for a non-qwen model', async () => {
       // `enable_thinking` is a qwen-specific extension. Pushing it at a
       // strict OpenAI-compatible backend could trip an unknown-key 400
-      // and would also pollute logs with a meaningless field. Mirror of
-      // the DeepSeek negative test above.
+      // and would also pollute logs with a meaningless field.
       mockContentGeneratorConfig = {
         ...mockContentGeneratorConfig,
-        baseUrl: 'https://api.openai.com/v1',
         model: 'gpt-5',
       } as ContentGeneratorConfig;
       mockConfig = {
@@ -3313,18 +1797,19 @@ describe('ContentGenerationPipeline', () => {
       const apiCall = (mockClient.chat.completions.create as Mock).mock
         .calls[0][0];
       expect(apiCall.enable_thinking).toBeUndefined();
+      expect(apiCall.chat_template_kwargs).toBeUndefined();
     });
 
-    it('disables qwen thinking via chat_template_kwargs on a non-DashScope endpoint (vLLM/SGLang)', async () => {
-      // Self-hosted OpenAI-compatible servers render the chat template
-      // server-side and read the thinking switch from `chat_template_kwargs`,
-      // silently ignoring a top-level `enable_thinking`. A qwen model on such
-      // an endpoint must therefore get the switch nested, not top-level — and
-      // any top-level `enable_thinking: true` a provider preset injected via
-      // extra_body must be stripped so it can't contradict the opt-out.
+    it('disables qwen thinking via chat_template_kwargs (vLLM/SGLang)', async () => {
+      // Local OpenAI-compatible servers render the chat template server-side
+      // and read the thinking switch from `chat_template_kwargs`, silently
+      // ignoring a top-level `enable_thinking`. A qwen model must therefore
+      // get the switch nested, not top-level — and any top-level
+      // `enable_thinking: true` injected via extra_body must be stripped so
+      // it can't contradict the opt-out.
       mockContentGeneratorConfig = {
         ...mockContentGeneratorConfig,
-        baseUrl: 'https://llm.example.com/v1',
+        baseUrl: 'http://127.0.0.1:11434/v1',
         model: 'Qwen3.6-27B',
       } as ContentGeneratorConfig;
       mockConfig = {
@@ -3363,53 +1848,13 @@ describe('ContentGenerationPipeline', () => {
       expect(apiCall.enable_thinking).toBeUndefined();
     });
 
-    it('disables coder-model thinking via chat_template_kwargs on a non-DashScope endpoint', async () => {
-      // `coder-model` is the QWEN_OAUTH default, but a user can point it at a
-      // self-hosted endpoint. The `model === 'coder-model'` arm must reach the
-      // non-DashScope chat_template_kwargs path just like a `qwen*` model.
-      mockContentGeneratorConfig = {
-        ...mockContentGeneratorConfig,
-        baseUrl: 'https://llm.example.com/v1',
-        model: 'coder-model',
-      } as ContentGeneratorConfig;
-      mockConfig = {
-        ...mockConfig,
-        contentGeneratorConfig: mockContentGeneratorConfig,
-      };
-      pipeline = new ContentGenerationPipeline(mockConfig);
-
-      const request: GenerateContentParameters = {
-        model: 'coder-model',
-        contents: [{ parts: [{ text: 'Suggest' }], role: 'user' }],
-        config: { thinkingConfig: { includeThoughts: false } },
-      };
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'user', content: 'Suggest' },
-      ]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'r',
-        choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-      } as OpenAI.Chat.ChatCompletion);
-
-      await pipeline.execute(request, 'forked_query');
-
-      const apiCall = (mockClient.chat.completions.create as Mock).mock
-        .calls[0][0];
-      expect(apiCall.chat_template_kwargs).toEqual({ enable_thinking: false });
-      expect(apiCall.enable_thinking).toBeUndefined();
-    });
-
-    it('merges enable_thinking into pre-existing chat_template_kwargs on a non-DashScope endpoint', async () => {
-      // The non-DashScope path spreads any existing `chat_template_kwargs`
+    it('merges enable_thinking into pre-existing chat_template_kwargs', async () => {
+      // The disable path spreads any existing `chat_template_kwargs`
       // before appending `enable_thinking: false`. Guard the merge so a future
       // refactor can't silently drop user-configured kwargs.
       mockContentGeneratorConfig = {
         ...mockContentGeneratorConfig,
-        baseUrl: 'https://llm.example.com/v1',
+        baseUrl: 'http://127.0.0.1:11434/v1',
         model: 'Qwen3.6-27B',
       } as ContentGeneratorConfig;
       mockConfig = {
@@ -3450,55 +1895,13 @@ describe('ContentGenerationPipeline', () => {
       });
     });
 
-    it('does NOT emit enable_thinking on a non-qwen model routed through DashScope', async () => {
-      // DashScope's compatible-mode endpoint routes multiple model families
-      // (qwen3, GLM, DeepSeek). Hostname alone is not enough — GLM uses
-      // `extra_body.thinking.enabled` and DeepSeek-on-DashScope uses
-      // `thinking: { type: 'disabled' }`, so sending `enable_thinking` is
-      // at best a no-op and at worst forwarded upstream and rejected.
-      mockContentGeneratorConfig = {
-        ...mockContentGeneratorConfig,
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        model: 'glm-5',
-      } as ContentGeneratorConfig;
-      mockConfig = {
-        ...mockConfig,
-        contentGeneratorConfig: mockContentGeneratorConfig,
-      };
-      pipeline = new ContentGenerationPipeline(mockConfig);
-
-      const request: GenerateContentParameters = {
-        model: 'glm-5',
-        contents: [{ parts: [{ text: 'Summarize' }], role: 'user' }],
-        config: { thinkingConfig: { includeThoughts: false } },
-      };
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'user', content: 'Summarize' },
-      ]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'r',
-        choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-      } as OpenAI.Chat.ChatCompletion);
-
-      await pipeline.execute(request, 'forked_query');
-
-      const apiCall = (mockClient.chat.completions.create as Mock).mock
-        .calls[0][0];
-      expect(apiCall.enable_thinking).toBeUndefined();
-    });
-
     it('gates on the wire model, not config: qwen config + non-qwen request.model does NOT emit', async () => {
       // buildRequest ships `context.model` (= request.model || config.model).
       // A qwen *config* with a non-qwen *request* model must gate on the
       // request model — otherwise the qwen-only field leaks to the non-qwen
-      // routing that is actually on the wire (e.g. GLM rejecting it upstream).
+      // model that is actually on the wire.
       mockContentGeneratorConfig = {
         ...mockContentGeneratorConfig,
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
         model: 'qwen3.5-flash',
       } as ContentGeneratorConfig;
       mockConfig = {
@@ -3529,6 +1932,7 @@ describe('ContentGenerationPipeline', () => {
       const apiCall = (mockClient.chat.completions.create as Mock).mock
         .calls[0][0];
       expect(apiCall.enable_thinking).toBeUndefined();
+      expect(apiCall.chat_template_kwargs).toBeUndefined();
     });
 
     it('gates on the wire model, not config: non-qwen config + qwen request.model emits false', async () => {
@@ -3537,7 +1941,6 @@ describe('ContentGenerationPipeline', () => {
       // would otherwise keep thinking-on (the #4501 regression).
       mockContentGeneratorConfig = {
         ...mockContentGeneratorConfig,
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
         model: 'glm-5',
       } as ContentGeneratorConfig;
       mockConfig = {
@@ -3567,49 +1970,7 @@ describe('ContentGenerationPipeline', () => {
 
       const apiCall = (mockClient.chat.completions.create as Mock).mock
         .calls[0][0];
-      expect(apiCall.enable_thinking).toBe(false);
-    });
-
-    it('emits enable_thinking:false when baseUrl is unset (DashScope default)', async () => {
-      // `isDashScopeProvider` treats a missing baseUrl as DashScope
-      // (`dashscope.ts:49` returns true for `!baseUrl`). A fresh install
-      // that hasn't run the setup wizard hits this path. All other
-      // positive tests above explicitly set baseUrl, so pin this
-      // implicit-default branch separately to detect future tightening
-      // of the `!baseUrl` early-return.
-      mockContentGeneratorConfig = {
-        ...mockContentGeneratorConfig,
-        model: 'qwen3.5-flash',
-      } as ContentGeneratorConfig;
-      delete (mockContentGeneratorConfig as { baseUrl?: string }).baseUrl;
-      mockConfig = {
-        ...mockConfig,
-        contentGeneratorConfig: mockContentGeneratorConfig,
-      };
-      pipeline = new ContentGenerationPipeline(mockConfig);
-
-      const request: GenerateContentParameters = {
-        model: 'qwen3.5-flash',
-        contents: [{ parts: [{ text: 'Summarize' }], role: 'user' }],
-        config: { thinkingConfig: { includeThoughts: false } },
-      };
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'user', content: 'Summarize' },
-      ]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'r',
-        choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-      } as OpenAI.Chat.ChatCompletion);
-
-      await pipeline.execute(request, 'forked_query');
-
-      const apiCall = (mockClient.chat.completions.create as Mock).mock
-        .calls[0][0];
-      expect(apiCall.enable_thinking).toBe(false);
+      expect(apiCall.chat_template_kwargs).toEqual({ enable_thinking: false });
     });
 
     it('should handle errors and log them', async () => {
@@ -3634,33 +1995,6 @@ describe('ContentGenerationPipeline', () => {
         expect.any(Object),
         request,
       );
-    });
-
-    it('should redact proxy credentials before request errors reach the error handler', async () => {
-      const request: GenerateContentParameters = {
-        model: 'test-model',
-        contents: [{ parts: [{ text: 'Hello' }], role: 'user' }],
-      };
-      const userPromptId = 'test-prompt-id';
-      const testError = new Error(
-        'connect ECONNREFUSED token@proxy.local:8080',
-      );
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([]);
-      (mockClient.chat.completions.create as Mock).mockRejectedValue(testError);
-
-      await expect(pipeline.execute(request, userPromptId)).rejects.toThrow(
-        'connect ECONNREFUSED <redacted>@proxy.local:8080',
-      );
-
-      expect(mockErrorHandler.handle).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'connect ECONNREFUSED <redacted>@proxy.local:8080',
-        }),
-        expect.any(Object),
-        request,
-      );
-      expect(testError.message).not.toContain('token@');
     });
 
     it('should pass abort signal to OpenAI client when provided', async () => {
@@ -3720,8 +2054,7 @@ describe('ContentGenerationPipeline', () => {
     it('retries stream creation when the provider requires thinking', async () => {
       mockContentGeneratorConfig = {
         ...mockContentGeneratorConfig,
-        baseUrl:
-          'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+        baseUrl: 'http://127.0.0.1:11434/v1',
         model: 'qwen3.8-max-preview',
         extra_body: { enable_thinking: true },
       } as ContentGeneratorConfig;
@@ -3779,7 +2112,9 @@ describe('ContentGenerationPipeline', () => {
 
       const calls = (mockClient.chat.completions.create as Mock).mock.calls;
       expect(calls).toHaveLength(2);
-      expect(calls[0][0].reasoning_effort).toBe('none');
+      expect(calls[0][0].chat_template_kwargs).toEqual({
+        enable_thinking: false,
+      });
       expect(calls[0][0].enable_thinking).toBeUndefined();
       expect(calls[1][0].enable_thinking).toBe(true);
       expect(mockReportOpenAiRequest).toHaveBeenNthCalledWith(1, calls[0][0]);
@@ -4588,73 +2923,6 @@ describe('ContentGenerationPipeline', () => {
       );
     });
 
-    it('should redact proxy credentials from stream creation errors', async () => {
-      const request: GenerateContentParameters = {
-        model: 'test-model',
-        contents: [{ parts: [{ text: 'Hello' }], role: 'user' }],
-      };
-      const userPromptId = 'test-prompt-id';
-      const testError = new Error('407 via http://user:pass@proxy.local');
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([]);
-      (mockClient.chat.completions.create as Mock).mockRejectedValue(testError);
-
-      await expect(
-        pipeline.executeStream(request, userPromptId),
-      ).rejects.toThrow('407 via http://<redacted>@proxy.local');
-
-      expect(mockErrorHandler.handle).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: '407 via http://<redacted>@proxy.local',
-        }),
-        expect.any(Object),
-        request,
-      );
-      expect(testError.message).not.toContain('user:pass');
-    });
-
-    it('should redact proxy credentials before stream errors reach the error handler', async () => {
-      const request: GenerateContentParameters = {
-        model: 'test-model',
-        contents: [{ parts: [{ text: 'Hello' }], role: 'user' }],
-      };
-      const userPromptId = 'test-prompt-id';
-      const testError = new Error(
-        'connect ECONNREFUSED token@proxy.local:8080',
-      );
-
-      const mockStream = {
-        [Symbol.asyncIterator]: () => ({
-          next: vi.fn().mockRejectedValue(testError),
-        }),
-      };
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([]);
-      (mockClient.chat.completions.create as Mock).mockResolvedValue(
-        mockStream,
-      );
-
-      const resultGenerator = await pipeline.executeStream(
-        request,
-        userPromptId,
-      );
-
-      await expect(async () => {
-        for await (const _ of resultGenerator) {
-          // consume stream
-        }
-      }).rejects.toThrow('connect ECONNREFUSED <redacted>@proxy.local:8080');
-
-      expect(mockErrorHandler.handle).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'connect ECONNREFUSED <redacted>@proxy.local:8080',
-        }),
-        expect.any(Object),
-        request,
-      );
-      expect(testError.message).not.toContain('token@');
-    });
-
     it('should throw StreamContentError when stream chunk contains error_finish', async () => {
       const request: GenerateContentParameters = {
         model: 'test-model',
@@ -4698,45 +2966,6 @@ describe('ContentGenerationPipeline', () => {
 
       expect(mockErrorHandler.handle).not.toHaveBeenCalled();
       expect(mockConverter.convertOpenAIChunkToLlm).not.toHaveBeenCalled();
-    });
-
-    it('should redact proxy credentials from StreamContentError messages', async () => {
-      const request: GenerateContentParameters = {
-        model: 'test-model',
-        contents: [{ parts: [{ text: 'Hello' }], role: 'user' }],
-      };
-      const mockStream = {
-        async *[Symbol.asyncIterator]() {
-          yield {
-            choices: [
-              {
-                delta: {
-                  content: 'connect ECONNREFUSED token@proxy.local:8080',
-                },
-                finish_reason: 'error_finish',
-              },
-            ],
-          } as unknown as OpenAI.Chat.ChatCompletionChunk;
-        },
-      };
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([]);
-      (mockClient.chat.completions.create as Mock).mockResolvedValue(
-        mockStream,
-      );
-
-      const resultGenerator = await pipeline.executeStream(
-        request,
-        'prompt-id',
-      );
-
-      await expect(async () => {
-        for await (const _ of resultGenerator) {
-          // consume stream
-        }
-      }).rejects.toThrow('connect ECONNREFUSED <redacted>@proxy.local:8080');
-
-      expect(mockErrorHandler.handle).not.toHaveBeenCalled();
     });
 
     it('should throw NonSSEResponseError when response has non-SSE content-type', async () => {
@@ -6510,60 +4739,6 @@ describe('ContentGenerationPipeline', () => {
     });
   });
 
-  describe('buildResponseFormat endpoint gate', () => {
-    const jsonModeRequest = {
-      model: 'test-model',
-      contents: [{ role: 'user', parts: [{ text: 'Hello' }] }],
-      config: { responseMimeType: 'application/json' },
-    };
-
-    it('omits response_format on custom OpenAI-compatible endpoints', () => {
-      mockContentGeneratorConfig.baseUrl = 'https://api.custom-provider.com/v1';
-      const body = pipeline['buildResponseFormat'](jsonModeRequest);
-      expect(body.response_format).toBeUndefined();
-    });
-
-    it('keeps json_object response_format on the official endpoint', () => {
-      const body = pipeline['buildResponseFormat'](jsonModeRequest);
-      expect(body.response_format).toEqual({ type: 'json_object' });
-    });
-
-    it('falls back to json_object when required is partial', () => {
-      const body = pipeline['buildResponseFormat']({
-        model: 'test-model',
-        contents: [{ role: 'user', parts: [{ text: 'Hello' }] }],
-        config: {
-          responseMimeType: 'application/json',
-          responseJsonSchema: {
-            type: 'object',
-            properties: {
-              ok: { type: 'boolean' },
-              note: { type: 'string' },
-            },
-            required: ['ok'],
-          },
-        },
-      });
-      expect(body.response_format).toEqual({ type: 'json_object' });
-    });
-
-    it('falls back to json_object when a property lacks a type', () => {
-      const body = pipeline['buildResponseFormat']({
-        model: 'test-model',
-        contents: [{ role: 'user', parts: [{ text: 'Hello' }] }],
-        config: {
-          responseMimeType: 'application/json',
-          responseJsonSchema: {
-            type: 'object',
-            properties: { ok: {} },
-            required: ['ok'],
-          },
-        },
-      });
-      expect(body.response_format).toEqual({ type: 'json_object' });
-    });
-  });
-
   describe('buildRequest', () => {
     it('should build request with sampling parameters', async () => {
       // Arrange
@@ -6650,7 +4825,7 @@ describe('ContentGenerationPipeline', () => {
       );
     });
 
-    it('should map JSON mode before provider enhancement', async () => {
+    it('lets the provider enhance a JSON-mode request without a response_format', async () => {
       // Arrange
       const request: GenerateContentParameters = {
         model: 'test-model',
@@ -6690,10 +4865,8 @@ describe('ContentGenerationPipeline', () => {
         expect.objectContaining({
           model: 'test-model',
           messages: mockMessages,
-          response_format: { type: 'json_object' },
         }),
         userPromptId,
-        0,
       );
       expect(mockClient.chat.completions.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -6703,483 +4876,9 @@ describe('ContentGenerationPipeline', () => {
           signal: undefined,
         }),
       );
-    });
-
-    it('uses json_schema when a response schema is present', async () => {
-      const schema = {
-        type: 'object',
-        properties: { verdict: { type: 'string' } },
-        required: ['verdict'],
-        additionalProperties: false,
-      };
-      const request: GenerateContentParameters = {
-        model: 'test-model',
-        contents: [{ parts: [{ text: 'Hello' }], role: 'user' }],
-        config: {
-          responseMimeType: 'application/json',
-          responseJsonSchema: schema,
-        },
-      };
-      const userPromptId = 'test-prompt-id';
-      const mockMessages = [
-        { role: 'user', content: 'Hello' },
-      ] as OpenAI.Chat.ChatCompletionMessageParam[];
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue(
-        mockMessages,
-      );
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'test',
-        choices: [{ message: { content: 'response' } }],
-      });
-
-      await pipeline.execute(request, userPromptId);
-
-      expect(mockProvider.buildRequest).toHaveBeenCalledWith(
-        expect.objectContaining({
-          response_format: {
-            type: 'json_schema',
-            json_schema: {
-              name: 'response',
-              schema,
-              strict: true,
-            },
-          },
-        }),
-        userPromptId,
-        0,
-      );
-    });
-
-    it('normalizes responseJsonSchema before strict OpenAI output', async () => {
-      const request: GenerateContentParameters = {
-        model: 'test-model',
-        contents: [{ parts: [{ text: 'Hello' }], role: 'user' }],
-        config: {
-          responseMimeType: 'application/json',
-          responseJsonSchema: {
-            type: 'object',
-            properties: {
-              verdict: { type: 'string', minLength: 1 },
-            },
-            required: ['verdict'],
-          },
-        },
-      };
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'user', content: 'Hello' },
-      ]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'test',
-        choices: [{ message: { content: 'response' } }],
-      });
-
-      await pipeline.execute(request, 'test-prompt-id');
-
-      expect(mockProvider.buildRequest).toHaveBeenCalledWith(
-        expect.objectContaining({
-          response_format: {
-            type: 'json_schema',
-            json_schema: {
-              name: 'response',
-              schema: {
-                type: 'object',
-                properties: { verdict: { type: 'string' } },
-                required: ['verdict'],
-                additionalProperties: false,
-              },
-              strict: true,
-            },
-          },
-        }),
-        'test-prompt-id',
-        0,
-      );
-    });
-
-    it('uses json_schema for compatible Gemini responseSchema configs', async () => {
-      const request: GenerateContentParameters = {
-        model: 'test-model',
-        contents: [{ parts: [{ text: 'Hello' }], role: 'user' }],
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'OBJECT',
-            properties: { ok: { type: 'BOOLEAN' } },
-            required: ['ok'],
-            additionalProperties: false,
-          },
-        },
-      };
-
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'user', content: 'Hello' },
-      ]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'test',
-        choices: [{ message: { content: 'response' } }],
-      });
-
-      await pipeline.execute(request, 'test-prompt-id');
-
-      expect(mockProvider.buildRequest).toHaveBeenCalledWith(
-        expect.objectContaining({
-          response_format: {
-            type: 'json_schema',
-            json_schema: {
-              name: 'response',
-              schema: {
-                type: 'object',
-                properties: { ok: { type: 'boolean' } },
-                required: ['ok'],
-                additionalProperties: false,
-              },
-              strict: true,
-            },
-          },
-        }),
-        'test-prompt-id',
-        0,
-      );
-    });
-
-    it('adds an official OpenAI session cache key to regular requests', async () => {
-      mockContentGeneratorConfig.baseUrl = 'https://api.openai.com/v1';
-      mockContentGeneratorConfig.model = 'gpt-5.5';
-      mockCliConfig = {
-        getSessionId: vi.fn().mockReturnValue('session-123'),
-      } as unknown as Config;
-      mockConfig.cliConfig = mockCliConfig;
-      pipeline = new ContentGenerationPipeline(mockConfig);
-      const messages = [
-        { role: 'user', content: 'Hello' },
-      ] as OpenAI.Chat.ChatCompletionMessageParam[];
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue(
-        messages,
-      );
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'test',
-        choices: [{ message: { content: 'response' } }],
-      });
-
-      await pipeline.execute(
-        {
-          model: 'gpt-5.5',
-          contents: [{ role: 'user', parts: [{ text: 'Hello' }] }],
-        },
-        'prompt-id',
-      );
-
-      expect(mockClient.chat.completions.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          prompt_cache_key: 'qwen-code:session-123',
-          messages,
-        }),
-        expect.anything(),
-      );
-    });
-
-    it('partitions official OpenAI cache keys for concurrent subagents', async () => {
-      mockContentGeneratorConfig.baseUrl = 'https://api.openai.com/v1';
-      mockContentGeneratorConfig.model = 'gpt-5.6';
-      mockCliConfig = {
-        getSessionId: vi.fn().mockReturnValue('session-123'),
-      } as unknown as Config;
-      mockConfig.cliConfig = mockCliConfig;
-      pipeline = new ContentGenerationPipeline(mockConfig);
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'user', content: 'Hello from a subagent' },
-      ] as OpenAI.Chat.ChatCompletionMessageParam[]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'test',
-        choices: [{ message: { content: 'response' } }],
-      });
-
-      await runWithAgentContext('Explore-a1b2c3d4', () =>
-        pipeline.execute(
-          {
-            model: 'gpt-5.6',
-            contents: [
-              { role: 'user', parts: [{ text: 'Hello from a subagent' }] },
-            ],
-          },
-          'prompt-id',
-        ),
-      );
-
-      expect(mockClient.chat.completions.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          prompt_cache_key: 'qwen-code:session-123:Explore-a1b2c3d4',
-        }),
-        expect.anything(),
-      );
-    });
-
-    it('preserves the session cache key for forked agents', async () => {
-      mockContentGeneratorConfig.baseUrl = 'https://api.openai.com/v1';
-      mockContentGeneratorConfig.model = 'gpt-5.6';
-      mockCliConfig = {
-        getSessionId: vi.fn().mockReturnValue('session-123'),
-      } as unknown as Config;
-      mockConfig.cliConfig = mockCliConfig;
-      pipeline = new ContentGenerationPipeline(mockConfig);
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'user', content: 'Hello from a fork' },
-      ] as OpenAI.Chat.ChatCompletionMessageParam[]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'test',
-        choices: [{ message: { content: 'response' } }],
-      });
-
-      await runInForkContext(() =>
-        runWithAgentContext('fork-a1b2c3d4', () =>
-          pipeline.execute(
-            {
-              model: 'gpt-5.6',
-              contents: [
-                { role: 'user', parts: [{ text: 'Hello from a fork' }] },
-              ],
-            },
-            'prompt-id',
-          ),
-        ),
-      );
-
-      expect(mockClient.chat.completions.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          prompt_cache_key: 'qwen-code:session-123',
-        }),
-        expect.anything(),
-      );
-    });
-
-    it('does not add explicit cache fields to regular GPT-5.6 requests', async () => {
-      mockContentGeneratorConfig.baseUrl = 'https://api.openai.com/v1';
-      mockContentGeneratorConfig.model = 'gpt-5.6';
-      mockCliConfig = {
-        getSessionId: vi.fn().mockReturnValue('session-123'),
-      } as unknown as Config;
-      mockConfig.cliConfig = mockCliConfig;
-      pipeline = new ContentGenerationPipeline(mockConfig);
-      const messages = [
-        { role: 'system', content: 'You are helpful.' },
-        { role: 'user', content: 'First question' },
-        { role: 'assistant', content: 'First answer' },
-        { role: 'user', content: 'Follow-up question' },
-      ] as OpenAI.Chat.ChatCompletionMessageParam[];
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue(
-        messages,
-      );
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'test',
-        choices: [{ message: { content: 'response' } }],
-      });
-
-      await pipeline.execute(
-        {
-          model: 'gpt-5.6',
-          contents: [{ role: 'user', parts: [{ text: 'Hello' }] }],
-        },
-        'prompt-id',
-      );
-
-      const sent = (mockClient.chat.completions.create as Mock).mock
-        .calls[0]?.[0] as OpenAI.Chat.ChatCompletionCreateParams & {
-        prompt_cache_options?: unknown;
-      };
-      expect(sent.prompt_cache_key).toBe('qwen-code:session-123');
-      expect(sent.prompt_cache_options).toBeUndefined();
-      expect(sent.messages).toEqual(messages);
-    });
-
-    it('does not add official OpenAI cache fields when cache control is disabled', async () => {
-      mockContentGeneratorConfig.baseUrl = 'https://api.openai.com/v1';
-      mockContentGeneratorConfig.model = 'gpt-5.6';
-      mockContentGeneratorConfig.enableCacheControl = false;
-      mockCliConfig = {
-        getSessionId: vi.fn().mockReturnValue('session-123'),
-      } as unknown as Config;
-      mockConfig.cliConfig = mockCliConfig;
-      pipeline = new ContentGenerationPipeline(mockConfig);
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'user', content: 'Hello' },
-      ] as OpenAI.Chat.ChatCompletionMessageParam[]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'test',
-        choices: [{ message: { content: 'response' } }],
-      });
-
-      await pipeline.execute(
-        {
-          model: 'gpt-5.6',
-          contents: [{ role: 'user', parts: [{ text: 'Hello' }] }],
-          promptCacheSharing: true,
-        },
-        'prompt-id',
-      );
-
-      const sent = (mockClient.chat.completions.create as Mock).mock
-        .calls[0]?.[0] as Record<string, unknown>;
-      expect(sent['prompt_cache_key']).toBeUndefined();
-      expect(sent['prompt_cache_options']).toBeUndefined();
-    });
-
-    it('does not add official OpenAI cache fields to third-party compatible endpoints', async () => {
-      mockContentGeneratorConfig.baseUrl = 'https://api.deepseek.com/v1';
-      mockContentGeneratorConfig.model = 'gpt-5.6';
-      mockCliConfig = {
-        getSessionId: vi.fn().mockReturnValue('session-123'),
-      } as unknown as Config;
-      mockConfig.cliConfig = mockCliConfig;
-      pipeline = new ContentGenerationPipeline(mockConfig);
-      const messages = [
-        { role: 'system', content: 'system' },
-        { role: 'user', content: 'main request' },
-        { role: 'assistant', content: 'main response' },
-        { role: 'user', content: 'compression directive' },
-      ] as OpenAI.Chat.ChatCompletionMessageParam[];
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue(
-        messages,
-      );
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'test',
-        choices: [{ message: { content: 'response' } }],
-      });
-
-      await pipeline.execute(
-        {
-          model: 'gpt-5.6',
-          contents: [{ role: 'user', parts: [{ text: 'Hello' }] }],
-          promptCacheSharing: true,
-        },
-        'prompt-id',
-      );
-
-      const sent = (mockClient.chat.completions.create as Mock).mock
-        .calls[0]?.[0] as OpenAI.Chat.ChatCompletionCreateParams & {
-        prompt_cache_options?: unknown;
-      };
-      expect(sent.prompt_cache_key).toBeUndefined();
-      expect(sent.prompt_cache_options).toBeUndefined();
-      expect(sent.messages).toEqual(messages);
-    });
-
-    it('marks the stable official OpenAI prefix for GPT-5.6 compression', async () => {
-      mockContentGeneratorConfig.baseUrl = 'https://api.openai.com/v1';
-      mockContentGeneratorConfig.model = 'gpt-5.6';
-      mockCliConfig = {
-        getSessionId: vi.fn().mockReturnValue('session-123'),
-      } as unknown as Config;
-      mockConfig.cliConfig = mockCliConfig;
-      pipeline = new ContentGenerationPipeline(mockConfig);
-      const messages = [
-        { role: 'system', content: 'system' },
-        { role: 'user', content: 'main request' },
-        { role: 'assistant', content: 'main response' },
-        { role: 'user', content: 'compression directive' },
-      ] as OpenAI.Chat.ChatCompletionMessageParam[];
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue(
-        messages,
-      );
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'test',
-        choices: [{ message: { content: 'response' } }],
-      });
-
-      await pipeline.execute(
-        {
-          model: 'gpt-5.6',
-          contents: [{ role: 'user', parts: [{ text: 'Hello' }] }],
-          promptCacheSharing: true,
-        },
-        'prompt-id',
-      );
-
-      const sent = (mockClient.chat.completions.create as Mock).mock
-        .calls[0]?.[0] as OpenAI.Chat.ChatCompletionCreateParams & {
-        prompt_cache_options?: { mode?: string };
-      };
-      expect(sent.prompt_cache_key).toBe('qwen-code:session-123');
-      expect(sent.prompt_cache_options).toEqual({ mode: 'explicit' });
-      expect(sent.messages[1]?.content).toEqual([
-        {
-          type: 'text',
-          text: 'main request',
-          prompt_cache_breakpoint: { mode: 'explicit' },
-        },
-      ]);
-      expect(sent.messages.at(-1)?.content).toBe('compression directive');
-    });
-
-    it('does not add official OpenAI cache fields when baseUrl is unset', async () => {
-      mockContentGeneratorConfig.baseUrl = undefined;
-      mockContentGeneratorConfig.model = 'gpt-5.6';
-      mockCliConfig = {
-        getSessionId: vi.fn().mockReturnValue('session-123'),
-      } as unknown as Config;
-      mockConfig.cliConfig = mockCliConfig;
-      pipeline = new ContentGenerationPipeline(mockConfig);
-      (mockConverter.convertLlmRequestToOpenAI as Mock).mockReturnValue([
-        { role: 'system', content: 'system' },
-        { role: 'user', content: 'main request' },
-        { role: 'assistant', content: 'main response' },
-        { role: 'user', content: 'compression directive' },
-      ] as OpenAI.Chat.ChatCompletionMessageParam[]);
-      (mockConverter.convertOpenAIResponseToLlm as Mock).mockReturnValue(
-        new GenerateContentResponse(),
-      );
-      (mockClient.chat.completions.create as Mock).mockResolvedValue({
-        id: 'test',
-        choices: [{ message: { content: 'response' } }],
-      });
-
-      await pipeline.execute(
-        {
-          model: 'gpt-5.6',
-          contents: [{ role: 'user', parts: [{ text: 'Hello' }] }],
-          promptCacheSharing: true,
-        },
-        'prompt-id',
-      );
-
-      const sent = (mockClient.chat.completions.create as Mock).mock
-        .calls[0]?.[0] as OpenAI.Chat.ChatCompletionCreateParams & {
-        prompt_cache_options?: { mode?: string };
-      };
-      expect(sent.prompt_cache_key).toBeUndefined();
-      expect(sent.prompt_cache_options).toBeUndefined();
-      expect(sent.messages[1]?.content).toBe('main request');
+      expect(
+        (mockClient.chat.completions.create as Mock).mock.calls[0][0],
+      ).not.toHaveProperty('response_format');
     });
 
     it('should pass arbitrary samplingParams keys through verbatim when the window has room (e.g. max_completion_tokens for GPT-5)', async () => {
@@ -7306,7 +5005,7 @@ describe('ContentGenerationPipeline', () => {
       // max_tokens, no provider-specific key). The window clamp
       // (request.config.maxOutputTokens) must still reach the wire as
       // max_tokens so these users get the same `prompt + max_tokens ≤ window`
-      // protection as everyone else, matching the Anthropic path.
+      // protection as everyone else.
       mockContentGeneratorConfig.samplingParams = {
         temperature: 0.7,
       } as ContentGeneratorConfig['samplingParams'];
@@ -7607,7 +5306,7 @@ describe('ContentGenerationPipeline', () => {
         model: 'test-model',
       } as unknown as OpenAI.Chat.ChatCompletion);
 
-      // Provider injects extra_body and metadata, mimicking real DashScope behavior.
+      // Provider injects extra_body and metadata into the request.
       (mockProvider.buildRequest as Mock).mockImplementation((req) => ({
         ...req,
         extra_body: { thinking: { type: 'enabled' } },

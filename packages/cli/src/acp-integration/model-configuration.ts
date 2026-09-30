@@ -9,7 +9,6 @@ import {
   REASONING_EFFORT_TIERS,
   getGptReasoningCapabilities,
   isReasoningEffortPlaceholder,
-  isOpenRouterHostname,
   clampReasoningEffort,
   reasoningEffortsForCapability,
   type Config,
@@ -174,14 +173,17 @@ export function getGptReasoningOverrideState(
     | false
     | null
     | undefined;
-  const openRouter =
-    profile === 'openai-reasoning' || isOpenRouterHostname(generation);
+  const reasoningObject = profile === 'openai-reasoning';
   const removedFlatNone =
     (generation.thinkingMandatory === true ||
       reasoning?.canDisable === false ||
       capabilities?.thinkingMandatory) &&
     flat === REASONING_EFFORT_NONE;
-  if (!openRouter && !isReasoningEffortPlaceholder(flat) && !removedFlatNone) {
+  if (
+    !reasoningObject &&
+    !isReasoningEffortPlaceholder(flat) &&
+    !removedFlatNone
+  ) {
     const effort = efforts.find((tier) => tier === flat);
     return {
       enabled: flat !== REASONING_EFFORT_NONE,
@@ -191,7 +193,7 @@ export function getGptReasoningOverrideState(
     };
   }
   if (nested === undefined) {
-    const suppressedConfiguredTier = openRouter
+    const suppressedConfiguredTier = reasoningObject
       ? !parseModelReasoningCapabilities(configuredReasoning) &&
         !isReasoningEffortPlaceholder(
           generation.samplingParams?.['reasoning_effort'],
@@ -212,7 +214,7 @@ export function getGptReasoningOverrideState(
         }
       : undefined;
   }
-  if (!openRouter || nested === null) {
+  if (!reasoningObject || nested === null) {
     return {
       enabled: defaultEnabled,
       useDefaultEffort: true,
@@ -374,8 +376,7 @@ export function isReasoningSelectionSupported(
   )?.reasoning;
   if (!reasoning?.thinking) {
     const normalized = modelId.toLowerCase();
-    if (normalized.startsWith('qwen') || normalized === 'coder-model')
-      return false;
+    if (normalized.startsWith('qwen')) return false;
   }
   if (selection === REASONING_EFFORT_DEFAULT) return true;
   if (selection === REASONING_EFFORT_NONE) {
@@ -640,6 +641,5 @@ export function getReasoningForDisplay(
   if (!resolved) return generation.reasoning;
   const override = getGptReasoningOverrideState(generation, resolved);
   if (override) return override.enabled ? { effort: override.effort } : false;
-  if (config.getReasoningEffortOverride?.()) return generation.reasoning;
   return getEffectiveReasoning(generation, resolved);
 }

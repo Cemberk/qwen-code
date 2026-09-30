@@ -2604,10 +2604,7 @@ export async function runNonInteractive(
             loopDetected = true;
           }
           if (event.type === LlmEventType.Error) {
-            const errorText = parseAndFormatApiError(
-              event.value.error,
-              config.getContentGeneratorConfig()?.authType,
-            );
+            const errorText = parseAndFormatApiError(event.value.error);
             if (outputFormat === OutputFormat.TEXT) {
               process.stderr.write(`${errorText}\n`);
             }
@@ -2927,10 +2924,7 @@ export async function runNonInteractive(
                   loopDetected = true;
                 }
                 if (event.type === LlmEventType.Error) {
-                  const errorText = parseAndFormatApiError(
-                    event.value.error,
-                    config.getContentGeneratorConfig()?.authType,
-                  );
+                  const errorText = parseAndFormatApiError(event.value.error);
                   if (outputFormat === OutputFormat.TEXT) {
                     process.stderr.write(`${errorText}\n`);
                   }

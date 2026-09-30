@@ -635,27 +635,21 @@ describe('registerModelProvidersHotReload', () => {
     registerModelProvidersHotReload(watcher, settings, config);
 
     merged.modelProviders = {
-      openai: [{ id: 'gpt-new', baseUrl: 'https://example.com' }],
+      openai: [{ id: 'gpt-new', baseUrl: 'http://127.0.0.1:11434/v1' }],
     } as ModelProvidersConfig;
     await listener([]);
 
-    // providerProtocol is boot-frozen (requiresRestart), so it must NOT be
-    // passed — reloadModels preserves the existing protocol map.
     expect(reloadModelProvidersConfig).toHaveBeenCalledOnce();
     expect(reloadModelProvidersConfig).toHaveBeenCalledWith(
       merged.modelProviders,
     );
     expect(refreshAuth).toHaveBeenCalledOnce();
-    // Watcher-triggered refresh must never start an interactive auth flow:
-    // the second argument makes QWEN_OAUTH require cached credentials, so
-    // unavailable credentials reject into the listener's catch (debug-logged,
-    // retried on later events) instead of prompting a device-auth mid-session.
-    expect(refreshAuth).toHaveBeenCalledWith(AuthType.USE_OPENAI, true);
+    expect(refreshAuth).toHaveBeenCalledWith(AuthType.USE_OPENAI);
   });
 
   it('skips the reload when an unrelated settings key changed', async () => {
     merged.modelProviders = {
-      openai: [{ id: 'gpt-x', baseUrl: 'https://x' }],
+      openai: [{ id: 'gpt-x', baseUrl: 'http://127.0.0.1:11434/v1' }],
     } as ModelProvidersConfig;
     // Boot already applied the boot-time providers.
     makeModelConfig(merged.modelProviders);
@@ -682,7 +676,7 @@ describe('registerModelProvidersHotReload', () => {
     registerModelProvidersHotReload(watcher, settings, config);
 
     merged.modelProviders = {
-      openai: [{ id: 'gpt-x', baseUrl: 'https://x' }],
+      openai: [{ id: 'gpt-x', baseUrl: 'http://127.0.0.1:11434/v1' }],
     } as ModelProvidersConfig;
     await listener([]);
     await listener([]);
@@ -698,7 +692,7 @@ describe('registerModelProvidersHotReload', () => {
     });
 
     merged.modelProviders = {
-      openai: [{ id: 'gpt-x', baseUrl: 'https://x' }],
+      openai: [{ id: 'gpt-x', baseUrl: 'http://127.0.0.1:11434/v1' }],
     } as ModelProvidersConfig;
     await listener([]);
 
@@ -710,10 +704,14 @@ describe('registerModelProvidersHotReload', () => {
     expect(refreshAuth).toHaveBeenCalledOnce();
   });
 
-  it('keeps the registry usable after an invalid API edit and applies its correction', async () => {
+  it('keeps the registry usable after an invalid baseUrl edit and applies its correction', async () => {
     const original: ModelProvidersConfig = {
       openai: [
-        { id: 'gpt-model', wireApi: 'responses', envKey: 'RESPONSES_KEY' },
+        {
+          id: 'local-model',
+          baseUrl: 'http://127.0.0.1:11434/v1',
+          envKey: 'LOCAL_KEY',
+        },
       ],
     };
     const registry = new ModelRegistry(original);
@@ -722,109 +720,66 @@ describe('registerModelProvidersHotReload', () => {
       reloadModelProvidersConfig: (next?: ModelProvidersConfig) =>
         registry.reloadModels(next),
       getModelProvidersConfig: () => registry.getModelProvidersConfig(),
-      getAuthType: () => AuthType.USE_OPENAI_RESPONSES,
+      getAuthType: () => AuthType.USE_OPENAI,
       refreshAuth,
     } as unknown as Config;
     registerModelProvidersHotReload(watcher, settings, config);
 
     merged.modelProviders = {
-      openai: [{ id: 'gpt-model', wireApi: 'invalid' }],
-    } as unknown as ModelProvidersConfig;
+      openai: [
+        {
+          id: 'local-model',
+          baseUrl: 'https://api.openai.com/v1',
+          envKey: 'LOCAL_KEY',
+        },
+      ],
+    };
     await listener([]);
 
-    expect(
-      registry.getModel(AuthType.USE_OPENAI_RESPONSES, 'gpt-model')?.envKey,
-    ).toBe('RESPONSES_KEY');
+    expect(registry.getModel(AuthType.USE_OPENAI, 'local-model')?.envKey).toBe(
+      'LOCAL_KEY',
+    );
     expect(registry.getModelProvidersConfig()).toEqual(original);
     expect(refreshAuth).not.toHaveBeenCalled();
 
     merged.modelProviders = {
       openai: [
-        { id: 'gpt-model', wireApi: 'responses', envKey: 'UPDATED_KEY' },
+        {
+          id: 'local-model',
+          baseUrl: 'http://localhost:1234/v1',
+          envKey: 'UPDATED_KEY',
+        },
       ],
     };
     await listener([]);
 
-    expect(
-      registry.getModel(AuthType.USE_OPENAI_RESPONSES, 'gpt-model')?.envKey,
-    ).toBe('UPDATED_KEY');
-    expect(refreshAuth).toHaveBeenCalledWith(
-      AuthType.USE_OPENAI_RESPONSES,
-      true,
+    expect(registry.getModel(AuthType.USE_OPENAI, 'local-model')?.envKey).toBe(
+      'UPDATED_KEY',
     );
+    expect(refreshAuth).toHaveBeenCalledWith(AuthType.USE_OPENAI);
   });
 
-  it('refreshes the current API without selecting a changed API route', async () => {
-    const original: ModelProvidersConfig = {
-      openai: [{ id: 'gpt-model', wireApi: 'responses' }],
-    };
-    const registry = new ModelRegistry(original);
-    merged.modelProviders = original;
-    config = {
-      reloadModelProvidersConfig: (next?: ModelProvidersConfig) =>
-        registry.reloadModels(next),
-      getModelProvidersConfig: () => registry.getModelProvidersConfig(),
-      getAuthType: () => AuthType.USE_OPENAI_RESPONSES,
-      refreshAuth,
-    } as unknown as Config;
+  it('surfaces a user-visible LogError when refreshAuth rejects after a reload', async () => {
     registerModelProvidersHotReload(watcher, settings, config);
-
-    merged.modelProviders = {
-      openai: [{ id: 'gpt-model', wireApi: 'chat-completions' }],
-    };
-    await listener([]);
-
-    expect(
-      registry.getModel(AuthType.USE_OPENAI_RESPONSES, 'gpt-model'),
-    ).toBeUndefined();
-    expect(registry.getModel(AuthType.USE_OPENAI, 'gpt-model')).toBeDefined();
-    expect(refreshAuth).toHaveBeenCalledWith(
-      AuthType.USE_OPENAI_RESPONSES,
-      true,
+    const refreshFailed = new Error(
+      "Model 'local-model' is no longer configured. Select an available model.",
     );
-  });
-
-  // R14-7: against the real `Config.refreshAuth`, refreshing the OLD route
-  // after a `wireApi` flip rejects (the registry moved the model to the other
-  // route). The listener deliberately does not switch routes for a running
-  // session, so the only thing it can do is tell the user — and until now it
-  // only did so on the `--debug` channel.
-  it('surfaces a user-visible LogError when refreshAuth rejects after a wireApi route flip', async () => {
-    const original: ModelProvidersConfig = {
-      openai: [{ id: 'gpt-model', wireApi: 'responses' }],
-    };
-    const registry = new ModelRegistry(original);
-    merged.modelProviders = original;
-    const routeGone = new Error(
-      "Model 'gpt-model' is no longer configured for authType 'openai-responses'. Select an available model.",
-    );
-    refreshAuth.mockRejectedValueOnce(routeGone);
-    config = {
-      reloadModelProvidersConfig: (next?: ModelProvidersConfig) =>
-        registry.reloadModels(next),
-      getModelProvidersConfig: () => registry.getModelProvidersConfig(),
-      getAuthType: () => AuthType.USE_OPENAI_RESPONSES,
-      refreshAuth,
-    } as unknown as Config;
-    registerModelProvidersHotReload(watcher, settings, config);
+    refreshAuth.mockRejectedValueOnce(refreshFailed);
 
     const spy = vi.fn();
     appEvents.on(AppEvent.LogError, spy);
     try {
       merged.modelProviders = {
-        openai: [{ id: 'gpt-model', wireApi: 'chat-completions' }],
+        openai: [{ id: 'local-model', baseUrl: 'http://127.0.0.1:11434/v1' }],
       };
       await listener([]);
 
-      // Still the old route — no auto-resolution / silent API switch.
-      expect(refreshAuth).toHaveBeenCalledWith(
-        AuthType.USE_OPENAI_RESPONSES,
-        true,
-      );
+      // The listener never switches models on its own; it only tells the user.
+      expect(refreshAuth).toHaveBeenCalledWith(AuthType.USE_OPENAI);
       expect(spy).toHaveBeenCalledOnce();
       const message = String(spy.mock.calls[0][0]);
       // Carries the real cause and tells the user how to recover.
-      expect(message).toContain(routeGone.message);
+      expect(message).toContain(refreshFailed.message);
       expect(message).toContain('/model');
     } finally {
       appEvents.off(AppEvent.LogError, spy);
@@ -832,30 +787,15 @@ describe('registerModelProvidersHotReload', () => {
   });
 
   it('does not repeat the LogError while the refreshAuth retry stays latched', async () => {
-    const original: ModelProvidersConfig = {
-      openai: [{ id: 'gpt-model', wireApi: 'responses' }],
-    };
-    const registry = new ModelRegistry(original);
-    merged.modelProviders = original;
-    const routeGone = new Error(
-      "Model 'gpt-model' is no longer configured for authType 'openai-responses'. Select an available model.",
-    );
-    // The throw condition is stable: every retry rejects the same way.
-    refreshAuth.mockRejectedValue(routeGone);
-    config = {
-      reloadModelProvidersConfig: (next?: ModelProvidersConfig) =>
-        registry.reloadModels(next),
-      getModelProvidersConfig: () => registry.getModelProvidersConfig(),
-      getAuthType: () => AuthType.USE_OPENAI_RESPONSES,
-      refreshAuth,
-    } as unknown as Config;
     registerModelProvidersHotReload(watcher, settings, config);
+    // The throw condition is stable: every retry rejects the same way.
+    refreshAuth.mockRejectedValue(new Error('refresh failed'));
 
     const spy = vi.fn();
     appEvents.on(AppEvent.LogError, spy);
     try {
       merged.modelProviders = {
-        openai: [{ id: 'gpt-model', wireApi: 'chat-completions' }],
+        openai: [{ id: 'local-model', baseUrl: 'http://127.0.0.1:11434/v1' }],
       };
       await listener([]);
       expect(spy).toHaveBeenCalledOnce();
@@ -884,7 +824,7 @@ describe('registerModelProvidersHotReload', () => {
     appEvents.on(AppEvent.LogError, spy);
     try {
       merged.modelProviders = {
-        openai: [{ id: 'gpt-x', baseUrl: 'https://x' }],
+        openai: [{ id: 'gpt-x', baseUrl: 'http://127.0.0.1:11434/v1' }],
       } as ModelProvidersConfig;
       await listener([]);
       expect(spy).toHaveBeenCalledOnce();
@@ -897,7 +837,7 @@ describe('registerModelProvidersHotReload', () => {
 
       // A new modelProviders edit fails afresh → a new episode, emit again.
       merged.modelProviders = {
-        openai: [{ id: 'gpt-y', baseUrl: 'https://y' }],
+        openai: [{ id: 'gpt-y', baseUrl: 'http://localhost:1234/v1' }],
       } as ModelProvidersConfig;
       await listener([]);
       expect(refreshAuth).toHaveBeenCalledTimes(3);
@@ -915,7 +855,7 @@ describe('registerModelProvidersHotReload', () => {
       .mockRejectedValueOnce(new Error('still flaky'));
 
     merged.modelProviders = {
-      openai: [{ id: 'gpt-x', baseUrl: 'https://x' }],
+      openai: [{ id: 'gpt-x', baseUrl: 'http://127.0.0.1:11434/v1' }],
     } as ModelProvidersConfig;
     await listener([]);
 
@@ -936,16 +876,16 @@ describe('registerModelProvidersHotReload', () => {
 
   it('reloads after an out-of-band registry rewrite desynced applied state', async () => {
     const bootProviders = {
-      openai: [{ id: 'gpt-a', baseUrl: 'https://a' }],
+      openai: [{ id: 'gpt-a', baseUrl: 'http://127.0.0.1:11434/v1' }],
     } as ModelProvidersConfig;
     merged.modelProviders = bootProviders;
     makeModelConfig(bootProviders);
     registerModelProvidersHotReload(watcher, settings, config);
 
-    // Provider-template / ACP flow: settings.setValue updates merged without
+    // ACP flow: settings.setValue updates merged without
     // a watcher event (self-write), then reloads the registry out-of-band.
     const outOfBand = {
-      openai: [{ id: 'gpt-b', baseUrl: 'https://b' }],
+      openai: [{ id: 'gpt-b', baseUrl: 'http://localhost:1234/v1' }],
     } as ModelProvidersConfig;
     merged.modelProviders = outOfBand;
     applied = outOfBand;
@@ -963,13 +903,13 @@ describe('registerModelProvidersHotReload', () => {
 
   it('reconciles once at registration for edits that landed before the listener attached', async () => {
     const bootProviders = {
-      openai: [{ id: 'gpt-a', baseUrl: 'https://a' }],
+      openai: [{ id: 'gpt-a', baseUrl: 'http://127.0.0.1:11434/v1' }],
     } as ModelProvidersConfig;
     makeModelConfig(bootProviders);
     // An edit refreshed settings.merged during the loadCliConfig window,
     // before any listener existed.
     merged.modelProviders = {
-      openai: [{ id: 'gpt-b', baseUrl: 'https://b' }],
+      openai: [{ id: 'gpt-b', baseUrl: 'http://localhost:1234/v1' }],
     } as ModelProvidersConfig;
 
     registerModelProvidersHotReload(watcher, settings, config);

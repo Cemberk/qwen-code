@@ -30,7 +30,6 @@ import {
   applyReasoningEffort,
   normalizeReasoningEffort,
   loadUsageDashboard,
-  type ReasoningEffortOverride,
 } from '@qwen-code/qwen-code-core';
 
 const debugLogger = createDebugLogger('SYSTEM_CONTROLLER');
@@ -165,7 +164,6 @@ export class SystemController extends BaseController {
       | {
           effort: string;
           applied: boolean;
-          override: ReasoningEffortOverride | null;
           reason?: string;
         }
       | undefined;
@@ -188,18 +186,9 @@ export class SystemController extends BaseController {
             this.context.config,
             normalized,
           );
-          const override =
-            this.context.config.getReasoningEffortOverride?.() ?? null;
-          const applied = effortMatches && override === null;
-          const reason = applied
-            ? undefined
-            : [
-                ...(effortMatches ? [] : ['thinking may be disabled']),
-                ...(override
-                  ? [`${override.source}.${override.field} takes precedence`]
-                  : []),
-              ].join('; ');
-          effortStatus = { effort: normalized, applied, override, reason };
+          const applied = effortMatches;
+          const reason = applied ? undefined : 'thinking may be disabled';
+          effortStatus = { effort: normalized, applied, reason };
 
           if (!applied) {
             debugLogger.warn(
@@ -507,9 +496,7 @@ export class SystemController extends BaseController {
         this.context.config,
         normalized,
       );
-      const override =
-        this.context.config.getReasoningEffortOverride?.() ?? null;
-      const applied = effortMatches && override === null;
+      const applied = effortMatches;
 
       debugLogger.info(
         `[SystemController] Reasoning effort set to: ${normalized} (applied: ${applied})`,
@@ -519,7 +506,6 @@ export class SystemController extends BaseController {
         subtype: 'set_effort',
         effort: normalized,
         applied,
-        override,
       };
     } catch (error) {
       const errorMessage =
@@ -549,7 +535,6 @@ export class SystemController extends BaseController {
     try {
       const models = this.context.config
         .getAvailableModels()
-        .filter((model) => !model.imageOnly)
         .map(({ id, label, capabilities, contextWindowSize }) => ({
           id,
           label,

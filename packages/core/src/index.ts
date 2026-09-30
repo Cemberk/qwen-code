@@ -17,14 +17,7 @@ export * from './permissions/index.js';
 
 // Model configuration
 export {
-  DEFAULT_QWEN_MODEL,
-  DEFAULT_QWEN_FLASH_MODEL,
-  DEFAULT_QWEN_EMBEDDING_MODEL,
-  MAINLINE_CODER_MODEL,
-} from './config/models.js';
-export {
   type AvailableModel,
-  type ModelWireApi,
   type ModelCapabilities,
   type ModelConfig as ProviderModelConfig,
   type ModelConfigCliInput,
@@ -34,25 +27,23 @@ export {
   type ModelConfigValidationResult,
   ModelRegistry,
   modelRegistryKey,
-  resolveProviderProtocol,
-  resolveModelProtocol,
-  tryResolveModelProtocol,
   validateModelProvidersConfig,
-  resolveModelSelectionAuthType,
   type ModelGenerationConfig,
   ModelsConfig,
   type ModelsConfigOptions,
   type ModelProvidersConfig,
-  type ProviderProtocolConfig,
   type ModelSwitchMetadata,
   MODEL_GENERATION_CONFIG_FIELDS,
+  OPENAI_ENV_MAPPING,
   type OnModelChangeCallback,
-  QWEN_OAUTH_MODELS,
   resolveModelConfig,
   type ResolvedModelConfig,
   validateModelConfig,
-  VERTEX_ADC_HINT,
 } from './models/index.js';
+export {
+  assertLocalBaseUrl,
+  getLocalBaseUrlError,
+} from './utils/local-base-url.js';
 
 // Output formatting
 export * from './output/json-formatter.js';
@@ -71,7 +62,6 @@ export {
   runOutsideAgentContext,
 } from './agents/runtime/agent-context.js';
 export * from './core/reasoning-effort.js';
-export { isOpenRouterHostname } from './core/openaiContentGenerator/provider/openrouter.js';
 export * from './core/coreToolScheduler.js';
 export * from './core/permissionFlow.js';
 export * from './core/permission-helpers.js';
@@ -680,7 +670,6 @@ export * from './utils/projectSummary.js';
 export * from './utils/promptIdContext.js';
 export * from './utils/background-turn-context.js';
 export * from './tools/tool-result-boundary-diagnostics.js';
-export * from './utils/proxyUtils.js';
 export * from './utils/quotaErrorDetection.js';
 export * from './utils/rateLimit.js';
 export * from './tools/readManyFiles.js';
@@ -690,10 +679,8 @@ export * from './utils/retry.js';
 export * from './utils/ripgrepUtils.js';
 export {
   detectRuntime,
-  getOrCreateSharedDispatcher,
   isTlsVerificationDisabled,
   preloadRuntimeFetchModule,
-  redactProxyCredentials,
 } from './utils/runtimeFetchOptions.js';
 export * from './utils/process-liveness.js';
 export * from './utils/runtimeStatus.js';
@@ -716,12 +703,6 @@ export { parse, stringify } from './utils/yaml-parser.js';
 export * from './utils/btwUtils.js';
 export * from './agents/forkedAgent.js';
 export * from './utils/sideQuery.js';
-
-// ============================================================================
-// OAuth & Authentication
-// ============================================================================
-
-export * from './qwen/qwenOAuth2.js';
 
 // ============================================================================
 // Message Bus Types

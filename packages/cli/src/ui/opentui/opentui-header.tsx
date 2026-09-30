@@ -21,12 +21,7 @@
 import { useMemo } from 'react';
 import { useTerminalDimensions } from '@opentui/react';
 import type { Config } from '@qwen-code/qwen-code-core';
-import {
-  findProviderByCredentials,
-  resolveMetadataKey,
-  shortenPath,
-  tildeifyPath,
-} from '@qwen-code/qwen-code-core';
+import { shortenPath, tildeifyPath } from '@qwen-code/qwen-code-core';
 import type { LoadedSettings } from '../../config/settings.js';
 import { formatVersionLabel } from '../../utils/version.js';
 import { C, GRADIENT, THEME_REVISION } from './theme.js';
@@ -124,17 +119,7 @@ function buildBanner(config: Config, settings: LoadedSettings, width: number) {
   const model = config.getModelDisplayName();
   const targetDir = config.getTargetDir();
   // auth label (mirrors AppHeader.getAuthDisplayType)
-  let authLabel = '';
-  try {
-    if (cg?.authType) {
-      const matched = findProviderByCredentials(cg.baseUrl, cg.apiKeyEnvKey);
-      authLabel =
-        (matched && resolveMetadataKey(matched) && matched.label) ||
-        (cg.authType === 'qwen-oauth' ? 'Qwen OAuth' : 'API Key');
-    }
-  } catch {
-    authLabel = '';
-  }
+  const authLabel = cg?.authType ? 'API Key' : '';
   const authModelText = authLabel ? `${authLabel} | ${model}` : model;
   const hint = ' (/model to change)';
 

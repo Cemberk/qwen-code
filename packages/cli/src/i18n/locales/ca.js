@@ -1221,62 +1221,17 @@ export default {
   'Welcome back! (Last updated: {{timeAgo}})':
     'Benvingut de nou! (Darrera actualització: {{timeAgo}})',
   'Overall Goal:': 'Objectiu general:',
-  'Connect a Provider': 'Connectar un proveïdor',
   'You must connect a provider to proceed. Press Ctrl+C again to exit.':
     'Cal connectar un proveïdor per continuar. Premeu Ctrl+C de nou per sortir.',
-  'Terms of Services and Privacy Notice':
-    'Termes de servei i avís de privacitat',
-  'Qwen OAuth': 'Qwen OAuth',
-  'Discontinued — switch to Coding Plan or API Key':
-    'Descontinuat — canvieu a Coding Plan o API Key',
-  'Qwen OAuth free tier was discontinued on 2026-04-15. Please select Coding Plan or API Key instead.':
-    'El nivell gratuït de Qwen OAuth es va descontinuar el 15-04-2026. Seleccioneu Coding Plan o API Key en el seu lloc.',
-  'Qwen OAuth free tier was discontinued on 2026-04-15. Please select a model from another provider or run /auth to switch.':
-    "El nivell gratuït de Qwen OAuth es va descontinuar el 15-04-2026. Seleccioneu un model d'un altre proveïdor o executeu /auth per canviar.",
-  '\n⚠ Qwen OAuth free tier was discontinued on 2026-04-15. Please select another option.\n':
-    '\n⚠ El nivell gratuït de Qwen OAuth es va descontinuar el 15-04-2026. Seleccioneu una altra opció.\n',
-  'Paid · Up to 6,000 requests/5 hrs · All Alibaba Cloud Coding Plan Models':
-    "De pagament · Fins a 6.000 sol·licituds/5 h · Tots els models de Coding Plan d'Alibaba Cloud",
-  'Alibaba Cloud Coding Plan': "Coding Plan d'Alibaba Cloud",
   'Bring your own API key': 'Porteu la vostra pròpia API Key',
-  'Authentication is enforced to be {{enforcedType}}, but you are currently using {{currentType}}.':
-    "L'autenticació ha de ser {{enforcedType}}, però actualment esteu usant {{currentType}}.",
-  'Qwen OAuth Authentication': 'Autenticació Qwen OAuth',
-  'Please visit this URL to authorize:': 'Visiteu aquesta URL per autoritzar:',
-  'Waiting for authorization': "Esperant l'autorització",
-  'Time remaining:': 'Temps restant:',
-  'Qwen OAuth Authentication Timeout':
-    "Temps d'espera de l'autenticació Qwen OAuth esgotat",
-  'OAuth token expired (over {{seconds}} seconds). Please select authentication method again.':
-    "El token OAuth ha expirat (més de {{seconds}} segons). Seleccioneu el mètode d'autenticació de nou.",
-  'Press any key to return to authentication type selection.':
-    "Premeu qualsevol tecla per tornar a la selecció del tipus d'autenticació.",
-  'Waiting for Qwen OAuth authentication...':
-    "Esperant l'autenticació Qwen OAuth...",
-  'Authentication timed out. Please try again.':
-    "L'autenticació ha expirat. Torneu-ho a intentar.",
-  'Waiting for auth... (Press ESC or CTRL+C to cancel)':
-    "Esperant l'autenticació... (Premeu ESC o CTRL+C per cancel·lar)",
   'Missing API key for OpenAI-compatible auth. Set settings.security.auth.apiKey, or set the {{envKeyHint}} environment variable.':
     "Manca l'API Key per a l'autenticació compatible amb OpenAI. Establiu settings.security.auth.apiKey o la variable d'entorn {{envKeyHint}}.",
-  '{{envKeyHint}} environment variable not found. Please set it in your .env file or environment variables.':
-    "La variable d'entorn {{envKeyHint}} no s'ha trobat. Establiu-la al fitxer .env o a les variables d'entorn.",
-  '{{envKeyHint}} environment variable not found (or set settings.security.auth.apiKey). Please set it in your .env file or environment variables.':
-    "La variable d'entorn {{envKeyHint}} no s'ha trobat (o establiu settings.security.auth.apiKey). Establiu-la al fitxer .env o a les variables d'entorn.",
   'Missing API key for OpenAI-compatible auth. Set the {{envKeyHint}} environment variable.':
     "Manca l'API Key per a l'autenticació compatible amb OpenAI. Establiu la variable d'entorn {{envKeyHint}}.",
-  'Anthropic provider missing required baseUrl in modelProviders[].baseUrl.':
-    'El proveïdor Anthropic no té la baseUrl obligatòria a modelProviders[].baseUrl.',
-  'ANTHROPIC_BASE_URL environment variable not found.':
-    "La variable d'entorn ANTHROPIC_BASE_URL no s'ha trobat.",
-  'Invalid auth method selected.':
-    "S'ha seleccionat un mètode d'autenticació no vàlid.",
   'Failed to authenticate. Message: {{message}}':
     'Error en autenticar-se. Missatge: {{message}}',
   'Authenticated successfully with {{authType}} credentials.':
     "S'ha autenticat correctament amb les credencials {{authType}}.",
-  'Invalid QWEN_DEFAULT_AUTH_TYPE value: "{{value}}". Valid values are: {{validValues}}':
-    'Valor de QWEN_DEFAULT_AUTH_TYPE no vàlid: "{{value}}". Els valors vàlids són: {{validValues}}',
   // ============================================================================
   // Diàlegs - Model
   // ============================================================================
@@ -1769,12 +1724,6 @@ export default {
   // Autenticació de Coding Plan
   // ============================================================================
   'API key cannot be empty.': 'La API Key no pot estar buida.',
-  'Invalid API key. Coding Plan API keys start with "sk-sp-". Please check.':
-    'API Key no vàlida. Les API Keys de Coding Plan comencen per "sk-sp-". Comproveu-la.',
-  'You can get your Coding Plan API key here':
-    'Podeu obtenir la vostra API Key de Coding Plan aquí',
-  'Failed to update Coding Plan configuration: {{message}}':
-    'Error en actualitzar la configuració de Coding Plan: {{message}}',
 
   // ============================================================================
   // Configuració de API Key personalitzada
@@ -1787,12 +1736,9 @@ export default {
   // ============================================================================
   // Diàleg d'autenticació - Títols i etiquetes
   // ============================================================================
-  'Coding Plan': 'Coding Plan',
   Custom: 'Personalitzat',
-  'Select Region for Coding Plan': 'Seleccioneu la regió per a Coding Plan',
   'Choose based on where your account is registered':
     "Trieu en funció d'on teniu registrat el compte",
-  'Enter Coding Plan API Key': 'Introduïu la API Key de Coding Plan',
 
   // ============================================================================
   // Actualitzacions internacionals de Coding Plan
@@ -1842,8 +1788,6 @@ export default {
     "La configuració de {{region}} s'ha actualitzat correctament.",
   'Authenticated successfully with {{region}}. API key and model configs saved to settings.json.':
     "S'ha autenticat correctament amb {{region}}. La API Key i les configuracions del model s'han desat a settings.json.",
-  'Tip: Use /model to switch between available Coding Plan models.':
-    'Consell: Useu /model per canviar entre els models de Coding Plan disponibles.',
   'Type something...': 'Escriviu alguna cosa...',
   Submit: 'Envia',
   'Submit answers': 'Envia les respostes',
@@ -1856,64 +1800,27 @@ export default {
     '↑/↓: Navegar | ←/→: Canviar de pestanya | Return: Seleccionar',
   '↑/↓: Navigate | Enter: Select | Esc: Cancel':
     '↑/↓: Navegar | Return: Seleccionar | Esc: Cancel·lar',
-  'Authenticate using Qwen OAuth': "Autentica't amb Qwen OAuth",
-  'Authenticate using Alibaba Cloud Coding Plan':
-    "Autentica't amb el Coding Plan d'Alibaba Cloud",
-  'Region for Coding Plan (china/global)':
-    'Regió per a Coding Plan (china/global)',
-  'API key for Coding Plan': 'API Key per a Coding Plan',
   'Show current authentication status': "Mostra l'estat d'autenticació actual",
   'Authentication completed successfully.':
     "L'autenticació s'ha completat correctament.",
-  'Starting Qwen OAuth authentication...':
-    "S'està iniciant l'autenticació de Qwen OAuth...",
-  'Successfully authenticated with Qwen OAuth.':
-    "S'ha autenticat correctament amb Qwen OAuth.",
-  'Failed to authenticate with Qwen OAuth: {{error}}':
-    'Error en autenticar-se amb Qwen OAuth: {{error}}',
-  'Processing Alibaba Cloud Coding Plan authentication...':
-    "Processant l'autenticació de Coding Plan d'Alibaba Cloud...",
-  'Successfully authenticated with Alibaba Cloud Coding Plan.':
-    "S'ha autenticat correctament amb el Coding Plan d'Alibaba Cloud.",
-  'Failed to authenticate with Coding Plan: {{error}}':
-    'Error en autenticar-se amb el Coding Plan: {{error}}',
-  '阿里云百炼 (aliyun.com)': '阿里云百炼 (aliyun.com)',
   Global: 'Global',
-  'Alibaba Cloud (alibabacloud.com)': 'Alibaba Cloud (alibabacloud.com)',
-  'Select region for Coding Plan:': 'Seleccioneu la regió per a Coding Plan:',
-  'Enter your Coding Plan API key: ':
-    'Introduïu la vostra API Key de Coding Plan: ',
-  'Select authentication method:': "Seleccioneu el mètode d'autenticació:",
   '\n=== Authentication Status ===\n': "\n=== Estat d'autenticació ===\n",
-  '⚠  No authentication method configured.\n':
-    "⚠  Cap mètode d'autenticació configurat.\n",
   'Run one of the following commands to get started:\n':
     'Executeu una de les ordres següents per començar:\n',
-  '  qwen auth qwen-oauth     - Authenticate with Qwen OAuth (discontinued)':
-    '  qwen auth qwen-oauth     - Autenticar-se amb Qwen OAuth (descontinuat)',
   'Or simply run:': 'O simplement executeu:',
   '  qwen auth                - Interactive authentication setup\n':
     "  qwen auth                - Configuració interactiva de l'autenticació\n",
-  '✓ Authentication Method: Qwen OAuth': "✓ Mètode d'autenticació: Qwen OAuth",
   '  Type: Free tier (discontinued 2026-04-15)':
     '  Tipus: Nivell gratuït (descontinuat el 15-04-2026)',
   '  Limit: No longer available': '  Límit: Ja no disponible',
-  'Qwen OAuth free tier was discontinued on 2026-04-15. Run /auth to switch to Coding Plan, OpenRouter, Fireworks AI, or another provider.':
-    'El nivell gratuït de Qwen OAuth es va descontinuar el 15-04-2026. Executeu /auth per canviar a Coding Plan, OpenRouter, Fireworks AI o un altre proveïdor.',
-  '✓ Authentication Method: Alibaba Cloud Coding Plan':
-    "✓ Mètode d'autenticació: Coding Plan d'Alibaba Cloud",
-  'Global - Alibaba Cloud': 'Global - Alibaba Cloud',
   '  Region: {{region}}': '  Regió: {{region}}',
   '  Current Model: {{model}}': '  Model actual: {{model}}',
   '  Config Version: {{version}}': '  Versió de configuració: {{version}}',
   '  Status: API key configured\n': '  Estat: API Key configurada\n',
-  '⚠  Authentication Method: Alibaba Cloud Coding Plan (Incomplete)':
-    "⚠  Mètode d'autenticació: Coding Plan d'Alibaba Cloud (Incomplet)",
   '  Issue: API key not found in environment or settings\n':
     "  Problema: API Key no trobada a l'entorn o la configuració\n",
   '  Run `qwen auth coding-plan` to re-configure.\n':
     '  Executeu `qwen auth coding-plan` per tornar a configurar.\n',
-  '✓ Authentication Method: {{type}}': "✓ Mètode d'autenticació: {{type}}",
   '  Status: Configured\n': '  Estat: Configurat\n',
   'Failed to check authentication status: {{error}}':
     "Error en comprovar l'estat d'autenticació: {{error}}",
@@ -1956,8 +1863,6 @@ export default {
     "Una altra operació està en curs, espereu que es completi abans d'executar /advisor",
   'No response received.': "No s'ha rebut cap resposta.",
   'No model configured.': 'No hi ha cap model configurat.',
-  'Browser-based authentication with third-party providers (e.g. OpenRouter, ModelScope)':
-    'Autenticació basada en navegador amb proveïdors de tercers (p. ex. OpenRouter, ModelScope)',
   'Manage Arena sessions': "Gestiona les sessions de l'Arena",
   'Start an Arena session with multiple models competing on the same task':
     "Inicia una sessió de l'Arena amb múltiples models competint en la mateixa tasca",
@@ -2019,7 +1924,6 @@ export default {
   'Manage extension settings': 'Gestiona la configuració de les extensions',
   'Desc:': 'Descripció:',
   '中国 (China)': 'Xina',
-  '中国 (China) - 阿里云百炼': 'Xina - 阿里云百炼',
 
   // Stats Dashboard — Category 2
   'Activity Heatmap': "Mapa d'activitat",
@@ -2075,8 +1979,6 @@ export default {
   'History collapsed: {{n}} messages hidden. Use /history expand-now to show.':
     'Història reduïda: {{n}} missatges ocults. Utilitzeu /history expand-now per mostrar.',
   // Update command
-  'Update successful! Please restart Qwen Code to use the new version. Switching model providers before restarting may not work correctly.':
-    'Actualització correcta! Reinicieu Qwen Code per utilitzar la nova versió. Canviar de proveïdor de models abans de reiniciar pot no funcionar correctament.',
   'Standalone install detected. Please rerun the standalone installer to update:':
     'S’ha detectat una instal·lació independent. Torneu a executar l’instal·lador independent per actualitzar:',
   'Unable to auto-update this standalone installation. Please reinstall from:':
@@ -2357,28 +2259,16 @@ export default {
   'Configured models: {{models}}.': 'Models configurats: {{models}}.',
   "Voice model '{{modelName}}' cannot be used for transcription.":
     'El model de veu «{{modelName}}» no es pot usar per a la transcripció.',
-  'Configure an OpenAI-compatible model with baseUrl in settings.modelProviders.':
-    'Configureu un model compatible amb OpenAI amb baseUrl a settings.modelProviders.',
 
   // ============================================================================
   // Plans i subscripcions
   // ============================================================================
-  'For teams · Paid · Up to 6,000 requests/5 hrs · All Alibaba Cloud Coding Plan Models':
-    "Per a equips · De pagament · Fins a 6.000 sol·licituds/5 h · Tots els models del Coding Plan d'Alibaba Cloud",
   'For individual developers · Pay per model call · 5-hour/weekly quotas':
     'Per a desenvolupadors individuals · Pagament per crida al model · Quotes de 5 h/setmanals',
   Subscribe: 'Subscriure',
-  'Paid subscription plans from Alibaba Cloud ModelStudio':
-    "Plans de subscripció de pagament d'Alibaba Cloud ModelStudio",
   'Select Subscription Plan': 'Seleccionar el pla de subscripció',
-  'Alibaba Cloud Token Plan': "Token Plan d'Alibaba Cloud",
-  'Pay-as-you-go tokens · Configure ModelStudio standard API key':
-    'Tokens de pagament per ús · Configura la clau API estàndard de ModelStudio',
-  'For individuals · Pay-as-you-go tokens · Dedicated Token Plan endpoint':
-    'Per a particulars · Tokens de pagament per ús · Endpoint dedicat de Token Plan',
   'For teams/companies · Credits deducted by token usage · Dedicated API key and base URL':
     "Per a equips/empreses · Crèdits descomptats per l'ús de tokens · Clau API i URL base dedicades",
-  'Token Plan documentation': 'Documentació del Token Plan',
   ' (this project)': ' (aquest projecte)',
   ' (global)': ' (global)',
   'Current vision model: {{visionModel}}\nUse "/model --vision <model-id>" to set the vision bridge model.':
@@ -2418,17 +2308,8 @@ export default {
   // ============================================================================
   // Token Plan / Coding Plan
   // ============================================================================
-  'You can get your Token Plan API key here':
-    'Podeu obtenir la vostra clau API del Token Plan aquí',
   'API key is stored in settings.env. You can migrate it to a .env file for better security.':
     'La clau API es desa a settings.env. Podeu migrar-la a un fitxer .env per a més seguretat.',
-  'New model configurations are available for Alibaba Cloud Coding Plan. Update now?':
-    "Hi ha configuracions de model noves disponibles per al Coding Plan d'Alibaba Cloud. Voleu actualitzar ara?",
-  'Coding Plan configuration updated successfully. New models are now available.':
-    "La configuració del Coding Plan s'ha actualitzat correctament. Ja hi ha models nous disponibles.",
-  'Coding Plan API key not found. Please re-authenticate with Coding Plan.':
-    "No s'ha trobat la clau API del Coding Plan. Torneu-vos a autenticar amb el Coding Plan.",
-  'Enter Token Plan API Key': 'Introduïu la clau API del Token Plan',
 
   // ============================================================================
   // /config — obtenció/definició de paràmetres

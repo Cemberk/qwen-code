@@ -35,8 +35,8 @@ export function calculateCost(args: {
 
   // Past this point the cost is knowable, so it is returned even when it comes
   // out as exactly zero. Testing the total instead conflated a zero cost with
-  // an unknown one: a model the user had deliberately priced at 0 -- a free
-  // OpenRouter variant, a local Ollama or LM Studio model -- reported `N/A`
+  // an unknown one: a model the user had deliberately priced at 0 -- a local
+  // Ollama or LM Studio model -- reported `N/A`
   // despite $0.0000 being the correct and known answer, and the Cost section
   // disappeared entirely when that was the only model in the session.
   const inputCost =

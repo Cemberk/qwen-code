@@ -45,12 +45,6 @@ function getRouteEndpointIdentity(baseUrl: string | undefined): string | null {
 /**
  * ACP model IDs use `${modelId}(${authType})` when that route is unique.
  * Colliding routes receive an opaque selector from `buildAcpModelOptions`.
- *
- * NOTE: The VSCode webview side mirrors this encoding contract in
- * `packages/vscode-ide-companion/src/webview/utils/discontinuedModel.ts` to
- * detect discontinued Qwen OAuth registry models without changing the wire
- * format. If the encoding here evolves (new authTypes, runtime prefix changes,
- * etc.), update that file too.
  */
 function formatAcpModelId(modelId: string, authType: AuthType): string {
   return `${modelId}(${authType})`;
@@ -66,12 +60,7 @@ export function buildAcpModelOptions(
   models: readonly AvailableModel[],
 ): AcpModelOption[] {
   const candidates = models
-    .filter(
-      (model) =>
-        model.fastOnly !== true &&
-        model.voiceOnly !== true &&
-        model.imageOnly !== true,
-    )
+    .filter((model) => model.fastOnly !== true)
     .map((model) => {
       const effectiveModelId =
         model.isRuntimeModel && model.runtimeSnapshotId
@@ -315,7 +304,7 @@ export function isInlineModelOverrideAllowed(
   const activeEnvKey = contentGeneratorConfig.apiKeyEnvKey;
   return config
     .getAvailableModelsForAuthType(authType)
-    .filter((m) => !m.fastOnly && !m.voiceOnly && !m.imageOnly)
+    .filter((m) => !m.fastOnly)
     .some(
       (m) =>
         m.id === modelId &&

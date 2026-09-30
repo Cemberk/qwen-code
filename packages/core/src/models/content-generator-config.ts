@@ -9,7 +9,8 @@
  *
  * Used by both InProcessBackend (Arena agents) and SubagentManager (regular
  * subagents) to create dedicated ContentGenerators when an agent targets a
- * different model or provider than the parent process.
+ * different model than the parent process. Every such generator talks to the
+ * same local model server protocol and passes the same base URL validation.
  */
 
 import type { Config } from '../config/config.js';
@@ -23,10 +24,7 @@ import {
   type ContentGeneratorConfig,
 } from '../core/contentGenerator.js';
 import type { RuntimeContentGeneratorView } from '../agents/runtime/agent-context.js';
-import {
-  AUTH_ENV_MAPPINGS,
-  MODEL_GENERATION_CONFIG_FIELDS,
-} from './constants.js';
+import { MODEL_GENERATION_CONFIG_FIELDS } from './constants.js';
 import type { ResolvedModelConfig } from './types.js';
 import {
   clampReasoningEffort,
@@ -52,30 +50,19 @@ export interface AgentContentGeneratorOptions {
    * Reasoning effort for this agent alone, written onto the agent's own copy of
    * the config and never onto the session's; {@link resolveAgentReasoningTier}
    * decides which tier lands. An explicit tier also drops a thinking budget the
-   * copy inherited, because Anthropic honours an explicit budget before the
-   * tier. A thinking knob fixed in the provider settings (`extra_body`,
-   * `samplingParams`) is left alone and still outranks the tier on the wire,
+   * copy inherited, so the tier is authoritative. A thinking knob fixed in the
+   * provider settings (`extra_body`, `samplingParams`) is left alone and still
+   * outranks the tier on the wire,
    * exactly as it outranks the session tier set by `/effort`.
    */
   reasoningEffort?: ReasoningEffort;
-  /**
-   * Refuse to start an interactive login while building this generator. A
-   * derived per-agent generator runs headless, so missing credentials must
-   * fail fast instead of opening a device-authorization flow; a refresh of
-   * cached credentials still happens.
-   */
-  requireCachedCredentials?: boolean;
 }
 
 /**
  * Build a ContentGeneratorConfig for a per-agent ContentGenerator.
- * Inherits operational settings (timeout, retries, proxy, sampling, etc.)
- * from the parent's config and overlays the agent-specific auth fields.
- *
- * For cross-provider agents the parent's API key / base URL are invalid,
- * so we resolve credentials from the provider-specific environment
- * variables (e.g. ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL). This mirrors
- * what a PTY subprocess does during its own initialization.
+ * Inherits operational settings (timeout, retries, sampling, etc.) and the
+ * credentials from the parent's config and overlays the agent's model route
+ * from the model registry.
  */
 export function buildAgentContentGeneratorConfig(
   base: Config,
@@ -101,15 +88,12 @@ export function buildAgentContentGeneratorConfig(
  *
  * The tier is limited to the tiers `/effort` offers for the target model
  * ({@link reasoningEffortsForCapability}). A model whose settings declare no
- * tiers falls back to its provider's built-in table, because the Responses
- * wire forwards a tier verbatim with no provider-side clamp. `/effort` refuses a
+ * tiers falls back to the built-in table. `/effort` refuses a
  * tier outside the set; an agent gets the closest tier the model does offer
  * instead (the next stronger one, else the strongest), so a script written for
  * one model still runs on another. Nothing lands when the model offers no
  * tiers, or when thinking is turned off for the session or on the target
- * config: a per-agent tier never re-enables thinking that was switched off,
- * including across a provider switch that cleared the session's
- * `reasoning: false` from the copy.
+ * config: a per-agent tier never re-enables thinking that was switched off.
  */
 export function resolveAgentReasoningTier(
   base: Config,
@@ -161,8 +145,8 @@ function offeredReasoningEfforts(
   }
   if (target.authType && target.model) {
     const models = base.getModelsConfig();
-    // Exact id + baseUrl first, then any entry with the same id: a gateway or
-    // proxy base URL must not hide the tiers the registry declares (the same
+    // Exact id + baseUrl first, then any entry with the same id: an override
+    // base URL must not hide the tiers the registry declares (the same
     // fallback modelsConfig applies to this miss).
     const resolved =
       (target.baseUrl !== undefined
@@ -181,9 +165,8 @@ function offeredReasoningEfforts(
 
 /**
  * Put the landed tier on `target` with the session setter's rule, then make it
- * authoritative on this copy: an inherited `budget_tokens` would otherwise
- * outrank it, because Anthropic honours an explicit budget before the tier, so
- * the copy drops it. The session's own block is never touched.
+ * authoritative on this copy by dropping an inherited `budget_tokens`. The
+ * session's own block is never touched.
  */
 function applyAgentReasoningEffort(
   base: Config,
@@ -209,7 +192,6 @@ function buildInheritedAgentContentGeneratorConfig(
   authOverrides: AuthOverrides,
 ): ContentGeneratorConfig {
   const parentConfig = base.getContentGeneratorConfig();
-  const sameProvider = authOverrides.authType === parentConfig.authType;
   const modelsConfig = base.getModelsConfig();
   const resolvedModel = modelId
     ? modelsConfig.getResolvedModel(
@@ -230,30 +212,12 @@ function buildInheritedAgentContentGeneratorConfig(
       `Model '${modelId}' is no longer configured at the selected endpoint`,
     );
   }
-  if (
-    resolvedModel?.imageOnly ||
-    resolvedModel?.voiceOnly ||
-    resolvedModel?.realtimeOnly
-  ) {
-    throw new Error(
-      `${resolvedModel.imageOnly ? 'Image' : resolvedModel.voiceOnly ? 'Voice' : 'Realtime'}-only model '${resolvedModel.id}' cannot be used for content generation`,
-    );
-  }
 
   const nextConfig: ContentGeneratorConfig = {
     ...parentConfig,
     model: modelId ?? parentConfig.model,
     authType: authOverrides.authType as AuthType,
   };
-
-  // When switching providers, clear generation config fields so parent
-  // settings (samplingParams, reasoning, extra_body, etc.) don't leak.
-  if (!sameProvider) {
-    for (const field of MODEL_GENERATION_CONFIG_FIELDS) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (nextConfig as any)[field] = undefined;
-    }
-  }
 
   if (resolvedModel) {
     applyResolvedModelConfig(
@@ -269,30 +233,15 @@ function buildInheritedAgentContentGeneratorConfig(
     nextConfig.thinkingMandatory = undefined;
   }
 
-  nextConfig.apiKey = resolveCredentialField(
-    authOverrides.apiKey,
-    sameProvider ? parentConfig.apiKey : undefined,
-    authOverrides.authType,
-    'apiKey',
-  );
+  nextConfig.apiKey = authOverrides.apiKey || parentConfig.apiKey;
   if (
-    !sameProvider ||
     nextConfig.model !== parentConfig.model ||
     (authOverrides.baseUrl !== undefined &&
       authOverrides.baseUrl !== parentConfig.baseUrl)
   )
     nextConfig.reasoningRouteBaseUrl = authOverrides.baseUrl;
-  nextConfig.baseUrl =
-    authOverrides.baseUrl ??
-    resolveCredentialField(
-      undefined,
-      sameProvider ? parentConfig.baseUrl : undefined,
-      authOverrides.authType,
-      'baseUrl',
-    );
-  nextConfig.apiKeyEnvKey = sameProvider
-    ? parentConfig.apiKeyEnvKey
-    : undefined;
+  nextConfig.baseUrl = authOverrides.baseUrl ?? parentConfig.baseUrl;
+  nextConfig.apiKeyEnvKey = parentConfig.apiKeyEnvKey;
 
   return nextConfig;
 }
@@ -320,17 +269,10 @@ export async function createRuntimeContentGeneratorView(
     authOverrides,
     options,
   );
-  const contentGenerator = options.requireCachedCredentials
-    ? await createContentGenerator(
-        contentGeneratorConfig,
-        contentGeneratorOwner,
-        // isInitialAuth: refuse an interactive login for a derived generator.
-        true,
-      )
-    : await createContentGenerator(
-        contentGeneratorConfig,
-        contentGeneratorOwner,
-      );
+  const contentGenerator = await createContentGenerator(
+    contentGeneratorConfig,
+    contentGeneratorOwner,
+  );
   return { contentGenerator, contentGeneratorConfig };
 }
 
@@ -340,20 +282,15 @@ function applyResolvedModelConfig(
   parentConfig: ContentGeneratorConfig,
   authOverrides: AuthOverrides,
 ): void {
-  const sameProvider = authOverrides.authType === parentConfig.authType;
   const inheritCredentials =
-    sameProvider &&
-    (authOverrides.registryBaseUrl === undefined ||
-      (resolvedModel.baseUrl === parentConfig.baseUrl &&
-        resolvedModel.envKey === parentConfig.apiKeyEnvKey));
+    authOverrides.registryBaseUrl === undefined ||
+    (resolvedModel.baseUrl === parentConfig.baseUrl &&
+      resolvedModel.envKey === parentConfig.apiKeyEnvKey);
   if (!inheritCredentials) targetConfig.customHeaders = undefined;
   targetConfig.reasoningRouteBaseUrl = resolvedModel.registryBaseUrl ?? null;
   targetConfig.model = resolvedModel.id;
   targetConfig.authType = resolvedModel.authType;
-  targetConfig.baseUrl =
-    authOverrides.baseUrl ??
-    resolvedModel.baseUrl ??
-    (sameProvider ? parentConfig.baseUrl : undefined);
+  targetConfig.baseUrl = authOverrides.baseUrl ?? resolvedModel.baseUrl;
 
   if (resolvedModel.envKey) {
     targetConfig.apiKey =
@@ -365,55 +302,19 @@ function applyResolvedModelConfig(
     targetConfig.apiKey =
       authOverrides.registryBaseUrl !== undefined && !inheritCredentials
         ? authOverrides.apiKey
-        : resolveCredentialField(
-            authOverrides.apiKey,
-            sameProvider ? parentConfig.apiKey : undefined,
-            authOverrides.authType,
-            'apiKey',
-          );
+        : authOverrides.apiKey || parentConfig.apiKey;
     targetConfig.apiKeyEnvKey = inheritCredentials
       ? parentConfig.apiKeyEnvKey
       : undefined;
   }
 
-  // Cross-provider fields are cleared by buildAgentContentGeneratorConfig.
-  // Same-provider fields inherit unless the registry overrides them, except
-  // model capabilities such as thinkingMandatory, which must not leak, and
-  // enableRequestMetadata, which is a per-model decision: an inherited true
-  // would ship the DashScope tracing object to a vendor-forwarded side model.
+  // Fields inherit from the parent unless the registry overrides them, except
+  // model capabilities such as thinkingMandatory, which must not leak.
   for (const field of MODEL_GENERATION_CONFIG_FIELDS) {
     const registryValue = resolvedModel.generationConfig[field];
-    if (
-      registryValue !== undefined ||
-      field === 'thinkingMandatory' ||
-      field === 'enableRequestMetadata'
-    ) {
+    if (registryValue !== undefined || field === 'thinkingMandatory') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (targetConfig as any)[field] = registryValue;
     }
   }
-}
-
-/**
- * Resolve a credential field (apiKey or baseUrl) with the following
- * priority: explicit override → same-provider parent value → env var.
- */
-export function resolveCredentialField(
-  explicitValue: string | undefined,
-  inheritedValue: string | undefined,
-  authType: string,
-  field: 'apiKey' | 'baseUrl',
-): string | undefined {
-  if (explicitValue) return explicitValue;
-  if (inheritedValue) return inheritedValue;
-
-  const envMapping =
-    AUTH_ENV_MAPPINGS[authType as keyof typeof AUTH_ENV_MAPPINGS];
-  if (!envMapping) return undefined;
-
-  for (const envKey of envMapping[field]) {
-    const value = process.env[envKey];
-    if (value) return value;
-  }
-  return undefined;
 }

@@ -5,6 +5,7 @@
  */
 
 import { fetchWithPolicy } from '../utils/fetch.js';
+import { getLocalBaseUrlError } from '../utils/local-base-url.js';
 import type { ModelSpec } from './types.js';
 
 const DISCOVERY_TIMEOUT_MS = 5000;
@@ -84,6 +85,10 @@ function mergeModelSpecs(
   return orderedModels.map(({ id }) => staticModelsById.get(id) ?? { id });
 }
 
+/**
+ * List the models served at `GET {baseUrl}/models`. Only loopback base URLs
+ * are queried, redirects are never followed, and any failure yields `null`.
+ */
 export async function discoverProviderModels({
   baseUrl,
   apiKey,
@@ -92,7 +97,7 @@ export async function discoverProviderModels({
 }: DiscoverProviderModelsOptions): Promise<ModelSpec[] | null> {
   const normalizedBaseUrl = baseUrl.trim();
   const normalizedApiKey = apiKey.trim();
-  if (!normalizedBaseUrl || !normalizedApiKey) {
+  if (!normalizedApiKey || getLocalBaseUrlError(normalizedBaseUrl) !== null) {
     return null;
   }
 
@@ -101,18 +106,13 @@ export async function discoverProviderModels({
     const result = await fetchWithPolicy(modelsUrl, {
       timeoutMs: DISCOVERY_TIMEOUT_MS,
       maxBytes: DISCOVERY_MAX_BYTES,
-      maxRedirects: 2,
       headers: {
         Accept: 'application/json',
         Authorization: `Bearer ${normalizedApiKey}`,
       },
       signal,
     });
-    if (
-      result.kind !== 'response' ||
-      result.status < 200 ||
-      result.status >= 300
-    ) {
+    if (result.status < 200 || result.status >= 300) {
       return null;
     }
 

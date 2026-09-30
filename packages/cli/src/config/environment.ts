@@ -103,21 +103,14 @@ if (inheritedProvenance) {
   Object.assign(process.env, getRelaunchEnvProvenance());
 }
 
-// Model credentials and endpoints that the docs name for each auth type
-// (docs/users/configuration/auth.md). Providers read them when a request is
-// made, never while a module loads.
+// Model credentials and endpoints that the docs name
+// (docs/users/configuration/auth.md). The model client reads them when a
+// request is made, never while a module loads.
 const DOCUMENTED_MODEL_ENV_KEYS = [
   'OPENAI_API_KEY',
   'OPENAI_BASE_URL',
   'OPENAI_MODEL',
   'QWEN_MODEL',
-  'ANTHROPIC_API_KEY',
-  'ANTHROPIC_BASE_URL',
-  'ANTHROPIC_MODEL',
-  'GEMINI_API_KEY',
-  'GEMINI_MODEL',
-  'GOOGLE_API_KEY',
-  'GOOGLE_MODEL',
 ];
 // Keys whose values are only read per request: the documented ones above plus
 // the `envKey` of every configured model provider, which is what `/auth` writes
@@ -490,42 +483,6 @@ export function findEnvFiles(
   }
 }
 
-export function setUpCloudShellEnvironment(envFilePath: string | null): void {
-  // Special handling for GOOGLE_CLOUD_PROJECT in Cloud Shell:
-  // Because GOOGLE_CLOUD_PROJECT in Cloud Shell tracks the project
-  // set by the user using "gcloud config set project" we do not want to
-  // use its value. So, unless the user overrides GOOGLE_CLOUD_PROJECT in
-  // one of the .env files, we set the Cloud Shell-specific default here.
-  if (envFilePath && fs.existsSync(envFilePath)) {
-    const envFileContent = fs.readFileSync(envFilePath);
-    const parsedEnv = dotenv.parse(envFileContent);
-    if (parsedEnv['GOOGLE_CLOUD_PROJECT']) {
-      // .env file takes precedence in Cloud Shell
-      process.env['GOOGLE_CLOUD_PROJECT'] = parsedEnv['GOOGLE_CLOUD_PROJECT'];
-    } else {
-      // If not in .env, set to default and override global
-      process.env['GOOGLE_CLOUD_PROJECT'] = 'cloudshell-gca';
-    }
-  } else {
-    // If no .env file, set to default and override global
-    process.env['GOOGLE_CLOUD_PROJECT'] = 'cloudshell-gca';
-  }
-}
-
-function setUpCloudShellEnvironmentInEnv(
-  env: NodeJS.ProcessEnv,
-  envFiles: readonly ParsedEnvFile[],
-): void {
-  for (const envFile of envFiles) {
-    if (envFile.parsedEnv['GOOGLE_CLOUD_PROJECT']) {
-      env['GOOGLE_CLOUD_PROJECT'] = envFile.parsedEnv['GOOGLE_CLOUD_PROJECT'];
-      return;
-    }
-  }
-
-  env['GOOGLE_CLOUD_PROJECT'] = 'cloudshell-gca';
-}
-
 interface ParsedEnvFile {
   readonly path: string;
   readonly parsedEnv: Record<string, string>;
@@ -661,10 +618,6 @@ export function buildRuntimeEnvironment(
   const parsedEnvFiles = parseEnvFiles(envFilePaths, userLevelPaths);
   const effectiveEnv: NodeJS.ProcessEnv = { ...baseEnv };
 
-  if (baseEnv['CLOUD_SHELL'] === 'true') {
-    setUpCloudShellEnvironmentInEnv(effectiveEnv, parsedEnvFiles.files);
-  }
-
   for (const envFile of parsedEnvFiles.files) {
     const excludedVars =
       settings?.advanced?.excludedEnvVars || DEFAULT_EXCLUDED_ENV_VARS;
@@ -729,11 +682,6 @@ export function loadEnvironment(
   const envFilePaths = findEnvFiles(settings, startDir, userLevelPaths);
   const parsedEnvFiles = parseEnvFiles(envFilePaths, userLevelPaths);
 
-  // Cloud Shell environment variable handling
-  if (process.env['CLOUD_SHELL'] === 'true') {
-    setUpCloudShellEnvironmentInEnv(process.env, parsedEnvFiles.files);
-  }
-
   // Step 1: Load from .env files (higher priority than settings.env)
   // Only set if not already present in process.env (no-override mode)
   for (const envFile of parsedEnvFiles.files) {
@@ -780,7 +728,7 @@ export function loadEnvironment(
         continue;
       }
       // Allow settings.env to fill in when process.env has the key but its
-      // value is empty string — an empty export (e.g. `DASHSCOPE_API_KEY=`
+      // value is empty string — an empty export (e.g. `OPENAI_API_KEY=`
       // in a Docker env file) is functionally missing yet blocks the normal
       // no-override check because Object.hasOwn returns true.
       const existingValue = process.env[key];
@@ -841,10 +789,6 @@ export function reloadEnvironment(
       removedKeys: [],
       envFileReadFailed: true,
     };
-  }
-
-  if (process.env['CLOUD_SHELL'] === 'true') {
-    setUpCloudShellEnvironmentInEnv(process.env, parsedEnvFiles.files);
   }
 
   // Build the set of new keys from .env (higher priority) + settings.env

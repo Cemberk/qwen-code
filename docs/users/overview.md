@@ -40,7 +40,7 @@ cd your-project
 qwen
 ```
 
-On first launch you'll be prompted to connect a model provider. The menu offers **Alibaba ModelStudio** (the official recommended setup), **Third-party Providers** (built-in providers such as DeepSeek, MiniMax, Z.AI, Kimi, and OpenRouter, connected with an API key), and **Custom Provider** (a local server, proxy, or unsupported provider). For the [Alibaba Cloud Token Plan](https://bailian.console.aliyun.com/cn-beijing?tab=doc#/doc/?type=model&url=3028856) ([intl](https://modelstudio.console.alibabacloud.com/ap-southeast-1?tab=doc#/doc/?type=model)), choose **Alibaba ModelStudio → Token Plan**; to use a ModelStudio API key, choose **Alibaba ModelStudio → Standard API Key** and follow the API setup guide ([Beijing](https://bailian.console.aliyun.com/cn-beijing/?tab=doc#/doc/?type=model&url=3023091) / [intl](https://modelstudio.console.alibabacloud.com/ap-southeast-1?tab=doc#/doc/?type=model&url=2974721)). Then let's start with understanding your codebase. Try one of these commands:
+Qwen Code runs against a local OpenAI-compatible model server on this machine, such as Ollama, LM Studio, vLLM or llama.cpp. On first launch you'll be prompted for the server's base URL (for example `http://127.0.0.1:11434/v1` for Ollama), an API key value and the model IDs to use. See [Authentication](./configuration/auth) for details. Then let's start with understanding your codebase. Try one of these commands:
 
 ```
 what does this project do?
@@ -48,7 +48,7 @@ what does this project do?
 
 ![](https://cloud.video.taobao.com/vod/j7-QtQScn8UEAaEdiv619fSkk5p-t17orpDbSqKVL5A.mp4)
 
-You'll be prompted to log in on first use. That's it! [Continue with Quickstart (5 mins) →](./quickstart)
+That's it! [Continue with Quickstart (5 mins) →](./quickstart)
 
 > [!tip]
 >

@@ -10,7 +10,7 @@
  * OpenTUI parity of the ink `/model` dialog
  * (ui/components/ModelDialog.tsx): model list with `[authType]` tags, the
  * highlighted-entry detail panel (Modality / Context Window / Base URL /
- * API Key), runtime/discontinued markers, the empty state, error box, and
+ * API Key), runtime markers, the empty state, error box, and
  * the original footer hint. Esc closes; in auxiliary modes (fast/vision/
  * compaction) ← closes too — both straight from the original.
  * Model switching/persisting is the backend's job: `onSelect` receives the
@@ -209,7 +209,6 @@ export interface OpenTuiModelEntry extends DialogListItem<string> {
   modelId: string;
   description?: string;
   isRuntime?: boolean;
-  isQwenOAuth?: boolean;
   modalities?: InputModalities;
   contextWindowSize?: number;
   baseUrl?: string;
@@ -224,7 +223,6 @@ export function formatModelOptionLabel(entry: OpenTuiModelEntry): string {
   let label = `[${entry.authType}] ${entry.label}`;
   if (entry.modelId !== entry.label) label += ` (${entry.modelId})`;
   if (entry.isRuntime) label += ' (Runtime)';
-  if (entry.isQwenOAuth && !entry.isRuntime) label += ` (${t('Discontinued')})`;
   return label;
 }
 
@@ -352,13 +350,6 @@ export function OpenTuiModelDialog(props: OpenTuiModelDialogProps) {
       {highlightedEntry && highlightedEntry.key !== ADVISOR_OFF_OPTION && (
         <box flexDirection="column" marginTop={1}>
           <text fg={C.dim}>{'─'.repeat(ruleWidth)}</text>
-          {highlightedEntry.isQwenOAuth && !highlightedEntry.isRuntime && (
-            <box marginTop={1}>
-              <text fg={C.yellow}>
-                ⚠ {t('Discontinued — switch to Coding Plan or API Key')}
-              </text>
-            </box>
-          )}
           <DetailRow
             label={t('Modality')}
             value={formatModalities(highlightedEntry.modalities)}
@@ -367,18 +358,14 @@ export function OpenTuiModelDialog(props: OpenTuiModelDialogProps) {
             label={t('Context Window')}
             value={formatContextWindow(highlightedEntry.contextWindowSize)}
           />
-          {!highlightedEntry.isQwenOAuth && (
-            <box flexDirection="column">
-              <DetailRow
-                label="Base URL"
-                value={highlightedEntry.baseUrl ?? t('(default)')}
-              />
-              <DetailRow
-                label="API Key"
-                value={highlightedEntry.envKey ?? t('(not set)')}
-              />
-            </box>
-          )}
+          <DetailRow
+            label="Base URL"
+            value={highlightedEntry.baseUrl ?? t('(default)')}
+          />
+          <DetailRow
+            label="API Key"
+            value={highlightedEntry.envKey ?? t('(not set)')}
+          />
         </box>
       )}
 

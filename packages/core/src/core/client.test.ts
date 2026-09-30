@@ -91,7 +91,6 @@ import {
   getPlanModeSystemReminder,
 } from './prompts.js';
 import { getBuiltInOutputStyle } from './output-styles.js';
-import { DEFAULT_QWEN_FLASH_MODEL } from '../config/models.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { promptIdContext } from '../utils/promptIdContext.js';
 import { setSimulate429 } from '../utils/testUtils.js';
@@ -119,6 +118,8 @@ import {
   clearCacheSafeParams,
   getCacheSafeParams,
 } from '../agents/forkedAgent.js';
+
+const SIDE_MODEL = 'side-model';
 
 // Mock fs module to prevent actual file system operations during tests
 const mockFileSystem = new Map<string, string>();
@@ -597,8 +598,7 @@ describe('Gemini Client (client.ts)', () => {
     const contentGeneratorConfig: ContentGeneratorConfig = {
       model: 'test-model',
       apiKey: 'test-key',
-      vertexai: false,
-      authType: AuthType.USE_GEMINI,
+      authType: AuthType.USE_OPENAI,
     };
     mockConfig = {
       getContentGeneratorConfig: vi
@@ -607,7 +607,6 @@ describe('Gemini Client (client.ts)', () => {
       getToolRegistry: vi.fn().mockReturnValue(mockToolRegistry),
       getToolSearchThreshold: vi.fn().mockReturnValue(10),
       getModel: vi.fn().mockReturnValue('test-model'),
-      getEmbeddingModel: vi.fn().mockReturnValue('test-embedding-model'),
       getApiKey: vi.fn().mockReturnValue('test-key'),
       getVertexAI: vi.fn().mockReturnValue(false),
       getUserAgent: vi.fn().mockReturnValue('test-agent'),
@@ -1959,8 +1958,7 @@ describe('Gemini Client (client.ts)', () => {
       vi.mocked(mockConfig.getContentGeneratorConfig).mockReturnValue({
         model: 'test-model',
         apiKey: 'test-key',
-        vertexai: false,
-        authType: AuthType.USE_GEMINI,
+        authType: AuthType.USE_OPENAI,
         contextWindowSize: 50_000,
       });
       reg.preloadDeferredToolsWithinBudget.mockClear();
@@ -4432,13 +4430,13 @@ describe('Gemini Client (client.ts)', () => {
           'prompt-selector-limit',
           {
             type: SendMessageType.UserQuery,
-            modelOverride: 'openai:vision-agent\0https://vision.example/v1\0',
+            modelOverride: 'openai:vision-agent\0http://127.0.0.1:8080/v1\0',
           },
         ),
       );
 
       expect(resolveForModel).toHaveBeenCalledWith(
-        'openai:vision-agent\0https://vision.example/v1',
+        'openai:vision-agent\0http://127.0.0.1:8080/v1',
         { failClosed: true },
       );
       expect(events).toContainEqual({
@@ -15432,7 +15430,7 @@ describe('Gemini Client (client.ts)', () => {
   describe('generateContent', () => {
     it('filters unsupported media for the resolved target model', async () => {
       vi.mocked(mockConfig.getContentGeneratorConfig).mockReturnValue({
-        authType: AuthType.USE_GEMINI,
+        authType: AuthType.USE_OPENAI,
         model: 'test-model',
         modalities: { pdf: true },
       } as ContentGeneratorConfig);
@@ -15473,12 +15471,12 @@ describe('Gemini Client (client.ts)', () => {
         contents,
         generationConfig,
         abortSignal,
-        DEFAULT_QWEN_FLASH_MODEL,
+        SIDE_MODEL,
       );
 
       expect(mockContentGenerator.generateContent).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: DEFAULT_QWEN_FLASH_MODEL,
+          model: SIDE_MODEL,
           config: expect.objectContaining({
             abortSignal,
             systemInstruction: getCoreSystemPrompt(''),
@@ -15520,7 +15518,7 @@ describe('Gemini Client (client.ts)', () => {
         contents,
         {},
         new AbortController().signal,
-        DEFAULT_QWEN_FLASH_MODEL,
+        SIDE_MODEL,
       );
 
       expect(mockContentGenerator.generateContent).not.toHaveBeenCalledWith({
@@ -15530,7 +15528,7 @@ describe('Gemini Client (client.ts)', () => {
       });
       expect(mockContentGenerator.generateContent).toHaveBeenCalledWith(
         {
-          model: DEFAULT_QWEN_FLASH_MODEL,
+          model: SIDE_MODEL,
           config: expect.any(Object),
           contents,
         },
@@ -15543,17 +15541,12 @@ describe('Gemini Client (client.ts)', () => {
       const abortSignal = new AbortController().signal;
 
       await promptIdContext.run('btw-prompt-id', async () => {
-        await client.generateContent(
-          contents,
-          {},
-          abortSignal,
-          DEFAULT_QWEN_FLASH_MODEL,
-        );
+        await client.generateContent(contents, {}, abortSignal, SIDE_MODEL);
       });
 
       expect(mockContentGenerator.generateContent).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: DEFAULT_QWEN_FLASH_MODEL,
+          model: SIDE_MODEL,
           contents,
         }),
         'btw-prompt-id',
@@ -15569,18 +15562,12 @@ describe('Gemini Client (client.ts)', () => {
           client.generateContent as unknown as (
             ...args: unknown[]
           ) => Promise<GenerateContentResponse>
-        )(
-          contents,
-          {},
-          abortSignal,
-          DEFAULT_QWEN_FLASH_MODEL,
-          'override-prompt-id',
-        );
+        )(contents, {}, abortSignal, SIDE_MODEL, 'override-prompt-id');
       });
 
       expect(mockContentGenerator.generateContent).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: DEFAULT_QWEN_FLASH_MODEL,
+          model: SIDE_MODEL,
           contents,
         }),
         'override-prompt-id',
@@ -15607,7 +15594,7 @@ describe('Gemini Client (client.ts)', () => {
         contents,
         { systemInstruction: 'Custom side-query prompt' },
         abortSignal,
-        DEFAULT_QWEN_FLASH_MODEL,
+        SIDE_MODEL,
       );
 
       const request = vi
@@ -15644,7 +15631,7 @@ describe('Gemini Client (client.ts)', () => {
         contents,
         { systemInstruction: 'Side query base' },
         abortSignal,
-        DEFAULT_QWEN_FLASH_MODEL,
+        SIDE_MODEL,
       );
 
       const request = vi
@@ -15675,12 +15662,7 @@ describe('Gemini Client (client.ts)', () => {
         'Override prompt with memory',
       );
 
-      await client.generateContent(
-        contents,
-        {},
-        abortSignal,
-        DEFAULT_QWEN_FLASH_MODEL,
-      );
+      await client.generateContent(contents, {}, abortSignal, SIDE_MODEL);
 
       // The override is the stable base only; user memory flows through
       // assembleSystemPrompt as the context layer.
@@ -15705,12 +15687,7 @@ describe('Gemini Client (client.ts)', () => {
         'Be extra concise.',
       );
 
-      await client.generateContent(
-        contents,
-        {},
-        abortSignal,
-        DEFAULT_QWEN_FLASH_MODEL,
-      );
+      await client.generateContent(contents, {}, abortSignal, SIDE_MODEL);
 
       // The core prompt is requested as the stable base only; the append
       // prompt flows through assembleSystemPrompt as a context-layer slot.
@@ -15742,12 +15719,7 @@ describe('Gemini Client (client.ts)', () => {
       vi.mocked(getCoreSystemPrompt).mockClear();
       vi.spyOn(client['config'], 'getOutputStyle').mockReturnValue(concise);
 
-      await client.generateContent(
-        contents,
-        {},
-        abortSignal,
-        DEFAULT_QWEN_FLASH_MODEL,
-      );
+      await client.generateContent(contents, {}, abortSignal, SIDE_MODEL);
 
       expect(getCoreSystemPrompt).toHaveBeenCalledWith(
         undefined,
@@ -15768,12 +15740,7 @@ describe('Gemini Client (client.ts)', () => {
       vi.mocked(getCoreSystemPrompt).mockClear();
       vi.spyOn(client['config'], 'getCodeModeOnly').mockReturnValue(true);
 
-      await client.generateContent(
-        contents,
-        {},
-        abortSignal,
-        DEFAULT_QWEN_FLASH_MODEL,
-      );
+      await client.generateContent(contents, {}, abortSignal, SIDE_MODEL);
 
       expect(getCoreSystemPrompt).toHaveBeenCalledWith(
         undefined,
@@ -15803,12 +15770,7 @@ describe('Gemini Client (client.ts)', () => {
           client['config'].getExperimentalZedIntegration,
         ).mockReturnValue(acp);
 
-        await client.generateContent(
-          contents,
-          {},
-          abortSignal,
-          DEFAULT_QWEN_FLASH_MODEL,
-        );
+        await client.generateContent(contents, {}, abortSignal, SIDE_MODEL);
 
         expect(getCoreSystemPrompt).toHaveBeenCalledWith(
           undefined,
@@ -15840,12 +15802,7 @@ describe('Gemini Client (client.ts)', () => {
         'Override prompt with memory and append',
       );
 
-      await client.generateContent(
-        contents,
-        {},
-        abortSignal,
-        DEFAULT_QWEN_FLASH_MODEL,
-      );
+      await client.generateContent(contents, {}, abortSignal, SIDE_MODEL);
 
       // The override is the stable base; memory and append flow through
       // assembleSystemPrompt in canonical layer order (context files before
@@ -15870,18 +15827,8 @@ describe('Gemini Client (client.ts)', () => {
       vi.mocked(getRecentGitStatus).mockClear();
       vi.mocked(getCoreSystemPrompt).mockReturnValue('Core prompt');
 
-      await client.generateContent(
-        contents,
-        {},
-        abortSignal,
-        DEFAULT_QWEN_FLASH_MODEL,
-      );
-      await client.generateContent(
-        contents,
-        {},
-        abortSignal,
-        DEFAULT_QWEN_FLASH_MODEL,
-      );
+      await client.generateContent(contents, {}, abortSignal, SIDE_MODEL);
+      await client.generateContent(contents, {}, abortSignal, SIDE_MODEL);
 
       expect(getRecentGitStatus).toHaveBeenCalledTimes(1);
       expect(mockContentGenerator.generateContent).toHaveBeenNthCalledWith(
@@ -15912,12 +15859,7 @@ describe('Gemini Client (client.ts)', () => {
       );
 
       await expect(
-        client.generateContent(
-          contents,
-          {},
-          abortSignal,
-          DEFAULT_QWEN_FLASH_MODEL,
-        ),
+        client.generateContent(contents, {}, abortSignal, SIDE_MODEL),
       ).rejects.toThrow('raw upstream 500 with sensitive details');
     });
 
@@ -15934,7 +15876,7 @@ describe('Gemini Client (client.ts)', () => {
           contents,
           {},
           abortController.signal,
-          DEFAULT_QWEN_FLASH_MODEL,
+          SIDE_MODEL,
         ),
       ).rejects.toThrow('raw abort reason with sensitive details');
     });
@@ -15955,7 +15897,7 @@ describe('Gemini Client (client.ts)', () => {
         id: 'fast-model',
         authType: 'openai' as const,
         name: 'Fast Model',
-        baseUrl: 'https://fast-api.example.com',
+        baseUrl: 'http://127.0.0.1:1234/v1',
         generationConfig: {
           extra_body: { enable_thinking: false },
           samplingParams: { temperature: 0.1 },
@@ -16008,7 +15950,7 @@ describe('Gemini Client (client.ts)', () => {
         id: 'fast-model',
         authType: 'openai' as const,
         name: 'Fast Model',
-        baseUrl: 'https://fast-api.example.com',
+        baseUrl: 'http://127.0.0.1:1234/v1',
         envKey: 'FAST_API_KEY',
         generationConfig: {
           extra_body: { enable_thinking: false },
@@ -16039,7 +15981,7 @@ describe('Gemini Client (client.ts)', () => {
         mockConfig,
         'fast-model',
         expect.objectContaining({
-          baseUrl: 'https://fast-api.example.com',
+          baseUrl: 'http://127.0.0.1:1234/v1',
         }),
       );
 
@@ -16122,51 +16064,6 @@ describe('Gemini Client (client.ts)', () => {
       expect(buildAgentContentGeneratorConfig).not.toHaveBeenCalled();
     });
 
-    it('should use fast model authType for retry, not main model authType', async () => {
-      const contents = [{ role: 'user', parts: [{ text: 'hello' }] }];
-      const abortSignal = new AbortController().signal;
-
-      const mockResolvedModel = {
-        id: 'fast-model',
-        authType: 'openai' as const,
-        name: 'Fast Model',
-        baseUrl: 'https://fast-api.example.com',
-        generationConfig: {},
-        capabilities: {},
-      };
-
-      const getResolvedModel = vi.fn().mockReturnValue(mockResolvedModel);
-      vi.mocked(mockConfig.getModelsConfig).mockReturnValue({
-        getResolvedModel,
-      } as unknown as ModelsConfig);
-
-      // Main config uses a different authType
-      vi.mocked(mockConfig.getContentGeneratorConfig).mockReturnValue({
-        authType: AuthType.QWEN_OAUTH,
-        apiKey: 'test-key',
-        apiModel: 'test-model',
-      } as unknown as ContentGeneratorConfig);
-
-      // Success path for createContentGenerator
-      vi.mocked(createContentGenerator).mockResolvedValue(mockContentGenerator);
-
-      await client.generateContent(
-        contents,
-        { temperature: 0.5 },
-        abortSignal,
-        'fast-model',
-      );
-
-      // VERIFY: retryWithBackoff was called with the fast model's authType ('openai'),
-      // not the main model's authType ('QWEN_OAUTH').
-      expect(retryWithBackoff).toHaveBeenCalledWith(
-        expect.any(Function),
-        expect.objectContaining({
-          authType: 'openai',
-        }),
-      );
-    });
-
     it('should cache per-model content generators', async () => {
       const contents = [{ role: 'user', parts: [{ text: 'hello' }] }];
       const abortController = new AbortController();
@@ -16174,7 +16071,7 @@ describe('Gemini Client (client.ts)', () => {
         id: 'fast-model',
         authType: 'openai' as const,
         name: 'Fast Model',
-        baseUrl: 'https://fast-api.example.com',
+        baseUrl: 'http://127.0.0.1:1234/v1',
         generationConfig: {},
         capabilities: {},
       };
@@ -16204,74 +16101,6 @@ describe('Gemini Client (client.ts)', () => {
       expect(createContentGenerator).toHaveBeenCalledTimes(1);
     });
 
-    it('should resolve model across authTypes when main authType misses', async () => {
-      const contents = [{ role: 'user', parts: [{ text: 'hello' }] }];
-      const abortSignal = new AbortController().signal;
-
-      const mockResolvedModel = {
-        id: 'fast-model',
-        authType: 'openai' as const,
-        name: 'Fast Model',
-        baseUrl: 'https://fast-api.example.com',
-        generationConfig: {},
-        capabilities: {},
-        envKey: undefined,
-      };
-
-      // The central model-id resolver can now identify the authType from the
-      // configured model list before BaseLlmClient asks ModelsConfig for the
-      // concrete provider settings.
-      vi.mocked(mockConfig.getAllConfiguredModels).mockImplementation(
-        (authTypes?: AuthType[]) =>
-          !authTypes || authTypes.includes(AuthType.USE_OPENAI)
-            ? [
-                {
-                  id: 'fast-model',
-                  label: 'Fast Model',
-                  authType: AuthType.USE_OPENAI,
-                },
-              ]
-            : [],
-      );
-      const getResolvedModel = vi.fn((authType: AuthType, model: string) =>
-        authType === AuthType.USE_OPENAI && model === 'fast-model'
-          ? mockResolvedModel
-          : undefined,
-      );
-
-      vi.mocked(mockConfig.getModelsConfig).mockReturnValue({
-        getResolvedModel,
-      } as unknown as ModelsConfig);
-
-      // Main config uses QWEN_OAUTH — fast model registered under USE_OPENAI
-      vi.mocked(mockConfig.getContentGeneratorConfig).mockReturnValue({
-        authType: AuthType.QWEN_OAUTH,
-        apiKey: 'test-key',
-        apiModel: 'test-model',
-      } as unknown as ContentGeneratorConfig);
-
-      // Mock createContentGenerator to succeed so the cross-authType
-      // resolution path completes without falling back
-      vi.mocked(createContentGenerator).mockResolvedValue(mockContentGenerator);
-
-      await client.generateContent(
-        contents,
-        { temperature: 0.5 },
-        abortSignal,
-        'fast-model',
-      );
-
-      // The model-id resolver found the configured OpenAI owner, so
-      // ModelsConfig is queried directly with that authType.
-      expect(getResolvedModel).toHaveBeenNthCalledWith(
-        1,
-        AuthType.USE_OPENAI,
-        'fast-model',
-      );
-      // Generator was created using the resolved model's config
-      expect(createContentGenerator).toHaveBeenCalled();
-    });
-
     it('should clear per-model generator cache on resetChat', async () => {
       const contents = [{ role: 'user', parts: [{ text: 'hello' }] }];
       const abortController = new AbortController();
@@ -16279,7 +16108,7 @@ describe('Gemini Client (client.ts)', () => {
         id: 'fast-model',
         authType: 'openai' as const,
         name: 'Fast Model',
-        baseUrl: 'https://fast-api.example.com',
+        baseUrl: 'http://127.0.0.1:1234/v1',
         generationConfig: {},
         capabilities: {},
       };

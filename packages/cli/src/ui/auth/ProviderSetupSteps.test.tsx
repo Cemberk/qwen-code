@@ -7,14 +7,15 @@
 import { renderWithProviders } from '../../test-utils/render.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
-import { AuthType, customProvider } from '@qwen-code/qwen-code-core';
-import type { ModelSpec } from '@qwen-code/qwen-code-core';
+import { customProvider } from '@qwen-code/qwen-code-core';
+import type { ProviderConfig } from '@qwen-code/qwen-code-core';
 import type { KeypressHandler, Key } from '../contexts/KeypressContext.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { ProviderSetupSteps } from './ProviderSetupSteps.js';
 import {
   useProviderSetupFlow,
   type ProviderSetupFlow,
+  type ProviderSetupState,
 } from './useProviderSetupFlow.js';
 
 type UseKeypressMockOptions = { isActive: boolean };
@@ -29,6 +30,8 @@ vi.mock('../hooks/useKeypress.js');
 
 let activeKeypressHandlers: KeypressHandler[] = [];
 
+const LOCAL_BASE_URL = 'http://127.0.0.1:11434/v1';
+
 describe('ProviderSetupSteps', () => {
   beforeEach(() => {
     activeKeypressHandlers = [];
@@ -42,6 +45,20 @@ describe('ProviderSetupSteps', () => {
     );
   });
 
+  const keyEvent = (
+    name: string,
+    sequence: string,
+    overrides: Partial<Key>,
+  ): Key => ({
+    name,
+    sequence,
+    ctrl: false,
+    meta: false,
+    shift: false,
+    paste: false,
+    ...overrides,
+  });
+
   const pressKey = (
     name: string,
     sequence: string = name,
@@ -50,17 +67,8 @@ describe('ProviderSetupSteps', () => {
     if (activeKeypressHandlers.length === 0) {
       throw new Error(`No active keypress handler for ${name}`);
     }
-    const event = {
-      name,
-      sequence,
-      ctrl: false,
-      meta: false,
-      shift: false,
-      paste: false,
-      ...overrides,
-    };
     for (const handler of activeKeypressHandlers) {
-      handler(event);
+      handler(keyEvent(name, sequence, overrides));
     }
   };
 
@@ -73,221 +81,25 @@ describe('ProviderSetupSteps', () => {
     if (!handler) {
       throw new Error(`No active keypress handler for ${name}`);
     }
-    handler({
-      name,
-      sequence,
-      ctrl: false,
-      meta: false,
-      shift: false,
-      paste: false,
-      ...overrides,
-    });
+    handler(keyEvent(name, sequence, overrides));
   };
 
-  const createProtocolFlow = (): ProviderSetupFlow => {
+  const createFlow = (
+    state: Partial<ProviderSetupState>,
+    actions: Partial<ProviderSetupFlow> = {},
+  ): ProviderSetupFlow => {
     const noop = vi.fn();
     return {
       state: {
         provider: customProvider,
-        step: 'protocol',
-        stepIndex: 0,
-        totalSteps: 1,
-        protocol: AuthType.USE_OPENAI,
-        baseUrl: '',
-        baseUrlPlaceholder: '',
-        baseUrlOptionIndex: 0,
+        step: 'models',
+        stepIndex: 1,
+        totalSteps: 5,
+        baseUrl: LOCAL_BASE_URL,
         baseUrlError: null,
-        apiKey: '',
+        apiKey: 'secret-key',
         apiKeyError: null,
         modelIds: '',
-        modelIdsError: null,
-        thinkingEnabled: false,
-        modalityEnabled: false,
-        modalityImage: true,
-        modalityVideo: true,
-        modalityAudio: true,
-        modalityPdf: false,
-        contextWindowSize: '',
-        focusedConfigIndex: 0,
-        previewJson: '',
-      },
-      start: noop,
-      reset: noop,
-      goBack: noop,
-      selectProtocol: noop,
-      selectBaseUrl: noop,
-      highlightBaseUrl: noop,
-      submitBaseUrl: noop,
-      changeBaseUrl: noop,
-      changeApiKey: noop,
-      submitApiKey: noop,
-      changeModelIds: noop,
-      submitModelIds: noop,
-      moveAdvancedFocusUp: noop,
-      moveAdvancedFocusDown: noop,
-      toggleFocusedAdvancedOption: noop,
-      changeContextWindowSize: noop,
-      submitAdvancedConfig: noop,
-      submit: noop,
-    } as unknown as ProviderSetupFlow;
-  };
-
-  const createAdvancedConfigFlow = (): ProviderSetupFlow => {
-    const noop = vi.fn();
-    return {
-      state: {
-        provider: {
-          name: 'Custom',
-          authType: AuthType.USE_OPENAI,
-          protocol: AuthType.USE_OPENAI,
-          showAdvancedConfig: true,
-        },
-        step: 'advancedConfig',
-        stepIndex: 0,
-        totalSteps: 1,
-        protocol: AuthType.USE_OPENAI,
-        baseUrl: '',
-        baseUrlPlaceholder: '',
-        baseUrlOptionIndex: 0,
-        baseUrlError: null,
-        apiKey: '',
-        apiKeyError: null,
-        modelIds: '',
-        modelIdsError: null,
-        thinkingEnabled: false,
-        modalityEnabled: false,
-        modalityImage: true,
-        modalityVideo: true,
-        modalityAudio: true,
-        modalityPdf: false,
-        contextWindowSize: '',
-        focusedConfigIndex: 0,
-        previewJson: '',
-      },
-      start: noop,
-      reset: noop,
-      goBack: noop,
-      selectProtocol: noop,
-      selectBaseUrl: noop,
-      highlightBaseUrl: noop,
-      submitBaseUrl: noop,
-      changeBaseUrl: noop,
-      changeApiKey: noop,
-      submitApiKey: noop,
-      changeModelIds: noop,
-      clearModelIdsError: vi.fn(),
-      submitModelIds: noop,
-      moveAdvancedFocusUp: vi.fn(),
-      moveAdvancedFocusDown: vi.fn(),
-      toggleFocusedAdvancedOption: noop,
-      changeContextWindowSize: noop,
-      submitAdvancedConfig: noop,
-      submit: noop,
-    } as unknown as ProviderSetupFlow;
-  };
-
-  const createModelIdsFlow = ({
-    modelIds = 'MiniMax-M3, MiniMax-M2.7',
-    submitModelIds = vi.fn(),
-  }: {
-    modelIds?: string;
-    submitModelIds?: ReturnType<typeof vi.fn>;
-  } = {}): ProviderSetupFlow => {
-    const noop = vi.fn();
-    return {
-      state: {
-        provider: {
-          id: 'minimax',
-          label: 'MiniMax API Key',
-          description: 'Quick setup for MiniMax models',
-          protocol: AuthType.USE_OPENAI,
-          baseUrl: 'https://api.minimax.io/v1',
-          envKey: 'MINIMAX_API_KEY',
-          models: [
-            {
-              id: 'MiniMax-M3',
-              contextWindowSize: 1000000,
-              modalities: { image: true, video: true },
-            },
-            { id: 'MiniMax-M2.7', contextWindowSize: 204800 },
-            { id: 'MiniMax-M2.5', contextWindowSize: 196608 },
-          ],
-          modelsEditable: true,
-          modelNamePrefix: 'MiniMax',
-        },
-        step: 'models',
-        stepIndex: 0,
-        totalSteps: 1,
-        protocol: AuthType.USE_OPENAI,
-        baseUrl: '',
-        baseUrlPlaceholder: '',
-        baseUrlOptionIndex: 0,
-        baseUrlError: null,
-        apiKey: '',
-        apiKeyError: null,
-        modelIds,
-        modelIdsError: null,
-        thinkingEnabled: false,
-        modalityEnabled: false,
-        modalityImage: true,
-        modalityVideo: true,
-        modalityAudio: true,
-        modalityPdf: false,
-        contextWindowSize: '',
-        focusedConfigIndex: 0,
-        previewJson: '',
-      },
-      start: noop,
-      reset: noop,
-      goBack: noop,
-      selectProtocol: noop,
-      selectBaseUrl: noop,
-      highlightBaseUrl: noop,
-      submitBaseUrl: noop,
-      changeBaseUrl: noop,
-      changeApiKey: noop,
-      submitApiKey: noop,
-      changeModelIds: noop,
-      clearModelIdsError: vi.fn(),
-      submitModelIds,
-      moveAdvancedFocusUp: noop,
-      moveAdvancedFocusDown: noop,
-      toggleFocusedAdvancedOption: noop,
-      changeContextWindowSize: noop,
-      submitAdvancedConfig: noop,
-      submit: noop,
-    } as unknown as ProviderSetupFlow;
-  };
-
-  const createCustomModelIdsFlow = ({
-    modelIds = 'model-a, model-b',
-    submitModelIds = vi.fn(),
-  }: {
-    modelIds?: string;
-    submitModelIds?: ReturnType<typeof vi.fn>;
-  } = {}): ProviderSetupFlow => {
-    const noop = vi.fn();
-    return {
-      state: {
-        provider: {
-          id: 'custom-openai-compatible',
-          label: 'Custom Provider',
-          description: 'Manually connect a provider',
-          protocol: AuthType.USE_OPENAI,
-          modelsEditable: true,
-          showAdvancedConfig: true,
-        },
-        step: 'models',
-        stepIndex: 0,
-        totalSteps: 1,
-        protocol: AuthType.USE_OPENAI,
-        baseUrl: '',
-        baseUrlPlaceholder: '',
-        baseUrlOptionIndex: 0,
-        baseUrlError: null,
-        apiKey: '',
-        apiKeyError: null,
-        modelIds,
         modelIdsError: null,
         thinkingEnabled: false,
         modalityEnabled: false,
@@ -298,61 +110,98 @@ describe('ProviderSetupSteps', () => {
         contextWindowSize: '',
         focusedConfigIndex: 0,
         previewJson: '',
+        ...state,
       },
       start: noop,
       reset: noop,
       goBack: noop,
-      selectProtocol: noop,
-      selectBaseUrl: noop,
-      highlightBaseUrl: noop,
       submitBaseUrl: noop,
       changeBaseUrl: noop,
       changeApiKey: noop,
       submitApiKey: noop,
-      changeModelIds: noop,
+      changeModelIds: vi.fn(),
       clearModelIdsError: vi.fn(),
-      submitModelIds,
-      moveAdvancedFocusUp: noop,
-      moveAdvancedFocusDown: noop,
+      submitModelIds: vi.fn(),
+      moveAdvancedFocusUp: vi.fn(),
+      moveAdvancedFocusDown: vi.fn(),
       toggleFocusedAdvancedOption: noop,
       changeContextWindowSize: noop,
       submitAdvancedConfig: noop,
       submit: noop,
+      ...actions,
     } as unknown as ProviderSetupFlow;
   };
 
-  const enableDiscovery = (flow: ProviderSetupFlow) => {
-    if (!flow.state.provider) {
-      throw new Error('Expected a provider');
-    }
-    flow.state.provider = {
-      ...flow.state.provider,
-      supportsModelDiscovery: true,
-    };
-    flow.state.baseUrl = 'https://example.com/v1';
-    flow.state.apiKey = 'secret-key';
+  const manualProvider: ProviderConfig = {
+    ...customProvider,
+    supportsModelDiscovery: false,
   };
 
-  it('shows one OpenAI provider choice and a separate API step', () => {
-    const flow = createProtocolFlow();
+  let realFlow: ProviderSetupFlow | undefined;
+  const RealFlowHarness = () => {
+    const flow = useProviderSetupFlow(async () => {});
+    realFlow = flow;
+    return <ProviderSetupSteps flow={flow} />;
+  };
 
-    const { lastFrame, unmount } = renderWithProviders(
-      <ProviderSetupSteps flow={flow} />,
+  describe('base URL step', () => {
+    const renderBaseUrlStep = async () => {
+      const view = renderWithProviders(<RealFlowHarness />);
+      await act(async () => {
+        realFlow?.start(customProvider);
+      });
+      return view;
+    };
+
+    it('asks for a loopback server without offering a default URL', async () => {
+      const { lastFrame, unmount } = await renderBaseUrlStep();
+
+      const frame = lastFrame() ?? '';
+      expect(frame).toContain(
+        'Enter the base URL of the local OpenAI-compatible server.',
+      );
+      expect(frame).toContain('The host must be 127.0.0.1, ::1 or localhost.');
+      expect(frame).not.toMatch(/https?:\/\//);
+      expect(frame).not.toContain('Documentation');
+      expect(realFlow?.state.baseUrl).toBe('');
+      unmount();
+    });
+
+    it.each([
+      ['', 'No model server base URL is configured'],
+      ['https://api.openai.com/v1', 'is not allowed'],
+      ['http://192.168.1.5:8000/v1', 'is not allowed'],
+    ])('shows an inline error for %j', async (url, message) => {
+      const { lastFrame, unmount } = await renderBaseUrlStep();
+
+      await act(async () => {
+        realFlow?.submitBaseUrl(url);
+      });
+
+      expect(lastFrame()).toContain(message);
+      expect(realFlow?.state.step).toBe('baseUrl');
+      unmount();
+    });
+
+    it.each(['http://127.0.0.1:11434/v1', 'http://localhost:1234/v1'])(
+      'moves on to the API key for %s',
+      async (url) => {
+        const { lastFrame, unmount } = await renderBaseUrlStep();
+
+        await act(async () => {
+          realFlow?.submitBaseUrl(url);
+        });
+
+        expect(realFlow?.state.step).toBe('apiKey');
+        expect(realFlow?.state.baseUrl).toBe(url);
+        expect(lastFrame()).not.toContain('is not allowed');
+        unmount();
+      },
     );
-
-    expect(lastFrame()).toContain('OpenAI-compatible');
-    expect(lastFrame()).not.toContain('OpenAI Responses');
-    unmount();
-    flow.state.step = 'wireApi';
-    flow.state.wireApi = 'responses';
-    flow.selectWireApi = vi.fn();
-    const apiView = renderWithProviders(<ProviderSetupSteps flow={flow} />);
-    expect(apiView.lastFrame()).toContain('Chat Completions');
-    expect(apiView.lastFrame()).toContain('Responses');
-    apiView.unmount();
   });
+
   it('maps Ctrl+P/N to advanced-config focus navigation', () => {
-    const flow = createAdvancedConfigFlow();
+    const flow = createFlow({ step: 'advancedConfig' });
 
     const { unmount } = renderWithProviders(<ProviderSetupSteps flow={flow} />);
 
@@ -364,125 +213,12 @@ describe('ProviderSetupSteps', () => {
     unmount();
   });
 
-  it('renders predefined editable models with a primary free-form input and recommendations', () => {
-    const flow = createModelIdsFlow();
-
-    const { lastFrame, unmount } = renderWithProviders(
-      <ProviderSetupSteps flow={flow} />,
-    );
-
-    const frame = lastFrame() ?? '';
-    expect(frame).toContain('Enter model IDs directly');
-    expect(frame).toContain('Recommended models');
-    expect(frame).not.toContain('Other models from the provider');
-    expect(frame).toContain(
-      'Checked recommended models are applied on submit but not copied into the input.',
-    );
-    expect(frame).toContain('◉');
-    expect(frame).toContain('○');
-    expect(frame).not.toContain('›');
-    expect(frame).not.toContain('[x]');
-    expect(frame).not.toContain('[ ]');
-    expect(frame).toContain('MiniMax-M3');
-    expect(frame).toContain('1,000,000 tokens');
-    expect(frame).toContain('text/image/video');
-    expect(frame).toContain('204,800 tokens, text');
-    expect(frame).not.toContain('Edit raw / custom model IDs');
-    expect(frame).not.toContain('Tab for custom IDs');
-    expect(frame).toContain('Search');
-    expect(frame).toContain(
-      '↑↓/Tab to switch input, search, and recommendations',
-    );
-    expect(frame).not.toContain('Enter model IDs separated by commas');
-    unmount();
-  });
-
-  it('filters recommended models when typing search while recommendations are focused', async () => {
-    const flow = createModelIdsFlow();
-
-    const { lastFrame, unmount } = renderWithProviders(
-      <ProviderSetupSteps flow={flow} />,
-    );
-
-    await act(async () => {
-      pressLatestKey('down');
-    });
-    await act(async () => {
-      pressLatestKey('M', 'M');
-    });
-    await act(async () => {
-      pressLatestKey('3', '3');
-    });
-
-    const frame = lastFrame() ?? '';
-    expect(frame).toContain('> M3');
-    expect(frame).toContain('MiniMax-M3');
-    expect(frame).not.toContain('MiniMax-M2.7');
-    expect(frame).not.toContain('MiniMax-M2.5');
-    unmount();
-  });
-
-  it('shows the fallback empty state when no recommended model matches', async () => {
-    const flow = createModelIdsFlow();
-    const { lastFrame, unmount } = renderWithProviders(
-      <ProviderSetupSteps flow={flow} />,
-    );
-
-    await act(async () => {
-      pressLatestKey('down');
-    });
-    await act(async () => {
-      pressLatestKey('z', 'z');
-    });
-
-    expect(lastFrame()).toContain('No recommended models match.');
-    unmount();
-  });
-
-  it('keeps recommended selections out of the free-form model input', () => {
-    const flow = createModelIdsFlow({
-      modelIds: 'custom-model, MiniMax-M3, MiniMax-M2.7',
-    });
-
-    const { lastFrame, unmount } = renderWithProviders(
-      <ProviderSetupSteps flow={flow} />,
-    );
-
-    const frame = lastFrame() ?? '';
-    const inputLine = frame
-      .split('\n')
-      .find((line) => line.includes('custom-model'));
-    expect(inputLine).toContain('custom-model');
-    expect(inputLine).not.toContain('MiniMax-M3');
-    expect(inputLine).not.toContain('MiniMax-M2.7');
-    expect(frame).toMatch(/◉\uFE0E\s+MiniMax-M3/);
-    expect(frame).toMatch(/◉\uFE0E\s+MiniMax-M2\.7/);
-    unmount();
-  });
-
-  it('deduplicates typed and recommended model IDs on submit', () => {
+  it('uses manual model entry when the provider has no discovery', () => {
     const submitModelIds = vi.fn();
-    const flow = createModelIdsFlow({
-      modelIds: 'custom-model, MiniMax-M3, MiniMax-M3, MiniMax-M2.7',
-      submitModelIds,
-    });
-
-    const { unmount } = renderWithProviders(<ProviderSetupSteps flow={flow} />);
-
-    pressKey('return', '\r');
-
-    expect(submitModelIds).toHaveBeenCalledWith({
-      modelIds: ['MiniMax-M3', 'MiniMax-M2.7', 'custom-model'],
-    });
-    unmount();
-  });
-
-  it('preserves comma-separated model IDs for custom providers', () => {
-    const submitModelIds = vi.fn();
-    const flow = createCustomModelIdsFlow({
-      modelIds: 'model-a, model-b',
-      submitModelIds,
-    });
+    const flow = createFlow(
+      { provider: manualProvider, modelIds: 'model-a, model-b' },
+      { submitModelIds },
+    );
 
     const { lastFrame, unmount } = renderWithProviders(
       <ProviderSetupSteps flow={flow} />,
@@ -491,6 +227,7 @@ describe('ProviderSetupSteps', () => {
     const frame = lastFrame() ?? '';
     expect(frame).toContain('Enter model IDs separated by commas');
     expect(frame).toContain('model-a, model-b');
+    expect(discoverProviderModelsMock).not.toHaveBeenCalled();
 
     pressLatestKey('return', '\r');
 
@@ -500,8 +237,7 @@ describe('ProviderSetupSteps', () => {
 
   it('does not mount the model editor before discovery settles', () => {
     discoverProviderModelsMock.mockReturnValue(new Promise(() => {}));
-    const flow = createModelIdsFlow();
-    enableDiscovery(flow);
+    const flow = createFlow({});
 
     const { lastFrame, unmount } = renderWithProviders(
       <ProviderSetupSteps flow={flow} />,
@@ -512,121 +248,24 @@ describe('ProviderSetupSteps', () => {
     expect(frame).toContain('Esc to go back');
     expect(frame).not.toContain('Enter model IDs directly');
     expect(discoverProviderModelsMock).toHaveBeenCalledWith({
-      baseUrl: 'https://example.com/v1',
+      baseUrl: LOCAL_BASE_URL,
       apiKey: 'secret-key',
-      staticModels: flow.state.provider?.models,
+      staticModels: [],
       signal: expect.any(AbortSignal),
     });
     unmount();
   });
 
-  it('mounts one provider snapshot without promoting new models or dropping unserved selections', async () => {
-    let resolveDiscovery!: (models: ModelSpec[]) => void;
-    discoverProviderModelsMock.mockReturnValue(
-      new Promise<ModelSpec[]>((resolve) => {
-        resolveDiscovery = resolve;
-      }),
-    );
-    const submitModelIds = vi.fn();
-    const flow = createModelIdsFlow({
-      modelIds: 'custom-model, MiniMax-M3, MiniMax-M2.7',
-      submitModelIds,
-    });
-    enableDiscovery(flow);
-    const { lastFrame, unmount } = renderWithProviders(
-      <ProviderSetupSteps flow={flow} />,
-    );
-
-    await act(async () => {
-      resolveDiscovery([
-        {
-          id: 'MiniMax-M3',
-          contextWindowSize: 1000000,
-          modalities: { image: true, video: true },
-        },
-        { id: 'MiniMax-M4' },
-        { id: 'custom-model' },
-      ]);
-    });
-
-    const frame = lastFrame() ?? '';
-    expect(frame).toContain('Models · from the provider');
-    expect(frame).not.toContain('Other models from the provider');
-    expect(frame).toContain('custom-model');
-    expect(frame).toContain('MiniMax-M3');
-    expect(frame).toContain('MiniMax-M4');
-    // The snapshot has no row for the previously selected MiniMax-M2.7, so it
-    // stays visible and selectable through the free-form input instead.
-    expect(frame).not.toMatch(/[◉○]\uFE0E\s+MiniMax-M2\.7/);
-    const inputLine = frame
-      .split('\n')
-      .find((line) => line.includes('custom-model'));
-    expect(inputLine).toContain('custom-model, MiniMax-M2.7');
-    expect(frame).toMatch(/◉\uFE0E\s+MiniMax-M3/);
-    expect(frame).toMatch(/○\uFE0E\s+MiniMax-M4/);
-    expect(frame).toMatch(/○\uFE0E\s+custom-model/);
-    const modelRows = frame.split('\n');
-    expect(
-      modelRows.findIndex((line) => /◉\uFE0E\s+MiniMax-M3/.test(line)),
-    ).toBeLessThan(
-      modelRows.findIndex((line) => /○\uFE0E\s+MiniMax-M4/.test(line)),
-    );
-    expect(
-      modelRows.findIndex((line) => /○\uFE0E\s+MiniMax-M4/.test(line)),
-    ).toBeLessThan(
-      modelRows.findIndex((line) => /○\uFE0E\s+custom-model/.test(line)),
-    );
-    expect(frame).toContain(
-      'Checked models are applied on submit but not copied into the input.',
-    );
-    expect(frame).toContain(
-      '↑↓/Tab to switch input, search, and models, Space to toggle models',
-    );
-    await act(async () => {
-      pressLatestKey('x', 'x');
-    });
-    expect(lastFrame()).toContain('xcustom-model, MiniMax-M2.7');
-    expect(flow.changeModelIds).not.toHaveBeenCalled();
-    pressKey('return', '\r');
-    expect(submitModelIds).toHaveBeenCalledWith({
-      modelIds: ['MiniMax-M3', 'xcustom-model', 'MiniMax-M2.7'],
-    });
-    unmount();
-  });
-
-  it('lists provider-only models in the unified provider catalog', async () => {
+  it('lists the served models with saved ids kept in the free-form input', async () => {
     discoverProviderModelsMock.mockResolvedValue([
-      { id: 'served-unknown-a' },
-      { id: 'served-unknown-b' },
-    ]);
-    const flow = createModelIdsFlow();
-    enableDiscovery(flow);
-
-    const { lastFrame, unmount } = renderWithProviders(
-      <ProviderSetupSteps flow={flow} />,
-    );
-    await act(async () => {});
-
-    const frame = lastFrame() ?? '';
-    expect(frame).toContain('Models · from the provider');
-    expect(frame).not.toContain('Other models from the provider');
-    expect(frame).toMatch(/○\uFE0E\s+served-unknown-a/);
-    expect(frame).toMatch(/○\uFE0E\s+served-unknown-b/);
-    unmount();
-  });
-
-  it('shows selected models in curated order while rendering provider order', async () => {
-    discoverProviderModelsMock.mockResolvedValue([
-      { id: 'MiniMax-M2.7', contextWindowSize: 204800 },
       {
-        id: 'MiniMax-M3',
+        id: 'served-a',
         contextWindowSize: 1000000,
         modalities: { image: true, video: true },
       },
+      { id: 'served-b', contextWindowSize: 204800 },
     ]);
-    const submitModelIds = vi.fn();
-    const flow = createModelIdsFlow({ submitModelIds });
-    enableDiscovery(flow);
+    const flow = createFlow({ modelIds: 'saved-model' });
 
     const { lastFrame, unmount } = renderWithProviders(
       <ProviderSetupSteps flow={flow} />,
@@ -634,126 +273,72 @@ describe('ProviderSetupSteps', () => {
     await act(async () => {});
 
     const frame = lastFrame() ?? '';
-    expect(frame).toContain('Models · from the provider · 2 checked');
-    expect(frame).toMatch(/◉\uFE0E\s+MiniMax-M2\.7/);
-    expect(frame).toMatch(/◉\uFE0E\s+MiniMax-M3/);
-    expect(frame.indexOf('MiniMax-M2.7')).toBeLessThan(
-      frame.indexOf('MiniMax-M3'),
+    expect(frame).toContain('Enter model IDs directly');
+    expect(frame).toContain('Models · from the provider · 0 checked');
+    expect(frame).toContain(
+      'Checked models are applied on submit but not copied into the input.',
     );
-
-    pressKey('return', '\r');
-    expect(submitModelIds).toHaveBeenCalledWith({
-      modelIds: ['MiniMax-M3', 'MiniMax-M2.7'],
-    });
+    expect(frame).toContain('1,000,000 tokens, text/image/video');
+    expect(frame).toContain('204,800 tokens, text');
+    expect(frame).toMatch(/○︎\s+served-a/);
+    expect(frame).toMatch(/○︎\s+served-b/);
+    const inputLine = frame
+      .split('\n')
+      .find((line) => line.includes('saved-model'));
+    expect(inputLine).toBeDefined();
+    expect(frame).toContain(
+      '↑↓/Tab to switch input, search, and models, Space to toggle models',
+    );
     unmount();
   });
 
-  it('keeps curated selection order after toggling a provider-only model', async () => {
+  it('filters served models by the search query', async () => {
     discoverProviderModelsMock.mockResolvedValue([
-      { id: 'provider-only-new' },
-      { id: 'MiniMax-M2.7' },
-      { id: 'MiniMax-M3' },
+      { id: 'qwen3-coder' },
+      { id: 'llama3' },
     ]);
-    const submitModelIds = vi.fn();
-    const flow = createModelIdsFlow({ submitModelIds });
-    enableDiscovery(flow);
+    const flow = createFlow({});
 
     const { lastFrame, unmount } = renderWithProviders(
       <ProviderSetupSteps flow={flow} />,
     );
     await act(async () => {});
+
+    await act(async () => {
+      pressLatestKey('down');
+    });
+    await act(async () => {
+      pressLatestKey('q', 'q');
+    });
 
     const frame = lastFrame() ?? '';
-    expect(frame).toMatch(/○\uFE0E\s+provider-only-new/);
-    expect(frame).toMatch(/◉\uFE0E\s+MiniMax-M2\.7/);
-    expect(frame.indexOf('provider-only-new')).toBeLessThan(
-      frame.indexOf('MiniMax-M2.7'),
-    );
+    expect(frame).toContain('qwen3-coder');
+    expect(frame).not.toContain('llama3');
 
-    await act(async () => {
-      pressLatestKey('down');
-    });
-    await act(async () => {
-      pressLatestKey('down');
-    });
-    await act(async () => {
-      pressLatestKey('space', ' ');
-    });
-
-    pressKey('return', '\r');
-    expect(submitModelIds).toHaveBeenCalledWith({
-      modelIds: ['MiniMax-M3', 'MiniMax-M2.7', 'provider-only-new'],
-    });
-    unmount();
-  });
-
-  it('reports selected models that begin below the provider window', async () => {
-    discoverProviderModelsMock.mockResolvedValue([
-      ...Array.from({ length: 8 }, (_, index) => ({
-        id: `new-model-${index}`,
-      })),
-      { id: 'MiniMax-M3' },
-      { id: 'MiniMax-M2.7' },
-    ]);
-    const flow = createModelIdsFlow();
-    enableDiscovery(flow);
-
-    const { lastFrame, unmount } = renderWithProviders(
-      <ProviderSetupSteps flow={flow} />,
-    );
-    await act(async () => {});
-
-    const frame = lastFrame() ?? '';
-    expect(frame).toContain('Models · from the provider · 2 checked');
-    expect(frame).not.toContain('MiniMax-M3');
-    expect(frame).not.toContain('MiniMax-M2.7');
-    unmount();
-  });
-
-  it('shows the provider empty state when no discovered model matches', async () => {
-    discoverProviderModelsMock.mockResolvedValue([{ id: 'served-model' }]);
-    const flow = createModelIdsFlow();
-    enableDiscovery(flow);
-    const { lastFrame, unmount } = renderWithProviders(
-      <ProviderSetupSteps flow={flow} />,
-    );
-    await act(async () => {});
-
-    await act(async () => {
-      pressLatestKey('down');
-    });
     await act(async () => {
       pressLatestKey('z', 'z');
     });
-
     expect(lastFrame()).toContain('No models match.');
     unmount();
   });
 
-  it('toggles and submits an unendorsed provider model like a recommended one', async () => {
-    let resolveDiscovery!: (models: ModelSpec[]) => void;
-    discoverProviderModelsMock.mockReturnValue(
-      new Promise<ModelSpec[]>((resolve) => {
-        resolveDiscovery = resolve;
-      }),
-    );
+  it('submits checked served models ahead of typed ids', async () => {
+    discoverProviderModelsMock.mockResolvedValue([
+      { id: 'served-a' },
+      { id: 'served-b' },
+    ]);
     const submitModelIds = vi.fn();
-    const flow = createModelIdsFlow({
-      modelIds: 'custom-model, MiniMax-M3',
-      submitModelIds,
-    });
-    enableDiscovery(flow);
+    const flow = createFlow(
+      { modelIds: 'typed-model, served-b' },
+      { submitModelIds },
+    );
+
     const { lastFrame, unmount } = renderWithProviders(
       <ProviderSetupSteps flow={flow} />,
     );
+    await act(async () => {});
 
-    await act(async () => {
-      resolveDiscovery([
-        { id: 'MiniMax-M3', contextWindowSize: 1000000 },
-        { id: 'MiniMax-M4' },
-      ]);
-    });
-
+    // Input → search → first model → second model, then toggle it.
     await act(async () => {
       pressLatestKey('down');
     });
@@ -767,20 +352,20 @@ describe('ProviderSetupSteps', () => {
       pressLatestKey('space', ' ');
     });
 
-    expect(lastFrame()).toMatch(/◉\uFE0E\s+MiniMax-M4/);
-    expect(lastFrame()).toContain('Models · from the provider · 2 checked');
+    expect(lastFrame()).toMatch(/◉︎\s+served-b/);
+    expect(lastFrame()).toContain('Models · from the provider · 1 checked');
+    expect(flow.changeModelIds).not.toHaveBeenCalled();
 
     pressKey('return', '\r');
     expect(submitModelIds).toHaveBeenCalledWith({
-      modelIds: ['MiniMax-M3', 'MiniMax-M4', 'custom-model'],
+      modelIds: ['served-b', 'typed-model'],
     });
     unmount();
   });
 
-  it('falls back to built-ins after an unavailable catalog', async () => {
+  it('falls back to manual entry when the model list is unavailable', async () => {
     discoverProviderModelsMock.mockResolvedValue(null);
-    const flow = createModelIdsFlow();
-    enableDiscovery(flow);
+    const flow = createFlow({ modelIds: 'saved-model' });
 
     const { lastFrame, unmount } = renderWithProviders(
       <ProviderSetupSteps flow={flow} />,
@@ -788,18 +373,15 @@ describe('ProviderSetupSteps', () => {
     await act(async () => {});
 
     const frame = lastFrame() ?? '';
-    expect(frame).toContain(
-      'Recommended models · provider list unavailable, showing built-ins',
-    );
-    expect(frame).not.toContain('Other models from the provider');
-    expect(frame).toContain('MiniMax-M2.7');
+    expect(frame).toContain('Enter model IDs separated by commas');
+    expect(frame).toContain('saved-model');
+    expect(frame).not.toContain('Models · from the provider');
     unmount();
   });
 
   it('cancels a pending discovery when the step unmounts', () => {
     discoverProviderModelsMock.mockReturnValue(new Promise(() => {}));
-    const flow = createModelIdsFlow();
-    enableDiscovery(flow);
+    const flow = createFlow({});
     const { unmount } = renderWithProviders(<ProviderSetupSteps flow={flow} />);
     const signal = discoverProviderModelsMock.mock.calls[0]?.[0]
       .signal as AbortSignal;
@@ -809,66 +391,19 @@ describe('ProviderSetupSteps', () => {
     expect(signal.aborted).toBe(true);
   });
 
-  it('submits served recommendations ahead of unserved defaults on a partial catalog', async () => {
-    let resolveDiscovery!: (models: ModelSpec[]) => void;
-    discoverProviderModelsMock.mockReturnValue(
-      new Promise<ModelSpec[]>((resolve) => {
-        resolveDiscovery = resolve;
-      }),
-    );
-    const submitModelIds = vi.fn();
-    // Defaults are pre-selected; the catalog serves MiniMax-M3 but not the
-    // built-in MiniMax-M2.7, which the step demotes into the free-form input.
-    const flow = createModelIdsFlow({ submitModelIds });
-    enableDiscovery(flow);
-
-    const { lastFrame, unmount } = renderWithProviders(
-      <ProviderSetupSteps flow={flow} />,
-    );
-
-    await act(async () => {
-      resolveDiscovery([{ id: 'MiniMax-M3', contextWindowSize: 1000000 }]);
-    });
-
-    expect(lastFrame()).toContain('Enter model IDs directly');
-
-    pressKey('return', '\r');
-
-    // The no-edit submit must lead with a catalog-served model: models[0]
-    // becomes modelSelection and is written as model.name on first-time setup.
-    expect(submitModelIds).toHaveBeenCalledWith({
-      modelIds: ['MiniMax-M3', 'MiniMax-M2.7'],
-    });
-    unmount();
-  });
-
   it('clears the model-ids error on edit after an empty discovery submit', async () => {
     discoverProviderModelsMock.mockResolvedValue([{ id: 'served-model' }]);
-
-    let flow: ProviderSetupFlow | undefined;
-    const RealFlowHarness = () => {
-      const realFlow = useProviderSetupFlow(async () => {});
-      flow = realFlow;
-      return <ProviderSetupSteps flow={realFlow} />;
-    };
 
     const { lastFrame, unmount } = renderWithProviders(<RealFlowHarness />);
 
     await act(async () => {
-      flow?.start({
-        id: 'discovery-provider',
-        label: 'Discovery Provider',
-        description: 'Provider with model discovery',
-        protocol: AuthType.USE_OPENAI,
-        baseUrl: 'https://example.com/v1',
-        envKey: 'DISCOVERY_API_KEY',
-        modelsEditable: true,
-        supportsModelDiscovery: true,
-        modelNamePrefix: 'Discovery',
-      });
+      realFlow?.start(customProvider);
     });
     await act(async () => {
-      flow?.submitApiKey('sk-discovery');
+      realFlow?.submitBaseUrl(LOCAL_BASE_URL);
+    });
+    await act(async () => {
+      realFlow?.submitApiKey('sk-discovery');
     });
     await act(async () => {});
 

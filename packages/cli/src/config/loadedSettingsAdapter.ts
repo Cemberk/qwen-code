@@ -20,9 +20,8 @@ import type {
 import {
   SettingScope,
   getHomeEnvFallbackVars,
-  LoadedSettings,
+  type LoadedSettings,
 } from './settings.js';
-import { AuthType } from '@qwen-code/qwen-code-core/utils/auth-type.js';
 import { preserveModelProviderPlaceholders } from '@qwen-code/qwen-code-core/providers/model-config-serialization.js';
 import { resolveEnvVarsInObject } from '@qwen-code/qwen-code-core/envVarResolver';
 import { getPersistScopeForModelSelection } from './modelProvidersScope.js';
@@ -119,25 +118,11 @@ export function createLoadedSettingsAdapter(
       const raw = ownsBucket
         ? settingsFile.originalSettings.modelProviders?.[provider]
         : sourceFor(provider);
-      const resolvedProviders =
-        provider === AuthType.USE_OPENAI
-          ? (settings.merged.modelProviders ?? {})
-          : { [provider]: previous ?? [] };
-      const rawProviders =
-        provider === AuthType.USE_OPENAI
-          ? Object.fromEntries(
-              Object.keys(resolvedProviders).map((id) => [
-                id,
-                sourceFor(id) ?? [],
-              ]),
-            )
-          : { [provider]: raw ?? [] };
       const persisted = preserveModelProviderPlaceholders(
         value as ModelProvidersConfig[string],
         provider,
-        resolvedProviders,
-        rawProviders,
-        settings.merged.providerProtocol,
+        { [provider]: previous ?? [] },
+        { [provider]: raw ?? [] },
       );
       settings.setValue(persistScope, key, persisted);
       settingsFile.settings.modelProviders = resolveEnvVarsInObject(
@@ -152,36 +137,7 @@ export function createLoadedSettingsAdapter(
     },
 
     getModelProvidersForWrite() {
-      const ownProviders = settingsFile.settings.modelProviders ?? {};
-      const writeView =
-        persistScope === SettingScope.User
-          ? new LoadedSettings(
-              settings.system,
-              settings.systemDefaults,
-              settings.user,
-              { ...settings.workspace, settings: {}, originalSettings: {} },
-              false,
-              new Set(),
-            ).merged
-          : settings.merged;
-      return {
-        modelProviders: ownProviders,
-        providerProtocol: writeView.providerProtocol,
-        shadowedProviders: Object.keys(ownProviders).filter(
-          (providerId) =>
-            [
-              SettingScope.System,
-              ...(settings.isTrusted ? [SettingScope.Workspace] : []),
-              SettingScope.User,
-              SettingScope.SystemDefaults,
-            ].find((scope) =>
-              Object.hasOwn(
-                settings.forScope(scope).originalSettings.modelProviders ?? {},
-                providerId,
-              ),
-            ) !== persistScope,
-        ),
-      };
+      return { modelProviders: settingsFile.settings.modelProviders ?? {} };
     },
 
     persist(): void {

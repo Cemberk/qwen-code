@@ -210,7 +210,6 @@ import {
   useSettingInputRequests,
   usePluginChoiceRequests,
 } from './hooks/useExtensionUpdates.js';
-import { useProviderUpdates } from './hooks/useProviderUpdates.js';
 import { ShellFocusContext } from './contexts/ShellFocusContext.js';
 import { ContextMenuProvider } from './context-menu/ContextMenuContext.js';
 import {
@@ -834,12 +833,6 @@ export const AppContainer = (props: AppContainerProps) => {
     extensionsUpdateStateInternal,
     dispatchExtensionStateUpdate,
   } = useExtensionUpdates();
-
-  const { providerUpdateRequest, dismissProviderUpdate } = useProviderUpdates(
-    settings,
-    config,
-    historyManager.addItem,
-  );
 
   const [isTrustDialogOpen, setTrustDialogOpen] = useState(false);
   const openTrustDialog = useCallback(() => setTrustDialogOpen(true), []);
@@ -1634,39 +1627,9 @@ export const AppContainer = (props: AppContainerProps) => {
   );
   const { state: authState, actions: authActions } = auth;
   const { onAuthError, openAuthDialog, closeAuthDialog } = authActions;
-  const { isAuthDialogOpen, isAuthenticating, pendingAuthType } = authState;
+  const { isAuthDialogOpen, isAuthenticating } = authState;
 
   useInitializationAuthError(initializationResult.authError, onAuthError);
-
-  // Sync user tier from config when authentication changes
-  // TODO: Implement getUserTier() method on Config if needed
-  // useEffect(() => {
-  //   if (authState === AuthState.Authenticated) {
-  //     setUserTier(config.getUserTier());
-  //   }
-  // }, [config, authState]);
-
-  // Check for enforced auth type mismatch
-  useEffect(() => {
-    // Check for initialization error first
-    const currentAuthType = config.getModelsConfig().getCurrentAuthType();
-
-    if (
-      settings.merged.security?.auth?.enforcedType &&
-      currentAuthType &&
-      settings.merged.security?.auth.enforcedType !== currentAuthType
-    ) {
-      onAuthError(
-        t(
-          'Authentication is enforced to be {{enforcedType}}, but you are currently using {{currentType}}.',
-          {
-            enforcedType: String(settings.merged.security?.auth.enforcedType),
-            currentType: String(currentAuthType),
-          },
-        ),
-      );
-    }
-  }, [settings.merged.security?.auth?.enforcedType, config, onAuthError]);
 
   const [editorError, setEditorError] = useState<string | null>(null);
   const {
@@ -3584,7 +3547,6 @@ export const AppContainer = (props: AppContainerProps) => {
     !!shellConfirmationRequest ||
     !!confirmationRequest ||
     confirmUpdateExtensionRequests.length > 0 ||
-    !!providerUpdateRequest ||
     settingInputRequests.length > 0 ||
     pluginChoiceRequests.length > 0 ||
     !!loopDetectionConfirmationRequest ||
@@ -4140,7 +4102,6 @@ export const AppContainer = (props: AppContainerProps) => {
     handleOutputStyleSelect,
     isAuthDialogOpen,
     closeAuthDialog,
-    pendingAuthType,
     isEditorDialogOpen,
     exitEditorDialog,
     isSettingsDialogOpen,
@@ -4628,7 +4589,6 @@ export const AppContainer = (props: AppContainerProps) => {
       shellConfirmationRequest,
       confirmationRequest,
       confirmUpdateExtensionRequests,
-      providerUpdateRequest,
       settingInputRequests,
       pluginChoiceRequests,
       loopDetectionConfirmationRequest,
@@ -4765,7 +4725,6 @@ export const AppContainer = (props: AppContainerProps) => {
       shellConfirmationRequest,
       confirmationRequest,
       confirmUpdateExtensionRequests,
-      providerUpdateRequest,
       settingInputRequests,
       pluginChoiceRequests,
       loopDetectionConfirmationRequest,
@@ -4890,7 +4849,6 @@ export const AppContainer = (props: AppContainerProps) => {
       openArenaDialog,
       closeArenaDialog,
       handleArenaModelsSelected,
-      dismissProviderUpdate,
       closeTrustDialog,
       closePermissionsDialog,
       setShellModeActive,
@@ -4977,7 +4935,6 @@ export const AppContainer = (props: AppContainerProps) => {
       openArenaDialog,
       closeArenaDialog,
       handleArenaModelsSelected,
-      dismissProviderUpdate,
       closeTrustDialog,
       closePermissionsDialog,
       setShellModeActive,

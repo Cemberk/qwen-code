@@ -20,9 +20,8 @@ export const CUSTOM_API_KEY_ENV_PREFIX = 'QWEN_CUSTOM_API_KEY_';
  * of the canonicalized (protocol, baseUrl) pair disambiguates structurally
  * distinct endpoints so configuring one custom provider can't silently
  * overwrite another's API key. 48 bits gives ~280 trillion values — well
- * past the point where an attacker controlling a user-typed URL could
- * realistically collide an existing entry to redirect an API key write,
- * while still keeping the env var name pasteable into a dashboard.
+ * past the point where a user-typed URL could realistically collide with an
+ * existing entry, while still keeping the env var name readable.
  *
  * Existing explicit envKey references are preserved on reconnect. This
  * function chooses the credential reference for new model routes.
@@ -91,27 +90,17 @@ export function generateCustomEnvKey(
 
 export const customProvider: ProviderConfig = {
   id: 'custom-openai-compatible',
-  label: 'Custom Provider',
+  label: 'Local OpenAI-compatible server',
   description:
-    'Manually connect a local server, proxy, or unsupported provider',
+    'Connect a model server on this machine (Ollama, LM Studio, vLLM, llama.cpp)',
   protocol: AuthType.USE_OPENAI,
-  protocolOptions: [
-    AuthType.USE_OPENAI,
-    AuthType.USE_ANTHROPIC,
-    AuthType.USE_GEMINI,
-  ],
-  baseUrl: undefined,
   envKey: generateCustomEnvKey,
-  models: undefined,
-  modelNamePrefix: '',
+  supportsModelDiscovery: true,
   showAdvancedConfig: true,
-  // Detect existing custom entries by our env-key namespace for UI/ACP flows,
-  // but merge installs by id+baseUrl so /auth can add another custom model
-  // without deleting models from other endpoints or different models on the
-  // same endpoint.
+  // Detect existing entries by our env-key namespace for UI/ACP flows; installs
+  // merge by id+baseUrl so /auth can add another model without deleting models
+  // from other endpoints or different models on the same endpoint.
   ownsModel: (model) =>
     typeof model.envKey === 'string' &&
     model.envKey.startsWith(CUSTOM_API_KEY_ENV_PREFIX),
-  mergeModelsByIdentity: true,
-  uiGroup: 'custom',
 };

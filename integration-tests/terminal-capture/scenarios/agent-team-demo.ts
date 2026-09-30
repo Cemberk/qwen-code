@@ -23,7 +23,7 @@
  * Run:
  *   QWEN_CODE_ENABLE_AGENT_TEAM=1 npx tsx \
  *     integration-tests/terminal-capture/scenarios/agent-team-demo.ts
- * Auth: glm-5.1 via the openai provider (DASHSCOPE_API_KEY in env).
+ * Auth: a model on the local OpenAI-compatible server (OPENAI_* in env).
  * Output: scenarios/screenshots/agent-team-demo/ (frames + demo.gif).
  */
 import { dirname, resolve, join } from 'node:path';

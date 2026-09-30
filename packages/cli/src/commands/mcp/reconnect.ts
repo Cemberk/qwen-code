@@ -102,14 +102,6 @@ async function createMinimalConfig(): Promise<Config> {
     // untrusted-skip reporting below becomes unreachable, and this command
     // would attempt connections a normal session would not (issue #9944).
     trustedFolder: isWorkspaceTrusted(settings.merged).isTrusted ?? true,
-    // Mirror loadCliConfig's proxy resolution (minus the --proxy flag this
-    // command does not take).
-    proxy:
-      settings.merged.proxy ||
-      process.env['HTTPS_PROXY'] ||
-      process.env['https_proxy'] ||
-      process.env['HTTP_PROXY'] ||
-      process.env['http_proxy'],
     ...(fileFiltering !== undefined ? { fileFiltering } : {}),
   });
 

@@ -7319,12 +7319,12 @@ describe('AgentTool', () => {
       );
     });
 
-    it('does not persist the parent base URL for a cross-provider runtime', async () => {
+    it('does not persist the parent base URL for a separate subagent runtime', async () => {
       const writeMetaSpy = vi.spyOn(transcript, 'writeAgentMeta');
       vi.mocked(config.getContentGeneratorConfig).mockReturnValue({
         model: 'parent-model',
         authType: AuthType.USE_OPENAI,
-        baseUrl: 'https://parent-provider.example.com',
+        baseUrl: 'http://127.0.0.1:11434/v1',
       });
       vi.mocked(mockAgent.getCore).mockReturnValue({
         modelConfig: { model: 'subagent-model' },
@@ -7332,7 +7332,7 @@ describe('AgentTool', () => {
           contentGenerator: {},
           contentGeneratorConfig: {
             model: 'subagent-model',
-            authType: AuthType.USE_ANTHROPIC,
+            authType: AuthType.USE_OPENAI,
           },
         },
         getEventEmitter: () => ({ on: vi.fn(), off: vi.fn() }),
@@ -7350,7 +7350,7 @@ describe('AgentTool', () => {
       const persistedFlags = writeMetaSpy.mock.calls[0]?.[1].persistedCliFlags;
       expect(persistedFlags).toMatchObject({
         model: 'subagent-model',
-        authType: 'anthropic',
+        authType: 'openai',
       });
       expect(persistedFlags).toHaveProperty('baseUrl', undefined);
       writeMetaSpy.mockRestore();

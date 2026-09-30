@@ -41,11 +41,6 @@ import {
   isRateLimitError,
   type RetryInfo,
 } from '../utils/rateLimit.js';
-import { ResponsesHttpError } from '../utils/responses-http-error.js';
-import {
-  getResponsesMessage,
-  sameResponsesMessage,
-} from '../utils/responses-message.js';
 import {
   classifyRetryError,
   isFallbackEligible,
@@ -375,16 +370,13 @@ export function redactStructuredOutputArgsForRecording(
 
 function consolidateModelResponseParts(allModelParts: Part[]): Part[] {
   // A turn can legitimately contain multiple distinct reasoning episodes
-  // separated by tool calls (Anthropic interleaved thinking, OpenAI
-  // Responses reasoning items on parallel function calls). Each episode
+  // separated by tool calls (interleaved thinking). Each episode
   // must keep its own signature and its own position relative to the
   // tool calls it preceded -- merging every thought-flagged part into one
   // blob and keeping only the first signature silently discards every
   // other episode's replayable payload and destroys the interleaving.
   //
-  // Both wires terminate an episode with a text-less, signature-only
-  // chunk (anthropicContentGenerator.ts's signature_delta handling;
-  // responses-converter.ts's output_item.done for a reasoning item), so a
+  // A signed episode ends with a text-less, signature-only chunk, so a
   // thought part carrying fresh non-empty text while the open episode
   // already has both accumulated text and a signature can only be the
   // start of a new episode -- no legitimate continuation of the same
@@ -398,16 +390,8 @@ function consolidateModelResponseParts(allModelParts: Part[]): Part[] {
   // Known limitation: two back-to-back thought parts with NO signature at
   // all and no intervening non-thought part still merge into one episode
   // -- neither boundary condition above can fire without a signature to
-  // test. This is consistent with both wires' documented invariant that
-  // every episode ends in a signature-only chunk; it is not reachable via
-  // Anthropic interleaved thinking or OpenAI Responses reasoning items as
-  // implemented, but would misattribute text across episodes if a
-  // non-compliant proxy ever dropped a signature entirely.
-  //
-  // Responses emits one complete JSON {id, encrypted_content} payload at
-  // output_item.done. Close that episode immediately, even without summary
-  // text; unlike Anthropic signature_delta fragments, it must never be
-  // concatenated with the next reasoning item's payload.
+  // test; that would misattribute text across episodes if a server ever
+  // dropped a signature entirely.
   const consolidatedHistoryParts: Part[] = [];
   let openEpisodeText = '';
   let openEpisodeSignature = '';
@@ -417,7 +401,7 @@ function consolidateModelResponseParts(allModelParts: Part[]): Part[] {
     if (!hasOpenEpisode) return;
     const text = openEpisodeText;
     // A signature-only episode (no text) is kept, not dropped: it is
-    // still potentially replayable per Anthropic's spec, and this is
+    // still potentially replayable, and this is
     // the ACTIVE (latest) turn's thinking, which must replay byte-exact
     // -- unlike converter.ts's dropEmptyTextThinkingBlocks, which drops
     // this same empty-text shape but only from non-latest turns, where
@@ -450,9 +434,6 @@ function consolidateModelResponseParts(allModelParts: Part[]): Part[] {
       openEpisodeText += partText;
       if (part.thoughtSignature) {
         openEpisodeSignature += part.thoughtSignature;
-        if (isCompleteResponsesReasoningSignature(part.thoughtSignature)) {
-          flushThoughtEpisode();
-        }
       }
       continue;
     }
@@ -462,7 +443,6 @@ function consolidateModelResponseParts(allModelParts: Part[]): Part[] {
     if (
       lastPart?.text &&
       isValidNonThoughtTextPart(lastPart) &&
-      sameResponsesMessage(lastPart, part) &&
       isValidNonThoughtTextPart(part)
     ) {
       lastPart.text += part.text;
@@ -1061,9 +1041,6 @@ function mergeDeliveredPrefix(
 
 function mergeDeliveredParts(prefix: Part[], remainder: Part[]): Part[] {
   if (prefix.length === 0) return remainder;
-  if ([...prefix, ...remainder].some((part) => getResponsesMessage(part))) {
-    return appendRecoveryContinuationParts(prefix, remainder);
-  }
   const parts = [...remainder];
   const textIndex = parts.findIndex(isPlainTextPart);
   const text = getPlainTextFromParts(prefix);
@@ -1218,11 +1195,6 @@ function appendRecoveryContinuationParts(
     const continuationTextPart = nextParts[continuationTextIndex] as Part & {
       text: string;
     };
-    // Distinct Responses messages carry their own meaning, even when their
-    // text overlaps (for example commentary repeated as the final answer).
-    if (!sameResponsesMessage(previousTextPart, continuationTextPart)) {
-      return [...mergedParts, ...nextParts];
-    }
     const suffix = getRecoveryContinuationSuffix(
       previousTextPart.text,
       continuationTextPart.text,
@@ -1340,23 +1312,6 @@ function dropDanglingUnsignedTrailingThought(
   }
 }
 
-function isCompleteResponsesReasoningSignature(signature: string): boolean {
-  if (!signature.startsWith('{')) return false;
-  try {
-    const payload: unknown = JSON.parse(signature);
-    return (
-      payload !== null &&
-      typeof payload === 'object' &&
-      'id' in payload &&
-      typeof payload.id === 'string' &&
-      'encrypted_content' in payload &&
-      typeof payload.encrypted_content === 'string'
-    );
-  } catch {
-    return false;
-  }
-}
-
 function findLastPlainTextPartIndex(parts: Part[]): number {
   for (let i = parts.length - 1; i >= 0; i -= 1) {
     if (isPlainTextPart(parts[i])) {
@@ -1368,7 +1323,7 @@ function findLastPlainTextPartIndex(parts: Part[]): number {
 
 /**
  * Options for retrying on rate-limit throttling errors returned as stream content.
- * Starts at 60s to match DashScope's per-minute quota window, then backs off
+ * Starts at 60s to match a per-minute quota window, then backs off
  * across repeated stream-side throttling errors.
  * 10 retries aligns with Claude Code's retry behavior.
  */
@@ -1428,7 +1383,7 @@ function delay(
 /**
  * Returns true if the response is valid, false otherwise.
  *
- * The DashScope provider may return the last 2 chunks as:
+ * Some OpenAI-compatible servers return the last 2 chunks as:
  * 1. A choice(candidate) with finishReason and empty content
  * 2. Empty choices with usage metadata
  * We'll check separately for both of these cases.
@@ -3524,7 +3479,6 @@ export class LlmChat {
         const requestOverrides = exactRoute
           ? {
               contentGenerator: exactRoute.contentGenerator,
-              retryAuthType: exactRoute.retryAuthType,
               retryErrorCodes: exactRoute.retryErrorCodes,
             }
           : undefined;
@@ -3764,7 +3718,6 @@ export class LlmChat {
             // Classify once per failed attempt; reused by the rate-limit
             // diagnostics below and the transport-retry decision further down.
             const classification = classifyRetryError(error, {
-              authType: cgConfig?.authType,
               extraRetryErrorCodes,
             });
 
@@ -3788,12 +3741,6 @@ export class LlmChat {
               });
             }
 
-            if (
-              error instanceof ResponsesHttpError &&
-              error.headers.get('x-should-retry') === 'false'
-            ) {
-              throw error;
-            }
             const isRateLimit = isRateLimitError(error, extraRetryErrorCodes);
             if (isRateLimit) {
               const details = getRateLimitErrorDetails(error);
@@ -3966,7 +3913,7 @@ export class LlmChat {
             // delivered, replaying is off the table — it would duplicate what
             // the caller already has — but propagating is not the only
             // alternative left. Gateways that cap SSE connection lifetime
-            // (DashScope closes at ~3-5 min) cut long generations partway
+            // (some close at ~3-5 min) cut long generations partway
             // through the answer, which is precisely when the replay gate is
             // shut, so large outputs failed outright however many retries were
             // configured. Instead of replaying, keep the delivered text and
@@ -4789,7 +4736,6 @@ export class LlmChat {
             !streamYieldedAnyChunk
           ) {
             let currentErrorClassification = classifyRetryError(lastError, {
-              authType: cgConfig?.authType,
               extraRetryErrorCodes,
             });
 
@@ -4815,7 +4761,6 @@ export class LlmChat {
 
                 // Resolve the fallback model's content generator
                 let fallbackGenerator: ContentGenerator;
-                let fallbackRetryAuthType: string | undefined;
                 let fallbackRetryErrorCodes: readonly number[] | undefined;
                 let resolvedFallbackModel: string;
                 let fallbackModalities: InputModalities | undefined;
@@ -4824,7 +4769,6 @@ export class LlmChat {
                     .getBaseLlmClient()
                     .resolveForModel(fallbackModelId, { failClosed: true });
                   fallbackGenerator = resolved.contentGenerator;
-                  fallbackRetryAuthType = resolved.retryAuthType;
                   fallbackRetryErrorCodes = resolved.retryErrorCodes;
                   resolvedFallbackModel = resolved.model;
                   fallbackModalities =
@@ -4899,7 +4843,6 @@ export class LlmChat {
                     params,
                     prompt_id,
                     fallbackGenerator,
-                    fallbackRetryAuthType,
                     fallbackRetryErrorCodes,
                     requestRouteKey,
                     turnGoalContext,
@@ -4947,7 +4890,6 @@ export class LlmChat {
                   const fallbackClassification = classifyRetryError(
                     fallbackError,
                     {
-                      authType: fallbackRetryAuthType,
                       extraRetryErrorCodes: fallbackRetryErrorCodes,
                     },
                   );
@@ -5091,7 +5033,6 @@ export class LlmChat {
     prompt_id: string,
     overrides?: {
       contentGenerator: ContentGenerator;
-      retryAuthType?: string;
       retryErrorCodes?: readonly number[];
     },
     routeKey = this.currentRouteKey(),
@@ -5116,7 +5057,6 @@ export class LlmChat {
       return generator.generateContentStream(request, prompt_id);
     };
     const cgConfig = this.config.getContentGeneratorConfig();
-    const authType = overrides?.retryAuthType ?? cgConfig?.authType;
     const extraRetryErrorCodes =
       overrides?.retryErrorCodes ?? cgConfig?.retryErrorCodes;
     // Fallback models never enter persistent retry mode — persistent mode
@@ -5124,10 +5064,6 @@ export class LlmChat {
     const persistentMode = overrides ? false : isUnattendedMode();
     const streamResponse = await retryWithBackoff(apiCall, {
       shouldRetryOnError: (error: unknown) => {
-        if (error instanceof ResponsesHttpError) {
-          return error.shouldRetry(extraRetryErrorCodes);
-        }
-
         if (error instanceof Error) {
           if (isSchemaDepthError(error.message)) return false;
           if (isInvalidArgumentError(error.message)) return false;
@@ -5139,21 +5075,20 @@ export class LlmChat {
           // ("network error for request ...") classifies as transport and is
           // transient; genuine client 400s stay kind 'http' and fail fast.
           return (
-            classifyRetryError(error, { authType, extraRetryErrorCodes })
-              .kind === 'transport'
+            classifyRetryError(error, { extraRetryErrorCodes }).kind ===
+            'transport'
           );
         }
         if (status === 429) return true;
         if (status && status >= 500 && status < 600) return true;
 
         // Everything an HTTP status cannot decide — provider rate-limit codes
-        // (e.g. DashScope), transport failures (ECONNRESET, ETIMEDOUT, …), and
+        // (e.g. 1302/1305), transport failures (ECONNRESET, ETIMEDOUT, …), and
         // upstream error bodies the provider traced with its own request id.
         // Shared with defaultShouldRetry, which a custom predicate like this
         // one bypasses, so the two paths cannot drift apart.
         return isRetryableUpstreamError(error, extraRetryErrorCodes);
       },
-      authType,
       extraRetryErrorCodes,
       persistentMode,
       signal: params.config?.abortSignal,
@@ -5190,7 +5125,7 @@ export class LlmChat {
       transportContinuationPrefix,
       acceptQuietToolResultCompletion,
       params.config?.abortSignal,
-      { authType, extraRetryErrorCodes },
+      { extraRetryErrorCodes },
     );
   }
 
@@ -5200,7 +5135,6 @@ export class LlmChat {
     params: SendMessageParameters,
     prompt_id: string,
     contentGenerator: ContentGenerator,
-    retryAuthType?: string,
     retryErrorCodes?: readonly number[],
     routeKey?: string,
     goalContext?: GoalTurnPermit,
@@ -5210,7 +5144,7 @@ export class LlmChat {
       requestContents,
       params,
       prompt_id,
-      { contentGenerator, retryAuthType, retryErrorCodes },
+      { contentGenerator, retryErrorCodes },
       routeKey,
       goalContext,
     );
@@ -5789,7 +5723,6 @@ export class LlmChat {
         if (
           previous &&
           isValidNonThoughtTextPart(previous) &&
-          sameResponsesMessage(previous, part) &&
           isValidNonThoughtTextPart(part)
         ) {
           previous.text! += part.text!;
@@ -6043,23 +5976,17 @@ export class LlmChat {
       // Cancellation can close the generator at a yield, skipping everything
       // after this finally. Keep the delivered partial in both history and JSONL.
       if (abortSignal?.aborted) {
-        let parts = consolidateModelResponseParts(allModelParts);
+        const parts = consolidateModelResponseParts(allModelParts);
         dropDanglingUnsignedTrailingThought(parts, hasToolCall);
         if (transportContinuationPrefix) {
-          if (
-            [...transportContinuationPrefix, ...parts].some(getResponsesMessage)
-          ) {
-            parts = mergeDeliveredParts(transportContinuationPrefix, parts);
+          // Cancellation keeps even unfinished reasoning. The success-only
+          // merge may drop it to avoid burying a dangling thought before tools.
+          const text = getPlainTextFromParts(transportContinuationPrefix);
+          const textPart = parts.find(isPlainTextPart);
+          if (textPart) {
+            textPart.text = mergeDeliveredPrefix(text, textPart.text);
           } else {
-            // Cancellation keeps even unfinished reasoning. The success-only
-            // merge may drop it to avoid burying a dangling thought before tools.
-            const text = getPlainTextFromParts(transportContinuationPrefix);
-            const textPart = parts.find(isPlainTextPart);
-            if (textPart) {
-              textPart.text = mergeDeliveredPrefix(text, textPart.text);
-            } else {
-              parts.push({ text });
-            }
+            parts.push({ text });
           }
         }
         if (parts.length > 0) {

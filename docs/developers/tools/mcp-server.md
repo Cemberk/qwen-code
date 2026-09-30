@@ -233,7 +233,7 @@ Tool parameter schemas undergo sanitization for API compatibility:
 
 - **`$schema` properties** are removed
 - **`additionalProperties`** are stripped
-- **`anyOf` with `default`** have their default values removed (Vertex AI compatibility)
+- **`anyOf` with `default`** have their default values removed
 - **Recursive processing** applies to nested schemas
 
 ### 5. Connection Management

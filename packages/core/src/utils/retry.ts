@@ -5,9 +5,7 @@
  */
 
 import type { GenerateContentResponse } from '@google/genai';
-import { AuthType } from './auth-type.js';
 import {
-  isQwenQuotaExceededError,
   isQuotaExhaustedError,
   formatQuotaExhaustedMessage,
 } from './quotaErrorDetection.js';
@@ -19,7 +17,6 @@ import {
   isRetryableUpstreamError,
 } from './retryErrorClassification.js';
 import { retryContext } from './retryContext.js';
-import { ResponsesHttpError } from './responses-http-error.js';
 
 const debugLogger = createDebugLogger('RETRY');
 
@@ -60,7 +57,6 @@ export interface RetryOptions {
   maxDelayMs: number;
   shouldRetryOnError: (error: Error) => boolean;
   shouldRetryOnContent?: (content: GenerateContentResponse) => boolean;
-  authType?: string;
   extraRetryErrorCodes?: readonly number[];
   // Persistent retry mode options
   persistentMode?: boolean;
@@ -114,9 +110,6 @@ function defaultShouldRetry(
   error: Error | unknown,
   extraRetryErrorCodes?: readonly number[],
 ): boolean {
-  if (error instanceof ResponsesHttpError) {
-    return error.shouldRetry(extraRetryErrorCodes);
-  }
   const status = getErrorStatus(error);
   if (status !== undefined && status >= 500 && status < 600) {
     return true;
@@ -255,7 +248,6 @@ export async function retryWithBackoff<T>(
     maxAttempts,
     initialDelayMs,
     maxDelayMs,
-    authType,
     extraRetryErrorCodes,
     shouldRetryOnError,
     shouldRetryOnContent,
@@ -345,12 +337,8 @@ export async function retryWithBackoff<T>(
       // verdict keeps a permanent error out of the unbounded persistent loop
       // (see shouldPersist below); and a 'retryable' verdict decides the retry
       // itself wherever defaultShouldRetry is the operative shouldRetryOnError
-      // — which it is unless the caller supplied its own. Computed before the
-      // Qwen quota fast-fail so the original error (status, request id,
-      // provider body) is always classified and logged, even when we replace it
-      // with a guidance message.
+      // — which it is unless the caller supplied its own.
       const retryDiagnostics = classifyRetryError(error, {
-        authType,
         extraRetryErrorCodes,
       });
 
@@ -359,23 +347,6 @@ export async function retryWithBackoff<T>(
       // regardless of a permissive shouldRetryOnError predicate.
       if (retryDiagnostics.kind === 'abort') {
         throw error;
-      }
-
-      // Check for Qwen OAuth quota exceeded error - throw immediately without retry
-      if (authType === AuthType.QWEN_OAUTH && isQwenQuotaExceededError(error)) {
-        debugLogger.error(
-          'Qwen OAuth quota exceeded, fast-failing',
-          retryDiagnostics,
-          error,
-        );
-        throw new Error(
-          `Qwen OAuth free tier has been discontinued as of 2026-04-15.\n\n` +
-            `To continue using Qwen Code, try one of these alternatives:\n` +
-            `  - OpenRouter:    https://openrouter.ai/docs/quickstart\n` +
-            `  - Fireworks AI:  https://docs.fireworks.ai/api-reference/introduction\n` +
-            `  - ModelStudio:   https://help.aliyun.com/zh/model-studio/coding-plan\n\n` +
-            `After setting up your API key, run /auth to configure your provider.`,
-        );
       }
 
       // Permanent quota exhaustion (e.g. Bailian token-plan "1-week quota has
@@ -432,11 +403,9 @@ export async function retryWithBackoff<T>(
       if (shouldPersist) {
         persistentAttempt++;
 
-        const retryAfterMs =
-          hasRetryAfterStatus(errorStatus) ||
-          error instanceof ResponsesHttpError
-            ? getRetryAfterDelayMs(error)
-            : null;
+        const retryAfterMs = hasRetryAfterStatus(errorStatus)
+          ? getRetryAfterDelayMs(error)
+          : null;
 
         if (retryAfterMs !== null && retryAfterMs > 0) {
           // Retry-After is a server-specified wait — respect it, only cap at
@@ -497,11 +466,9 @@ export async function retryWithBackoff<T>(
         }
       } else {
         // Normal retry path.
-        const retryAfterMs =
-          hasRetryAfterStatus(errorStatus) ||
-          error instanceof ResponsesHttpError
-            ? getRetryAfterDelayMs(error)
-            : null;
+        const retryAfterMs = hasRetryAfterStatus(errorStatus)
+          ? getRetryAfterDelayMs(error)
+          : null;
 
         let actualDelayMs: number;
         if (retryAfterMs !== null && retryAfterMs > 0) {

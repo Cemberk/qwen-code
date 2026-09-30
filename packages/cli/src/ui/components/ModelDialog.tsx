@@ -9,14 +9,13 @@ import process from 'node:process';
 import { useCallback, useContext, useMemo, useRef, useState } from 'react';
 import { Box, Text } from 'ink';
 import {
-  AuthType,
   buildModelIdContext,
   ModelSlashCommandEvent,
   logModelSlashCommand,
-  MAINLINE_CODER_MODEL,
   isImageCapable,
   parseVisionModelSetting,
   resolveModelId,
+  type AuthType,
   type AvailableModel as CoreAvailableModel,
   type Config,
   type ContentGeneratorConfig,
@@ -240,7 +239,7 @@ function handleModelSwitchSuccess({
     persistAuthTypeSelection(settings, effectiveAuthType, persistScope);
   }
 
-  const baseUrl = after?.baseUrl ?? t('(default)');
+  const baseUrl = after?.baseUrl ?? t('(not set)');
   const maskedKey = maskApiKey(after?.apiKey);
   const scopeSuffix =
     persistScope === 'workspace'
@@ -347,13 +346,9 @@ export function ModelDialog({
             .available);
       return (
         !m.isRuntimeModel &&
-        (m.authType !== AuthType.QWEN_OAUTH ||
-          authType === AuthType.QWEN_OAUTH) &&
-        m.imageOnly !== true &&
         (isFastModelMode ||
           (isAdvisorModelMode && isAvailableAdvisorModel) ||
           !m.fastOnly) &&
-        !m.voiceOnly &&
         (isVisionModelMode || !m.visionOnly) &&
         (!isAdvisorModelMode ||
           (isAvailableAdvisorModel &&
@@ -361,33 +356,7 @@ export function ModelDialog({
       );
     });
 
-    // Group registry models by authType
-    const modelsByAuthTypeMap = new Map<AuthType, CoreAvailableModel[]>();
-    for (const model of registryModels) {
-      const authType = model.authType;
-      if (!modelsByAuthTypeMap.has(authType)) {
-        modelsByAuthTypeMap.set(authType, []);
-      }
-      modelsByAuthTypeMap.get(authType)!.push(model);
-    }
-
-    // Fixed order: qwen-oauth first, then others in a stable order
-    const authTypeOrder: AuthType[] = [
-      AuthType.QWEN_OAUTH,
-      AuthType.USE_OPENAI,
-      AuthType.USE_OPENAI_RESPONSES,
-      AuthType.USE_ANTHROPIC,
-      AuthType.USE_GEMINI,
-      AuthType.USE_VERTEX_AI,
-    ];
-
-    // Filter to only include authTypes that have registry models and maintain order
-    const availableAuthTypes = new Set(modelsByAuthTypeMap.keys());
-    const orderedAuthTypes = authTypeOrder.filter((t) =>
-      availableAuthTypes.has(t),
-    );
-
-    // Build ordered list: runtime models first, then registry models grouped by authType
+    // Build ordered list: runtime models first, then registry models
     const result: Array<{
       authType: AuthType;
       model: CoreAvailableModel;
@@ -405,21 +374,13 @@ export function ModelDialog({
       });
     }
 
-    // Add registry models grouped by authType
-    for (const t of orderedAuthTypes) {
-      for (const model of modelsByAuthTypeMap.get(t) ?? []) {
-        result.push({ authType: t, model, isRuntime: false });
-      }
+    // Then the registry models
+    for (const model of registryModels) {
+      result.push({ authType: model.authType, model, isRuntime: false });
     }
 
     return result;
-  }, [
-    authType,
-    config,
-    isFastModelMode,
-    isAdvisorModelMode,
-    isVisionModelMode,
-  ]);
+  }, [config, isFastModelMode, isAdvisorModelMode, isVisionModelMode]);
 
   const MODEL_OPTIONS = useMemo(() => {
     const options = availableModelEntries.map(
@@ -433,19 +394,11 @@ export function ModelDialog({
                 isAdvisorModelMode ? model.registryBaseUrl : model.baseUrl,
               );
 
-        const isQwenOAuth = t2 === AuthType.QWEN_OAUTH;
-
         const title = (
           <Text>
             <Text
               bold
-              color={
-                isQwenOAuth
-                  ? theme.status.warning
-                  : isRuntime
-                    ? theme.status.warning
-                    : theme.text.accent
-              }
+              color={isRuntime ? theme.status.warning : theme.text.accent}
             >
               [{t2}]
             </Text>
@@ -457,21 +410,15 @@ export function ModelDialog({
               </Text>
             )}
             {isRuntime && <Text color={theme.status.warning}> (Runtime)</Text>}
-            {isQwenOAuth && !isRuntime && (
-              <Text color={theme.status.warning}> ({t('Discontinued')})</Text>
-            )}
           </Text>
         );
 
-        // Include runtime / discontinued indicator in description
+        // Include runtime indicator in description
         let description = model.description || '';
         if (isRuntime) {
           description = description
             ? `${description} (Runtime)`
             : 'Runtime model';
-        }
-        if (isQwenOAuth && !isRuntime) {
-          description = t('Discontinued — switch to Coding Plan or API Key');
         }
 
         return {
@@ -568,7 +515,7 @@ export function ModelDialog({
         ? parsedAdvisorModelSetting.modelId
         : isVisionModelMode && parsedVisionModelSetting
           ? parsedVisionModelSetting.modelId
-          : config?.getModel() || MAINLINE_CODER_MODEL;
+          : (config?.getModel() ?? '');
   const isAuxiliaryModelMode =
     isFastModelMode ||
     isAdvisorModelMode ||
@@ -951,25 +898,6 @@ export function ModelDialog({
         return;
       }
 
-      // Block selection of discontinued qwen-oauth models
-      // (only block non-runtime OAuth; runtime OAuth models from existing
-      //  cached tokens are still allowed to work until the server rejects them)
-      const isQwenOAuthSelection =
-        selected.startsWith(`${AuthType.QWEN_OAUTH}::`) ||
-        (selected.startsWith('$runtime|') &&
-          selected.split('|')[1] === AuthType.QWEN_OAUTH);
-      const isRuntimeOAuthSelection = selected.startsWith(
-        `$runtime|${AuthType.QWEN_OAUTH}|`,
-      );
-      if (isQwenOAuthSelection && !isRuntimeOAuthSelection) {
-        setErrorMessage(
-          t(
-            'Qwen OAuth free tier was discontinued on 2026-04-15. Please select a model from another provider or run /auth to switch.',
-          ),
-        );
-        return;
-      }
-
       let after: ContentGeneratorConfig | undefined;
       let effectiveAuthType: AuthType | undefined;
       let effectiveModelId = selected;
@@ -1009,10 +937,6 @@ export function ModelDialog({
         selectionInFlightRef.current = true;
         try {
           await config.switchModel(selectedAuthType, modelId, {
-            ...(selectedAuthType !== authType &&
-            selectedAuthType === AuthType.QWEN_OAUTH
-              ? { requireCachedCredentials: true }
-              : {}),
             baseUrl: selectedBaseUrl,
           });
           selectionCommittedRef.current = true;
@@ -1159,14 +1083,6 @@ export function ModelDialog({
             borderRight={false}
             borderColor={theme.border.default}
           />
-          {highlightedEntry.authType === AuthType.QWEN_OAUTH &&
-            !highlightedEntry.isRuntime && (
-              <Box marginTop={1}>
-                <Text color={theme.status.warning}>
-                  ⚠ {t('Discontinued — switch to Coding Plan or API Key')}
-                </Text>
-              </Box>
-            )}
           <DetailRow
             label={t('Modality')}
             value={formatModalities(highlightedEntry.model.modalities)}
@@ -1177,18 +1093,14 @@ export function ModelDialog({
               highlightedEntry.model.contextWindowSize,
             )}
           />
-          {highlightedEntry.authType !== AuthType.QWEN_OAUTH && (
-            <>
-              <DetailRow
-                label="Base URL"
-                value={highlightedEntry.model.baseUrl ?? t('(default)')}
-              />
-              <DetailRow
-                label="API Key"
-                value={highlightedEntry.model.envKey ?? t('(not set)')}
-              />
-            </>
-          )}
+          <DetailRow
+            label="Base URL"
+            value={highlightedEntry.model.baseUrl ?? t('(not set)')}
+          />
+          <DetailRow
+            label="API Key"
+            value={highlightedEntry.model.envKey ?? t('(not set)')}
+          />
         </Box>
       )}
 

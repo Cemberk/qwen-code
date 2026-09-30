@@ -589,10 +589,6 @@ describe('Settings Loading and Merging', () => {
             protocol: 'openai',
             models: [{ id: 'gpt-4o', name: 'GPT-4o' }],
           },
-          'vertex-ai': {
-            protocol: 'gemini',
-            models: [{ id: 'gemini-pro', name: 'Gemini Pro' }],
-          },
         },
       };
       (fs.readFileSync as Mock).mockImplementation(
@@ -608,7 +604,6 @@ describe('Settings Loading and Merging', () => {
 
       const expectedModelProviders = {
         openai: [{ id: 'gpt-4o', name: 'GPT-4o' }],
-        'vertex-ai': [{ id: 'gemini-pro', name: 'Gemini Pro' }],
       };
 
       expect(merged[SETTINGS_VERSION_KEY]).toBe(SETTINGS_VERSION);
@@ -3010,7 +3005,7 @@ describe('Settings Loading and Merging', () => {
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
           if (p === '/mock/project/.env') {
-            return 'DEBUG=true\nDEBUG_MODE=1\nGEMINI_API_KEY=test-key';
+            return 'DEBUG=true\nDEBUG_MODE=1\nOPENAI_API_KEY=test-key';
           }
           if (p === MOCK_WORKSPACE_SETTINGS_PATH) {
             return JSON.stringify(workspaceSettingsContent);
@@ -3930,7 +3925,7 @@ describe('Settings Loading and Merging', () => {
         modelProviders: { openai: [{ id: 'old-user' }] },
       });
       let workspaceContent = JSON.stringify({
-        modelProviders: { gemini: [{ id: 'old-workspace' }] },
+        modelProviders: { openai: [{ id: 'old-workspace' }] },
       });
       (mockFsExistsSync as Mock).mockImplementation(
         (p: fs.PathLike) =>
@@ -3960,11 +3955,10 @@ describe('Settings Loading and Merging', () => {
         openai: [{ id: 'old-user' }],
       });
       expect(settings.workspace.settings.modelProviders).toEqual({
-        gemini: [{ id: 'old-workspace' }],
+        openai: [{ id: 'old-workspace' }],
       });
       expect(settings.merged.modelProviders).toEqual({
-        openai: [{ id: 'old-user' }],
-        gemini: [{ id: 'old-workspace' }],
+        openai: [{ id: 'old-workspace' }],
       });
     });
   });
@@ -3980,7 +3974,7 @@ describe('Settings Loading and Merging', () => {
             {
               id: 'existing-model',
               name: 'Existing Model',
-              baseUrl: 'https://example.com/v1',
+              baseUrl: 'http://127.0.0.1:11434/v1',
               envKey: 'OPENAI_API_KEY',
             },
           ],
@@ -3997,13 +3991,13 @@ describe('Settings Loading and Merging', () => {
             {
               id: 'existing-model',
               name: 'Existing Model',
-              baseUrl: 'https://example.com/v1',
+              baseUrl: 'http://127.0.0.1:11434/v1',
               envKey: 'OPENAI_API_KEY',
             },
             {
               id: 'manually-added-model',
               name: 'Manually Added Model',
-              baseUrl: 'https://example.com/v1',
+              baseUrl: 'http://127.0.0.1:11434/v1',
               envKey: 'OPENAI_API_KEY',
             },
           ],
@@ -4542,44 +4536,6 @@ describe('Settings Loading and Merging', () => {
       expect(process.env['PARENT_WORKSPACE_VAR']).toBeUndefined();
       expect(process.env['OPENCODE_GO_API_KEY']).toEqual('from_user_qwen_env');
 
-      cwdSpy.mockRestore();
-    });
-
-    it('uses the same .env priority order for Cloud Shell GOOGLE_CLOUD_PROJECT', () => {
-      delete process.env['GOOGLE_CLOUD_PROJECT'];
-      process.env['CLOUD_SHELL'] = 'true';
-      const cwdSpy = vi
-        .spyOn(process, 'cwd')
-        .mockReturnValue(MOCK_WORKSPACE_DIR);
-      const projectEnvPath = path.join(MOCK_WORKSPACE_DIR, '.env');
-      const userQwenEnvPath = path.join('/mock/home/user', QWEN_DIR, '.env');
-
-      vi.mocked(isWorkspaceTrusted).mockReturnValue({
-        isTrusted: true,
-        source: 'file',
-      });
-      (mockFsExistsSync as Mock).mockImplementation((p: fs.PathLike) =>
-        [projectEnvPath, userQwenEnvPath].includes(p.toString()),
-      );
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === projectEnvPath)
-            return 'GOOGLE_CLOUD_PROJECT=from_project_env';
-          if (p === userQwenEnvPath)
-            return 'GOOGLE_CLOUD_PROJECT=from_user_qwen_env';
-          return '{}';
-        },
-      );
-
-      const loaded = loadSettings(MOCK_WORKSPACE_DIR, {
-        skipLoadEnvironment: true,
-      });
-      loadEnvironment(loaded.merged);
-
-      expect(process.env['GOOGLE_CLOUD_PROJECT']).toEqual('from_project_env');
-
-      delete process.env['CLOUD_SHELL'];
-      delete process.env['GOOGLE_CLOUD_PROJECT'];
       cwdSpy.mockRestore();
     });
 

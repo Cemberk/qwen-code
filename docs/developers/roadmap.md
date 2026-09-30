@@ -4,7 +4,7 @@
 
 | Category                        | Phase 1                                                                                                                                                                            | Phase 2                                                                                                                                                             |
 | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| User Experience                 | ✅ Terminal UI<br>✅ Support OpenAI Protocol<br>✅ Settings<br>✅ OAuth<br>✅ Cache Control<br>✅ Memory<br>✅ Compress<br>✅ Theme                                                | Better UI<br>OnBoarding<br>LogView<br>✅ Session<br>Permission<br>🔄 Cross-platform Compatibility<br>✅ Coding Plan<br>✅ Anthropic Provider<br>✅ Multimodal Input |
+| User Experience                 | ✅ Terminal UI<br>✅ Support OpenAI Protocol<br>✅ Settings<br>✅ Cache Control<br>✅ Memory<br>✅ Compress<br>✅ Theme                                                            | Better UI<br>OnBoarding<br>LogView<br>✅ Session<br>Permission<br>🔄 Cross-platform Compatibility<br>✅ Coding Plan<br>✅ Anthropic Provider<br>✅ Multimodal Input |
 | Coding Workflow                 | ✅ Slash Commands<br>✅ MCP<br>✅ PlanMode<br>✅ TodoWrite<br>✅ SubAgent<br>✅ Multi Model<br>✅ Chat Management<br>✅ Tools (WebFetch, Bash, TextSearch, FileReadFile, EditFile) | 🔄 Hooks<br>✅ Skill<br>✅ Headless Mode<br>✅ Tools (WebSearch)<br>✅ LSP Support<br>✅ Concurrent Runner                                                          |
 | Building Open Capabilities      | ✅ Custom Commands                                                                                                                                                                 | ✅ Extension System                                                                                                                                                 |
 | Integrating Community Ecosystem |                                                                                                                                                                                    | ✅ ACP<br>✅ GHA                                                                                                                                                    |
@@ -18,11 +18,9 @@
 
 | Feature                 | Version   | Description                                             | Category                        | Phase |
 | ----------------------- | --------- | ------------------------------------------------------- | ------------------------------- | ----- |
-| **Coding Plan**         | `V0.10.0` | Alibaba Cloud Coding Plan authentication & models       | User Experience                 | 2     |
 | Export Chat             | `V0.8.0`  | Export sessions to Markdown/JSON/JSONL                  | User Experience                 | 2     |
 | Extension System        | `V0.8.0`  | Full extension management with slash commands           | Building Open Capabilities      | 2     |
 | LSP Support             | `V0.7.0`  | Experimental LSP service (`--experimental-lsp`)         | Coding Workflow                 | 2     |
-| Anthropic Provider      | `V0.7.0`  | Anthropic API provider support                          | User Experience                 | 2     |
 | User Feedback Dialog    | `V0.7.0`  | In-app feedback collection with fatigue mechanism       | Administrative Capabilities     | 2     |
 | Concurrent Runner       | `V0.6.0`  | Batch CLI execution with Git integration                | Coding Workflow                 | 2     |
 | Multimodal Input        | `V0.6.0`  | Image, PDF, audio, video input support                  | User Experience                 | 2     |
@@ -46,15 +44,13 @@
 | Feedback                | `V0.1.0+` | Feedback mechanism (/bug command)                       | Administrative Capabilities     | 1     |
 | Stats                   | `V0.1.0+` | Usage statistics and quota display                      | Administrative Capabilities     | 1     |
 | Memory                  | `V0.0.9+` | Project-level and global memory management              | User Experience                 | 1     |
-| Cache Control           | `V0.0.9+` | Prompt caching control (Anthropic, DashScope)           | User Experience                 | 1     |
+| Cache Control           | `V0.0.9+` | Prompt caching control                                  | User Experience                 | 1     |
 | PlanMode                | `V0.0.14` | Task planning mode                                      | Coding Workflow                 | 1     |
 | Compress                | `V0.0.11` | Chat compression mechanism                              | User Experience                 | 1     |
 | SubAgent                | `V0.0.11` | Dedicated sub-agent system                              | Coding Workflow                 | 1     |
 | TodoWrite               | `V0.0.10` | Task management and progress tracking                   | Coding Workflow                 | 1     |
 | Tool: TextSearch        | `V0.0.8+` | Text search tool (grep, supports .qwenignore)           | Coding Workflow                 | 1     |
 | Tool: WebFetch          | `V0.0.7+` | Web content fetching tool                               | Coding Workflow                 | 1     |
-| Tool: WebSearch         | `V0.0.7+` | Built-in web search (DashScope Responses API)           | Coding Workflow                 | 1     |
-| OAuth                   | `V0.0.5+` | OAuth login authentication (Qwen OAuth)                 | User Experience                 | 1     |
 
 #### Features to Develop
 

@@ -156,9 +156,6 @@ vi.mock('@qwen-code/qwen-code-core', async (importOriginal) => ({
   isReasoningEffortPlaceholder: (
     await importOriginal<typeof import('@qwen-code/qwen-code-core')>()
   ).isReasoningEffortPlaceholder,
-  isOpenRouterHostname: (
-    await importOriginal<typeof import('@qwen-code/qwen-code-core')>()
-  ).isOpenRouterHostname,
   // The real parser: `model-configuration` gates every reasoning control on it,
   // and a stand-in would decide capability validity differently from the wire.
   parseModelReasoningCapabilities: (
@@ -200,9 +197,6 @@ vi.mock('@qwen-code/qwen-code-core', async (importOriginal) => ({
   },
   AuthType: {},
   DEFAULT_QWEN_CUSTOM_IGNORE_FILE_NAMES: ['.agentignore', '.aiignore'],
-  clearCachedCredentialFile: vi.fn(),
-  QwenOAuth2Event: {},
-  qwenOAuth2Events: { on: vi.fn(), off: vi.fn() },
   MCP_BUDGET_WARN_FRACTION: 0.75,
   MCPServerConfig: vi.fn().mockImplementation((...args: unknown[]) => ({
     _args: args,

@@ -20,11 +20,9 @@
 
 import {
   CompressionStatus,
-  findProviderByCredentials,
   getExtensionDisplayName,
   getMCPServerStatus,
   MCPServerStatus,
-  resolveMetadataKey,
   uiTelemetryService,
 } from '@qwen-code/qwen-code-core';
 import type {
@@ -45,7 +43,6 @@ import { formatDuration } from '../utils/formatters.js';
 import { levelLabel } from '../utils/skill-level-label.js';
 import type { SessionStatsState } from '../contexts/SessionContext.js';
 import type { LoadedSettings } from '../../config/settings.js';
-import { redactProxy } from '../systemInfoFields.js';
 
 /** Runtime state the host supplies for items that read it in ink. */
 export interface ItemProjectionContext {
@@ -104,27 +101,10 @@ export function projectAbout(systemInfo: Record<string, unknown>): string {
   );
   const selectedAuthType = String(systemInfo['selectedAuthType'] ?? '');
   const baseUrl = systemInfo['baseUrl'] as string | undefined;
-  const apiKeyEnvKey = systemInfo['apiKeyEnvKey'] as string | undefined;
-  let authLabel = '';
-  if (selectedAuthType) {
-    const matched = findProviderByCredentials(baseUrl, apiKeyEnvKey);
-    if (matched && resolveMetadataKey(matched) && matched.label) {
-      authLabel = matched.label;
-    } else if (
-      selectedAuthType.startsWith('oauth') ||
-      selectedAuthType === 'qwen-oauth'
-    ) {
-      authLabel = 'Qwen OAuth';
-    } else {
-      authLabel = `API Key - ${selectedAuthType}`;
-    }
-  }
-  addField('Auth', authLabel);
-  const isOAuth =
-    authLabel === 'Qwen OAuth' || authLabel.startsWith('Qwen OAuth');
+  addField('Auth', selectedAuthType ? `API Key - ${selectedAuthType}` : '');
   // ink's formatBaseUrl hides the line unless BOTH the auth type and the
   // base URL are present (systemInfoFields.ts).
-  if (!isOAuth && selectedAuthType && baseUrl) {
+  if (selectedAuthType && baseUrl) {
     addField('Base URL', baseUrl);
   }
   const modelVersion = String(systemInfo['modelVersion'] ?? '');
@@ -132,12 +112,6 @@ export function projectAbout(systemInfo: Record<string, unknown>): string {
   addField('Fast Model', String(systemInfo['fastModel'] ?? '') || modelVersion);
   addField('Session ID', String(systemInfo['sessionId'] ?? ''));
   addField('Sandbox', String(systemInfo['sandboxEnv'] ?? ''));
-  const proxy = systemInfo['proxy'] as string | undefined;
-  if (proxy) {
-    addField('Proxy', redactProxy(proxy));
-  } else {
-    addField('Proxy', 'no proxy');
-  }
   addField('Memory Usage', String(systemInfo['memoryUsage'] ?? ''));
   return lines.join('\n');
 }

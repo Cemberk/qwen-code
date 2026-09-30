@@ -273,16 +273,24 @@ describe('JSON output', () => {
     expect(resultMessage.result.toLowerCase()).toContain('paris');
   });
 
-  it('should return a JSON error for enforced auth mismatch before running', async () => {
-    await rig.setup('json-output-auth-mismatch', {
-      settings: {
-        security: { auth: { enforcedType: 'qwen-oauth' } },
-      },
-    });
+  it('should return a JSON error for a non-loopback base URL before running', async () => {
+    await rig.setup('json-output-cloud-base-url');
 
     let thrown: Error | undefined;
     try {
-      await rig.run('Hello', '--output-format', 'json', ...fakeModelArgs());
+      await rig.run(
+        'Hello',
+        '--output-format',
+        'json',
+        '--auth-type',
+        'openai',
+        '--model',
+        'fake-model',
+        '--openai-base-url',
+        'https://api.openai.com/v1',
+        '--openai-api-key',
+        'fake-key',
+      );
       expect.fail('Expected process to exit with error');
     } catch (e) {
       thrown = e as Error;
@@ -338,10 +346,10 @@ describe('JSON output', () => {
     expect(resultMessage).toHaveProperty('error');
     expect(resultMessage.error).toBeDefined();
     expect(resultMessage.error?.message).toContain(
-      'configured auth type is qwen-oauth',
+      'Model server base URL "https://api.openai.com/v1"',
     );
     expect(resultMessage.error?.message).toContain(
-      'current auth type is openai',
+      'the host must be 127.0.0.1, ::1 or localhost',
     );
   });
 });

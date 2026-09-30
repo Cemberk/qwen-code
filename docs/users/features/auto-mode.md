@@ -299,7 +299,7 @@ tightened over time.
   trust a specific MCP tool, add
   `permissions.allow: ["mcp__server__tool"]` so it bypasses the
   classifier entirely; if you want the classifier to see only the tool
-  name (for example when it runs against a different provider than the
+  name (for example when it runs on a different model than the
   main model), set `permissions.autoMode.mcp.forwardArguments: false`
   — most MCP calls are then conservatively blocked.
 
@@ -346,7 +346,7 @@ send to that server — the classifier's data-exfiltration and
 external-write rules can only be applied to them, and they were
 already produced by the main model, so forwarding them to a classifier
 on the same model configuration discloses nothing new. If your
-classifier runs against a different provider, set
+classifier runs on a different model, set
 `permissions.autoMode.mcp.forwardArguments: false` to restore the
 name-only projection (expect most MCP calls to be blocked).
 

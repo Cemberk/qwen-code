@@ -304,7 +304,7 @@ function createFakeConfig(
     getSessionId: () => 'session-1',
     getModel: () => 'test-model',
     getMaxSessionTurns: () => 10,
-    getContentGeneratorConfig: () => ({ authType: 'qwen-oauth' }),
+    getContentGeneratorConfig: () => ({ authType: 'openai' }),
     // Pinning a bridge model is what turns `shouldRunVisionBridge` on; every
     // other test leaves it undefined and the prompt rides through untouched.
     getDefaultVisionBridgeModel: () => bridgeModel,

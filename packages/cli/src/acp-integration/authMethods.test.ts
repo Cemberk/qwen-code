@@ -12,18 +12,14 @@ import {
 } from './authMethods.js';
 
 describe('ACP auth methods', () => {
-  it('advertises one shared OpenAI key method', () => {
-    const authMethods = buildAuthMethods();
-
-    expect(authMethods.map((method) => method.id)).toEqual([
-      AuthType.USE_OPENAI,
+  it('advertises only the local OpenAI-compatible server method', () => {
+    expect(buildAuthMethods()).toEqual([
+      expect.objectContaining({
+        id: AuthType.USE_OPENAI,
+        name: 'Local OpenAI-compatible server',
+        _meta: { type: 'terminal', args: ['--auth-type=openai'] },
+      }),
     ]);
-  });
-
-  it('uses the shared OpenAI method for a Responses session', () => {
-    expect(pickAuthMethodsForAuthRequired('openai-responses')).toEqual(
-      buildAuthMethods(),
-    );
   });
 
   it('selects only the OpenAI method for a stored openai selection', () => {
@@ -34,19 +30,12 @@ describe('ACP auth methods', () => {
     ]);
   });
 
-  it('falls back to working methods for a stored discontinued Qwen OAuth selection', () => {
-    const authMethods = pickAuthMethodsForAuthRequired('qwen-oauth');
-
-    expect(authMethods.map((method) => method.id)).toEqual([
-      AuthType.USE_OPENAI,
-    ]);
-  });
-
-  it('falls back to working methods for an unknown stored selection', () => {
-    const authMethods = pickAuthMethodsForAuthRequired('not-a-real-auth-type');
-
-    expect(authMethods.map((method) => method.id)).toEqual([
-      AuthType.USE_OPENAI,
-    ]);
-  });
+  it.each(['qwen-oauth', 'openai-responses', 'not-a-real-auth-type'])(
+    'falls back to the local method for an unsupported stored %s selection',
+    (selectedType) => {
+      expect(pickAuthMethodsForAuthRequired(selectedType)).toEqual(
+        buildAuthMethods(),
+      );
+    },
+  );
 });

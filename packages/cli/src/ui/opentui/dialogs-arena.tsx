@@ -9,8 +9,8 @@
 /**
  * OpenTUI arena dialogs (M4 deep-fidelity port of ink arena/*):
  *
- *  - start:  MultiSelect over config.getAllConfiguredModels() (runtime /
- *    image-only models filtered out, qwen-oauth disabled); confirming fills
+ *  - start:  MultiSelect over config.getAllConfiguredModels() (runtime
+ *    models filtered out); confirming fills
  *    the composer with `/arena start --models …` — the dialog never launches
  *    the session itself, exactly like ink's handleArenaModelsSelected.
  *  - status: live agent table (status/time/tokens/rounds/tools) refreshed on
@@ -25,7 +25,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useKeyboard, useTerminalDimensions } from '@opentui/react';
 import {
   ArenaSessionStatus,
-  AuthType,
   DISPLAY_MODE,
   isSettledStatus,
   isSuccessStatus,
@@ -135,13 +134,12 @@ function ArenaStart({ config, onClose, onFillInput }: OpenTuiArenaDialogProps) {
   const modelItems = useMemo(() => {
     const all = config?.getAllConfiguredModels?.() ?? [];
     return all
-      .filter((m) => !m.isRuntimeModel && !m.imageOnly)
+      .filter((m) => !m.isRuntimeModel)
       .map((m) => {
         const token = `${m.authType}:${m.id}`;
         return {
           key: token,
           label: `[${m.authType}] ${m.label}`,
-          disabled: m.authType === AuthType.QWEN_OAUTH,
         };
       });
   }, [config]);
@@ -155,8 +153,7 @@ function ArenaStart({ config, onClose, onFillInput }: OpenTuiArenaDialogProps) {
   } = useBatchSafeState<ReadonlySet<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
-  const hasDisabledQwenOauth = modelItems.some((m) => m.disabled);
-  const selectableCount = modelItems.filter((m) => !m.disabled).length;
+  const selectableCount = modelItems.length;
   const needsMoreModels = selectableCount < 2;
   const showMoreModelsHint = selectableCount >= 2 && selectableCount < 3;
 
@@ -168,7 +165,7 @@ function ArenaStart({ config, onClose, onFillInput }: OpenTuiArenaDialogProps) {
       setCursor(findNextEnabledIndex(modelItems, cursorRef.current, o.name));
     } else if (o.name === 'space') {
       const item = modelItems[cursorRef.current];
-      if (!item || item.disabled) return;
+      if (!item) return;
       const next = new Set(checkedRef.current);
       if (next.has(item.key)) next.delete(item.key);
       else next.add(item.key);
@@ -201,12 +198,12 @@ function ArenaStart({ config, onClose, onFillInput }: OpenTuiArenaDialogProps) {
         <box flexDirection="column" marginTop={1}>
           {modelItems.map((m, i) => (
             <box key={m.key} flexDirection="row">
-              <text fg={m.disabled ? C.dim : i === cursor ? C.accent : C.dim}>
+              <text fg={i === cursor ? C.accent : C.dim}>
                 {checked.has(m.key) ? '[x] ' : '[ ] '}
               </text>
               <text
-                fg={m.disabled ? C.dim : i === cursor ? C.text : C.dim}
-                attributes={!m.disabled && i === cursor ? 1 : 0}
+                fg={i === cursor ? C.text : C.dim}
+                attributes={i === cursor ? 1 : 0}
               >
                 {m.label}
               </text>
@@ -219,28 +216,17 @@ function ArenaStart({ config, onClose, onFillInput }: OpenTuiArenaDialogProps) {
           <text fg={C.red}>{error}</text>
         </box>
       )}
-      {(hasDisabledQwenOauth || needsMoreModels) && (
+      {needsMoreModels && (
         <box marginTop={1} flexDirection="column">
-          {hasDisabledQwenOauth && (
-            <text fg={C.yellow}>
-              {'Note: qwen-oauth models are not supported in Arena.'}
-            </text>
-          )}
-          {needsMoreModels && (
-            <>
-              <text fg={C.yellow}>
-                {'Arena requires at least 2 models. To add more:'}
-              </text>
-              <text fg={C.yellow}>
-                {
-                  '  - Run /auth to set up a Coding Plan (includes multiple models)'
-                }
-              </text>
-              <text fg={C.yellow}>
-                {'  - Or configure modelProviders in settings.json'}
-              </text>
-            </>
-          )}
+          <text fg={C.yellow}>
+            {'Arena requires at least 2 models. To add more:'}
+          </text>
+          <text fg={C.yellow}>
+            {'  - Run /auth to add more model IDs from your local server'}
+          </text>
+          <text fg={C.yellow}>
+            {'  - Or configure modelProviders in settings.json'}
+          </text>
         </box>
       )}
       {showMoreModelsHint && (

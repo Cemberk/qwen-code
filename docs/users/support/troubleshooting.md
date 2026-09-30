@@ -2,18 +2,32 @@
 
 This guide provides solutions to common issues and debugging tips, including topics on:
 
-- Authentication or login errors
+- Model server connection and configuration errors
 - Frequently asked questions (FAQs)
 - Debugging tips
 - Existing GitHub Issues similar to yours or creating new Issues
 
-## Authentication or login errors
+## Model server connection and configuration errors
 
-- **Error: `Qwen OAuth free tier was discontinued on 2026-04-15`**
-  - **Cause:** Qwen OAuth is no longer available as of April 15, 2026.
-  - **Solution:** Switch to a different authentication method. Run `qwen` → `/auth` and choose one of:
-    - **API Key**: Use an API key from Alibaba Cloud Model Studio ([Beijing](https://bailian.console.aliyun.com/) / [intl](https://modelstudio.console.alibabacloud.com/)). See the API setup guide ([Beijing](https://bailian.console.aliyun.com/cn-beijing/?tab=doc#/doc/?type=model&url=3023091) / [intl](https://modelstudio.console.alibabacloud.com/ap-southeast-1?tab=doc#/doc/?type=model&url=2974721)).
-    - **Alibaba Cloud Coding Plan**: Subscribe for a fixed monthly fee with higher quotas. See the Coding Plan guide ([Beijing](https://bailian.console.aliyun.com/cn-beijing/?tab=coding-plan#/efm/coding-plan-index) / [intl](https://modelstudio.console.alibabacloud.com/?tab=coding-plan#/efm/coding-plan-index)).
+- **Error: `No model server base URL is configured`**
+  - **Cause:** Qwen Code has no default base URL. None of the selected model entry, `--openai-base-url`, `OPENAI_BASE_URL` or `security.auth.baseUrl` provides one.
+  - **Solution:** Run `/auth` and enter your local server's base URL, or set one of those sources. For example: Ollama `http://127.0.0.1:11434/v1`, LM Studio `http://localhost:1234/v1`, vLLM `http://127.0.0.1:8000/v1`, llama.cpp `http://127.0.0.1:8080/v1`. See [Authentication](../configuration/auth).
+
+- **Error: `Model server base URL "..." is not allowed: the host must be 127.0.0.1, ::1 or localhost.`**
+  - **Cause:** Qwen Code only talks to model servers on this machine's loopback interface. LAN addresses, `0.0.0.0`, other host names and cloud endpoints are rejected, both in `modelProviders` entries and in flags, environment variables and settings.
+  - **Solution:** Run the model server locally and use a loopback base URL. If the server listens on all interfaces, still connect through `127.0.0.1` or `localhost`.
+
+- **Error: `Auth type '...' is not supported`**
+  - **Cause:** `security.auth.selectedType` or `--auth-type` is set to something other than `openai`, for example a value left over from an older configuration.
+  - **Solution:** Set `security.auth.selectedType` to `"openai"`, or remove it and run `/auth`.
+
+- **Error: a missing API key or model**
+  - **Cause:** The API key or model ID could not be resolved from any source.
+  - **Solution:** Run `/auth`, or set `OPENAI_API_KEY` (any non-empty value if your server doesn't check keys) and `OPENAI_MODEL`. When a `modelProviders` entry declares an `envKey`, make sure that variable is set.
+
+- **Error: `Connection error` or `ECONNREFUSED` against `127.0.0.1` / `localhost`**
+  - **Cause:** The local model server isn't running, or it listens on a different port than the configured base URL.
+  - **Solution:** Start the server (for example `ollama serve`, the LM Studio local server, `vllm serve <model>` or `llama-server -m <model.gguf>`) and check that the port and the `/v1` path match your base URL. The server must answer directly: Qwen Code doesn't follow HTTP redirects from the model server.
 
 - **Error: `UNABLE_TO_GET_ISSUER_CERT_LOCALLY`, `UNABLE_TO_VERIFY_LEAF_SIGNATURE`, or `unable to get local issuer certificate`**
   - **Cause:** You may be on a corporate network with a firewall that intercepts and inspects SSL/TLS traffic. This often requires a custom root CA certificate to be trusted by Node.js.
@@ -23,15 +37,8 @@ This guide provides solutions to common issues and debugging tips, including top
 - **Error: `Connection error. (cause: fetch failed)` against a self-signed endpoint**
   - **Cause:** You are pointing Qwen Code at a self-hosted server (for example a local model behind `https://`) whose TLS certificate is self-signed, so Node.js rejects it.
   - **Solution:** Prefer trusting the certificate via `NODE_EXTRA_CA_CERTS` (above). If that is not practical in a trusted lab/private network, skip verification with the `--insecure` flag (or `QWEN_TLS_INSECURE=1`):
-    - Example: `qwen --insecure --openaiBaseUrl https://192.168.1.10:8080 ...`
+    - Example: `qwen --insecure --openai-base-url https://localhost:8443/v1 ...`
     - **Warning:** Disabling verification removes protection against man-in-the-middle attacks. Only use it for endpoints you fully trust.
-
-- **Error: `Device authorization flow failed: fetch failed`**
-  - **Cause:** Node.js could not reach Qwen OAuth endpoints (often a proxy or SSL/TLS trust issue). When available, Qwen Code will also print the underlying error cause (for example: `UNABLE_TO_VERIFY_LEAF_SIGNATURE`). Note: this error is specific to the legacy Qwen OAuth flow.
-  - **Solution:**
-    - If you are still using Qwen OAuth, switch to API Key or Coding Plan via `/auth`.
-    - If you are behind a proxy, set it via `qwen --proxy <url>` (or the `proxy` setting in `settings.json`).
-    - If your network uses a corporate TLS inspection CA, set `NODE_EXTRA_CA_CERTS` as described above.
 
 - **Issue: Unable to display UI after authentication failure**
   - **Cause:** If authentication fails after selecting an authentication type, the `security.auth.selectedType` setting may be persisted in `settings.json`. On restart, the CLI may get stuck trying to authenticate with the failed auth type and fail to display the UI.
@@ -53,7 +60,7 @@ This guide provides solutions to common issues and debugging tips, including top
     Refer to [Qwen Code Configuration](../configuration/settings) for more details.
 
 - **Q: Why don't I see cached token counts in my stats output?**
-  - A: Cached token information is only displayed when cached tokens are being used. This feature is available for API key users (e.g., Alibaba Cloud Model Studio API key or Google Cloud Vertex AI). You can still view your total token usage using the `/stats` command.
+  - A: Cached token information is only displayed when cached tokens are being used. It depends on your local server reporting cached prompt tokens in its usage data; many local servers don't. You can still view your total token usage using the `/stats` command.
 
 - **Q: A customization (extension, hook, skill, MCP server, or subagent) seems to be breaking Qwen Code. How do I isolate it?**
   - A: Start Qwen Code with the `--safe-mode` flag to disable all customizations — context files, hooks, extensions, skills, MCP servers, custom subagents (only built-in subagents load), permission rules, settings-sourced approval mode overrides, memory features, and sandbox settings — for the session. Note: the CLI flags `--yolo` and `--approval-mode` still take effect in safe mode. If the problem disappears in safe mode, re-enable your customizations one at a time to find the culprit.

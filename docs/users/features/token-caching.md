@@ -2,17 +2,17 @@
 
 Caching lowers the price of the prefix every request carries. To make that prefix smaller in the first place — fewer resident tool schemas, smaller context files — see [Resident Context Cost](context-cost.md); the two compose.
 
-Qwen Code automatically optimizes API costs through token caching when using API key authentication. This feature stores frequently used content like system instructions and conversation history to reduce the number of tokens processed in subsequent requests.
+Qwen Code keeps the request prefix (system instructions, tool declarations and conversation history) stable between requests, so a local model server with prefix (prompt) caching can reuse it instead of reprocessing it.
 
 ## How It Benefits You
 
-- **Cost reduction**: Less tokens mean lower API costs
+- **Less recomputation**: Fewer prompt tokens have to be processed again
 - **Faster responses**: Cached content is retrieved more quickly
 - **Automatic optimization**: No configuration needed - it works behind the scenes
 
 ## Token caching is available for
 
-- API key users (Qwen API key, OpenAI-compatible providers)
+- Local OpenAI-compatible servers that support prefix caching and report cached prompt tokens in their usage data
 
 ## Monitoring Your Savings
 
@@ -22,7 +22,7 @@ Use the `/stats` command to see your cached token savings:
 - You'll see both the absolute number and percentage of cached tokens
 - Example: "10,500 (90.4%) of input tokens were served from the cache, reducing costs."
 
-This information is only displayed when cached tokens are being used, which occurs with API key authentication but not with OAuth authentication.
+This information is only displayed when the server reports cached tokens.
 
 ## Example Stats Display
 

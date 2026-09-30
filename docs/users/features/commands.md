@@ -96,7 +96,7 @@ Commands for managing AI tools and models.
 | → `auto`              | Classifier-evaluated approval (autonomous)                                                       | `/approval-mode auto`                                                                                     |
 | → `yolo`              | Auto-approve everything (quick prototyping)                                                      | `/approval-mode yolo`                                                                                     |
 | `/model`              | Switch model used in current session                                                             | `/model`, `/model <model-id>` (switch immediately)                                                        |
-| `/model --fast`       | Set a lighter model for prompt suggestions                                                       | `/model --fast qwen3-coder-flash`                                                                         |
+| `/model --fast`       | Set a lighter model for prompt suggestions                                                       | `/model --fast qwen3:4b`                                                                                  |
 | `/model --vision`     | Set the vision-bridge model used to transcribe images for a text-only main model                 | `/model --vision <model-id>`                                                                              |
 | `/model --compaction` | Set the model used for chat compression                                                          | `/model --compaction <model-id>`, `/model --compaction clear`                                             |
 | `/effort`             | Set reasoning effort for thinking-capable models                                                 | `/effort` (opens picker), `/effort high` (low/medium/high/xhigh/max; mapped & clamped per provider)       |
@@ -232,7 +232,7 @@ The `/advisor` command runs an independent, read-only review of the conversation
 - The main conversation is **not** interrupted; the review is shown only to you
 - The review is rendered as a boxed markdown block with four fixed sections — **Verdict**, **Risks**, **Missing evidence**, and **Recommendation** — under an `/advisor · <model>` header that names the resolved reviewer model
 - Unlike `/btw`, which is fire-and-forget and leaves the session usable, `/advisor` blocks input until the review returns; over a full context window with a strong reviewer this can take tens of seconds
-- By default the main model is used; set [`advisorModel`](../configuration/settings.md#advisormodel) to route the review to a different (typically stronger) model — the recent transcript is sent to that model even when it uses another provider
+- By default the main model is used; set [`advisorModel`](../configuration/settings.md#advisormodel) to route the review to a different (typically stronger) model on your local model server — the recent transcript is sent to that model
 
 **Example:**
 
@@ -326,7 +326,7 @@ this setting.
 > [!tip]
 >
 > Configure a fast model via `/model --fast <model>` (e.g.
-> `qwen3-coder-flash`) to make `/recap` fast and cheap. Set
+> `qwen3:4b`) to make `/recap` fast and cheap. Set
 > `general.showSessionRecap` to `true` to enable the auto-trigger; the
 > manual `/recap` command always works regardless of this setting.
 
@@ -400,7 +400,7 @@ Commands for obtaining information and performing system settings.
 | `/stats export`  | Export usage statistics to CSV or JSON                                                                             | `/stats export <daily\|monthly> [date\|month] [--format csv\|json] [--output path]` |
 | `/settings`      | Open settings editor                                                                                               | `/settings`                                                                         |
 | `/config`        | Get or set any setting by dot-path key (writes to user settings)                                                   | `/config` (list all), `/config <key>`, `/config <key>=<value>`                      |
-| `/auth`          | Change authentication method                                                                                       | `/auth`, `/connect`, `/login`                                                       |
+| `/auth`          | Connect a local model server (base URL, API key, model IDs)                                                        | `/auth`, `/connect`, `/login`                                                       |
 | `/doctor`        | Run installation and environment diagnostics                                                                       | `/doctor`, `/doctor memory`                                                         |
 | → `memory`       | Show current process memory diagnostics                                                                            | `/doctor memory [--json] [--sample] [--snapshot]`                                   |
 | → `cpu-profile`  | Record a CPU profile for Chrome DevTools analysis                                                                  | `/doctor cpu-profile [--duration <seconds>]`                                        |
@@ -428,12 +428,12 @@ Commands for obtaining information and performing system settings.
 
 ### 1.12 Authentication Commands
 
-Use `/auth` inside a Qwen Code session to configure authentication. Use `/doctor` to inspect the current authentication and environment status.
+Use `/auth` inside a Qwen Code session to connect your local OpenAI-compatible model server (base URL, API key and model IDs). See [Authentication](../configuration/auth.md). Use `/doctor` to inspect the current configuration and environment status.
 
-| Command   | Description                                                            |
-| --------- | ---------------------------------------------------------------------- |
-| `/auth`   | Configure authentication interactively (aliases: `/connect`, `/login`) |
-| `/doctor` | Show authentication and environment checks                             |
+| Command   | Description                                                                |
+| --------- | -------------------------------------------------------------------------- |
+| `/auth`   | Connect a local model server interactively (aliases: `/connect`, `/login`) |
+| `/doctor` | Show authentication and environment checks                                 |
 
 ## 2. @ Commands (Introducing Files)
 

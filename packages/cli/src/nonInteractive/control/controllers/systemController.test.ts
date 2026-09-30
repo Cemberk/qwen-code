@@ -50,7 +50,6 @@ function createContext(
       setModel: vi.fn(),
       setReasoningEffort: vi.fn(),
       getReasoningEffort: vi.fn().mockReturnValue(undefined),
-      getReasoningEffortOverride: vi.fn().mockReturnValue(undefined),
       getAvailableModels: vi.fn().mockReturnValue([]),
     } as unknown as IControlContext['config'],
     streamJson: {
@@ -363,7 +362,6 @@ describe('SystemController', () => {
         subtype: 'set_effort',
         effort: 'high',
         applied: true,
-        override: null,
       });
     });
 
@@ -387,40 +385,6 @@ describe('SystemController', () => {
         subtype: 'set_effort',
         effort: 'high',
         applied: false,
-        override: null,
-      });
-    });
-
-    it('returns the higher-priority wire override', async () => {
-      const context = createContext();
-      (
-        context.config.getReasoningEffort as ReturnType<typeof vi.fn>
-      ).mockReturnValue('high');
-      (
-        context.config.getReasoningEffortOverride as ReturnType<typeof vi.fn>
-      ).mockReturnValue({
-        source: 'samplingParams',
-        field: 'enable_thinking',
-      });
-      const controller = new SystemController(
-        context,
-        createRegistry(),
-        'SystemController',
-      );
-
-      const result = await controller.handleRequest(
-        { subtype: 'set_effort', effort: 'high' },
-        'effort-override',
-      );
-
-      expect(result).toEqual({
-        subtype: 'set_effort',
-        effort: 'high',
-        applied: false,
-        override: {
-          source: 'samplingParams',
-          field: 'enable_thinking',
-        },
       });
     });
 
@@ -466,13 +430,8 @@ describe('SystemController', () => {
           label: 'Qwen Max',
           capabilities: { vision: true },
           contextWindowSize: 128000,
-          baseUrl: 'https://internal-proxy.corp/v1',
+          baseUrl: 'http://127.0.0.1:11434/v1',
           envKey: 'SECRET_API_KEY',
-        },
-        {
-          id: 'qwen-image-2.0',
-          label: 'Qwen Image 2.0',
-          imageOnly: true,
         },
       ]);
       const controller = new SystemController(
@@ -576,7 +535,6 @@ describe('SystemController', () => {
       expect(result).toHaveProperty('effort_status', {
         effort: 'high',
         applied: true,
-        override: null,
       });
     });
 
@@ -603,86 +561,10 @@ describe('SystemController', () => {
       expect(result).toHaveProperty('effort_status', {
         effort: 'high',
         applied: false,
-        override: null,
         reason: 'thinking may be disabled',
       });
       expect(mockDebugLogger.warn).toHaveBeenCalledWith(
         "[SystemController] Effort 'high' was not applied (thinking may be disabled)",
-      );
-    });
-
-    it('reports the higher-priority override during initialize', async () => {
-      mockDebugLogger.warn.mockClear();
-      const context = createContext();
-      (
-        context.config.getReasoningEffort as ReturnType<typeof vi.fn>
-      ).mockReturnValue('high');
-      (
-        context.config.getReasoningEffortOverride as ReturnType<typeof vi.fn>
-      ).mockReturnValue({
-        source: 'samplingParams',
-        field: 'enable_thinking',
-      });
-      const controller = new SystemController(
-        context,
-        createRegistry(),
-        'SystemController',
-      );
-
-      const result = await controller.handleRequest(
-        { subtype: 'initialize', effort: 'high' },
-        'init-effort-override',
-      );
-
-      expect(result).toHaveProperty('effort_status', {
-        effort: 'high',
-        applied: false,
-        override: {
-          source: 'samplingParams',
-          field: 'enable_thinking',
-        },
-        reason: 'samplingParams.enable_thinking takes precedence',
-      });
-      expect(mockDebugLogger.warn).toHaveBeenCalledWith(
-        "[SystemController] Effort 'high' was not applied (samplingParams.enable_thinking takes precedence)",
-      );
-    });
-
-    it('joins every held cause in the effort_status reason during initialize', async () => {
-      mockDebugLogger.warn.mockClear();
-      const context = createContext();
-      (
-        context.config.getReasoningEffort as ReturnType<typeof vi.fn>
-      ).mockReturnValue('medium');
-      (
-        context.config.getReasoningEffortOverride as ReturnType<typeof vi.fn>
-      ).mockReturnValue({
-        source: 'extra_body',
-        field: 'thinking_budget',
-      });
-      const controller = new SystemController(
-        context,
-        createRegistry(),
-        'SystemController',
-      );
-
-      const result = await controller.handleRequest(
-        { subtype: 'initialize', effort: 'high' },
-        'init-effort-both-causes',
-      );
-
-      expect(result).toHaveProperty('effort_status', {
-        effort: 'high',
-        applied: false,
-        override: {
-          source: 'extra_body',
-          field: 'thinking_budget',
-        },
-        reason:
-          'thinking may be disabled; extra_body.thinking_budget takes precedence',
-      });
-      expect(mockDebugLogger.warn).toHaveBeenCalledWith(
-        "[SystemController] Effort 'high' was not applied (thinking may be disabled; extra_body.thinking_budget takes precedence)",
       );
     });
 

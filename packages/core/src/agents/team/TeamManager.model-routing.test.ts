@@ -88,7 +88,7 @@ const LEADER_AUTH_TYPE = 'openai';
 
 /**
  * Leader-session Config mock: provider route is
- * openai/leader-model @ https://leader.example.com. Anything a spawned
+ * openai/leader-model @ http://127.0.0.1:11434/v1. Anything a spawned
  * teammate resolves to differently is observable against these values.
  */
 function createLeaderConfig(projectRoot: string): Config {
@@ -118,7 +118,7 @@ function createLeaderConfig(projectRoot: string): Config {
       model: LEADER_MODEL,
       authType: LEADER_AUTH_TYPE,
       apiKey: 'leader-key',
-      baseUrl: 'https://leader.example.com',
+      baseUrl: 'http://127.0.0.1:11434/v1',
     }),
     getAuthType: vi.fn().mockReturnValue(LEADER_AUTH_TYPE),
     getModelsConfig: vi.fn().mockReturnValue({
@@ -208,13 +208,13 @@ describe('TeamManager teammate model routing (#10071)', () => {
 
   it('routes a teammate through the custom provider selected in its agent definition', async () => {
     // Leader runs on openai/leader-model; the definition selects a
-    // different provider route (anthropic:claude-worker). An ordinary
+    // different model route (openai:worker-model). An ordinary
     // subagent with this definition gets a dedicated ContentGenerator
-    // for the anthropic route — a named teammate must get the same.
+    // for that route — a named teammate must get the same.
     await writeAgentDefinition(projectDir, 'worker.md', {
       name: 'worker',
       description: 'A worker with a custom model route',
-      model: 'anthropic:claude-worker',
+      model: 'openai:worker-model',
     });
 
     await teamManager.spawnTeammate({
@@ -229,8 +229,8 @@ describe('TeamManager teammate model routing (#10071)', () => {
     // teammate's own route, not inherited from the leader.
     expect(mockCreateContentGenerator).toHaveBeenCalledWith(
       expect.objectContaining({
-        authType: 'anthropic',
-        model: 'claude-worker',
+        authType: 'openai',
+        model: 'worker-model',
       }),
       expect.anything(),
     );
@@ -245,14 +245,14 @@ describe('TeamManager teammate model routing (#10071)', () => {
     const { modelConfig, runtimeView } = destructureAgentCoreCall(
       MockAgentCore.mock.calls.at(-1)!,
     );
-    expect(modelConfig.model).toBe('claude-worker');
+    expect(modelConfig.model).toBe('worker-model');
     expect(runtimeView).toBeDefined();
-    expect(runtimeView!.contentGeneratorConfig.authType).toBe('anthropic');
+    expect(runtimeView!.contentGeneratorConfig.authType).toBe('openai');
     expect(runtimeView!.contentGenerator).toBe(teammateGenerator);
 
     // The team file reflects the model the teammate actually runs on.
     const member = teamManager.getTeamFile().members[0]!;
-    expect(member.model).toBe('claude-worker');
+    expect(member.model).toBe('worker-model');
   });
 
   it('resolves a fast selector in the definition against the runtime context', async () => {
@@ -261,7 +261,7 @@ describe('TeamManager teammate model routing (#10071)', () => {
     // inherited the leader's model. The spawn path must resolve it.
     (
       leaderConfig as unknown as { getFastModel: ReturnType<typeof vi.fn> }
-    ).getFastModel.mockReturnValue('anthropic:claude-fast');
+    ).getFastModel.mockReturnValue('openai:fast-model');
 
     await writeAgentDefinition(projectDir, 'fast-worker.md', {
       name: 'fast-worker',
@@ -277,8 +277,8 @@ describe('TeamManager teammate model routing (#10071)', () => {
 
     expect(mockCreateContentGenerator).toHaveBeenCalledWith(
       expect.objectContaining({
-        authType: 'anthropic',
-        model: 'claude-fast',
+        authType: 'openai',
+        model: 'fast-model',
       }),
       expect.anything(),
     );
@@ -287,7 +287,7 @@ describe('TeamManager teammate model routing (#10071)', () => {
     const { modelConfig } = destructureAgentCoreCall(
       MockAgentCore.mock.calls.at(-1)!,
     );
-    expect(modelConfig.model).toBe('claude-fast');
+    expect(modelConfig.model).toBe('fast-model');
   });
 
   it('keeps the leader route for definitions that do not select a model', async () => {
@@ -347,7 +347,7 @@ describe('TeamManager teammate model routing (#10071)', () => {
     await writeAgentDefinition(projectDir, 'overridden-worker.md', {
       name: 'overridden-worker',
       description: 'A worker whose route must yield to a spawn override',
-      model: 'anthropic:claude-worker',
+      model: 'openai:worker-model',
     });
 
     await teamManager.spawnTeammate({
@@ -386,11 +386,11 @@ describe('TeamManager teammate model routing (#10071)', () => {
     await writeAgentDefinition(projectDir, 'unroutable-worker.md', {
       name: 'unroutable-worker',
       description: 'A worker whose route cannot be created',
-      model: 'anthropic:claude-worker',
+      model: 'openai:worker-model',
     });
 
     mockCreateContentGenerator.mockRejectedValueOnce(
-      new Error('The API key for Anthropic is not set'),
+      new Error('The API key is not set'),
     );
 
     // The swallowed creation failure must surface in the spawn error:
@@ -404,7 +404,7 @@ describe('TeamManager teammate model routing (#10071)', () => {
         cwd: projectDir,
       }),
     ).rejects.toThrow(
-      /could not create a dedicated ContentGenerator for model "claude-worker" \(anthropic\): The API key for Anthropic is not set/,
+      /could not create a dedicated ContentGenerator for model "worker-model" \(openai\): The API key is not set/,
     );
 
     // Rollback must run: no member persisted, and the rolled-back id
@@ -429,11 +429,11 @@ describe('TeamManager teammate model routing (#10071)', () => {
     await writeAgentDefinition(projectDir, 'retry-worker.md', {
       name: 'retry-worker',
       description: 'A worker whose route fails then succeeds',
-      model: 'anthropic:claude-worker',
+      model: 'openai:worker-model',
     });
 
     mockCreateContentGenerator.mockRejectedValueOnce(
-      new Error('The API key for Anthropic is not set'),
+      new Error('The API key is not set'),
     );
 
     // First attempt: route creation fails, spawn fails, rollback runs.
@@ -444,7 +444,7 @@ describe('TeamManager teammate model routing (#10071)', () => {
         cwd: projectDir,
       }),
     ).rejects.toThrow(
-      /could not create a dedicated ContentGenerator for model "claude-worker" \(anthropic\)/,
+      /could not create a dedicated ContentGenerator for model "worker-model" \(openai\)/,
     );
     expect(teamManager.getTeamFile().members).toHaveLength(0);
 
@@ -481,7 +481,7 @@ describe('TeamManager teammate model routing (#10071)', () => {
     await writeAgentDefinition(projectDir, 'empty-override-worker.md', {
       name: 'empty-override-worker',
       description: 'A worker with a custom model route',
-      model: 'anthropic:claude-worker',
+      model: 'openai:worker-model',
     });
 
     await teamManager.spawnTeammate({
@@ -495,8 +495,8 @@ describe('TeamManager teammate model routing (#10071)', () => {
 
     expect(mockCreateContentGenerator).toHaveBeenCalledWith(
       expect.objectContaining({
-        authType: 'anthropic',
-        model: 'claude-worker',
+        authType: 'openai',
+        model: 'worker-model',
       }),
       expect.anything(),
     );
@@ -506,9 +506,9 @@ describe('TeamManager teammate model routing (#10071)', () => {
     const { modelConfig } = destructureAgentCoreCall(
       MockAgentCore.mock.calls.at(-1)!,
     );
-    expect(modelConfig.model).toBe('claude-worker');
+    expect(modelConfig.model).toBe('worker-model');
     const member = teamManager.getTeamFile().members[0]!;
-    expect(member.model).toBe('claude-worker');
+    expect(member.model).toBe('worker-model');
   });
 
   it('fails loudly on a backend that omits getAgentContentGenerator', async () => {
@@ -520,7 +520,7 @@ describe('TeamManager teammate model routing (#10071)', () => {
     await writeAgentDefinition(projectDir, 'routed-worker.md', {
       name: 'routed-worker',
       description: 'A worker with a custom model route',
-      model: 'anthropic:claude-worker',
+      model: 'openai:worker-model',
     });
 
     const ptyStyleBackend = {
@@ -551,7 +551,7 @@ describe('TeamManager teammate model routing (#10071)', () => {
         cwd: projectDir,
       }),
     ).rejects.toThrow(
-      /does not support dedicated per-agent ContentGenerators required by model "claude-worker" \(anthropic\)/,
+      /does not support dedicated per-agent ContentGenerators required by model "worker-model" \(openai\)/,
     );
 
     // Rollback must run: no member persisted.

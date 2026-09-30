@@ -4,11 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { DEFAULT_QWEN_MODEL, MAINLINE_CODER_MODEL } from '../config/models.js';
-
-import type { ModelConfig } from './types.js';
-
-type AuthType = import('../core/contentGenerator.js').AuthType;
 type ContentGeneratorConfig =
   import('../core/contentGenerator.js').ContentGeneratorConfig;
 
@@ -27,10 +22,6 @@ export const MODEL_GENERATION_CONFIG_FIELDS = [
   'retryMaxDelayMs',
   'retryErrorCodes',
   'enableCacheControl',
-  'enableRequestMetadata',
-  'forceGlobalCacheScope',
-  'cacheRetention',
-  'cacheRetentionByBlock',
   'schemaCompliance',
   'reasoning',
   'contextWindowSize',
@@ -63,70 +54,10 @@ export const PROVIDER_SOURCED_FIELDS = [
 ] as const;
 
 /**
- * Environment variable mappings per authType.
+ * Environment variables read for the model credentials, base URL and model id.
  */
-export interface AuthEnvMapping {
-  apiKey: string[];
-  baseUrl: string[];
-  model: string[];
-}
-
-export const AUTH_ENV_MAPPINGS = {
-  openai: {
-    apiKey: ['OPENAI_API_KEY'],
-    baseUrl: ['OPENAI_BASE_URL'],
-    model: ['OPENAI_MODEL', 'QWEN_MODEL'],
-  },
-  'openai-responses': {
-    apiKey: ['OPENAI_API_KEY'],
-    baseUrl: ['OPENAI_BASE_URL'],
-    model: ['OPENAI_MODEL'],
-  },
-  anthropic: {
-    apiKey: ['ANTHROPIC_API_KEY'],
-    baseUrl: ['ANTHROPIC_BASE_URL'],
-    model: ['ANTHROPIC_MODEL'],
-  },
-  gemini: {
-    apiKey: ['GEMINI_API_KEY'],
-    baseUrl: [],
-    model: ['GEMINI_MODEL'],
-  },
-  'vertex-ai': {
-    apiKey: ['GOOGLE_API_KEY'],
-    baseUrl: [],
-    model: ['GOOGLE_MODEL'],
-  },
-  'qwen-oauth': {
-    apiKey: [],
-    baseUrl: [],
-    model: [],
-  },
-} as const satisfies Record<AuthType, AuthEnvMapping>;
-
-export const DEFAULT_MODELS = {
-  openai: MAINLINE_CODER_MODEL,
-  'qwen-oauth': DEFAULT_QWEN_MODEL,
-} as Partial<Record<AuthType, string>>;
-
-/**
- * Hard-coded Qwen OAuth models that are always available.
- * These cannot be overridden by user configuration.
- */
-export const QWEN_OAUTH_MODELS: ModelConfig[] = [
-  {
-    id: 'coder-model',
-    name: 'coder-model',
-    description:
-      'Qwen 3.7 Max — efficient hybrid model with leading coding performance',
-    capabilities: { vision: true },
-  },
-];
-
-/**
- * Derive allowed models from QWEN_OAUTH_MODELS for authorization.
- * This ensures single source of truth (SSOT).
- */
-export const QWEN_OAUTH_ALLOWED_MODELS = QWEN_OAUTH_MODELS.map(
-  (model) => model.id,
-) as readonly string[];
+export const OPENAI_ENV_MAPPING = {
+  apiKey: ['OPENAI_API_KEY'],
+  baseUrl: ['OPENAI_BASE_URL'],
+  model: ['OPENAI_MODEL', 'QWEN_MODEL'],
+} as const;

@@ -19,7 +19,6 @@ import {
   getGptReasoningCapabilities,
   isReasoningEffortPlaceholder,
 } from '../../reasoning-effort.js';
-import { isOpenRouterHostname } from './openrouter.js';
 import { resolveReasoningForModel } from '../../reasoning-overrides.js';
 import { createDebugLogger } from '../../../utils/debugLogger.js';
 
@@ -77,11 +76,7 @@ export class DefaultOpenAICompatibleProvider
 {
   protected contentGeneratorConfig: ContentGeneratorConfig;
   protected cliConfig: Config;
-  /**
-   * Latch so an effort-clamp warning fires once per provider lifetime. Shared
-   * with subclasses that clamp on their own wire shape (see DashScope) so one
-   * provider instance never repeats the notice.
-   */
+  /** Latch so an effort-clamp warning fires once per provider lifetime. */
   protected effortClampWarned = false;
 
   constructor(
@@ -113,20 +108,13 @@ export class DefaultOpenAICompatibleProvider
     } = this.contentGeneratorConfig;
     const timeout = resolveRequestTimeout(this.contentGeneratorConfig.timeout);
     const defaultHeaders = this.buildHeaders();
-    // Configure fetch options for proxy support and timeout handling.
-    // With proxy, dispatcher timeouts are disabled so SDK timeout controls the
-    // request; without proxy, no custom dispatcher is installed.
-    const runtimeOptions = buildRuntimeFetchOptions(
-      'openai',
-      this.cliConfig.getProxy(),
-    );
     return new OpenAI({
       apiKey,
       baseURL: baseUrl,
       timeout,
       maxRetries,
       defaultHeaders,
-      ...(runtimeOptions || {}),
+      ...buildRuntimeFetchOptions(),
     });
   }
 
@@ -242,7 +230,6 @@ export class DefaultOpenAICompatibleProvider
       this.getReasoningCapabilities(body['model'] as string | undefined)
         ?.profile ||
       !getGptReasoningCapabilities(body['model'] as string | undefined) ||
-      isOpenRouterHostname(this.contentGeneratorConfig) ||
       this.contentGeneratorConfig.samplingParams?.['reasoning'] !== undefined ||
       this.contentGeneratorConfig.extra_body?.['reasoning'] !== undefined
     )

@@ -11,14 +11,11 @@ import { FolderTrustDialog } from './FolderTrustDialog.js';
 import { MCPServerApprovalDialog } from './mcp/MCPServerApprovalDialog.js';
 import { ShellConfirmationDialog } from './ShellConfirmationDialog.js';
 import { ConsentPrompt } from './ConsentPrompt.js';
-import { ProviderUpdatePrompt } from './ProviderUpdatePrompt.js';
 import { SettingInputPrompt } from './SettingInputPrompt.js';
 import { PluginChoicePrompt } from './PluginChoicePrompt.js';
 import { ThemeDialog } from './ThemeDialog.js';
 import { SettingsDialog } from './SettingsDialog.js';
 import { StatusLineDialog } from './StatusLineDialog.js';
-import { QwenOAuthProgress } from './QwenOAuthProgress.js';
-import { ExternalAuthProgress } from './ExternalAuthProgress.js';
 import { AuthDialog } from '../auth/AuthDialog.js';
 import { EditorSettingsDialog } from './EditorSettingsDialog.js';
 import { TrustDialog } from './TrustDialog.js';
@@ -36,8 +33,6 @@ import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
 import { useConfig } from '../contexts/ConfigContext.js';
 import { useSettings } from '../contexts/SettingsContext.js';
-import { AuthState } from '../types.js';
-import { AuthType } from '@qwen-code/qwen-code-core';
 import process from 'node:process';
 import { type UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 import { WelcomeBackDialog } from './WelcomeBackDialog.js';
@@ -175,14 +170,6 @@ export const DialogManager = ({
         onConfirm={request.onConfirm}
         terminalWidth={terminalWidth}
         availableTerminalHeight={constrainedDialogHeight}
-      />
-    );
-  }
-  if (uiState.providerUpdateRequest) {
-    return (
-      <ProviderUpdatePrompt
-        entries={uiState.providerUpdateRequest.entries}
-        onConfirm={uiState.providerUpdateRequest.onConfirm}
       />
     );
   }
@@ -413,45 +400,6 @@ export const DialogManager = ({
     );
   }
 
-  if (uiState.auth.isAuthenticating) {
-    if (
-      uiState.auth.pendingAuthType === AuthType.USE_OPENAI &&
-      uiState.auth.externalAuthState
-    ) {
-      return (
-        <ExternalAuthProgress
-          title={uiState.auth.externalAuthState.title}
-          message={uiState.auth.externalAuthState.message}
-          detail={uiState.auth.externalAuthState.detail}
-          onCancel={() => {
-            uiActions.auth.cancelAuthentication();
-            uiActions.auth.setAuthState(AuthState.Updating);
-          }}
-        />
-      );
-    }
-
-    // OpenAI authentication now handled through AuthDialog with coding-plan/custom sub-modes
-    // Qwen OAuth remains as a separate flow
-    if (uiState.auth.pendingAuthType === AuthType.QWEN_OAUTH) {
-      return (
-        <QwenOAuthProgress
-          deviceAuth={uiState.auth.qwenAuthState.deviceAuth || undefined}
-          authStatus={uiState.auth.qwenAuthState.authStatus}
-          authMessage={uiState.auth.qwenAuthState.authMessage}
-          onTimeout={() => {
-            uiActions.auth.onAuthError('Qwen OAuth authentication timed out.');
-            uiActions.auth.cancelAuthentication();
-            uiActions.auth.setAuthState(AuthState.Updating);
-          }}
-          onCancel={() => {
-            uiActions.auth.cancelAuthentication();
-            uiActions.auth.setAuthState(AuthState.Updating);
-          }}
-        />
-      );
-    }
-  }
   if (uiState.isTrustDialogOpen) {
     return (
       <TrustDialog onExit={uiActions.closeTrustDialog} addItem={addItem} />

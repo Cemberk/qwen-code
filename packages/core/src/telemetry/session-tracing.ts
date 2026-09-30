@@ -132,7 +132,7 @@ export interface LLMRequestMetadata {
    * Undefined when no retry context exists. Populated by Phase 4b retry layer.
    */
   retryTotalDelayMs?: number;
-  /** Provider response ID (e.g. DashScope request_id / OpenAI completion id). */
+  /** Provider response ID (e.g. the OpenAI-compatible completion id). */
   responseId?: string;
   /** Model identifier returned by the provider, without request-model fallback. */
   responseModel?: string;

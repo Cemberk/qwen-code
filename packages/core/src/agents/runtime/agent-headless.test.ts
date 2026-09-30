@@ -30,7 +30,6 @@ import {
   type ConfigParameters,
 } from '../../config/config.js';
 import type { ExecutionEnvironment } from '../../services/execution-environment.js';
-import { DEFAULT_QWEN_MODEL } from '../../config/models.js';
 import {
   createContentGenerator,
   createContentGeneratorConfig,
@@ -74,11 +73,12 @@ import { LoopDetectionService } from '../../services/loopDetectionService.js';
 import { logSubagentExecution } from '../../telemetry/loggers.js';
 import type { SubagentExecutionEvent } from '../../telemetry/types.js';
 
+const TEST_MODEL = 'test-model';
+
 vi.mock('../../core/llm-chat.js');
 vi.mock('../../core/contentGenerator.js', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('../../core/contentGenerator.js')>();
-  const { DEFAULT_QWEN_MODEL } = await import('../../config/models.js');
   return {
     ...actual,
     createContentGenerator: vi.fn().mockResolvedValue({
@@ -87,13 +87,13 @@ vi.mock('../../core/contentGenerator.js', async (importOriginal) => {
       embedContent: vi.fn(),
     }),
     createContentGeneratorConfig: vi.fn().mockReturnValue({
-      model: DEFAULT_QWEN_MODEL,
-      authType: actual.AuthType.USE_GEMINI,
+      model: 'test-model',
+      authType: actual.AuthType.USE_OPENAI,
     }),
     resolveContentGeneratorConfigWithSources: vi.fn().mockReturnValue({
       config: {
-        model: DEFAULT_QWEN_MODEL,
-        authType: actual.AuthType.USE_GEMINI,
+        model: 'test-model',
+        authType: actual.AuthType.USE_OPENAI,
         apiKey: 'test-api-key',
       },
       sources: {},
@@ -159,7 +159,7 @@ async function createMockConfig(
   toolRegistryMocks = {},
 ): Promise<{ config: Config; toolRegistry: ToolRegistry }> {
   const configParams: ConfigParameters = {
-    model: DEFAULT_QWEN_MODEL,
+    model: TEST_MODEL,
     targetDir: '.',
     debugMode: false,
     cwd: process.cwd(),
@@ -168,7 +168,7 @@ async function createMockConfig(
   };
   const config = new Config(configParams);
   await config.initialize();
-  await config.refreshAuth(AuthType.USE_GEMINI);
+  await config.refreshAuth(AuthType.USE_OPENAI);
 
   // Mock ToolRegistry
   const mockToolRegistryBase = {
@@ -188,8 +188,8 @@ async function createMockConfig(
 
   // Mock getContentGeneratorConfig to return a valid config
   vi.spyOn(config, 'getContentGeneratorConfig').mockReturnValue({
-    model: DEFAULT_QWEN_MODEL,
-    authType: AuthType.USE_GEMINI,
+    model: TEST_MODEL,
+    authType: AuthType.USE_OPENAI,
   });
 
   // Mock setModel method
@@ -346,13 +346,13 @@ describe('subagent.ts', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any);
       vi.mocked(createContentGeneratorConfig).mockReturnValue({
-        model: DEFAULT_QWEN_MODEL,
+        model: TEST_MODEL,
         authType: undefined,
       });
       vi.mocked(resolveContentGeneratorConfigWithSources).mockReturnValue({
         config: {
-          model: DEFAULT_QWEN_MODEL,
-          authType: AuthType.USE_GEMINI,
+          model: TEST_MODEL,
+          authType: AuthType.USE_OPENAI,
           apiKey: 'test-api-key',
         },
         sources: {},
@@ -404,7 +404,7 @@ describe('subagent.ts', () => {
 
       it('rejects a container requirement through real worktree and approval overlays', async () => {
         const config = new Config({
-          model: DEFAULT_QWEN_MODEL,
+          model: TEST_MODEL,
           targetDir: process.cwd(),
           cwd: process.cwd(),
           debugMode: false,
@@ -433,7 +433,7 @@ describe('subagent.ts', () => {
 
       it('allows a required container with its injected environment and no factory', async () => {
         const config = new Config({
-          model: DEFAULT_QWEN_MODEL,
+          model: TEST_MODEL,
           targetDir: process.cwd(),
           cwd: process.cwd(),
           debugMode: false,

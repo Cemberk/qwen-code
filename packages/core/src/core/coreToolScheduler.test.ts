@@ -13809,7 +13809,7 @@ describe('CoreToolScheduler telemetry spans', () => {
       type: 'vision_bridge_notice' as const,
       summary: 'Failed to read PDF after rendering pages 20-23',
       notice:
-        'Vision bridge (qwen3-vl-plus) failed after sending images to dashscope.aliyuncs.com.',
+        'Vision bridge (qwen3-vl-plus) failed after sending images to 127.0.0.1:1234.',
     };
     const { completedCalls } = await runSingleTool({
       execute: vi.fn().mockResolvedValue({

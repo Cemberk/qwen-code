@@ -5,13 +5,7 @@
  */
 
 import type { Config, ContentGeneratorConfig } from '@qwen-code/qwen-code-core';
-import {
-  buildInstallPlan,
-  findProviderById,
-  REASONING_EFFORT_TIERS,
-  parseModelReasoningCapabilities,
-  resolveBaseUrl,
-} from '@qwen-code/qwen-code-core';
+import { REASONING_EFFORT_TIERS } from '@qwen-code/qwen-code-core';
 import { resolveReasoningCapabilities } from '@qwen-code/qwen-code-core/core/reasoning-overrides.js';
 import type { LoadedSettings } from '../config/settings.js';
 import { describe, expect, it, vi } from 'vitest';
@@ -27,7 +21,6 @@ import {
   getModelConfiguration,
   getGptReasoningOverrideState,
   getReasoningEffortsForConfig,
-  type ModelReasoningConfiguration,
   isReasoningSelectionSupported,
   resolvePersistedReasoningConfigState,
 } from './model-configuration.js';
@@ -47,7 +40,7 @@ describe('default reasoning configuration', () => {
       const config = {
         getAuthType: () => 'openai',
         getModel: () => 'gpt-5.5',
-        getCurrentModelRegistryBaseUrl: () => 'https://selected.example/v1',
+        getCurrentModelRegistryBaseUrl: () => 'http://127.0.0.1:11434/v1',
         getActiveRuntimeModelSnapshot: () => (runtime ? {} : undefined),
         getResolvedModelConfig: resolve,
       } as unknown as Config;
@@ -61,7 +54,7 @@ describe('default reasoning configuration', () => {
         expect(resolve).toHaveBeenCalledWith(
           'openai',
           'gpt-5.5',
-          'https://selected.example/v1',
+          'http://127.0.0.1:11434/v1',
         );
       }
     },
@@ -69,85 +62,6 @@ describe('default reasoning configuration', () => {
 });
 
 describe('model configuration manifest', () => {
-  it.each([
-    ['moonshot', 'kimi-k3', ['low', 'high', 'max'], 'max'],
-    ['moonshot', 'kimi-k2.7-code', ['default'], 'default'],
-    ['moonshot', 'kimi-k2.7-code-highspeed', ['default'], 'default'],
-    ['moonshot', 'kimi-k2.6', ['none', 'default'], 'default'],
-    ['deepseek', 'deepseek-v4-pro', ['none', 'low', 'high', 'max'], 'high'],
-    ['deepseek', 'deepseek-v4-flash', ['none', 'low', 'high', 'max'], 'high'],
-    [
-      'alibabaStandard',
-      'qwen3.8-max',
-      ['none', 'low', 'medium', 'xhigh'],
-      'xhigh',
-    ],
-    [
-      'alibabaStandard',
-      'qwen3.8-max-0902',
-      ['none', 'low', 'medium', 'xhigh'],
-      'xhigh',
-    ],
-    [
-      'alibabaStandard',
-      'qwen3.8-flash',
-      ['none', 'low', 'medium', 'xhigh'],
-      'xhigh',
-    ],
-    ['alibabaStandard', 'deepseek-v4-pro', ['none', 'high', 'max'], 'high'],
-    [
-      'alibabaStandard',
-      'deepseek-v4-pro-0813',
-      ['none', 'low', 'high', 'max'],
-      'high',
-    ],
-    ['alibabaStandard', 'kimi-k3', ['low', 'high', 'max'], 'max'],
-    ['token-plan', 'qwen3.8-max', ['low', 'medium', 'xhigh'], 'xhigh'],
-    ['token-plan', 'qwen3.8-max-preview', ['low', 'medium', 'xhigh'], 'xhigh'],
-    [
-      'token-plan',
-      'qwen3.8-flash',
-      ['none', 'low', 'medium', 'xhigh'],
-      'xhigh',
-    ],
-    [
-      'token-plan',
-      'deepseek-v4-flash-0731',
-      ['none', 'low', 'high', 'max'],
-      'high',
-    ],
-    ['coding-plan', 'qwen3.5-plus', ['none', 'default'], 'default'],
-    ['coding-plan', 'kimi-k2.5', ['none', 'default'], 'default'],
-  ] as const)(
-    'projects installed %s / %s native choices',
-    (providerId, model, values, currentValue) => {
-      const preset = findProviderById(providerId)!;
-      const installed = buildInstallPlan(preset, {
-        baseUrl: resolveBaseUrl(preset),
-        apiKey: 'test-key',
-        modelIds: [model],
-      }).modelProviders![0].models[0];
-      const reasoning = parseModelReasoningCapabilities(
-        installed.capabilities?.reasoning,
-      );
-      expect(reasoning).toBeDefined();
-      const option = buildModelReasoningConfigOption(model, {}, reasoning);
-      expect(
-        option?.options.map((item) =>
-          'value' in item ? item.value : undefined,
-        ),
-      ).toEqual(values);
-      expect(option?.currentValue).toBe(currentValue);
-      const restored = buildModelReasoningConfigOption(
-        model,
-        { effort: 'high' },
-        reasoning,
-      );
-      expect(restored?.currentValue).toBe(
-        values.some((value) => value === 'high') ? 'high' : currentValue,
-      );
-    },
-  );
   it.each([
     ['gpt-5.1', ['none', 'low', 'medium', 'high'], 'none'],
     ['gpt-5.4', ['none', 'low', 'medium', 'high', 'xhigh'], 'none'],
@@ -292,7 +206,7 @@ describe('model configuration manifest', () => {
       getContentGeneratorConfig: () => ({
         model: 'deepseek-v4-pro',
         authType: 'openai',
-        baseUrl: 'https://api.deepseek.com',
+        baseUrl: 'http://127.0.0.1:11434/v1',
       }),
       getResolvedModelConfig: () => ({ capabilities: { reasoning } }),
     } as unknown as Config;
@@ -400,7 +314,7 @@ describe('model configuration manifest', () => {
     'qwen3.8-max-latest',
     'qwen3.8-max-2026-08-12',
     'qwen-route:v1:stable',
-    '$runtime|qwen-oauth|qwen3.8-max',
+    '$runtime|openai|qwen3.8-max',
   ])('does not project a tiered welcome preview for %s', (modelId) => {
     expect(buildModelReasoningConfigPreview(modelId)).toBeUndefined();
   });
@@ -604,129 +518,19 @@ describe('GPT raw reasoning reporting', () => {
       },
       { enabled: true, useDefaultEffort: true },
     ],
-    [
-      {
-        baseUrl: 'https://openrouter.ai/api/v1',
-        extra_body: { reasoning_effort: 'high' },
-      },
-      undefined,
-    ],
-    [
-      {
-        baseUrl: 'https://openrouter.ai/api/v1',
-        samplingParams: { reasoning_effort: 'high' },
-      },
-      { enabled: true, effort: 'high', useDefaultEffort: false },
-    ],
-    [
-      {
-        model: 'gpt-5.4',
-        baseUrl: 'https://openrouter.ai/api/v1',
-        samplingParams: { reasoning_effort: 'high' },
-        extra_body: { reasoning_effort: 'low' },
-      },
-      { enabled: true, effort: 'low', useDefaultEffort: false },
-    ],
-    [
-      {
-        baseUrl: 'https://openrouter.ai/api/v1',
-        samplingParams: { reasoning_effort: 'none' },
-      },
-      { enabled: false, useDefaultEffort: true },
-    ],
-    [
-      {
-        model: 'gpt-6-astra',
-        baseUrl: 'https://openrouter.ai/api/v1',
-        samplingParams: { reasoning_effort: 'none' },
-      },
-      { enabled: true, useDefaultEffort: true },
-    ],
-    [
-      {
-        baseUrl: 'https://openrouter.ai/api/v1',
-        samplingParams: { reasoning_effort: 'high' },
-        extra_body: { reasoning_effort: '' },
-      },
-      undefined,
-    ],
   ] as const)(
     'reports effective raw precedence for %j',
     (overrides, expected) => {
       expect(
         getGptReasoningOverrideState({
           model: 'gpt-5.5',
-          baseUrl: 'https://api.openai.com/v1',
+          baseUrl: 'http://127.0.0.1:11434/v1',
           reasoning: { effort: 'xhigh' },
           ...overrides,
         } as ContentGeneratorConfig),
       ).toEqual(expected ? { ...expected, blocksTierChange: true } : undefined);
     },
   );
-
-  it.each(['samplingParams', 'extra_body'] as const)(
-    'projects OpenRouter nested overrides from %s',
-    (layer) => {
-      for (const [model, reasoning, expected] of [
-        ['gpt-5.5', null, { enabled: true, useDefaultEffort: true }],
-        ['gpt-5.5', false, { enabled: false, useDefaultEffort: true }],
-        [
-          'gpt-5.5',
-          { enabled: false },
-          { enabled: false, useDefaultEffort: true },
-        ],
-        [
-          'gpt-5.5',
-          { effort: 'none' },
-          { enabled: false, useDefaultEffort: true },
-        ],
-        ['gpt-5.5', {}, { enabled: true, useDefaultEffort: true }],
-        [
-          'gpt-5.4',
-          { enabled: true },
-          { enabled: true, useDefaultEffort: true },
-        ],
-        [
-          'gpt-5.4',
-          { max_tokens: 1024 },
-          { enabled: true, useDefaultEffort: true },
-        ],
-        [
-          'gpt-5.4',
-          { effort: 'high' },
-          { enabled: true, effort: 'high', useDefaultEffort: false },
-        ],
-        ['gpt-5.4', {}, { enabled: false, useDefaultEffort: true }],
-      ] as const) {
-        expect(
-          getGptReasoningOverrideState({
-            model,
-            baseUrl: 'https://openrouter.ai/api/v1',
-            reasoning: { effort: 'xhigh' },
-            [layer]: { reasoning, reasoning_effort: 'none' },
-          } as ContentGeneratorConfig),
-        ).toEqual({ ...expected, blocksTierChange: true });
-      }
-    },
-  );
-
-  it('allows configured capability injection past an OpenRouter sampling flat override', () => {
-    expect(
-      getGptReasoningOverrideState(
-        {
-          model: 'gpt-5.5',
-          baseUrl: 'https://openrouter.ai/api/v1',
-          reasoning: { effort: 'high' },
-          samplingParams: { reasoning_effort: 'low' },
-        } as ContentGeneratorConfig,
-        {
-          thinking: true,
-          disableField: 'reasoning_effort',
-          efforts: ['low', 'high'],
-        } as ModelReasoningConfiguration,
-      ),
-    ).toBeUndefined();
-  });
 });
 
 // `/effort` and a workflow agent's per-call effort share one tier rule (core's
@@ -739,7 +543,7 @@ describe('getReasoningEffortsForConfig', () => {
       getContentGeneratorConfig: () => ({
         model: 'custom-model',
         authType: 'openai',
-        baseUrl: 'https://example.com',
+        baseUrl: 'http://127.0.0.1:11434/v1',
       }),
       getResolvedModelConfig: () => ({ capabilities: { reasoning } }),
     }) as unknown as Config;
@@ -784,7 +588,7 @@ describe('external reasoning controls', () => {
   const generation = {
     model: 'company-alias',
     authType: 'openai',
-    baseUrl: 'https://gateway.example/v1',
+    baseUrl: 'http://127.0.0.1:11434/v1',
   } as ContentGeneratorConfig;
 
   it('shows concrete defaults without persisting them as a selection', () => {
@@ -871,8 +675,10 @@ describe('external reasoning controls', () => {
         getGptReasoningOverrideState(
           {
             ...generation,
-            baseUrl: 'https://openrouter.ai/api/v1',
-            extra_body: { reasoning: { enabled: false } },
+            extra_body:
+              profile === 'openai-effort'
+                ? { reasoning_effort: 'none' }
+                : { reasoning: { enabled: false } },
           },
           reasoning,
         )?.enabled,

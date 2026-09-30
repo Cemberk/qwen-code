@@ -13,7 +13,6 @@ import { FatalConfigError } from '../utils/errors.js';
 
 export { QWEN_DIR } from '../utils/paths.js';
 export const GOOGLE_ACCOUNTS_FILENAME = 'google_accounts.json';
-export const OAUTH_FILE = 'oauth_creds.json';
 export const SKILL_PROVIDER_CONFIG_DIRS = ['.qwen', '.agents'];
 const TMP_DIR_NAME = 'tmp';
 const BIN_DIR_NAME = 'bin';
@@ -627,10 +626,6 @@ export class Storage {
 
   ensureProjectTempDirExists(): void {
     fs.mkdirSync(this.getProjectTempDir(), { recursive: true });
-  }
-
-  static getOAuthCredsPath(): string {
-    return path.join(Storage.getGlobalQwenDir(), OAUTH_FILE);
   }
 
   getProjectRoot(): string {

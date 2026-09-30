@@ -648,15 +648,12 @@ export async function* livePromptEvents(
     inline: options?.modelOverride !== undefined,
   };
   const map = createEventMapper({
-    // ink handleErrorEvent parity: auth-aware formatting. The Ctrl+Y retry
+    // ink handleErrorEvent parity: API error formatting. The Ctrl+Y retry
     // hint travels on the error event's `hint` field (ErrorMessage renders
     // it inline in secondary color).
     formatError: (error) => {
       try {
-        return parseAndFormatApiError(
-          error,
-          config.getContentGeneratorConfig()?.authType,
-        );
+        return parseAndFormatApiError(error);
       } catch {
         return error instanceof Error ? error.message : String(error);
       }

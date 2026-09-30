@@ -243,13 +243,17 @@ describe('SettingsSchema', () => {
       });
     });
 
-    it('should have top-level proxy setting in schema', () => {
-      expect(getSettingsSchema().proxy).toBeDefined();
-      expect(getSettingsSchema().proxy.type).toBe('string');
-      expect(getSettingsSchema().proxy.category).toBe('Advanced');
-      expect(getSettingsSchema().proxy.requiresRestart).toBe(true);
-      expect(getSettingsSchema().proxy.default).toBe(undefined);
-      expect(getSettingsSchema().proxy.showInDialog).toBe(false);
+    it('should not expose the removed proxy and provider-routing settings', () => {
+      const schema = getSettingsSchema();
+
+      expect(schema).not.toHaveProperty('proxy');
+      expect(schema).not.toHaveProperty('providerProtocol');
+      expect(schema.security.properties.auth.properties).not.toHaveProperty(
+        'enforcedType',
+      );
+      expect(schema.security.properties.auth.properties).not.toHaveProperty(
+        'useExternal',
+      );
     });
 
     it('should have general.outputStyle setting in schema', () => {

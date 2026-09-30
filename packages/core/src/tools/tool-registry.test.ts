@@ -103,7 +103,6 @@ const createMockCallableTool = (
 const baseConfigParams: ConfigParameters = {
   cwd: '/tmp',
   model: 'test-model',
-  embeddingModel: 'test-embedding-model',
   sandbox: undefined,
   targetDir: '/test/dir',
   debugMode: false,

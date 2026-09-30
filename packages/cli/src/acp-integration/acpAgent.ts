@@ -11,31 +11,21 @@ import {
   APPROVAL_MODE_INFO,
   APPROVAL_MODES,
   AuthType,
-  type ModelWireApi,
-  resolveModelProtocol,
-  tryResolveModelProtocol,
-  resolveModelSelectionAuthType,
-  hasVertexProjectConfigured,
   BTW_MAX_INPUT_LENGTH,
   buildBtwCacheSafeParams,
   buildBtwPrompt,
   ALL_PROVIDERS,
   applyProviderInstallPlan,
   buildInstallPlan,
-  getModelsForProviderProtocol,
-  clearCachedCredentialFile,
+  getLocalBaseUrlError,
+  getProviderModels,
   createDebugLogger,
   generateSessionRecap,
   findProviderById,
   getAllMemoryFilenames,
   getAutoMemoryRoot,
   getUserAutoMemoryRoot,
-  getDefaultBaseUrlForProtocol,
-  getDefaultModelIds,
   getScopedEnvContents,
-  QwenOAuth2Event,
-  qwenOAuth2Events,
-  resolveBaseUrl,
   MCP_BUDGET_WARN_FRACTION,
   MCPServerConfig,
   runForkedAgent,
@@ -60,7 +50,6 @@ import {
   PRIVATE_PARENT_CAPABILITY_META_KEY,
   parseInvocationContext,
   findExistingProviderModels,
-  resolveOwnsModel,
   ExtensionManager,
   ExtensionSettingScope,
   HookEventName,
@@ -122,7 +111,6 @@ import {
   ApprovalMode,
   type Config,
   type ConfigInitializeOptions,
-  type DeviceAuthorizationData,
   type DiscoveredMCPPrompt,
   type DiscoveredMCPResource,
   type HookConfig,
@@ -1401,37 +1389,16 @@ function hasFailedDisplayStatus(
 }
 /**
  * Env-var candidates per auth method, used by `buildAuthPreflightCell` for
- * a side-effect-free presence check. Mirrors `AUTH_ENV_MAPPINGS` from
- * `core/src/models/constants.ts` (which isn't on the public package
- * surface). Keep in sync if a new provider is added there. Any auth method
- * not listed here surfaces as `status: 'unknown'` on the cell rather than
- * a false `auth_env_error` — full validation happens at session start.
- *
- * Drift detection: `AUTH_PREFLIGHT_AUDITED_AUTH_TYPES` below lists every
- * `AuthType` enum value that has been triaged for this map (either keyed
- * here, or explicitly waived for non-env-based auth like qwen-oauth). The
- * paired test `AUTH_PREFLIGHT_AUDITED_AUTH_TYPES covers every AuthType`
- * walks the public enum and fails CI when core adds a new auth method
- * without a deliberate decision here.
+ * a side-effect-free presence check. Mirrors `OPENAI_ENV_MAPPING.apiKey` from
+ * `core/src/models/constants.ts`. Any auth method not listed here surfaces as
+ * `status: 'unknown'` on the cell rather than a false `auth_env_error` — full
+ * validation happens at session start.
  */
 export const AUTH_PREFLIGHT_ENV_KEYS: Readonly<
   Record<string, readonly string[]>
 > = {
   openai: ['OPENAI_API_KEY'],
-  'openai-responses': ['OPENAI_API_KEY'],
-  anthropic: ['ANTHROPIC_API_KEY'],
-  gemini: ['GEMINI_API_KEY'],
-  'vertex-ai': ['GOOGLE_API_KEY'],
 };
-
-/**
- * Auth methods deliberately not env-keyed (e.g. OAuth-based, credential
- * file). Listed here so the drift test recognizes them as triaged-but-
- * waived rather than a missing entry.
- */
-export const AUTH_PREFLIGHT_WAIVED_AUTH_TYPES: ReadonlySet<string> = new Set([
-  'qwen-oauth',
-]);
 
 type QwenMemorySettings = {
   enableManagedAutoMemory: boolean;
@@ -1726,23 +1693,6 @@ function readProviderAdvancedConfig(
   return Object.keys(advancedConfig).length > 0 ? advancedConfig : undefined;
 }
 
-function resolveProviderDocumentationUrl(
-  config: ProviderConfig,
-  baseUrl: string,
-): string | undefined {
-  if (typeof config.documentationUrl === 'string') {
-    return config.documentationUrl;
-  }
-  if (typeof config.documentationUrl === 'function') {
-    try {
-      return config.documentationUrl(baseUrl);
-    } catch {
-      return undefined;
-    }
-  }
-  return undefined;
-}
-
 function readSettingsEnv(
   settings: LoadedSettings,
   envKey: string | undefined,
@@ -1755,13 +1705,10 @@ function readSettingsEnv(
 
 function resolveProviderEnvKey(
   config: ProviderConfig,
-  protocol: ProviderConfig['protocol'],
   baseUrl: string,
 ): string | undefined {
   try {
-    return typeof config.envKey === 'function'
-      ? config.envKey(protocol, baseUrl)
-      : config.envKey;
+    return config.envKey(config.protocol, baseUrl);
   } catch {
     return undefined;
   }
@@ -1791,60 +1738,30 @@ function readExistingProviderConfig(
     (settings.merged as Record<string, unknown>)['modelProviders'] as
       | Record<string, unknown>
       | undefined,
-    settings.merged.providerProtocol,
-    {
-      authType: settings.merged.security?.auth?.selectedType,
-      id: settings.merged.model?.name,
-      baseUrl: settings.merged.model?.baseUrl,
-    },
   );
   const firstModel = existing?.models[0];
-  const protocol = existing?.protocol ?? config.protocol;
-  const baseUrl =
-    typeof firstModel?.baseUrl === 'string'
-      ? firstModel.baseUrl
-      : resolveBaseUrl(config);
+  if (!firstModel) return undefined;
+  const baseUrl = firstModel.baseUrl ?? '';
   const envKey =
-    typeof firstModel?.envKey === 'string'
+    typeof firstModel.envKey === 'string'
       ? firstModel.envKey
-      : resolveProviderEnvKey(config, protocol, baseUrl);
+      : resolveProviderEnvKey(config, baseUrl);
   const apiKey = readSettingsEnv(settings, envKey);
-  const hasExistingConfig = !!apiKey || !!existing;
-
-  if (!hasExistingConfig) return undefined;
-
   const advancedConfig = readExistingAdvancedConfig(firstModel);
 
   return {
-    protocol:
-      protocol === AuthType.USE_OPENAI_RESPONSES
-        ? AuthType.USE_OPENAI
-        : protocol,
-    ...(protocol === AuthType.USE_OPENAI ||
-    protocol === AuthType.USE_OPENAI_RESPONSES
-      ? {
-          wireApi:
-            firstModel?.wireApi ??
-            (protocol === AuthType.USE_OPENAI_RESPONSES
-              ? 'responses'
-              : 'chat-completions'),
-        }
-      : {}),
+    protocol: config.protocol,
     baseUrl: sanitizeProviderBaseUrl(baseUrl),
     // Never serialize the raw secret over the ACP wire. Expose only whether a
     // key is stored; the client can omit `apiKey` on connect to keep it.
     ...(apiKey ? { hasApiKey: true } : {}),
-    ...(existing
-      ? {
-          modelIds: existing.models
-            .filter(
-              (model) =>
-                model.baseUrl === firstModel?.baseUrl &&
-                model.envKey === firstModel?.envKey,
-            )
-            .map((model) => model.id),
-        }
-      : {}),
+    modelIds: existing.models
+      .filter(
+        (model) =>
+          model.baseUrl === firstModel.baseUrl &&
+          model.envKey === firstModel.envKey,
+      )
+      .map((model) => model.id),
     ...(advancedConfig ? { advancedConfig } : {}),
   };
 }
@@ -1855,24 +1772,12 @@ function readExistingProviderConfig(
 function resolveExistingProviderApiKey(
   config: ProviderConfig,
   settings: LoadedSettings,
-  protocol: ProviderConfig['protocol'],
   baseUrl: string,
   modelIds: string[],
 ): string | undefined {
-  const ownsModel = resolveOwnsModel(config);
-  const canonicalProtocol =
-    protocol === AuthType.USE_OPENAI_RESPONSES ? AuthType.USE_OPENAI : protocol;
-  const candidates = getModelsForProviderProtocol(
-    settings.merged.modelProviders,
-    canonicalProtocol,
-    settings.merged.providerProtocol,
-  ).filter(
+  const candidates = getProviderModels(settings.merged.modelProviders).filter(
     (model) =>
-      model.baseUrl === baseUrl &&
-      model.envKey &&
-      (ownsModel?.(model) || config.mergeModelsByIdentity) &&
-      modelIds.includes(model.id) &&
-      tryResolveModelProtocol(canonicalProtocol, model) === protocol,
+      model.baseUrl === baseUrl && model.envKey && modelIds.includes(model.id),
   );
   // Keep the first entry per model id (scan order) so this resolver agrees
   // with buildInstallPlan's first-wins identity match.
@@ -1880,60 +1785,25 @@ function resolveExistingProviderApiKey(
     (model, index) =>
       candidates.findIndex((entry) => entry.id === model.id) === index,
   );
-  // Service-role models (imageOnly/voiceOnly) carry their own suffixed env key,
-  // so a reconnect reads the key of the conversation model being connected and
-  // only falls back to service entries when no conversation model matched.
-  const conversation = matched.filter(
-    (model) => !model.imageOnly && !model.voiceOnly && !model.realtimeOnly,
-  );
-  if (
-    !conversation.length &&
-    modelIds.some((id) => !matched.some((model) => model.id === id))
-  ) {
-    return readSettingsEnv(
-      settings,
-      resolveProviderEnvKey(config, canonicalProtocol, baseUrl),
-    );
-  }
-  const keys = new Set(
-    (conversation.length ? conversation : matched).map((model) => model.envKey),
-  );
+  const keys = new Set(matched.map((model) => model.envKey));
   if (keys.size === 1) return readSettingsEnv(settings, [...keys][0]);
   if (keys.size > 1) return undefined;
-  return readSettingsEnv(
-    settings,
-    resolveProviderEnvKey(config, canonicalProtocol, baseUrl),
-  );
+  return readSettingsEnv(settings, resolveProviderEnvKey(config, baseUrl));
 }
 
 function serializeProviderConfig(
   config: ProviderConfig,
   settings: LoadedSettings,
 ): Record<string, unknown> {
-  const defaultProtocol = config.protocolOptions?.[0] ?? config.protocol;
-  const defaultBaseUrl =
-    config.baseUrl === undefined
-      ? getDefaultBaseUrlForProtocol(defaultProtocol)
-      : resolveBaseUrl(config);
   const existingConfig = readExistingProviderConfig(config, settings);
-
   return {
     id: config.id,
     label: config.label,
     description: config.description,
     protocol: config.protocol,
-    protocolOptions: config.protocolOptions ?? [],
-    baseUrl: config.baseUrl,
-    baseUrlPlaceholder:
-      config.baseUrl === undefined ? defaultBaseUrl : undefined,
-    defaultModelIds: getDefaultModelIds(config),
-    models: config.models ?? [],
-    modelsEditable: config.modelsEditable === true || !config.models,
     showAdvancedConfig: config.showAdvancedConfig === true,
+    supportsModelDiscovery: config.supportsModelDiscovery === true,
     apiKeyPlaceholder: config.apiKeyPlaceholder,
-    documentationUrl: resolveProviderDocumentationUrl(config, defaultBaseUrl),
-    uiGroup: config.uiGroup ?? 'third-party',
-    uiLabels: config.uiLabels,
     ...(existingConfig ? { existingConfig } : {}),
   };
 }
@@ -1942,59 +1812,21 @@ function readProviderSetupInputs(
   config: ProviderConfig,
   params: Record<string, unknown>,
   resolveExistingApiKey?: (
-    protocol: ProviderConfig['protocol'],
     baseUrl: string,
     modelIds: string[],
   ) => string | undefined,
 ): ProviderSetupInputs {
-  const protocol = readOptionalString(params['protocol'], 'protocol') as
-    | AuthType
-    | undefined;
-  if (
-    protocol &&
-    protocol !== config.protocol &&
-    !config.protocolOptions?.includes(protocol)
-  ) {
-    throw RequestError.invalidParams(
-      undefined,
-      `Invalid protocol for provider "${config.id}"`,
-    );
-  }
-
-  const wireApi = params['wireApi'] as ModelWireApi | undefined;
-  let effectiveProtocol: AuthType;
-  try {
-    effectiveProtocol = resolveModelProtocol(protocol ?? config.protocol, {
-      wireApi,
-    })!;
-  } catch (error) {
-    throw RequestError.invalidParams(
-      undefined,
-      error instanceof Error ? error.message : String(error),
-    );
-  }
-
-  let baseUrl = resolveBaseUrl(
-    config,
-    readOptionalString(params['baseUrl'], 'baseUrl'),
+  // No default: a missing or non-loopback base URL is rejected.
+  const baseUrl = (
+    readOptionalString(params['baseUrl'], 'baseUrl') ?? ''
   ).trim();
-  if (!baseUrl && config.baseUrl === undefined) {
-    // Default to the EFFECTIVE route's endpoint: a Responses selection dials
-    // the /v1-less default, so deriving from the raw bucket protocol would
-    // persist the Chat Completions endpoint on the Responses wire.
-    baseUrl = getDefaultBaseUrlForProtocol(effectiveProtocol);
-  }
-  if (!baseUrl) {
-    throw RequestError.invalidParams(
-      undefined,
-      `Invalid or missing baseUrl for provider "${config.id}"`,
-    );
+  const baseUrlError = getLocalBaseUrlError(baseUrl, 'baseUrl');
+  if (baseUrlError) {
+    throw RequestError.invalidParams(undefined, baseUrlError);
   }
 
-  const defaultModelIds = getDefaultModelIds(config);
   const modelIds = readStringArray(params['modelIds'], 'modelIds');
-  const resolvedModelIds = modelIds.length > 0 ? modelIds : defaultModelIds;
-  if (resolvedModelIds.length === 0) {
+  if (modelIds.length === 0) {
     throw RequestError.invalidParams(
       undefined,
       `Invalid or missing modelIds for provider "${config.id}"`,
@@ -2005,23 +1837,17 @@ function readProviderSetupInputs(
   // received `hasApiKey` from the list response), fall back to the stored key.
   const apiKey =
     readOptionalString(params['apiKey'], 'apiKey') ??
-    resolveExistingApiKey?.(effectiveProtocol, baseUrl, resolvedModelIds);
+    resolveExistingApiKey?.(baseUrl, modelIds);
   if (!apiKey) {
     throw RequestError.invalidParams(undefined, 'Invalid or missing apiKey');
-  }
-  const apiKeyError = config.validateApiKey?.(apiKey, baseUrl);
-  if (apiKeyError) {
-    throw RequestError.invalidParams(undefined, apiKeyError);
   }
 
   const advancedConfig = readProviderAdvancedConfig(params['advancedConfig']);
 
   return {
-    ...(protocol ? { protocol } : {}),
-    ...(wireApi ? { wireApi } : {}),
     baseUrl,
     apiKey,
-    modelIds: resolvedModelIds,
+    modelIds,
     ...(advancedConfig ? { advancedConfig } : {}),
   };
 }
@@ -5060,65 +4886,16 @@ class QwenAgent implements Agent {
 
   async authenticate({ methodId }: AuthenticateRequest): Promise<void> {
     const method = z.nativeEnum(AuthType).parse(methodId);
-    const currentAuthType =
-      this.config.getCurrentAuthType?.() ?? this.config.getAuthType?.();
-    // The wire resolver throws on a hand-edited invalid `wireApi` anywhere in
-    // modelProviders; re-authentication is the repair path, so tolerate the
-    // failure instead of rejecting it outright. The fallback must preserve
-    // the wire the session is actually on — falling back to the requested
-    // method could re-authenticate onto a wire that holds no models.
-    let authType = method;
-    if (method === AuthType.USE_OPENAI) {
-      const seeded =
-        currentAuthType === AuthType.USE_OPENAI_RESPONSES
-          ? currentAuthType
-          : method;
-      try {
-        authType = resolveModelSelectionAuthType(
-          seeded,
-          this.config.getModel(),
-          this.settings.merged.modelProviders,
-          this.settings.merged.providerProtocol,
-          this.config.getCurrentModelRegistryBaseUrl?.(),
-        );
-      } catch {
-        authType = seeded;
-      }
-    }
-
-    let authUri: string | undefined;
-    const authUriHandler = (deviceAuth: DeviceAuthorizationData) => {
-      authUri = deviceAuth.verification_uri_complete;
-      void this.connection.extNotification('authenticate/update', {
-        _meta: { authUri },
-      });
-    };
-
-    if (method === AuthType.QWEN_OAUTH) {
-      qwenOAuth2Events.once(QwenOAuth2Event.AuthUri, authUriHandler);
-    }
-
-    await clearCachedCredentialFile();
-    try {
-      await this.refreshAuthWithPersistedReasoning(
-        this.config,
-        this.settings,
-        authType,
-      );
-      this.settings.setValue(
-        SettingScope.User,
-        'security.auth.selectedType',
-        method === AuthType.USE_OPENAI &&
-          this.settings.forScope(SettingScope.User).settings.security?.auth
-            ?.selectedType === AuthType.USE_OPENAI_RESPONSES
-          ? AuthType.USE_OPENAI_RESPONSES
-          : method,
-      );
-    } finally {
-      if (method === AuthType.QWEN_OAUTH) {
-        qwenOAuth2Events.off(QwenOAuth2Event.AuthUri, authUriHandler);
-      }
-    }
+    await this.refreshAuthWithPersistedReasoning(
+      this.config,
+      this.settings,
+      method,
+    );
+    this.settings.setValue(
+      SettingScope.User,
+      'security.auth.selectedType',
+      method,
+    );
   }
 
   private reserveStartingSessionId(sessionId: string): () => void {
@@ -7951,10 +7728,8 @@ class QwenAgent implements Agent {
    *
    * Deliberately does NOT call `validateAuthMethod` from `cli/config/auth.ts`:
    * that helper has side effects (reloads `.env` from disk via
-   * `loadEnvironment`, writes `process.env['GOOGLE_GENAI_USE_VERTEXAI']` for
-   * Vertex auth) which would let a read-only `GET /workspace/preflight`
-   * mutate daemon state and produce torn snapshots when racing
-   * `GET /workspace/env`. Full validation still happens at session start.
+   * `loadEnvironment`) which would let a read-only preflight mutate state.
+   * Full validation still happens at session start.
    */
   private buildAuthPreflightCell(config: Config): ServePreflightCell {
     try {
@@ -7973,10 +7748,7 @@ class QwenAgent implements Agent {
         Boolean(process.env[name]),
       );
       let hasToken = Boolean(presentVar);
-      if (
-        !hasToken &&
-        !AUTH_PREFLIGHT_WAIVED_AUTH_TYPES.has(String(authType))
-      ) {
+      if (!hasToken) {
         const resolvedApiKey = config
           .getModelsConfig()
           .getGenerationConfig()?.apiKey;
@@ -7984,28 +7756,8 @@ class QwenAgent implements Agent {
           hasToken = true;
         }
       }
-      // Keyless Vertex: a configured project selects the ADC path, but it is
-      // routing configuration, not evidence that a usable credential exists.
-      // Report indeterminate rather than a confirmed token and let the session
-      // boot settle it.
-      if (
-        !hasToken &&
-        authType === AuthType.USE_VERTEX_AI &&
-        hasVertexProjectConfigured()
-      ) {
-        return this.acpCell('auth', {
-          status: 'unknown',
-          hint: 'Vertex AI is configured for Application Default Credentials; whether they resolve is only known at session start.',
-          detail: {
-            source: String(authType),
-            hasToken: 'unknown' as const,
-            envVarCandidates: apiKeyVars,
-          },
-        });
-      }
-      // No env-var registration → either OAuth-style auth (qwen-oauth) or
-      // a custom provider whose key is sourced from settings rather than
-      // env. If the resolved generation config already contains an apiKey
+      // No env-var registration → a provider whose key is sourced from
+      // settings rather than env. If the resolved generation config already contains an apiKey
       // we can report 'ok'; otherwise surface 'unknown' so the SDK
       // consumer defers to the `/session` boot for definitive validation.
       if (apiKeyVars.length === 0) {
@@ -8171,9 +7923,7 @@ class QwenAgent implements Agent {
 
   private buildProvidersPreflightCell(config: Config): ServePreflightCell {
     try {
-      const models = config
-        .getAllConfiguredModels()
-        .filter((model) => !model.imageOnly);
+      const models = config.getAllConfiguredModels();
       const authType = config.getAuthType?.();
       if (models.length === 0) {
         // `authType` set but zero models = the next `POST /session` will
@@ -9102,11 +8852,10 @@ class QwenAgent implements Agent {
         const inputs = readProviderSetupInputs(
           providerConfig,
           params,
-          (protocol, baseUrl, modelIds) =>
+          (baseUrl, modelIds) =>
             resolveExistingProviderApiKey(
               providerConfig,
               this.settings,
-              protocol,
               baseUrl,
               modelIds,
             ),
@@ -9115,16 +8864,7 @@ class QwenAgent implements Agent {
         const plan = buildInstallPlan(
           providerConfig,
           inputs,
-          getModelsForProviderProtocol(
-            this.settings.merged.modelProviders,
-            inputs.protocol ?? providerConfig.protocol,
-            this.settings.merged.providerProtocol,
-          ),
-          {
-            authType: this.settings.merged.security?.auth?.selectedType,
-            id: this.settings.merged.model?.name,
-            baseUrl: this.settings.merged.model?.baseUrl,
-          },
+          getProviderModels(this.settings.merged.modelProviders),
         );
         const adapter = createLoadedSettingsAdapter(
           this.settings,
@@ -13735,17 +13475,13 @@ class QwenAgent implements Agent {
         const reloadRevision = ++this.modelProviderReloadRevision;
         const merged = this.settings.merged;
         reloadEnvironment(merged, cwd);
-        const providerProtocol = merged.providerProtocol ?? {};
         let configsRefreshed = 0;
         let configsFailed = 0;
 
         const reloadConfig = async (config: Config, id: string) => {
           if (reloadRevision !== this.modelProviderReloadRevision) return;
           try {
-            config.reloadModelProvidersConfig(
-              merged.modelProviders,
-              providerProtocol,
-            );
+            config.reloadModelProvidersConfig(merged.modelProviders);
             configsRefreshed += 1;
           } catch {
             configsFailed += 1;
@@ -13786,8 +13522,7 @@ class QwenAgent implements Agent {
         const changed = diffSettingsKeys(oldMerged, newMerged);
         const envChanged =
           envResult.updatedKeys.length > 0 || envResult.removedKeys.length > 0;
-        const providersChanged =
-          changed.has('modelProviders') || changed.has('providerProtocol');
+        const providersChanged = changed.has('modelProviders');
         if (providersChanged) {
           this.modelProviderReloadRevision += 1;
         }
@@ -13841,10 +13576,7 @@ class QwenAgent implements Agent {
           sessions.map(async ([id, session]) => {
             const reasoningError = session
               .getConfig()
-              .stageReasoningOverrides?.(
-                newMerged.modelProviders,
-                newMerged.providerProtocol ?? {},
-              );
+              .stageReasoningOverrides?.(newMerged.modelProviders);
             if (reasoningError)
               await session
                 .sendUpdate({
@@ -13864,20 +13596,11 @@ class QwenAgent implements Agent {
 
             const sessionProvidersChanged =
               JSON.stringify(config.getModelProvidersConfig()) !==
-                JSON.stringify(newMerged.modelProviders) ||
-              JSON.stringify(config.getProviderProtocolConfig()) !==
-                JSON.stringify(newMerged.providerProtocol ?? {});
+              JSON.stringify(newMerged.modelProviders);
 
-            // Long-lived ACP sessions never restart, so honor providerProtocol
-            // changes here too (its requiresRestart only gates the TUI path) and
-            // always pass the current map so a modelProviders-only reload doesn't
-            // re-register against a stale protocol mapping.
             if (sessionProvidersChanged) {
               try {
-                config.reloadModelProvidersConfig(
-                  newMerged.modelProviders,
-                  newMerged.providerProtocol ?? {},
-                );
+                config.reloadModelProvidersConfig(newMerged.modelProviders);
               } catch (err) {
                 debugLogger.warn(
                   `reload: reloadModelProvidersConfig failed for session ${id}: ${err}`,
@@ -13906,7 +13629,6 @@ class QwenAgent implements Agent {
                   config,
                   this.settings,
                   authType,
-                  undefined,
                   session.getSessionReasoningSelection(),
                 );
                 session.reloadReasoningSelection();
@@ -14620,10 +14342,9 @@ class QwenAgent implements Agent {
     config: Config,
     settings: LoadedSettings,
     authType: AuthType,
-    isInitialAuth?: boolean,
     sessionSelection?: ReasoningSelection,
   ): Promise<void> {
-    await config.refreshAuth(authType, isInitialAuth);
+    await config.refreshAuth(authType);
     const selection =
       sessionSelection ??
       parseReasoningSelection(settings.merged.model?.reasoningEffort);
@@ -14668,7 +14389,6 @@ class QwenAgent implements Agent {
         config,
         settings,
         selectedType,
-        true,
       );
     } catch (e) {
       debugLogger.error(`Authentication failed: ${e}`);
@@ -15136,7 +14856,6 @@ class QwenAgent implements Agent {
       while (true) {
         const providerReloadRevision = this.modelProviderReloadRevision;
         const previousModelProviders = settings.merged.modelProviders;
-        const previousProviderProtocol = settings.merged.providerProtocol;
         const settingsReloaded =
           settings.reloadScopesFromDiskAtomically?.([
             SettingScope.User,
@@ -15152,24 +14871,16 @@ class QwenAgent implements Agent {
             'Final model-provider settings reload failed; keeping current settings',
           );
         }
-        config.reloadModelProvidersConfig?.(
-          settings.merged.modelProviders,
-          settings.merged.providerProtocol ?? {},
-        );
+        config.reloadModelProvidersConfig?.(settings.merged.modelProviders);
         if (options.deferWorkspaceActivation !== true) {
           const envReload = reloadEnvironment(
             settings.merged,
             config.getTargetDir(),
           );
-          const providerSettingsChanged =
-            !isDeepStrictEqual(
-              previousModelProviders,
-              settings.merged.modelProviders,
-            ) ||
-            !isDeepStrictEqual(
-              previousProviderProtocol,
-              settings.merged.providerProtocol,
-            );
+          const providerSettingsChanged = !isDeepStrictEqual(
+            previousModelProviders,
+            settings.merged.modelProviders,
+          );
           if (
             forceAuthenticationRefresh ||
             providerSettingsChanged ||
@@ -15420,38 +15131,6 @@ class QwenAgent implements Agent {
       return [modeConfigOption, modelConfigOption];
     }
     const currentModelEffort = config.getReasoningEffort?.();
-    const reasoningOverride = config.getReasoningEffortOverride?.();
-    const reasoningOverrideValue = reasoningOverride
-      ? generation[reasoningOverride.source]?.[reasoningOverride.field]
-      : undefined;
-    const normalizedEffortOverride =
-      reasoningOverride?.field === 'reasoning_effort' &&
-      typeof reasoningOverrideValue === 'string'
-        ? reasoningOverrideValue === 'minimal'
-          ? 'low'
-          : REASONING_EFFORT_TIERS.find(
-              (effort) => effort === reasoningOverrideValue,
-            )
-        : undefined;
-    const normalizedBudgetOverride =
-      reasoningOverride?.field === 'thinking_budget' &&
-      typeof reasoningOverrideValue === 'number' &&
-      Number.isFinite(reasoningOverrideValue) &&
-      reasoningOverrideValue >= 0 &&
-      reasoningOverrideValue <= 262_144
-        ? reasoningOverrideValue <= 4_096
-          ? 'low'
-          : reasoningOverrideValue <= 16_384
-            ? 'medium'
-            : 'xhigh'
-        : undefined;
-    const normalizedOverrideEffort =
-      normalizedEffortOverride ?? normalizedBudgetOverride;
-    const overrideDisablesReasoning =
-      (reasoningOverride?.field === 'enable_thinking' &&
-        reasoningOverrideValue === false) ||
-      (reasoningOverride?.field === 'reasoning_effort' &&
-        reasoningOverrideValue === REASONING_EFFORT_NONE);
     const gptOverride = getGptReasoningOverrideState(
       generation,
       modelReasoning,
@@ -15470,29 +15149,16 @@ class QwenAgent implements Agent {
             modelReasoning,
           )
         : gptOverride;
-    const mandatoryUsesDefaultEffort =
-      generation.thinkingMandatory === true &&
-      (overrideDisablesReasoning ||
-        (generation.reasoning === false &&
-          reasoningOverride?.field === 'reasoning_effort'));
     const effectiveModelEffort =
       modelReasoning && !modelReasoning.toggleOnly
-        ? mandatoryUsesDefaultEffort || gptOverride?.useDefaultEffort
+        ? gptOverride?.useDefaultEffort
           ? modelReasoning.defaultEffort
-          : normalizedOverrideEffort
-            ? (modelReasoning.efforts?.find(
-                (effort) => effort === normalizedOverrideEffort,
-              ) ?? modelReasoning.defaultEffort)
-            : (gptOverride?.effort ?? currentModelEffort)
+          : (gptOverride?.effort ?? currentModelEffort)
         : currentModelEffort;
     const reasoningEnabled =
-      generation.reasoning === undefined &&
-      !reasoningOverride &&
-      gptOverride?.enabled === undefined
+      generation.reasoning === undefined && gptOverride?.enabled === undefined
         ? undefined
-        : generation.reasoning !== false &&
-          (!reasoningOverride || !overrideDisablesReasoning) &&
-          gptOverride?.enabled !== false;
+        : generation.reasoning !== false && gptOverride?.enabled !== false;
     const canDisableReasoning = generation.thinkingMandatory !== true;
     const reasoningEffortConfigOption: SessionConfigOption = (modelReasoning
       ? buildModelReasoningConfigOption(
@@ -15569,16 +15235,7 @@ class QwenAgent implements Agent {
   }
 
   private buildSelectableModelOptions(config: Config) {
-    const currentAuthType = config.getAuthType();
-    return buildAcpModelOptions(
-      config
-        .getAllConfiguredModels()
-        .filter(
-          (model) =>
-            model.authType !== AuthType.QWEN_OAUTH ||
-            currentAuthType === AuthType.QWEN_OAUTH,
-        ),
-    );
+    return buildAcpModelOptions(config.getAllConfiguredModels());
   }
 }
 

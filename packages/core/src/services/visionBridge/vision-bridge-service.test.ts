@@ -207,7 +207,7 @@ describe('runVisionBridge', () => {
     const configWithEndpoint = {
       getDefaultVisionBridgeModel: () => ({
         id: 'qwen3-vl-plus',
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        baseUrl: 'http://127.0.0.1:1234/v1',
       }),
     } as unknown as Config;
     const result = await runVisionBridge({
@@ -216,7 +216,7 @@ describe('runVisionBridge', () => {
       signal: signal(),
     });
     expect(result.status).toBe('ok');
-    expect(result.modelEndpoint).toBe('dashscope.aliyuncs.com');
+    expect(result.modelEndpoint).toBe('127.0.0.1:1234');
   });
 
   it('labels rendered PDF pages and permits continuation on the original PDF', async () => {
@@ -377,7 +377,7 @@ describe('runVisionBridge', () => {
     const configWithEndpoint = {
       getDefaultVisionBridgeModel: () => ({
         id: 'openai:qwen3-vl-plus',
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        baseUrl: 'http://127.0.0.1:1234/v1',
       }),
     } as unknown as Config;
 
@@ -388,7 +388,7 @@ describe('runVisionBridge', () => {
     });
 
     expect(mockSideQuery.mock.calls[0][1].model).toBe(
-      'openai:qwen3-vl-plus\0https://dashscope.aliyuncs.com/compatible-mode/v1',
+      'openai:qwen3-vl-plus\0http://127.0.0.1:1234/v1',
     );
     expect(result.modelId).toBe('openai:qwen3-vl-plus');
     expect(textOf(result.parts)).toContain('by qwen3-vl-plus');
@@ -550,7 +550,7 @@ describe('runVisionBridge', () => {
     const configWithPinnedEndpoint = {
       getDefaultVisionBridgeModel: () => ({
         id: 'openai:qwen3.7-plus',
-        baseUrl: 'https://token-plan.example.com/v1',
+        baseUrl: 'http://localhost:8000/v1',
       }),
     } as unknown as Config;
 
@@ -561,7 +561,7 @@ describe('runVisionBridge', () => {
     });
 
     expect(mockSideQuery.mock.calls[0][1].model).toBe(
-      'openai:qwen3.7-plus\0https://token-plan.example.com/v1',
+      'openai:qwen3.7-plus\0http://localhost:8000/v1',
     );
   });
 
@@ -814,7 +814,7 @@ describe('runVisionBridge', () => {
     const configWithEndpoint = {
       getDefaultVisionBridgeModel: () => ({
         id: 'qwen3-vl-plus',
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        baseUrl: 'http://127.0.0.1:1234/v1',
       }),
     } as unknown as Config;
     const result = await runVisionBridge({
@@ -827,13 +827,13 @@ describe('runVisionBridge', () => {
     expect(result.error).toMatch(/no usable image/);
     expect(result.omittedCount).toBe(1);
     expect(result.egressOccurred).toBeUndefined();
-    expect(result.modelEndpoint).toBe('dashscope.aliyuncs.com');
+    expect(result.modelEndpoint).toBe('127.0.0.1:1234');
     expect(mockSideQuery).not.toHaveBeenCalled();
     expect(textOf(result.parts)).toContain('describe this');
     expect((result.parts as Part[]).some((p) => p.inlineData)).toBe(false);
     const notice = formatVisionBridgeNotice(result);
     expect(notice).toContain(
-      'Vision bridge (qwen3-vl-plus (dashscope.aliyuncs.com)) failed',
+      'Vision bridge (qwen3-vl-plus (127.0.0.1:1234)) failed',
     );
     expect(notice).not.toContain('were sent');
   });
@@ -848,10 +848,10 @@ describe('formatVisionBridgeNotice', () => {
         convertedCount: 4,
         omittedCount: 0,
         modelId: 'qwen3-vl-plus',
-        modelEndpoint: 'dashscope.aliyuncs.com',
+        modelEndpoint: '127.0.0.1:1234',
         egressOccurred: true,
       }),
-    ).toContain('qwen3-vl-plus (dashscope.aliyuncs.com)');
+    ).toContain('qwen3-vl-plus (127.0.0.1:1234)');
   });
 
   it('hides auth-qualified routing prefixes from user-facing notices', () => {
@@ -862,18 +862,18 @@ describe('formatVisionBridgeNotice', () => {
         convertedCount: 1,
         omittedCount: 0,
         modelId: 'openai:qwen3-vl-plus',
-        modelEndpoint: 'dashscope.aliyuncs.com',
+        modelEndpoint: '127.0.0.1:1234',
         egressOccurred: true,
       }),
-    ).toContain('via qwen3-vl-plus (dashscope.aliyuncs.com)');
+    ).toContain('via qwen3-vl-plus (127.0.0.1:1234)');
 
     expect(
       formatFullTurnVisionNotice({
         id: 'openai:qwen3-vl-plus',
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        baseUrl: 'http://127.0.0.1:1234/v1',
         agentCapable: true,
       }),
-    ).toContain('to qwen3-vl-plus (dashscope.aliyuncs.com)');
+    ).toContain('to qwen3-vl-plus (127.0.0.1:1234)');
   });
 
   it('does not claim egress for a success result without egress', () => {
@@ -883,7 +883,7 @@ describe('formatVisionBridgeNotice', () => {
       convertedCount: 1,
       omittedCount: 0,
       modelId: 'qwen3-vl-plus',
-      modelEndpoint: 'dashscope.aliyuncs.com',
+      modelEndpoint: '127.0.0.1:1234',
       egressOccurred: false,
     });
 
@@ -897,11 +897,11 @@ describe('formatVisionBridgeNotice', () => {
       convertedCount: 0,
       omittedCount: 0,
       modelId: 'qwen3-vl-plus',
-      modelEndpoint: 'dashscope.aliyuncs.com',
+      modelEndpoint: '127.0.0.1:1234',
       egressOccurred: true,
     });
 
-    expect(notice.match(/dashscope\.aliyuncs\.com/g)).toHaveLength(1);
+    expect(notice.match(/127\.0\.0\.1:1234/g)).toHaveLength(1);
   });
 
   it.each([
@@ -916,7 +916,7 @@ describe('formatVisionBridgeNotice', () => {
         convertedCount: 0,
         omittedCount: 0,
         modelId: 'qwen3-vl-plus',
-        modelEndpoint: 'dashscope.aliyuncs.com',
+        modelEndpoint: '127.0.0.1:1234',
         egressOccurred,
       });
 
@@ -941,14 +941,15 @@ describe('formatVisionBridgeNotice', () => {
 });
 
 describe('selectVisionBridgeModel (same-provider only)', () => {
-  const dashscope = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
-  const idealab = 'https://idealab.example.com/v1';
-  // Primary qwen-text-max is text-only on dashscope; qwen3.7-plus shares that
-  // endpoint (a real vision model), gpt-5.4 is image-capable but on idealab.
+  const primaryEndpoint = 'http://127.0.0.1:1234/v1';
+  const otherEndpoint = 'http://127.0.0.1:8080/v1';
+  // Primary qwen-text-max is text-only on the primary endpoint; qwen3.7-plus
+  // shares that endpoint (a real vision model), gpt-5.4 is image-capable but
+  // on another server.
   const models: VisionModelCandidate[] = [
-    { id: 'qwen-text-max', authType: 'openai', baseUrl: dashscope },
-    { id: 'gpt-5.4', authType: 'openai', baseUrl: idealab },
-    { id: 'qwen3.7-plus', authType: 'openai', baseUrl: dashscope },
+    { id: 'qwen-text-max', authType: 'openai', baseUrl: primaryEndpoint },
+    { id: 'gpt-5.4', authType: 'openai', baseUrl: otherEndpoint },
+    { id: 'qwen3.7-plus', authType: 'openai', baseUrl: primaryEndpoint },
   ];
 
   it('returns undefined when no image-capable model is registered', () => {
@@ -956,27 +957,29 @@ describe('selectVisionBridgeModel (same-provider only)', () => {
       selectVisionBridgeModel(
         'qwen-text-max',
         [
-          { id: 'qwen-text-max', baseUrl: dashscope },
-          { id: 'deepseek-v3', baseUrl: dashscope },
+          { id: 'qwen-text-max', baseUrl: primaryEndpoint },
+          { id: 'deepseek-v3', baseUrl: primaryEndpoint },
         ],
-        { baseUrl: dashscope },
+        { baseUrl: primaryEndpoint },
       ),
     ).toBeUndefined();
   });
 
   it('never selects the primary model itself', () => {
     const picked = selectVisionBridgeModel('qwen3.7-plus', models, {
-      baseUrl: dashscope,
+      baseUrl: primaryEndpoint,
     });
     expect(picked?.id).not.toBe('qwen3.7-plus');
   });
 
   it('picks the image-capable model on the SAME endpoint as the primary', () => {
-    // gpt-5.4 (idealab) appears first, but qwen3.7-plus shares the primary's
-    // dashscope endpoint and must win.
+    // gpt-5.4 (other server) appears first, but qwen3.7-plus shares the
+    // primary's endpoint and must win.
     expect(
-      selectVisionBridgeModel('qwen-text-max', models, { baseUrl: dashscope }),
-    ).toEqual({ id: 'openai:qwen3.7-plus', baseUrl: dashscope });
+      selectVisionBridgeModel('qwen-text-max', models, {
+        baseUrl: primaryEndpoint,
+      }),
+    ).toEqual({ id: 'openai:qwen3.7-plus', baseUrl: primaryEndpoint });
   });
 
   it('never reaches across providers: undefined when the only vision model is on a different endpoint', () => {
@@ -984,17 +987,10 @@ describe('selectVisionBridgeModel (same-provider only)', () => {
       selectVisionBridgeModel(
         'qwen-text-max',
         [
-          { id: 'qwen-text-max', authType: 'openai', baseUrl: dashscope },
-          { id: 'gpt-5.4', authType: 'openai', baseUrl: idealab },
-          // OAuth/runtime model on yet another endpoint must never be picked.
-          {
-            id: 'coder-model',
-            authType: 'qwen-oauth',
-            baseUrl: 'DYNAMIC_QWEN_OAUTH_BASE_URL',
-            isVision: true,
-          },
+          { id: 'qwen-text-max', authType: 'openai', baseUrl: primaryEndpoint },
+          { id: 'gpt-5.4', authType: 'openai', baseUrl: otherEndpoint },
         ],
-        { authType: 'openai', baseUrl: dashscope },
+        { authType: 'openai', baseUrl: primaryEndpoint },
       ),
     ).toBeUndefined();
   });
@@ -1020,15 +1016,15 @@ describe('selectVisionBridgeModel (same-provider only)', () => {
     const picked = selectVisionBridgeModel(
       'primary',
       [
-        { id: 'primary', baseUrl: dashscope },
+        { id: 'primary', baseUrl: primaryEndpoint },
         // text-by-name but explicitly image-capable -> eligible
         {
           id: 'custom-text-name',
-          baseUrl: dashscope,
+          baseUrl: primaryEndpoint,
           modalities: { image: true },
         },
       ],
-      { baseUrl: dashscope },
+      { baseUrl: primaryEndpoint },
     );
     expect(picked?.id).toBe('custom-text-name');
   });
@@ -1037,25 +1033,25 @@ describe('selectVisionBridgeModel (same-provider only)', () => {
     const picked = selectVisionBridgeModel(
       'primary',
       [
-        { id: 'primary', authType: 'openai', baseUrl: dashscope },
+        { id: 'primary', authType: 'openai', baseUrl: primaryEndpoint },
         {
           id: 'vision-agent',
           authType: 'openai',
-          baseUrl: dashscope,
+          baseUrl: primaryEndpoint,
           modalities: { image: true },
           capabilities: { agent: true },
         },
       ],
-      { baseUrl: dashscope },
+      { baseUrl: primaryEndpoint },
     );
 
     expect(picked).toEqual({
       id: 'openai:vision-agent',
-      baseUrl: dashscope,
+      baseUrl: primaryEndpoint,
       agentCapable: true,
     });
     expect(getFullTurnVisionModelSelector(picked!)).toBe(
-      `openai:vision-agent\0${dashscope}\0`,
+      `openai:vision-agent\0${primaryEndpoint}\0`,
     );
     expect(formatFullTurnVisionNotice(picked!)).toMatch(
       /retries and tool continuations/i,
@@ -1065,14 +1061,14 @@ describe('selectVisionBridgeModel (same-provider only)', () => {
       selectVisionBridgeModel(
         'primary',
         [
-          { id: 'primary', baseUrl: dashscope },
+          { id: 'primary', baseUrl: primaryEndpoint },
           {
             id: 'vision-only',
-            baseUrl: dashscope,
+            baseUrl: primaryEndpoint,
             modalities: { image: true },
           },
         ],
-        { baseUrl: dashscope },
+        { baseUrl: primaryEndpoint },
       )?.agentCapable,
     ).toBeUndefined();
   });
@@ -1084,14 +1080,14 @@ describe('selectVisionBridgeModel (same-provider only)', () => {
         {
           id: 'vision-agent',
           authType: 'openai',
-          baseUrl: dashscope,
+          baseUrl: primaryEndpoint,
           modalities: { image: true },
           capabilities: { agent: true },
         },
         {
           id: 'vision-agent',
           authType: 'openai',
-          baseUrl: dashscope,
+          baseUrl: primaryEndpoint,
           modalities: { image: false },
         },
       ];
@@ -1100,10 +1096,10 @@ describe('selectVisionBridgeModel (same-provider only)', () => {
         selectVisionBridgeModel(
           'primary',
           [
-            { id: 'primary', authType: 'openai', baseUrl: dashscope },
+            { id: 'primary', authType: 'openai', baseUrl: primaryEndpoint },
             ...(reversed ? routeEntries.reverse() : routeEntries),
           ],
-          { authType: 'openai', baseUrl: dashscope },
+          { authType: 'openai', baseUrl: primaryEndpoint },
         ),
       ).toBeUndefined();
     },
@@ -1119,13 +1115,13 @@ describe('selectVisionBridgeModel (same-provider only)', () => {
         {
           id: 'shared-vision',
           authType: 'openai',
-          baseUrl: dashscope,
+          baseUrl: primaryEndpoint,
           isVision: true,
         },
         {
           id: 'shared-vision',
           authType: 'anthropic',
-          baseUrl: dashscope,
+          baseUrl: primaryEndpoint,
           isVision: true,
         },
       ];
@@ -1133,13 +1129,13 @@ describe('selectVisionBridgeModel (same-provider only)', () => {
       const picked = selectVisionBridgeModel(
         'primary',
         [
-          { id: 'primary', authType: 'openai', baseUrl: dashscope },
+          { id: 'primary', authType: 'openai', baseUrl: primaryEndpoint },
           ...(reversed ? routeEntries.reverse() : routeEntries),
         ],
-        { authType: 'openai', baseUrl: dashscope },
+        { authType: 'openai', baseUrl: primaryEndpoint },
       );
 
-      expect(picked).toEqual({ id: expectedId, baseUrl: dashscope });
+      expect(picked).toEqual({ id: expectedId, baseUrl: primaryEndpoint });
     },
   );
 });
@@ -1165,17 +1161,6 @@ describe('isImageCapable', () => {
 });
 
 describe('isFullTurnVisionCapable', () => {
-  it('excludes an image-only model even when agent-capable', () => {
-    expect(
-      isFullTurnVisionCapable({
-        id: 'qwen-image-2.0',
-        imageOnly: true,
-        isVision: true,
-        capabilities: { agent: true },
-      }),
-    ).toBe(false);
-  });
-
   it('includes a non-image-only agent-capable vision model', () => {
     expect(
       isFullTurnVisionCapable({

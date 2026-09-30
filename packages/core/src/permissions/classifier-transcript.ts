@@ -26,7 +26,7 @@
  * assistant `tool_calls` that lack a matching `tool` response (an orphan
  * filter at converter.ts:1429-1454). Because step 2 strips tool results,
  * every retained historical function-call would become orphan on the
- * default Qwen / DashScope backend and the entire prior-action chain would
+ * model server and the entire prior-action chain would
  * be wiped before the classifier saw it.
  */
 

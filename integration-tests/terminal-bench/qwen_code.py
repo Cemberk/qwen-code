@@ -42,7 +42,10 @@ class QwenCodeAgent(AbstractInstalledAgent):
         elif "OPENAI_MODEL" in os.environ:
             env["OPENAI_MODEL"] = os.environ["OPENAI_MODEL"]
         else:
-            env["OPENAI_MODEL"] = "qwen3-coder-plus"
+            raise ValueError(
+                "OPENAI_MODEL must be provided either via environment variable "
+                "or the agent model name"
+            )
         
         # Base URL - prefer agent_kwargs over environment variables  
         if self._base_url:
@@ -50,7 +53,10 @@ class QwenCodeAgent(AbstractInstalledAgent):
         elif "OPENAI_BASE_URL" in os.environ:
             env["OPENAI_BASE_URL"] = os.environ["OPENAI_BASE_URL"]
         else:
-            env["OPENAI_BASE_URL"] = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+            raise ValueError(
+                "OPENAI_BASE_URL (a loopback URL of the local model server) must "
+                "be provided either via environment variable or --agent-kwarg base_url=..."
+            )
         
         return env
 

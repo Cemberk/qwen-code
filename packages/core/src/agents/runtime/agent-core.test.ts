@@ -287,7 +287,7 @@ describe('AgentCore.runInAgentFrames', () => {
       } as unknown as ContentGenerator,
       contentGeneratorConfig: {
         model: 'agent-model',
-        authType: 'anthropic',
+        authType: 'openai',
       } as ContentGeneratorConfig,
     };
     const core = makeCore('image-agent', view);
@@ -314,7 +314,7 @@ describe('AgentCore.runInAgentFrames', () => {
       } as unknown as ContentGenerator,
       contentGeneratorConfig: {
         model: 'agent-model',
-        authType: 'anthropic',
+        authType: 'openai',
       } as ContentGeneratorConfig,
     };
     const core = makeCore('approval-agent', view);
@@ -406,7 +406,7 @@ describe('AgentCore.runInAgentFrames', () => {
       } as unknown as ContentGenerator,
       contentGeneratorConfig: {
         model: 'parent-model',
-        authType: 'anthropic',
+        authType: 'openai',
       } as ContentGeneratorConfig,
     };
     const inheritingCore = makeCore('inherit-agent');
@@ -559,7 +559,7 @@ describe('AgentCore.runInAgentFrames', () => {
       } as unknown as ContentGenerator,
       contentGeneratorConfig: {
         model: 'own-model',
-        authType: 'anthropic',
+        authType: 'openai',
       } as ContentGeneratorConfig,
     };
     const otherView: RuntimeContentGeneratorView = {

@@ -37,7 +37,7 @@ vi.mock('../core/contentGenerator.js', () => ({
   }),
   createContentGeneratorConfig: vi.fn().mockReturnValue({}),
   createContentGenerator: vi.fn().mockReturnValue({}),
-  AuthType: { USE_GEMINI: 'gemini', QWEN_OAUTH: 'qwen-oauth' },
+  AuthType: { USE_OPENAI: 'openai' },
 }));
 vi.mock('../core/baseLlmClient.js');
 vi.mock('../core/toolHookTriggers.js', () => ({
@@ -235,7 +235,7 @@ describe('Config modelEnvClaimed guard', () => {
       } as ContentGeneratorConfig,
       sources: {},
     });
-    await config.refreshAuth(AuthType.USE_GEMINI);
+    await config.refreshAuth(AuthType.USE_OPENAI);
 
     expect(process.env['QWEN_CODE_MODEL']).toBe('auth-resolved-model');
   });
@@ -288,12 +288,12 @@ describe('Config provider-qualified model identity', () => {
       config: {
         model: 'qualified-model',
         apiKey: 'k',
-        baseUrl: 'https://provider-a.example/v1',
+        baseUrl: 'http://127.0.0.1:11434/v1',
       } as ContentGeneratorConfig,
       sources: {},
     });
     const config = new Config({ ...baseParams });
-    await config.refreshAuth(AuthType.USE_GEMINI);
+    await config.refreshAuth(AuthType.USE_OPENAI);
 
     expect(process.env['QWEN_CODE_MODEL']).toBe('qualified-model');
     expect(process.env['QWEN_CODE_MODEL_IDENTITY']).toMatch(
@@ -328,22 +328,22 @@ describe('Config provider-qualified model identity', () => {
       config: {
         model: 'same-model',
         apiKey: 'k',
-        baseUrl: 'https://provider-a.example/v1',
+        baseUrl: 'http://127.0.0.1:11434/v1',
       } as ContentGeneratorConfig,
       sources: {},
     });
-    await config.refreshAuth(AuthType.USE_GEMINI);
+    await config.refreshAuth(AuthType.USE_OPENAI);
     const a = process.env['QWEN_CODE_MODEL_IDENTITY'];
 
     vi.mocked(resolveContentGeneratorConfigWithSources).mockReturnValue({
       config: {
         model: 'same-model',
         apiKey: 'k',
-        baseUrl: 'https://provider-b.example/v1',
+        baseUrl: 'http://127.0.0.1:1234/v1',
       } as ContentGeneratorConfig,
       sources: {},
     });
-    await config.refreshAuth(AuthType.USE_GEMINI);
+    await config.refreshAuth(AuthType.USE_OPENAI);
     const b = process.env['QWEN_CODE_MODEL_IDENTITY'];
 
     expect(process.env['QWEN_CODE_MODEL']).toBe('same-model');
@@ -361,14 +361,14 @@ describe('Config provider-qualified model identity', () => {
       config: {
         model: 'steady-model',
         apiKey: 'k',
-        baseUrl: 'https://provider-a.example/v1',
+        baseUrl: 'http://127.0.0.1:11434/v1',
       } as ContentGeneratorConfig,
       sources: {},
     });
     const config = new Config({ ...baseParams });
-    await config.refreshAuth(AuthType.USE_GEMINI);
+    await config.refreshAuth(AuthType.USE_OPENAI);
     const first = process.env['QWEN_CODE_MODEL_IDENTITY'];
-    await config.refreshAuth(AuthType.USE_GEMINI);
+    await config.refreshAuth(AuthType.USE_OPENAI);
 
     expect(process.env['QWEN_CODE_MODEL_IDENTITY']).toBe(first);
   });
@@ -430,12 +430,12 @@ describe('Config.getModelRouteIdentity (#9454 route key)', () => {
       config: {
         model: 'steady-model',
         apiKey: 'k',
-        baseUrl: 'https://provider-a.example/v1',
+        baseUrl: 'http://127.0.0.1:11434/v1',
       } as ContentGeneratorConfig,
       sources: {},
     });
     const config = new Config({ ...baseParams });
-    await config.refreshAuth(AuthType.USE_GEMINI);
+    await config.refreshAuth(AuthType.USE_OPENAI);
 
     // Route-scoped caches (e.g. LlmChat token counts) compare these
     // strings for equality — the value must not drift between calls.
@@ -454,26 +454,26 @@ describe('Config.getModelRouteIdentity (#9454 route key)', () => {
       config: {
         model: 'active-model',
         apiKey: 'k',
-        baseUrl: 'https://provider-a.example/v1',
+        baseUrl: 'http://127.0.0.1:11434/v1',
       } as ContentGeneratorConfig,
       sources: {},
     });
     const config = new Config({ ...baseParams });
-    await config.refreshAuth(AuthType.USE_GEMINI);
+    await config.refreshAuth(AuthType.USE_OPENAI);
 
     // The readable model id stays the prefix; the discriminator is exactly
     // eight hex characters, stable for one (auth type, endpoint) pair.
     const explicit = config.getModelRouteIdentity('route-model', {
       model: 'route-model',
       authType: 'openai',
-      baseUrl: 'https://route.example/v1',
+      baseUrl: 'http://127.0.0.1:8000/v1',
     } as ContentGeneratorConfig);
     expect(explicit).toMatch(/^route-model@[0-9a-f]{8}$/);
     expect(
       config.getModelRouteIdentity('route-model', {
         model: 'route-model',
         authType: 'openai',
-        baseUrl: 'https://route.example/v1',
+        baseUrl: 'http://127.0.0.1:8000/v1',
       } as ContentGeneratorConfig),
     ).toBe(explicit);
   });
@@ -498,7 +498,7 @@ describe('Config.getModelRouteIdentity (#9454 route key)', () => {
       sources: {},
     });
     const config = new Config({ ...baseParams });
-    await config.refreshAuth(AuthType.USE_GEMINI);
+    await config.refreshAuth(AuthType.USE_OPENAI);
     const registrySpy = vi.spyOn(config, 'getCurrentModelRegistryBaseUrl');
 
     const foreignGeneratorConfig = {
@@ -506,7 +506,7 @@ describe('Config.getModelRouteIdentity (#9454 route key)', () => {
       authType: 'openai',
     } as ContentGeneratorConfig;
 
-    registrySpy.mockReturnValue('https://registry.example/v1');
+    registrySpy.mockReturnValue('http://localhost:11434/v1');
     const activeWithRegistry = config.getModelRouteIdentity();
     const foreignWithRegistry = config.getModelRouteIdentity(
       'foreign-model',

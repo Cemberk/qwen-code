@@ -531,27 +531,6 @@ export async function start_sandbox(
   // mount os.tmpdir() as os.tmpdir() inside container
   args.push('--volume', `${os.tmpdir()}:${getContainerPath(os.tmpdir())}`);
 
-  // mount gcloud config directory if it exists
-  const gcloudConfigDir = path.join(os.homedir(), '.config', 'gcloud');
-  if (fs.existsSync(gcloudConfigDir)) {
-    args.push(
-      '--volume',
-      `${gcloudConfigDir}:${getContainerPath(gcloudConfigDir)}:ro`,
-    );
-  }
-
-  // mount ADC file if GOOGLE_APPLICATION_CREDENTIALS is set
-  if (process.env['GOOGLE_APPLICATION_CREDENTIALS']) {
-    const adcFile = process.env['GOOGLE_APPLICATION_CREDENTIALS'];
-    if (fs.existsSync(adcFile)) {
-      args.push('--volume', `${adcFile}:${getContainerPath(adcFile)}:ro`);
-      args.push(
-        '--env',
-        `GOOGLE_APPLICATION_CREDENTIALS=${getContainerPath(adcFile)}`,
-      );
-    }
-  }
-
   // mount paths listed in SANDBOX_MOUNTS
   if (process.env['SANDBOX_MOUNTS']) {
     for (let mount of process.env['SANDBOX_MOUNTS'].split(',')) {
@@ -681,15 +660,7 @@ export async function start_sandbox(
     );
   }
 
-  // copy GEMINI_API_KEY(s)
-  if (process.env['GEMINI_API_KEY']) {
-    args.push('--env', `GEMINI_API_KEY=${process.env['GEMINI_API_KEY']}`);
-  }
-  if (process.env['GOOGLE_API_KEY']) {
-    args.push('--env', `GOOGLE_API_KEY=${process.env['GOOGLE_API_KEY']}`);
-  }
-
-  // copy OPENAI_API_KEY and related env vars for Qwen
+  // copy the local model server credentials and selection
   if (process.env['OPENAI_API_KEY']) {
     args.push('--env', `OPENAI_API_KEY=${process.env['OPENAI_API_KEY']}`);
   }
@@ -698,43 +669,6 @@ export async function start_sandbox(
   }
   if (process.env['OPENAI_MODEL']) {
     args.push('--env', `OPENAI_MODEL=${process.env['OPENAI_MODEL']}`);
-  }
-
-  // copy GOOGLE_GENAI_USE_VERTEXAI
-  if (process.env['GOOGLE_GENAI_USE_VERTEXAI']) {
-    args.push(
-      '--env',
-      `GOOGLE_GENAI_USE_VERTEXAI=${process.env['GOOGLE_GENAI_USE_VERTEXAI']}`,
-    );
-  }
-
-  // copy GOOGLE_GENAI_USE_GCA
-  if (process.env['GOOGLE_GENAI_USE_GCA']) {
-    args.push(
-      '--env',
-      `GOOGLE_GENAI_USE_GCA=${process.env['GOOGLE_GENAI_USE_GCA']}`,
-    );
-  }
-
-  // copy GOOGLE_CLOUD_PROJECT
-  if (process.env['GOOGLE_CLOUD_PROJECT']) {
-    args.push(
-      '--env',
-      `GOOGLE_CLOUD_PROJECT=${process.env['GOOGLE_CLOUD_PROJECT']}`,
-    );
-  }
-
-  // copy GOOGLE_CLOUD_LOCATION
-  if (process.env['GOOGLE_CLOUD_LOCATION']) {
-    args.push(
-      '--env',
-      `GOOGLE_CLOUD_LOCATION=${process.env['GOOGLE_CLOUD_LOCATION']}`,
-    );
-  }
-
-  // copy GEMINI_MODEL
-  if (process.env['GEMINI_MODEL']) {
-    args.push('--env', `GEMINI_MODEL=${process.env['GEMINI_MODEL']}`);
   }
 
   // copy TERM and COLORTERM to try to maintain terminal setup

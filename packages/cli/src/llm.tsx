@@ -11,7 +11,6 @@ import {
 import { prepareFileWatchersForProcessExit } from '@qwen-code/qwen-code-core/utils/file-watcher-cleanup.js';
 import { validateExecutionSandboxSelection } from './config/execution-sandbox-settings.js';
 import {
-  AuthType,
   type ChatRecord,
   computeInitialTurnFromHistory,
   type Config,
@@ -661,24 +660,22 @@ export async function main() {
         buildEnabledSkillNamesProvider(settings),
       );
 
-      if (!settings.merged.security?.auth?.useExternal) {
-        // Validate authentication here because the sandbox will interfere with the Oauth2 web redirect.
-        try {
-          const authType = partialConfig.getModelsConfig().getCurrentAuthType();
-          // Fresh users may not have selected/persisted an authType yet.
-          // In that case, defer auth prompting/selection to the main interactive flow.
-          if (authType) {
-            const err = validateAuthMethod(authType, partialConfig);
-            if (err) {
-              throw new Error(err);
-            }
-
-            await partialConfig.refreshAuth(authType);
+      // Validate authentication before entering the sandbox.
+      try {
+        const authType = partialConfig.getModelsConfig().getCurrentAuthType();
+        // Fresh users may not have selected/persisted an authType yet.
+        // In that case, defer auth prompting/selection to the main interactive flow.
+        if (authType) {
+          const err = validateAuthMethod(authType, partialConfig);
+          if (err) {
+            throw new Error(err);
           }
-        } catch (err) {
-          writeStderrLine(`Error authenticating: ${err}`);
-          process.exit(1);
+
+          await partialConfig.refreshAuth(authType);
         }
+      } catch (err) {
+        writeStderrLine(`Error authenticating: ${err}`);
+        process.exit(1);
       }
       // For stream-json and ACP modes, don't read stdin here — stdin carries
       // protocol data (not a user prompt) and should be forwarded to the sandbox
@@ -1223,12 +1220,6 @@ export async function main() {
         })),
         ...getSettingsWarnings(settings),
         ...config.getWarnings(),
-        ...(config.getModelsConfig().getCurrentAuthType() ===
-        AuthType.QWEN_OAUTH
-          ? [
-              'Qwen OAuth free tier was discontinued on 2026-04-15. Run /auth to switch to Coding Plan or another provider.',
-            ]
-          : []),
       ]),
     ];
     const emittedStartupWarnings = new Set(startupWarnings);
@@ -1464,11 +1455,7 @@ export async function main() {
     const { validateNonInteractiveAuth } = await import(
       './validateNonInterActiveAuth.js'
     );
-    const nonInteractiveConfig = await validateNonInteractiveAuth(
-      settings.merged.security?.auth?.useExternal,
-      config,
-      settings,
-    );
+    const nonInteractiveConfig = await validateNonInteractiveAuth(config);
 
     const prompt_id = createNonInteractivePromptId(
       config.getSessionId(),

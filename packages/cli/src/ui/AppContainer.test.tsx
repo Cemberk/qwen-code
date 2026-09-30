@@ -235,12 +235,6 @@ vi.mock('./hooks/useAutoAcceptIndicator.js');
 vi.mock('./hooks/useGitBranchName.js');
 vi.mock('./hooks/usePreferredEditor.js');
 vi.mock('./hooks/useWorktreeSession.js');
-vi.mock('./hooks/useProviderUpdates.js', () => ({
-  useProviderUpdates: vi.fn(() => ({
-    providerUpdateRequest: undefined,
-    dismissProviderUpdate: vi.fn(),
-  })),
-}));
 vi.mock('./contexts/VimModeContext.js');
 vi.mock('./contexts/SessionContext.js');
 vi.mock('./contexts/AgentViewContext.js', () => ({
@@ -431,42 +425,23 @@ describe('AppContainer State Management', () => {
       handleThemeHighlight: vi.fn(),
     });
     mockedUseAuthCommand.mockReturnValue({
-      authState: 'authenticated',
-      setAuthState: vi.fn(),
       authError: null,
       onAuthError: vi.fn(),
       isAuthDialogOpen: false,
       isAuthenticating: false,
-      pendingAuthType: undefined,
-      externalAuthState: null,
-      qwenAuthState: {
-        deviceAuth: null,
-        authStatus: 'idle',
-        authMessage: null,
-      },
       state: {
         authError: null,
         isAuthDialogOpen: false,
         isAuthenticating: false,
-        pendingAuthType: undefined,
-        externalAuthState: null,
-        qwenAuthState: {
-          deviceAuth: null,
-          authStatus: 'idle',
-          authMessage: null,
-        },
       },
       closeAuthDialog: vi.fn(),
       handleProviderSubmit: vi.fn(),
       openAuthDialog: vi.fn(),
-      cancelAuthentication: vi.fn(),
       actions: {
-        setAuthState: vi.fn(),
         onAuthError: vi.fn(),
         closeAuthDialog: vi.fn(),
         handleProviderSubmit: vi.fn(),
         openAuthDialog: vi.fn(),
-        cancelAuthentication: vi.fn(),
       },
     });
     mockedUseEditorSettings.mockReturnValue({
@@ -6269,42 +6244,23 @@ describe('AppContainer State Management', () => {
   describe('Keyboard Input Handling', () => {
     it('should block quit command during authentication', () => {
       mockedUseAuthCommand.mockReturnValue({
-        authState: 'unauthenticated',
-        setAuthState: vi.fn(),
         authError: null,
         onAuthError: vi.fn(),
         isAuthDialogOpen: false,
         isAuthenticating: true,
-        pendingAuthType: undefined,
-        externalAuthState: null,
-        qwenAuthState: {
-          deviceAuth: null,
-          authStatus: 'idle',
-          authMessage: null,
-        },
         state: {
           authError: null,
           isAuthDialogOpen: false,
           isAuthenticating: true,
-          pendingAuthType: undefined,
-          externalAuthState: null,
-          qwenAuthState: {
-            deviceAuth: null,
-            authStatus: 'idle',
-            authMessage: null,
-          },
         },
         closeAuthDialog: vi.fn(),
         handleProviderSubmit: vi.fn(),
         openAuthDialog: vi.fn(),
-        cancelAuthentication: vi.fn(),
         actions: {
-          setAuthState: vi.fn(),
           onAuthError: vi.fn(),
           closeAuthDialog: vi.fn(),
           handleProviderSubmit: vi.fn(),
           openAuthDialog: vi.fn(),
-          cancelAuthentication: vi.fn(),
         },
       });
 

@@ -419,7 +419,6 @@ describe('loggers', () => {
         }),
         getQuestion: () => 'test-question',
         getTargetDir: () => 'target-dir',
-        getProxy: () => 'http://test.proxy.com:8080',
         getOutputFormat: () => OutputFormat.JSON,
         getToolRegistry: () => undefined,
         getChatRecordingService: () => undefined,
@@ -640,7 +639,7 @@ describe('loggers', () => {
       const event = new UserPromptEvent(
         11,
         'prompt-id-8',
-        AuthType.USE_VERTEX_AI,
+        AuthType.USE_OPENAI,
         'test-prompt',
       );
 
@@ -655,7 +654,7 @@ describe('loggers', () => {
           prompt_length: 11,
           prompt: 'test-prompt',
           prompt_id: 'prompt-id-8',
-          auth_type: 'vertex-ai',
+          auth_type: 'openai',
         },
       });
     });
@@ -696,7 +695,7 @@ describe('loggers', () => {
       const event = new UserPromptEvent(
         11,
         'prompt-id-9',
-        AuthType.USE_GEMINI,
+        AuthType.USE_OPENAI,
         'test-prompt',
       );
 
@@ -710,7 +709,7 @@ describe('loggers', () => {
           'event.timestamp': '2025-01-01T00:00:00.000Z',
           prompt_length: 11,
           prompt_id: 'prompt-id-9',
-          auth_type: 'gemini',
+          auth_type: 'openai',
         },
       });
     });
@@ -755,7 +754,7 @@ describe('loggers', () => {
         'test-model',
         100,
         'prompt-id-1',
-        AuthType.USE_GEMINI,
+        AuthType.USE_OPENAI,
         usageData,
         'test-response',
       );
@@ -780,7 +779,7 @@ describe('loggers', () => {
           total_token_count: 0,
           response_text: 'test-response',
           prompt_id: 'prompt-id-1',
-          auth_type: 'gemini',
+          auth_type: 'openai',
         },
       });
 
@@ -871,7 +870,7 @@ describe('loggers', () => {
         'test-model',
         100,
         promptId,
-        AuthType.USE_GEMINI,
+        AuthType.USE_OPENAI,
         {
           promptTokenCount: 1,
           candidatesTokenCount: 2,
@@ -1123,7 +1122,7 @@ describe('loggers', () => {
     } as unknown as Config;
 
     it('should log flash fallback event', () => {
-      const event = new FlashFallbackEvent(AuthType.USE_VERTEX_AI);
+      const event = new FlashFallbackEvent(AuthType.USE_OPENAI);
 
       logFlashFallback(mockConfig, event);
 
@@ -1133,7 +1132,7 @@ describe('loggers', () => {
           'session.id': 'test-session-id',
           'event.name': EVENT_FLASH_FALLBACK,
           'event.timestamp': '2025-01-01T00:00:00.000Z',
-          auth_type: 'vertex-ai',
+          auth_type: 'openai',
         },
       });
     });
@@ -1317,11 +1316,9 @@ describe('loggers', () => {
       getSessionId: () => 'test-session-id',
       getTargetDir: () => 'target-dir',
       getProjectRoot: () => '/test/project/root',
-      getProxy: () => 'http://test.proxy.com:8080',
       getContentGeneratorConfig: () =>
         ({ model: 'test-model' }) as ContentGeneratorConfig,
       getModel: () => 'test-model',
-      getEmbeddingModel: () => 'test-embedding-model',
       getWorkingDir: () => 'test-working-dir',
       getSandbox: () => true,
       getCoreTools: () => ['ls', 'read-file'],

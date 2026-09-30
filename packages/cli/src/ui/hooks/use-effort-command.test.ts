@@ -25,7 +25,6 @@ describe('useEffortCommand', () => {
     config = {
       setReasoningEffort,
       getReasoningEffort,
-      getReasoningEffortOverride: vi.fn().mockReturnValue(undefined),
     } as unknown as Config;
     settings = {
       setValue,
@@ -75,7 +74,6 @@ describe('useEffortCommand', () => {
     config = {
       setReasoningEffort,
       getReasoningEffort: vi.fn().mockReturnValue('xhigh'),
-      getReasoningEffortOverride: vi.fn().mockReturnValue(undefined),
       getChatRecordingService: vi.fn(() => ({ recordSlashCommand })),
     } as unknown as Config;
     const { result } = renderHook(() =>
@@ -103,7 +101,6 @@ describe('useEffortCommand', () => {
       // Thinking disabled: setReasoningEffort is a no-op, so the read-back
       // returns something other than the requested tier.
       getReasoningEffort: vi.fn().mockReturnValue(undefined),
-      getReasoningEffortOverride: vi.fn().mockReturnValue(undefined),
     } as unknown as Config;
     const { result } = renderHook(() =>
       useEffortCommand(settings, config, addItem),
@@ -115,26 +112,5 @@ describe('useEffortCommand', () => {
     const [item] = addItem.mock.calls[0];
     expect(item.type).toBe('info');
     expect(item.text).toContain('thinking is currently disabled');
-  });
-
-  it('warns in-chat when a static thinking knob overrides the tier', () => {
-    const addItem = vi.fn();
-    config = {
-      setReasoningEffort,
-      getReasoningEffort: vi.fn().mockReturnValue('max'),
-      getReasoningEffortOverride: vi.fn().mockReturnValue({
-        source: 'samplingParams',
-        field: 'thinking_budget',
-      }),
-    } as unknown as Config;
-    const { result } = renderHook(() =>
-      useEffortCommand(settings, config, addItem),
-    );
-
-    act(() => result.current.handleEffortSelect('max'));
-
-    const [item] = addItem.mock.calls[0];
-    expect(item.text).toContain('samplingParams.thinking_budget');
-    expect(item.text).toContain('will remain effective');
   });
 });

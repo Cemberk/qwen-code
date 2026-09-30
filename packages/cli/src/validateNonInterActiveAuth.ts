@@ -7,16 +7,13 @@
 import type { Config } from '@qwen-code/qwen-code-core/config/config.js';
 import { OutputFormat } from '@qwen-code/qwen-code-core/output/types.js';
 import { validateAuthMethod } from './config/auth.js';
-import { type LoadedSettings } from './config/settings.js';
 import { JsonOutputAdapter } from './nonInteractive/io/JsonOutputAdapter.js';
 import { StreamJsonOutputAdapter } from './nonInteractive/io/StreamJsonOutputAdapter.js';
 import { runExitCleanup } from './utils/cleanup.js';
 import { writeStderrLine } from './utils/stdioHelpers.js';
 
 export async function validateNonInteractiveAuth(
-  useExternalAuth: boolean | undefined,
   nonInteractiveConfig: Config,
-  settings: LoadedSettings,
 ): Promise<Config> {
   try {
     // Get the actual authType from config which has already resolved CLI args, env vars, and settings
@@ -30,17 +27,9 @@ export async function validateNonInteractiveAuth(
     }
     const resolvedAuthType: NonNullable<typeof authType> = authType;
 
-    const enforcedType = settings.merged.security?.auth?.enforcedType;
-    if (enforcedType && enforcedType !== resolvedAuthType) {
-      const message = `The configured auth type is ${enforcedType}, but the current auth type is ${resolvedAuthType}. Please re-authenticate with the correct type.`;
-      throw new Error(message);
-    }
-
-    if (!useExternalAuth) {
-      const err = validateAuthMethod(resolvedAuthType, nonInteractiveConfig);
-      if (err != null) {
-        throw new Error(err);
-      }
+    const err = validateAuthMethod(resolvedAuthType, nonInteractiveConfig);
+    if (err != null) {
+      throw new Error(err);
     }
 
     await nonInteractiveConfig.refreshAuth(resolvedAuthType);

@@ -250,13 +250,18 @@ describe('terminal-bench integration', () => {
           '1',
         ];
 
+        const model = process.env['OPENAI_MODEL'];
+        const baseUrl = process.env['OPENAI_BASE_URL'];
+        if (!model || !baseUrl) {
+          throw new Error(
+            'OPENAI_MODEL and OPENAI_BASE_URL (a loopback URL of the local model server) must be set to run the qwen-code agent.',
+          );
+        }
         const env = {
           ...process.env,
           OPENAI_API_KEY: apiKey,
-          OPENAI_MODEL: process.env['OPENAI_MODEL'] || 'qwen3-coder-plus',
-          OPENAI_BASE_URL:
-            process.env['OPENAI_BASE_URL'] ||
-            'https://dashscope.aliyuncs.com/compatible-mode/v1',
+          OPENAI_MODEL: model,
+          OPENAI_BASE_URL: baseUrl,
         };
 
         // Use spawn with promise to avoid blocking

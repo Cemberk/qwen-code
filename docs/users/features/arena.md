@@ -33,10 +33,10 @@ Agent Arena uses significantly more tokens than a single session (each agent has
 Use the `/arena` slash command to launch a session. Specify the models you want to compete and the task:
 
 ```
-/arena --models qwen3.5-plus,glm-5,kimi-k2.5 "Refactor the authentication module to use JWT tokens"
+/arena --models qwen3-coder:30b,gpt-oss:20b,devstral:24b "Refactor the authentication module to use JWT tokens"
 ```
 
-If you omit `--models`, an interactive model selection dialog appears, letting you pick from your configured providers.
+If you omit `--models`, an interactive model selection dialog appears, letting you pick from the models configured in `modelProviders`.
 
 ### What happens when you start
 
@@ -123,10 +123,10 @@ therefore does not limit `/arena` runs.
 Arena is most valuable when you compare models with meaningfully different strengths. For example:
 
 ```
-/arena --models qwen3.5-plus,glm-5,kimi-k2.5 "Optimize the database query layer"
+/arena --models qwen3-coder:30b,gpt-oss:20b,devstral:24b "Optimize the database query layer"
 ```
 
-Comparing three versions of the same model family yields less insight than comparing across providers.
+Comparing three versions of the same model family yields less insight than comparing different model families.
 
 ### Keep tasks self-contained
 
@@ -160,7 +160,7 @@ For routine changes like renaming a variable or updating a config file, a single
 
 ### Agents failing to start
 
-- Verify that each model in `--models` is properly configured with valid API credentials
+- Verify that each model in `--models` is configured in `modelProviders` and served by a running local server
 - Check that your working directory is a Git repository (worktrees require Git)
 - Ensure you have write access to the `arena` directory under the Qwen home
   directory (the default worktree base directory)

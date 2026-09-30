@@ -991,48 +991,13 @@ export default {
   'Welcome back! (Last updated: {{timeAgo}})':
     'おかえりなさい!(最終更新: {{timeAgo}})',
   'Overall Goal:': '全体目標:',
-  'Connect a Provider': 'プロバイダーに接続',
   'You must connect a provider to proceed. Press Ctrl+C again to exit.':
     '続行するにはプロバイダーに接続してください。Ctrl+C をもう一度押すと終了します',
-  'Terms of Services and Privacy Notice': '利用規約とプライバシー通知',
-  'Qwen OAuth': 'Qwen OAuth',
-  'Discontinued — switch to Coding Plan or API Key':
-    '終了 — Coding Plan または API Key に切り替えてください',
-  'Qwen OAuth free tier was discontinued on 2026-04-15. Please select Coding Plan or API Key instead.':
-    'Qwen OAuth 無料枠は 2026-04-15 に終了しました。Coding Plan または API Key を選択してください。',
-  'Qwen OAuth free tier was discontinued on 2026-04-15. Please select a model from another provider or run /auth to switch.':
-    'Qwen OAuth無料プランは2026-04-15に終了しました。他のプロバイダーのモデルを選択するか、/authを実行して切り替えてください。',
-  '\n⚠ Qwen OAuth free tier was discontinued on 2026-04-15. Please select another option.\n':
-    '\n⚠ Qwen OAuth 無料枠は 2026-04-15 に終了しました。他のオプションを選択してください。\n',
-  'Paid \u00B7 Up to 6,000 requests/5 hrs \u00B7 All Alibaba Cloud Coding Plan Models':
-    '有料 \u00B7 5時間最大6,000リクエスト \u00B7 すべての Alibaba Cloud Coding Plan モデル',
-  'Alibaba Cloud Coding Plan': 'Alibaba Cloud Coding Plan',
   'Bring your own API key': '自分の API Key を使用',
-  'Browser-based authentication with third-party providers (e.g. OpenRouter, ModelScope)':
-    'サードパーティプロバイダーによるブラウザベースの認証（例：OpenRouter、ModelScope）',
-  'Authentication is enforced to be {{enforcedType}}, but you are currently using {{currentType}}.':
-    '認証は {{enforcedType}} に強制されていますが、現在 {{currentType}} を使用しています',
-  'Qwen OAuth Authentication': 'Qwen OAuth認証',
-  'Please visit this URL to authorize:':
-    '認証するには以下のURLにアクセスしてください:',
-  'Waiting for authorization': '認証を待っています',
-  'Time remaining:': '残り時間:',
-  'Qwen OAuth Authentication Timeout': 'Qwen OAuth認証タイムアウト',
-  'OAuth token expired (over {{seconds}} seconds). Please select authentication method again.':
-    'OAuthトークンが期限切れです({{seconds}}秒以上)。認証方法を再度選択してください',
-  'Press any key to return to authentication type selection.':
-    '認証タイプ選択に戻るには任意のキーを押してください',
-  'Waiting for Qwen OAuth authentication...': 'Qwen OAuth認証を待っています...',
-  'Authentication timed out. Please try again.':
-    '認証がタイムアウトしました。再度お試しください',
-  'Waiting for auth... (Press ESC or CTRL+C to cancel)':
-    '認証を待っています... (ESC または CTRL+C でキャンセル)',
   'Failed to authenticate. Message: {{message}}':
     '認証に失敗しました。メッセージ: {{message}}',
   'Authenticated successfully with {{authType}} credentials.':
     '{{authType}} 認証情報で正常に認証されました',
-  'Invalid QWEN_DEFAULT_AUTH_TYPE value: "{{value}}". Valid values are: {{validValues}}':
-    '無効な QWEN_DEFAULT_AUTH_TYPE 値: "{{value}}"。有効な値: {{validValues}}',
   // Dialogs - Model
   'Select Model': 'モデルを選択',
   Modality: 'モダリティ',
@@ -1311,20 +1276,13 @@ export default {
   // Coding Plan Authentication
   // ============================================================================
   'API key cannot be empty.': 'API Key は空にできません。',
-  'You can get your Coding Plan API key here':
-    'Coding Plan API Key はこちらで取得できます',
-  'Failed to update Coding Plan configuration: {{message}}':
-    'Coding Plan の設定更新に失敗しました: {{message}}',
 
   // ============================================================================
   // Auth Dialog - View Titles and Labels
   // ============================================================================
-  'Coding Plan': 'Coding Plan',
   Custom: 'カスタム',
-  'Select Region for Coding Plan': 'Coding Planのリージョンを選択',
   'Choose based on where your account is registered':
     'アカウントの登録先に応じて選択してください',
-  'Enter Coding Plan API Key': 'Coding Plan API Key を入力',
 
   // ============================================================================
   // Coding Plan International Updates
@@ -1371,8 +1329,6 @@ export default {
     '{{region}} の設定が正常に更新されました。',
   'Authenticated successfully with {{region}}. API key and model configs saved to settings.json.':
     '{{region}} での認証に成功しました。API Key とモデル設定が settings.json に保存されました。',
-  'Tip: Use /model to switch between available Coding Plan models.':
-    'ヒント: /model で利用可能な Coding Plan モデルを切り替えられます。',
   'Type something...': '何か入力...',
   Submit: '送信',
   'Submit answers': '回答を送信',
@@ -1384,62 +1340,26 @@ export default {
     '↑/↓: ナビゲート | ←/→: タブ切り替え | Enter: 選択',
   '↑/↓: Navigate | Enter: Select | Esc: Cancel':
     '↑/↓: ナビゲート | Enter: 選択 | Esc: キャンセル',
-  'Authenticate using Qwen OAuth': 'Qwen OAuth で認証する',
-  'Authenticate using Alibaba Cloud Coding Plan':
-    'Alibaba Cloud Coding Plan で認証する',
-  'Region for Coding Plan (china/global)':
-    'Coding Plan のリージョン (china/global)',
-  'API key for Coding Plan': 'Coding Plan の API Key',
   'Show current authentication status': '現在の認証ステータスを表示',
   'Authentication completed successfully.': '認証が正常に完了しました。',
-  'Starting Qwen OAuth authentication...': 'Qwen OAuth 認証を開始しています...',
-  'Successfully authenticated with Qwen OAuth.':
-    'Qwen OAuth での認証に成功しました。',
-  'Failed to authenticate with Qwen OAuth: {{error}}':
-    'Qwen OAuth での認証に失敗しました: {{error}}',
-  'Processing Alibaba Cloud Coding Plan authentication...':
-    'Alibaba Cloud Coding Plan 認証を処理しています...',
-  'Successfully authenticated with Alibaba Cloud Coding Plan.':
-    'Alibaba Cloud Coding Plan での認証に成功しました。',
-  'Failed to authenticate with Coding Plan: {{error}}':
-    'Coding Plan での認証に失敗しました: {{error}}',
-  '阿里云百炼 (aliyun.com)': '阿里云百炼 (aliyun.com)',
   Global: 'グローバル',
-  'Alibaba Cloud (alibabacloud.com)': 'Alibaba Cloud (alibabacloud.com)',
-  'Select region for Coding Plan:': 'Coding Plan のリージョンを選択:',
-  'Enter your Coding Plan API key: ':
-    'Coding Plan の API Key を入力してください: ',
-  'Select authentication method:': '認証方法を選択:',
   '\n=== Authentication Status ===\n': '\n=== 認証ステータス ===\n',
-  '⚠  No authentication method configured.\n':
-    '⚠  認証方法が設定されていません。\n',
   'Run one of the following commands to get started:\n':
     '以下のコマンドのいずれかを実行して開始してください:\n',
-  '  qwen auth qwen-oauth     - Authenticate with Qwen OAuth (discontinued)':
-    '  qwen auth qwen-oauth     - Qwen OAuth で認証（終了）',
   'Or simply run:': 'または以下を実行:',
   '  qwen auth                - Interactive authentication setup\n':
     '  qwen auth                - インタラクティブ認証セットアップ\n',
-  '✓ Authentication Method: Qwen OAuth': '✓ 認証方法: Qwen OAuth',
   '  Type: Free tier (discontinued 2026-04-15)':
     '  タイプ: 無料枠（2026-04-15 終了）',
   '  Limit: No longer available': '  制限: 利用不可',
-  'Qwen OAuth free tier was discontinued on 2026-04-15. Run /auth to switch to Coding Plan, OpenRouter, Fireworks AI, or another provider.':
-    'Qwen OAuth 無料枠は 2026-04-15 に終了しました。/auth を実行して Coding Plan、OpenRouter、Fireworks AI、または他のプロバイダーに切り替えてください。',
-  '✓ Authentication Method: Alibaba Cloud Coding Plan':
-    '✓ 認証方法: Alibaba Cloud Coding Plan',
-  'Global - Alibaba Cloud': 'グローバル - Alibaba Cloud',
   '  Region: {{region}}': '  リージョン: {{region}}',
   '  Current Model: {{model}}': '  現在のモデル: {{model}}',
   '  Config Version: {{version}}': '  設定バージョン: {{version}}',
   '  Status: API key configured\n': '  ステータス: API Key 設定済み\n',
-  '⚠  Authentication Method: Alibaba Cloud Coding Plan (Incomplete)':
-    '⚠  認証方法: Alibaba Cloud Coding Plan（不完全）',
   '  Issue: API key not found in environment or settings\n':
     '  問題: 環境変数または設定に API Key が見つかりません\n',
   '  Run `qwen auth coding-plan` to re-configure.\n':
     '  `qwen auth coding-plan` を実行して再設定してください。\n',
-  '✓ Authentication Method: {{type}}': '✓ 認証方法: {{type}}',
   '  Status: Configured\n': '  ステータス: 設定済み\n',
   'Failed to check authentication status: {{error}}':
     '認証ステータスの確認に失敗しました: {{error}}',
@@ -1763,17 +1683,8 @@ export default {
   '{{count}} more below': '下にあと {{count}} 件',
   'Missing API key for OpenAI-compatible auth. Set settings.security.auth.apiKey, or set the {{envKeyHint}} environment variable.':
     'OpenAI 互換認証用の API Key がありません。`settings.security.auth.apiKey` を設定するか、環境変数 {{envKeyHint}} を設定してください。',
-  '{{envKeyHint}} environment variable not found. Please set it in your .env file or environment variables.':
-    '環境変数 {{envKeyHint}} が見つかりません。.env ファイルまたは環境変数に設定してください。',
-  '{{envKeyHint}} environment variable not found (or set settings.security.auth.apiKey). Please set it in your .env file or environment variables.':
-    '環境変数 {{envKeyHint}} が見つかりません (または settings.security.auth.apiKey を設定してください)。.env ファイルまたは環境変数に設定してください。',
   'Missing API key for OpenAI-compatible auth. Set the {{envKeyHint}} environment variable.':
     'OpenAI 互換認証用の API Key がありません。環境変数 {{envKeyHint}} を設定してください。',
-  'Anthropic provider missing required baseUrl in modelProviders[].baseUrl.':
-    'Anthropic プロバイダーで必須の `modelProviders[].baseUrl` が設定されていません。',
-  'ANTHROPIC_BASE_URL environment variable not found.':
-    '環境変数 ANTHROPIC_BASE_URL が見つかりません。',
-  'Invalid auth method selected.': '無効な認証方式が選択されました。',
   ' (this project)': ' (このプロジェクト)',
   ' (global)': ' (グローバル)',
   'Persist the model selection to the project settings (workspace scope)':
@@ -1824,8 +1735,6 @@ export default {
   'Press Ctrl+Y to retry': 'Ctrl+Y で再試行',
   'No failed request to retry.': '再試行できる失敗したリクエストはありません。',
   'to retry last request': '最後のリクエストを再試行',
-  'Invalid API key. Coding Plan API keys start with "sk-sp-". Please check.':
-    '無効な API Key です。Coding Plan の API Key は "sk-sp-" で始まります。確認してください。',
   'Lock release warning': 'ロック解除の警告',
   'Metadata write warning': 'メタデータ書き込みの警告',
   "Subsequent dreams may be skipped as locked until the next session's staleness sweep cleans the file.":
@@ -1856,7 +1765,6 @@ export default {
   ' (not in model registry)': '（モデルレジストリにありません）',
   'Attribution: commit': 'コミットの帰属表示',
   '中国 (China)': '中国',
-  '中国 (China) - 阿里云百炼': '中国 - 阿里云百炼',
 
   // Stats Dashboard — Category 2 (missing from ja)
   'Activity Heatmap': 'アクティビティヒートマップ',
@@ -1892,8 +1800,6 @@ export default {
   out: '出力',
   'In/Out': '入力/出力',
   // Update command
-  'Update successful! Please restart Qwen Code to use the new version. Switching model providers before restarting may not work correctly.':
-    'アップデートに成功しました！新しいバージョンを使用するには Qwen Code を再起動してください。再起動前にモデルプロバイダーを切り替えると正しく動作しない場合があります。',
   'Standalone install detected. Please rerun the standalone installer to update:':
     'スタンドアロンインストールを検出しました。更新するにはスタンドアロンインストーラーを再実行してください:',
   'Unable to auto-update this standalone installation. Please reinstall from:':

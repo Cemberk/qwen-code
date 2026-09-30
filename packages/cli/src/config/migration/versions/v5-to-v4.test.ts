@@ -101,8 +101,7 @@ describe('V5ToV4Migration', () => {
         $version: 5,
         modelProviders: {
           openai: { protocol: 'openai', models: [{ id: 'gpt-4o' }] },
-          'vertex-ai': { protocol: 'gemini', models: [{ id: 'gemini-pro' }] },
-          anthropic: { protocol: 'anthropic', models: [{ id: 'claude-3' }] },
+          local: { protocol: 'openai', models: [{ id: 'llama3' }] },
         },
       };
       const { settings, warnings } = migration.migrate(input, 'user') as {
@@ -112,10 +111,10 @@ describe('V5ToV4Migration', () => {
 
       expect(settings['modelProviders']).toEqual({
         openai: [{ id: 'gpt-4o' }],
-        'vertex-ai': [{ id: 'gemini-pro' }],
-        anthropic: [{ id: 'claude-3' }],
+        local: [{ id: 'llama3' }],
       });
-      // vertex-ai -> gemini is the key-derived protocol, so no warning.
+      // openai's explicit protocol matches its key-derived one, and other keys
+      // derive none, so there is no warning.
       expect(warnings).toEqual([]);
     });
 

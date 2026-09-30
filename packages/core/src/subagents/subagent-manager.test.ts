@@ -2850,15 +2850,15 @@ bad`);
         );
       });
 
-      it('should create a new ContentGenerator for cross-provider selectors', async () => {
+      it('keeps a vendor-prefixed selector on the current auth type', async () => {
         const config = { ...agentConfig, model: 'anthropic:claude-sonnet' };
 
         await manager.createAgentHeadless(config, mockConfig);
 
         expect(mockCreateContentGenerator).toHaveBeenCalledWith(
           expect.objectContaining({
-            model: 'claude-sonnet',
-            authType: 'anthropic',
+            model: 'anthropic:claude-sonnet',
+            authType: AuthType.USE_OPENAI,
           }),
           mockConfig,
         );
@@ -2878,16 +2878,16 @@ bad`);
         await manager.createAgentHeadless(config, mockConfig, {
           modelConfigOverrides: { model: 'launch-model' },
           runtimeAuthOverrides: {
-            authType: AuthType.USE_ANTHROPIC,
-            baseUrl: 'https://launch-provider.example.com',
+            authType: AuthType.USE_OPENAI,
+            baseUrl: 'http://127.0.0.1:8000/v1',
           },
         });
 
         expect(mockCreateContentGenerator).toHaveBeenCalledWith(
           expect.objectContaining({
             model: 'launch-model',
-            authType: AuthType.USE_ANTHROPIC,
-            baseUrl: 'https://launch-provider.example.com',
+            authType: AuthType.USE_OPENAI,
+            baseUrl: 'http://127.0.0.1:8000/v1',
           }),
           mockConfig,
         );
@@ -2916,7 +2916,6 @@ bad`);
             reasoning: { effort: 'low' },
           }),
           mockConfig,
-          true,
         );
         const { runtimeView } = destructureAgentHeadlessCall(
           mockAgentHeadlessCreate.mock.calls[0],
@@ -2952,11 +2951,11 @@ bad`);
         expect(runtimeView).toBeUndefined();
       });
 
-      // A tier alone is no reason to log in, and no reason to fail the
-      // dispatch: a failed build leaves the agent on the session's generator.
+      // A tier alone is no reason to fail the dispatch: a failed build
+      // leaves the agent on the session's generator.
       it('should run an effort-only agent on the session generator when its own cannot be built', async () => {
         mockCreateContentGenerator.mockRejectedValueOnce(
-          new Error('Qwen OAuth credentials expired.'),
+          new Error('Model server unavailable.'),
         );
 
         await manager.createAgentHeadless(agentConfig, mockConfig, {
@@ -2966,7 +2965,6 @@ bad`);
         expect(mockCreateContentGenerator).toHaveBeenCalledWith(
           expect.anything(),
           mockConfig,
-          true,
         );
         const { runtimeView } = destructureAgentHeadlessCall(
           mockAgentHeadlessCreate.mock.calls[0],
@@ -3088,56 +3086,17 @@ bad`);
         );
       });
 
-      it('should build a cross-auth ContentGenerator when "fast" resolves to an authType-qualified selector', async () => {
+      it('should strip the authType prefix when "fast" resolves to an authType-qualified selector', async () => {
         const config = { ...agentConfig, model: 'fast' };
-        vi.spyOn(mockConfig, 'getContentGeneratorConfig').mockReturnValue({
-          model: 'parent-model',
-          authType: AuthType.USE_ANTHROPIC,
-          apiKey: 'parent-key',
-        });
         vi.spyOn(mockConfig, 'getFastModel').mockReturnValue(
-          'openai:deepseek-v4-flash',
+          'openai:local-flash',
         );
 
         await manager.createAgentHeadless(config, mockConfig);
 
         expect(mockCreateContentGenerator).toHaveBeenCalledWith(
           expect.objectContaining({
-            model: 'deepseek-v4-flash',
-            authType: AuthType.USE_OPENAI,
-          }),
-          mockConfig,
-        );
-      });
-
-      it('should resolve bare fast models to their configured auth type when current auth does not own them', async () => {
-        const config = { ...agentConfig, model: 'fast' };
-        vi.spyOn(mockConfig, 'getContentGeneratorConfig').mockReturnValue({
-          model: 'claude-opus',
-          authType: AuthType.USE_ANTHROPIC,
-          apiKey: 'parent-key',
-        });
-        vi.spyOn(mockConfig, 'getFastModel').mockReturnValue(
-          'deepseek-v4-flash',
-        );
-        vi.spyOn(mockConfig, 'getAllConfiguredModels').mockImplementation(
-          (authTypes) =>
-            authTypes?.includes(AuthType.USE_ANTHROPIC)
-              ? []
-              : [
-                  {
-                    id: 'deepseek-v4-flash',
-                    label: 'deepseek-v4-flash',
-                    authType: AuthType.USE_OPENAI,
-                  },
-                ],
-        );
-
-        await manager.createAgentHeadless(config, mockConfig);
-
-        expect(mockCreateContentGenerator).toHaveBeenCalledWith(
-          expect.objectContaining({
-            model: 'deepseek-v4-flash',
+            model: 'local-flash',
             authType: AuthType.USE_OPENAI,
           }),
           mockConfig,

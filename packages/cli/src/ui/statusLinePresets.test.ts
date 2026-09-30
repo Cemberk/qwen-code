@@ -287,7 +287,7 @@ describe('statusLinePresets', () => {
     const data = buildStatusLinePresetData({
       sessionId: 'session-123',
       version: '1.2.3',
-      modelDisplayName: '[ModelStudio Standard] glm-5.2',
+      modelDisplayName: '[Ollama] glm-5.2',
       currentDir: '/repo/project',
       branch: undefined,
       contextWindowSize: 0,

@@ -46,11 +46,6 @@ const APPROVAL_MODE_DESCRIPTIONS: Record<`${ApprovalMode}`, string> = {
 
 const AUTH_TYPE_CHOICES = [
   'openai',
-  'openai-responses',
-  'anthropic',
-  'qwen-oauth',
-  'gemini',
-  'vertex-ai',
 ] as const satisfies ReadonlyArray<`${CoreAuthType}`>;
 
 // AuthType drift witness (the choices array's `satisfies` check only
@@ -59,11 +54,6 @@ const AUTH_TYPE_CHOICES = [
 // runtime; exported only so noUnusedLocals preserves the witness.
 export const AUTH_TYPE_PARITY_WITNESS: Record<`${CoreAuthType}`, true> = {
   openai: true,
-  'openai-responses': true,
-  anthropic: true,
-  'qwen-oauth': true,
-  gemini: true,
-  'vertex-ai': true,
 };
 
 /** Usage banner shared by both help builders, kept here with the options. */
@@ -119,10 +109,6 @@ export const TOP_LEVEL_GLOBAL_OPTIONS = {
     description:
       'Disable all customizations (context files, hooks, extensions, skills, MCP servers) for troubleshooting.',
   },
-  proxy: {
-    type: 'string' as const,
-    description: 'Proxy for Qwen Code, like schema://user:password@host:port',
-  },
   insecure: {
     type: 'boolean' as const,
     description:
@@ -143,8 +129,6 @@ export const TOP_LEVEL_DEPRECATED_OPTIONS = {
     'Use the "telemetry.logPrompts" setting in settings.json instead. This flag will be removed in a future version.',
   'telemetry-outfile':
     'Use the "telemetry.outfile" setting in settings.json instead. This flag will be removed in a future version.',
-  proxy:
-    'Use the "proxy" setting in settings.json instead. This flag will be removed in a future version.',
   'sandbox-image':
     'Use the "tools.sandboxImage" setting in settings.json instead. This flag will be removed in a future version.',
   prompt:
@@ -283,11 +267,12 @@ export const DEFAULT_COMMAND_OPTIONS = {
   },
   'openai-api-key': {
     type: 'string' as const,
-    description: 'OpenAI API key to use for authentication',
+    description: 'API key for the local OpenAI-compatible server',
   },
   'openai-base-url': {
     type: 'string' as const,
-    description: 'OpenAI base URL (for custom endpoints)',
+    description:
+      'Base URL of the local OpenAI-compatible server (host must be 127.0.0.1, ::1 or localhost)',
   },
   'screen-reader': {
     type: 'boolean' as const,

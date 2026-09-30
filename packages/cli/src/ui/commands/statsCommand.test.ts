@@ -111,7 +111,7 @@ describe('statsCommand', () => {
       'model-a',
       100,
       'prompt-1',
-      AuthType.USE_GEMINI,
+      AuthType.USE_OPENAI,
       {
         promptTokenCount: 10,
         candidatesTokenCount: 20,
@@ -126,7 +126,7 @@ describe('statsCommand', () => {
       'model-b',
       200,
       'prompt-2',
-      AuthType.USE_VERTEX_AI,
+      AuthType.USE_OPENAI,
       {
         promptTokenCount: 7,
         candidatesTokenCount: 8,
@@ -688,7 +688,7 @@ describe('statsCommand', () => {
       expect(result.content).toContain('Cached (included in Input): 6');
       expect(result.content).toContain('model-a: 32 tokens');
       expect(result.content).toContain('model-b: 15 tokens');
-      expect(result.content).toContain('vertex-ai: 15 tokens');
+      expect(result.content).toContain('openai: 47 tokens');
       expect(result.content).toContain('main: 47 tokens');
       expect(result.content).not.toContain('API response duration only');
       expect(result.content).toContain('TTFT/TPS');

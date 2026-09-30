@@ -178,7 +178,7 @@ Output (at end of execution):
     "subtype": "session_start",
     "uuid": "...",
     "session_id": "...",
-    "model": "qwen3-coder-plus",
+    "model": "qwen3-coder:30b",
     ...
   },
   {
@@ -189,7 +189,7 @@ Output (at end of execution):
       "id": "...",
       "type": "message",
       "role": "assistant",
-      "model": "qwen3-coder-plus",
+      "model": "qwen3-coder:30b",
       "content": [
         {
           "type": "text",

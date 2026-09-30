@@ -6,13 +6,9 @@
 
 import { describe, it, expect } from 'vitest';
 import { parseAndFormatApiError } from './errorParsing.js';
-import { AuthType } from '../core/contentGenerator.js';
 import type { StructuredError } from '../core/turn.js';
 
 describe('parseAndFormatApiError', () => {
-  const vertexMessage = 'request a quota increase through Vertex';
-  const geminiMessage = 'request a quota increase through AI Studio';
-
   it('should format a valid API error JSON', () => {
     const errorMessage =
       'got status: 400 Bad Request. {"error":{"code":400,"message":"API key not valid. Please pass a valid API key.","status":"INVALID_ARGUMENT"}}';
@@ -24,19 +20,11 @@ describe('parseAndFormatApiError', () => {
   it('should format a 429 API error with the default message', () => {
     const errorMessage =
       'got status: 429 Too Many Requests. {"error":{"code":429,"message":"Rate limit exceeded","status":"RESOURCE_EXHAUSTED"}}';
-    const result = parseAndFormatApiError(errorMessage, undefined);
+    const result = parseAndFormatApiError(errorMessage);
     expect(result).toContain('[API Error: Rate limit exceeded');
     expect(result).toContain(
       'Possible quota limitations in place or slow response times detected. Please wait and try again later.',
     );
-  });
-
-  it('should format a 429 API error with the vertex message', () => {
-    const errorMessage =
-      'got status: 429 Too Many Requests. {"error":{"code":429,"message":"Rate limit exceeded","status":"RESOURCE_EXHAUSTED"}}';
-    const result = parseAndFormatApiError(errorMessage, AuthType.USE_VERTEX_AI);
-    expect(result).toContain('[API Error: Rate limit exceeded');
-    expect(result).toContain(vertexMessage);
   });
 
   it('should return the original message if it is not a JSON error', () => {
@@ -86,9 +74,11 @@ describe('parseAndFormatApiError', () => {
       },
     });
 
-    const result = parseAndFormatApiError(errorMessage, AuthType.USE_GEMINI);
+    const result = parseAndFormatApiError(errorMessage);
     expect(result).toContain('Gemini 2.5 Pro Preview');
-    expect(result).toContain(geminiMessage);
+    expect(result).toContain(
+      'Possible quota limitations in place or slow response times detected.',
+    );
   });
 
   it('should format a StructuredError', () => {
@@ -128,29 +118,20 @@ describe('parseAndFormatApiError', () => {
     expect(parseAndFormatApiError(error)).toContain('ECONNREFUSED');
   });
 
-  it('should format a 429 StructuredError with the vertex message', () => {
+  it('should format a 429 StructuredError with the quota message', () => {
     const error: StructuredError = {
       message: 'Rate limit exceeded',
       status: 429,
     };
-    const result = parseAndFormatApiError(error, AuthType.USE_VERTEX_AI);
-    expect(result).toContain('[API Error: Rate limit exceeded]');
-    expect(result).toContain(vertexMessage);
+    expect(parseAndFormatApiError(error)).toBe(
+      '[API Error: Rate limit exceeded]\nPossible quota limitations in place or slow response times detected. Please wait and try again later.',
+    );
   });
 
   it('should handle an unknown error type', () => {
     const error = 12345;
     const expected = '[API Error: An unknown error occurred.]';
     expect(parseAndFormatApiError(error)).toBe(expected);
-  });
-
-  it.each([
-    'Qwen OAuth quota exceeded: retry after 12:00 UTC',
-    'Qwen OAuth free tier has been discontinued for this model',
-  ])('should return Qwen quota messages unchanged: %s', (message) => {
-    const error: StructuredError = { message, status: 429 };
-
-    expect(parseAndFormatApiError(error)).toBe(message);
   });
 
   it('should surface a friendly quota-exhaustion message verbatim (string)', () => {
@@ -165,7 +146,7 @@ describe('parseAndFormatApiError', () => {
     const message =
       'Quota exhausted: Your token-plan 1-week quota has been exhausted. The quota will reset at 07-27 09:25:00 UTC.\n\nPlease retry after the reset time, or switch to another API key / auth method.';
     const error: StructuredError = { message, status: 429 };
-    expect(parseAndFormatApiError(error, AuthType.USE_OPENAI)).toBe(message);
+    expect(parseAndFormatApiError(error)).toBe(message);
   });
 
   // Idempotency — added after a customer report where a 4xx in non-interactive
@@ -200,22 +181,6 @@ describe('parseAndFormatApiError', () => {
         '[API Error: Rate limit exceeded]\nPossible quota limitations in place or slow response times detected. Please wait and try again later.';
       const error: StructuredError = { message: formatted, status: 429 };
       expect(parseAndFormatApiError(error)).toBe(formatted);
-    });
-
-    it('returns an already-formatted 429 USE_GEMINI message unchanged', () => {
-      const formatted =
-        '[API Error: Rate limit exceeded]\nPlease wait and try again later. To increase your limits, request a quota increase through AI Studio, or switch to another /auth method';
-      expect(parseAndFormatApiError(formatted, AuthType.USE_GEMINI)).toBe(
-        formatted,
-      );
-    });
-
-    it('returns an already-formatted 429 VERTEX message unchanged', () => {
-      const formatted =
-        '[API Error: Rate limit exceeded]\nPlease wait and try again later. To increase your limits, request a quota increase through Vertex, or switch to another /auth method';
-      expect(parseAndFormatApiError(formatted, AuthType.USE_VERTEX_AI)).toBe(
-        formatted,
-      );
     });
 
     it('still wraps a raw message that merely contains the prefix mid-string', () => {

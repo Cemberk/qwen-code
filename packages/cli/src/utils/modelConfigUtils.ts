@@ -6,144 +6,23 @@
 
 import {
   AuthType,
+  getProviderModels,
   MODEL_GENERATION_CONFIG_FIELDS,
+  OPENAI_ENV_MAPPING,
   type ContentGeneratorConfig,
   type ContentGeneratorConfigSources,
   normalizeReasoningEffort,
   REASONING_EFFORT_TIERS,
   resolveModelConfig,
-  resolveModelSelectionAuthType,
-  tryResolveModelProtocol,
-  resolveProviderProtocol,
   type ModelConfigSourcesInput,
-  type ModelProvidersConfig,
   type ProviderModelConfig,
-  type ProviderProtocolConfig,
   stripRuntimeSnapshotPrefix,
 } from '@qwen-code/qwen-code-core';
 import type { Settings } from '../config/settings.js';
 import { sanitizeProviderBaseUrl } from './acpModelUtils.js';
 
-/**
- * Env var names that hold model selections for each auth type.
- * Mirrors the model-var mappings in core's AUTH_ENV_MAPPINGS.
- */
-const AUTH_ENV_MODEL_VARS: Record<AuthType, string[]> = {
-  [AuthType.USE_OPENAI]: ['OPENAI_MODEL', 'QWEN_MODEL'],
-  [AuthType.USE_OPENAI_RESPONSES]: ['OPENAI_MODEL'],
-  [AuthType.USE_GEMINI]: ['GEMINI_MODEL'],
-  [AuthType.USE_VERTEX_AI]: ['GOOGLE_MODEL'],
-  [AuthType.USE_ANTHROPIC]: ['ANTHROPIC_MODEL'],
-  [AuthType.QWEN_OAUTH]: [],
-};
-
-/**
- * Collect every modelProviders entry whose provider id resolves (via
- * providerProtocol) to the given protocol, in declaration order. Mirrors
- * {@link ModelRegistry}: a built-in key resolves to itself, a custom id resolves
- * through providerProtocol, with each model's api selecting its OpenAI route.
- * Lets credential/metadata lookups find a custom
- * provider's models under their resolved protocol instead of only the protocol
- * key.
- */
-export function collectProviderModelsForProtocol(
-  modelProviders: ModelProvidersConfig | undefined,
-  providerProtocol: ProviderProtocolConfig | undefined,
-  protocol: string,
-): ProviderModelConfig[] {
-  if (!modelProviders) {
-    return [];
-  }
-  const out: ProviderModelConfig[] = [];
-  for (const [providerId, models] of Object.entries(modelProviders)) {
-    if (!Array.isArray(models)) {
-      continue;
-    }
-    out.push(
-      ...models.filter(
-        // tryResolveModelProtocol: one entry with an invalid `wireApi` (a
-        // hand-edited settings file surviving a hot reload) must not take
-        // down every read that walks the providers map — skip that entry.
-        // Startup validation still classifies it as a FatalConfigError.
-        (model) =>
-          tryResolveModelProtocol(providerId, model, providerProtocol) ===
-          protocol,
-      ),
-    );
-  }
-  return out;
-}
-
-function findProviderIdForModel(
-  modelProviders: ModelProvidersConfig | undefined,
-  providerProtocol: ProviderProtocolConfig | undefined,
-  protocol: string,
-  modelProvider: ProviderModelConfig | undefined,
-): string | undefined {
-  if (!modelProviders || !modelProvider) {
-    return undefined;
-  }
-  for (const [providerId, models] of Object.entries(modelProviders)) {
-    if (!Array.isArray(models)) {
-      continue;
-    }
-    if (
-      models.includes(modelProvider) &&
-      tryResolveModelProtocol(providerId, modelProvider, providerProtocol) ===
-        protocol
-    ) {
-      return providerId;
-    }
-  }
-  return undefined;
-}
-
-/**
- * Build user-visible warnings for modelProviders entries that carry models but
- * are dropped at registration: an unknown provider id with no providerProtocol
- * mapping, or a mapping to an unknown protocol. Without this the models silently
- * vanish from selection (the registry only logs at debug level).
- */
-function buildSkippedProviderWarnings(
-  modelProviders: ModelProvidersConfig | undefined,
-  providerProtocol: ProviderProtocolConfig | undefined,
-): string[] {
-  if (!modelProviders) {
-    return [];
-  }
-  const warnings: string[] = [];
-  const known = Object.values(AuthType)
-    .filter((value) => value !== AuthType.USE_OPENAI_RESPONSES)
-    .join(', ');
-  for (const [providerId, models] of Object.entries(modelProviders)) {
-    if (!Array.isArray(models) || models.length === 0) {
-      continue;
-    }
-    const protocol = resolveProviderProtocol(providerId, providerProtocol);
-    if (
-      protocol === AuthType.QWEN_OAUTH &&
-      providerId !== AuthType.QWEN_OAUTH
-    ) {
-      warnings.push(
-        `Warning: modelProviders provider "${providerId}" maps to "qwen-oauth" via providerProtocol, but qwen-oauth uses hard-coded models only; its ${models.length} model(s) are ignored.`,
-      );
-      continue;
-    }
-    if (protocol !== undefined) {
-      continue;
-    }
-    const mapped =
-      providerProtocol && Object.hasOwn(providerProtocol, providerId)
-        ? providerProtocol[providerId]
-        : undefined;
-    warnings.push(
-      mapped !== undefined
-        ? `Warning: providerProtocol["${providerId}"] = "${mapped}" is not a known protocol (expected one of: ${known}); its ${models.length} model(s) are ignored.`
-        : `Warning: modelProviders provider "${providerId}" is not a built-in protocol (${known}) and has no providerProtocol mapping; its ${models.length} model(s) are ignored. Add providerProtocol["${providerId}"] (e.g. "openai") to enable them.`,
-    );
-  }
-  return warnings;
-}
+/** Env var names that hold the model selection. */
+const MODEL_ENV_VARS: readonly string[] = OPENAI_ENV_MAPPING.model;
 
 function getIgnoredTopLevelGenerationConfigFields(
   settingsGenerationConfig: Partial<ContentGeneratorConfig> | undefined,
@@ -198,7 +77,7 @@ export interface CliGenerationConfigInputs {
 }
 
 export interface ResolvedCliGenerationConfig {
-  /** Effective protocol after applying the selected model's API. */
+  /** The selected auth type (only 'openai' is supported). */
   authType: AuthType | undefined;
   /** The resolved model id (may be empty string if not resolvable at CLI layer) */
   model: string;
@@ -216,13 +95,13 @@ export interface ResolvedCliGenerationConfig {
   warnings: string[];
 }
 
+/**
+ * Infer the auth type when none is selected: a complete OpenAI-compatible
+ * environment (API key, model and base URL) selects the local server.
+ */
 export function getAuthTypeFromEnv(
   env: Record<string, string | undefined> = process.env,
 ): AuthType | undefined {
-  if (env['QWEN_OAUTH']) {
-    return AuthType.QWEN_OAUTH;
-  }
-
   if (
     env['OPENAI_API_KEY'] &&
     (env['OPENAI_MODEL'] || env['QWEN_MODEL']) &&
@@ -230,46 +109,19 @@ export function getAuthTypeFromEnv(
   ) {
     return AuthType.USE_OPENAI;
   }
-
-  if (env['GEMINI_API_KEY'] && env['GEMINI_MODEL']) {
-    return AuthType.USE_GEMINI;
-  }
-
-  if (env['GOOGLE_API_KEY'] && env['GOOGLE_MODEL']) {
-    return AuthType.USE_VERTEX_AI;
-  }
-
-  if (env['GOOGLE_CLOUD_PROJECT'] && env['GOOGLE_MODEL']) {
-    return AuthType.USE_VERTEX_AI;
-  }
-
-  if (
-    env['ANTHROPIC_API_KEY'] &&
-    env['ANTHROPIC_MODEL'] &&
-    env['ANTHROPIC_BASE_URL']
-  ) {
-    return AuthType.USE_ANTHROPIC;
-  }
-
   return undefined;
 }
 
 /**
  * Unified resolver for CLI generation config.
  *
- * Model precedence (all auth types):
- * - argv.model > settings.model.name > auth-specific env model vars
- *
- * Env var mapping by auth type (mirrors core's AUTH_ENV_MAPPINGS):
- * - USE_OPENAI: OPENAI_MODEL, QWEN_MODEL
- * - USE_GEMINI: GEMINI_MODEL
- * - USE_VERTEX_AI: GOOGLE_MODEL
- * - USE_ANTHROPIC: ANTHROPIC_MODEL
+ * Model precedence:
+ * - argv.model > settings.model.name > OPENAI_MODEL / QWEN_MODEL
  *
  * When model is resolved from argv or settings, all model env vars are stripped
  * from the env passed to core's resolveModelConfig to prevent incorrect overrides.
- * When model is resolved from an auth-specific env var, only that env var is
- * kept in the filtered env so core can access the provider metadata.
+ * When model is resolved from an env var, only that env var is kept in the
+ * filtered env so core can access the provider metadata.
  */
 export function resolveCliGenerationConfig(
   inputs: CliGenerationConfigInputs,
@@ -278,7 +130,7 @@ export function resolveCliGenerationConfig(
   const env = inputs.env ?? (process.env as Record<string, string | undefined>);
 
   // Resolve the target model based on strict precedence:
-  // argv.model > settings.model.name > auth-specific env model vars
+  // argv.model > settings.model.name > model env vars
   // Env vars are ONLY considered when neither argv.model nor settings.model.name is set.
   let resolvedModel: string | undefined;
   let sourceEnvVar: string | undefined;
@@ -291,9 +143,8 @@ export function resolveCliGenerationConfig(
     // Self-heal configs already corrupted by older builds.
     resolvedModel = stripRuntimeSnapshotPrefix(settings.model.name);
     resolvedFromSettings = true;
-  } else if (selectedAuthType && AUTH_ENV_MODEL_VARS[selectedAuthType]) {
-    // Only check env vars for the current auth type
-    for (const envVar of AUTH_ENV_MODEL_VARS[selectedAuthType]) {
+  } else if (selectedAuthType) {
+    for (const envVar of MODEL_ENV_VARS) {
       if (env[envVar]) {
         resolvedModel = env[envVar];
         sourceEnvVar = envVar;
@@ -302,21 +153,7 @@ export function resolveCliGenerationConfig(
     }
   }
 
-  // Only derive the wire when a model selection exists to derive it from:
-  // the resolver's no-model branch would let an unrelated `wireApi: 'responses'`
-  // entry anywhere in the map flip an `openai` selection to openai-responses,
-  // which has no DEFAULT_MODELS entry — the session would then start on a
-  // wire and a fallback model id no config file contains.
-  const authType =
-    selectedAuthType && resolvedModel !== undefined
-      ? resolveModelSelectionAuthType(
-          selectedAuthType,
-          resolvedModel,
-          settings.modelProviders,
-          settings.providerProtocol,
-          resolvedFromSettings ? settings.model?.baseUrl : undefined,
-        )
-      : selectedAuthType;
+  const authType = selectedAuthType;
 
   // Find a matching provider for the resolved model (for metadata: generationConfig, envKey, etc.)
   // When resolvedModel is from settings and matches a provider, modelProvider.id == settings.model.name,
@@ -325,14 +162,7 @@ export function resolveCliGenerationConfig(
   let modelProvider: ProviderModelConfig | undefined;
   let disambiguationWarning: string | undefined;
   if (resolvedModel && authType && settings.modelProviders) {
-    // Merge across all provider ids that route to this protocol (built-in key
-    // or custom id via providerProtocol), so a custom provider's envKey/metadata
-    // is honored, not just entries stored under the protocol key itself.
-    const providers = collectProviderModelsForProtocol(
-      settings.modelProviders,
-      settings.providerProtocol,
-      authType,
-    );
+    const providers = getProviderModels(settings.modelProviders);
     if (providers.length > 0) {
       // When multiple providers share the same id, disambiguate by the
       // persisted settings.model.baseUrl (written by the model picker). This
@@ -360,10 +190,9 @@ export function resolveCliGenerationConfig(
         // Surface the silent fallback: the paired provider was removed or its
         // baseUrl changed, so traffic now routes to a different same-id provider.
         if (!exactMatch && modelProvider) {
-          const fallbackBaseUrl =
-            modelProvider.baseUrl === undefined
-              ? '(default baseUrl)'
-              : sanitizeProviderBaseUrl(modelProvider.baseUrl);
+          const fallbackBaseUrl = sanitizeProviderBaseUrl(
+            modelProvider.baseUrl ?? '',
+          );
           disambiguationWarning =
             `Persisted model.baseUrl '${sanitizeProviderBaseUrl(persistedBaseUrl)}' no longer matches any provider ` +
             `for model '${resolvedModel}' (authType '${authType}'); using the first id match ` +
@@ -379,19 +208,17 @@ export function resolveCliGenerationConfig(
   // sourceEnvVar is only set when the model was actually resolved from an env var (lines 119-128),
   // so this is source-based filtering, not value-based. If model came from argv or settings,
   // sourceEnvVar is undefined and ALL model env vars are stripped.
-  // Build a list of ALL model env vars across all auth types.
-  const allModelEnvVars = Object.values(AUTH_ENV_MODEL_VARS).flat();
   const filteredEnv = { ...env };
   if (sourceEnvVar) {
     // Keep only the env var that was actually used
-    for (const envVar of allModelEnvVars) {
+    for (const envVar of MODEL_ENV_VARS) {
       if (envVar !== sourceEnvVar) {
         delete filteredEnv[envVar];
       }
     }
   } else {
     // Model was not resolved from env - strip ALL model env vars
-    for (const envVar of allModelEnvVars) {
+    for (const envVar of MODEL_ENV_VARS) {
       delete filteredEnv[envVar];
     }
   }
@@ -424,12 +251,7 @@ export function resolveCliGenerationConfig(
   const ignoredGenerationConfigWarning =
     authType && modelProvider
       ? buildIgnoredTopLevelGenerationConfigWarning(
-          findProviderIdForModel(
-            settings.modelProviders,
-            settings.providerProtocol,
-            authType,
-            modelProvider,
-          ) ?? authType,
+          authType,
           modelProvider,
           getIgnoredTopLevelGenerationConfigFields(
             settings.model?.generationConfig as
@@ -499,10 +321,6 @@ export function resolveCliGenerationConfig(
       ...(ignoredGenerationConfigWarning
         ? [ignoredGenerationConfigWarning]
         : []),
-      ...buildSkippedProviderWarnings(
-        settings.modelProviders,
-        settings.providerProtocol,
-      ),
     ],
   };
 }

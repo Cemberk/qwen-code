@@ -94,7 +94,6 @@
     "scripts/postinstall.js"
   ],
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.36.1",
     "@google/genai": "2.6.0",
     "@iarna/toml": "^2.2.5",
     "@jitl/quickjs-singlefile-mjs-release-sync": "0.32.0",

@@ -6,11 +6,7 @@
 
 import { useCallback } from 'react';
 import { SettingScope } from '../../config/settings.js';
-import type {
-  AuthType,
-  ApprovalMode,
-  ReasoningEffort,
-} from '@qwen-code/qwen-code-core';
+import type { ApprovalMode, ReasoningEffort } from '@qwen-code/qwen-code-core';
 import type { ArenaDialogType } from './useArenaCommand.js';
 
 export interface DialogCloseOptions {
@@ -36,7 +32,6 @@ export interface DialogCloseOptions {
   // Auth dialog
   isAuthDialogOpen: boolean;
   closeAuthDialog: () => void;
-  pendingAuthType: AuthType | undefined;
 
   // Editor dialog
   isEditorDialogOpen: boolean;

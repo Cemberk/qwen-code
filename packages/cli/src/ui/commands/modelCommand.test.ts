@@ -79,16 +79,6 @@ describe('modelCommand', () => {
           authType: AuthType.USE_OPENAI,
         },
         {
-          id: 'qw-voice-model',
-          authType: AuthType.USE_OPENAI,
-          voiceOnly: true,
-        },
-        {
-          id: 'qw-image-model',
-          authType: AuthType.USE_OPENAI,
-          imageOnly: true,
-        },
-        {
           id: 'qw-vision-model',
           authType: AuthType.USE_OPENAI,
           visionOnly: true,
@@ -150,21 +140,6 @@ describe('modelCommand', () => {
     });
   });
 
-  it('should return dialog action for QWEN_OAUTH auth type', async () => {
-    const mockConfig = createMockConfig({
-      model: 'test-model',
-      authType: AuthType.QWEN_OAUTH,
-    });
-    mockContext.services.config = mockConfig as Config;
-
-    const result = await modelCommand.action!(mockContext, '');
-
-    expect(result).toEqual({
-      type: 'dialog',
-      dialog: 'model',
-    });
-  });
-
   it('should return dialog action for USE_OPENAI auth type', async () => {
     const mockConfig = createMockConfig({
       model: 'test-model',
@@ -221,7 +196,7 @@ describe('modelCommand', () => {
         config: {
           getContentGeneratorConfig: vi.fn().mockReturnValue({
             model: 'qwen-plus',
-            authType: AuthType.QWEN_OAUTH,
+            authType: AuthType.USE_OPENAI,
           }),
           getAvailableModelsForAuthType: vi.fn().mockReturnValue([
             {
@@ -241,7 +216,7 @@ describe('modelCommand', () => {
     const result = await modelCommand.action!(mockContext, 'qwen-max');
 
     expect(switchModel).toHaveBeenCalledWith(
-      AuthType.QWEN_OAUTH,
+      AuthType.USE_OPENAI,
       'qwen-max',
       undefined,
     );
@@ -280,14 +255,14 @@ describe('modelCommand', () => {
         config: {
           getContentGeneratorConfig: vi.fn().mockReturnValue({
             model: 'qwen-max',
-            authType: AuthType.QWEN_OAUTH,
+            authType: AuthType.USE_OPENAI,
           }),
           getAvailableModelsForAuthType: vi
             .fn()
             .mockReturnValue([{ id: 'qwen-max', label: 'Qwen Max' }]),
           switchModel,
           getModel: vi.fn(() => currentModel),
-          getAuthType: vi.fn().mockReturnValue(AuthType.QWEN_OAUTH),
+          getAuthType: vi.fn().mockReturnValue(AuthType.USE_OPENAI),
           getActiveRuntimeModelSnapshot: vi.fn().mockReturnValue(undefined),
           getCurrentModelRegistryBaseUrl: vi.fn().mockReturnValue(undefined),
           getChatRecordingService: vi.fn().mockReturnValue({
@@ -305,7 +280,7 @@ describe('modelCommand', () => {
     );
     expect(recordSessionModel).toHaveBeenCalledWith({
       modelId: 'qwen-max',
-      authType: AuthType.QWEN_OAUTH,
+      authType: AuthType.USE_OPENAI,
     });
   });
 
@@ -325,14 +300,14 @@ describe('modelCommand', () => {
         config: {
           getContentGeneratorConfig: vi.fn().mockReturnValue({
             model: 'qwen-plus',
-            authType: AuthType.QWEN_OAUTH,
+            authType: AuthType.USE_OPENAI,
           }),
           getAvailableModelsForAuthType: vi
             .fn()
             .mockReturnValue([{ id: 'qwen-max', label: 'Qwen Max' }]),
           switchModel,
           getModel: vi.fn().mockReturnValue('qwen-max'),
-          getAuthType: vi.fn().mockReturnValue(AuthType.QWEN_OAUTH),
+          getAuthType: vi.fn().mockReturnValue(AuthType.USE_OPENAI),
           getActiveRuntimeModelSnapshot: vi.fn().mockReturnValue(undefined),
           getCurrentModelRegistryBaseUrl: vi.fn().mockReturnValue(undefined),
           getChatRecordingService: vi.fn().mockReturnValue({
@@ -346,7 +321,7 @@ describe('modelCommand', () => {
     await modelCommand.action!(mockContext, 'qwen-max');
 
     expect(switchModel).toHaveBeenCalledWith(
-      AuthType.QWEN_OAUTH,
+      AuthType.USE_OPENAI,
       'qwen-max',
       undefined,
     );
@@ -369,7 +344,7 @@ describe('modelCommand', () => {
         config: {
           getContentGeneratorConfig: vi.fn().mockReturnValue({
             model: 'qwen-plus',
-            authType: AuthType.QWEN_OAUTH,
+            authType: AuthType.USE_OPENAI,
           }),
           switchModel,
           setFastModel,
@@ -402,7 +377,7 @@ describe('modelCommand', () => {
         config: {
           getContentGeneratorConfig: vi.fn().mockReturnValue({
             model: 'qwen-plus',
-            authType: AuthType.QWEN_OAUTH,
+            authType: AuthType.USE_OPENAI,
           }),
           getAvailableModelsForAuthType: vi
             .fn()
@@ -440,7 +415,7 @@ describe('modelCommand', () => {
         config: {
           getContentGeneratorConfig: vi.fn().mockReturnValue({
             model: 'qwen-plus',
-            authType: AuthType.QWEN_OAUTH,
+            authType: AuthType.USE_OPENAI,
           }),
           switchModel,
           getAvailableModelsForAuthType: vi.fn().mockReturnValue([]),
@@ -458,42 +433,6 @@ describe('modelCommand', () => {
     expect(result).toMatchObject({ type: 'message', messageType: 'error' });
   });
 
-  it('rejects an inline prompt that targets a different provider', async () => {
-    const switchModel = vi.fn();
-    mockContext = createMockCommandContext({
-      invocation: {
-        raw: '/model gpt-4(openai) hello',
-        name: 'model',
-        args: 'gpt-4(openai) hello',
-      },
-      services: {
-        config: {
-          getContentGeneratorConfig: vi.fn().mockReturnValue({
-            model: 'qwen-plus',
-            authType: AuthType.QWEN_OAUTH,
-          }),
-          switchModel,
-          getAvailableModelsForAuthType: vi
-            .fn()
-            .mockReturnValue([{ id: 'gpt-4', label: 'GPT-4' }]),
-        },
-        settings: createMockSettings(vi.fn()),
-      },
-    });
-
-    const result = await modelCommand.action!(
-      mockContext,
-      'gpt-4(openai) hello',
-    );
-
-    expect(switchModel).not.toHaveBeenCalled();
-    expect(result).toMatchObject({
-      type: 'message',
-      messageType: 'error',
-      content: expect.stringContaining('different provider'),
-    });
-  });
-
   it('rejects an inline prompt whose model belongs to a same-auth-type provider with a different endpoint/credentials', async () => {
     const switchModel = vi.fn();
     mockContext = createMockCommandContext({
@@ -508,7 +447,7 @@ describe('modelCommand', () => {
           getContentGeneratorConfig: vi.fn().mockReturnValue({
             model: 'shared-id',
             authType: AuthType.USE_OPENAI,
-            baseUrl: 'https://provider-a.example/v1',
+            baseUrl: 'http://127.0.0.1:11434/v1',
             apiKeyEnvKey: 'PROVIDER_A_KEY',
           }),
           switchModel,
@@ -518,7 +457,7 @@ describe('modelCommand', () => {
               id: 'shared-id',
               label: 'Shared',
               authType: AuthType.USE_OPENAI,
-              baseUrl: 'https://provider-b.example/v1',
+              baseUrl: 'http://localhost:1234/v1',
               envKey: 'PROVIDER_B_KEY',
             },
           ]),
@@ -550,7 +489,7 @@ describe('modelCommand', () => {
           getContentGeneratorConfig: vi.fn().mockReturnValue({
             model: 'other',
             authType: AuthType.USE_OPENAI,
-            baseUrl: 'https://provider-a.example/v1',
+            baseUrl: 'http://127.0.0.1:11434/v1',
             apiKeyEnvKey: 'PROVIDER_A_KEY',
           }),
           switchModel,
@@ -559,7 +498,7 @@ describe('modelCommand', () => {
               id: 'shared-id',
               label: 'Shared',
               authType: AuthType.USE_OPENAI,
-              baseUrl: 'https://provider-a.example/v1',
+              baseUrl: 'http://127.0.0.1:11434/v1',
               envKey: 'PROVIDER_A_KEY',
             },
           ]),
@@ -594,7 +533,7 @@ describe('modelCommand', () => {
         config: {
           getContentGeneratorConfig: vi.fn().mockReturnValue({
             model: 'qwen-plus',
-            authType: AuthType.QWEN_OAUTH,
+            authType: AuthType.USE_OPENAI,
           }),
           switchModel,
           getAvailableModelsForAuthType: vi
@@ -627,7 +566,7 @@ describe('modelCommand', () => {
         config: {
           getContentGeneratorConfig: vi.fn().mockReturnValue({
             model: 'qwen-plus',
-            authType: AuthType.QWEN_OAUTH,
+            authType: AuthType.USE_OPENAI,
           }),
           switchModel,
           getAvailableModelsForAuthType: vi.fn().mockReturnValue([]),
@@ -644,8 +583,8 @@ describe('modelCommand', () => {
       type: 'message',
       messageType: 'error',
       content:
-        "Model 'missing-model' is not available for auth type 'qwen-oauth'.\n" +
-        "No models are configured for auth type 'qwen-oauth'.\n" +
+        "Model 'missing-model' is not available for auth type 'openai'.\n" +
+        "No models are configured for auth type 'openai'.\n" +
         'Configure models in settings.modelProviders and ensure the required environment variables are set. In interactive mode, run /auth to configure or switch providers, or run /model without arguments to choose from configured models.',
     });
   });
@@ -664,7 +603,7 @@ describe('modelCommand', () => {
         config: {
           getContentGeneratorConfig: vi.fn().mockReturnValue({
             model: 'qwen-plus',
-            authType: AuthType.QWEN_OAUTH,
+            authType: AuthType.USE_OPENAI,
           }),
           switchModel,
           getAvailableModelsForAuthType: vi
@@ -680,7 +619,7 @@ describe('modelCommand', () => {
     );
 
     expect(switchModel).toHaveBeenCalledWith(
-      AuthType.QWEN_OAUTH,
+      AuthType.USE_OPENAI,
       'qwen-max',
       undefined,
     );
@@ -780,9 +719,9 @@ describe('modelCommand', () => {
         config: {
           getContentGeneratorConfig: vi.fn().mockReturnValue({
             model: 'qwen-plus',
-            authType: AuthType.QWEN_OAUTH,
+            authType: AuthType.USE_OPENAI,
           }),
-          getAuthType: vi.fn().mockReturnValue(AuthType.QWEN_OAUTH),
+          getAuthType: vi.fn().mockReturnValue(AuthType.USE_OPENAI),
           getAvailableModelsForAuthType: vi
             .fn()
             .mockReturnValue([{ id: 'gpt-4', label: 'GPT-4' }]),
@@ -797,11 +736,7 @@ describe('modelCommand', () => {
       `gpt-4(${AuthType.USE_OPENAI})`,
     );
 
-    expect(switchModel).toHaveBeenCalledWith(
-      AuthType.USE_OPENAI,
-      'gpt-4',
-      undefined,
-    );
+    expect(switchModel).toHaveBeenCalledWith(AuthType.USE_OPENAI, 'gpt-4');
     expect(setValue).toHaveBeenCalledWith(
       expect.any(String),
       'security.auth.selectedType',
@@ -819,7 +754,7 @@ describe('modelCommand', () => {
     });
   });
 
-  it('should set fast models configured under another auth type', async () => {
+  it('should set fast models from the configured models', async () => {
     const setValue = vi.fn();
     const setFastModel = vi.fn();
     mockContext = createMockCommandContext({
@@ -831,8 +766,8 @@ describe('modelCommand', () => {
       services: {
         config: {
           getContentGeneratorConfig: vi.fn().mockReturnValue({
-            model: 'claude-opus-4-7',
-            authType: AuthType.USE_ANTHROPIC,
+            model: 'main-model',
+            authType: AuthType.USE_OPENAI,
           }),
           getAllConfiguredModels: vi.fn().mockReturnValue([
             {
@@ -841,9 +776,9 @@ describe('modelCommand', () => {
               authType: AuthType.USE_OPENAI,
             },
             {
-              id: 'claude-opus-4-7',
-              label: 'claude-opus-4-7',
-              authType: AuthType.USE_ANTHROPIC,
+              id: 'main-model',
+              label: 'main-model',
+              authType: AuthType.USE_OPENAI,
             },
           ]),
           setFastModel,
@@ -882,8 +817,8 @@ describe('modelCommand', () => {
       services: {
         config: {
           getContentGeneratorConfig: vi.fn().mockReturnValue({
-            model: 'claude-opus-4-7',
-            authType: AuthType.USE_ANTHROPIC,
+            model: 'main-model',
+            authType: AuthType.USE_OPENAI,
           }),
           getAvailableModelsForAuthType: vi.fn((authType: AuthType) =>
             authType === AuthType.USE_OPENAI
@@ -977,8 +912,8 @@ describe('modelCommand', () => {
       services: {
         config: {
           getContentGeneratorConfig: vi.fn().mockReturnValue({
-            model: 'claude-opus-4-7',
-            authType: AuthType.USE_ANTHROPIC,
+            model: 'main-model',
+            authType: AuthType.USE_OPENAI,
           }),
           getAvailableModelsForAuthType: vi.fn((authType: AuthType) =>
             authType === AuthType.USE_OPENAI
@@ -1028,7 +963,7 @@ describe('modelCommand', () => {
               id: 'qwen-vl-max',
               label: 'qwen-vl-max',
               authType: AuthType.USE_OPENAI,
-              baseUrl: 'https://vision.example.com/v1',
+              baseUrl: 'http://127.0.0.1:11434/v1',
             },
           ]),
           isCurrentPrimaryModel: (m: { id: string }) => m.id === 'qwen-plus',
@@ -1046,10 +981,10 @@ describe('modelCommand', () => {
     expect(setValue).toHaveBeenCalledWith(
       expect.any(String),
       'visionModel',
-      'openai:qwen-vl-max\0https://vision.example.com/v1',
+      'openai:qwen-vl-max\0http://127.0.0.1:11434/v1',
     );
     expect(setVisionModel).toHaveBeenCalledWith(
-      'openai:qwen-vl-max\0https://vision.example.com/v1',
+      'openai:qwen-vl-max\0http://127.0.0.1:11434/v1',
     );
     expect(result).toEqual({
       type: 'message',
@@ -1078,13 +1013,13 @@ describe('modelCommand', () => {
               id: 'qwen-vl-max',
               label: 'token endpoint',
               authType: AuthType.USE_OPENAI,
-              baseUrl: 'https://token.example.com/v1',
+              baseUrl: 'http://127.0.0.1:11434/v1',
             },
             {
               id: 'qwen-vl-max',
               label: 'account endpoint',
               authType: AuthType.USE_OPENAI,
-              baseUrl: 'https://account.example.com/v1',
+              baseUrl: 'http://localhost:1234/v1',
             },
           ]),
           setVisionModel,
@@ -1107,53 +1042,6 @@ describe('modelCommand', () => {
     });
   });
 
-  it('suggests an auth-qualified selector for cross-provider vision ambiguity', async () => {
-    const setValue = vi.fn();
-    const setVisionModel = vi.fn();
-    mockContext = createMockCommandContext({
-      invocation: {
-        raw: '/model --vision qwen-vl-max',
-        name: 'model',
-        args: '--vision qwen-vl-max',
-      },
-      services: {
-        config: {
-          getContentGeneratorConfig: vi.fn().mockReturnValue({
-            model: 'qwen-plus',
-            authType: AuthType.USE_OPENAI,
-          }),
-          getAllConfiguredModels: vi.fn().mockReturnValue([
-            {
-              id: 'qwen-vl-max',
-              label: 'OpenAI endpoint',
-              authType: AuthType.USE_OPENAI,
-            },
-            {
-              id: 'qwen-vl-max',
-              label: 'Anthropic endpoint',
-              authType: AuthType.USE_ANTHROPIC,
-            },
-          ]),
-          setVisionModel,
-        },
-        settings: createMockSettings(setValue),
-      },
-    });
-
-    const result = await modelCommand.action!(
-      mockContext,
-      '--vision qwen-vl-max',
-    );
-
-    expect(setValue).not.toHaveBeenCalled();
-    expect(setVisionModel).not.toHaveBeenCalled();
-    expect(result).toEqual({
-      type: 'message',
-      messageType: 'error',
-      content: expect.stringContaining('openai:qwen-vl-max'),
-    });
-  });
-
   it('should set authType-qualified vision model selectors', async () => {
     const setValue = vi.fn();
     const setVisionModel = vi.fn();
@@ -1166,8 +1054,8 @@ describe('modelCommand', () => {
       services: {
         config: {
           getContentGeneratorConfig: vi.fn().mockReturnValue({
-            model: 'claude-opus-4-7',
-            authType: AuthType.USE_ANTHROPIC,
+            model: 'main-model',
+            authType: AuthType.USE_OPENAI,
           }),
           getAvailableModelsForAuthType: vi.fn((authType: AuthType) =>
             authType === AuthType.USE_OPENAI
@@ -1180,10 +1068,9 @@ describe('modelCommand', () => {
                 ]
               : [],
           ),
-          // The pinned model lives on a different provider than the primary, so
-          // the set-time primary guard (config.isCurrentPrimaryModel) never fires.
-          isCurrentPrimaryModel: (m: { id: string }) =>
-            m.id === 'claude-opus-4-7',
+          // The pinned model is not the primary, so the set-time primary guard
+          // (config.isCurrentPrimaryModel) never fires.
+          isCurrentPrimaryModel: (m: { id: string }) => m.id === 'main-model',
           setVisionModel,
         },
         settings: createMockSettings(setValue),
@@ -1452,7 +1339,7 @@ describe('modelCommand', () => {
         }),
         settings: {
           merged: {
-            visionModel: 'qwen-vl-max\0https://vision.example.com/v1',
+            visionModel: 'qwen-vl-max\0http://127.0.0.1:11434/v1',
           } as Record<string, unknown>,
         },
       },
@@ -1464,7 +1351,7 @@ describe('modelCommand', () => {
       type: 'message',
       messageType: 'info',
       content:
-        'Current vision model: qwen-vl-max (https://vision.example.com/v1)\nUse "/model --vision <model-id>" to set the vision bridge model.',
+        'Current vision model: qwen-vl-max (http://127.0.0.1:11434/v1)\nUse "/model --vision <model-id>" to set the vision bridge model.',
     });
   });
 
@@ -1479,7 +1366,7 @@ describe('modelCommand', () => {
         }),
         settings: {
           merged: {
-            visionModel: '\0https://vision.example.com/v1',
+            visionModel: '\0http://127.0.0.1:11434/v1',
           } as Record<string, unknown>,
         },
       },
@@ -1491,7 +1378,7 @@ describe('modelCommand', () => {
       type: 'message',
       messageType: 'info',
       content:
-        'Current vision model: \\0https://vision.example.com/v1\nUse "/model --vision <model-id>" to set the vision bridge model.',
+        'Current vision model: \\0http://127.0.0.1:11434/v1\nUse "/model --vision <model-id>" to set the vision bridge model.',
     });
   });
 
@@ -1768,7 +1655,7 @@ describe('modelCommand', () => {
           config: {
             getContentGeneratorConfig: vi.fn().mockReturnValue({
               model: 'qwen-max',
-              authType: AuthType.QWEN_OAUTH,
+              authType: AuthType.USE_OPENAI,
             }),
             getModel: vi.fn().mockReturnValue('qwen-max'),
           },
@@ -1793,7 +1680,7 @@ describe('modelCommand', () => {
           config: {
             getContentGeneratorConfig: vi.fn().mockReturnValue({
               model: 'qwen-max',
-              authType: AuthType.QWEN_OAUTH,
+              authType: AuthType.USE_OPENAI,
             }),
             getModel: vi.fn().mockReturnValue('qwen-max'),
           },
@@ -1844,70 +1731,6 @@ describe('modelCommand', () => {
       });
     });
 
-    it('should reject voiceOnly models from normal /model selection', async () => {
-      mockContext = createMockCommandContext({
-        invocation: {
-          raw: '/model voice-model',
-          name: 'model',
-          args: 'voice-model',
-        },
-        services: {
-          config: {
-            getContentGeneratorConfig: vi.fn().mockReturnValue({
-              model: 'main-model',
-              authType: AuthType.USE_OPENAI,
-            }),
-            getAvailableModelsForAuthType: vi.fn().mockReturnValue([
-              { id: 'main-model', label: 'Main' },
-              { id: 'voice-model', label: 'Voice', voiceOnly: true },
-            ]),
-          },
-          settings: createMockSettings(),
-        },
-      });
-
-      const result = await modelCommand.action!(mockContext, 'voice-model');
-      expect(result).toMatchObject({
-        type: 'message',
-        messageType: 'error',
-        content: expect.stringContaining('voice-model'),
-      });
-    });
-
-    it('should reject image-generation-only models from normal /model selection', async () => {
-      mockContext = createMockCommandContext({
-        invocation: {
-          raw: '/model qwen-image-2.0',
-          name: 'model',
-          args: 'qwen-image-2.0',
-        },
-        services: {
-          config: {
-            getContentGeneratorConfig: vi.fn().mockReturnValue({
-              model: 'main-model',
-              authType: AuthType.USE_OPENAI,
-            }),
-            getAvailableModelsForAuthType: vi.fn().mockReturnValue([
-              { id: 'main-model', label: 'Main' },
-              {
-                id: 'qwen-image-2.0',
-                label: 'Image',
-                imageOnly: true,
-              },
-            ]),
-          },
-          settings: createMockSettings(),
-        },
-      });
-
-      const result = await modelCommand.action!(mockContext, 'qwen-image-2.0');
-      expect(result).toMatchObject({
-        type: 'message',
-        messageType: 'error',
-        content: expect.stringContaining('qwen-image-2.0'),
-      });
-    });
-
     it('should allow fastOnly models in --fast selection', async () => {
       const setValue = vi.fn();
       mockContext = createMockCommandContext({
@@ -1943,40 +1766,6 @@ describe('modelCommand', () => {
       });
     });
 
-    it('should reject voiceOnly models from --fast selection', async () => {
-      mockContext = createMockCommandContext({
-        invocation: {
-          raw: '/model --fast voice-model',
-          name: 'model',
-          args: '--fast voice-model',
-        },
-        services: {
-          config: {
-            getContentGeneratorConfig: vi.fn().mockReturnValue({
-              model: 'main-model',
-              authType: AuthType.USE_OPENAI,
-            }),
-            getAllConfiguredModels: vi.fn().mockReturnValue([
-              { id: 'main-model', label: 'Main' },
-              { id: 'voice-model', label: 'Voice', voiceOnly: true },
-            ]),
-            setFastModel: vi.fn(),
-          },
-          settings: createMockSettings(),
-        },
-      });
-
-      const result = await modelCommand.action!(
-        mockContext,
-        '--fast voice-model',
-      );
-      expect(result).toMatchObject({
-        type: 'message',
-        messageType: 'error',
-        content: expect.stringContaining('voice-model'),
-      });
-    });
-
     it('should reject fastOnly models from --vision selection', async () => {
       mockContext = createMockCommandContext({
         invocation: {
@@ -2008,40 +1797,6 @@ describe('modelCommand', () => {
         type: 'message',
         messageType: 'error',
         content: expect.stringContaining('fast-model'),
-      });
-    });
-
-    it('should reject voiceOnly models from --vision selection', async () => {
-      mockContext = createMockCommandContext({
-        invocation: {
-          raw: '/model --vision voice-model',
-          name: 'model',
-          args: '--vision voice-model',
-        },
-        services: {
-          config: {
-            getContentGeneratorConfig: vi.fn().mockReturnValue({
-              model: 'main-model',
-              authType: AuthType.USE_OPENAI,
-            }),
-            getAllConfiguredModels: vi.fn().mockReturnValue([
-              { id: 'main-model', label: 'Main' },
-              { id: 'voice-model', label: 'Voice', voiceOnly: true },
-            ]),
-            setVisionModel: vi.fn(),
-          },
-          settings: createMockSettings(),
-        },
-      });
-
-      const result = await modelCommand.action!(
-        mockContext,
-        '--vision voice-model',
-      );
-      expect(result).toMatchObject({
-        type: 'message',
-        messageType: 'error',
-        content: expect.stringContaining('voice-model'),
       });
     });
   });
@@ -2127,9 +1882,7 @@ describe('modelCommand', () => {
       };
       cfg.getAllConfiguredModels = vi
         .fn()
-        .mockReturnValue([
-          { id: 'qwen3-coder-flash', voiceOnly: false, fastOnly: true },
-        ]);
+        .mockReturnValue([{ id: 'qwen3-coder-flash', fastOnly: true }]);
       cfg.setFastModel = vi.fn();
       const result = await modelCommand.action!(
         ctx,
@@ -2160,9 +1913,7 @@ describe('modelCommand', () => {
       };
       cfg.getAllConfiguredModels = vi
         .fn()
-        .mockReturnValue([
-          { id: 'qwen3-coder-flash', voiceOnly: false, fastOnly: true },
-        ]);
+        .mockReturnValue([{ id: 'qwen3-coder-flash', fastOnly: true }]);
       cfg.setFastModel = vi.fn();
       const result = await modelCommand.action!(
         ctx,
@@ -2217,9 +1968,7 @@ describe('modelCommand', () => {
       };
       cfg.getAvailableModelsForAuthType = vi
         .fn()
-        .mockReturnValue([
-          { id: 'qwen-max', voiceOnly: false, fastOnly: false },
-        ]);
+        .mockReturnValue([{ id: 'qwen-max', fastOnly: false }]);
       cfg.switchModel = vi.fn().mockResolvedValue(mockGenerator);
       const result = await modelCommand.action!(ctx, '--project qwen-max');
       expect(result).toMatchObject({

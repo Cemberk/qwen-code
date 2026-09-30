@@ -115,12 +115,6 @@ vi.mock('../skills/skill-manager.js', () => {
 
 vi.mock('../core/contentGenerator.js', () => ({
   AuthType: { USE_OPENAI: 'openai' },
-  Protocol: {
-    OPENAI: 'openai',
-    QWEN_OAUTH: 'qwen-oauth',
-    GEMINI: 'gemini',
-    ANTHROPIC: 'anthropic',
-  },
   createContentGenerator: vi.fn().mockReturnValue({
     getContentGeneratorConfig: () => ({ model: 'test' }),
   }),

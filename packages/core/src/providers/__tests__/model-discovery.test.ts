@@ -4,7 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { discoverProviderModels } from '../model-discovery.js';
 
 const { fetchWithPolicyMock } = vi.hoisted(() => ({
@@ -17,18 +19,16 @@ vi.mock('../../utils/fetch.js', () => ({
 
 function response(body: unknown, status = 200) {
   return {
-    kind: 'response' as const,
     status,
     statusText: '',
     contentType: 'application/json',
     contentDisposition: '',
     body: Buffer.from(JSON.stringify(body)),
-    finalUrl: 'https://example.com/v1/models',
   };
 }
 
 const options = {
-  baseUrl: ' https://example.com/v1/ ',
+  baseUrl: ' http://127.0.0.1:11434/v1/ ',
   apiKey: ' secret-key ',
   staticModels: [
     { id: 'known-a', contextWindowSize: 1000 },
@@ -68,11 +68,10 @@ describe('discoverProviderModels', () => {
       { id: 'wan2.7-t2v-plus' },
     ]);
     expect(fetchWithPolicyMock).toHaveBeenCalledWith(
-      'https://example.com/v1/models',
+      'http://127.0.0.1:11434/v1/models',
       expect.objectContaining({
         timeoutMs: 5000,
         maxBytes: 1024 * 1024,
-        maxRedirects: 2,
         headers: {
           Accept: 'application/json',
           Authorization: 'Bearer secret-key',
@@ -253,16 +252,10 @@ describe('discoverProviderModels', () => {
     await expect(discoverProviderModels(options)).resolves.toBeNull();
   });
 
-  it.each([
-    response({ data: [{ id: 'model-a' }] }, 401),
-    {
-      kind: 'cross-host-redirect' as const,
-      originalUrl: 'https://example.com/v1/models',
-      redirectUrl: 'https://other.example/models',
-      status: 302,
-    },
-  ])('falls back for an unsuccessful response', async (result) => {
-    fetchWithPolicyMock.mockResolvedValue(result);
+  it('falls back for an unsuccessful response', async () => {
+    fetchWithPolicyMock.mockResolvedValue(
+      response({ data: [{ id: 'model-a' }] }, 401),
+    );
 
     await expect(discoverProviderModels(options)).resolves.toBeNull();
   });
@@ -289,6 +282,19 @@ describe('discoverProviderModels', () => {
     expect(fetchWithPolicyMock).not.toHaveBeenCalled();
   });
 
+  it.each([
+    'https://api.openai.com/v1',
+    'http://192.168.1.5:8000/v1',
+    'http://localhost.evil.com/v1',
+    'http://127.0.0.1@evil.com/v1',
+  ])('does not query the non-loopback base URL %s', async (baseUrl) => {
+    await expect(
+      discoverProviderModels({ ...options, baseUrl }),
+    ).resolves.toBeNull();
+
+    expect(fetchWithPolicyMock).not.toHaveBeenCalled();
+  });
+
   it('passes caller cancellation to the bounded request', async () => {
     fetchWithPolicyMock.mockResolvedValue(response({ data: [{ id: 'new' }] }));
     const controller = new AbortController();
@@ -299,5 +305,46 @@ describe('discoverProviderModels', () => {
       expect.any(String),
       expect.objectContaining({ signal: controller.signal }),
     );
+  });
+
+  describe('against a loopback server', () => {
+    let server: Server | undefined;
+
+    afterEach(async () => {
+      await new Promise<void>((resolve) =>
+        server ? server.close(() => resolve()) : resolve(),
+      );
+      server = undefined;
+    });
+
+    it('does not follow a redirect', async () => {
+      const actual = await vi.importActual<
+        typeof import('../../utils/fetch.js')
+      >('../../utils/fetch.js');
+      fetchWithPolicyMock.mockImplementation(actual.fetchWithPolicy);
+      const requestedPaths: string[] = [];
+      server = createServer((req, res) => {
+        requestedPaths.push(req.url ?? '');
+        if (req.url === '/v1/models') {
+          res.writeHead(302, { Location: '/moved/models' });
+          res.end();
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ data: [{ id: 'redirected-model' }] }));
+      });
+      await new Promise<void>((resolve) =>
+        server!.listen(0, '127.0.0.1', resolve),
+      );
+      const { port } = server.address() as AddressInfo;
+
+      await expect(
+        discoverProviderModels({
+          ...options,
+          baseUrl: `http://127.0.0.1:${port}/v1`,
+        }),
+      ).resolves.toBeNull();
+      expect(requestedPaths).toEqual(['/v1/models']);
+    });
   });
 });

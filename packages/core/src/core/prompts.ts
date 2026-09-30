@@ -1360,10 +1360,6 @@ function getToolCallExamples(model?: string): string {
     if (/qwen[^-]*-vl/i.test(model)) {
       return qwenVlToolCallExamples;
     }
-    // Match coder-model pattern (same as qwen3-coder)
-    if (/coder-model/i.test(model)) {
-      return qwenCoderToolCallExamples;
-    }
     if (/gemma[-_]?4/i.test(model)) {
       return gemma4ToolCallExamples;
     }

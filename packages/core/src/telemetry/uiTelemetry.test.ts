@@ -863,34 +863,29 @@ describe('UiTelemetryService', () => {
       },
     );
 
-    it.each(['openai', 'qwen-oauth'])(
-      'does not double-count reasoning for %s events',
-      (authType) => {
-        const sessionId = '11111111-1111-1111-1111-111111111111';
-        service.addEvent(
-          {
-            'event.name': EVENT_API_RESPONSE,
-            model: 'openai-model',
-            duration_ms: 10,
-            input_token_count: 40,
-            output_token_count: 10,
-            total_token_count: 0,
-            cached_content_token_count: 0,
-            thoughts_token_count: 2,
-            auth_type: authType,
-          } as ApiResponseEvent & { 'event.name': typeof EVENT_API_RESPONSE },
-          sessionId,
-        );
+    it('does not double-count reasoning for openai events', () => {
+      const sessionId = '11111111-1111-1111-1111-111111111111';
+      service.addEvent(
+        {
+          'event.name': EVENT_API_RESPONSE,
+          model: 'openai-model',
+          duration_ms: 10,
+          input_token_count: 40,
+          output_token_count: 10,
+          total_token_count: 0,
+          cached_content_token_count: 0,
+          thoughts_token_count: 2,
+          auth_type: 'openai',
+        } as ApiResponseEvent & { 'event.name': typeof EVENT_API_RESPONSE },
+        sessionId,
+      );
 
-        expect(service.getMetrics().models['openai-model'].tokens.total).toBe(
-          0,
-        );
-        expect(
-          service.getMetricsForSession(sessionId).statsModels?.['openai-model']
-            .tokens.total,
-        ).toBe(50);
-      },
-    );
+      expect(service.getMetrics().models['openai-model'].tokens.total).toBe(0);
+      expect(
+        service.getMetricsForSession(sessionId).statsModels?.['openai-model']
+          .tokens.total,
+      ).toBe(50);
+    });
 
     it('preserves richer invocation metadata from earlier events', () => {
       const sessionId = '11111111-1111-1111-1111-111111111111';

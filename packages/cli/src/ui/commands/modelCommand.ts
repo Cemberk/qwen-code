@@ -15,7 +15,7 @@ import { CommandKind } from './types.js';
 import { t } from '../../i18n/index.js';
 import { getPersistScopeForModelSelection } from '../../config/modelProvidersScope.js';
 import {
-  AuthType,
+  type AuthType,
   type AvailableModel,
   type Config,
   isImageCapable,
@@ -129,14 +129,7 @@ async function switchMainModel(
   const parsed = parseAcpModelOption(modelArg);
 
   if (parsed.authType) {
-    await config.switchModel(
-      parsed.authType,
-      parsed.modelId,
-      parsed.authType !== currentAuthType &&
-        parsed.authType === AuthType.QWEN_OAUTH
-        ? { requireCachedCredentials: true }
-        : undefined,
-    );
+    await config.switchModel(parsed.authType, parsed.modelId);
     if (persistSelection) {
       persistSetting(
         settings,
@@ -259,24 +252,6 @@ function formatAmbiguousVisionModelMessage(
   const endpoints = matchingModels
     .map((model) => model.baseUrl ?? '(default endpoint)')
     .join(', ');
-  const qualifiedSelectors = Array.from(
-    new Set(
-      matchingModels
-        .map((model) =>
-          model.authType ? `${model.authType}:${model.id}` : undefined,
-        )
-        .filter((selector): selector is string => selector !== undefined),
-    ),
-  );
-  const scriptedHint =
-    qualifiedSelectors.length > 1
-      ? `\n${t(
-          'For scripts, pass an auth-qualified selector such as {{selector}}.',
-          {
-            selector: qualifiedSelectors[0],
-          },
-        )}`
-      : '';
   return (
     t("Vision model '{{modelName}}' matches multiple configured endpoints.", {
       modelName,
@@ -284,10 +259,7 @@ function formatAmbiguousVisionModelMessage(
     '\n' +
     t('Matching endpoints: {{endpoints}}.', { endpoints }) +
     '\n' +
-    t(
-      'Run /model --vision without an argument and choose the exact endpoint.',
-    ) +
-    scriptedHint
+    t('Run /model --vision without an argument and choose the exact endpoint.')
   );
 }
 
@@ -313,10 +285,10 @@ function getAvailableModelIds(
     return [];
   }
   const availableModels = config.getAvailableModels().filter((m) => {
-    if (mode === 'vision') return !m.fastOnly && !m.voiceOnly && !m.imageOnly;
-    if (mode === 'fast') return !m.voiceOnly && !m.imageOnly && !m.visionOnly;
+    if (mode === 'vision') return !m.fastOnly;
+    if (mode === 'fast') return !m.visionOnly;
     // 'main' and 'compaction' exclude all selector-only models.
-    return !m.fastOnly && !m.voiceOnly && !m.imageOnly && !m.visionOnly;
+    return !m.fastOnly && !m.visionOnly;
   });
   return availableModels.map((model) => model.id);
 }
@@ -520,7 +492,7 @@ export const modelCommand: SlashCommand = {
         selector.authType
           ? config.getAvailableModelsForAuthType(selector.authType)
           : config.getAllConfiguredModels()
-      ).filter((m) => !m.voiceOnly && !m.imageOnly && !m.visionOnly);
+      ).filter((m) => !m.visionOnly);
       if (!availableModels.some((model) => model.id === selector.modelId)) {
         return {
           type: 'message',
@@ -603,7 +575,7 @@ export const modelCommand: SlashCommand = {
         selector.authType
           ? config.getAvailableModelsForAuthType(selector.authType)
           : config.getAllConfiguredModels()
-      ).filter((m) => !m.fastOnly && !m.voiceOnly && !m.imageOnly);
+      ).filter((m) => !m.fastOnly);
       const matchingModels = availableModels.filter(
         (model) => model.id === selector.modelId,
       );
@@ -733,9 +705,7 @@ export const modelCommand: SlashCommand = {
         selector.authType
           ? config.getAvailableModelsForAuthType(selector.authType)
           : config.getAllConfiguredModels()
-      ).filter(
-        (m) => !m.fastOnly && !m.voiceOnly && !m.imageOnly && !m.visionOnly,
-      );
+      ).filter((m) => !m.fastOnly && !m.visionOnly);
       if (!availableModels.some((model) => model.id === selector.modelId)) {
         return {
           type: 'message',
@@ -796,7 +766,7 @@ export const modelCommand: SlashCommand = {
       const targetAuthType = parsed.authType ?? authType;
       const availableModels = config
         .getAvailableModelsForAuthType(targetAuthType)
-        .filter((m) => !m.fastOnly && !m.voiceOnly && !m.imageOnly);
+        .filter((m) => !m.fastOnly);
       if (!availableModels.some((model) => model.id === parsed.modelId)) {
         return {
           type: 'message',

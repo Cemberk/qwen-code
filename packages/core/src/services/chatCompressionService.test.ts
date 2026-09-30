@@ -2516,8 +2516,6 @@ describe('ChatCompressionService.compress cache sharing', () => {
 
   function makeFixture(options?: {
     history?: Content[];
-    authType?: AuthType;
-    baseUrl?: string;
     compactionModel?: string;
     enableCacheControl?: boolean;
     contextWindowSize?: number | null;
@@ -2566,8 +2564,8 @@ describe('ChatCompressionService.compress cache sharing', () => {
       getBaseLlmClient: vi.fn().mockReturnValue(baseLlmClient),
       getContentGeneratorConfig: vi.fn().mockReturnValue({
         model: 'test-model',
-        authType: options?.authType ?? AuthType.USE_ANTHROPIC,
-        baseUrl: options?.baseUrl,
+        authType: AuthType.USE_OPENAI,
+        baseUrl: 'http://127.0.0.1:11434/v1',
         ...(options?.contextWindowSize === null
           ? {}
           : { contextWindowSize: options?.contextWindowSize ?? 220_000 }),
@@ -2608,9 +2606,6 @@ describe('ChatCompressionService.compress cache sharing', () => {
     expect(request.promptCacheSharing).toBe(true);
     expect(request.config?.tools).toBe(tools);
     expect(request.config?.thinkingConfig?.includeThoughts).toBe(true);
-    expect(request.config?.thinkingConfig?.thinkingBudget).toBe(
-      COMPACT_MAX_OUTPUT_TOKENS - 1,
-    );
     expect(request.config?.maxOutputTokens).toBe(COMPACT_MAX_OUTPUT_TOKENS);
     expect(request.contents.slice(0, -1)).toEqual(history);
     expect(request.contents).toHaveLength(43);
@@ -2676,95 +2671,6 @@ describe('ChatCompressionService.compress cache sharing', () => {
     expect(coldSpy).not.toHaveBeenCalled();
     expect(slimSpy).not.toHaveBeenCalled();
   });
-
-  it.each([AuthType.QWEN_OAUTH, AuthType.USE_OPENAI])(
-    'uses cache sharing for DashScope through %s',
-    async (authType) => {
-      const { chat, config, generateText } = makeFixture({ authType });
-      const coldSpy = vi.spyOn(sideQueryModule, 'runSideQuery');
-
-      await new ChatCompressionService().compress(chat, {
-        promptId: 'p',
-        force: true,
-        config,
-        consecutiveFailures: 0,
-        originalTokenCount: 180_000,
-      });
-
-      expect(generateText).toHaveBeenCalledTimes(1);
-      expect(coldSpy).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each([AuthType.USE_GEMINI, AuthType.USE_VERTEX_AI])(
-    'uses cache sharing for Google GenAI through %s',
-    async (authType) => {
-      const { chat, config, generateText } = makeFixture({ authType });
-      const coldSpy = vi.spyOn(sideQueryModule, 'runSideQuery');
-
-      await new ChatCompressionService().compress(chat, {
-        promptId: 'p',
-        force: true,
-        config,
-        consecutiveFailures: 0,
-        originalTokenCount: 180_000,
-      });
-
-      expect(generateText).toHaveBeenCalledTimes(1);
-      const request = generateText.mock.calls[0]![0] as {
-        config?: { thinkingConfig?: { includeThoughts?: boolean } };
-      };
-      expect(request.config?.thinkingConfig?.includeThoughts).toBe(false);
-      expect(coldSpy).not.toHaveBeenCalled();
-    },
-  );
-
-  it('keeps implicit Google cache sharing enabled when explicit cache control is disabled', async () => {
-    const { chat, config, generateText } = makeFixture({
-      authType: AuthType.USE_GEMINI,
-      enableCacheControl: false,
-    });
-    const coldSpy = vi.spyOn(sideQueryModule, 'runSideQuery');
-
-    await new ChatCompressionService().compress(chat, {
-      promptId: 'p',
-      force: true,
-      config,
-      consecutiveFailures: 0,
-      originalTokenCount: 180_000,
-    });
-
-    expect(generateText).toHaveBeenCalledTimes(1);
-    expect(coldSpy).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    'https://api.openai.com/v1',
-    'https://api.deepseek.com/v1',
-    'https://proxy.example/v1',
-  ])(
-    'uses cache sharing for OpenAI-compatible endpoint %s',
-    async (baseUrl) => {
-      const { chat, config, generateText } = makeFixture({
-        authType: AuthType.USE_OPENAI,
-        baseUrl,
-      });
-      const coldSpy = vi.spyOn(sideQueryModule, 'runSideQuery');
-
-      await new ChatCompressionService().compress(chat, {
-        promptId: 'p',
-        force: true,
-        config,
-        consecutiveFailures: 0,
-        originalTokenCount: 180_000,
-      });
-
-      expect(generateText).toHaveBeenCalledTimes(1);
-      const request = generateText.mock.calls[0]![0] as GenerateTextOptions;
-      expect(request.promptCacheSharing).toBe(true);
-      expect(coldSpy).not.toHaveBeenCalled();
-    },
-  );
 
   it('appends a pending tool result after the cached history and before the directive', async () => {
     const history: Content[] = [
