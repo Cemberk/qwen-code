@@ -19,7 +19,6 @@ import {
   type AvailableModel,
   type Config,
   isImageCapable,
-  isImageGenerationCapable,
   parseVisionModelSetting,
   resolveModelId,
 } from '@qwen-code/qwen-code-core';
@@ -42,14 +41,10 @@ const VISION_MODEL_CONFIGURATION_HINT =
 const COMPACTION_MODEL_CONFIGURATION_HINT =
   'Configure models in settings.modelProviders and ensure the required environment variables are set. In interactive mode, run /auth to configure or switch providers, or run /model --compaction without a model to choose from configured models.';
 
-const IMAGE_MODEL_CONFIGURATION_HINT =
-  'Configure a model with supportsImageGeneration: true (or legacy imageOnly: true), baseUrl, and envKey in settings.modelProviders. Run /model --image <model-id> to select it.';
-
 const MODEL_PICKER_FLAGS = [
   'fast',
   'vision',
   'compaction',
-  'image',
   'project',
   'global',
 ] as const;
@@ -169,12 +164,7 @@ async function switchMainModel(
 }
 
 function formatUnavailableModelMessage(
-  kind:
-    | 'Model'
-    | 'Fast model'
-    | 'Vision model'
-    | 'Compaction model'
-    | 'Image model',
+  kind: 'Model' | 'Fast model' | 'Vision model' | 'Compaction model',
   modelName: string,
   authType: AuthType,
   availableModels: AvailableModel[],
@@ -194,9 +184,7 @@ function formatUnavailableModelMessage(
         ? VISION_MODEL_CONFIGURATION_HINT
         : kind === 'Compaction model'
           ? COMPACTION_MODEL_CONFIGURATION_HINT
-          : kind === 'Image model'
-            ? IMAGE_MODEL_CONFIGURATION_HINT
-            : MAIN_MODEL_CONFIGURATION_HINT;
+          : MAIN_MODEL_CONFIGURATION_HINT;
 
   return (
     `${kind} '${modelName}' is not available for auth type '${authType}'.\n` +
@@ -208,7 +196,7 @@ function formatUnavailableModelMessage(
 // Auxiliary model selectors share the same "not configured for any auth type"
 // message shape, differing only in the label and configuration hint.
 function formatUnavailableAuxModelMessage(
-  label: 'Fast model' | 'Vision model' | 'Compaction model' | 'Image model',
+  label: 'Fast model' | 'Vision model' | 'Compaction model',
   modelName: string,
   availableModels: AvailableModel[],
   hint: string,
@@ -261,18 +249,6 @@ function formatUnavailableCompactionModelMessage(
     modelName,
     availableModels,
     COMPACTION_MODEL_CONFIGURATION_HINT,
-  );
-}
-
-function formatUnavailableImageModelMessage(
-  modelName: string,
-  availableModels: AvailableModel[],
-): string {
-  return formatUnavailableAuxModelMessage(
-    'Image model',
-    modelName,
-    availableModels,
-    IMAGE_MODEL_CONFIGURATION_HINT,
   );
 }
 
@@ -329,20 +305,14 @@ function formatNonVisionModelWarning(modelName: string): string {
 // Get an array of the available model IDs as strings, filtered by mode
 function getAvailableModelIds(
   context: CommandContext,
-  mode: 'main' | 'fast' | 'vision' | 'compaction' | 'image' = 'main',
+  mode: 'main' | 'fast' | 'vision' | 'compaction' = 'main',
 ) {
   const { services } = context;
   const { config } = services;
   if (!config) {
     return [];
   }
-  const models =
-    mode === 'image'
-      ? config.getAllConfiguredModels()
-      : config.getAvailableModels();
-  const availableModels = models.filter((m) => {
-    if (mode === 'image')
-      return isImageGenerationCapable(m) && !m.fastOnly && !m.voiceOnly;
+  const availableModels = config.getAvailableModels().filter((m) => {
     if (mode === 'vision') return !m.fastOnly && !m.voiceOnly && !m.imageOnly;
     if (mode === 'fast') return !m.voiceOnly && !m.imageOnly && !m.visionOnly;
     // 'main' and 'compaction' exclude all selector-only models.
@@ -356,11 +326,11 @@ export const modelCommand: SlashCommand = {
   completionPriority: 100,
   get description() {
     return t(
-      'Switch the model for this session (--fast for suggestion model, --vision for the vision bridge model, --compaction for chat compression model, --image for the image generation model, --project to persist to project settings, --global to persist to user settings, [model-id] to switch immediately, or [model-id] [prompt] to run a one-off prompt on another model; the inline prompt is sent verbatim without @file expansion).',
+      'Switch the model for this session (--fast for suggestion model, --vision for the vision bridge model, --compaction for chat compression model, --project to persist to project settings, --global to persist to user settings, [model-id] to switch immediately, or [model-id] [prompt] to run a one-off prompt on another model; the inline prompt is sent verbatim without @file expansion).',
     );
   },
   argumentHint:
-    '[--fast|--vision|--compaction|--image] [--project|--global] [<model-id>] | <model-id> <prompt>',
+    '[--fast|--vision|--compaction] [--project|--global] [<model-id>] | <model-id> <prompt>',
   kind: CommandKind.BUILT_IN,
   supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
   completion: async (context, partialArg) => {
@@ -385,10 +355,6 @@ export const modelCommand: SlashCommand = {
           ),
         },
         {
-          value: '--image',
-          description: t('Set the model used to generate images'),
-        },
-        {
           value: '--project',
           description: t(
             'Persist the model selection to the project settings (workspace scope)',
@@ -406,13 +372,12 @@ export const modelCommand: SlashCommand = {
       }
       const trimmed = partialArg.trim();
       if (trimmed) {
-        let mode: 'main' | 'fast' | 'vision' | 'compaction' | 'image' = 'main';
+        let mode: 'main' | 'fast' | 'vision' | 'compaction' = 'main';
         // Strip all known flags to isolate the model prefix for completion
         const modelPrefix = trimmed
           .replace(/(?:^|\s)--fast(?:\s|$)/, ' ')
           .replace(/(?:^|\s)--vision(?:\s|$)/, ' ')
           .replace(/(?:^|\s)--compaction(?:\s|$)/, ' ')
-          .replace(/(?:^|\s)--image(?:\s|$)/, ' ')
           .replace(/(?:^|\s)--project(?:\s|$)/, ' ')
           .replace(/(?:^|\s)--global(?:\s|$)/, ' ')
           .trim();
@@ -420,7 +385,6 @@ export const modelCommand: SlashCommand = {
         else if (/(?:^|\s)--vision(?:\s|$)/.test(trimmed)) mode = 'vision';
         else if (/(?:^|\s)--compaction(?:\s|$)/.test(trimmed))
           mode = 'compaction';
-        else if (/(?:^|\s)--image(?:\s|$)/.test(trimmed)) mode = 'image';
         return getAvailableModelIds(context, mode).filter((id) =>
           id.startsWith(modelPrefix),
         );
@@ -466,7 +430,7 @@ export const modelCommand: SlashCommand = {
       };
     }
     const auxiliarySelection =
-      /(?:^|\s)--(?:fast|vision|compaction|image)(?:\s|$)/.test(rawArgs);
+      /(?:^|\s)--(?:fast|vision|compaction)(?:\s|$)/.test(rawArgs);
     if (
       (hasProject &&
         context.executionPolicy?.allowWorkspaceSettingsWrite === false) ||
@@ -797,121 +761,6 @@ export const modelCommand: SlashCommand = {
         type: 'message',
         messageType: 'info',
         content: t('Compaction Model') + ': ' + modelName + scopeSuffix,
-      };
-    }
-
-    const isImageModelCommand =
-      args === '--image' || args.startsWith('--image ');
-    if (isImageModelCommand) {
-      const modelName = args.replace('--image', '').trim();
-      if (!modelName) {
-        if (context.executionMode !== 'interactive') {
-          const imageModel =
-            context.services.settings?.merged?.imageModel?.trim();
-          return {
-            type: 'message',
-            messageType: 'info',
-            content: t(
-              'Current image model: {{imageModel}}\nUse "/model --image <model-id>" to set the image generation model.',
-              {
-                imageModel: imageModel
-                  ? formatVisionModelSettingForDisplay(imageModel)
-                  : t('not set'),
-              },
-            ),
-          };
-        }
-        return {
-          type: 'dialog',
-          dialog: 'image-model',
-          ...persistScopeSpread(scopeOverride),
-        };
-      }
-      if (!settings) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: t('Settings service not available.'),
-        };
-      }
-
-      const selector = (() => {
-        try {
-          return resolveModelId(modelName);
-        } catch {
-          return undefined;
-        }
-      })();
-      if (!selector) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: formatUnavailableImageModelMessage(modelName, []),
-        };
-      }
-
-      const availableModels = (
-        selector.authType
-          ? config.getAvailableModelsForAuthType(selector.authType)
-          : config.getAllConfiguredModels()
-      ).filter(
-        (model) =>
-          isImageGenerationCapable(model) &&
-          !model.fastOnly &&
-          !model.voiceOnly,
-      );
-      const matchingModels = availableModels.filter(
-        (model) => model.id === selector.modelId,
-      );
-      if (matchingModels.length > 1) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: t(
-            "Image model '{{modelName}}' matches multiple configured endpoints. Run /model --image without an argument and choose the exact endpoint.",
-            { modelName },
-          ),
-        };
-      }
-      const matched = matchingModels[0];
-      if (!matched) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: selector.authType
-            ? formatUnavailableModelMessage(
-                'Image model',
-                selector.modelId,
-                selector.authType,
-                availableModels,
-              )
-            : formatUnavailableImageModelMessage(modelName, availableModels),
-        };
-      }
-
-      const qualifiedModelName = `${
-        selector.authType ?? matched.authType
-      }:${selector.modelId}`;
-      const imageModel = matched.baseUrl
-        ? `${qualifiedModelName}\0${matched.baseUrl}`
-        : qualifiedModelName;
-      if (!config.resolveImageGenerationModel(imageModel)) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: t(
-            "Image model '{{modelName}}' must declare a valid HTTPS baseUrl and credential environment variable.",
-            { modelName },
-          ),
-        };
-      }
-
-      persistSetting(settings, 'imageModel', imageModel, scopeOverride);
-      await config.setImageModel(imageModel);
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: t('Image Model') + ': ' + modelName + scopeSuffix,
       };
     }
 

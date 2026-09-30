@@ -360,9 +360,6 @@ vi.mock('../tools/shell', () => ({
 vi.mock('../tools/write-file', () => ({
   WriteFileTool: createToolMock('write_file'),
 }));
-vi.mock('../tools/web-fetch', () => ({
-  WebFetchTool: createToolMock('web_fetch'),
-}));
 vi.mock('../tools/read-many-files', () => ({
   ReadManyFilesTool: createToolMock('read_many_files'),
 }));
@@ -1688,82 +1685,6 @@ describe('Server Config (config.ts)', () => {
 
       config.setShellExecutionConfig({ terminalWidth: 120 });
       expect(config.getShellExecutionConfig().pager).toBe('less');
-    });
-  });
-
-  describe('omni quarantine budget getters', () => {
-    it('passes through positive settings', () => {
-      const config = new Config({
-        ...baseParams,
-        omniQuarantineRetentionDays: 3,
-        omniQuarantineMaxBytes: 1024,
-      });
-      expect(config.getOmniQuarantineRetentionDays()).toBe(3);
-      expect(config.getOmniQuarantineMaxBytes()).toBe(1024);
-    });
-
-    it.each([
-      ['unset', undefined],
-      ['zero', 0],
-      ['negative', -1],
-      ['NaN', Number.NaN],
-      ['Infinity', Number.POSITIVE_INFINITY],
-    ])(
-      'falls back to defaults on a %s setting (a bad value must not expire the whole quarantine)',
-      (_label, bad) => {
-        const config = new Config({
-          ...baseParams,
-          omniQuarantineRetentionDays: bad,
-          omniQuarantineMaxBytes: bad,
-        });
-        expect(config.getOmniQuarantineRetentionDays()).toBe(7);
-        expect(config.getOmniQuarantineMaxBytes()).toBe(5 * 1024 * 1024 * 1024);
-      },
-    );
-  });
-
-  describe('omni storage GC getters (settings → sweep knobs)', () => {
-    it('passes through valid settings', () => {
-      const config = new Config({
-        ...baseParams,
-        omniStorageRetentionDays: 3,
-        omniStorageMaxTotalBytes: 1024,
-      });
-      expect(config.getOmniStorageRetentionDays()).toBe(3);
-      expect(config.getOmniStorageMaxTotalBytes()).toBe(1024);
-    });
-
-    it.each([
-      ['unset', undefined],
-      ['zero', 0],
-      ['negative', -1],
-      ['NaN', Number.NaN],
-      ['Infinity', Number.POSITIVE_INFINITY],
-      // Sub-day retention would gut the multi-process grace window the
-      // GC's safety argument leans on — the schema promises minimum 1.
-      ['sub-day', 0.5],
-    ])('retentionDays falls back to 14 on a %s setting', (_label, bad) => {
-      const config = new Config({
-        ...baseParams,
-        omniStorageRetentionDays: bad,
-      });
-      expect(config.getOmniStorageRetentionDays()).toBe(14);
-    });
-
-    it.each([
-      ['unset', undefined],
-      ['zero', 0],
-      ['negative', -1],
-      ['NaN', Number.NaN],
-      ['Infinity', Number.POSITIVE_INFINITY],
-    ])('maxTotalBytes falls back to 20 GiB on a %s setting', (_label, bad) => {
-      const config = new Config({
-        ...baseParams,
-        omniStorageMaxTotalBytes: bad,
-      });
-      expect(config.getOmniStorageMaxTotalBytes()).toBe(
-        20 * 1024 * 1024 * 1024,
-      );
     });
   });
 
@@ -3209,26 +3130,6 @@ describe('Server Config (config.ts)', () => {
       );
       expect(parent.getTargetDir()).toBe(path.resolve(TARGET_DIR));
     });
-    it('keeps session approval independent of nested agent and worktree modes', () => {
-      const parent = new Config({
-        ...baseParams,
-        approvalMode: ApprovalMode.DEFAULT,
-      });
-      const child = deriveConfig(parent, {
-        getApprovalMode: () => ApprovalMode.AUTO_EDIT,
-      });
-      const nested = deriveWorktreeConfig(
-        child,
-        '/tmp/native-permission-worktree',
-      );
-      const wrapper = Object.create(nested) as Config;
-      expect(wrapper.getApprovalMode()).toBe(ApprovalMode.AUTO_EDIT);
-      expect(wrapper.getSessionApprovalMode()).toBe(ApprovalMode.DEFAULT);
-      vi.spyOn(parent, 'getApprovalMode').mockReturnValue(ApprovalMode.YOLO);
-      expect(wrapper.getSessionApprovalMode()).toBe(ApprovalMode.YOLO);
-      expect(wrapper.getApprovalMode()).toBe(ApprovalMode.AUTO_EDIT);
-    });
-
     it('applies public getter overrides without mutating the parent', () => {
       const parent = new Config(baseParams);
       const child = deriveConfig(parent, {
@@ -3850,18 +3751,14 @@ describe('Server Config (config.ts)', () => {
         mcpServers: {
           implicit: { command: 'node', args: ['server.js'] },
           explicit: { command: 'node', cwd: explicitCwd },
-          remote: { httpUrl: 'https://example.test/mcp' },
           sdk: { type: 'sdk', command: 'placeholder' },
-          tcpWithCommand: { tcp: 'tcp://example.test:9000', command: 'node' },
         },
       });
 
       const servers = config.getMcpServers()!;
       expect(servers['implicit']?.cwd).toBeUndefined();
       expect(servers['explicit']?.cwd).toBe(explicitCwd);
-      expect(servers['remote']?.cwd).toBeUndefined();
       expect(servers['sdk']?.cwd).toBeUndefined();
-      expect(servers['tcpWithCommand']?.cwd).toBeUndefined();
     });
 
     it('isMcpServerDisabled supports glob patterns in excludedMcpServers', () => {
@@ -4207,52 +4104,6 @@ describe('Server Config (config.ts)', () => {
       config.startNewSession('replacement-session');
 
       expect(await permissionManager.evaluate(gitPush)).toBe('ask');
-    });
-
-    it('resets the web search session budget at the session boundary', async () => {
-      // Subagents and every web_search call share this counter; a new
-      // session starts with the full budget.
-      const config = new Config({ ...baseParams });
-      await config.initialize({
-        skipLlmInitialization: true,
-        skipHooks: true,
-        skipMcpDiscovery: true,
-        skipSkillManager: true,
-        skipFileCheckpointing: true,
-      });
-      config.getWebSearchSessionUsage().calls = 7;
-
-      config.startNewSession('replacement-session');
-
-      expect(config.getWebSearchSessionUsage().calls).toBe(0);
-    });
-
-    it('keeps the web search session budget when the same session id restarts', async () => {
-      const config = new Config({ ...baseParams });
-      await config.initialize({
-        skipLlmInitialization: true,
-        skipHooks: true,
-        skipMcpDiscovery: true,
-        skipSkillManager: true,
-        skipFileCheckpointing: true,
-      });
-      config.getWebSearchSessionUsage().calls = 7;
-
-      config.startNewSession(config.getSessionId());
-
-      expect(config.getWebSearchSessionUsage().calls).toBe(7);
-    });
-
-    it('shares the web search session budget with derived configs', () => {
-      // A derived Config is `Object.create(base)`: counting on it must reach
-      // the base counter instead of shadowing it with an own property.
-      const config = new Config({ ...baseParams });
-      const derived = deriveConfig(config);
-
-      derived.getWebSearchSessionUsage().calls++;
-
-      expect(config.getWebSearchSessionUsage().calls).toBe(1);
-      expect(Object.hasOwn(derived, 'webSearchSessionUsage')).toBe(false);
     });
 
     it('records no lifecycle transition when resuming the current session id', async () => {
@@ -7253,315 +7104,6 @@ describe('Server Config (config.ts)', () => {
       ).mock.calls.map((call) => call[0]);
       expect(registeredNames).not.toContain(ToolNames.ARTIFACT);
       expect(registeredNames).not.toContain(ToolNames.RECORD_ARTIFACT);
-    });
-
-    it('registers image_gen when a dual-role model is selected', async () => {
-      const baseUrl = 'https://images.example.com/api/v1';
-      const config = new Config({
-        ...baseParams,
-        authType: AuthType.USE_OPENAI,
-        model: 'dual-role-model',
-        modelProvidersConfig: {
-          openai: [
-            {
-              id: 'dual-role-model',
-              baseUrl,
-              envKey: 'TEST_IMAGE_GENERATION_KEY',
-              supportsImageGeneration: true,
-            },
-          ],
-        },
-        imageModel: `openai:dual-role-model\0${baseUrl}`,
-      });
-      await config.initialize();
-
-      const registeredNames = (
-        ToolRegistry.prototype.registerFactory as Mock
-      ).mock.calls.map((call) => call[0]);
-      expect(registeredNames).toContain(ToolNames.IMAGE_GEN);
-      expect(config.getModel()).toBe('dual-role-model');
-      expect(config.getImageGenerationConfig()).toEqual({
-        model: 'dual-role-model',
-        baseUrl,
-        apiKeyEnv: 'TEST_IMAGE_GENERATION_KEY',
-      });
-    });
-
-    it('registers image_gen for a legacy image-and-vision-only route', async () => {
-      const baseUrl = 'https://images.example.com/api/v1';
-      const config = new Config({
-        ...baseParams,
-        modelProvidersConfig: {
-          openai: [
-            {
-              id: 'qwen-image-2.0',
-              baseUrl,
-              envKey: 'TEST_IMAGE_GENERATION_KEY',
-              imageOnly: true,
-              visionOnly: true,
-            },
-          ],
-        },
-        imageModel: `openai:qwen-image-2.0\0${baseUrl}`,
-      });
-      await config.initialize();
-
-      const registeredNames = (
-        ToolRegistry.prototype.registerFactory as Mock
-      ).mock.calls.map((call) => call[0]);
-      expect(registeredNames).toContain(ToolNames.IMAGE_GEN);
-      expect(config.getImageGenerationConfig()).toEqual({
-        model: 'qwen-image-2.0',
-        baseUrl,
-        apiKeyEnv: 'TEST_IMAGE_GENERATION_KEY',
-      });
-    });
-
-    it('does not register image_gen without an image model selection', async () => {
-      const config = new Config({
-        ...baseParams,
-        modelProvidersConfig: {
-          openai: [
-            {
-              id: 'qwen-image-2.0',
-              baseUrl: 'https://images.example.com/api/v1',
-              envKey: 'TEST_IMAGE_GENERATION_KEY',
-              imageOnly: true,
-            },
-          ],
-        },
-      });
-      await config.initialize();
-
-      const registeredNames = (
-        ToolRegistry.prototype.registerFactory as Mock
-      ).mock.calls.map((call) => call[0]);
-      expect(registeredNames).not.toContain(ToolNames.IMAGE_GEN);
-    });
-
-    it('does not use a protocol default as the image generation endpoint', () => {
-      const config = new Config({
-        ...baseParams,
-        modelProvidersConfig: {
-          openai: [
-            {
-              id: 'qwen-image-2.0',
-              envKey: 'TEST_IMAGE_GENERATION_KEY',
-              imageOnly: true,
-            },
-          ],
-        },
-        imageModel: 'openai:qwen-image-2.0',
-      });
-
-      expect(config.getImageGenerationConfig()).toBeUndefined();
-    });
-
-    it('rejects a route without image generation capability', () => {
-      const baseUrl = 'https://images.example.com/api/v1';
-      const config = new Config({
-        ...baseParams,
-        modelProvidersConfig: {
-          openai: [
-            {
-              id: 'chat-model',
-              baseUrl,
-              envKey: 'TEST_IMAGE_GENERATION_KEY',
-            },
-          ],
-        },
-      });
-
-      expect(
-        config.resolveImageGenerationModel(`openai:chat-model\0${baseUrl}`),
-      ).toBeUndefined();
-    });
-
-    it('resolves a vision-only image generation route with explicit capability', () => {
-      const baseUrl = 'https://images.example.com/api/v1';
-      const config = new Config({
-        ...baseParams,
-        modelProvidersConfig: {
-          openai: [
-            {
-              id: 'vision-only-model',
-              baseUrl,
-              envKey: 'TEST_IMAGE_GENERATION_KEY',
-              visionOnly: true,
-              supportsImageGeneration: true,
-            },
-          ],
-        },
-      });
-
-      expect(
-        config.resolveImageGenerationModel(
-          `openai:vision-only-model\0${baseUrl}`,
-        ),
-      ).toEqual({
-        model: 'vision-only-model',
-        baseUrl,
-        apiKeyEnv: 'TEST_IMAGE_GENERATION_KEY',
-      });
-    });
-
-    it('rejects an image generation route without an environment key', () => {
-      const baseUrl = 'https://images.example.com/api/v1';
-      const config = new Config({
-        ...baseParams,
-        modelProvidersConfig: {
-          openai: [
-            {
-              id: 'dual-role-model',
-              baseUrl,
-              supportsImageGeneration: true,
-            },
-          ],
-        },
-      });
-
-      expect(
-        config.resolveImageGenerationModel(
-          `openai:dual-role-model\0${baseUrl}`,
-        ),
-      ).toBeUndefined();
-    });
-
-    it('rejects an ambiguous image generation route', () => {
-      const config = new Config({
-        ...baseParams,
-        modelProvidersConfig: {
-          openai: [
-            {
-              id: 'dual-role-model',
-              baseUrl: 'https://images-a.example.com/api/v1',
-              envKey: 'TEST_IMAGE_GENERATION_KEY',
-              supportsImageGeneration: true,
-            },
-            {
-              id: 'dual-role-model',
-              baseUrl: 'https://images-b.example.com/api/v1',
-              envKey: 'TEST_IMAGE_GENERATION_KEY',
-              supportsImageGeneration: true,
-            },
-          ],
-        },
-      });
-
-      expect(
-        config.resolveImageGenerationModel('openai:dual-role-model'),
-      ).toBeUndefined();
-    });
-
-    it('retains an image selection while the tool registry is still initializing', async () => {
-      const baseUrl = 'https://images.example.com/api/v1';
-      const config = new Config({
-        ...baseParams,
-        modelProvidersConfig: {
-          openai: [
-            {
-              id: 'qwen-image-2.0',
-              baseUrl,
-              envKey: 'TEST_IMAGE_GENERATION_KEY',
-              imageOnly: true,
-            },
-          ],
-        },
-      });
-      let release!: (registry: ToolRegistry) => void;
-      const createRegistry = vi
-        .spyOn(config, 'createToolRegistry')
-        .mockReturnValue(
-          new Promise((resolve) => {
-            release = resolve;
-          }),
-        );
-      const initializing = config.initialize();
-      await vi.waitFor(() => expect(createRegistry).toHaveBeenCalled());
-      const selection = `openai:qwen-image-2.0\0${baseUrl}`;
-      try {
-        await expect(config.setImageModel(selection)).resolves.toBeUndefined();
-      } finally {
-        release(new ToolRegistry(config));
-        await initializing;
-      }
-      expect(config.getImageGenerationConfig()).toMatchObject({
-        model: 'qwen-image-2.0',
-        baseUrl,
-      });
-      await config.setImageModel(selection);
-      expect(ToolRegistry.prototype.ensureTool).toHaveBeenCalledWith(
-        ToolNames.IMAGE_GEN,
-      );
-    });
-
-    it('registers image_gen immediately when the image model changes at runtime', async () => {
-      const baseUrl = 'https://images.example.com/api/v1';
-      const config = new Config({
-        ...baseParams,
-        modelProvidersConfig: {
-          openai: [
-            {
-              id: 'qwen-image-2.0',
-              baseUrl,
-              envKey: 'TEST_IMAGE_GENERATION_KEY',
-              imageOnly: true,
-            },
-          ],
-        },
-      });
-      await config.initialize();
-      vi.mocked(ToolRegistry.prototype.registerFactory).mockClear();
-
-      const refreshTools = vi
-        .spyOn(config.getLlmClient(), 'setTools')
-        .mockResolvedValue(undefined);
-      await config.setImageModel(`openai:qwen-image-2.0\0${baseUrl}`);
-
-      expect(ToolRegistry.prototype.registerFactory).toHaveBeenCalledWith(
-        ToolNames.IMAGE_GEN,
-        expect.any(Function),
-      );
-      expect(ToolRegistry.prototype.ensureTool).toHaveBeenCalledWith(
-        ToolNames.IMAGE_GEN,
-      );
-      expect(refreshTools).toHaveBeenCalledOnce();
-      await config.setImageModel('');
-      expect(config.isImageGenerationEnabled()).toBe(false);
-      expect(refreshTools).toHaveBeenCalledTimes(2);
-    });
-
-    it('does not register image_gen when the permission manager disables it', async () => {
-      const baseUrl = 'https://images.example.com/api/v1';
-      const config = new Config({
-        ...baseParams,
-        modelProvidersConfig: {
-          openai: [
-            {
-              id: 'qwen-image-2.0',
-              baseUrl,
-              envKey: 'TEST_IMAGE_GENERATION_KEY',
-              imageOnly: true,
-            },
-          ],
-        },
-      });
-      await config.initialize();
-      vi.mocked(ToolRegistry.prototype.registerFactory).mockClear();
-      (
-        config as unknown as {
-          permissionManager: { isToolEnabled: () => Promise<boolean> };
-        }
-      ).permissionManager = {
-        isToolEnabled: vi.fn().mockResolvedValue(false),
-      };
-
-      await config.setImageModel(`openai:qwen-image-2.0\0${baseUrl}`);
-
-      expect(ToolRegistry.prototype.registerFactory).not.toHaveBeenCalledWith(
-        ToolNames.IMAGE_GEN,
-        expect.any(Function),
-      );
     });
 
     it('registers both artifact tools by default for interactive sessions', async () => {
@@ -11716,7 +11258,7 @@ describe('Server Config (config.ts)', () => {
       const config = new Config({
         ...baseParams,
         bareMode: true,
-        coreTools: [ToolNames.WEB_FETCH],
+        coreTools: [ToolNames.WRITE_FILE],
       });
       await config.initialize();
 
@@ -11880,299 +11422,6 @@ describe('Server Config (config.ts)', () => {
       expect(subagentNames).toContain(ToolNames.SEND_MESSAGE);
     });
 
-    it('registers web_search when enabled with a usable env-declared backend', async () => {
-      process.env['WEB_SEARCH_GATE_TEST_KEY'] = 'sk-test';
-      try {
-        const config = new Config({
-          ...baseParams,
-          webSearch: {
-            enabled: true,
-            model: 'qwen3.6-plus',
-            baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-            apiKeyEnv: 'WEB_SEARCH_GATE_TEST_KEY',
-          },
-        });
-        await config.initialize();
-
-        const registerToolMock = (
-          (await vi.importMock('../tools/tool-registry')) as {
-            ToolRegistry: { prototype: { registerFactory: Mock } };
-          }
-        ).ToolRegistry.prototype.registerFactory;
-
-        expect(
-          (registerToolMock as Mock).mock.calls.map((call) => call[0]),
-        ).toContain(ToolNames.WEB_SEARCH);
-        expect(
-          config.getWarnings().filter((w) => w.includes('WebSearch')),
-        ).toEqual([]);
-      } finally {
-        delete process.env['WEB_SEARCH_GATE_TEST_KEY'];
-      }
-    });
-
-    it('does not register web_search or push a notice when nothing is configured and no provider can back it', async () => {
-      const config = new Config(baseParams);
-      await config.initialize();
-
-      const registerToolMock = (
-        (await vi.importMock('../tools/tool-registry')) as {
-          ToolRegistry: { prototype: { registerFactory: Mock } };
-        }
-      ).ToolRegistry.prototype.registerFactory;
-
-      expect(
-        (registerToolMock as Mock).mock.calls.map((call) => call[0]),
-      ).not.toContain(ToolNames.WEB_SEARCH);
-      expect(
-        config.getWarnings().filter((w) => w.includes('WebSearch')),
-      ).toEqual([]);
-    });
-
-    it('registers web_search with no configuration when the primary model runs on a ModelStudio provider', async () => {
-      process.env['DASHSCOPE_API_KEY'] = 'sk-test';
-      try {
-        const config = new Config({
-          ...baseParams,
-          authType: AuthType.USE_OPENAI,
-          model: 'qwen3.6-plus',
-          modelProvidersConfig: {
-            openai: [
-              {
-                id: 'qwen3.6-plus',
-                baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-                envKey: 'DASHSCOPE_API_KEY',
-              },
-            ],
-          },
-        });
-        await config.initialize();
-
-        const registerToolMock = (
-          (await vi.importMock('../tools/tool-registry')) as {
-            ToolRegistry: { prototype: { registerFactory: Mock } };
-          }
-        ).ToolRegistry.prototype.registerFactory;
-
-        expect(
-          (registerToolMock as Mock).mock.calls.map((call) => call[0]),
-        ).toContain(ToolNames.WEB_SEARCH);
-        expect(
-          config.getWarnings().filter((w) => w.includes('WebSearch')),
-        ).toEqual([]);
-      } finally {
-        delete process.env['DASHSCOPE_API_KEY'];
-      }
-    });
-
-    it('registers web_search for an env-only configuration pointing at a DashScope host', async () => {
-      // No modelProviders entry at all: the endpoint comes from
-      // OPENAI_BASE_URL and the key variable is the auth type's default. The
-      // runtime model snapshot is not captured until after the tool registry
-      // is built, so the gate must read the resolved generation config.
-      vi.stubEnv('OPENAI_API_KEY', 'sk-env-only');
-      try {
-        const config = new Config({
-          ...baseParams,
-          authType: AuthType.USE_OPENAI,
-          model: 'qwen3.6-plus',
-          // What the CLI resolver produces from OPENAI_BASE_URL /
-          // OPENAI_API_KEY: an endpoint but no key variable name.
-          generationConfig: {
-            authType: AuthType.USE_OPENAI,
-            model: 'qwen3.6-plus',
-            baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-            apiKey: 'sk-env-only',
-          },
-          generationConfigSources: {
-            apiKey: { kind: 'env', envKey: 'OPENAI_API_KEY' },
-          },
-        });
-        await config.initialize();
-
-        const registerToolMock = (
-          (await vi.importMock('../tools/tool-registry')) as {
-            ToolRegistry: { prototype: { registerFactory: Mock } };
-          }
-        ).ToolRegistry.prototype.registerFactory;
-
-        expect(
-          (registerToolMock as Mock).mock.calls.map((call) => call[0]),
-        ).toContain(ToolNames.WEB_SEARCH);
-        expect(
-          config.getWarnings().filter((w) => w.includes('WebSearch')),
-        ).toEqual([]);
-      } finally {
-        vi.unstubAllEnvs();
-      }
-    });
-
-    it('leaves web_search off for an env-only configuration on a non-DashScope host', async () => {
-      vi.stubEnv('OPENAI_API_KEY', 'sk-env-only');
-      try {
-        const config = new Config({
-          ...baseParams,
-          authType: AuthType.USE_OPENAI,
-          model: 'gpt-5',
-          generationConfig: {
-            authType: AuthType.USE_OPENAI,
-            model: 'gpt-5',
-            baseUrl: 'https://api.openai.com/v1',
-          },
-        });
-        await config.initialize();
-
-        const registerToolMock = (
-          (await vi.importMock('../tools/tool-registry')) as {
-            ToolRegistry: { prototype: { registerFactory: Mock } };
-          }
-        ).ToolRegistry.prototype.registerFactory;
-
-        expect(
-          (registerToolMock as Mock).mock.calls.map((call) => call[0]),
-        ).not.toContain(ToolNames.WEB_SEARCH);
-        expect(
-          config.getWarnings().filter((w) => w.includes('WebSearch')),
-        ).toEqual([]);
-      } finally {
-        vi.unstubAllEnvs();
-      }
-    });
-
-    it('does not activate a legacy model-only web search configuration', async () => {
-      process.env['DASHSCOPE_API_KEY'] = 'sk-test';
-      try {
-        const config = new Config({
-          ...baseParams,
-          authType: AuthType.USE_OPENAI,
-          model: 'qwen3.6-plus',
-          modelProvidersConfig: {
-            openai: [
-              {
-                id: 'qwen3.6-plus',
-                baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-                envKey: 'DASHSCOPE_API_KEY',
-              },
-            ],
-          },
-          webSearch: { model: 'qwen3.6-plus' },
-        });
-        await config.initialize();
-
-        const registerToolMock = (
-          (await vi.importMock('../tools/tool-registry')) as {
-            ToolRegistry: { prototype: { registerFactory: Mock } };
-          }
-        ).ToolRegistry.prototype.registerFactory;
-        expect(
-          (registerToolMock as Mock).mock.calls.map((call) => call[0]),
-        ).not.toContain(ToolNames.WEB_SEARCH);
-      } finally {
-        delete process.env['DASHSCOPE_API_KEY'];
-      }
-    });
-
-    it('leaves web_search off without a notice when the primary model runs on a provider that cannot back it', async () => {
-      process.env['OPENROUTER_API_KEY'] = 'sk-or-test';
-      try {
-        const config = new Config({
-          ...baseParams,
-          authType: AuthType.USE_OPENAI,
-          model: 'z-ai/glm-4.5-air:free',
-          modelProvidersConfig: {
-            openai: [
-              {
-                id: 'z-ai/glm-4.5-air:free',
-                baseUrl: 'https://openrouter.ai/api/v1',
-                envKey: 'OPENROUTER_API_KEY',
-              },
-            ],
-          },
-        });
-        await config.initialize();
-
-        const registerToolMock = (
-          (await vi.importMock('../tools/tool-registry')) as {
-            ToolRegistry: { prototype: { registerFactory: Mock } };
-          }
-        ).ToolRegistry.prototype.registerFactory;
-
-        expect(
-          (registerToolMock as Mock).mock.calls.map((call) => call[0]),
-        ).not.toContain(ToolNames.WEB_SEARCH);
-        expect(
-          config.getWarnings().filter((w) => w.includes('WebSearch')),
-        ).toEqual([]);
-      } finally {
-        delete process.env['OPENROUTER_API_KEY'];
-      }
-    });
-
-    it('does not register web_search when it is turned off explicitly', async () => {
-      process.env['DASHSCOPE_API_KEY'] = 'sk-test';
-      try {
-        const config = new Config({
-          ...baseParams,
-          authType: AuthType.USE_OPENAI,
-          model: 'qwen3.6-plus',
-          modelProvidersConfig: {
-            openai: [
-              {
-                id: 'qwen3.6-plus',
-                baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-                envKey: 'DASHSCOPE_API_KEY',
-              },
-            ],
-          },
-          webSearch: { enabled: false },
-        });
-        await config.initialize();
-
-        const registerToolMock = (
-          (await vi.importMock('../tools/tool-registry')) as {
-            ToolRegistry: { prototype: { registerFactory: Mock } };
-          }
-        ).ToolRegistry.prototype.registerFactory;
-
-        expect(
-          (registerToolMock as Mock).mock.calls.map((call) => call[0]),
-        ).not.toContain(ToolNames.WEB_SEARCH);
-        expect(
-          config.getWarnings().filter((w) => w.includes('WebSearch')),
-        ).toEqual([]);
-      } finally {
-        delete process.env['DASHSCOPE_API_KEY'];
-      }
-    });
-
-    it('pushes a one-time notice when web_search is enabled but misconfigured', async () => {
-      // Enabled without a model: the tool must stay off with a diagnostic
-      // notice, pushed exactly once across registry rebuilds.
-      const config = new Config({
-        ...baseParams,
-        webSearch: { enabled: true },
-      });
-      await config.initialize();
-
-      const registerToolMock = (
-        (await vi.importMock('../tools/tool-registry')) as {
-          ToolRegistry: { prototype: { registerFactory: Mock } };
-        }
-      ).ToolRegistry.prototype.registerFactory;
-      expect(
-        (registerToolMock as Mock).mock.calls.map((call) => call[0]),
-      ).not.toContain(ToolNames.WEB_SEARCH);
-
-      const webSearchNotices = () =>
-        config.getWarnings().filter((w) => w.includes('WebSearch'));
-      expect(webSearchNotices()).toHaveLength(1);
-      expect(webSearchNotices()[0]).toContain('no search model');
-
-      // A registry rebuild must not duplicate the notice.
-      await config.createToolRegistry(undefined, { skipDiscovery: true });
-      expect(webSearchNotices()).toHaveLength(1);
-    });
-
     it('should register a tool if coreTools contains an argument-specific pattern', async () => {
       const params: ConfigParameters = {
         ...baseParams,
@@ -12295,7 +11544,6 @@ describe('Server Config (config.ts)', () => {
         'Glob',
         'ListFiles',
         'Shell',
-        'WebFetch',
       ];
       const params: ConfigParameters = {
         ...baseParams,
@@ -12335,7 +11583,6 @@ describe('Server Config (config.ts)', () => {
       expect(registered).toContain(ToolNames.GREP);
       expect(registered).toContain(ToolNames.GLOB);
       expect(registered).toContain(ToolNames.SHELL);
-      expect(registered).toContain(ToolNames.WEB_FETCH);
 
       // Unlisted built-ins are NOT registered eagerly — their schemas are
       // never sent in the eager model request (#9827). But since #10075 they
@@ -12716,61 +11963,6 @@ describe('Server Config (config.ts)', () => {
           registerToolMock as Mock
         ).mock.calls.some((call) => call[0] === ToolNames.SHELL);
         expect(wasShellToolRegistered).toBe(true);
-      });
-    });
-
-    describe('omni media-memory recall exposure (D10)', () => {
-      /** Register a fresh omni-enabled registry and report what it holds.
-       * `createToolRegistry` (not `initialize`) is the unit under test: it
-       * is where the mode decision happens, and it runs before the omni
-       * normalization block in startup. */
-      async function registeredToolNames(
-        omniMemory?: Record<string, unknown>,
-      ): Promise<string[]> {
-        const config = new Config({
-          ...baseParams,
-          omniEnabled: true,
-          ...(omniMemory !== undefined ? { omniMemory } : {}),
-        });
-        await config.createToolRegistry(undefined, { skipDiscovery: true });
-        const registerFactoryMock = (
-          (await vi.importMock('../tools/tool-registry')) as {
-            ToolRegistry: { prototype: { registerFactory: Mock } };
-          }
-        ).ToolRegistry.prototype.registerFactory;
-        return (registerFactoryMock as Mock).mock.calls.map(
-          (call) => call[0] as string,
-        );
-      }
-
-      it('exposes the recall tool in active mode', async () => {
-        const names = await registeredToolNames({ recall: { mode: 'active' } });
-        expect(names).toContain(ToolNames.OMNI_RECALL_MEDIA_MEMORY);
-      });
-
-      it('withholds the recall tool in sideQuery mode', async () => {
-        // The two recall surfaces are mutually exclusive: in sideQuery mode
-        // the harness injects recall itself before every request. Leaving
-        // the tool registered as well would let the model spend a tool call
-        // re-fetching memory it was already handed — and the registration
-        // is decided once, here, so nothing downstream can take it back.
-        const names = await registeredToolNames({
-          recall: { mode: 'sideQuery' },
-        });
-        expect(names).not.toContain(ToolNames.OMNI_RECALL_MEDIA_MEMORY);
-        // The rest of the omni toolset still registered — proof the tool is
-        // missing because of the mode, not because omni was off.
-        expect(names).toContain(ToolNames.OMNI_DOWNSAMPLE_IMAGE);
-      });
-
-      it('aborts startup on an invalid omni.memory setting', async () => {
-        // A rejected `omni.memory` must never degrade to defaults: the
-        // default is `active`, so a typo in the mode would silently hand the
-        // model a recall tool in a session the user configured for passive
-        // injection — the exact silent fallback the normalizer forbids.
-        await expect(
-          registeredToolNames({ recall: { mode: 'passive' } }),
-        ).rejects.toThrow(/omni\.memory\.recall\.mode/);
       });
     });
   });
@@ -14379,10 +13571,10 @@ describe('visibleTools', () => {
   it('is readonly — returned set preserves config state', () => {
     const config = new Config({
       ...baseParams,
-      visibleTools: ['web_fetch'],
+      visibleTools: ['tool_a'],
     });
     const set = config.getVisibleTools();
-    expect(set.has('web_fetch')).toBe(true);
+    expect(set.has('tool_a')).toBe(true);
     // always returns the same reference
     expect(config.getVisibleTools()).toBe(set);
   });

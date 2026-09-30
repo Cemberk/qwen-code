@@ -499,8 +499,8 @@ export default {
     'このメニューは読み取り専用です。フックを追加または変更するには、settings.json を直接編集するか、Qwen Code に尋ねてください。',
   'Reopen this menu to reload hook definitions.':
     'このメニューを再度開くと、フック定義を再読み込みできます。',
-  'Hook controls and HTTP security settings require a restart.':
-    'フックの制御設定と HTTP セキュリティ設定の変更には再起動が必要です。',
+  'Hook controls require a restart.':
+    'フックの制御設定の変更には再起動が必要です。',
   'Failed to reload hook definitions: {{error}}':
     'フック定義の再読み込みに失敗しました: {{error}}',
   'Enter to select · Esc to cancel': 'Enter で選択 · Esc でキャンセル',
@@ -732,15 +732,6 @@ export default {
     'マネージド自動メモリトピックファイルを統合する。',
   'No MCP servers configured.': 'MCP servers が設定されていません',
   'Could not retrieve tool registry.': 'ツールレジストリを取得できませんでした',
-  "Successfully authenticated and refreshed tools for '{{name}}'.":
-    "'{{name}}' の認証とツール更新に成功しました",
-  "Re-discovering tools from '{{name}}'...":
-    "'{{name}}' からツールを再検出中...",
-  "Discovered {{count}} tool(s) from '{{name}}'.":
-    "'{{name}}' から {{count}} 個のツールを検出しました。",
-  'Authentication complete. Returning to server details...':
-    '認証完了。サーバー詳細に戻ります...',
-  'Authentication successful.': '認証成功。',
   'Configured MCP servers:': '設定済み MCP servers:',
   Ready: '準備完了',
   Disconnected: '切断',
@@ -857,9 +848,6 @@ export default {
   'Press Enter to confirm, Esc to cancel': 'Enter で確認、Esc でキャンセル',
   Disable: '無効化',
   Enable: '有効化',
-  Authenticate: '認証',
-  'Re-authenticate': '再認証',
-  'Clear Authentication': '認証をクリア',
   disabled: '無効',
   enabled: '有効',
   'disabled (bare mode)': '無効（ベアモード）',
@@ -867,7 +855,6 @@ export default {
   'disabled (disableAllHooks)': '無効（disableAllHooks）',
   'disabled (folder not trusted)': '無効（フォルダーが信頼されていません）',
   'disabled (turned off for this session)': '無効（このセッションでオフ）',
-  'Server:': 'サーバー:',
   Reconnect: '再接続',
   'View tools': 'ツールを表示',
   'Status:': 'ステータス:',
@@ -895,9 +882,6 @@ export default {
     'qwen --debug を実行してエラーログを確認してください',
 
   // MCP OAuth Authentication
-  'OAuth Authentication': 'OAuth 認証',
-  'Authenticating... Please complete the login in your browser.':
-    '認証中... ブラウザでログインを完了してください。',
   // MCP Tool List
   'No tools available for this server.':
     'このサーバーには使用可能なツールがありません。',
@@ -1151,8 +1135,6 @@ export default {
   '{{count}} prompts': '{{count}} プロンプト',
   '(from {{extensionName}})': '({{extensionName}} から)',
   OAuth: 'OAuth',
-  'OAuth expired': 'OAuth 期限切れ',
-  'OAuth not authenticated': 'OAuth 未認証',
   'tools and prompts will appear when ready':
     'ツールとプロンプトは準備完了後に表示されます',
   '{{count}} tools cached': '{{count}} ツール(キャッシュ済み)',
@@ -1166,11 +1148,8 @@ export default {
   'to show server and tool descriptions': 'サーバーとツールの説明を表示',
   'to show tool parameter schemas': 'tool parameter schemas を表示',
   'to hide descriptions': '説明を非表示',
-  'to authenticate with OAuth-enabled servers': 'OAuth対応サーバーで認証',
   Press: '押す',
   'to toggle tool descriptions on/off': 'ツール説明の表示/非表示を切り替え',
-  "Starting OAuth authentication for MCP server '{{name}}'...":
-    "MCP server '{{name}}' の OAuth 認証を開始中...",
   // Startup Tips
   'Tips:': 'ヒント：',
   'Use /compress when the conversation gets long to summarize history and free up context.':
@@ -1533,8 +1512,8 @@ export default {
     '現在サポートされているエディタです。サンドボックスモードでは一部のエディタが利用できない場合があります。',
   'Your preferred editor is:': '現在の優先エディタ:',
   'Open MCP management dialog': 'MCP 管理ダイアログを開く',
-  'Install an extension from a git repo or local path':
-    'git リポジトリまたはローカルパスから拡張機能をインストール',
+  'Install an extension from a local path':
+    'ローカルパスから拡張機能をインストール',
   'Disable an extension': '拡張機能を無効化',
   'Enable an extension': '拡張機能を有効化',
   'Uninstall an extension': '拡張機能をアンインストール',
@@ -1696,15 +1675,10 @@ export default {
     'インストール済みのバージョンから次のワークフロースクリプトが変更されています: {{names}}。',
   'Installation cancelled for "{{name}}".':
     '"{{name}}" のインストールをキャンセルしました。',
-  '--ref is not applicable for marketplace extensions.':
-    '--ref はマーケットプレイス拡張機能には適用できません。',
   'Extension "{{name}}" installed successfully and enabled.':
     '拡張機能 "{{name}}" をインストールし、有効化しました。',
   'The github URL, local path, or marketplace source (marketplace-url:plugin-name) of the extension to install.':
     'インストールする拡張機能の GitHub URL、ローカルパス、またはマーケットプレイスソース (marketplace-url:plugin-name)。',
-  'The git ref to install from.': 'インストール元の git ref。',
-  'Enable pre-release versions for this extension.':
-    'この拡張機能でプレリリース版を有効にします。',
   'Acknowledge the security risks of installing an extension and skip the confirmation prompt.':
     '拡張機能インストールのセキュリティリスクを了承し、確認プロンプトをスキップします。',
   'The source argument must be provided.':
@@ -1743,8 +1717,6 @@ export default {
     '拡張機能名または --all のいずれかを指定する必要があります',
   'Path:': 'パス:',
   'Type:': '種類:',
-  'Ref:': '参照:',
-  'Release tag:': 'リリースタグ:',
   'Enabled (User):': '有効 (ユーザー):',
   'Enabled (Workspace):': '有効 (ワークスペース):',
   'Context files:': 'コンテキストファイル:',
@@ -1789,12 +1761,6 @@ export default {
     '↑↓ または j/k で移動、Enter で選択、Escape でキャンセル',
   '{{count}} more above': '上にあと {{count}} 件',
   '{{count}} more below': '下にあと {{count}} 件',
-  'Press c to copy the authorization URL to your clipboard.':
-    'c キーで認証 URL をクリップボードにコピーします。',
-  'Copy request sent to your terminal. If paste is empty, copy the URL above manually.':
-    'コピー要求をターミナルに送信しました。貼り付け結果が空の場合は、上の URL を手動でコピーしてください。',
-  'Cannot write to terminal — copy the URL above manually.':
-    'ターミナルに書き込めないため、上の URL を手動でコピーしてください。',
   'Missing API key for OpenAI-compatible auth. Set settings.security.auth.apiKey, or set the {{envKeyHint}} environment variable.':
     'OpenAI 互換認証用の API Key がありません。`settings.security.auth.apiKey` を設定するか、環境変数 {{envKeyHint}} を設定してください。',
   '{{envKeyHint}} environment variable not found. Please set it in your .env file or environment variables.':

@@ -37,11 +37,7 @@ function sourceLabel(scope: McpServerScope | undefined): string {
 
 function summarize(config: MCPServerConfig): string {
   let summary: string;
-  if (config.httpUrl) {
-    summary = `${config.httpUrl} (http)`;
-  } else if (config.url) {
-    summary = `${config.url} (sse)`;
-  } else if (config.command) {
+  if (config.command) {
     summary =
       `${config.command} ${config.args?.join(' ') ?? ''} (stdio)`.replace(
         /\s+\(/,
@@ -54,9 +50,6 @@ function summarize(config: MCPServerConfig): string {
   const details: string[] = [];
   if (config.env && Object.keys(config.env).length > 0) {
     details.push(`env: ${Object.keys(config.env).join(', ')}`);
-  }
-  if (config.headers && Object.keys(config.headers).length > 0) {
-    details.push(`headers: ${Object.keys(config.headers).join(', ')}`);
   }
   return details.length > 0 ? `${summary} [${details.join('; ')}]` : summary;
 }

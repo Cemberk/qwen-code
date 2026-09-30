@@ -61,7 +61,6 @@ class ExecInvocation extends BaseToolInvocation<ExecParams, ToolResult> {
       output: unknown;
     }> = [];
     const media: Part[] = [];
-    let retainedOmniMedia = false;
     const metadata: Pick<ToolResult, 'modelOverride' | 'terminateTurn'> = {};
     const retainedTools = new Set<string>([
       ToolNames.SKILL,
@@ -122,27 +121,16 @@ class ExecInvocation extends BaseToolInvocation<ExecParams, ToolResult> {
               if ('modelOverride' in response)
                 metadata.modelOverride = response.modelOverride;
               if (response.terminateTurn) metadata.terminateTurn = true;
-              const nestedParts = (native?.parts ?? []) as Part[];
-              const hasOmniMedia =
-                this.config.isOmniEnabled() &&
-                nestedParts.some(
-                  (part) => part.fileData || part.text !== undefined,
-                );
-              if (retainedTools.has(name) || hasOmniMedia) {
+              if (retainedTools.has(name)) {
                 toolResults.push({
                   name,
                   args,
                   output: native?.response?.['output'],
                 });
-                if (hasOmniMedia) {
-                  retainedOmniMedia = true;
-                  media.push(...nestedParts);
-                } else {
-                  for (const part of nestedParts) {
-                    if (part.inlineData)
-                      media.push({ inlineData: part.inlineData });
-                    if (part.fileData) media.push({ fileData: part.fileData });
-                  }
+                for (const part of native?.parts ?? []) {
+                  if (part.inlineData)
+                    media.push({ inlineData: part.inlineData });
+                  if (part.fileData) media.push({ fileData: part.fileData });
                 }
               }
             },
@@ -211,18 +199,7 @@ class ExecInvocation extends BaseToolInvocation<ExecParams, ToolResult> {
       });
     }
     return {
-      llmContent: retainedOmniMedia
-        ? [
-            {
-              functionResponse: {
-                id: runtime.parentCallId,
-                name: ToolNames.EXEC,
-                response: { output: display },
-                parts: llmContent.slice(1),
-              },
-            },
-          ]
-        : llmContent,
+      llmContent,
       returnDisplay: display,
       ...metadata,
       persistedOutputFiles: [],

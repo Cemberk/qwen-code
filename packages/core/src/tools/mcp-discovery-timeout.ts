@@ -15,7 +15,7 @@ import type { MCPServerConfig } from '../config/config.js';
  * and the HTTP route handler never returned.
  *
  * Mirrors `McpClientManager.runWithDiscoveryTimeout` /
- * `discoveryTimeoutFor` exactly (stdio default 30s, remote 5s,
+ * `discoveryTimeoutFor` exactly (default 30s,
  * per-server `discoveryTimeoutMs` override clamped to [100ms, 300s])
  * — same wall-clock contract regardless of whether a server's
  * discovery happens in pool mode or legacy per-session mode.
@@ -25,16 +25,13 @@ import type { MCPServerConfig } from '../config/config.js';
 const MIN_DISCOVERY_TIMEOUT_MS = 100;
 /** Hard ceiling for the per-server `discoveryTimeoutMs` override. */
 const MAX_DISCOVERY_TIMEOUT_MS = 300_000;
-/** stdio default — local subprocesses get more leeway for cold start. */
-const STDIO_DEFAULT_TIMEOUT_MS = 30_000;
-/** Remote default — networked transports carry latency risk. */
-const REMOTE_DEFAULT_TIMEOUT_MS = 5_000;
+/** Default — local subprocesses get leeway for cold start. */
+const DEFAULT_DISCOVERY_TIMEOUT_MS = 30_000;
 
 /**
- * Resolve the discovery timeout for a server config. stdio defaults
- * to 30s, remote (HTTP / SSE / WebSocket) defaults to 5s, per-server
- * `discoveryTimeoutMs` override is honored when present (clamped to
- * [100ms, 300s]).
+ * Resolve the discovery timeout for a server config. Defaults to 30s;
+ * per-server `discoveryTimeoutMs` override is honored when present
+ * (clamped to [100ms, 300s]).
  */
 export function discoveryTimeoutFor(cfg: MCPServerConfig): number {
   const override = cfg.discoveryTimeoutMs;
@@ -44,8 +41,7 @@ export function discoveryTimeoutFor(cfg: MCPServerConfig): number {
       Math.min(override, MAX_DISCOVERY_TIMEOUT_MS),
     );
   }
-  const isRemote = !!(cfg.httpUrl || cfg.url || cfg.tcp);
-  return isRemote ? REMOTE_DEFAULT_TIMEOUT_MS : STDIO_DEFAULT_TIMEOUT_MS;
+  return DEFAULT_DISCOVERY_TIMEOUT_MS;
 }
 
 /**

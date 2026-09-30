@@ -56,26 +56,22 @@ export interface HooksListingRow {
   hookType: HookType;
   /** One-line identity, the text the ink /hooks handler list shows. */
   displayText: string;
-  /** The literal command, URL or prompt, when the hook type has one. */
+  /** The literal command or prompt, when the hook type has one. */
   commandText?: string;
   name?: string;
   description?: string;
   timeout?: number;
   statusMessage?: string;
-  /** HTTP hooks: `once`. */
-  runsOnce?: boolean;
   /** Command hooks: `async`. */
   runsInBackground?: boolean;
-  /** HTTP hooks: `if`. */
-  condition?: string;
   /** Session rows: the id the session hooks manager assigned. */
   hookId?: string;
   /** Session rows registered by a skill: the skill's root directory. */
   skillRoot?: string;
   /**
    * The hook configuration itself, for in-process consumers that need a
-   * field this row does not flatten. It can carry `env` and HTTP `headers`,
-   * which may hold secrets, so serialize it field by field, never whole.
+   * field this row does not flatten. It can carry `env`, which may hold
+   * secrets, so serialize it field by field, never whole.
    */
   config: HookConfig;
 }
@@ -123,8 +119,6 @@ export function describeHookConfig(config: HookConfig): string {
   switch (config.type) {
     case HookType.Command:
       return config.command || '';
-    case HookType.Http:
-      return config.name || config.url || '';
     case HookType.Function:
       return config.name || config.id || 'function-hook';
     case HookType.Prompt: {
@@ -146,8 +140,6 @@ function commandTextFor(config: HookConfig): string | undefined {
   switch (config.type) {
     case HookType.Command:
       return config.command;
-    case HookType.Http:
-      return config.url;
     case HookType.Prompt:
       return config.prompt;
     default:
@@ -207,8 +199,6 @@ function toRow(
   const commandText = commandTextFor(config);
   const runsInBackground =
     config.type === HookType.Command && config.async === true;
-  const runsOnce = config.type === HookType.Http && config.once === true;
-  const condition = config.type === HookType.Http ? config.if : undefined;
   return {
     eventName: placement.eventName,
     ...(placement.matcher ? { matcher: placement.matcher } : {}),
@@ -234,9 +224,7 @@ function toRow(
     ...(config.statusMessage !== undefined
       ? { statusMessage: config.statusMessage }
       : {}),
-    ...(runsOnce ? { runsOnce } : {}),
     ...(runsInBackground ? { runsInBackground } : {}),
-    ...(condition !== undefined ? { condition } : {}),
     ...(placement.hookId !== undefined ? { hookId: placement.hookId } : {}),
     ...(placement.skillRoot !== undefined
       ? { skillRoot: placement.skillRoot }
@@ -250,7 +238,6 @@ const HOOK_EVENT_NAMES: readonly string[] = Object.values(HookEventName);
 /** The field each settings hook type must carry, as the registry requires. */
 const LITERAL_FIELD: Readonly<Record<string, string>> = {
   [HookType.Command]: 'command',
-  [HookType.Http]: 'url',
   [HookType.Prompt]: 'prompt',
 };
 

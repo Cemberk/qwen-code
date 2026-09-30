@@ -19,7 +19,7 @@ import { useState } from 'react';
 import { useKeyboard } from '@opentui/react';
 import { C } from './theme.js';
 import { t } from '../../i18n/index.js';
-import { MCPServerStatus } from '@qwen-code/qwen-code-core/tools/mcp-status.js';
+import type { MCPServerStatus } from '@qwen-code/qwen-code-core/tools/mcp-status.js';
 import { ICON } from '../constants.js';
 import { toOriginalKey } from './key-map.js';
 import { useBatchSafeCursor } from './batch-cursor.js';
@@ -34,7 +34,6 @@ export const MCP_MANAGEMENT_STEPS = {
   TOOL_DETAIL: 'tool-detail',
   RESOURCE_LIST: 'resource-list',
   RESOURCE_DETAIL: 'resource-detail',
-  AUTHENTICATE: 'authenticate',
 } as const;
 
 export type McpManagementStep =
@@ -65,8 +64,6 @@ export interface McpServerInfo {
   promptCount: number;
   resourceCount: number;
   isDisabled: boolean;
-  hasOAuthTokens: boolean;
-  requiresAuth: boolean;
   approvalState?: 'pending' | 'rejected';
   command?: string;
   workingDirectory?: string;
@@ -170,21 +167,15 @@ export function groupMcpServersBySource(
   return result;
 }
 
-/** Parity of the server-row status text (approval/auth overrides first). */
+/** Parity of the server-row status text (approval overrides first). */
 export function mcpServerStatusText(server: McpServerInfo): string {
   const awaitingApproval = !server.isDisabled && !!server.approvalState;
-  const needsAuth =
-    !server.isDisabled &&
-    !awaitingApproval &&
-    !!server.requiresAuth &&
-    server.status !== MCPServerStatus.CONNECTED;
   if (server.isDisabled) return t('disabled');
   if (awaitingApproval) {
     return server.approvalState === 'rejected'
       ? t('rejected — edit config to re-approve')
       : t('needs approval');
   }
-  if (needsAuth) return t('needs authentication');
   return t(server.status);
 }
 
@@ -193,12 +184,7 @@ export function mcpServerRowColor(
   server: McpServerInfo,
 ): 'green' | 'yellow' | 'red' | 'gray' {
   const awaitingApproval = !server.isDisabled && !!server.approvalState;
-  const needsAuth =
-    !server.isDisabled &&
-    !awaitingApproval &&
-    !!server.requiresAuth &&
-    server.status !== MCPServerStatus.CONNECTED;
-  if (server.isDisabled || awaitingApproval || needsAuth) return 'yellow';
+  if (server.isDisabled || awaitingApproval) return 'yellow';
   return mcpStatusColor(server.status);
 }
 
@@ -207,9 +193,7 @@ export type McpServerAction =
   | 'view-resources'
   | 'reconnect'
   | 'approve'
-  | 'toggle-disable'
-  | 'authenticate'
-  | 'clear-auth';
+  | 'toggle-disable';
 
 /** Parity of ServerDetailStep's conditional action list. */
 export function buildMcpServerActions(
@@ -257,20 +241,6 @@ export function buildMcpServerActions(
     label: server.isDisabled ? t('Enable') : t('Disable'),
     action: 'toggle-disable',
   });
-  if (!server.isDisabled && !awaitingApproval) {
-    result.push({
-      key: 'authenticate',
-      label: server.hasOAuthTokens ? t('Re-authenticate') : t('Authenticate'),
-      action: 'authenticate',
-    });
-  }
-  if (!server.isDisabled && server.hasOAuthTokens) {
-    result.push({
-      key: 'clear-auth',
-      label: t('Clear Authentication'),
-      action: 'clear-auth',
-    });
-  }
   return result;
 }
 
@@ -291,8 +261,6 @@ export function mcpStepFooter(
     case MCP_MANAGEMENT_STEPS.TOOL_DETAIL:
     case MCP_MANAGEMENT_STEPS.RESOURCE_DETAIL:
       return t('Esc to back');
-    case MCP_MANAGEMENT_STEPS.AUTHENTICATE:
-      return t('Esc to go back');
     default:
       return t('Esc to close');
   }
@@ -576,12 +544,6 @@ export function OpenTuiMcpDialog(props: OpenTuiMcpDialogProps) {
             </text>
             <text fg={C.dim}>{t('Server')}</text>
           </box>
-        );
-      case MCP_MANAGEMENT_STEPS.AUTHENTICATE:
-        return (
-          <text fg={C.accent} attributes={1}>
-            {t('OAuth Authentication')}
-          </text>
         );
       default:
         return (
@@ -895,9 +857,6 @@ export function OpenTuiMcpDialog(props: OpenTuiMcpDialogProps) {
           renderResourceList()}
         {currentStep === MCP_MANAGEMENT_STEPS.RESOURCE_DETAIL &&
           renderResourceDetail()}
-        {currentStep === MCP_MANAGEMENT_STEPS.AUTHENTICATE && (
-          <text fg={C.dim}>{t('Loading...')}</text>
-        )}
       </box>
       <FooterHint text={mcpStepFooter(currentStep, servers.length)} />
     </DialogFrame>

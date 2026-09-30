@@ -230,12 +230,11 @@ describe('ToolCallTool', () => {
 
     it('invokes the tool when only its description changed', async () => {
       // Shipped deferred tools rebuild the model-facing description from
-      // mutable state on every `schema` access: WebSearchTool interpolates the
-      // current month/year (web-search.ts:997-1004) and ReadFileTool rebuilds
-      // from the model's CURRENT input modalities (read-file.ts:628-637). Both
-      // are intentional so a long-lived `qwen serve`/ACP process is not stale,
-      // so prose drift across a month boundary or a `/model` switch must not
-      // arm a false "changed" refusal against an identical parameter contract.
+      // mutable state on every `schema` access: ReadFileTool rebuilds from the
+      // model's CURRENT input modalities. That is intentional so a long-lived
+      // ACP process is not stale, so prose drift across a `/model` switch
+      // must not arm a false "changed" refusal against an identical parameter
+      // contract.
       const sameContractNewProse = new MockTool({
         name: 'mcp_lookup',
         description: 'Look up a record by id. (October 2026)',

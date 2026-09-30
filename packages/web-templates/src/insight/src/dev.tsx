@@ -52,7 +52,6 @@ const MOCK_DATA: InsightData = {
     ['edit', 98],
     ['grep_search', 53],
     ['todo_write', 52],
-    ['web_fetch', 19],
     ['list_directory', 15],
     ['glob', 14],
     ['write_file', 5],

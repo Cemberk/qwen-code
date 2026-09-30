@@ -459,25 +459,15 @@ describe('useStatusLine', () => {
       expect(result.current.lines).toEqual(['Test Model']);
     });
 
-    it('looks up the current branch pull request number with gh', async () => {
-      mockUIState.branchName = 'dragon/feat-reproduce-skill';
+    it('infers the pull request number from the branch name without running gh', () => {
+      mockUIState.branchName = 'dragon/pr-4118';
       setStatusLineConfig({
         type: 'preset',
         items: ['pull-request-number'],
       });
       const { result } = renderHook(() => useStatusLine());
 
-      expect(child_process.exec).toHaveBeenCalledOnce();
-      expect(lastExecCommand).toBe('gh pr view --json number --jq .number');
-      expect(result.current.lines).toEqual([]);
-
-      await act(async () => {
-        execCallback(null, '4118\n', '');
-      });
-      await act(async () => {
-        vi.advanceTimersByTime(300);
-      });
-
+      expect(child_process.exec).not.toHaveBeenCalled();
       expect(result.current.lines).toEqual(['#4118']);
     });
 
@@ -508,7 +498,7 @@ describe('useStatusLine', () => {
     });
 
     it('refreshes when status line settings are saved in the same process', async () => {
-      mockUIState.branchName = 'dragon/feat-reproduce-skill';
+      mockUIState.branchName = 'dragon/pr-4118';
       setStatusLineConfig({
         type: 'preset',
         items: ['model-with-reasoning'],
@@ -528,17 +518,11 @@ describe('useStatusLine', () => {
       };
       mockUIState.statusLineSettingsVersion += 1;
       rerender();
-
-      expect(child_process.exec).toHaveBeenCalledOnce();
-      expect(lastExecCommand).toBe('gh pr view --json number --jq .number');
-
-      await act(async () => {
-        execCallback(null, '4118\n', '');
-      });
       await act(async () => {
         vi.advanceTimersByTime(300);
       });
 
+      expect(child_process.exec).not.toHaveBeenCalled();
       expect(result.current.lines).toEqual(['Test Model · #4118']);
     });
 
@@ -601,35 +585,6 @@ describe('useStatusLine', () => {
 
       expect(result.current.lines).toEqual([]);
       expect(child_process.exec).not.toHaveBeenCalled();
-    });
-
-    it('logs and retries pull request lookup failures after state changes', async () => {
-      mockUIState.branchName = 'dragon/feat-reproduce-skill';
-      setStatusLineConfig({
-        type: 'preset',
-        items: ['pull-request-number'],
-      });
-      const { rerender } = renderHook(() => useStatusLine());
-
-      expect(child_process.exec).toHaveBeenCalledOnce();
-
-      await act(async () => {
-        execCallback(new Error('gh not authenticated'), '', '');
-      });
-
-      expect(debugLogMock.warn).toHaveBeenCalledWith(
-        'statusline: gh pr view failed:',
-        'gh not authenticated',
-      );
-
-      mockUIState.sessionStats.lastPromptTokenCount = 101;
-      rerender();
-      await act(async () => {
-        vi.advanceTimersByTime(300);
-      });
-
-      expect(child_process.exec).toHaveBeenCalledTimes(2);
-      expect(lastExecCommand).toBe('gh pr view --json number --jq .number');
     });
   });
 

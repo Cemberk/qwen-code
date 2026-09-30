@@ -610,7 +610,7 @@ export function OpenTuiPermissionsDialog(props: OpenTuiPermissionsDialogProps) {
           </text>
           <box flexDirection="row">
             <text fg={C.text}>{`${t('e.g.,')} `}</text>
-            <text attributes={1}>WebFetch</text>
+            <text attributes={1}>Read</text>
             <text fg={C.text}>{` ${t('or')} `}</text>
             <text attributes={1}>Bash(ls:*)</text>
           </box>

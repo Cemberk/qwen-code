@@ -589,13 +589,6 @@ export function createProductionDispatch(
         { __wfRunFailure: true },
       );
     }
-    if (agentIdentity.resolvedAgentType?.executor !== undefined) {
-      throw new Error(
-        'Workflow agent() does not support external-executor agents: ' +
-          'token budgets, schema output, and workflow tool restrictions ' +
-          'cannot be enforced. Use an in-process agent definition instead.',
-      );
-    }
     let attempt = 0;
     return runStallResilient(
       async (attemptSignal, emitter) => {

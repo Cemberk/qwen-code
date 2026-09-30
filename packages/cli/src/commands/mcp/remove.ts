@@ -8,7 +8,6 @@
 import type { CommandModule } from 'yargs';
 import { loadSettings, SettingScope } from '../../config/settings.js';
 import { writeStdoutLine } from '../../utils/stdioHelpers.js';
-import { MCPOAuthTokenStorage } from '@qwen-code/qwen-code-core';
 
 async function removeMcpServer(
   name: string,
@@ -32,14 +31,6 @@ async function removeMcpServer(
   delete mcpServers[name];
 
   settings.setValue(settingsScope, 'mcpServers', mcpServers);
-
-  // Clean up any stored OAuth tokens for this server
-  try {
-    const tokenStorage = new MCPOAuthTokenStorage();
-    await tokenStorage.deleteCredentials(name);
-  } catch {
-    // Token cleanup is best-effort; don't fail the remove operation
-  }
 
   writeStdoutLine(`Server "${name}" removed from ${scope} settings.`);
 }

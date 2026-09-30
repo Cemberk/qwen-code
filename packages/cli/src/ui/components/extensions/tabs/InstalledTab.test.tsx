@@ -74,7 +74,6 @@ describe('InstalledTab', () => {
         onLockChange={vi.fn()}
         onStatus={(status) => statuses.push(status)}
         extensionsUpdateState={new Map()}
-        reloadSignal={0}
       />,
     );
 

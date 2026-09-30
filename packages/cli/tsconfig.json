@@ -20,10 +20,6 @@
       "@qwen-code/qwen-code-core/telemetryConstants": [
         "../core/src/telemetry/constants.ts"
       ],
-      "@qwen-code/qwen-code-core/omni": ["../core/src/omni/index.ts"],
-      "@qwen-code/qwen-code-core/omniPolicyCollection": [
-        "../core/src/omni/policy/model-call-collection.ts"
-      ],
       "@qwen-code/qwen-code-core/goalWire": ["../core/src/goals/goal-wire.ts"],
       "@qwen-code/qwen-code-core/noFollowOpen": [
         "../core/src/utils/no-follow-open.ts"
@@ -46,9 +42,6 @@
       ],
       "@qwen-code/qwen-code-core/conversationsRuntimeMarker": [
         "../core/src/utils/conversations-runtime-marker.ts"
-      ],
-      "@qwen-code/qwen-code-core/subagentRuntime": [
-        "../core/src/subagent-runtime.ts"
       ],
       "@qwen-code/qwen-code-core/*": ["../core/src/*"],
       "@qwen-code/acp-bridge": ["../acp-bridge/src/index.ts"],

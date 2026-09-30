@@ -81,7 +81,7 @@ describe('useMcpApproval', () => {
   it('queues pending project servers and exposes the first', () => {
     const config = makeConfig({
       a: { command: 'a', scope: 'project' },
-      b: { httpUrl: 'https://b.test', scope: 'project' },
+      b: { command: 'b', scope: 'project' },
     });
     const { result } = renderHook(() => useMcpApproval(config));
     expect(result.current.isMcpApprovalDialogOpen).toBe(true);
@@ -89,20 +89,19 @@ describe('useMcpApproval', () => {
     expect(result.current.mcpApprovalRemaining).toBe(1);
   });
 
-  it('shows env and header key names in the approval summary', () => {
+  it('shows env key names in the approval summary', () => {
     const config = makeConfig({
       a: {
         command: 'node',
         args: ['server.js'],
         env: { LD_PRELOAD: '/evil.so', TOKEN: 'secret' },
-        headers: { Authorization: 'Bearer secret' },
         scope: 'project',
       },
     });
     const { result } = renderHook(() => useMcpApproval(config));
 
     expect(result.current.currentMcpApproval?.summary).toBe(
-      'node server.js (stdio) [env: LD_PRELOAD, TOKEN; headers: Authorization]',
+      'node server.js (stdio) [env: LD_PRELOAD, TOKEN]',
     );
   });
 
@@ -162,7 +161,7 @@ describe('useMcpApproval', () => {
     expect(result.current.isMcpApprovalDialogOpen).toBe(false);
 
     // A hot-reload adds a gated, unapproved server and signals the change.
-    servers['c'] = { httpUrl: 'https://c.test', scope: 'project' };
+    servers['c'] = { command: 'c', scope: 'project' };
     act(() => {
       appEvents.emit(AppEvent.McpPendingApprovalChanged);
     });
@@ -215,7 +214,7 @@ describe('useMcpApproval', () => {
     const { result } = renderHook(() => useMcpApproval(config));
     expect(result.current.isMcpApprovalDialogOpen).toBe(false);
 
-    servers['c'] = { httpUrl: 'https://c.test', scope: 'project' };
+    servers['c'] = { command: 'c', scope: 'project' };
     act(() => {
       appEvents.emit(AppEvent.McpPendingApprovalChanged);
     });

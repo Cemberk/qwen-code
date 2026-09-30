@@ -12,30 +12,15 @@ import {
 } from './mcp-discovery-timeout.js';
 
 // Build a minimal `MCPServerConfig`-shaped object via cast — the
-// helper only reads `discoveryTimeoutMs` / `httpUrl` / `url` / `tcp`,
-// so a partial test fixture is enough and avoids the 16-positional
-// constructor.
+// helper only reads `discoveryTimeoutMs`, so a partial test fixture is
+// enough and avoids the positional constructor.
 function mkCfg(partial: Partial<MCPServerConfig>): MCPServerConfig {
   return partial as MCPServerConfig;
 }
 
 describe('discoveryTimeoutFor', () => {
-  it('stdio config (no remote fields) defaults to 30s', () => {
+  it('stdio config defaults to 30s', () => {
     expect(discoveryTimeoutFor(mkCfg({ command: 'node' }))).toBe(30_000);
-  });
-
-  it('httpUrl config defaults to 5s (remote)', () => {
-    expect(discoveryTimeoutFor(mkCfg({ httpUrl: 'https://api.x' }))).toBe(
-      5_000,
-    );
-  });
-
-  it('url config (sse) defaults to 5s (remote)', () => {
-    expect(discoveryTimeoutFor(mkCfg({ url: 'https://api.y' }))).toBe(5_000);
-  });
-
-  it('tcp config (websocket) defaults to 5s (remote)', () => {
-    expect(discoveryTimeoutFor(mkCfg({ tcp: 'ws://x' }))).toBe(5_000);
   });
 
   it('honors per-server discoveryTimeoutMs override', () => {

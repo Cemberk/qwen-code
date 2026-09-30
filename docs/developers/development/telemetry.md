@@ -266,8 +266,7 @@ and logs still carry `session.id`.
 When telemetry is enabled, Qwen Code registers `UndiciInstrumentation`
 which creates a client-side HTTP span for every outbound `fetch()`
 request originated by the process — including the LLM SDKs (`openai`,
-`@google/genai`, `@anthropic-ai/sdk`), the MCP StreamableHTTP client, and the
-`WebFetch` tool. The span
+`@google/genai`, `@anthropic-ai/sdk`) and the MCP StreamableHTTP client. The span
 lets you see network latency (TTFB / response body transfer) separately
 from upstream model processing time, which the existing
 `api.generateContent` span alone can't distinguish.

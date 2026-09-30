@@ -390,7 +390,7 @@ describe('SettingsDialog', () => {
   });
 
   describe('Settings Toggling', () => {
-    it('toggles an unset WebSearch setting off and resets it to auto', async () => {
+    it('toggles an unset tri-state setting off and resets it to auto', async () => {
       vi.mocked(saveModifiedSettings).mockClear();
       const settings = createMockSettings();
       const onSelect = vi.fn();
@@ -400,7 +400,7 @@ describe('SettingsDialog', () => {
         </KeypressProvider>,
       );
       const targetIndex = getDialogSettingKeys().indexOf(
-        'tools.webSearch.enabled',
+        'tools.shell.enableInteractiveShell',
       );
       expect(targetIndex).toBeGreaterThan(0);
       for (let i = 0; i < targetIndex; i++) {
@@ -408,7 +408,7 @@ describe('SettingsDialog', () => {
         await wait();
       }
       await waitFor(() => {
-        expect(lastFrame()).toContain('●\uFE0E Enable WebSearch');
+        expect(lastFrame()).toContain('●\uFE0E Interactive Shell (PTY)');
         expect(lastFrame()).toContain('(not set)');
       });
 
@@ -416,7 +416,7 @@ describe('SettingsDialog', () => {
       await waitFor(() => {
         const activeRow = lastFrame()
           ?.split('\n')
-          .find((line) => line.includes('●\uFE0E Enable WebSearch'));
+          .find((line) => line.includes('●\uFE0E Interactive Shell (PTY)'));
         expect(activeRow).toContain('false*');
       });
 
@@ -424,17 +424,17 @@ describe('SettingsDialog', () => {
       await waitFor(() => {
         const activeRow = lastFrame()
           ?.split('\n')
-          .find((line) => line.includes('●\uFE0E Enable WebSearch'));
+          .find((line) => line.includes('●\uFE0E Interactive Shell (PTY)'));
         expect(activeRow).toContain('(not set)');
         expect(activeRow).not.toContain('(not set)*');
       });
       unmount();
     });
 
-    it('persists resetting an explicit WebSearch setting to auto', async () => {
+    it('persists resetting an explicit tri-state setting to auto', async () => {
       vi.mocked(saveModifiedSettings).mockClear();
       const settings = createMockSettings({
-        tools: { webSearch: { enabled: true } },
+        tools: { shell: { enableInteractiveShell: true } },
       });
       const onRestartRequest = vi.fn();
       const { stdin, unmount, lastFrame } = render(
@@ -447,7 +447,7 @@ describe('SettingsDialog', () => {
         </KeypressProvider>,
       );
       const targetIndex = getDialogSettingKeys().indexOf(
-        'tools.webSearch.enabled',
+        'tools.shell.enableInteractiveShell',
       );
       for (let i = 0; i < targetIndex; i++) {
         act(() => stdin.write(TerminalKeys.DOWN_ARROW));
@@ -458,17 +458,19 @@ describe('SettingsDialog', () => {
       await waitFor(() => {
         const activeRow = lastFrame()
           ?.split('\n')
-          .find((line) => line.includes('●\uFE0E Enable WebSearch'));
+          .find((line) => line.includes('●\uFE0E Interactive Shell (PTY)'));
         expect(activeRow).toContain('(not set)*');
       });
 
       act(() => stdin.write('r'));
       await waitFor(() => expect(onRestartRequest).toHaveBeenCalledOnce());
       expect(saveModifiedSettings).toHaveBeenCalledWith(
-        new Set(['tools.webSearch.enabled']),
+        new Set(['tools.shell.enableInteractiveShell']),
         expect.objectContaining({
           tools: expect.objectContaining({
-            webSearch: expect.objectContaining({ enabled: undefined }),
+            shell: expect.objectContaining({
+              enableInteractiveShell: undefined,
+            }),
           }),
         }),
         settings,
@@ -625,7 +627,7 @@ describe('SettingsDialog', () => {
     });
 
     describe('integer settings', () => {
-      const editMaxPerSession = async (typed: string) => {
+      const editAdvisorMaxUses = async (typed: string) => {
         vi.mocked(saveModifiedSettings).mockClear();
         const settings = createMockSettings();
         const { stdin, unmount, lastFrame } = render(
@@ -637,9 +639,7 @@ describe('SettingsDialog', () => {
           expect(lastFrame()).toContain('Settings');
         });
 
-        const index = getDialogSettingKeys().indexOf(
-          'tools.webSearch.maxPerSession',
-        );
+        const index = getDialogSettingKeys().indexOf('advisorMaxUses');
         expect(index).toBeGreaterThanOrEqual(0);
 
         const press = async (key: string) => {
@@ -662,19 +662,17 @@ describe('SettingsDialog', () => {
         return vi
           .mocked(saveModifiedSettings)
           .mock.calls.find((call) =>
-            (call[0] as Set<string>).has('tools.webSearch.maxPerSession'),
+            (call[0] as Set<string>).has('advisorMaxUses'),
           );
       };
 
       it('edits an integer setting on Enter and saves the typed number', async () => {
-        const call = await editMaxPerSession('5');
-        expect(call?.[1]).toEqual({
-          tools: { webSearch: { maxPerSession: 5 } },
-        });
+        const call = await editAdvisorMaxUses('5');
+        expect(call?.[1]).toEqual({ advisorMaxUses: 5 });
       });
 
       it('does not save a fractional value for an integer setting', async () => {
-        expect(await editMaxPerSession('1.5')).toBeUndefined();
+        expect(await editAdvisorMaxUses('1.5')).toBeUndefined();
       });
     });
 

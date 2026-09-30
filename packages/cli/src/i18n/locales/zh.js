@@ -9,7 +9,6 @@
 export default {
   'Cannot disable an extension-provided MCP server here.':
     '无法在此处禁用扩展提供的 MCP 服务器。',
-  'Cleared authentication for "{{name}}".': '已清空 "{{name}}" 的认证信息。',
   'MCP "{{name}}" disabled for all projects.':
     'MCP "{{name}}" 已在所有项目中禁用。',
   'Enable extension "{{name}}" to manage this MCP server.':
@@ -25,23 +24,10 @@ export default {
   // ==========================================================================
   // Extensions manager dialog (Installed / Discover / Sources tabs)
   // ==========================================================================
-  ' · {{marketplace}} (Tab to clear)': ' · {{marketplace}}（Tab 清除）',
   '"{{name}}" {{state}}.': '"{{name}}" {{state}}。',
-  '(Tab / ←→ to switch)': '(Tab / ←→ 切换)',
-  '+ Add new marketplace': '+ 添加新市场源',
-  '+ Install a new extension': '+ 安装一个新扩展',
   Actions: '操作',
-  'Add Marketplace': '添加市场源',
-  'Add a marketplace in the Sources tab to discover extensions.':
-    '在“来源”标签页中添加市场源以发现扩展。',
-  'Add new': '新增',
   'Add to Favorites': '添加到收藏',
   'Added "{{name}}" to favorites.': '已将 "{{name}}" 添加到收藏。',
-  'Added marketplace "{{name}}".': '已添加市场源 "{{name}}"。',
-  'Adding...': '添加中...',
-  'Back to extension list': '返回扩展列表',
-  'Browse extensions ({{count}})': '浏览扩展（{{count}}）',
-  'By: {{a}}': '作者：{{a}}',
   'Change scope': '更改作用域',
   'Change scope for "{{name}}":': '更改 "{{name}}" 的作用域：',
   'Changing scope...': '正在更改作用域...',
@@ -53,112 +39,51 @@ export default {
   '"{{name}}" cannot be update-checked (Claude marketplace plugins update by reinstalling).':
     '"{{name}}" 无法检查更新（Claude 市场源插件需卸载后重装来更新）。',
   'Failed to check "{{name}}" for updates.': '检查 "{{name}}" 的更新失败。',
-  'Claude plugin marketplace': 'Claude 插件市场',
-  Commands: '命令',
   'Components:': '组件：',
-  'Could not load this marketplace.': '无法加载该市场源。',
   'Current: {{scope}}': '当前：{{scope}}',
   Disabled: '已禁用',
-  Discover: '发现',
   'Disabling "{{name}}"...': '正在禁用 "{{name}}"...',
   'Disabling MCP "{{name}}"...': '正在禁用 MCP "{{name}}"...',
-  'Discover extensions': '发现扩展',
-  'Discovering extensions...': '正在发现扩展...',
   'Enabling "{{name}}"...': '正在启用 "{{name}}"...',
   'Enabling MCP "{{name}}"...': '正在启用 MCP "{{name}}"...',
-  'Enter extension source:': '输入扩展来源：',
-  'Enter marketplace source (Claude format):':
-    '输入市场源地址（Claude 格式）：',
   'Examples:': '示例：',
-  'Extension details': '扩展详情',
   'Extension v{{version}}': '扩展 v{{version}}',
   'Extensions are not available in this environment.': '当前环境中扩展不可用。',
-  'Failed to open {{url}}': '打开 {{url}} 失败',
   Favorites: '收藏',
   'Global (User Scope)': '全局（用户作用域）',
-  'Install Extension': '安装扩展',
-  'Install for the current workspace (project scope)':
-    '为当前工作区安装（项目作用域）',
-  'Install for you (user scope)': '全局安装（用户作用域）',
-  'Install {{count}} extension(s) to which scope?':
-    '将 {{count}} 个扩展安装到哪个作用域？',
-  Installed: '已安装',
-  'Installed extension "{{name}}".': '已安装扩展 "{{name}}"。',
-  'Installed extensions ({{count}}):': '已安装的扩展（{{count}}）：',
-  'Installed {{count}} extension(s).': '已安装 {{count}} 个扩展。',
   '{{name}}: installed, but the scope rollback failed — it may be disabled at all scopes; re-enable it from the Installed tab.':
     '{{name}}：已安装,但作用域回滚失败 —— 该扩展可能在所有作用域均被禁用;请在“已安装”页重新启用。',
   'Could not change scope, and the rollback also failed — "{{name}}" may be disabled at all scopes. Re-enable it from the Installed tab. ({{error}})':
     '无法更改作用域,且回滚也失败 ——“{{name}}”可能在所有作用域均被禁用。请在“已安装”页重新启用。({{error}})',
-  'Installed {{ok}}, failed {{fail}}: {{detail}}':
-    '成功 {{ok}} 个，失败 {{fail}} 个：{{detail}}',
-  'Installing...': '安装中...',
-  'Last updated: {{date}}': '最近更新：{{date}}',
   MCP: 'MCP',
   'MCP "{{name}}" {{state}}.': 'MCP "{{name}}" {{state}}。',
   'MCP servers': 'MCP 服务器',
   'Mark for Update': '标记为待更新',
-  Marketplaces: '市场源',
-  'No extensions discovered.': '未发现任何扩展。',
-  'No extensions match your search.': '没有与搜索匹配的扩展。',
   'No extensions or marketplaces added yet.': '尚未添加任何扩展或市场源。',
-  'No homepage available.': '没有可用的主页。',
-  'No installable extensions selected.': '未选择可安装的扩展。',
   'No plugins or MCP servers installed.': '尚未安装任何插件或 MCP 服务器。',
   None: '无',
   'Note: Uninstall permanently removes this extension.':
     '注意：卸载将永久移除此扩展。',
-  'Open homepage': '打开主页',
   'Project (Workspace)': '项目（工作区）',
-  'Refreshed {{count}} extension(s).': '已刷新 {{count}} 个扩展。',
   'Remove from Favorites': '从收藏中移除',
-  'Remove marketplace': '移除市场源',
-  'Remove marketplace "{{name}}"?': '移除市场源 "{{name}}"？',
   'Removed "{{name}}" from favorites.': '已将 "{{name}}" 从收藏中移除。',
-  'Removed marketplace "{{name}}".': '已移除市场源 "{{name}}"。',
   'Scope:': '作用域：',
   'Set "{{name}}" scope to {{scope}}.':
     '已将 "{{name}}" 的作用域设为 {{scope}}。',
-  Sources: '来源',
-  'Type to search · Space to toggle · Enter to view · Ctrl+R refresh · Esc to go back':
-    '输入以搜索 · Space 切换 · Enter 查看 · Ctrl+R 刷新 · Esc 返回',
   Uninstall: '卸载',
   'Uninstalled "{{name}}".': '已卸载 "{{name}}"。',
   'Update Now': '立即更新',
-  'Update marketplace': '更新市场源',
-  'Update marketplace (last updated {{date}})':
-    '更新市场源（最近更新 {{date}}）',
-  'Could not update marketplace "{{name}}".': '无法更新市场源 "{{name}}"。',
   'Updated "{{name}}".': '已更新 "{{name}}"。',
-  'Updated marketplace "{{name}}".': '已更新市场源 "{{name}}"。',
-  'Use the Discover tab to find and install plugins.':
-    '使用“发现”标签页查找并安装扩展。',
-  'Version: {{v}}': '版本：{{v}}',
-  'Will install:': '将安装：',
-  'Would open: {{url}}': '将打开：{{url}}',
-  'Y/Enter to confirm · N/Esc to cancel': 'Y/Enter 确认 · N/Esc 取消',
-  'Press R to retry · Esc to go back': '按 R 重试 · Esc 返回',
-  'Enter to select · R refresh · Esc to go back':
-    'Enter 选择 · R 刷新 · Esc 返回',
-  'from {{marketplace}}': '来自 {{marketplace}}',
   installed: '已安装',
   '{{count}} Agents': '{{count}} 个智能体',
   '{{count}} Workflows': '{{count}} 个工作流',
   '{{count}} Commands': '{{count}} 个命令',
   '{{count}} MCP': '{{count}} 个 MCP',
   '{{count}} Skills': '{{count}} 个技能',
-  '{{count}} available extensions': '{{count}} 个可用扩展',
   '↑ more above': '↑ 上方更多',
-  '↑↓ navigate · Enter open · d remove marketplace · Esc close':
-    '↑↓ 导航 · Enter 打开 · d 移除市场源 · Esc 关闭',
-  '↑↓ navigate · Enter select · Esc close': '↑↓ 导航 · Enter 选择 · Esc 关闭',
-  '↑↓ navigate · Enter select · d remove marketplace · Esc close':
-    '↑↓ 导航 · Enter 选择 · d 移除市场源 · Esc 关闭',
   '↑↓ navigate · Space enable/disable · f favorite · Enter details · Esc close':
     '↑↓ 导航 · Space 启用/禁用 · f 收藏 · Enter 查看详情 · Esc 关闭',
   '↓ more below': '↓ 下方更多',
-  '⚠ Make sure you trust an extension before installing, updating, or using it. We cannot verify what MCP servers, files, or other software an extension includes, or that it works as intended. See the extension homepage for more information.':
-    '⚠ 在安装、更新或使用扩展前，请确保你信任它。我们无法验证扩展包含哪些 MCP 服务器、文件或其他软件，也无法保证其按预期工作。更多信息请查看扩展主页。',
 
   // ============================================================================
   // Tool display names (chat-stream badge labels)
@@ -196,8 +121,6 @@ export default {
   'toolDisplayName.Skill': '技能',
   'toolDisplayName.EnterPlanMode': '进入计划模式',
   'toolDisplayName.ExitPlanMode': '退出计划模式',
-  'toolDisplayName.WebFetch': '网络抓取',
-  'toolDisplayName.WebSearch': '网络搜索',
   'toolDisplayName.ListFiles': '列出文件',
   'toolDisplayName.Lsp': 'LSP',
   'toolDisplayName.AskUserQuestion': '询问用户',
@@ -225,24 +148,6 @@ export default {
   'toolDisplayName.ExitWorktree': '退出 Worktree',
   'toolDisplayName.Workflow': '工作流',
   'toolDisplayName.ReadMcpResource': '读取 MCP 资源',
-  'toolDisplayName.ImageGen': '图像生成',
-  'toolDisplayName.DownsampleImage': '降采样图像',
-  'toolDisplayName.DownscaleVideo': '降采样视频',
-  'toolDisplayName.DownsampleAudio': '降采样音频',
-  'toolDisplayName.ExtractKeyframes': '提取关键帧',
-  'toolDisplayName.ExtractAudio': '提取音轨',
-  'toolDisplayName.ClipVideo': '剪辑视频',
-  'toolDisplayName.ClipImage': '裁剪图像',
-  'toolDisplayName.ClipAudio': '剪辑音频',
-  'toolDisplayName.CaptionImage': '描述图像',
-  'toolDisplayName.CaptionAudio': '描述音频',
-  'toolDisplayName.OcrImage': '识别图像文字',
-  'toolDisplayName.UnderstandVideoSegments': '分段理解视频',
-  'toolDisplayName.ConvertImage': '转换图像',
-  'toolDisplayName.TranscribeAudio': '转写音频',
-  'toolDisplayName.RecallMediaMemory': '召回媒体记忆',
-  '[fixed-only: runs via media policies, not the model]':
-    '［仅固定策略：由媒体策略调用，不开放给模型］',
   // ============================================================================
   // Help / UI Components
   // ============================================================================
@@ -489,12 +394,10 @@ export default {
   'Manage existing subagents (view, edit, delete).':
     '管理现有子智能体（查看、编辑、删除）',
   'Create a new subagent with guided setup.': '通过引导式设置创建新的子智能体',
-  'Create a reusable skill from a knowledge source (file, URL, conversation, or text).':
-    '从知识源（文件、URL、对话或文本）创建可复用的技能。',
+  'Create a reusable skill from a knowledge source (file, conversation, or text).':
+    '从知识源（文件、对话或文本）创建可复用的技能。',
   'The current model or provider does not support native video input for /learn. Switch to a video-capable model on an OpenAI-compatible provider and try again.':
     '当前模型或提供商不支持 /learn 的原生视频输入。请切换到 OpenAI 兼容提供商上的视频模型后重试。',
-  'YouTube page URLs cannot be sent as native video input. Download the video into your workspace and pass the local video file path to /learn.':
-    'YouTube 页面链接不能作为原生视频输入发送。请将视频下载到工作区内，再将本地视频文件路径传给 /learn。',
   'The local video could not be attached for /learn.':
     '无法为 /learn 附加本地视频。',
 
@@ -853,8 +756,7 @@ export default {
   'Manage installed extensions': '管理已安装的扩展',
   'Disable an extension': '禁用扩展',
   'Enable an extension': '启用扩展',
-  'Install an extension from a git repo or local path':
-    '从 Git 仓库或本地路径安装扩展',
+  'Install an extension from a local path': '从本地路径安装扩展',
   'Uninstall an extension': '卸载扩展',
   'No extensions installed.': '未安装扩展。',
   'Extension "{{name}}" not found.': '未找到扩展 "{{name}}"。',
@@ -862,21 +764,6 @@ export default {
     '安装扩展的作用域："user"（全局，默认）或 "project"（仅当前工作区）。',
   'Extension "{{name}}" installed successfully and enabled for the current workspace.':
     '扩展 "{{name}}" 安装成功，并已在当前工作区启用。',
-  'Marketplace "{{name}}" not found.': '未找到市场源 "{{name}}"。',
-  'No marketplace sources added yet.': '尚未添加任何市场源。',
-  'No marketplaces added yet.': '尚未添加任何市场源。',
-  'Adds a marketplace source (Claude format).':
-    '添加一个市场源（Claude 格式）。',
-  'The marketplace source to add: owner/repo (GitHub), a git or https URL, or a local path.':
-    '要添加的市场源：owner/repo（GitHub）、git 或 https URL，或本地路径。',
-  'Removes a marketplace source.': '移除一个市场源。',
-  'The name of the marketplace to remove.': '要移除的市场源名称。',
-  'Lists configured marketplace sources.': '列出已配置的市场源。',
-  'Re-fetches a marketplace source and its plugin listing.':
-    '重新拉取市场源及其插件列表。',
-  'The name of the marketplace to update.': '要更新的市场源名称。',
-  'Manage marketplace sources for discovering extensions.':
-    '管理用于发现扩展的市场源。',
   'You need at least one command before continuing.':
     '需要至少提供一个子命令。',
   'No extensions to update.': '没有可更新的扩展。',
@@ -909,24 +796,14 @@ export default {
   'Installation cancelled for "{{name}}".': '已取消安装 "{{name}}"。',
   'You are installing an extension from {{originSource}}. Some features may not work perfectly with Qwen Code.':
     '您正在安装来自 {{originSource}} 的扩展。某些功能可能无法完美兼容 Qwen Code。',
-  '--ref is not applicable for marketplace extensions.':
-    '--ref 不适用于市场扩展。',
   'Extension "{{name}}" installed successfully and enabled.':
     '扩展 "{{name}}" 安装成功并已启用。',
   'The github URL, local path, or marketplace source (marketplace-url:plugin-name) of the extension to install.':
     '要安装的扩展的 GitHub URL、本地路径或市场源（marketplace-url:plugin-name）。',
-  'The git ref to install from.': '要安装的 Git 引用。',
-  '--registry is only applicable for npm extensions.':
-    '--registry 仅适用于 npm 扩展。',
-  'Custom npm registry URL (only for npm extensions).':
-    '自定义 npm registry URL（仅适用于 npm 扩展）。',
-  '--ref is not applicable for npm extensions. Use @version suffix instead (e.g. @scope/package@1.2.0).':
-    '--ref 不适用于 npm 扩展。请改用 @version 后缀（例如 @scope/package@1.2.0）。',
   'Installs an extension from a git repository URL, local path, scoped npm package (@scope/name), or claude marketplace (marketplace-url:plugin-name).':
     '从 Git 仓库 URL、本地路径、带作用域的 npm 包（@scope/name）或 Claude 市场源（marketplace-url:plugin-name）安装扩展。',
   Description: '描述',
   'Delete Session': '删除会话',
-  'Enable pre-release versions for this extension.': '为此扩展启用预发布版本。',
   'Acknowledge the security risks of installing an extension and skip the confirmation prompt.':
     '确认安装扩展的安全风险并跳过确认提示。',
   'The source argument must be provided.': '必须提供来源参数。',
@@ -969,8 +846,6 @@ export default {
   'Path:': '路径：',
   'Source:': '来源：',
   'Type:': '类型：',
-  'Ref:': '引用：',
-  'Release tag:': '发布标签：',
   'Enabled (User):': '已启用（用户）：',
   'Enabled (Workspace):': '已启用（工作区）：',
   'Context files:': '上下文文件：',
@@ -1064,8 +939,7 @@ export default {
     '此菜单为只读。要添加或修改 Hook，请直接编辑 settings.json 或询问 Qwen Code。',
   'Reopen this menu to reload hook definitions.':
     '重新打开此菜单可重新加载 Hook 定义。',
-  'Hook controls and HTTP security settings require a restart.':
-    'Hook 控制项和 HTTP 安全设置需要重启后生效。',
+  'Hook controls require a restart.': 'Hook 控制项需要重启后生效。',
   'Failed to reload hook definitions: {{error}}':
     '重新加载 Hook 定义失败：{{error}}',
   'Enter to select · Esc to cancel': 'Enter 选择 · Esc 取消',
@@ -1092,11 +966,9 @@ export default {
     '所有 Hook 已被 disableAllHooks 设置禁用。',
   'Timeout:': '超时：',
   'Status message:': '状态消息：',
-  'Condition:': '条件：',
   'Options:': '选项：',
   'Skill:': '技能：',
   'runs in background': '后台运行',
-  'runs once': '只运行一次',
   sequential: '顺序执行',
   // Hooks - Disabled Step
   'Hook Configuration - Disabled': 'Hook 配置 - 已禁用',
@@ -1309,15 +1181,6 @@ export default {
   'Import MCP servers from Claude configs': '从 Claude 配置导入 MCP 服务器',
   'Open MCP management dialog': '打开 MCP 管理对话框',
   'Could not retrieve tool registry.': '无法检索工具注册表',
-  "Successfully authenticated and refreshed tools for '{{name}}'.":
-    "成功认证并刷新了 '{{name}}' 的工具",
-  "Re-discovering tools from '{{name}}'...":
-    "正在重新发现 '{{name}}' 的工具...",
-  "Discovered {{count}} tool(s) from '{{name}}'.":
-    "从 '{{name}}' 发现了 {{count}} 个工具。",
-  'Authentication complete. Returning to server details...':
-    '认证完成，正在返回服务器详情...',
-  'Authentication successful.': '认证成功。',
   // ============================================================================
   // MCP Management Dialog
   // ============================================================================
@@ -1345,9 +1208,6 @@ export default {
   Reconnect: '重新连接',
   Enable: '启用',
   Disable: '禁用',
-  Authenticate: '认证',
-  'Re-authenticate': '重新认证',
-  'Clear Authentication': '清空认证',
   disabled: '已禁用',
   enabled: '已启用',
   'disabled (bare mode)': '已禁用（精简模式）',
@@ -1355,7 +1215,6 @@ export default {
   'disabled (disableAllHooks)': '已禁用（disableAllHooks）',
   'disabled (folder not trusted)': '已禁用（文件夹未受信任）',
   'disabled (turned off for this session)': '已禁用（本会话中已关闭）',
-  'Server:': '服务器：',
   'Error:': '错误：',
   tool: '工具',
   tools: '个工具',
@@ -1364,7 +1223,6 @@ export default {
   connected: '已连接',
   connecting: '连接中',
   disconnected: '已断开',
-  'needs authentication': '需要认证',
 
   // MCP Server List
   'User MCPs': '用户 MCP',
@@ -1377,15 +1235,6 @@ export default {
   'Run qwen --debug to see error logs': '运行 qwen --debug 查看错误日志',
 
   // MCP OAuth Authentication
-  'OAuth Authentication': 'OAuth 认证',
-  'Authenticating... Please complete the login in your browser.':
-    '认证中... 请在浏览器中完成登录。',
-  'Press c to copy the authorization URL to your clipboard.':
-    '按 c 复制授权 URL 到剪贴板。',
-  'Copy request sent to your terminal. If paste is empty, copy the URL above manually.':
-    '已向终端发送复制请求；若粘贴为空，请手动复制上方 URL。',
-  'Cannot write to terminal — copy the URL above manually.':
-    '无法写入终端，请手动复制上方 URL。',
   // MCP Server Detail
   'Command:': '命令：',
   'Working Directory:': '工作目录：',
@@ -1471,8 +1320,8 @@ export default {
     '切换此会话的模型（--fast 可设置建议模型，--voice 可设置语音转写模型，[model-id] 可立即切换）',
   'Switch the model for this session (--fast for suggestion model, --voice for voice transcription model, --vision for the vision bridge model, --project to persist to project settings, --global to persist to user settings, [model-id] to switch immediately, or [model-id] [prompt] to run a one-off prompt on another model; the inline prompt is sent verbatim without @file expansion).':
     '切换此会话的模型（--fast 建议模型，--voice 语音转写模型，--vision 视觉桥接模型，--project 持久化到项目设置，--global 持久化到用户设置，[model-id] 立即切换，或用 [model-id] [prompt] 在另一个模型上运行一次性提示；内联提示按原文发送，不展开 @file）',
-  'Switch the model for this session (--fast for suggestion model, --vision for the vision bridge model, --compaction for chat compression model, --image for the image generation model, --project to persist to project settings, --global to persist to user settings, [model-id] to switch immediately, or [model-id] [prompt] to run a one-off prompt on another model; the inline prompt is sent verbatim without @file expansion).':
-    '切换此会话的模型（--fast 建议模型，--vision 视觉桥接模型，--compaction 聊天压缩模型，--image 图像生成模型，--project 持久化到项目设置，--global 持久化到用户设置，[model-id] 立即切换，或用 [model-id] [prompt] 在另一个模型上运行一次性提示；内联提示按原文发送，不展开 @file）',
+  'Switch the model for this session (--fast for suggestion model, --vision for the vision bridge model, --compaction for chat compression model, --project to persist to project settings, --global to persist to user settings, [model-id] to switch immediately, or [model-id] [prompt] to run a one-off prompt on another model; the inline prompt is sent verbatim without @file expansion).':
+    '切换此会话的模型（--fast 建议模型，--vision 视觉桥接模型，--compaction 聊天压缩模型，--project 持久化到项目设置，--global 持久化到用户设置，[model-id] 立即切换，或用 [model-id] [prompt] 在另一个模型上运行一次性提示；内联提示按原文发送，不展开 @file）',
   "Inline one-shot override isn't supported in this mode — run '/model {{model}}' first, then send your prompt.":
     "此模式不支持内联一次性覆盖——请先运行 '/model {{model}}'，再发送你的提示。",
   "Inline one-shot override can't switch providers. '{{model}}' belongs to a different provider — run '/model {{model}}' first, then send your prompt.":
@@ -1483,7 +1332,6 @@ export default {
     '设置用于输入建议和推测执行的轻量模型',
   'Set the image-capable model used to transcribe images for a text-only main model':
     '设置用于为纯文本主模型转写图像的图像能力模型',
-  'Set the model used to generate images': '设置用于生成图像的模型',
   'Set the model used for chat compression (auto-compaction)':
     '设置用于聊天压缩（自动压缩）的模型',
   'Persist the model selection to the project settings (workspace scope)':
@@ -1492,15 +1340,12 @@ export default {
     '将模型选择持久化到用户设置（全局）',
   'Select Fast Model': '选择快速模型',
   'Select Vision Model': '选择视觉模型',
-  'Select Image Model': '选择图像模型',
   'Select Compaction Model': '选择压缩模型',
   'Vision Model': '视觉模型',
-  'Image Model': '图像模型',
   'Compaction Model': '压缩模型',
   'Selected compaction model is unavailable.': '所选压缩模型不可用。',
   'Configure models in settings.modelProviders and ensure the required environment variables are set. In interactive mode, run /auth to configure or switch providers, or run /model --compaction without a model to choose from configured models.':
     '在 settings.modelProviders 中配置模型并确保设置了所需的环境变量。在交互模式下，运行 /auth 配置或切换 provider，或运行 /model --compaction（不带模型参数）从已配置的模型中选择。',
-  'Selected image model is unavailable.': '所选图像模型不可用。',
   'No models are configured.': '未配置模型。',
   'Configured models: {{models}}.': '已配置模型：{{models}}。',
   "Voice model '{{modelName}}' cannot be used for transcription.":
@@ -1701,17 +1546,9 @@ export default {
   'not set (falls back to the main model)': '未设置（回退到主模型）',
   'Current vision model: {{visionModel}}\nUse "/model --vision <model-id>" to set the vision bridge model.':
     '当前视觉模型：{{visionModel}}\n使用 "/model --vision <model-id>" 设置视觉桥接模型。',
-  'Current image model: {{imageModel}}\nUse "/model --image <model-id>" to set the image generation model.':
-    '当前图像模型：{{imageModel}}\n使用 "/model --image <model-id>" 设置图像生成模型。',
   'Compaction model override cleared': '压缩模型覆盖已清除',
   'Current compaction model: {{compactionModel}}\nUse "/model --compaction <model-id>" to set compaction model, or "/model --compaction clear" to clear the override.':
     '当前压缩模型：{{compactionModel}}\n使用 "/model --compaction <model-id>" 设置压缩模型，或使用 "/model --compaction clear" 清除覆盖设置。',
-  "Image model '{{modelName}}' matches multiple configured endpoints. Run /model --image without an argument and choose the exact endpoint.":
-    "图像模型 '{{modelName}}' 匹配了多个已配置的端点。请运行 /model --image（不带参数）并选择确切的端点。",
-  "Image model '{{modelName}}' must declare a valid HTTPS baseUrl and credential environment variable.":
-    "图像模型 '{{modelName}}' 必须声明有效的 HTTPS baseUrl 和凭据环境变量。",
-  "'{{model}}' must declare a valid HTTPS baseUrl and credential environment variable.":
-    "'{{model}}' 必须声明有效的 HTTPS baseUrl 和凭据环境变量。",
   none: '无',
   unknown: '未知',
   // ============================================================================
@@ -1820,8 +1657,6 @@ export default {
   '{{count}} prompts': '{{count}} 个提示',
   '(from {{extensionName}})': '（来自 {{extensionName}}）',
   OAuth: 'OAuth',
-  'OAuth expired': 'OAuth 已过期',
-  'OAuth not authenticated': 'OAuth 未认证',
   'tools and prompts will appear when ready': '工具和提示将在就绪时显示',
   '{{count}} tools cached': '{{count}} 个工具已缓存',
   'Tools:': '工具：',
@@ -1834,12 +1669,8 @@ export default {
   'to show server and tool descriptions': '显示服务器和工具描述',
   'to show tool parameter schemas': '显示 tool parameter schemas',
   'to hide descriptions': '隐藏描述',
-  'to authenticate with OAuth-enabled servers':
-    '使用支持 OAuth 的服务器进行认证',
   Press: '按',
   'to toggle tool descriptions on/off': '切换工具描述开关',
-  "Starting OAuth authentication for MCP server '{{name}}'...":
-    "正在为 MCP server '{{name}}' 启动 OAuth 认证...",
   // ============================================================================
   // Startup Tips
   // ============================================================================

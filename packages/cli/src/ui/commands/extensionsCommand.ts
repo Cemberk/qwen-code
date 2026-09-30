@@ -259,7 +259,7 @@ const listExtensionsCommand: SlashCommand = {
 const installCommand: SlashCommand = {
   name: 'install',
   get description() {
-    return t('Install an extension from a git repo or local path');
+    return t('Install an extension from a local path');
   },
   kind: CommandKind.BUILT_IN,
   supportedModes: ['interactive'] as const,

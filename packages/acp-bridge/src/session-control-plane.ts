@@ -124,7 +124,6 @@ import {
   InvalidRewindTargetError,
   PromptDeadlineExceededError,
   BridgeChannelQuarantinedError,
-  McpAuthenticationInProgressError,
   SessionResetPendingError,
   WorkspaceDrainingError,
   WorkspaceRuntimeStopError,
@@ -638,9 +637,6 @@ interface ChannelInfo {
   workspaceMcpDiscoveryInFlight: boolean;
   workspaceMcpDiscoveryTimer?: NodeJS.Timeout;
   workspaceMcpDiscoveryRequested: boolean;
-  workspaceMcpAuthenticationServerNames: Set<string>;
-  workspaceMcpAuthenticationTimers: Map<string, NodeJS.Timeout>;
-  workspaceMcpAuthenticationReleases: Map<string, () => void>;
   /**
    * Session ids whose restore hit its public deadline and whose underlying
    * ACP request has not settled yet. Non-empty means "this channel is still
@@ -2303,7 +2299,6 @@ const PERSIST_TIMEOUT_MS = 5_000;
 const MAX_PARENT_PERSIST_ATTEMPTS = 3;
 const MCP_RESTART_TIMEOUT_MS = 300_000;
 const WORKSPACE_MEMORY_REMEMBER_TIMEOUT_MS = 300_000;
-const MCP_OAUTH_TIMEOUT_MS = 600_000;
 const DAEMON_RETRY_META_KEY = 'qwen.daemon.retry';
 // Trusted continuation marker. `sendPrompt` strips it from every caller and
 // re-arms it only for the trusted `continueSession` dispatch (the `isContinue`
@@ -4914,9 +4909,6 @@ export function createSessionControlPlane(
       sessionSpawnsInFlight: 0,
       workspaceMcpDiscoveryInFlight: false,
       workspaceMcpDiscoveryRequested: false,
-      workspaceMcpAuthenticationServerNames: new Set(),
-      workspaceMcpAuthenticationTimers: new Map(),
-      workspaceMcpAuthenticationReleases: new Map(),
       unsettledAbandonedRestores: new Set(),
       overdueAbandonedRestores: new Set(),
       restoreSettlementTimers: new Map(),
@@ -4936,15 +4928,6 @@ export function createSessionControlPlane(
       clearTimeout(info.workspaceMcpDiscoveryTimer);
       info.workspaceMcpDiscoveryTimer = undefined;
     }
-    for (const timer of info.workspaceMcpAuthenticationTimers.values()) {
-      clearTimeout(timer);
-    }
-    info.workspaceMcpAuthenticationTimers.clear();
-    info.workspaceMcpAuthenticationServerNames.clear();
-    for (const release of info.workspaceMcpAuthenticationReleases.values()) {
-      release();
-    }
-    info.workspaceMcpAuthenticationReleases.clear();
     for (const timer of info.restoreSettlementTimers.values()) {
       clearTimeout(timer);
     }
@@ -5104,10 +5087,7 @@ export function createSessionControlPlane(
       hasNoSessionWork(getChannelInfo(channel), exclusions),
     hasNoWorkspaceWork: (channel) => {
       const info = getChannelInfo(channel);
-      return (
-        !info.workspaceMcpDiscoveryInFlight &&
-        info.workspaceMcpAuthenticationServerNames.size === 0
-      );
+      return !info.workspaceMcpDiscoveryInFlight;
     },
     channelShouldReapWhenIdle: (channel) =>
       channelShouldReapWhenIdle(getChannelInfo(channel)),
@@ -6512,10 +6492,7 @@ export function createSessionControlPlane(
           return response as unknown as T;
         }
         const rawServers = rawStatus.servers;
-        const effectiveManagedServerNames = new Set([
-          ...info.workspaceMcpAuthenticationServerNames,
-          ...(managedServerNames ?? []),
-        ]);
+        const effectiveManagedServerNames = new Set(managedServerNames ?? []);
         if (effectiveManagedServerNames.size > 0) {
           response = mergeManagedWorkspaceMcpStatus(
             effectiveManagedServerNames,
@@ -6554,65 +6531,11 @@ export function createSessionControlPlane(
         } else if (Array.isArray(status.errors) && status.errors.length > 0) {
           info.workspaceMcpDiscoveryRequested = false;
         }
-        for (const serverName of info.workspaceMcpAuthenticationServerNames) {
-          const server = rawServers.find(
-            (candidate) => candidate.name === serverName,
-          );
-          if (
-            server !== undefined &&
-            server.authenticationState !== 'pending'
-          ) {
-            info.workspaceMcpAuthenticationServerNames.delete(serverName);
-            info.harness.lastUsedAt = Date.now();
-            const timer = info.workspaceMcpAuthenticationTimers.get(serverName);
-            if (timer) clearTimeout(timer);
-            info.workspaceMcpAuthenticationTimers.delete(serverName);
-            info.workspaceMcpAuthenticationReleases.get(serverName)?.();
-            info.workspaceMcpAuthenticationReleases.delete(serverName);
-          }
-        }
         workspaceMcpStatusCache =
           response as unknown as ServeWorkspaceMcpStatus;
       }
       return response as unknown as T;
     });
-  };
-
-  const expireWorkspaceMcpAuthentication = async (
-    info: ChannelInfo,
-    serverName: string,
-    timer: NodeJS.Timeout,
-  ): Promise<void> => {
-    if (
-      info.harness.isDying ||
-      liveChannelInfo() !== info ||
-      info.workspaceMcpAuthenticationTimers.get(serverName) !== timer
-    ) {
-      return;
-    }
-    try {
-      await requestWorkspaceStatus(
-        SERVE_STATUS_EXT_METHODS.workspaceMcp,
-        () => undefined,
-        {},
-        new Set([serverName]),
-      );
-    } catch {
-      // Failure to observe completion is not proof that uncancellable auth
-      // work stopped. Retiring its owning channel is the safe drain.
-    }
-    if (
-      info.harness.isDying ||
-      liveChannelInfo() !== info ||
-      info.workspaceMcpAuthenticationTimers.get(serverName) !== timer ||
-      !info.workspaceMcpAuthenticationServerNames.has(serverName)
-    ) {
-      return;
-    }
-    await harness.retireChannelAfterSessionsDrain(
-      info.harness,
-      `workspace MCP authentication timeout for ${serverName}`,
-    );
   };
 
   /**
@@ -9729,8 +9652,7 @@ export function createSessionControlPlane(
       channels.some(
         (ci) =>
           ci.harness.workspaceControlInFlight ||
-          ci.workspaceMcpDiscoveryInFlight ||
-          ci.workspaceMcpAuthenticationServerNames.size,
+          ci.workspaceMcpDiscoveryInFlight,
       )
     )
       blockedReasons.push('workspace_control_pending');
@@ -15508,106 +15430,45 @@ export function createSessionControlPlane(
     },
 
     async manageMcpServer(serverName, action, originatorClientId) {
-      let releaseAuthentication =
-        action === 'authenticate'
-          ? opts.acquireMcpAuthentication?.(boundWorkspace, serverName)
-          : undefined;
-      if (
-        action === 'authenticate' &&
-        opts.acquireMcpAuthentication &&
-        !releaseAuthentication
-      ) {
-        throw new McpAuthenticationInProgressError();
-      }
-      try {
-        return await withEnsuredWorkspaceControl(async (info) => {
-          if (releaseAuthentication) {
-            info.workspaceMcpAuthenticationReleases.set(
-              serverName,
-              releaseAuthentication,
+      return await withEnsuredWorkspaceControl(async (info) => {
+        const response = (await Promise.race([
+          withTimeout(
+            info.connection.extMethod(
+              SERVE_CONTROL_EXT_METHODS.workspaceMcpManage,
+              { serverName, action, originatorClientId },
+            ),
+            MCP_RESTART_TIMEOUT_MS,
+            SERVE_CONTROL_EXT_METHODS.workspaceMcpManage,
+          ),
+          getChannelClosedReject(info),
+        ])) as {
+          serverName: string;
+          action: 'approve' | 'enable' | 'disable';
+          ok: true;
+          changed?: boolean;
+        };
+        invalidateWorkspaceMcpDetailCache(serverName);
+        await requestWorkspaceStatus<ServeWorkspaceMcpStatus>(
+          SERVE_STATUS_EXT_METHODS.workspaceMcp,
+          () => {
+            throw new BridgeChannelClosedError(
+              'workspace MCP management status refresh',
             );
-            releaseAuthentication = undefined;
-          }
-          const timeout =
-            action === 'authenticate'
-              ? MCP_OAUTH_TIMEOUT_MS
-              : MCP_RESTART_TIMEOUT_MS;
-          let response: {
-            serverName: string;
-            action:
-              | 'approve'
-              | 'enable'
-              | 'disable'
-              | 'authenticate'
-              | 'clear-auth';
-            ok: true;
-            changed?: boolean;
-            messages?: string[];
-            authUrl?: string;
-            pending?: boolean;
-          };
-          try {
-            response = (await Promise.race([
-              withTimeout(
-                info.connection.extMethod(
-                  SERVE_CONTROL_EXT_METHODS.workspaceMcpManage,
-                  { serverName, action, originatorClientId },
-                ),
-                timeout,
-                SERVE_CONTROL_EXT_METHODS.workspaceMcpManage,
-              ),
-              getChannelClosedReject(info),
-            ])) as typeof response;
-          } catch (error) {
-            if (
-              action === 'authenticate' &&
-              !(error instanceof BridgeTimeoutError) &&
-              !(error instanceof BridgeChannelClosedError)
-            ) {
-              info.workspaceMcpAuthenticationReleases.get(serverName)?.();
-              info.workspaceMcpAuthenticationReleases.delete(serverName);
-            }
-            throw error;
-          }
-          if (action === 'authenticate' && response.pending) {
-            info.workspaceMcpAuthenticationServerNames.add(serverName);
-            const previousTimer =
-              info.workspaceMcpAuthenticationTimers.get(serverName);
-            if (previousTimer) clearTimeout(previousTimer);
-            const timer = setTimeout(() => {
-              void expireWorkspaceMcpAuthentication(info, serverName, timer);
-            }, MCP_OAUTH_TIMEOUT_MS);
-            timer.unref();
-            info.workspaceMcpAuthenticationTimers.set(serverName, timer);
-          } else if (action === 'authenticate') {
-            info.workspaceMcpAuthenticationReleases.get(serverName)?.();
-            info.workspaceMcpAuthenticationReleases.delete(serverName);
-          }
-          invalidateWorkspaceMcpDetailCache(serverName);
-          await requestWorkspaceStatus<ServeWorkspaceMcpStatus>(
-            SERVE_STATUS_EXT_METHODS.workspaceMcp,
-            () => {
-              throw new BridgeChannelClosedError(
-                'workspace MCP management status refresh',
-              );
-            },
-            {},
-            new Set([serverName]),
-          );
-          broadcastWorkspaceEvent({
-            type: 'mcp_server_changed',
-            data: {
-              serverName: response.serverName,
-              action: response.action,
-              originatorClientId,
-            },
-            ...(originatorClientId ? { originatorClientId } : {}),
-          });
-          return response;
+          },
+          {},
+          new Set([serverName]),
+        );
+        broadcastWorkspaceEvent({
+          type: 'mcp_server_changed',
+          data: {
+            serverName: response.serverName,
+            action: response.action,
+            originatorClientId,
+          },
+          ...(originatorClientId ? { originatorClientId } : {}),
         });
-      } finally {
-        releaseAuthentication?.();
-      }
+        return response;
+      });
     },
 
     async initializeWorkspaceMcp() {
@@ -15786,7 +15647,7 @@ export function createSessionControlPlane(
       }
       type AddOk = {
         name: string;
-        transport: 'stdio' | 'sse' | 'http' | 'tcp' | 'sdk';
+        transport: 'stdio' | 'sdk';
         replaced: boolean;
         shadowedSettings: boolean;
         toolCount: number;

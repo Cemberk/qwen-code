@@ -35,7 +35,6 @@ describe('Agent Plugins extension conversion', () => {
     await expect(convertCompatibleExtension(pluginRoot)).resolves.toEqual({
       extensionDir: pluginRoot,
       originSource: 'AgentPlugins',
-      externalContent: false,
     });
     expect(fs.readFileSync(path.join(pluginRoot, 'plugin.json'), 'utf8')).toBe(
       manifest,
@@ -76,7 +75,6 @@ describe('Agent Plugins extension conversion', () => {
     await expect(convertCompatibleExtension(pluginRoot)).resolves.toEqual({
       extensionDir: pluginRoot,
       originSource: 'QwenCode',
-      externalContent: false,
     });
   });
 

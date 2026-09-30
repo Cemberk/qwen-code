@@ -4,11 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {
-  SlashCommand,
-  MessageActionReturn,
-  OpenDialogActionReturn,
-} from './types.js';
+import type { SlashCommand, OpenDialogActionReturn } from './types.js';
 import { CommandKind } from './types.js';
 import { t } from '../../i18n/index.js';
 
@@ -20,32 +16,10 @@ export const mcpCommand: SlashCommand = {
   argumentHint: 'desc|nodesc|schema',
   kind: CommandKind.BUILT_IN,
   supportedModes: ['interactive'] as const,
-  action: async (
-    _context,
-    args = '',
-  ): Promise<MessageActionReturn | OpenDialogActionReturn> => {
-    const [subcommand, serverName] = args.trim().split(/\s+/);
-
-    if (subcommand === 'auth' || subcommand === 'noauth') {
-      return {
-        type: 'message',
-        messageType: 'warning',
-        content: serverName
-          ? t(
-              "MCP OAuth is now managed in the /mcp dialog. Open /mcp, select '{{serverName}}', then use the Auth actions there.",
-              { serverName },
-            )
-          : t(
-              'MCP OAuth is now managed in the /mcp dialog. Open /mcp, select a server, then use the Auth actions there.',
-            ),
-      };
-    }
-
-    // desc, nodesc, and schema open this same MCP dialog. Their display state
-    // is owned outside this command, including Ctrl+T's slash-command path.
-    return {
-      type: 'dialog',
-      dialog: 'mcp',
-    };
-  },
+  // desc, nodesc, and schema open this same MCP dialog. Their display state
+  // is owned outside this command, including Ctrl+T's slash-command path.
+  action: async (): Promise<OpenDialogActionReturn> => ({
+    type: 'dialog',
+    dialog: 'mcp',
+  }),
 };

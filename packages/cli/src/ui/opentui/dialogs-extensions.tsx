@@ -8,23 +8,19 @@
 
 /**
  * OpenTUI parity of the ink `/extensions` dialog (audit 01 G-4 / 05 G-12):
- * the Installed / Discover / Sources tab shell with its cycling rules
- * (Tab/Shift+Tab/←/→, Discover's marketplace filter clears in place on Tab,
- * Esc to close, status message coloring) plus the Installed-tab management
+ * Esc to close, status message coloring, plus the installed-list management
  * keys the footer promises — ↑↓ navigate (wrap-around), Space enable/disable,
  * f favorite, Enter details. The detail view reproduces the ink
  * ExtensionActionsView stack: info panel + actions list, scope select, and a
- * y/n uninstall confirm. Discover/Sources degrade honestly (they say so —
- * no fake loading state, no fake footer hints). Rows and mutations are
- * backend work (dialog-data.ts); MCP servers are managed in the /mcp dialog.
+ * y/n uninstall confirm. Rows and mutations are backend work
+ * (dialog-data.ts); MCP servers are managed in the /mcp dialog.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { C } from './theme.js';
 import { t } from '../../i18n/index.js';
 import { toOriginalKey } from './key-map.js';
 import { useKeyboard } from '@opentui/react';
-import { cycleTab } from './dialogs-core.js';
 import {
   DialogSelect,
   useDialogSelect,
@@ -34,51 +30,10 @@ import type { ExtensionUpdateCheckState } from './dialog-data.js';
 
 export const EXTENSIONS_TABS = {
   INSTALLED: 'installed',
-  DISCOVER: 'discover',
-  SOURCES: 'sources',
 } as const;
 
 export type ExtensionsTab =
   (typeof EXTENSIONS_TABS)[keyof typeof EXTENSIONS_TABS];
-
-export const EXTENSIONS_TAB_ORDER: readonly ExtensionsTab[] = [
-  EXTENSIONS_TABS.INSTALLED,
-  EXTENSIONS_TABS.DISCOVER,
-  EXTENSIONS_TABS.SOURCES,
-];
-
-/** Parity of tabLabel in extensions/TabBar.tsx. */
-export function extensionsTabLabel(tab: ExtensionsTab): string {
-  switch (tab) {
-    case EXTENSIONS_TABS.DISCOVER:
-      return t('Discover');
-    case EXTENSIONS_TABS.INSTALLED:
-      return t('Installed');
-    case EXTENSIONS_TABS.SOURCES:
-      return t('Sources');
-    default:
-      return tab;
-  }
-}
-
-/**
- * Footer hint for the Installed tab (the original text). Discover/Sources
- * get an honest hint instead: their ink footers promise keys this renderer
- * does not implement, so repeating them would be a lie.
- */
-export function extensionsFooterHint(tab: ExtensionsTab): string {
-  switch (tab) {
-    case EXTENSIONS_TABS.INSTALLED:
-      return t(
-        '↑↓ navigate · Space enable/disable · f favorite · Enter details · Esc close',
-      );
-    case EXTENSIONS_TABS.DISCOVER:
-    case EXTENSIONS_TABS.SOURCES:
-      return t('Tab / ←→ to switch · Esc to close');
-    default:
-      return '';
-  }
-}
 
 export interface ExtensionsStatusMessage {
   type: 'info' | 'success' | 'warning' | 'error';
@@ -125,15 +80,11 @@ type InstalledView = 'list' | 'detail' | 'scope-select' | 'uninstall-confirm';
 
 export interface OpenTuiExtensionsDialogProps {
   onClose: () => void;
-  initialTab?: ExtensionsTab;
   status?: ExtensionsStatusMessage | null;
-  /** True while a tab owns a sub-view (locks tab cycling). */
+  /** True while a sub-view is open (disables the list keys). */
   tabLocked?: boolean;
-  /** Optional tab-provided footer hint wins over the generic hint. */
+  /** Optional footer hint wins over the generic hint. */
   tabFooter?: string | null;
-  /** Marketplace filter for the Discover tab (set via Sources "Browse"). */
-  discoverFilter?: string | null;
-  onDiscoverFilterChange?: (filter: string | null) => void;
   rowsByTab?: Partial<Record<ExtensionsTab, readonly ExtensionRow[]>>;
   /** Space / f on the highlighted Installed row. */
   onRowAction?: (row: ExtensionRow, action: 'toggle' | 'favorite') => void;
@@ -156,24 +107,15 @@ export interface OpenTuiExtensionsDialogProps {
 export function OpenTuiExtensionsDialog(props: OpenTuiExtensionsDialogProps) {
   const {
     onClose,
-    initialTab,
     status,
     tabLocked = false,
     tabFooter,
-    discoverFilter: discoverFilterProp,
-    onDiscoverFilterChange,
     rowsByTab,
     onRowAction,
     onDetailAction,
     busy = false,
   } = props;
 
-  const [activeTab, setActiveTab] = useState<ExtensionsTab>(
-    initialTab ?? EXTENSIONS_TABS.INSTALLED,
-  );
-  const [discoverFilter, setDiscoverFilter] = useState<string | null>(
-    discoverFilterProp ?? null,
-  );
   const [view, setView] = useState<InstalledView>('list');
   // Selected row tracked by key: rows are re-read after every mutation, so
   // keying keeps the cursor (and any open detail view) on the SAME item even
@@ -182,18 +124,6 @@ export function OpenTuiExtensionsDialog(props: OpenTuiExtensionsDialogProps) {
   const [checkedUpdateState, setCheckedUpdateState] = useState<
     ExtensionUpdateCheckState | undefined
   >(undefined);
-
-  const clearDiscoverFilter = useCallback(() => {
-    setDiscoverFilter(null);
-    onDiscoverFilterChange?.(null);
-  }, [onDiscoverFilterChange]);
-
-  const cycle = useCallback((direction: 1 | -1) => {
-    setDiscoverFilter(null);
-    setActiveTab((current) =>
-      cycleTab(EXTENSIONS_TAB_ORDER, current, direction),
-    );
-  }, []);
 
   const rows: readonly ExtensionRow[] = useMemo(
     () => rowsByTab?.[EXTENSIONS_TABS.INSTALLED] ?? [],
@@ -230,7 +160,7 @@ export function OpenTuiExtensionsDialog(props: OpenTuiExtensionsDialogProps) {
   const listSelect = useDialogSelect({
     items: listItems,
     numbers: false,
-    focused: activeTab === EXTENSIONS_TABS.INSTALLED && view === 'list',
+    focused: view === 'list',
     onSelect: (key) => {
       setSelectedKey(key);
       setCheckedUpdateState(undefined);
@@ -378,22 +308,9 @@ export function OpenTuiExtensionsDialog(props: OpenTuiExtensionsDialogProps) {
     }
 
     if (tabLocked) return;
-    if (name === 'tab') {
-      // On Discover with an active marketplace filter, Tab clears the
-      // filter in place instead of leaving the tab — the "(Tab to clear)"
-      // promise from the original.
-      if (activeTab === EXTENSIONS_TABS.DISCOVER && discoverFilter) {
-        clearDiscoverFilter();
-      } else {
-        cycle(original.shift ? -1 : 1);
-      }
-    } else if (name === 'right') {
-      cycle(1);
-    } else if (name === 'left') {
-      cycle(-1);
-    } else if (name === 'escape') {
+    if (name === 'escape') {
       onClose();
-    } else if (activeTab === EXTENSIONS_TABS.INSTALLED && !busy) {
+    } else if (!busy) {
       const row = listItems[listSelect.activeIndexRef.current]?.row;
       if (!row) return;
       if (name === 'space' || original.sequence === ' ') {
@@ -412,7 +329,9 @@ export function OpenTuiExtensionsDialog(props: OpenTuiExtensionsDialogProps) {
     tabFooter ??
     (tabLocked || view !== 'list'
       ? t('Enter to select · Esc to go back')
-      : extensionsFooterHint(activeTab));
+      : t(
+          '↑↓ navigate · Space enable/disable · f favorite · Enter details · Esc close',
+        ));
 
   const renderInstalledContent = () => {
     if (view === 'detail' && currentRow) {
@@ -567,7 +486,7 @@ export function OpenTuiExtensionsDialog(props: OpenTuiExtensionsDialogProps) {
         scrollOffset={listSelect.scrollOffset}
         showNumbers={false}
         showScrollArrows
-        focused={activeTab === EXTENSIONS_TABS.INSTALLED && view === 'list'}
+        focused={view === 'list'}
         onHover={listSelect.highlightIndex}
         onWheel={(direction) =>
           listSelect.highlightIndex(
@@ -610,52 +529,7 @@ export function OpenTuiExtensionsDialog(props: OpenTuiExtensionsDialogProps) {
       borderColor={C.dim}
       paddingX={1}
     >
-      <box flexDirection="row">
-        {EXTENSIONS_TAB_ORDER.map((tab) => {
-          const isActive = tab === activeTab;
-          return (
-            <box key={tab} marginRight={2}>
-              <text
-                fg={isActive ? '#000000' : C.dim}
-                bg={isActive ? C.accent : undefined}
-                attributes={isActive ? 1 : undefined}
-              >
-                {` ${extensionsTabLabel(tab)} `}
-              </text>
-            </box>
-          );
-        })}
-        <text fg={tabLocked || view !== 'list' ? '#555555' : C.dim}>
-          {t('(Tab / ←→ to switch)')}
-        </text>
-      </box>
-
-      <box marginTop={1} flexDirection="column">
-        {activeTab === EXTENSIONS_TABS.DISCOVER && discoverFilter ? (
-          <text fg={C.dim}>
-            {t('Marketplace: {{name}}', { name: discoverFilter })}{' '}
-            {t('(Tab to clear)')}
-          </text>
-        ) : null}
-        {activeTab === EXTENSIONS_TABS.DISCOVER ? (
-          <box flexDirection="column">
-            <text fg={C.dim}>
-              {t('Discover is not yet available in the OpenTUI renderer.')}
-            </text>
-            <text fg={C.dim}>
-              {t('Manage installed extensions on the Installed tab.')}
-            </text>
-          </box>
-        ) : activeTab === EXTENSIONS_TABS.SOURCES ? (
-          <text fg={C.dim}>
-            {t(
-              'Marketplace sources are not yet available in the OpenTUI renderer.',
-            )}
-          </text>
-        ) : (
-          renderInstalledContent()
-        )}
-      </box>
+      <box flexDirection="column">{renderInstalledContent()}</box>
 
       {status && (
         <box marginTop={1}>

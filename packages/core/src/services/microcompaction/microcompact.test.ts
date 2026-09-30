@@ -934,9 +934,9 @@ describe('microcompactHistory', () => {
 
   it('size-compacts bridged tool results using the target tool identity', () => {
     const history: Content[] = [
-      makeBridgedToolCall('c1', 'WEB_FETCH'),
+      makeBridgedToolCall('c1', 'GREP_SEARCH'),
       makeBridgedToolResult('c1', 'x'.repeat(1_000)),
-      makeBridgedToolCall('c2', 'web_fetch'),
+      makeBridgedToolCall('c2', 'grep_search'),
       makeBridgedToolResult('c2', 'recent'),
     ];
 
@@ -958,7 +958,7 @@ describe('microcompactHistory', () => {
 
   it('does not guess when a bridged call id maps to mixed tool names', () => {
     const history: Content[] = [
-      makeBridgedToolCall('reused', 'web_fetch'),
+      makeBridgedToolCall('reused', 'glob'),
       makeBridgedToolCall('reused', 'grep_search'),
       makeBridgedToolResult('reused', 'ambiguous output'.repeat(100)),
     ];
@@ -2012,7 +2012,7 @@ describe('microcompactHistory evictedReadPaths (issue #4239)', () => {
         file_path: '/proj/old.ts',
       }),
       makeBridgedToolResult('c0', 'old long content '.repeat(50)),
-      makeBridgedToolCall('c1', 'web_fetch'),
+      makeBridgedToolCall('c1', 'glob'),
       makeBridgedToolResult('c1', 'recent content'),
     ];
 

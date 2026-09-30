@@ -149,13 +149,11 @@ describe('mcp list command', () => {
     );
   });
 
-  it('should display different server types with connected status', async () => {
+  it('should display stdio servers with connected status', async () => {
     mockedLoadSettings.mockReturnValue({
       merged: {
         mcpServers: {
           'stdio-server': { command: '/path/to/server', args: ['arg1'] },
-          'sse-server': { url: 'https://example.com/sse' },
-          'http-server': { httpUrl: 'https://example.com/http' },
         },
       },
     });
@@ -172,27 +170,9 @@ describe('mcp list command', () => {
         'stdio-server: /path/to/server arg1 (stdio) - Connected',
       ),
     );
-    expect(mockWriteStdoutLine).toHaveBeenCalledWith(
-      expect.stringContaining(
-        'sse-server: https://example.com/sse (sse) - Connected',
-      ),
-    );
-    expect(mockWriteStdoutLine).toHaveBeenCalledWith(
-      expect.stringContaining(
-        'http-server: https://example.com/http (http) - Connected',
-      ),
-    );
     expect(mockedCreateMcpClient).toHaveBeenCalledWith(
       'mcp-test-client',
       expect.objectContaining({ command: '/path/to/server' }),
-    );
-    expect(mockedCreateMcpClient).toHaveBeenCalledWith(
-      'mcp-test-client',
-      expect.objectContaining({ url: 'https://example.com/sse' }),
-    );
-    expect(mockedCreateMcpClient).toHaveBeenCalledWith(
-      'mcp-test-client',
-      expect.objectContaining({ httpUrl: 'https://example.com/http' }),
     );
     expect(mockClient.connect).toHaveBeenCalledWith(mockTransport, {
       timeout: 10_000,
@@ -225,7 +205,7 @@ describe('mcp list command', () => {
       mockedLoadSettings.mockReturnValue({
         merged: {
           mcpServers: {
-            'slow-server': { url: 'https://example.com/sse' },
+            'slow-server': { command: '/slow/server' },
           },
         },
       });
@@ -241,7 +221,7 @@ describe('mcp list command', () => {
       expect(mockTransport.close).toHaveBeenCalledOnce();
       expect(mockWriteStdoutLine).toHaveBeenCalledWith(
         expect.stringContaining(
-          'slow-server: https://example.com/sse (sse) - Disconnected (timed out after 10000ms)',
+          'slow-server: /slow/server  (stdio) - Disconnected (timed out after 10000ms)',
         ),
       );
     } finally {
@@ -255,7 +235,7 @@ describe('mcp list command', () => {
       mockedLoadSettings.mockReturnValue({
         merged: {
           mcpServers: {
-            'healthy-server': { url: 'https://example.com/sse' },
+            'healthy-server': { command: '/healthy/server' },
           },
         },
       });
@@ -329,7 +309,8 @@ describe('mcp list command', () => {
     mockedLoadSettings.mockReturnValue({ merged: { mcpServers: {} } });
     mockedAssembleMcpServers.mockReturnValue({
       'workspace-server': {
-        httpUrl: 'https://example.com/mcp',
+        command: 'node',
+        args: ['ws.js'],
         scope: 'workspace',
       },
     });
@@ -342,7 +323,7 @@ describe('mcp list command', () => {
     expect(mockedCreateTransport).not.toHaveBeenCalled();
     expect(mockWriteStdoutLine).toHaveBeenCalledWith(
       expect.stringContaining(
-        'workspace-server: https://example.com/mcp (http) - Rejected',
+        'workspace-server: node ws.js (stdio) - Rejected',
       ),
     );
   });

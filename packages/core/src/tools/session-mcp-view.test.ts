@@ -280,10 +280,6 @@ describe('SessionMcpView', () => {
         undefined,
         undefined,
         undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
         /*trust*/ true,
       ),
     );
@@ -335,10 +331,6 @@ describe('SessionMcpView', () => {
         undefined,
         undefined,
         undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
         /*trust*/ true,
       ),
     );
@@ -370,10 +362,6 @@ describe('SessionMcpView', () => {
     const { tools, prompts, resources } = mkRegistries();
     const cfgFiltered = new MCPServerConfig(
       'node',
-      undefined,
-      undefined,
-      undefined,
-      undefined,
       undefined,
       undefined,
       undefined,
@@ -470,10 +458,6 @@ describe('SessionMcpView', () => {
       undefined,
       undefined,
       undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
       ['keep', 'bad'],
     );
     const view = new SessionMcpView(
@@ -547,10 +531,6 @@ describe('SessionMcpView', () => {
       undefined,
       undefined,
       undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
       ['only_this_tool'],
     );
     const view = new SessionMcpView(
@@ -613,10 +593,6 @@ describe('SessionMcpView', () => {
     view.updateConfig(
       new MCPServerConfig(
         'node',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
         undefined,
         undefined,
         undefined,

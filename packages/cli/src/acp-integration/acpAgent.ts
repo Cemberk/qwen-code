@@ -74,8 +74,6 @@ import {
   McpServerSpawnFailedError,
   InvalidMcpConfigError,
   isGatedMcpScope,
-  MCPOAuthProvider,
-  MCPOAuthTokenStorage,
   InvalidSessionTranscriptCursorError,
   InvalidSessionTranscriptTurnAnchorError,
   SESSION_TRANSCRIPT_MAX_LIMIT,
@@ -100,7 +98,6 @@ import {
   runManagedAutoMemoryDream,
   runManagedRememberByAgent,
   matchesAnyServerPattern,
-  mcpServerRequiresOAuth,
   IMAGE_CAPABILITY,
   registerAcpEventLoopLagGauge,
   SESSION_ARTIFACT_PERSISTENCE_VERSION,
@@ -195,8 +192,6 @@ import type {
   LoadSessionRequest,
   LoadSessionResponse,
   McpServer,
-  McpServerHttp,
-  McpServerSse,
   McpServerStdio,
   NewSessionRequest,
   NewSessionResponse,
@@ -351,7 +346,6 @@ import { runWithAcpRuntimeOutputDir } from './runtimeOutputDirContext.js';
 import { ACP_ERROR_CODES } from './errorCodes.js';
 import { runExitCleanup } from '../utils/cleanup.js';
 import { startNonInteractiveOpenAILogHousekeeping } from '../services/housekeeping/scheduler.js';
-import { appEvents, AppEvent } from '../utils/events.js';
 import {
   setLanguageAsync,
   getCurrentLanguage,
@@ -598,7 +592,6 @@ const POSIX_TMP_LOCAL_READ_ROOT = '/tmp';
 // Must be less than SESSION_BTW_TIMEOUT_MS (60s) in bridge.ts so the child
 // aborts before the bridge's backstop timer fires.
 const BTW_CHILD_TIMEOUT_MS = 55_000;
-const MCP_OAUTH_START_TIMEOUT_MS = 30_000;
 const SESSION_DRAIN_TIMEOUT_MS = 30_000;
 const ACP_EVENT_LOOP_STALL_RESTART_MS = 5 * 60 * 1000;
 const SESSION_ID_RE = /^[0-9a-fA-F-]{32,36}$/;
@@ -1456,7 +1449,7 @@ type QwenMemoryPaths = {
 
 type QwenSettingsScope = 'user' | 'workspace';
 type QwenSettingValue = string | number | boolean | string[] | undefined;
-type QwenMcpTransport = 'stdio' | 'http' | 'sse';
+type QwenMcpTransport = 'stdio';
 type QwenHookEvent = HookEventName;
 
 type QwenCoreSettingKey =
@@ -1489,9 +1482,6 @@ type QwenMcpServerConfig = {
   args?: string[];
   cwd?: string;
   env?: Record<string, string>;
-  httpUrl?: string;
-  url?: string;
-  headers?: Record<string, string>;
   timeout?: number;
   versionNegotiation?: 'auto' | 'legacy';
   appResourceMaxBytes?: number;
@@ -1504,17 +1494,13 @@ type QwenMcpServerConfig = {
 };
 
 type QwenHookConfig = {
-  type: 'command' | 'http';
+  type: 'command';
   command?: string;
-  url?: string;
-  headers?: Record<string, string>;
-  allowedEnvVars?: string[];
   name?: string;
   description?: string;
   timeout?: number;
   env?: Record<string, string>;
   async?: boolean;
-  once?: boolean;
   statusMessage?: string;
   shell?: 'bash' | 'powershell';
 };
@@ -2234,11 +2220,8 @@ function toMcpAppResourceLimit(value: unknown): number | undefined {
 function normalizeMcpServerConfig(value: unknown): QwenMcpServerConfig {
   const input = toRecord(value);
   const transport = input['transport'];
-  if (transport !== 'stdio' && transport !== 'http' && transport !== 'sse') {
-    throw RequestError.invalidParams(
-      undefined,
-      'MCP transport must be stdio, http, or sse',
-    );
+  if (transport !== 'stdio') {
+    throw RequestError.invalidParams(undefined, 'MCP transport must be stdio');
   }
 
   const server: QwenMcpServerConfig = { transport };
@@ -2273,31 +2256,16 @@ function normalizeMcpServerConfig(value: unknown): QwenMcpServerConfig {
   server.includeTools = normalizeStringArray(input['includeTools']);
   server.excludeTools = normalizeStringArray(input['excludeTools']);
 
-  if (transport === 'stdio') {
-    const command = input['command'];
-    if (typeof command !== 'string' || !command.trim()) {
-      throw RequestError.invalidParams(
-        undefined,
-        'Stdio MCP servers require a command',
-      );
-    }
-    server.command = command.trim();
-    server.args = normalizeStringArray(input['args']);
-    server.env = normalizeStringRecord(input['env']);
-    return server;
-  }
-
-  const urlKey = transport === 'http' ? 'httpUrl' : 'url';
-  const url = input[urlKey];
-  if (typeof url !== 'string' || !url.trim()) {
+  const command = input['command'];
+  if (typeof command !== 'string' || !command.trim()) {
     throw RequestError.invalidParams(
       undefined,
-      `${transport.toUpperCase()} MCP servers require a URL`,
+      'Stdio MCP servers require a command',
     );
   }
-  if (transport === 'http') server.httpUrl = url.trim();
-  else server.url = url.trim();
-  server.headers = normalizeStringRecord(input['headers']);
+  server.command = command.trim();
+  server.args = normalizeStringArray(input['args']);
+  server.env = normalizeStringRecord(input['env']);
   return server;
 }
 
@@ -2317,71 +2285,15 @@ function toStoredMcpServerConfig(
   ] as const) {
     if (server[key] !== undefined) result[key] = server[key];
   }
-  if (server.transport === 'stdio') {
-    result['command'] = server.command;
-    if (server.args !== undefined) result['args'] = server.args;
-    if (server.cwd !== undefined) result['cwd'] = server.cwd;
-    if (server.env !== undefined) result['env'] = server.env;
-  } else if (server.transport === 'http') {
-    result['httpUrl'] = server.httpUrl;
-    if (server.headers !== undefined) result['headers'] = server.headers;
-  } else {
-    result['url'] = server.url;
-    if (server.headers !== undefined) result['headers'] = server.headers;
-  }
+  result['command'] = server.command;
+  if (server.args !== undefined) result['args'] = server.args;
+  if (server.cwd !== undefined) result['cwd'] = server.cwd;
+  if (server.env !== undefined) result['env'] = server.env;
   return result;
 }
 
 function toMcpServerConfig(value: unknown): QwenMcpServerConfig | undefined {
   const server = toRecord(value);
-  if (typeof server['httpUrl'] === 'string') {
-    return {
-      transport: 'http',
-      httpUrl: server['httpUrl'],
-      headers: normalizeStringRecord(server['headers']),
-      timeout: normalizeOptionalNumber(server['timeout']),
-      versionNegotiation: toMcpVersionNegotiation(server['versionNegotiation']),
-      appResourceMaxBytes: toMcpAppResourceLimit(server['appResourceMaxBytes']),
-      appResourceTimeoutMs: toMcpAppResourceLimit(
-        server['appResourceTimeoutMs'],
-      ),
-      trust: typeof server['trust'] === 'boolean' ? server['trust'] : undefined,
-      description:
-        typeof server['description'] === 'string'
-          ? server['description']
-          : undefined,
-      includeTools: normalizeStringArray(server['includeTools']),
-      excludeTools: normalizeStringArray(server['excludeTools']),
-      extensionName:
-        typeof server['extensionName'] === 'string'
-          ? server['extensionName']
-          : undefined,
-    };
-  }
-  if (typeof server['url'] === 'string') {
-    return {
-      transport: 'sse',
-      url: server['url'],
-      headers: normalizeStringRecord(server['headers']),
-      timeout: normalizeOptionalNumber(server['timeout']),
-      versionNegotiation: toMcpVersionNegotiation(server['versionNegotiation']),
-      appResourceMaxBytes: toMcpAppResourceLimit(server['appResourceMaxBytes']),
-      appResourceTimeoutMs: toMcpAppResourceLimit(
-        server['appResourceTimeoutMs'],
-      ),
-      trust: typeof server['trust'] === 'boolean' ? server['trust'] : undefined,
-      description:
-        typeof server['description'] === 'string'
-          ? server['description']
-          : undefined,
-      includeTools: normalizeStringArray(server['includeTools']),
-      excludeTools: normalizeStringArray(server['excludeTools']),
-      extensionName:
-        typeof server['extensionName'] === 'string'
-          ? server['extensionName']
-          : undefined,
-    };
-  }
   if (typeof server['command'] === 'string') {
     return {
       transport: 'stdio',
@@ -2446,17 +2358,14 @@ function restoreSecretRecord(
 }
 
 // Hooks carry the same secret classes as MCP servers — command-hook `env`
-// (tokens passed to scripts) and http-hook `headers` (auth). Mask them in the
-// settings response and restore them on write, mirroring the MCP scheme.
+// (tokens passed to scripts). Mask them in the settings response and restore
+// them on write, mirroring the MCP scheme.
 function redactHookSecrets(hook: QwenHookDefinition): QwenHookDefinition {
   return {
     ...hook,
     hooks: hook.hooks.map((config) => ({
       ...config,
       ...(config.env ? { env: redactSecretRecord(config.env) } : {}),
-      ...(config.headers
-        ? { headers: redactSecretRecord(config.headers) }
-        : {}),
     })),
   };
 }
@@ -2477,14 +2386,6 @@ function restoreRedactedHookSecrets(
         ...(config.env
           ? { env: restoreSecretRecord(config.env, priorConfig['env']) }
           : {}),
-        ...(config.headers
-          ? {
-              headers: restoreSecretRecord(
-                config.headers,
-                priorConfig['headers'],
-              ),
-            }
-          : {}),
       };
     }),
   };
@@ -2503,8 +2404,8 @@ function readMcpServers(
     .map(([name, value]) => {
       try {
         const server = toMcpServerConfig(value);
-        // Never expose stdio env or http/sse auth headers in plaintext in the
-        // settings response — they routinely hold API keys / tokens.
+        // Never expose stdio env in plaintext in the settings response — it
+        // routinely holds API keys / tokens.
         return server
           ? { name, scope, server: redactMcpServerSecrets(server) }
           : undefined;
@@ -2537,36 +2438,22 @@ function isHookEvent(value: unknown): value is QwenHookEvent {
 function normalizeHookConfig(value: unknown): QwenHookConfig {
   const input = toRecord(value);
   const type = input['type'];
-  if (type !== 'command' && type !== 'http') {
-    throw RequestError.invalidParams(
-      undefined,
-      'Hook type must be command or http',
-    );
+  if (type !== 'command') {
+    throw RequestError.invalidParams(undefined, 'Hook type must be command');
   }
   const config: QwenHookConfig = { type };
-  if (type === 'command') {
-    const command = input['command'];
-    if (typeof command !== 'string' || !command.trim()) {
-      throw RequestError.invalidParams(
-        undefined,
-        'Command hooks require a command',
-      );
-    }
-    config.command = command.trim();
-    config.env = normalizeStringRecord(input['env']);
-    if (typeof input['async'] === 'boolean') config.async = input['async'];
-    const shell = input['shell'];
-    if (shell === 'bash' || shell === 'powershell') config.shell = shell;
-  } else {
-    const url = input['url'];
-    if (typeof url !== 'string' || !url.trim()) {
-      throw RequestError.invalidParams(undefined, 'HTTP hooks require a URL');
-    }
-    config.url = url.trim();
-    config.headers = normalizeStringRecord(input['headers']);
-    config.allowedEnvVars = normalizeStringArray(input['allowedEnvVars']);
-    if (typeof input['once'] === 'boolean') config.once = input['once'];
+  const command = input['command'];
+  if (typeof command !== 'string' || !command.trim()) {
+    throw RequestError.invalidParams(
+      undefined,
+      'Command hooks require a command',
+    );
   }
+  config.command = command.trim();
+  config.env = normalizeStringRecord(input['env']);
+  if (typeof input['async'] === 'boolean') config.async = input['async'];
+  const shell = input['shell'];
+  if (shell === 'bash' || shell === 'powershell') config.shell = shell;
   const timeout = normalizeOptionalNumber(input['timeout']);
   if (timeout !== undefined) config.timeout = timeout;
   for (const key of ['name', 'description', 'statusMessage'] as const) {
@@ -2896,13 +2783,10 @@ function readRuntimeMcpAddRequest(
   // filters, or choose a process working directory.
   const {
     trust: _trust,
-    authProviderType: _auth,
     includeTools: _inc,
     excludeTools: _exc,
     cwd: _cwd,
     env: _env,
-    oauth: _oauth,
-    headers: _headers,
     type: _type,
     [CLIENT_MCP_OVER_WS_CONFIG_FLAG]: clientMcpOverWs,
     ...safeConfig
@@ -3036,8 +2920,8 @@ export async function runAcpAgent(
     endAcpBootstrapConfigProfiling();
   }
   // The ACP path exits llm.tsx before its startup-warning printing runs,
-  // so config warnings (including initialize-time ones like the WebSearch
-  // enablement notice) would otherwise vanish. stderr lands in the client's
+  // so config warnings (including initialize-time ones) would otherwise
+  // vanish. stderr lands in the client's
   // logs without interfering with the ACP protocol on stdout.
   // Defensive `typeof` for tests that stub Config without getWarnings.
   const startupWarnings =
@@ -3453,39 +3337,16 @@ export function toStdioServer(server: McpServer): McpServerStdio | undefined {
   return undefined;
 }
 
-export function toSseServer(
-  server: McpServer,
-): (McpServerSse & { type: 'sse' }) | undefined {
-  if ('type' in server && server.type === 'sse') {
-    return server as McpServerSse & { type: 'sse' };
-  }
-  return undefined;
-}
-
-export function toHttpServer(
-  server: McpServer,
-): (McpServerHttp & { type: 'http' }) | undefined {
-  if ('type' in server && server.type === 'http') {
-    return server as McpServerHttp & { type: 'http' };
-  }
-  return undefined;
-}
-
 /**
  * Parse `QWEN_SERVE_MCP_POOL_TRANSPORTS` env var. Comma-separated list
- * e.g. "stdio,websocket,http". Falls back to `POOLED_TRANSPORTS_DEFAULT`
+ * e.g. "stdio". Falls back to `POOLED_TRANSPORTS_DEFAULT`
  * on missing / malformed input. Unknown transport names are silently dropped.
  */
 function parsePooledTransports(
   envValue: string | undefined,
 ): ReadonlySet<McpTransportKind> {
   if (!envValue || !envValue.trim()) return POOLED_TRANSPORTS_DEFAULT;
-  const KNOWN: ReadonlySet<McpTransportKind> = new Set([
-    'stdio',
-    'websocket',
-    'http',
-    'sse',
-  ]);
+  const KNOWN: ReadonlySet<McpTransportKind> = new Set(['stdio']);
   const out = new Set<McpTransportKind>();
   for (const raw of envValue.split(',')) {
     const trimmed = raw.trim().toLowerCase();
@@ -3599,13 +3460,6 @@ interface TranscriptReplayConfigCacheEntry {
   settings: LoadedSettings;
   config?: Config;
   pending?: Promise<Config>;
-}
-
-interface PendingMcpAuthentication {
-  started: Promise<{
-    authUrl: string;
-    messages: string[];
-  }>;
 }
 
 interface ActivePromptCall {
@@ -3814,14 +3668,6 @@ class QwenAgent implements Agent {
   private readonly workspaceExtensionStatusRefreshes = new Map<
     boolean,
     Promise<void>
-  >();
-  private readonly pendingMcpAuthentications = new Map<
-    string,
-    PendingMcpAuthentication
-  >();
-  private readonly mcpAuthenticationResults = new Map<
-    string,
-    { state: 'succeeded' | 'failed'; error?: string }
   >();
   private readonly generationControllers = new Map<
     string,
@@ -5116,10 +4962,6 @@ class QwenAgent implements Agent {
         sessionCapabilities: {
           list: {},
           resume: {},
-        },
-        mcpCapabilities: {
-          sse: true,
-          http: true,
         },
         _meta: {
           imageCapability: IMAGE_CAPABILITY,
@@ -7088,9 +6930,6 @@ class QwenAgent implements Agent {
     if (!server || typeof server !== 'object') return 'unknown';
     const s = server as Record<string, unknown>;
     if (s['type'] === 'sdk') return 'sdk';
-    if (typeof s['httpUrl'] === 'string') return 'http';
-    if (typeof s['url'] === 'string') return 'sse';
-    if (typeof s['tcp'] === 'string') return 'websocket';
     if (typeof s['command'] === 'string') return 'stdio';
     return 'unknown';
   }
@@ -7230,9 +7069,6 @@ class QwenAgent implements Agent {
         }
       }
 
-      const sharedTokenStorage =
-        scope === 'workspace' ? new MCPOAuthTokenStorage() : undefined;
-
       return {
         v: STATUS_SCHEMA_VERSION,
         workspaceCwd,
@@ -7241,17 +7077,6 @@ class QwenAgent implements Agent {
         servers: await Promise.all(
           Object.entries(servers).map(async ([name, server]) => {
             const disabled = config.isMcpServerDisabled(name);
-            let hasOAuthTokens: boolean | undefined;
-            if (sharedTokenStorage) {
-              hasOAuthTokens = false;
-              try {
-                const credentials =
-                  await sharedTokenStorage.getCredentials(name);
-                hasOAuthTokens = credentials !== null;
-              } catch {
-                // Match CLI: token lookup errors should not break /mcp status.
-              }
-            }
             const poolRow = poolByName[name];
             const rawStatus = poolRow
               ? poolRow.entrySummary.some(
@@ -7264,11 +7089,6 @@ class QwenAgent implements Agent {
                   ? MCPServerStatus.CONNECTING
                   : MCPServerStatus.DISCONNECTED
               : this.getMcpServerStatus(config, name);
-            const requiresAuth =
-              scope === 'workspace' &&
-              rawStatus !== MCPServerStatus.CONNECTED &&
-              (mcpServerRequiresOAuth.get(name) === true ||
-                (server.oauth?.enabled === true && !hasOAuthTokens));
             const refusedByBudget = refusedSet.has(name);
             // Config-disable takes precedence over budget-refusal.
             const effectivelyRefused = refusedByBudget && !disabled;
@@ -7285,8 +7105,6 @@ class QwenAgent implements Agent {
               mcpStatus: this.mcpStatus(rawStatus),
               transport: this.mcpTransport(server),
               disabled,
-              ...(hasOAuthTokens !== undefined ? { hasOAuthTokens } : {}),
-              ...(requiresAuth ? { requiresAuth: true } : {}),
             };
             if (isGatedMcpScope(server.scope)) {
               const approvalState = approvals.getState(
@@ -7299,19 +7117,6 @@ class QwenAgent implements Agent {
                 if (!disabled) {
                   out.status = 'warning';
                   out.mcpStatus = 'disconnected';
-                }
-              }
-            }
-            if (scope === 'workspace') {
-              if (this.pendingMcpAuthentications.has(name)) {
-                out.authenticationState = 'pending';
-              } else {
-                const authentication = this.mcpAuthenticationResults.get(name);
-                if (authentication) {
-                  out.authenticationState = authentication.state;
-                  if (authentication.error) {
-                    out.authenticationError = authentication.error;
-                  }
                 }
               }
             }
@@ -7370,8 +7175,6 @@ class QwenAgent implements Agent {
               const candidate = server as {
                 command?: unknown;
                 args?: unknown;
-                httpUrl?: unknown;
-                url?: unknown;
                 cwd?: unknown;
               };
               const serverConfig: NonNullable<
@@ -7387,12 +7190,6 @@ class QwenAgent implements Agent {
                 if (args.length > 0) {
                   serverConfig.args = args;
                 }
-              }
-              if (typeof candidate.httpUrl === 'string') {
-                serverConfig.httpUrl = candidate.httpUrl;
-              }
-              if (typeof candidate.url === 'string') {
-                serverConfig.url = candidate.url;
               }
               if (typeof candidate.cwd === 'string') {
                 serverConfig.cwd = candidate.cwd;
@@ -8890,25 +8687,6 @@ class QwenAgent implements Agent {
             ? { statusMessage: config.statusMessage }
             : {}),
         };
-      case 'http':
-        return {
-          type: 'http',
-          url: config.url,
-          ...(config.name !== undefined ? { name: config.name } : {}),
-          ...(config.description !== undefined
-            ? { description: config.description }
-            : {}),
-          ...(config.timeout !== undefined ? { timeout: config.timeout } : {}),
-          ...(config.headers ? { headers: config.headers } : {}),
-          ...(config.allowedEnvVars
-            ? { allowedEnvVars: config.allowedEnvVars }
-            : {}),
-          ...(config.if !== undefined ? { if: config.if } : {}),
-          ...(config.statusMessage !== undefined
-            ? { statusMessage: config.statusMessage }
-            : {}),
-          ...(config.once !== undefined ? { once: config.once } : {}),
-        };
       case 'function':
         return {
           type: 'function',
@@ -9099,9 +8877,6 @@ class QwenAgent implements Agent {
               : {}),
             ...(ext.installMetadata?.originSource
               ? { originSource: ext.installMetadata.originSource }
-              : {}),
-            ...(ext.installMetadata?.ref
-              ? { ref: ext.installMetadata.ref }
               : {}),
             capabilities,
             updateState: ext.installMetadata ? 'unknown' : 'not updatable',
@@ -10427,30 +10202,6 @@ class QwenAgent implements Agent {
             reason: 'disabled' as const,
           };
         }
-        const server = servers[serverName]!;
-        let requiresAuth = mcpServerRequiresOAuth.get(serverName) === true;
-        if (!requiresAuth && server.oauth?.enabled === true) {
-          try {
-            requiresAuth =
-              (await new MCPOAuthTokenStorage().getCredentials(serverName)) ===
-              null;
-          } catch {
-            // A token-storage read failure is not proof that authentication is
-            // required; let reconnect surface the underlying connection error.
-          }
-        }
-        if (
-          requiresAuth &&
-          this.getMcpServerStatus(config, serverName) !==
-            MCPServerStatus.CONNECTED
-        ) {
-          return {
-            serverName,
-            restarted: false,
-            skipped: true,
-            reason: 'authentication_required' as const,
-          };
-        }
         const manager = config.getToolRegistry()?.getMcpClientManager();
         if (!manager) {
           throw RequestError.internalError(
@@ -10633,9 +10384,7 @@ class QwenAgent implements Agent {
         if (
           action !== 'approve' &&
           action !== 'enable' &&
-          action !== 'disable' &&
-          action !== 'authenticate' &&
-          action !== 'clear-auth'
+          action !== 'disable'
         ) {
           throw RequestError.invalidParams(
             undefined,
@@ -10721,179 +10470,52 @@ class QwenAgent implements Agent {
           };
         }
 
-        if (action === 'disable') {
-          const settings = loadSettings(config.getTargetDir());
-          const userSettings = settings.forScope(SettingScope.User).settings;
-          const workspaceSettings = settings.forScope(
-            SettingScope.Workspace,
-          ).settings;
-          let targetScope = SettingScope.User;
-          if (server.extensionName) {
-            throw RequestError.invalidParams(
-              undefined,
-              `Cannot disable extension MCP server: ${serverName}`,
-            );
-          }
-          if (
-            server.scope === 'project' ||
-            server.scope === 'workspace' ||
-            workspaceSettings.mcpServers?.[serverName]
-          ) {
-            targetScope = SettingScope.Workspace;
-          } else if (userSettings.mcpServers?.[serverName]) {
-            targetScope = SettingScope.User;
-          }
-          const scopeSettings = settings.forScope(targetScope).settings;
-          const currentExcluded = scopeSettings.mcp?.excluded || [];
-          let settingsChanged = false;
-          if (!matchesAnyServerPattern(serverName, currentExcluded)) {
-            settings.setValue(targetScope, 'mcp.excluded', [
-              ...currentExcluded,
-              serverName,
-            ]);
-            settingsChanged = true;
-          }
-          let runtimeChanged = false;
-          const liveConfigs = this.getLiveMcpConfigs(serverName);
-          for (const liveConfig of liveConfigs) {
-            const runtimeExcluded = liveConfig.getExcludedMcpServers() || [];
-            if (!matchesAnyServerPattern(serverName, runtimeExcluded)) {
-              liveConfig.setExcludedMcpServers([
-                ...runtimeExcluded,
-                serverName,
-              ]);
-              runtimeChanged = true;
-            }
-          }
-          await this.reconcileMcpServerAcrossLiveConfigs(serverName, 'disable');
-          return {
-            serverName,
-            action,
-            ok: true,
-            changed: settingsChanged || runtimeChanged,
-          };
-        }
-
-        if (action === 'clear-auth') {
-          const tokenStorage = new MCPOAuthTokenStorage();
-          await tokenStorage.deleteCredentials(serverName);
-          await this.reconcileMcpServerAcrossLiveConfigs(
-            serverName,
-            'disconnect',
+        const settings = loadSettings(config.getTargetDir());
+        const userSettings = settings.forScope(SettingScope.User).settings;
+        const workspaceSettings = settings.forScope(
+          SettingScope.Workspace,
+        ).settings;
+        let targetScope = SettingScope.User;
+        if (server.extensionName) {
+          throw RequestError.invalidParams(
+            undefined,
+            `Cannot disable extension MCP server: ${serverName}`,
           );
-          return { serverName, action, ok: true, changed: true };
         }
-
-        let pending = this.pendingMcpAuthentications.get(serverName);
-        if (!pending) {
-          this.mcpAuthenticationResults.delete(serverName);
-          const messages: string[] = [];
-          let resolveStarted!: (value: {
-            authUrl: string;
-            messages: string[];
-          }) => void;
-          let rejectStarted!: (reason: unknown) => void;
-          let startedTimer!: NodeJS.Timeout;
-          const started = new Promise<{
-            authUrl: string;
-            messages: string[];
-          }>((resolve, reject) => {
-            resolveStarted = (value) => {
-              clearTimeout(startedTimer);
-              resolve(value);
-            };
-            rejectStarted = (reason) => {
-              clearTimeout(startedTimer);
-              reject(reason);
-            };
-            startedTimer = setTimeout(
-              () =>
-                rejectStarted(
-                  new Error(
-                    `MCP OAuth authentication did not provide a URL within ${MCP_OAUTH_START_TIMEOUT_MS / 1000} seconds`,
-                  ),
-                ),
-              MCP_OAUTH_START_TIMEOUT_MS,
-            );
-            startedTimer.unref();
-          });
-          pending = { started };
-          this.pendingMcpAuthentications.set(serverName, pending);
-
-          const displayListener = (message: unknown) => {
-            if (typeof message === 'string') {
-              messages.push(message);
-            } else if (message && typeof message === 'object') {
-              const key = (message as { key?: unknown }).key;
-              if (typeof key === 'string') messages.push(key);
-            }
-          };
-          const authUrlListener = (url: unknown) => {
-            if (typeof url === 'string') {
-              resolveStarted({ authUrl: url, messages: [...messages] });
-            }
-          };
-          appEvents.on(AppEvent.OauthDisplayMessage, displayListener);
-          appEvents.on(AppEvent.OauthAuthUrl, authUrlListener);
-          void (async () => {
-            try {
-              try {
-                const oauthConfig = server.oauth ?? { enabled: false };
-                const mcpServerUrl = server.httpUrl || server.url;
-                const authProvider = new MCPOAuthProvider(
-                  new MCPOAuthTokenStorage(),
-                );
-                await authProvider.authenticate(
-                  serverName,
-                  oauthConfig,
-                  mcpServerUrl,
-                  appEvents,
-                );
-                this.mcpAuthenticationResults.set(serverName, {
-                  state: 'succeeded',
-                });
-              } catch (error) {
-                this.mcpAuthenticationResults.set(serverName, {
-                  state: 'failed',
-                  error: error instanceof Error ? error.message : String(error),
-                });
-                rejectStarted(error);
-                debugLogger.warn(
-                  `MCP OAuth authentication failed for ${serverName}:`,
-                  error,
-                );
-                return;
-              }
-              try {
-                await this.reconcileMcpServerAcrossLiveConfigs(
-                  serverName,
-                  'discover',
-                );
-              } catch (error) {
-                debugLogger.warn(
-                  `MCP OAuth authenticated for ${serverName}, but tool synchronization failed:`,
-                  error,
-                );
-              }
-            } finally {
-              appEvents.removeListener(
-                AppEvent.OauthDisplayMessage,
-                displayListener,
-              );
-              appEvents.removeListener(AppEvent.OauthAuthUrl, authUrlListener);
-              this.pendingMcpAuthentications.delete(serverName);
-            }
-          })();
+        if (
+          server.scope === 'project' ||
+          server.scope === 'workspace' ||
+          workspaceSettings.mcpServers?.[serverName]
+        ) {
+          targetScope = SettingScope.Workspace;
+        } else if (userSettings.mcpServers?.[serverName]) {
+          targetScope = SettingScope.User;
         }
-
-        const { authUrl, messages } = await pending.started;
+        const scopeSettings = settings.forScope(targetScope).settings;
+        const currentExcluded = scopeSettings.mcp?.excluded || [];
+        let settingsChanged = false;
+        if (!matchesAnyServerPattern(serverName, currentExcluded)) {
+          settings.setValue(targetScope, 'mcp.excluded', [
+            ...currentExcluded,
+            serverName,
+          ]);
+          settingsChanged = true;
+        }
+        let runtimeChanged = false;
+        const liveConfigs = this.getLiveMcpConfigs(serverName);
+        for (const liveConfig of liveConfigs) {
+          const runtimeExcluded = liveConfig.getExcludedMcpServers() || [];
+          if (!matchesAnyServerPattern(serverName, runtimeExcluded)) {
+            liveConfig.setExcludedMcpServers([...runtimeExcluded, serverName]);
+            runtimeChanged = true;
+          }
+        }
+        await this.reconcileMcpServerAcrossLiveConfigs(serverName, 'disable');
         return {
           serverName,
           action,
           ok: true,
-          pending: true,
-          messages,
-          authUrl,
+          changed: settingsChanged || runtimeChanged,
         };
       }
       case SERVE_CONTROL_EXT_METHODS.workspaceGenerationStart: {
@@ -14124,7 +13746,6 @@ class QwenAgent implements Agent {
               merged.modelProviders,
               providerProtocol,
             );
-            await config.setImageModel(merged.imageModel);
             configsRefreshed += 1;
           } catch {
             configsFailed += 1;
@@ -14262,14 +13883,6 @@ class QwenAgent implements Agent {
                   `reload: reloadModelProvidersConfig failed for session ${id}: ${err}`,
                 );
               }
-            }
-
-            try {
-              await config.setImageModel(newMerged.imageModel);
-            } catch (err) {
-              debugLogger.warn(
-                `reload: setImageModel failed for session ${id}: ${err}`,
-              );
             }
 
             const newModelName = newMerged.model?.name;
@@ -14719,43 +14332,6 @@ class QwenAgent implements Agent {
           stdioServer.args,
           env,
         );
-        continue;
-      }
-
-      const sseServer = toSseServer(server);
-      if (sseServer) {
-        const headers: Record<string, string> = {};
-        for (const { name: headerName, value } of sseServer.headers) {
-          headers[headerName] = value;
-        }
-        sessionMcpServers[sseServer.name] = new MCPServerConfig(
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          sseServer.url,
-          undefined,
-          Object.keys(headers).length > 0 ? headers : undefined,
-        );
-        continue;
-      }
-
-      const httpServer = toHttpServer(server);
-      if (httpServer) {
-        const headers: Record<string, string> = {};
-        for (const { name: headerName, value } of httpServer.headers) {
-          headers[headerName] = value;
-        }
-        sessionMcpServers[httpServer.name] = new MCPServerConfig(
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          httpServer.url,
-          Object.keys(headers).length > 0 ? headers : undefined,
-        );
-        continue;
       }
     }
 
@@ -15580,7 +15156,6 @@ class QwenAgent implements Agent {
           settings.merged.modelProviders,
           settings.merged.providerProtocol ?? {},
         );
-        await config.setImageModel(settings.merged.imageModel);
         if (options.deferWorkspaceActivation !== true) {
           const envReload = reloadEnvironment(
             settings.merged,

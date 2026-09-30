@@ -159,7 +159,6 @@ describe('ReadFileTool', () => {
         );
         expect(desc).not.toContain('audio, video');
         expect(desc).not.toContain('watch a video');
-        expect(desc).not.toContain('read_file on the resulting clip');
       }
     });
 

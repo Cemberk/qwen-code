@@ -153,7 +153,6 @@ function specToModelConfig(
     ...(spec.capabilities ? { capabilities: spec.capabilities } : {}),
     baseUrl,
     envKey,
-    ...(spec.supportsImageGeneration ? { supportsImageGeneration: true } : {}),
     ...(spec.imageOnly ? { imageOnly: true } : {}),
     ...(genConfig ? { generationConfig: genConfig } : {}),
   };
@@ -235,7 +234,7 @@ function buildModelConfigs(
         baseUrl: inputs.baseUrl,
         envKey,
         ...(advCfg?.purpose === 'image'
-          ? { supportsImageGeneration: true, imageOnly: true }
+          ? { imageOnly: true }
           : advCfg?.purpose === 'voice'
             ? { voiceOnly: true }
             : {}),
@@ -480,9 +479,6 @@ export function buildInstallPlan(
         ...model,
         name: existing?.name ?? model.name,
         generationConfig,
-        ...(existing?.supportsImageGeneration
-          ? { supportsImageGeneration: true }
-          : {}),
         ...(existing?.imageOnly ? { imageOnly: true } : {}),
         ...(existing?.voiceOnly ? { voiceOnly: true } : {}),
         // Hand-written Live Voice routes must survive a provider reconnect

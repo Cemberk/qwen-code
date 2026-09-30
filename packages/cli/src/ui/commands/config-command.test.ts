@@ -176,11 +176,11 @@ describe('configCommand', () => {
       },
     );
 
-    it('turns an unset tri-state web search setting off', async () => {
+    it('turns an unset tri-state interactive shell setting off', async () => {
       const { ctx, setValuesMock } = createMockContext({});
       const result = await configCommand.action!(
         ctx,
-        'tools.webSearch.enabled',
+        'tools.shell.enableInteractiveShell',
       );
 
       expect(result).toEqual({
@@ -191,7 +191,7 @@ describe('configCommand', () => {
       expect(setValuesMock).toHaveBeenCalledWith([
         {
           scope: 'User',
-          key: 'tools.webSearch.enabled',
+          key: 'tools.shell.enableInteractiveShell',
           value: false,
         },
       ]);

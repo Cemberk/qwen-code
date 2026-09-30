@@ -154,9 +154,7 @@ describe('HooksListStep', () => {
 
     const flattened = lastFrame()?.replace(/\s+/g, ' ');
     expect(flattened).toContain('Reopen this menu to reload hook definitions.');
-    expect(flattened).toContain(
-      'Hook controls and HTTP security settings require a restart.',
-    );
+    expect(flattened).toContain('Hook controls require a restart.');
   });
 
   it('omits the reload notice when no hook system can reload', () => {

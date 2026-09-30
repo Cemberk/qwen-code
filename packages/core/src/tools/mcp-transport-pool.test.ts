@@ -586,7 +586,7 @@ describe('McpTransportPool', () => {
         cliConfig,
         mkPoolOptions({
           pooledTransports: new Set() as ReadonlySet<
-            'stdio' | 'websocket' | 'http' | 'sse' | 'sdk' | 'unknown'
+            'stdio' | 'sdk' | 'unknown'
           >,
         }),
       );
@@ -671,43 +671,12 @@ describe('McpTransportPool', () => {
 
     it('different env between two sessions creates 2 distinct entries (credential isolation)', async () => {
       const mocked = mockMcpSuccess();
-      const cfgA = new MCPServerConfig(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        'https://api.x',
-        { Authorization: 'tokenA' },
-      );
-      const cfgB = new MCPServerConfig(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        'https://api.x',
-        { Authorization: 'tokenB' },
-      );
+      const cfgA = new MCPServerConfig('node', undefined, { TOKEN: 'tokenA' });
+      const cfgB = new MCPServerConfig('node', undefined, { TOKEN: 'tokenB' });
 
       const r1 = mkSessionRegistries();
       const r2 = mkSessionRegistries();
-      // Default pooledTransports excludes http (V21 C8 opt-in); enable
-      // it so the credential-isolation invariant can be tested in pool
-      // mode (otherwise both sessions take the unpooled bypass path,
-      // which is trivially isolated by construction).
-      const pool2 = new McpTransportPool(
-        cliConfig,
-        mkPoolOptions({
-          pooledTransports: new Set([
-            'stdio',
-            'websocket',
-            'http',
-          ]) as ReadonlySet<
-            'stdio' | 'websocket' | 'http' | 'sse' | 'sdk' | 'unknown'
-          >,
-        }),
-      );
+      const pool2 = new McpTransportPool(cliConfig, mkPoolOptions());
       const cA = await pool2.acquire(
         'srv',
         cfgA,
@@ -776,7 +745,7 @@ describe('McpTransportPool', () => {
         cliConfig,
         mkPoolOptions({
           pooledTransports: new Set() as ReadonlySet<
-            'stdio' | 'websocket' | 'http' | 'sse' | 'sdk' | 'unknown'
+            'stdio' | 'sdk' | 'unknown'
           >,
         }),
       );
@@ -799,25 +768,21 @@ describe('McpTransportPool', () => {
         cliConfig,
         mkPoolOptions({
           pooledTransports: new Set() as ReadonlySet<
-            'stdio' | 'websocket' | 'http' | 'sse' | 'sdk' | 'unknown'
+            'stdio' | 'sdk' | 'unknown'
           >,
         }),
       );
-      // MCPServerConfig positional: 9=trust, 11=includeTools, 12=excludeTools
+      // MCPServerConfig positional: 5=trust, 7=includeTools, 8=excludeTools
       const cfg = new MCPServerConfig(
         'node',
         undefined, // args
         undefined, // env
         undefined, // cwd
-        undefined, // url
-        undefined, // httpUrl
-        undefined, // headers
-        undefined, // tcp
         undefined, // timeout
         true, // trust
         undefined, // description
         undefined, // includeTools
-        ['denied'], // excludeTools
+        ['denied'],
       );
       const r = mkSessionRegistries();
       await pool.acquire('srv', cfg, 's1', r.tools, r.prompts, r.resources);
@@ -858,7 +823,7 @@ describe('McpTransportPool', () => {
         cliConfig,
         mkPoolOptions({
           pooledTransports: new Set() as ReadonlySet<
-            'stdio' | 'websocket' | 'http' | 'sse' | 'sdk' | 'unknown'
+            'stdio' | 'sdk' | 'unknown'
           >,
         }),
       );
@@ -1606,29 +1571,13 @@ describe('McpTransportPool', () => {
       const pool = new McpTransportPool(
         cliConfig,
         mkPoolOptions({
-          pooledTransports: new Set(['stdio', 'http']) as ReadonlySet<
-            'stdio' | 'websocket' | 'http' | 'sse' | 'sdk' | 'unknown'
+          pooledTransports: new Set(['stdio']) as ReadonlySet<
+            'stdio' | 'sdk' | 'unknown'
           >,
         }),
       );
-      const cfgA = new MCPServerConfig(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        'https://x',
-        { Authorization: 'A' },
-      );
-      const cfgB = new MCPServerConfig(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        'https://x',
-        { Authorization: 'B' },
-      );
+      const cfgA = new MCPServerConfig('node', undefined, { TOKEN: 'A' });
+      const cfgB = new MCPServerConfig('node', undefined, { TOKEN: 'B' });
       const rA = mkSessionRegistries();
       const rB = mkSessionRegistries();
       await pool.acquire('srv', cfgA, 'sA', rA.tools, rA.prompts, rA.resources);
@@ -1755,7 +1704,7 @@ describe('McpTransportPool', () => {
         cliConfig,
         mkPoolOptions({
           pooledTransports: new Set() as ReadonlySet<
-            'stdio' | 'websocket' | 'http' | 'sse' | 'sdk' | 'unknown'
+            'stdio' | 'sdk' | 'unknown'
           >,
         }),
       );

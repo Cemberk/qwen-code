@@ -35,8 +35,6 @@ interface ExtensionActionsViewProps {
   isActive: boolean;
   /** Current update state for this extension, if known. */
   updateState?: string;
-  /** Whether to offer the favorite toggle (hidden in the Sources tab). */
-  showFavorite?: boolean;
   onStatus: (status: StatusMessage | null) => void;
   /** Ask the parent list to reload (state changed). */
   onReload: () => void;
@@ -75,7 +73,6 @@ export const ExtensionActionsView = ({
   extension,
   isActive,
   updateState,
-  showFavorite = true,
   onStatus,
   onReload,
   onExit,
@@ -99,7 +96,7 @@ export const ExtensionActionsView = ({
   // Uninstall removes files (and can take a moment); surfaced as a loading
   // line so the confirm prompt doesn't appear frozen after pressing Enter.
   const [uninstallBusy, setUninstallBusy] = useState(false);
-  // An update re-fetches the source, converts, stages, swaps the artifact and
+  // An update re-reads the source, converts, stages, swaps the artifact and
   // reloads tools; surfaced as a loading line so the action doesn't look
   // ignored — the action list is also replaced while it runs, so a second
   // Enter cannot start a concurrent update, and Escape cancels the run instead
@@ -108,9 +105,9 @@ export const ExtensionActionsView = ({
   const [updateBusy, setUpdateBusy] = useState(false);
   // Cancellation handle for the update in flight, so the wait below has a
   // release valve: `updateExtension` takes an optional AbortSignal that reaches
-  // the git fetch underneath, and without one a fetch that stalls rather than
-  // fails would leave this view (and the dialog's keys) inert with no deadline
-  // to break out of. Held in a ref because it must survive the re-render the
+  // the source read and archive extraction underneath, and without one a read
+  // that stalls rather than fails would leave this view (and the dialog's
+  // keys) inert with no deadline to break out of. Held in a ref because it must survive the re-render the
   // busy branch causes, and cleared in the same `finally` that clears the flag.
   const updateAbortRef = useRef<AbortController | null>(null);
   // The action the user last activated from the detail list. The busy branches
@@ -191,9 +188,8 @@ export const ExtensionActionsView = ({
             break;
           case 'mark-update': {
             // Check only the selected extension (not every installed one), and
-            // surface the result so "Update Now" can appear right away. Git /
-            // GitHub-release / npm checks hit the network, so show a pending
-            // line first; other types resolve instantly.
+            // surface the result so "Update Now" can appear right away. The
+            // check re-reads the local source, so show a pending line first.
             onStatus({
               type: 'info',
               text: t('Checking "{{name}}" for updates...', { name }),
@@ -473,7 +469,6 @@ export const ExtensionActionsView = ({
       extension={{ ...extension, isActive: enabled }}
       scope={t(SCOPE_LABEL[scope])}
       isFavorite={isFavorite}
-      showFavorite={showFavorite}
       hasUpdateAvailable={hasUpdate}
       isFocused={isActive && sub === 'detail'}
       initialAction={lastActivatedAction}

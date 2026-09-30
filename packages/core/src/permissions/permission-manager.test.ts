@@ -14,7 +14,6 @@ import {
   matchesRule,
   matchesCommandPattern,
   matchesPathPattern,
-  matchesDomainPattern,
   resolveToolName,
   getToolNameAliases,
   resolvePathPattern,
@@ -225,10 +224,6 @@ describe('getSpecifierKind', () => {
     expect(getSpecifierKind('list_directory')).toBe('path');
   });
 
-  it('returns "domain" for web fetch tools', async () => {
-    expect(getSpecifierKind('web_fetch')).toBe('domain');
-  });
-
   it('returns "literal" for other tools', async () => {
     expect(getSpecifierKind('Agent')).toBe('literal');
     expect(getSpecifierKind('task')).toBe('literal');
@@ -320,13 +315,6 @@ describe('parseRule', () => {
     expect(r.toolName).toBe('edit');
     expect(r.specifier).toBe('/src/**/*.ts');
     expect(r.specifierKind).toBe('path');
-  });
-
-  it('parses WebFetch with domain specifier', async () => {
-    const r = parseRule('WebFetch(domain:example.com)');
-    expect(r.toolName).toBe('web_fetch');
-    expect(r.specifier).toBe('domain:example.com');
-    expect(r.specifierKind).toBe('domain');
   });
 
   it('parses Agent with literal specifier', async () => {
@@ -1316,41 +1304,6 @@ describe('matchesPathPattern', () => {
   });
 });
 
-// ─── matchesDomainPattern ────────────────────────────────────────────────────
-
-describe('matchesDomainPattern', () => {
-  it('matches exact domain', async () => {
-    expect(matchesDomainPattern('domain:example.com', 'example.com')).toBe(
-      true,
-    );
-  });
-
-  it('matches subdomain', async () => {
-    expect(matchesDomainPattern('domain:example.com', 'sub.example.com')).toBe(
-      true,
-    );
-    expect(
-      matchesDomainPattern('domain:example.com', 'deep.sub.example.com'),
-    ).toBe(true);
-  });
-
-  it('does not match different domain', async () => {
-    expect(matchesDomainPattern('domain:example.com', 'notexample.com')).toBe(
-      false,
-    );
-  });
-
-  it('is case-insensitive', async () => {
-    expect(matchesDomainPattern('domain:Example.COM', 'example.com')).toBe(
-      true,
-    );
-  });
-
-  it('handles missing prefix', async () => {
-    expect(matchesDomainPattern('example.com', 'example.com')).toBe(true);
-  });
-});
-
 // ─── matchesRule (unified) ───────────────────────────────────────────────────
 
 describe('matchesRule', () => {
@@ -1429,24 +1382,10 @@ describe('matchesRule', () => {
     expect(matchesRule(rule, 'read_file')).toBe(false);
     // With filePath
     expect(
-      matchesRule(
-        rule,
-        'read_file',
-        undefined,
-        '/project/.env',
-        undefined,
-        pathCtx,
-      ),
+      matchesRule(rule, 'read_file', undefined, '/project/.env', pathCtx),
     ).toBe(true);
     expect(
-      matchesRule(
-        rule,
-        'read_file',
-        undefined,
-        '/project/other.txt',
-        undefined,
-        pathCtx,
-      ),
+      matchesRule(rule, 'read_file', undefined, '/project/other.txt', pathCtx),
     ).toBe(false);
   });
 
@@ -1459,7 +1398,6 @@ describe('matchesRule', () => {
         'write_file',
         undefined,
         '/project/src/index.ts',
-        undefined,
         pathCtx,
       ),
     ).toBe(true);
@@ -1469,7 +1407,6 @@ describe('matchesRule', () => {
         'write_file',
         undefined,
         '/project/docs/readme.md',
-        undefined,
         pathCtx,
       ),
     ).toBe(false);
@@ -1484,7 +1421,6 @@ describe('matchesRule', () => {
         'notebook_edit',
         undefined,
         '/project/src/analysis.ipynb',
-        undefined,
         pathCtx,
       ),
     ).toBe(true);
@@ -1494,26 +1430,9 @@ describe('matchesRule', () => {
         'notebook_edit',
         undefined,
         '/project/docs/analysis.ipynb',
-        undefined,
         pathCtx,
       ),
     ).toBe(false);
-  });
-
-  // WebFetch domain matching
-  it('WebFetch domain specifier', async () => {
-    const rule = parseRule('WebFetch(domain:example.com)');
-    expect(
-      matchesRule(rule, 'web_fetch', undefined, undefined, 'example.com'),
-    ).toBe(true);
-    expect(
-      matchesRule(rule, 'web_fetch', undefined, undefined, 'sub.example.com'),
-    ).toBe(true);
-    expect(
-      matchesRule(rule, 'web_fetch', undefined, undefined, 'other.com'),
-    ).toBe(false);
-    // No domain → no match
-    expect(matchesRule(rule, 'web_fetch')).toBe(false);
   });
 
   // Agent literal matching
@@ -1521,26 +1440,10 @@ describe('matchesRule', () => {
     const rule = parseRule('Agent(Explore)');
     // Agent is an alias for 'task'; specifier matches via the specifier field
     expect(
-      matchesRule(
-        rule,
-        'task',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        'Explore',
-      ),
+      matchesRule(rule, 'task', undefined, undefined, undefined, 'Explore'),
     ).toBe(true);
     expect(
-      matchesRule(
-        rule,
-        'task',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        'Plan',
-      ),
+      matchesRule(rule, 'task', undefined, undefined, undefined, 'Plan'),
     ).toBe(false);
     expect(matchesRule(rule, 'task')).toBe(false); // no specifier
   });
@@ -1648,12 +1551,6 @@ describe('matchesRule', () => {
     expect(r.toolParamMatchers).toEqual([{ key: 'model', valuePattern: '*' }]);
   });
 
-  it('parseRule does not treat WebFetch domain: as key:value', async () => {
-    const r = parseRule('WebFetch(domain:example.com)');
-    expect(r.specifierKind).toBe('domain');
-    expect(r.toolParamMatchers).toBeUndefined();
-  });
-
   it('parseRule preserves legacy :* for command specifiers', async () => {
     const r = parseRule('Bash(git:*)');
     expect(r.specifier).toBe('git *');
@@ -1663,32 +1560,14 @@ describe('matchesRule', () => {
   it('matchesRule matches tool with param matcher', async () => {
     const rule = parseRule('Agent(model:opus)');
     expect(
-      matchesRule(
-        rule,
-        'agent',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        {
-          model: 'opus',
-        },
-      ),
+      matchesRule(rule, 'agent', undefined, undefined, undefined, undefined, {
+        model: 'opus',
+      }),
     ).toBe(true);
     expect(
-      matchesRule(
-        rule,
-        'agent',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        {
-          model: 'sonnet',
-        },
-      ),
+      matchesRule(rule, 'agent', undefined, undefined, undefined, undefined, {
+        model: 'sonnet',
+      }),
     ).toBe(false);
   });
 
@@ -1700,32 +1579,14 @@ describe('matchesRule', () => {
   it('matchesRule supports wildcard value pattern', async () => {
     const rule = parseRule('Agent(model:*)');
     expect(
-      matchesRule(
-        rule,
-        'agent',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        {
-          model: 'opus',
-        },
-      ),
+      matchesRule(rule, 'agent', undefined, undefined, undefined, undefined, {
+        model: 'opus',
+      }),
     ).toBe(true);
     expect(
-      matchesRule(
-        rule,
-        'agent',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        {
-          model: 'sonnet',
-        },
-      ),
+      matchesRule(rule, 'agent', undefined, undefined, undefined, undefined, {
+        model: 'sonnet',
+      }),
     ).toBe(true);
     expect(matchesRule(rule, 'agent')).toBe(false); // no toolParams
   });
@@ -1733,88 +1594,40 @@ describe('matchesRule', () => {
   it('matchesRule requires all param matchers to match', async () => {
     const rule = parseRule('Agent(model:opus,type:code)');
     expect(
-      matchesRule(
-        rule,
-        'agent',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        {
-          model: 'opus',
-          type: 'code',
-        },
-      ),
+      matchesRule(rule, 'agent', undefined, undefined, undefined, undefined, {
+        model: 'opus',
+        type: 'code',
+      }),
     ).toBe(true);
     expect(
-      matchesRule(
-        rule,
-        'agent',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        {
-          model: 'opus',
-          type: 'chat',
-        },
-      ),
+      matchesRule(rule, 'agent', undefined, undefined, undefined, undefined, {
+        model: 'opus',
+        type: 'chat',
+      }),
     ).toBe(false);
     expect(
-      matchesRule(
-        rule,
-        'agent',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        {
-          model: 'opus',
-        },
-      ),
+      matchesRule(rule, 'agent', undefined, undefined, undefined, undefined, {
+        model: 'opus',
+      }),
     ).toBe(false); // missing 'type' param
   });
 
   it('matchesRule handles mixed specifier and param matchers', async () => {
     const rule = parseRule('Agent(coder,model:opus)');
     expect(
-      matchesRule(
-        rule,
-        'agent',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        'coder',
-        { model: 'opus' },
-      ),
+      matchesRule(rule, 'agent', undefined, undefined, undefined, 'coder', {
+        model: 'opus',
+      }),
     ).toBe(true);
     expect(
-      matchesRule(
-        rule,
-        'agent',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        'coder',
-        { model: 'sonnet' },
-      ),
+      matchesRule(rule, 'agent', undefined, undefined, undefined, 'coder', {
+        model: 'sonnet',
+      }),
     ).toBe(false); // param mismatch
     expect(
-      matchesRule(
-        rule,
-        'agent',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        'explore',
-        { model: 'opus' },
-      ),
+      matchesRule(rule, 'agent', undefined, undefined, undefined, 'explore', {
+        model: 'opus',
+      }),
     ).toBe(false); // specifier mismatch
   });
 
@@ -1828,46 +1641,19 @@ describe('matchesRule', () => {
   it('matchesRule supports partial wildcard patterns', async () => {
     const rule = parseRule('Agent(model:op*)');
     expect(
-      matchesRule(
-        rule,
-        'agent',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        {
-          model: 'opus',
-        },
-      ),
+      matchesRule(rule, 'agent', undefined, undefined, undefined, undefined, {
+        model: 'opus',
+      }),
     ).toBe(true);
     expect(
-      matchesRule(
-        rule,
-        'agent',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        {
-          model: 'opera',
-        },
-      ),
+      matchesRule(rule, 'agent', undefined, undefined, undefined, undefined, {
+        model: 'opera',
+      }),
     ).toBe(true);
     expect(
-      matchesRule(
-        rule,
-        'agent',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        {
-          model: 'sonnet',
-        },
-      ),
+      matchesRule(rule, 'agent', undefined, undefined, undefined, undefined, {
+        model: 'sonnet',
+      }),
     ).toBe(false);
   });
 
@@ -1875,65 +1661,29 @@ describe('matchesRule', () => {
     const rule = parseRule('Agent(prompt:*x*x*x*x*x*y)');
     // This should not hang (ReDoS) and should return false for non-matching input
     expect(
-      matchesRule(
-        rule,
-        'agent',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        {
-          prompt: 'a'.repeat(1000),
-        },
-      ),
+      matchesRule(rule, 'agent', undefined, undefined, undefined, undefined, {
+        prompt: 'a'.repeat(1000),
+      }),
     ).toBe(false);
     // Should match when pattern is present
     expect(
-      matchesRule(
-        rule,
-        'agent',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        {
-          prompt: 'xaxaxaxaxay',
-        },
-      ),
+      matchesRule(rule, 'agent', undefined, undefined, undefined, undefined, {
+        prompt: 'xaxaxaxaxay',
+      }),
     ).toBe(true);
   });
 
   it('matchesRule coerces number values to string for matching', async () => {
     const rule = parseRule('Agent(count:42)');
     expect(
-      matchesRule(
-        rule,
-        'agent',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        {
-          count: 42,
-        },
-      ),
+      matchesRule(rule, 'agent', undefined, undefined, undefined, undefined, {
+        count: 42,
+      }),
     ).toBe(true);
     expect(
-      matchesRule(
-        rule,
-        'agent',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        {
-          count: 43,
-        },
-      ),
+      matchesRule(rule, 'agent', undefined, undefined, undefined, undefined, {
+        count: 43,
+      }),
     ).toBe(false);
   });
 });
@@ -3039,42 +2789,6 @@ describe('PermissionManager', () => {
     });
   });
 
-  describe('WebFetch domain evaluation', () => {
-    beforeEach(() => {
-      pm = new PermissionManager(
-        makeConfig({
-          permissionsAllow: ['WebFetch(domain:github.com)'],
-          permissionsDeny: ['WebFetch(domain:evil.com)'],
-        }),
-      );
-      pm.initialize();
-    });
-
-    it('allows fetch to allowed domain', async () => {
-      expect(
-        await pm.evaluate({ toolName: 'web_fetch', domain: 'github.com' }),
-      ).toBe('allow');
-    });
-
-    it('allows fetch to subdomain of allowed domain', async () => {
-      expect(
-        await pm.evaluate({ toolName: 'web_fetch', domain: 'api.github.com' }),
-      ).toBe('allow');
-    });
-
-    it('denies fetch to denied domain', async () => {
-      expect(
-        await pm.evaluate({ toolName: 'web_fetch', domain: 'evil.com' }),
-      ).toBe('deny');
-    });
-
-    it('returns default for unmatched domain', async () => {
-      expect(
-        await pm.evaluate({ toolName: 'web_fetch', domain: 'example.com' }),
-      ).toBe('default');
-    });
-  });
-
   describe('isToolEnabled', () => {
     it('returns false for deny-ruled tools', async () => {
       pm = new PermissionManager(
@@ -3319,7 +3033,6 @@ describe('PermissionManager', () => {
             'Glob',
             'ListFiles',
             'Shell',
-            'WebFetch',
           ],
         }),
       );
@@ -3334,7 +3047,6 @@ describe('PermissionManager', () => {
         'glob',
         'list_directory',
         'run_shell_command',
-        'web_fetch',
       ]) {
         expect(await pm.getToolRegistrationStatus(covered)).toBe('registered');
       }
@@ -3359,7 +3071,7 @@ describe('PermissionManager', () => {
       pm = new PermissionManager(
         makeConfig({
           permissionsAllow: ['ReadFile', 'Grep'],
-          permissionsAsk: ['WebFetch'],
+          permissionsAsk: ['Edit'],
         }),
       );
       pm.initialize();
@@ -3903,10 +3615,6 @@ describe('getRuleDisplayName', () => {
     expect(getRuleDisplayName('run_shell_command')).toBe('Bash');
   });
 
-  it('maps web_fetch to "WebFetch"', async () => {
-    expect(getRuleDisplayName('web_fetch')).toBe('WebFetch');
-  });
-
   it('maps agent to "Agent" and skill to "Skill"', async () => {
     expect(getRuleDisplayName('agent')).toBe('Agent');
     expect(getRuleDisplayName('skill')).toBe('Skill');
@@ -4010,38 +3718,26 @@ describe('buildPermissionRules', () => {
 
       // Should match the original file (inside the directory)
       expect(
-        matchesRule(
-          parsed,
-          'read_file',
-          undefined,
-          '/Users/alice/.secrets',
-          undefined,
-          { projectRoot: '/some/project', cwd: '/some/project' },
-        ),
+        matchesRule(parsed, 'read_file', undefined, '/Users/alice/.secrets', {
+          projectRoot: '/some/project',
+          cwd: '/some/project',
+        }),
       ).toBe(true);
 
       // Should also match other files in the same directory
       expect(
-        matchesRule(
-          parsed,
-          'read_file',
-          undefined,
-          '/Users/alice/.other',
-          undefined,
-          { projectRoot: '/some/project', cwd: '/some/project' },
-        ),
+        matchesRule(parsed, 'read_file', undefined, '/Users/alice/.other', {
+          projectRoot: '/some/project',
+          cwd: '/some/project',
+        }),
       ).toBe(true);
 
       // Should NOT match files in a different directory
       expect(
-        matchesRule(
-          parsed,
-          'read_file',
-          undefined,
-          '/Users/bob/.secrets',
-          undefined,
-          { projectRoot: '/some/project', cwd: '/some/project' },
-        ),
+        matchesRule(parsed, 'read_file', undefined, '/Users/bob/.secrets', {
+          projectRoot: '/some/project',
+          cwd: '/some/project',
+        }),
       ).toBe(false);
     });
 
@@ -4059,37 +3755,17 @@ describe('buildPermissionRules', () => {
           'grep_search',
           undefined,
           '/external/dir/file.txt',
-          undefined,
           { projectRoot: '/p', cwd: '/p' },
         ),
       ).toBe(true);
 
       // Should also match read_file (Read meta-category)
       expect(
-        matchesRule(
-          parsed,
-          'read_file',
-          undefined,
-          '/external/dir/other.ts',
-          undefined,
-          { projectRoot: '/p', cwd: '/p' },
-        ),
+        matchesRule(parsed, 'read_file', undefined, '/external/dir/other.ts', {
+          projectRoot: '/p',
+          cwd: '/p',
+        }),
       ).toBe(true);
-    });
-  });
-
-  describe('domain-based tools', () => {
-    it('generates WebFetch rule with domain specifier', async () => {
-      const rules = buildPermissionRules({
-        toolName: 'web_fetch',
-        domain: 'example.com',
-      });
-      expect(rules).toEqual(['WebFetch(example.com)']);
-    });
-
-    it('falls back to bare display name when no domain', async () => {
-      const rules = buildPermissionRules({ toolName: 'web_fetch' });
-      expect(rules).toEqual(['WebFetch']);
     });
   });
 
@@ -4282,11 +3958,6 @@ describe('buildHumanReadableRuleLabel', () => {
     expect(label).toBe("monitor 'tail -f *' commands");
   });
 
-  it('converts WebFetch with domain specifier', () => {
-    const label = buildHumanReadableRuleLabel(['WebFetch(github.com)']);
-    expect(label).toBe('fetch from github.com');
-  });
-
   it('converts Skill with literal specifier', () => {
     const label = buildHumanReadableRuleLabel(['Skill(Explore)']);
     expect(label).toBe('use skill "Explore"');
@@ -4336,15 +4007,6 @@ describe('buildHumanReadableRuleLabel', () => {
     });
     const label = buildHumanReadableRuleLabel(rules);
     expect(label).toBe("run 'git status' commands");
-  });
-
-  it('round-trips from buildPermissionRules for web fetch', () => {
-    const rules = buildPermissionRules({
-      toolName: 'web_fetch',
-      domain: 'example.com',
-    });
-    const label = buildHumanReadableRuleLabel(rules);
-    expect(label).toBe('fetch from example.com');
   });
 });
 
@@ -5038,80 +4700,45 @@ describe('matchesRule — param matcher type guards', () => {
   it('rejects boolean param values', () => {
     const rule = parseRule('Agent(model:*)');
     expect(
-      matchesRule(
-        rule,
-        'agent',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        { model: true },
-      ),
+      matchesRule(rule, 'agent', undefined, undefined, undefined, undefined, {
+        model: true,
+      }),
     ).toBe(false);
   });
 
   it('rejects null param values', () => {
     const rule = parseRule('Agent(model:*)');
     expect(
-      matchesRule(
-        rule,
-        'agent',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        { model: null },
-      ),
+      matchesRule(rule, 'agent', undefined, undefined, undefined, undefined, {
+        model: null,
+      }),
     ).toBe(false);
   });
 
   it('rejects undefined param values', () => {
     const rule = parseRule('Agent(model:*)');
     expect(
-      matchesRule(
-        rule,
-        'agent',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        { model: undefined },
-      ),
+      matchesRule(rule, 'agent', undefined, undefined, undefined, undefined, {
+        model: undefined,
+      }),
     ).toBe(false);
   });
 
   it('rejects object param values', () => {
     const rule = parseRule('Agent(model:*)');
     expect(
-      matchesRule(
-        rule,
-        'agent',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        { model: { nested: 'opus' } },
-      ),
+      matchesRule(rule, 'agent', undefined, undefined, undefined, undefined, {
+        model: { nested: 'opus' },
+      }),
     ).toBe(false);
   });
 
   it('accepts number param values via coercion', () => {
     const rule = parseRule('Agent(count:42)');
     expect(
-      matchesRule(
-        rule,
-        'agent',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        { count: 42 },
-      ),
+      matchesRule(rule, 'agent', undefined, undefined, undefined, undefined, {
+        count: 42,
+      }),
     ).toBe(true);
   });
 });

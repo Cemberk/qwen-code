@@ -58,7 +58,6 @@ export interface UIActions {
     advisorModelMode?: boolean;
     visionModelMode?: boolean;
     compactionModelMode?: boolean;
-    imageModelMode?: boolean;
   }) => void;
   openArenaDialog: (type: Exclude<ArenaDialogType, null>) => void;
   closeArenaDialog: () => void;

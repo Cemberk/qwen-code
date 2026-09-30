@@ -29,5 +29,4 @@ export default {
   'scheduled-tasks': 'Scheduled Tasks',
   goals: 'Goals',
   tips: 'Contextual Tips',
-  'omni-media-policies': 'Omni Media Policies',
 };

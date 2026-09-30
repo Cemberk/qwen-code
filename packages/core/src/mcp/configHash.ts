@@ -11,7 +11,7 @@ import type { MCPServerConfig } from '../config/config.js';
  * Top-level fields excluded from the approval hash: pure provenance / cosmetic
  * metadata that does not change what the server executes or connects to.
  * Editing these must NOT send an approved project-scoped server back to
- * `pending` — only behavioral changes (command/args/env/url/headers/...) do.
+ * `pending` — only behavioral changes (command/args/env/cwd/...) do.
  */
 const NON_BEHAVIORAL_FIELDS = new Set<string>([
   'scope', // where the config came from (settings / .mcp.json / extension)
@@ -28,7 +28,7 @@ const NON_BEHAVIORAL_FIELDS = new Set<string>([
  * Object keys are sorted recursively so `{a:1,b:2}` and `{b:2,a:1}` hash the
  * same; array order is preserved (e.g. `args` order is behavioral). Provenance
  * and cosmetic fields are stripped at the TOP level only — a user-defined nested
- * key that happens to be named e.g. `description` inside `env`/`headers` is
+ * key that happens to be named e.g. `description` inside `env` is
  * still hashed.
  *
  * Claude Code truncates similar hashes for reload detection, where collisions

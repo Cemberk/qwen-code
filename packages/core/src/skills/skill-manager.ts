@@ -50,7 +50,6 @@ import {
   HookType,
   type HookDefinition,
   type CommandHookConfig,
-  type HttpHookConfig,
 } from '../hooks/types.js';
 
 const debugLogger = createDebugLogger('SKILL_MANAGER');
@@ -903,7 +902,7 @@ export class SkillManager {
       return null;
     }
 
-    const hooks: Array<CommandHookConfig | HttpHookConfig> = [];
+    const hooks: CommandHookConfig[] = [];
 
     for (const hookRaw of hooksRaw) {
       if (typeof hookRaw !== 'object' || hookRaw === null) {
@@ -922,16 +921,6 @@ export class SkillManager {
           shell: hook['shell'] as 'bash' | 'powershell' | undefined,
         };
         hooks.push(commandHook);
-      } else if (hookType === 'http') {
-        const httpHook: HttpHookConfig = {
-          type: HookType.Http,
-          url: hook['url'] as string,
-          headers: hook['headers'] as Record<string, string> | undefined,
-          allowedEnvVars: hook['allowedEnvVars'] as string[] | undefined,
-          timeout: hook['timeout'] as number | undefined,
-          statusMessage: hook['statusMessage'] as string | undefined,
-        };
-        hooks.push(httpHook);
       } else {
         debugLogger.warn(`Unknown hook type: ${hookType}, skipping`);
       }

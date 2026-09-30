@@ -592,8 +592,8 @@ export default {
   'Manage installed extensions': 'Gérer les extensions installées',
   'Disable an extension': 'Désactiver une extension',
   'Enable an extension': 'Activer une extension',
-  'Install an extension from a git repo or local path':
-    'Installer une extension depuis un dépôt git ou un chemin local',
+  'Install an extension from a local path':
+    'Installer une extension depuis un chemin local',
   'Uninstall an extension': 'Désinstaller une extension',
   'No extensions installed.': 'Aucune extension installée.',
   'Extension "{{name}}" not found.': 'Extension "{{name}}" introuvable.',
@@ -632,15 +632,10 @@ export default {
     'Installation annulée pour "{{name}}".',
   'You are installing an extension from {{originSource}}. Some features may not work perfectly with Qwen Code.':
     'Vous installez une extension depuis {{originSource}}. Certaines fonctionnalités peuvent ne pas fonctionner parfaitement avec Qwen Code.',
-  '--ref is not applicable for marketplace extensions.':
-    "--ref n'est pas applicable aux extensions du marketplace.",
   'Extension "{{name}}" installed successfully and enabled.':
     'Extension "{{name}}" installée et activée avec succès.',
   'The github URL, local path, or marketplace source (marketplace-url:plugin-name) of the extension to install.':
     "L'URL GitHub, le chemin local ou la source marketplace (marketplace-url:nom-plugin) de l'extension à installer.",
-  'The git ref to install from.': 'La référence git depuis laquelle installer.',
-  'Enable pre-release versions for this extension.':
-    'Activer les versions pré-release pour cette extension.',
   'Acknowledge the security risks of installing an extension and skip the confirmation prompt.':
     "Reconnaître les risques de sécurité liés à l'installation d'une extension et ignorer la confirmation.",
   'The source argument must be provided.':
@@ -684,8 +679,6 @@ export default {
   'Path:': 'Chemin :',
   'Source:': 'Source :',
   'Type:': 'Type :',
-  'Ref:': 'Réf :',
-  'Release tag:': 'Tag de version :',
   'Enabled (User):': 'Activé (Utilisateur) :',
   'Enabled (Workspace):': 'Activé (Espace de travail) :',
   'Context files:': 'Fichiers de contexte :',
@@ -786,8 +779,8 @@ export default {
     'Ce menu est en lecture seule. Pour ajouter ou modifier des hooks, éditez settings.json directement ou demandez à Qwen Code.',
   'Reopen this menu to reload hook definitions.':
     'Rouvrez ce menu pour recharger les définitions des hooks.',
-  'Hook controls and HTTP security settings require a restart.':
-    'Les options de contrôle des hooks et les paramètres de sécurité HTTP nécessitent un redémarrage.',
+  'Hook controls require a restart.':
+    'Les options de contrôle des hooks nécessitent un redémarrage.',
   'Failed to reload hook definitions: {{error}}':
     'Échec du rechargement des définitions des hooks : {{error}}',
   'Enter to select · Esc to cancel':
@@ -1017,15 +1010,6 @@ export default {
   'Open MCP management dialog': 'Ouvrir le dialogue de gestion MCP',
   'Could not retrieve tool registry.':
     'Impossible de récupérer le registre des outils.',
-  "Successfully authenticated and refreshed tools for '{{name}}'.":
-    "Authentification réussie et outils actualisés pour '{{name}}'.",
-  "Re-discovering tools from '{{name}}'...":
-    "Redécouverte des outils depuis '{{name}}'...",
-  "Discovered {{count}} tool(s) from '{{name}}'.":
-    "{{count}} outil(s) découvert(s) depuis '{{name}}'.",
-  'Authentication complete. Returning to server details...':
-    'Authentification terminée. Retour aux détails du serveur...',
-  'Authentication successful.': 'Authentification réussie.',
   // ============================================================================
   // Boîte de dialogue de gestion MCP
   // ============================================================================
@@ -1054,10 +1038,6 @@ export default {
   Reconnect: 'Reconnecter',
   Enable: 'Activer',
   Disable: 'Désactiver',
-  Authenticate: 'Authentifier',
-  'Re-authenticate': 'Réauthentifier',
-  'Clear Authentication': "Effacer l'authentification",
-  'Server:': 'Serveur :',
   'Command:': 'Commande :',
   'Working Directory:': 'Répertoire de travail :',
   'No server selected': 'Aucun serveur sélectionné',
@@ -1077,9 +1057,6 @@ export default {
     'Ajoutez des MCP servers à vos paramètres pour commencer.',
   'Run qwen --debug to see error logs':
     "Exécutez qwen --debug pour voir les journaux d'erreurs",
-  'OAuth Authentication': 'Authentification OAuth',
-  'Authenticating... Please complete the login in your browser.':
-    'Authentification... Veuillez compléter la connexion dans votre navigateur.',
   'No tools available for this server.':
     'Aucun outil disponible pour ce serveur.',
   destructive: 'destructif',
@@ -1449,8 +1426,6 @@ export default {
   '{{count}} prompts': '{{count}} invites',
   '(from {{extensionName}})': '(depuis {{extensionName}})',
   OAuth: 'OAuth',
-  'OAuth expired': 'OAuth expiré',
-  'OAuth not authenticated': 'OAuth non authentifié',
   'tools and prompts will appear when ready':
     'les outils et invites apparaîtront quand prêts',
   '{{count}} tools cached': '{{count}} outils mis en cache',
@@ -1465,13 +1440,9 @@ export default {
     'pour afficher les descriptions des serveurs et des outils',
   'to show tool parameter schemas': 'pour afficher les tool parameter schemas',
   'to hide descriptions': 'pour masquer les descriptions',
-  'to authenticate with OAuth-enabled servers':
-    'pour authentifier avec des serveurs compatibles OAuth',
   Press: 'Appuyez sur',
   'to toggle tool descriptions on/off':
     'pour activer/désactiver les descriptions des outils',
-  "Starting OAuth authentication for MCP server '{{name}}'...":
-    "Démarrage de l'authentification OAuth pour MCP server '{{name}}'...",
   // ============================================================================
   // Conseils de démarrage
   // ============================================================================
@@ -2084,12 +2055,6 @@ export default {
     'Aucune entrée de mémoire automatique gérée ne correspond à : {{query}}',
   'Consolidate managed auto-memory topic files.':
     'Consolider les fichiers de sujets de mémoire automatique gérée.',
-  'Press c to copy the authorization URL to your clipboard.':
-    "Appuyez sur c pour copier l'URL d'autorisation dans le presse-papiers.",
-  'Copy request sent to your terminal. If paste is empty, copy the URL above manually.':
-    "Demande de copie envoyée au terminal. Si le collage est vide, copiez manuellement l'URL ci-dessus.",
-  'Cannot write to terminal — copy the URL above manually.':
-    "Impossible d'écrire dans le terminal — copiez manuellement l'URL ci-dessus.",
   'Invalid API key. Coding Plan API keys start with "sk-sp-". Please check.':
     'API Key invalide. Les Coding Plan API Keys commencent par "sk-sp-". Veuillez vérifier.',
   'Lock release warning': 'Avertissement de libération du verrou',

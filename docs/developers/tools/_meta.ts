@@ -7,8 +7,6 @@ export default {
   'todo-write': 'Todo Write',
   task: 'Task',
   'exit-plan-mode': 'Exit Plan Mode',
-  'web-fetch': 'Web Fetch',
-  'web-search': 'Web Search',
   'mcp-server': 'MCP Servers',
   sandbox: 'Sandboxing',
 };

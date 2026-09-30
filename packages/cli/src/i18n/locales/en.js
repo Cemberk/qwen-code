@@ -10,8 +10,6 @@
 export default {
   'Cannot disable an extension-provided MCP server here.':
     'Cannot disable an extension-provided MCP server here.',
-  'Cleared authentication for "{{name}}".':
-    'Cleared authentication for "{{name}}".',
   'MCP "{{name}}" disabled for all projects.':
     'MCP "{{name}}" disabled for all projects.',
   'Enable extension "{{name}}" to manage this MCP server.':
@@ -27,23 +25,10 @@ export default {
   // ==========================================================================
   // Extensions manager dialog (Installed / Discover / Sources tabs)
   // ==========================================================================
-  ' · {{marketplace}} (Tab to clear)': ' · {{marketplace}} (Tab to clear)',
   '"{{name}}" {{state}}.': '"{{name}}" {{state}}.',
-  '(Tab / ←→ to switch)': '(Tab / ←→ to switch)',
-  '+ Add new marketplace': '+ Add new marketplace',
-  '+ Install a new extension': '+ Install a new extension',
   Actions: 'Actions',
-  'Add Marketplace': 'Add Marketplace',
-  'Add a marketplace in the Sources tab to discover extensions.':
-    'Add a marketplace in the Sources tab to discover extensions.',
-  'Add new': 'Add new',
   'Add to Favorites': 'Add to Favorites',
   'Added "{{name}}" to favorites.': 'Added "{{name}}" to favorites.',
-  'Added marketplace "{{name}}".': 'Added marketplace "{{name}}".',
-  'Adding...': 'Adding...',
-  'Back to extension list': 'Back to extension list',
-  'Browse extensions ({{count}})': 'Browse extensions ({{count}})',
-  'By: {{a}}': 'By: {{a}}',
   'Change scope': 'Change scope',
   'Change scope for "{{name}}":': 'Change scope for "{{name}}":',
   'Changing scope...': 'Changing scope...',
@@ -57,117 +42,53 @@ export default {
     '"{{name}}" cannot be update-checked (Claude marketplace plugins update by reinstalling).',
   'Failed to check "{{name}}" for updates.':
     'Failed to check "{{name}}" for updates.',
-  'Claude plugin marketplace': 'Claude plugin marketplace',
-  Commands: 'Commands',
   'Components:': 'Components:',
-  'Could not load this marketplace.': 'Could not load this marketplace.',
   'Current: {{scope}}': 'Current: {{scope}}',
   Disabled: 'Disabled',
-  Discover: 'Discover',
   'Disabling "{{name}}"...': 'Disabling "{{name}}"...',
   'Disabling MCP "{{name}}"...': 'Disabling MCP "{{name}}"...',
-  'Discover extensions': 'Discover extensions',
-  'Discovering extensions...': 'Discovering extensions...',
   'Enabling "{{name}}"...': 'Enabling "{{name}}"...',
   'Enabling MCP "{{name}}"...': 'Enabling MCP "{{name}}"...',
-  'Enter extension source:': 'Enter extension source:',
-  'Enter marketplace source (Claude format):':
-    'Enter marketplace source (Claude format):',
   'Examples:': 'Examples:',
-  'Extension details': 'Extension details',
   'Extension v{{version}}': 'Extension v{{version}}',
   'Extensions are not available in this environment.':
     'Extensions are not available in this environment.',
-  'Failed to open {{url}}': 'Failed to open {{url}}',
   Favorites: 'Favorites',
   'Global (User Scope)': 'Global (User Scope)',
-  'Install Extension': 'Install Extension',
-  'Install for the current workspace (project scope)':
-    'Install for the current workspace (project scope)',
-  'Install for you (user scope)': 'Install for you (user scope)',
-  'Install {{count}} extension(s) to which scope?':
-    'Install {{count}} extension(s) to which scope?',
-  Installed: 'Installed',
-  'Installed extension "{{name}}".': 'Installed extension "{{name}}".',
-  'Installed extensions ({{count}}):': 'Installed extensions ({{count}}):',
-  'Installed {{count}} extension(s).': 'Installed {{count}} extension(s).',
   '{{name}}: installed, but the scope rollback failed — it may be disabled at all scopes; re-enable it from the Installed tab.':
     '{{name}}: installed, but the scope rollback failed — it may be disabled at all scopes; re-enable it from the Installed tab.',
   'Could not change scope, and the rollback also failed — "{{name}}" may be disabled at all scopes. Re-enable it from the Installed tab. ({{error}})':
     'Could not change scope, and the rollback also failed — "{{name}}" may be disabled at all scopes. Re-enable it from the Installed tab. ({{error}})',
-  'Installed {{ok}}, failed {{fail}}: {{detail}}':
-    'Installed {{ok}}, failed {{fail}}: {{detail}}',
-  'Installing...': 'Installing...',
-  'Last updated: {{date}}': 'Last updated: {{date}}',
   MCP: 'MCP',
   'MCP "{{name}}" {{state}}.': 'MCP "{{name}}" {{state}}.',
   'MCP servers': 'MCP servers',
   'Mark for Update': 'Mark for Update',
-  Marketplaces: 'Marketplaces',
-  'No extensions discovered.': 'No extensions discovered.',
-  'No extensions match your search.': 'No extensions match your search.',
   'No extensions or marketplaces added yet.':
     'No extensions or marketplaces added yet.',
-  'No homepage available.': 'No homepage available.',
-  'No installable extensions selected.': 'No installable extensions selected.',
   'No plugins or MCP servers installed.':
     'No plugins or MCP servers installed.',
   None: 'None',
   'Note: Uninstall permanently removes this extension.':
     'Note: Uninstall permanently removes this extension.',
-  'Open homepage': 'Open homepage',
   'Project (Workspace)': 'Project (Workspace)',
-  'Refreshed {{count}} extension(s).': 'Refreshed {{count}} extension(s).',
   'Remove from Favorites': 'Remove from Favorites',
-  'Remove marketplace': 'Remove marketplace',
-  'Remove marketplace "{{name}}"?': 'Remove marketplace "{{name}}"?',
   'Removed "{{name}}" from favorites.': 'Removed "{{name}}" from favorites.',
-  'Removed marketplace "{{name}}".': 'Removed marketplace "{{name}}".',
   'Scope:': 'Scope:',
   'Set "{{name}}" scope to {{scope}}.': 'Set "{{name}}" scope to {{scope}}.',
-  Sources: 'Sources',
-  'Type to search · Space to toggle · Enter to view · Ctrl+R refresh · Esc to go back':
-    'Type to search · Space to toggle · Enter to view · Ctrl+R refresh · Esc to go back',
   Uninstall: 'Uninstall',
   'Uninstalled "{{name}}".': 'Uninstalled "{{name}}".',
   'Update Now': 'Update Now',
-  'Update marketplace': 'Update marketplace',
-  'Update marketplace (last updated {{date}})':
-    'Update marketplace (last updated {{date}})',
-  'Could not update marketplace "{{name}}".':
-    'Could not update marketplace "{{name}}".',
   'Updated "{{name}}".': 'Updated "{{name}}".',
-  'Updated marketplace "{{name}}".': 'Updated marketplace "{{name}}".',
-  'Use the Discover tab to find and install plugins.':
-    'Use the Discover tab to find and install plugins.',
-  'Version: {{v}}': 'Version: {{v}}',
-  'Will install:': 'Will install:',
-  'Would open: {{url}}': 'Would open: {{url}}',
-  'Y/Enter to confirm · N/Esc to cancel':
-    'Y/Enter to confirm · N/Esc to cancel',
-  'Press R to retry · Esc to go back': 'Press R to retry · Esc to go back',
-  'Enter to select · R refresh · Esc to go back':
-    'Enter to select · R refresh · Esc to go back',
-  'from {{marketplace}}': 'from {{marketplace}}',
   installed: 'installed',
   '{{count}} Agents': '{{count}} Agents',
   '{{count}} Workflows': '{{count}} Workflows',
   '{{count}} Commands': '{{count}} Commands',
   '{{count}} MCP': '{{count}} MCP',
   '{{count}} Skills': '{{count}} Skills',
-  '{{count}} available extensions': '{{count}} available extensions',
   '↑ more above': '↑ more above',
-  '↑↓ navigate · Enter open · d remove marketplace · Esc close':
-    '↑↓ navigate · Enter open · d remove marketplace · Esc close',
-  '↑↓ navigate · Enter select · Esc close':
-    '↑↓ navigate · Enter select · Esc close',
-  '↑↓ navigate · Enter select · d remove marketplace · Esc close':
-    '↑↓ navigate · Enter select · d remove marketplace · Esc close',
   '↑↓ navigate · Space enable/disable · f favorite · Enter details · Esc close':
     '↑↓ navigate · Space enable/disable · f favorite · Enter details · Esc close',
   '↓ more below': '↓ more below',
-  '⚠ Make sure you trust an extension before installing, updating, or using it. We cannot verify what MCP servers, files, or other software an extension includes, or that it works as intended. See the extension homepage for more information.':
-    '⚠ Make sure you trust an extension before installing, updating, or using it. We cannot verify what MCP servers, files, or other software an extension includes, or that it works as intended. See the extension homepage for more information.',
 
   // ============================================================================
   // Tool display names (chat-stream badge labels)
@@ -204,8 +125,6 @@ export default {
   'toolDisplayName.Skill': 'toolDisplayName.Skill',
   'toolDisplayName.EnterPlanMode': 'toolDisplayName.EnterPlanMode',
   'toolDisplayName.ExitPlanMode': 'toolDisplayName.ExitPlanMode',
-  'toolDisplayName.WebFetch': 'toolDisplayName.WebFetch',
-  'toolDisplayName.WebSearch': 'toolDisplayName.WebSearch',
   'toolDisplayName.ListFiles': 'toolDisplayName.ListFiles',
   'toolDisplayName.Lsp': 'toolDisplayName.Lsp',
   'toolDisplayName.AskUserQuestion': 'toolDisplayName.AskUserQuestion',
@@ -233,25 +152,6 @@ export default {
   'toolDisplayName.ExitWorktree': 'toolDisplayName.ExitWorktree',
   'toolDisplayName.Workflow': 'toolDisplayName.Workflow',
   'toolDisplayName.ReadMcpResource': 'toolDisplayName.ReadMcpResource',
-  'toolDisplayName.ImageGen': 'toolDisplayName.ImageGen',
-  'toolDisplayName.DownsampleImage': 'toolDisplayName.DownsampleImage',
-  'toolDisplayName.DownscaleVideo': 'toolDisplayName.DownscaleVideo',
-  'toolDisplayName.DownsampleAudio': 'toolDisplayName.DownsampleAudio',
-  'toolDisplayName.ExtractKeyframes': 'toolDisplayName.ExtractKeyframes',
-  'toolDisplayName.ExtractAudio': 'toolDisplayName.ExtractAudio',
-  'toolDisplayName.ClipVideo': 'toolDisplayName.ClipVideo',
-  'toolDisplayName.ClipImage': 'toolDisplayName.ClipImage',
-  'toolDisplayName.ClipAudio': 'toolDisplayName.ClipAudio',
-  'toolDisplayName.CaptionImage': 'toolDisplayName.CaptionImage',
-  'toolDisplayName.CaptionAudio': 'toolDisplayName.CaptionAudio',
-  'toolDisplayName.OcrImage': 'toolDisplayName.OcrImage',
-  'toolDisplayName.UnderstandVideoSegments':
-    'toolDisplayName.UnderstandVideoSegments',
-  'toolDisplayName.ConvertImage': 'toolDisplayName.ConvertImage',
-  'toolDisplayName.TranscribeAudio': 'toolDisplayName.TranscribeAudio',
-  'toolDisplayName.RecallMediaMemory': 'toolDisplayName.RecallMediaMemory',
-  '[fixed-only: runs via media policies, not the model]':
-    '[fixed-only: runs via media policies, not the model]',
   // ============================================================================
   // Help / UI Components
   // ============================================================================
@@ -507,12 +407,10 @@ export default {
     'Manage existing subagents (view, edit, delete).',
   'Create a new subagent with guided setup.':
     'Create a new subagent with guided setup.',
-  'Create a reusable skill from a knowledge source (file, URL, conversation, or text).':
-    'Create a reusable skill from a knowledge source (file, URL, conversation, or text).',
+  'Create a reusable skill from a knowledge source (file, conversation, or text).':
+    'Create a reusable skill from a knowledge source (file, conversation, or text).',
   'The current model or provider does not support native video input for /learn. Switch to a video-capable model on an OpenAI-compatible provider and try again.':
     'The current model or provider does not support native video input for /learn. Switch to a video-capable model on an OpenAI-compatible provider and try again.',
-  'YouTube page URLs cannot be sent as native video input. Download the video into your workspace and pass the local video file path to /learn.':
-    'YouTube page URLs cannot be sent as native video input. Download the video into your workspace and pass the local video file path to /learn.',
   'The local video could not be attached for /learn.':
     'The local video could not be attached for /learn.',
 
@@ -866,8 +764,8 @@ export default {
   'Manage installed extensions': 'Manage installed extensions',
   'Disable an extension': 'Disable an extension',
   'Enable an extension': 'Enable an extension',
-  'Install an extension from a git repo or local path':
-    'Install an extension from a git repo or local path',
+  'Install an extension from a local path':
+    'Install an extension from a local path',
   'Uninstall an extension': 'Uninstall an extension',
   'No extensions installed.': 'No extensions installed.',
   'Extension "{{name}}" not found.': 'Extension "{{name}}" not found.',
@@ -875,24 +773,6 @@ export default {
     'The scope to install the extension in: "user" (global, default) or "project" (current workspace only).',
   'Extension "{{name}}" installed successfully and enabled for the current workspace.':
     'Extension "{{name}}" installed successfully and enabled for the current workspace.',
-  'Marketplace "{{name}}" not found.': 'Marketplace "{{name}}" not found.',
-  'No marketplace sources added yet.': 'No marketplace sources added yet.',
-  'No marketplaces added yet.': 'No marketplaces added yet.',
-  'Adds a marketplace source (Claude format).':
-    'Adds a marketplace source (Claude format).',
-  'The marketplace source to add: owner/repo (GitHub), a git or https URL, or a local path.':
-    'The marketplace source to add: owner/repo (GitHub), a git or https URL, or a local path.',
-  'Removes a marketplace source.': 'Removes a marketplace source.',
-  'The name of the marketplace to remove.':
-    'The name of the marketplace to remove.',
-  'Lists configured marketplace sources.':
-    'Lists configured marketplace sources.',
-  'Re-fetches a marketplace source and its plugin listing.':
-    'Re-fetches a marketplace source and its plugin listing.',
-  'The name of the marketplace to update.':
-    'The name of the marketplace to update.',
-  'Manage marketplace sources for discovering extensions.':
-    'Manage marketplace sources for discovering extensions.',
   'You need at least one command before continuing.':
     'You need at least one command before continuing.',
   'No extensions to update.': 'No extensions to update.',
@@ -928,25 +808,14 @@ export default {
     'Installation cancelled for "{{name}}".',
   'You are installing an extension from {{originSource}}. Some features may not work perfectly with Qwen Code.':
     'You are installing an extension from {{originSource}}. Some features may not work perfectly with Qwen Code.',
-  '--ref is not applicable for marketplace extensions.':
-    '--ref is not applicable for marketplace extensions.',
   'Extension "{{name}}" installed successfully and enabled.':
     'Extension "{{name}}" installed successfully and enabled.',
   'The github URL, local path, or marketplace source (marketplace-url:plugin-name) of the extension to install.':
     'The github URL, local path, or marketplace source (marketplace-url:plugin-name) of the extension to install.',
-  'The git ref to install from.': 'The git ref to install from.',
-  '--registry is only applicable for npm extensions.':
-    '--registry is only applicable for npm extensions.',
-  'Custom npm registry URL (only for npm extensions).':
-    'Custom npm registry URL (only for npm extensions).',
-  '--ref is not applicable for npm extensions. Use @version suffix instead (e.g. @scope/package@1.2.0).':
-    '--ref is not applicable for npm extensions. Use @version suffix instead (e.g. @scope/package@1.2.0).',
   'Installs an extension from a git repository URL, local path, scoped npm package (@scope/name), or claude marketplace (marketplace-url:plugin-name).':
     'Installs an extension from a git repository URL, local path, scoped npm package (@scope/name), or claude marketplace (marketplace-url:plugin-name).',
   Description: 'Description',
   'Delete Session': 'Delete Session',
-  'Enable pre-release versions for this extension.':
-    'Enable pre-release versions for this extension.',
   'Acknowledge the security risks of installing an extension and skip the confirmation prompt.':
     'Acknowledge the security risks of installing an extension and skip the confirmation prompt.',
   'The source argument must be provided.':
@@ -994,8 +863,6 @@ export default {
   'Path:': 'Path:',
   'Source:': 'Source:',
   'Type:': 'Type:',
-  'Ref:': 'Ref:',
-  'Release tag:': 'Release tag:',
   'Enabled (User):': 'Enabled (User):',
   'Enabled (Workspace):': 'Enabled (Workspace):',
   'Context files:': 'Context files:',
@@ -1094,8 +961,7 @@ export default {
     'This menu is read-only. To add or modify hooks, edit settings.json directly or ask Qwen Code.',
   'Reopen this menu to reload hook definitions.':
     'Reopen this menu to reload hook definitions.',
-  'Hook controls and HTTP security settings require a restart.':
-    'Hook controls and HTTP security settings require a restart.',
+  'Hook controls require a restart.': 'Hook controls require a restart.',
   'Failed to reload hook definitions: {{error}}':
     'Failed to reload hook definitions: {{error}}',
   'Enter to select · Esc to cancel': 'Enter to select · Esc to cancel',
@@ -1122,11 +988,9 @@ export default {
     'All hooks are disabled by the disableAllHooks setting.',
   'Timeout:': 'Timeout:',
   'Status message:': 'Status message:',
-  'Condition:': 'Condition:',
   'Options:': 'Options:',
   'Skill:': 'Skill:',
   'runs in background': 'runs in background',
-  'runs once': 'runs once',
   sequential: 'sequential',
   // Hooks - Disabled Step
   'Hook Configuration - Disabled': 'Hook Configuration - Disabled',
@@ -1375,15 +1239,6 @@ export default {
     'Import MCP servers from Claude configs',
   'Open MCP management dialog': 'Open MCP management dialog',
   'Could not retrieve tool registry.': 'Could not retrieve tool registry.',
-  "Successfully authenticated and refreshed tools for '{{name}}'.":
-    "Successfully authenticated and refreshed tools for '{{name}}'.",
-  "Re-discovering tools from '{{name}}'...":
-    "Re-discovering tools from '{{name}}'...",
-  "Discovered {{count}} tool(s) from '{{name}}'.":
-    "Discovered {{count}} tool(s) from '{{name}}'.",
-  'Authentication complete. Returning to server details...':
-    'Authentication complete. Returning to server details...',
-  'Authentication successful.': 'Authentication successful.',
   // ============================================================================
   // MCP Management Dialog
   // ============================================================================
@@ -1413,10 +1268,6 @@ export default {
   Reconnect: 'Reconnect',
   Enable: 'Enable',
   Disable: 'Disable',
-  Authenticate: 'Authenticate',
-  'Re-authenticate': 'Re-authenticate',
-  'Clear Authentication': 'Clear Authentication',
-  'Server:': 'Server:',
   'Command:': 'Command:',
   'Working Directory:': 'Working Directory:',
   'No server selected': 'No server selected',
@@ -1429,7 +1280,6 @@ export default {
   connected: 'connected',
   connecting: 'connecting',
   disconnected: 'disconnected',
-  'needs authentication': 'needs authentication',
 
   // MCP Server List
   'User MCPs': 'User MCPs',
@@ -1442,15 +1292,6 @@ export default {
   'Run qwen --debug to see error logs': 'Run qwen --debug to see error logs',
 
   // MCP OAuth Authentication
-  'OAuth Authentication': 'OAuth Authentication',
-  'Authenticating... Please complete the login in your browser.':
-    'Authenticating... Please complete the login in your browser.',
-  'Press c to copy the authorization URL to your clipboard.':
-    'Press c to copy the authorization URL to your clipboard.',
-  'Copy request sent to your terminal. If paste is empty, copy the URL above manually.':
-    'Copy request sent to your terminal. If paste is empty, copy the URL above manually.',
-  'Cannot write to terminal — copy the URL above manually.':
-    'Cannot write to terminal — copy the URL above manually.',
   // MCP Tool List
   'No tools available for this server.': 'No tools available for this server.',
   destructive: 'destructive',
@@ -1532,8 +1373,8 @@ export default {
     'Switch the model for this session (--fast for suggestion model, --voice for voice transcription model, [model-id] to switch immediately).',
   'Switch the model for this session (--fast for suggestion model, --voice for voice transcription model, --vision for the vision bridge model, --project to persist to project settings, --global to persist to user settings, [model-id] to switch immediately, or [model-id] [prompt] to run a one-off prompt on another model; the inline prompt is sent verbatim without @file expansion).':
     'Switch the model for this session (--fast for suggestion model, --voice for voice transcription model, --vision for the vision bridge model, --project to persist to project settings, --global to persist to user settings, [model-id] to switch immediately, or [model-id] [prompt] to run a one-off prompt on another model; the inline prompt is sent verbatim without @file expansion).',
-  'Switch the model for this session (--fast for suggestion model, --vision for the vision bridge model, --compaction for chat compression model, --image for the image generation model, --project to persist to project settings, --global to persist to user settings, [model-id] to switch immediately, or [model-id] [prompt] to run a one-off prompt on another model; the inline prompt is sent verbatim without @file expansion).':
-    'Switch the model for this session (--fast for suggestion model, --vision for the vision bridge model, --compaction for chat compression model, --image for the image generation model, --project to persist to project settings, --global to persist to user settings, [model-id] to switch immediately, or [model-id] [prompt] to run a one-off prompt on another model; the inline prompt is sent verbatim without @file expansion).',
+  'Switch the model for this session (--fast for suggestion model, --vision for the vision bridge model, --compaction for chat compression model, --project to persist to project settings, --global to persist to user settings, [model-id] to switch immediately, or [model-id] [prompt] to run a one-off prompt on another model; the inline prompt is sent verbatim without @file expansion).':
+    'Switch the model for this session (--fast for suggestion model, --vision for the vision bridge model, --compaction for chat compression model, --project to persist to project settings, --global to persist to user settings, [model-id] to switch immediately, or [model-id] [prompt] to run a one-off prompt on another model; the inline prompt is sent verbatim without @file expansion).',
   "Inline one-shot override isn't supported in this mode — run '/model {{model}}' first, then send your prompt.":
     "Inline one-shot override isn't supported in this mode — run '/model {{model}}' first, then send your prompt.",
   "Inline one-shot override can't switch providers. '{{model}}' belongs to a different provider — run '/model {{model}}' first, then send your prompt.":
@@ -1544,8 +1385,6 @@ export default {
     'Set a lighter model for prompt suggestions and speculative execution',
   'Set the image-capable model used to transcribe images for a text-only main model':
     'Set the image-capable model used to transcribe images for a text-only main model',
-  'Set the model used to generate images':
-    'Set the model used to generate images',
   'Set the model used for chat compression (auto-compaction)':
     'Set the model used for chat compression (auto-compaction)',
   'Persist the model selection to the project settings (workspace scope)':
@@ -1554,10 +1393,8 @@ export default {
     'Persist the model selection to the user settings (global scope)',
   'Select Fast Model': 'Select Fast Model',
   'Select Vision Model': 'Select Vision Model',
-  'Select Image Model': 'Select Image Model',
   'Select Compaction Model': 'Select Compaction Model',
   'Vision Model': 'Vision Model',
-  'Image Model': 'Image Model',
   'Compaction Model': 'Compaction Model',
   'Compaction model override cleared': 'Compaction model override cleared',
   'Current compaction model: {{compactionModel}}\nUse "/model --compaction <model-id>" to set compaction model, or "/model --compaction clear" to clear the override.':
@@ -1568,8 +1405,6 @@ export default {
     'Configure models in settings.modelProviders and ensure the required environment variables are set. In interactive mode, run /auth to configure or switch providers, or run /model --compaction without a model to choose from configured models.',
   'Selected compaction model is unavailable.':
     'Selected compaction model is unavailable.',
-  'Selected image model is unavailable.':
-    'Selected image model is unavailable.',
   'No models are configured.': 'No models are configured.',
   'Configured models: {{models}}.': 'Configured models: {{models}}.',
   "Voice model '{{modelName}}' cannot be used for transcription.":
@@ -1783,14 +1618,6 @@ export default {
   'not set': 'not set',
   'Current vision model: {{visionModel}}\nUse "/model --vision <model-id>" to set the vision bridge model.':
     'Current vision model: {{visionModel}}\nUse "/model --vision <model-id>" to set the vision bridge model.',
-  'Current image model: {{imageModel}}\nUse "/model --image <model-id>" to set the image generation model.':
-    'Current image model: {{imageModel}}\nUse "/model --image <model-id>" to set the image generation model.',
-  "Image model '{{modelName}}' matches multiple configured endpoints. Run /model --image without an argument and choose the exact endpoint.":
-    "Image model '{{modelName}}' matches multiple configured endpoints. Run /model --image without an argument and choose the exact endpoint.",
-  "Image model '{{modelName}}' must declare a valid HTTPS baseUrl and credential environment variable.":
-    "Image model '{{modelName}}' must declare a valid HTTPS baseUrl and credential environment variable.",
-  "'{{model}}' must declare a valid HTTPS baseUrl and credential environment variable.":
-    "'{{model}}' must declare a valid HTTPS baseUrl and credential environment variable.",
   none: 'none',
   unknown: 'unknown',
   // ============================================================================
@@ -1900,8 +1727,6 @@ export default {
   '{{count}} prompts': '{{count}} prompts',
   '(from {{extensionName}})': '(from {{extensionName}})',
   OAuth: 'OAuth',
-  'OAuth expired': 'OAuth expired',
-  'OAuth not authenticated': 'OAuth not authenticated',
   'tools and prompts will appear when ready':
     'tools and prompts will appear when ready',
   '{{count}} tools cached': '{{count}} tools cached',
@@ -1916,12 +1741,8 @@ export default {
     'to show server and tool descriptions',
   'to show tool parameter schemas': 'to show tool parameter schemas',
   'to hide descriptions': 'to hide descriptions',
-  'to authenticate with OAuth-enabled servers':
-    'to authenticate with OAuth-enabled servers',
   Press: 'Press',
   'to toggle tool descriptions on/off': 'to toggle tool descriptions on/off',
-  "Starting OAuth authentication for MCP server '{{name}}'...":
-    "Starting OAuth authentication for MCP server '{{name}}'...",
   // ============================================================================
   // Startup Tips
   // ============================================================================

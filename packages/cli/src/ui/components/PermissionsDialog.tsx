@@ -807,7 +807,7 @@ export function PermissionsDialog({
             )}
           </Text>
           <Text>
-            {t('e.g.,')} <Text bold>WebFetch</Text> {t('or')}{' '}
+            {t('e.g.,')} <Text bold>Read</Text> {t('or')}{' '}
             <Text bold>Bash(ls:*)</Text>
           </Text>
           <Box height={1} />

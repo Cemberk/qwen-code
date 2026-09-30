@@ -202,10 +202,6 @@ export class Storage {
     return path.join(homeDir, QWEN_DIR);
   }
 
-  static getMcpOAuthTokensPath(): string {
-    return path.join(Storage.getGlobalQwenDir(), 'mcp-oauth-tokens.json');
-  }
-
   static getGlobalSettingsPath(): string {
     return path.join(Storage.getGlobalQwenDir(), 'settings.json');
   }

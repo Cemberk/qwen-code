@@ -19,10 +19,7 @@ import {
   convertQoderPlugin,
   QODER_PLUGIN_MANIFEST,
 } from './qoder-converter.js';
-import type {
-  ExtensionNetworkPolicy,
-  ExtensionOriginSource,
-} from '../config/config.js';
+import type { ExtensionOriginSource } from '../config/config.js';
 import {
   AGENT_PLUGIN_MANIFEST,
   AGENT_PLUGIN_SCHEMA,
@@ -40,17 +37,14 @@ export const SUPPORTED_EXTENSION_MANIFESTS = [
 export async function convertCompatibleExtension(
   extensionDir: string,
   pluginName?: string,
-  networkPolicy?: ExtensionNetworkPolicy,
   signal?: AbortSignal,
 ): Promise<{
   extensionDir: string;
   originSource: ExtensionOriginSource;
-  externalContent: boolean;
 }> {
   signal?.throwIfAborted();
   let newExtensionDir = extensionDir;
   let originSource: ExtensionOriginSource = 'QwenCode';
-  let externalContent = false;
   const agentPluginStatus = pluginName
     ? 'unrelated'
     : getAgentPluginSchemaStatus(extensionDir);
@@ -78,7 +72,6 @@ export async function convertCompatibleExtension(
     const converted = await convertClaudePluginPackage(
       extensionDir,
       pluginName,
-      networkPolicy,
       signal,
     );
     newExtensionDir = converted.convertedDir;
@@ -88,7 +81,6 @@ export async function convertCompatibleExtension(
       });
     }
     originSource = 'Claude';
-    externalContent = converted.externalContent;
   } else if (fs.existsSync(path.join(extensionDir, QODER_PLUGIN_MANIFEST))) {
     newExtensionDir = (await convertQoderPlugin(extensionDir)).convertedDir;
     originSource = 'Qoder';
@@ -100,5 +92,5 @@ export async function convertCompatibleExtension(
     originSource = 'Claude';
   }
   signal?.throwIfAborted();
-  return { extensionDir: newExtensionDir, originSource, externalContent };
+  return { extensionDir: newExtensionDir, originSource };
 }

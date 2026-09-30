@@ -98,50 +98,14 @@ vi.mock('./theme.js', () => ({
 }));
 
 import {
-  EXTENSIONS_TAB_ORDER,
   EXTENSIONS_TABS,
-  extensionsFooterHint,
   extensionsStatusColor,
-  extensionsTabLabel,
   OpenTuiExtensionsDialog,
   type ExtensionRow,
 } from './dialogs-extensions.js';
 import { C } from './theme.js';
 
-describe('extensions tabs (shell parity)', () => {
-  it('keeps the original tab ids and order', () => {
-    expect(EXTENSIONS_TABS).toEqual({
-      INSTALLED: 'installed',
-      DISCOVER: 'discover',
-      SOURCES: 'sources',
-    });
-    expect([...EXTENSIONS_TAB_ORDER]).toEqual([
-      'installed',
-      'discover',
-      'sources',
-    ]);
-  });
-
-  it('labels tabs like the original TabBar', () => {
-    expect(extensionsTabLabel('installed')).toBe('Installed');
-    expect(extensionsTabLabel('discover')).toBe('Discover');
-    expect(extensionsTabLabel('sources')).toBe('Sources');
-  });
-
-  it('keeps the original Installed hint; Discover/Sources get an honest one', () => {
-    expect(extensionsFooterHint('installed')).toBe(
-      '↑↓ navigate · Space enable/disable · f favorite · Enter details · Esc close',
-    );
-    // The ink hints promise keys this renderer does not implement; repeating
-    // them would be a lie, so the degraded tabs say what they actually do.
-    expect(extensionsFooterHint('discover')).toBe(
-      'Tab / ←→ to switch · Esc to close',
-    );
-    expect(extensionsFooterHint('sources')).toBe(
-      'Tab / ←→ to switch · Esc to close',
-    );
-  });
-
+describe('extensions dialog (shell parity)', () => {
   it('maps status types onto the shared palette', () => {
     expect(extensionsStatusColor({ type: 'error', text: '' })).toBe(C.red);
     expect(extensionsStatusColor({ type: 'warning', text: '' })).toBe(C.yellow);
@@ -360,22 +324,5 @@ describe('OpenTuiExtensionsDialog management keys (#44)', () => {
       />,
     );
     expect(screen.getByText('No extensions installed.')).toBeTruthy();
-  });
-
-  it('Discover/Sources degrade honestly (no fake footer hints)', async () => {
-    renderDialog();
-    await press('tab');
-    expect(
-      screen.getByText(
-        'Discover is not yet available in the OpenTUI renderer.',
-      ),
-    ).toBeTruthy();
-    expect(screen.getByText(/Tab \/ ←→ to switch · Esc to close/)).toBeTruthy();
-    await press('tab');
-    expect(
-      screen.getByText(
-        'Marketplace sources are not yet available in the OpenTUI renderer.',
-      ),
-    ).toBeTruthy();
   });
 });

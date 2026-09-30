@@ -12,15 +12,10 @@ import {
   type JsonValue,
 } from '../extension/variables.js';
 import type { Extension } from '../extension/extensionManager.js';
-import type {
-  LspInitializationOptions,
-  LspServerConfig,
-  LspSocketOptions,
-} from './types.js';
+import type { LspInitializationOptions, LspServerConfig } from './types.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
 
 const debugLogger = createDebugLogger('LSP');
-const MAX_TCP_PORT = 65_535;
 
 export type LspUserConfigLoadResult =
   | { ok: true; configs: LspServerConfig[] }
@@ -289,6 +284,12 @@ export class LspConfigLoader {
     options: { forceTrustRequired?: boolean } = {},
   ): LspServerConfig | null {
     const transport = this.normalizeTransport(spec['transport']);
+    if (!transport) {
+      debugLogger.warn(
+        `LSP config error in ${origin}: ${name} uses an unsupported transport; only stdio is supported`,
+      );
+      return null;
+    }
     const command =
       typeof spec['command'] === 'string'
         ? (spec['command'] as string)
@@ -320,18 +321,10 @@ export class LspConfigLoader {
       : typeof spec['trustRequired'] === 'boolean'
         ? (spec['trustRequired'] as boolean)
         : true;
-    const socket = this.normalizeSocketOptions(spec);
 
-    if (transport === 'stdio' && !command) {
+    if (!command) {
       debugLogger.warn(
         `LSP config error in ${origin}: ${name} missing command`,
-      );
-      return null;
-    }
-
-    if (transport !== 'stdio' && !socket) {
-      debugLogger.warn(
-        `LSP config error in ${origin}: ${name} missing socket info`,
       );
       return null;
     }
@@ -353,7 +346,6 @@ export class LspConfigLoader {
       restartOnCrash,
       maxRestarts,
       trustRequired,
-      socket,
     };
   }
 
@@ -405,13 +397,13 @@ export class LspConfigLoader {
     return Object.keys(mapping).length > 0 ? mapping : undefined;
   }
 
-  private normalizeTransport(value: unknown): 'stdio' | 'tcp' | 'socket' {
+  private normalizeTransport(value: unknown): 'stdio' | undefined {
     if (typeof value !== 'string') {
       return 'stdio';
     }
     const normalized = value.toLowerCase();
     if (normalized === 'tcp' || normalized === 'socket') {
-      return normalized;
+      return undefined;
     }
     return 'stdio';
   }
@@ -434,64 +426,6 @@ export class LspConfigLoader {
       return undefined;
     }
     return value;
-  }
-
-  private normalizePort(value: unknown): number | undefined {
-    let port: number;
-    if (typeof value === 'number') {
-      port = value;
-    } else if (typeof value === 'string') {
-      const trimmed = value.trim();
-      if (!/^\d+$/.test(trimmed)) {
-        return undefined;
-      }
-      port = Number(trimmed);
-    } else {
-      return undefined;
-    }
-
-    if (!Number.isSafeInteger(port) || port < 1 || port > MAX_TCP_PORT) {
-      return undefined;
-    }
-    return port;
-  }
-
-  private normalizeSocketOptions(
-    value: Record<string, unknown>,
-  ): LspSocketOptions | undefined {
-    const socketValue = value['socket'];
-    if (typeof socketValue === 'string') {
-      return { path: socketValue };
-    }
-
-    const source = this.isRecord(socketValue) ? socketValue : value;
-    const host =
-      typeof source['host'] === 'string'
-        ? (source['host'] as string)
-        : undefined;
-    const pathValue =
-      typeof source['path'] === 'string'
-        ? (source['path'] as string)
-        : typeof source['socketPath'] === 'string'
-          ? (source['socketPath'] as string)
-          : undefined;
-    const port = this.normalizePort(source['port']);
-
-    const socket: LspSocketOptions = {};
-    if (host) {
-      socket.host = host;
-    }
-    if (port !== undefined) {
-      socket.port = port;
-    }
-    if (pathValue) {
-      socket.path = pathValue;
-    }
-
-    if (!socket.path && !socket.port) {
-      return undefined;
-    }
-    return socket;
   }
 
   private resolveWorkspaceFolder(value: unknown): string {

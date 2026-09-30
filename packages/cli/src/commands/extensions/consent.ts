@@ -182,9 +182,7 @@ export function extensionConsentString(
     output.push(t('This extension will run the following MCP servers:'));
     for (const [key, mcpServer] of mcpServerEntries) {
       const isLocal = !!mcpServer.command;
-      const source =
-        mcpServer.httpUrl ??
-        `${mcpServer.command || ''}${mcpServer.args ? ' ' + mcpServer.args.join(' ') : ''}`;
+      const source = `${mcpServer.command || ''}${mcpServer.args ? ' ' + mcpServer.args.join(' ') : ''}`;
       output.push(
         `  * ${key} (${isLocal ? t('local') : t('remote')}): ${source}`,
       );

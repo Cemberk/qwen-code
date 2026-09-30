@@ -43,8 +43,6 @@ function server(overrides: Partial<McpServerInfo> = {}): McpServerInfo {
     promptCount: 0,
     resourceCount: 0,
     isDisabled: false,
-    hasOAuthTokens: false,
-    requiresAuth: false,
     ...overrides,
   };
 }
@@ -102,48 +100,26 @@ describe('mcpServerStatusText', () => {
     expect(mcpServerStatusText(server({ isDisabled: true }))).toBe('disabled');
   });
 
-  it('shows approval states before auth', () => {
-    expect(
-      mcpServerStatusText(
-        server({ approvalState: 'pending', requiresAuth: true }),
-      ),
-    ).toBe('needs approval');
-    expect(
-      mcpServerStatusText(
-        server({ approvalState: 'rejected', requiresAuth: true }),
-      ),
-    ).toBe('rejected — edit config to re-approve');
+  it('shows approval states', () => {
+    expect(mcpServerStatusText(server({ approvalState: 'pending' }))).toBe(
+      'needs approval',
+    );
+    expect(mcpServerStatusText(server({ approvalState: 'rejected' }))).toBe(
+      'rejected — edit config to re-approve',
+    );
   });
 
-  it('shows needs authentication for unconnected auth-required servers', () => {
+  it('falls back to the raw status', () => {
     expect(
-      mcpServerStatusText(
-        server({
-          status: MCPServerStatus.DISCONNECTED,
-          requiresAuth: true,
-        }),
-      ),
-    ).toBe('needs authentication');
-  });
-
-  it('falls back to the raw status once connected', () => {
-    expect(
-      mcpServerStatusText(
-        server({ status: MCPServerStatus.CONNECTED, requiresAuth: true }),
-      ),
+      mcpServerStatusText(server({ status: MCPServerStatus.CONNECTED })),
     ).toBe('connected');
   });
 
-  it('colors approval/auth/disabled rows yellow', () => {
+  it('colors approval/disabled rows yellow', () => {
     expect(mcpServerRowColor(server({ isDisabled: true }))).toBe('yellow');
     expect(mcpServerRowColor(server({ approvalState: 'pending' }))).toBe(
       'yellow',
     );
-    expect(
-      mcpServerRowColor(
-        server({ status: MCPServerStatus.DISCONNECTED, requiresAuth: true }),
-      ),
-    ).toBe('yellow');
     expect(mcpServerRowColor(server())).toBe('green');
     expect(
       mcpServerRowColor(server({ status: MCPServerStatus.DISCONNECTED })),
@@ -152,7 +128,7 @@ describe('mcpServerStatusText', () => {
 });
 
 describe('buildMcpServerActions', () => {
-  it('offers browse + toggle + authenticate for a healthy server', () => {
+  it('offers browse + toggle for a healthy server', () => {
     const actions = buildMcpServerActions(
       server({ toolCount: 2, resourceCount: 1 }),
       { resourcesSupported: true },
@@ -161,7 +137,6 @@ describe('buildMcpServerActions', () => {
       'view-tools',
       'view-resources',
       'toggle-disable',
-      'authenticate',
     ]);
   });
 
@@ -169,14 +144,10 @@ describe('buildMcpServerActions', () => {
     const actions = buildMcpServerActions(
       server({ status: MCPServerStatus.DISCONNECTED }),
     );
-    expect(actions.map((a) => a.key)).toEqual([
-      'reconnect',
-      'toggle-disable',
-      'authenticate',
-    ]);
+    expect(actions.map((a) => a.key)).toEqual(['reconnect', 'toggle-disable']);
   });
 
-  it('offers approve when pending and hides reconnect/authenticate', () => {
+  it('offers approve when pending and hides reconnect', () => {
     const actions = buildMcpServerActions(
       server({ approvalState: 'pending' }),
       { approveSupported: true },
@@ -189,12 +160,6 @@ describe('buildMcpServerActions', () => {
     expect(actions).toEqual([
       { key: 'toggle-disable', label: 'Enable', action: 'toggle-disable' },
     ]);
-  });
-
-  it('uses Re-authenticate + Clear Authentication when tokens exist', () => {
-    const actions = buildMcpServerActions(server({ hasOAuthTokens: true }));
-    expect(actions.map((a) => a.label)).toContain('Re-authenticate');
-    expect(actions.map((a) => a.label)).toContain('Clear Authentication');
   });
 
   it('hides resources unless the caller supports them', () => {
@@ -216,9 +181,6 @@ describe('mcpStepFooter', () => {
     );
     expect(mcpStepFooter(MCP_MANAGEMENT_STEPS.TOOL_DETAIL, 2)).toBe(
       'Esc to back',
-    );
-    expect(mcpStepFooter(MCP_MANAGEMENT_STEPS.AUTHENTICATE, 2)).toBe(
-      'Esc to go back',
     );
   });
 });

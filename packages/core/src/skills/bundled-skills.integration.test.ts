@@ -44,6 +44,10 @@ describe('bundled SKILL.md files', () => {
     if (cfg.allowedTools !== undefined) {
       expect(Array.isArray(cfg.allowedTools)).toBe(true);
     }
+    // Bundled skills must not auto-approve whole shell/write/edit tools.
+    for (const tool of ['run_shell_command', 'write_file', 'edit']) {
+      expect(cfg.allowedTools ?? []).not.toContain(tool);
+    }
   });
 
   it('ships dataviz validator and references with the bundled skill', () => {

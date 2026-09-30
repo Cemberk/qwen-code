@@ -10,8 +10,6 @@ import {
   GOAL_MAX_ACTIVE_MINUTES_CAP,
   GOAL_MAX_TURNS_CAP,
   HookEventName,
-  MAX_WEB_SEARCH_MAX_PER_SESSION,
-  MAX_WEB_SEARCH_TIMEOUT_MS,
   DEFAULT_SENSITIVE_SPAN_ATTRIBUTE_MAX_LENGTH,
   OutputFormat,
   SENSITIVE_SPAN_ATTRIBUTE_MAX_LENGTH_LIMIT,
@@ -32,11 +30,7 @@ describe('SettingsSchema', () => {
           'hooks'
         ]?.items?.properties;
 
-      expect(hookProperties?.['type']?.enum).toEqual([
-        'command',
-        'http',
-        'prompt',
-      ]);
+      expect(hookProperties?.['type']?.enum).toEqual(['command', 'prompt']);
       expect(hookProperties?.['prompt']).toMatchObject({ type: 'string' });
       expect(hookProperties?.['model']).toMatchObject({ type: 'string' });
     });
@@ -78,7 +72,6 @@ describe('SettingsSchema', () => {
         'security',
         'advanced',
         'plansDirectory',
-        'imageModel',
       ];
 
       expectedSettings.forEach((setting) => {
@@ -250,33 +243,6 @@ describe('SettingsSchema', () => {
       });
     });
 
-    // Type and bounds mirror resolveWebSearchTimeoutMs, which accepts only
-    // whole numbers in range: without them the write paths accept values the
-    // runtime silently replaces with the default. The maximum is core's
-    // constant so the schema cannot drift from the runtime contract.
-    it('should bound tools.webSearch.timeoutMs to the runtime contract', () => {
-      expect(
-        getSettingsSchema().tools.properties.webSearch.properties.timeoutMs,
-      ).toMatchObject({
-        type: 'integer',
-        minimum: 1,
-        maximum: MAX_WEB_SEARCH_TIMEOUT_MS,
-        showInDialog: true,
-      });
-    });
-
-    it('should bound tools.webSearch.maxPerSession to the runtime contract', () => {
-      expect(
-        getSettingsSchema().tools.properties.webSearch.properties.maxPerSession,
-      ).toMatchObject({
-        type: 'integer',
-        minimum: 1,
-        maximum: MAX_WEB_SEARCH_MAX_PER_SESSION,
-        requiresRestart: true,
-        showInDialog: true,
-      });
-    });
-
     it('should have top-level proxy setting in schema', () => {
       expect(getSettingsSchema().proxy).toBeDefined();
       expect(getSettingsSchema().proxy.type).toBe('string');
@@ -303,17 +269,6 @@ describe('SettingsSchema', () => {
       expect(getSettingsSchema().plansDirectory.default).toBe(undefined);
       expect(getSettingsSchema().plansDirectory.requiresRestart).toBe(true);
       expect(getSettingsSchema().plansDirectory.showInDialog).toBe(false);
-    });
-
-    it('should define the image model setting', () => {
-      const imageModel = getSettingsSchema().imageModel;
-
-      expect(imageModel.type).toBe('string');
-      expect(imageModel.category).toBe('Model');
-      expect(imageModel.default).toBe('');
-      expect(imageModel.requiresRestart).toBe(false);
-      expect(imageModel.showInDialog).toBe(false);
-      expect(imageModel.description).toContain('supportsImageGeneration: true');
     });
 
     it('should define the advisor model setting', () => {

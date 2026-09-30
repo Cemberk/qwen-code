@@ -111,16 +111,6 @@ export const TOOL_NAME_ALIASES: Readonly<Record<string, string>> = {
   TodoWrite: 'todo_write',
   TodoWriteTool: 'todo_write',
 
-  // WebFetch tool
-  web_fetch: 'web_fetch',
-  WebFetch: 'web_fetch',
-  WebFetchTool: 'web_fetch',
-
-  // WebSearch tool
-  web_search: 'web_search',
-  WebSearch: 'web_search',
-  WebSearchTool: 'web_search',
-
   // ReadMcpResource tool
   read_mcp_resource: 'read_mcp_resource',
   ReadMcpResource: 'read_mcp_resource',
@@ -240,43 +230,6 @@ export const TOOL_NAME_ALIASES: Readonly<Record<string, string>> = {
   team_plan_approval: 'team_plan_approval',
   TeamPlanApproval: 'team_plan_approval',
 
-  // Image generation tool
-  image_gen: 'image_gen',
-  ImageGen: 'image_gen',
-  ImageGenTool: 'image_gen',
-
-  // Omni media tools
-  omni_downsample_image: 'omni_downsample_image',
-  DownsampleImage: 'omni_downsample_image',
-  omni_downscale_video: 'omni_downscale_video',
-  DownscaleVideo: 'omni_downscale_video',
-  omni_downsample_audio: 'omni_downsample_audio',
-  DownsampleAudio: 'omni_downsample_audio',
-  omni_extract_keyframes: 'omni_extract_keyframes',
-  ExtractKeyframes: 'omni_extract_keyframes',
-  omni_extract_audio: 'omni_extract_audio',
-  ExtractAudio: 'omni_extract_audio',
-  omni_clip_video: 'omni_clip_video',
-  ClipVideo: 'omni_clip_video',
-  omni_convert_image: 'omni_convert_image',
-  ConvertImage: 'omni_convert_image',
-  omni_transcribe_audio: 'omni_transcribe_audio',
-  TranscribeAudio: 'omni_transcribe_audio',
-  omni_clip_image: 'omni_clip_image',
-  ClipImage: 'omni_clip_image',
-  omni_clip_audio: 'omni_clip_audio',
-  ClipAudio: 'omni_clip_audio',
-  omni_caption_image: 'omni_caption_image',
-  CaptionImage: 'omni_caption_image',
-  omni_caption_audio: 'omni_caption_audio',
-  CaptionAudio: 'omni_caption_audio',
-  omni_ocr_image: 'omni_ocr_image',
-  OcrImage: 'omni_ocr_image',
-  omni_understand_video_segments: 'omni_understand_video_segments',
-  UnderstandVideoSegments: 'omni_understand_video_segments',
-  omni_recall_media_memory: 'omni_recall_media_memory',
-  RecallMediaMemory: 'omni_recall_media_memory',
-
   // Tool search tool
   tool_search: 'tool_search',
   ToolSearch: 'tool_search',
@@ -351,11 +304,6 @@ const READ_TOOLS = new Set([
  */
 const EDIT_TOOLS = new Set(['edit', 'write_file', 'notebook_edit']);
 
-/**
- * WebFetch tools.
- */
-const WEBFETCH_TOOLS = new Set(['web_fetch']);
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Tool name resolution & categorization
 // ─────────────────────────────────────────────────────────────────────────────
@@ -407,9 +355,6 @@ export function getSpecifierKind(canonicalToolName: string): SpecifierKind {
   }
   if (READ_TOOLS.has(canonicalToolName) || EDIT_TOOLS.has(canonicalToolName)) {
     return 'path';
-  }
-  if (WEBFETCH_TOOLS.has(canonicalToolName)) {
-    return 'domain';
   }
   return 'literal';
 }
@@ -463,7 +408,6 @@ export function toolMatchesRuleToolName(
  *   "Bash(git *)"               → shell command glob
  *   "Read(./secrets/**)"        → gitignore-style path match
  *   "Edit(/src/**\/*.ts)"        → gitignore-style path match
- *   "WebFetch(domain:x.com)"    → domain match
  *   "Agent(Explore)"            → subagent type literal match (alias for Task)
  *   "mcp__server__tool"         → MCP tool (no specifier needed)
  */
@@ -544,11 +488,7 @@ export function parseRule(raw: string): PermissionRule {
       toolParamMatchers = matchers;
       specifier = plainParts.join(',').trim() || undefined;
     }
-  } else if (
-    specifierKind !== 'literal' &&
-    rawSpecifier.includes(':') &&
-    !rawSpecifier.startsWith('domain:')
-  ) {
+  } else if (specifierKind !== 'literal' && rawSpecifier.includes(':')) {
     debugLogger.warn(
       `key:value syntax is only supported for literal-specifier tools (got ${specifierKind} for "${canonicalName}")`,
     );
@@ -609,9 +549,7 @@ const CANONICAL_TO_RULE_DISPLAY: Readonly<Record<string, string>> = {
   run_shell_command: 'Bash',
   // Monitor
   monitor: 'Monitor',
-  // Web
-  web_fetch: 'WebFetch',
-  web_search: 'WebSearch',
+  // MCP resources
   read_mcp_resource: 'ReadMcpResource',
   // Agent / Skill
   agent: 'Agent',
@@ -667,7 +605,6 @@ const FILE_TARGETED_TOOLS = new Set([
  *       single file.
  *       Directory-targeted tools (grep, glob, ls) use the directory as-is.
  *       The `//` prefix denotes an absolute filesystem path in the rule grammar.
- *   - **domain** tools (WebFetch): `WebFetch(example.com)`
  *   - **command** tools (Bash): `Bash(command)` — note: Shell already generates
  *     its own fine-grained rules via `extractCommandRules`; this is a fallback.
  *   - **literal** tools (Skill/Task): `Skill(name)` / `Task(type)`
@@ -707,12 +644,6 @@ export function buildPermissionRules(ctx: PermissionCheckContext): string[] {
           ? `/${dirPath}/**`
           : `${dirPath}/**`;
         return [`${displayName}(${specifier})`];
-      }
-      return [displayName];
-
-    case 'domain':
-      if (ctx.domain) {
-        return [`${displayName}(${ctx.domain})`];
       }
       return [displayName];
 
@@ -757,8 +688,6 @@ const DISPLAY_NAME_TO_VERB: Readonly<Record<string, string>> = {
   Edit: 'edit files',
   Bash: 'run commands',
   Monitor: 'monitor commands',
-  WebFetch: 'fetch from',
-  WebSearch: 'search the web',
   Agent: 'use agent',
   Skill: 'use skill',
   SaveMemory: 'save memory',
@@ -799,7 +728,6 @@ function cleanPathSpecifier(specifier: string): string {
  * Examples:
  *   `["Read(//Users/mochi/.qwen/**)"]`  → `"read files in /Users/mochi/.qwen/"`
  *   `["Bash(git *)"]`                    → `"run 'git *' commands"`
- *   `["WebFetch(github.com)"]`            → `"fetch from github.com"`
  *   `["Read"]`                            → `"read files"`
  *
  * @param rules - Array of rule strings from buildPermissionRules()
@@ -841,9 +769,6 @@ export function buildHumanReadableRuleLabel(rules: string[]): string {
         parts.push(`${verbWord} '${specifier}' commands`);
         break;
       }
-      case 'domain':
-        parts.push(`${verb} ${specifier}`);
-        break;
       case 'literal':
       default:
         parts.push(`${verb} "${specifier}"`);
@@ -1245,8 +1170,8 @@ export function matchesCommandPattern(
 
 /**
  * Match a glob pattern against a value using linear-time greedy matching.
- * `*` matches any substring (including empty). Case-insensitive to match
- * the convention used by matchesDomainPattern. No regex involved — avoids
+ * `*` matches any substring (including empty). Case-insensitive. No regex
+ * involved — avoids
  * ReDoS risk from catastrophic backtracking on multi-wildcard patterns.
  */
 function matchesParamValuePattern(pattern: string, value: string): boolean {
@@ -1588,50 +1513,6 @@ function realpathNearestExisting(filePath: string): string | undefined {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Domain matching (for WebFetch)
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Match a domain against a WebFetch domain specifier.
- *
- * Specifier format: `domain:example.com`
- * Matches the exact domain or any subdomain.
- *
- * Examples:
- *   matchesDomainPattern("domain:example.com", "example.com")      → true
- *   matchesDomainPattern("domain:example.com", "sub.example.com")  → true
- *   matchesDomainPattern("domain:example.com", "notexample.com")   → false
- */
-export function matchesDomainPattern(
-  specifier: string,
-  domain: string,
-): boolean {
-  // Strip the "domain:" prefix if present
-  const pattern = specifier.startsWith('domain:')
-    ? specifier.substring(7).trim()
-    : specifier.trim();
-
-  if (!pattern || !domain) {
-    return false;
-  }
-
-  const normalizedDomain = domain.toLowerCase();
-  const normalizedPattern = pattern.toLowerCase();
-
-  // Exact match
-  if (normalizedDomain === normalizedPattern) {
-    return true;
-  }
-
-  // Subdomain match: "sub.example.com" matches "example.com"
-  if (normalizedDomain.endsWith('.' + normalizedPattern)) {
-    return true;
-  }
-
-  return false;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // MCP tool wildcard matching
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1726,14 +1607,12 @@ export interface PathMatchContext {
  * 3. **With specifier** (depends on specifierKind):
  *    - `command`: Shell glob matching with word boundary & operator awareness
  *    - `path`: Gitignore-style file path matching (*, **)
- *    - `domain`: Domain matching for WebFetch
  *    - `literal`: Exact string match (for Agent subagent names, etc.)
  *
  * @param rule - The parsed permission rule
  * @param toolName - The canonical tool name being checked
  * @param command - Shell command (for Bash rules)
  * @param filePath - Absolute file path (for Read/Edit rules)
- * @param domain - Domain (for WebFetch rules)
  * @param pathContext - Project root and cwd for resolving relative path patterns
  * @param pathMatchMode - Whether path rules also match canonical destinations
  */
@@ -1742,7 +1621,6 @@ export function matchesRule(
   toolName: string,
   command?: string,
   filePath?: string,
-  domain?: string,
   pathContext?: PathMatchContext,
   specifier?: string,
   toolParams?: Record<string, unknown>,
@@ -1836,14 +1714,6 @@ export function matchesRule(
           ctx.cwd,
           pathMatchMode,
         );
-        break;
-      }
-
-      case 'domain': {
-        if (domain === undefined) {
-          return false;
-        }
-        specifierMatched = matchesDomainPattern(rule.specifier, domain);
         break;
       }
 

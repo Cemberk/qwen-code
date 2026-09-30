@@ -646,7 +646,6 @@ export function projectMcpStatus(item: Record<string, unknown>): string {
     serverName: string;
     name: string;
   }>;
-  const authStatus = (item['authStatus'] ?? {}) as Record<string, string>;
   const blocked = (item['blockedServers'] ?? []) as Array<{
     name: string;
     extensionName?: string;
@@ -671,18 +670,6 @@ export function projectMcpStatus(item: Record<string, unknown>): string {
   }
   lines.push('Configured MCP servers:');
   lines.push('');
-  const authSuffix = (name: string): string => {
-    switch (authStatus[name]) {
-      case 'authenticated':
-        return ' (OAuth)';
-      case 'expired':
-        return ' (OAuth expired)';
-      case 'unauthenticated':
-        return ' (OAuth not authenticated)';
-      default:
-        return '';
-    }
-  };
   for (const [name, serverConfig] of Object.entries(servers)) {
     const serverTools = tools.filter((tool) => tool.serverName === name);
     const serverPrompts = prompts.filter((p) => p.serverName === name);
@@ -702,7 +689,7 @@ export function projectMcpStatus(item: Record<string, unknown>): string {
     }
     if (status === MCPServerStatus.CONNECTING) {
       lines.push(
-        `◐ ${name}${from} - Starting... (first startup may take longer)${authSuffix(name)}`,
+        `◐ ${name}${from} - Starting... (first startup may take longer)`,
       );
       lines.push(' (tools and prompts will appear when ready)');
     } else if (status === MCPServerStatus.CONNECTED) {
@@ -718,10 +705,10 @@ export function projectMcpStatus(item: Record<string, unknown>): string {
         );
       }
       lines.push(
-        `● ${name}${from} - Ready${parts.length > 0 ? ` (${parts.join(', ')})` : ''}${authSuffix(name)}`,
+        `● ${name}${from} - Ready${parts.length > 0 ? ` (${parts.join(', ')})` : ''}`,
       );
     } else {
-      lines.push(`● ${name}${from} - Disconnected${authSuffix(name)}`);
+      lines.push(`● ${name}${from} - Disconnected`);
       if (serverTools.length > 0) {
         lines.push(`(${serverTools.length} tools cached)`);
       }
@@ -773,7 +760,6 @@ export function projectMcpStatus(item: Record<string, unknown>): string {
     lines.push('  - Use /mcp desc to show server and tool descriptions');
     lines.push('  - Use /mcp schema to show tool parameter schemas');
     lines.push('  - Use /mcp nodesc to hide descriptions');
-    lines.push('  - Use /mcp to authenticate with OAuth-enabled servers');
     lines.push('  - Press Ctrl+T to toggle tool descriptions on/off');
   }
   return lines.join('\n').trimEnd();

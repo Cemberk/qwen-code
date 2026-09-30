@@ -99,12 +99,6 @@ export function extensionToOutputString(
     if (extension.installMetadata.originSource) {
       output += `\n ${t('Origin:')} ${extension.installMetadata.originSource}`;
     }
-    if (extension.installMetadata.ref) {
-      output += `\n ${t('Ref:')} ${extension.installMetadata.ref}`;
-    }
-    if (extension.installMetadata.releaseTag) {
-      output += `\n ${t('Release tag:')} ${extension.installMetadata.releaseTag}`;
-    }
   }
   output += `\n ${t('Enabled (User):')} ${userEnabled}`;
   output += `\n ${t('Enabled (Workspace):')} ${workspaceEnabled}`;

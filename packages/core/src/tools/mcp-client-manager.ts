@@ -11,10 +11,8 @@ import {
   McpClient,
   MCPDiscoveryState,
   MCPServerStatus,
-  attemptAutomaticMcpOAuth,
   getMCPServerStatus,
   populateMcpServerCommand,
-  probeMcpServerForOAuth,
   removeMCPServerStatus,
   setMCPDiscoveryState,
 } from './mcp-client.js';
@@ -177,13 +175,7 @@ export type McpBudgetEvent =
     };
 
 /** Transport family per `MCPServerConfig`. `unknown` covers misconfigured entries. */
-export type McpTransportKind =
-  | 'stdio'
-  | 'sse'
-  | 'http'
-  | 'websocket'
-  | 'sdk'
-  | 'unknown';
+export type McpTransportKind = 'stdio' | 'sdk' | 'unknown';
 
 /**
  * Snapshot of the manager's live + reserved MCP state. The daemon's
@@ -196,7 +188,7 @@ export interface McpClientAccounting {
   total: number;
   /** Live client count split by transport family. */
   byTransport: Record<McpTransportKind, number>;
-  /** stdio + websocket — the only transports that spawn an OS process. */
+  /** stdio — the only transport that spawns an OS process. */
   subprocessCount: number;
   /** Server names currently holding a budget slot (in or over the cap). */
   reservedSlots: string[];
@@ -240,19 +232,7 @@ export class BudgetExhaustedError extends Error {
 
 /**
  * Map an `MCPServerConfig` to its transport family. Aligned with the
- * detection order in `mcp-client.ts:createTransport` (sdk → httpUrl
- * → url → command) with ONE forward-looking exception: `tcp` is
- * mapped here to `websocket` matching the field's declared intent on
- * `MCPServerConfig`, but `createTransport` does NOT yet construct a
- * websocket transport. A config carrying both `tcp` and `command`
- * is labeled `websocket` in the accounting snapshot while the real
- * connection fires through the `command` path as `stdio`. The
- * `subprocessCount = stdio + websocket` arithmetic is therefore
- * accurate-by-vacancy today (no real websocket subprocesses exist
- * yet) and will need revisiting if a websocket transport ships.
- * This is a future core decision: (a) implement WS in
- * createTransport vs (b) drop `tcp` from `MCPServerConfig` + both
- * mappers.
+ * detection order in `mcp-client.ts:createTransport` (sdk → command).
  *
  * `sdk` is checked first because `SDK_MCP_SERVER_FIELDS` may coexist
  * with a placeholder `command` — without the sdk-first order, an
@@ -260,9 +240,6 @@ export class BudgetExhaustedError extends Error {
  */
 export function mcpTransportOf(config: MCPServerConfig): McpTransportKind {
   if (isSdkMcpServerConfig(config)) return 'sdk';
-  if (typeof config.httpUrl === 'string') return 'http';
-  if (typeof config.url === 'string') return 'sse';
-  if (typeof config.tcp === 'string') return 'websocket';
   if (typeof config.command === 'string') return 'stdio';
   return 'unknown';
 }
@@ -354,7 +331,7 @@ export class McpClientManager {
    */
   private lastRefusedServerNames: string[] = [];
   /**
-   * transport family (`stdio`/`http`/...) resolved for each
+   * transport family (`stdio`/`sdk`/...) resolved for each
    * entry in `lastRefusedServerNames`, captured at refusal time. The
    * `'refused_batch'` event payload includes the per-server transport
    * so dashboards can break down "which kind of servers got refused"
@@ -572,9 +549,6 @@ export class McpClientManager {
   getMcpClientAccounting(): McpClientAccounting {
     const byTransport: Record<McpTransportKind, number> = {
       stdio: 0,
-      sse: 0,
-      http: 0,
-      websocket: 0,
       sdk: 0,
       unknown: 0,
     };
@@ -590,7 +564,7 @@ export class McpClientManager {
     return {
       total,
       byTransport,
-      subprocessCount: byTransport.stdio + byTransport.websocket,
+      subprocessCount: byTransport.stdio,
       reservedSlots: Array.from(this.reservedSlots),
       refusedServerNames: [...this.lastRefusedServerNames],
     };
@@ -1124,7 +1098,7 @@ export class McpClientManager {
    * Connects to a single MCP server and discovers its tools/prompts.
    * The connected client is tracked so it can be closed by {@link stop}.
    *
-   * This is primarily used for on-demand re-discovery flows (e.g. after OAuth).
+   * This is primarily used for on-demand re-discovery flows.
    */
   async discoverMcpToolsForServer(
     serverName: string,
@@ -1192,7 +1166,7 @@ export class McpClientManager {
     }
     // disabled gate.
     // `discoverMcpToolsForServerInternal` is reachable from
-    // `/mcp reconnect`, OAuth re-discovery, and the health monitor's
+    // `/mcp reconnect` and the health monitor's
     // `reconnectServer`. Without this check those paths could
     // resurrect a server the operator has explicitly disabled,
     // wasting a budget slot and registering tools the user told us
@@ -1274,7 +1248,6 @@ export class McpClientManager {
     const existingClient = this.clients.get(serverName);
     if (existingClient) {
       try {
-        existingClient.clearOAuthState?.();
         await existingClient.disconnect();
       } catch (error) {
         debugLogger.error(
@@ -1291,7 +1264,7 @@ export class McpClientManager {
         // here also keeps the failure path clean (a rediscovery that throws
         // leaves no stale entries behind). Mirrors `removeServer` /
         // `addRuntimeMcpServer`'s replace branch. Same-config reconnects
-        // (`/mcp reconnect`, health monitor, OAuth) simply re-register the
+        // (`/mcp reconnect`, health monitor) simply re-register the
         // identical set immediately after.
         this.purgeServerRegistries(serverName);
         this.eventEmitter?.emit('mcp-client-update', this.clients);
@@ -1653,10 +1626,6 @@ export class McpClientManager {
                   `budget=${err.budget}, reservedCount=${err.reservedCount})`,
               );
             } else {
-              // The shared pool is injected by the ACP daemon, where opening
-              // a local browser is invalid. Record the OAuth requirement so a
-              // mediated client can authenticate, but do not auto-retry here.
-              await probeMcpServerForOAuth(name, config);
               debugLogger.error(
                 `Pool acquire failed for ${name}: ${getErrorMessage(err)}`,
               );
@@ -1712,7 +1681,7 @@ export class McpClientManager {
     //   1. Outer 5s deadline via `Promise.race` — a single hung MCP
     //      server should not block daemon SIGTERM indefinitely;
     //      individual acquires are bounded by `runWithTimeout`
-    //      (stdio default 30s, remote 5s), but the aggregate
+    //      (default 30s), but the aggregate
     //      `discoveryInFlight` promise has no inherent cap. Matches
     //      the pool's own `drainAll` shutdown-bounded contract.
     //   2. Debug log on entry + on rejection — pre-fix the empty catch
@@ -1783,7 +1752,6 @@ export class McpClientManager {
     const disconnectionPromises = Array.from(this.clients.entries()).map(
       async ([name, client]) => {
         try {
-          client.clearOAuthState?.();
           await client.disconnect();
         } catch (error) {
           debugLogger.error(
@@ -1835,7 +1803,6 @@ export class McpClientManager {
     const client = this.clients.get(serverName);
     if (client) {
       try {
-        client.clearOAuthState?.();
         await client.disconnect();
       } catch (error) {
         debugLogger.error(
@@ -2172,7 +2139,7 @@ export class McpClientManager {
           serversToUpdate.push(name);
         } else {
           // Still-connected server: detect an in-place config change
-          // (command / url / env / headers / oauth, plus the discovery metadata
+          // (command / args / env / cwd, plus the discovery metadata
           // trust / alwaysLoadTools / includeTools / excludeTools) by comparing
           // the connected-config key it was connected with against the desired
           // one. This is
@@ -2196,7 +2163,7 @@ export class McpClientManager {
       }
 
       // Update only the servers that need it. Each per-server discover is
-      // wrapped in a discovery-only timeout (stdio default 30s, remote 5s,
+      // wrapped in a discovery-only timeout (default 30s,
       // per-server override via `discoveryTimeoutMs`). Tool-call timeout is
       // intentionally left alone — a long-running tool invocation is not a
       // startup pathology.
@@ -2206,18 +2173,6 @@ export class McpClientManager {
           await this.runWithDiscoveryTimeout(name, serverConfig, () =>
             this.discoverMcpToolsForServer(name, cliConfig),
           );
-          await probeMcpServerForOAuth(name, serverConfig);
-          const authenticated = await attemptAutomaticMcpOAuth(
-            name,
-            serverConfig,
-            cliConfig.isInteractive?.() === true &&
-              cliConfig.isBrowserLaunchSuppressed?.() !== true,
-          );
-          if (authenticated) {
-            await this.runWithDiscoveryTimeout(name, serverConfig, () =>
-              this.discoverMcpToolsForServer(name, cliConfig),
-            );
-          }
           // `discoverMcpToolsForServerInternal` swallows connect/discover
           // errors (best-effort discovery semantics — see its catch block),
           // so the try here resolves even for failed servers. Only the
@@ -2298,9 +2253,7 @@ export class McpClientManager {
 
   /**
    * Caps how long a single MCP server's discover handshake is allowed to
-   * take during startup. Local stdio servers default to 30s; remote
-   * HTTP/SSE servers default to 5s (mirrors Claude Code's
-   * `CLAUDE_AI_MCP_TIMEOUT_MS`). Per-server override via
+   * take during startup. Defaults to 30s. Per-server override via
    * `mcpServers.<name>.discoveryTimeoutMs` in settings.
    */
   private runWithDiscoveryTimeout<T>(
@@ -2461,18 +2414,7 @@ export class McpClientManager {
         Math.min(override, McpClientManager.MAX_DISCOVERY_TIMEOUT_MS),
       );
     }
-    // Remote transports (HTTP/SSE/WebSocket) carry network risk and get
-    // a shorter default; stdio servers we trust the user already runs
-    // locally. `tcp` is the WebSocket transport field on
-    // `MCPServerConfig` — without it, websocket servers fall through to
-    // the stdio default and a hung WS handshake holds back the
-    // non-interactive `waitForMcpReady()` for 30s instead of 5s.
-    const isRemote = !!(
-      serverConfig?.httpUrl ||
-      serverConfig?.url ||
-      serverConfig?.tcp
-    );
-    return isRemote ? 5_000 : 30_000;
+    return 30_000;
   }
 
   /**
@@ -2512,7 +2454,6 @@ export class McpClientManager {
     const client = this.clients.get(serverName);
     if (client) {
       try {
-        client.clearOAuthState?.();
         await client.disconnect();
       } catch (error) {
         debugLogger.error(
@@ -2856,10 +2797,7 @@ export class McpClientManager {
     // Validate config minimally: must have at least one transport field
     const transport = mcpTransportOf(config);
     if (transport === 'unknown') {
-      throw new InvalidMcpConfigError(
-        name,
-        'config must specify at least one of: command, url, httpUrl, tcp',
-      );
+      throw new InvalidMcpConfigError(name, 'config must specify a command');
     }
 
     // Detect shadow-over-settings

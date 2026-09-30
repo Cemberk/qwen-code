@@ -32,7 +32,6 @@ import {
   setGeneratorReasoningEffort,
   type ReasoningEffort,
 } from '../core/reasoning-effort.js';
-import type { MCPOAuthConfig } from '../mcp/oauth-provider.js';
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
 import type { VisionBridgeModelSelection } from '../services/visionBridge/vision-bridge-service.js';
 import {
@@ -41,13 +40,6 @@ import {
   selectVisionBridgeModel,
 } from '../services/visionBridge/vision-bridge-service.js';
 import type { AnyToolInvocation } from '../tools/tools.js';
-import type {
-  NormalizedOmniProcessingConfig,
-  OmniPolicyToolsSettings,
-} from '../omni/policy/types.js';
-import type { OmniUploadConfig } from '../omni/upload-config.js';
-import type { NormalizedOmniMemoryConfig } from '../services/media-memory/config.js';
-import { MediaResourceRegistry } from '../services/media-memory/registry.js';
 import type { ArenaManager } from '../agents/arena/ArenaManager.js';
 import { ArenaAgentClient } from '../agents/arena/ArenaAgentClient.js';
 import type { TeamManager } from '../agents/team/TeamManager.js';
@@ -66,7 +58,6 @@ import {
 } from '../core/contentGenerator.js';
 import { tokenLimit } from '../core/tokenLimits.js';
 import { getRuntimeContentGenerator } from '../agents/runtime/agent-context.js';
-import type { ExternalAgentExecutor } from '../agents/runtime/subagent-executor.js';
 import type {
   ExecutionEnvironment,
   ExecutionEnvironmentFactory,
@@ -117,10 +108,6 @@ import {
   type ToolMode as ToolModeValue,
 } from '../tools/code-mode.js';
 import type {
-  ArtifactHostConfig,
-  ArtifactOssConfig,
-} from '../tools/artifact/publisher.js';
-import type {
   LspClient,
   LspServiceReinitializeResult,
   LspStatusSnapshot,
@@ -154,8 +141,6 @@ import { SubagentManager } from '../subagents/subagent-manager.js';
 import type { SubagentConfig } from '../subagents/types.js';
 import { BackgroundTaskRegistry } from '../agents/background-tasks.js';
 import { MonitorRegistry } from '../services/monitorRegistry.js';
-import { normalizeImageGenerationBaseUrl } from '../services/image-generation-service.js';
-import { isImageGenerationCapable } from '../models/image-generation-capability.js';
 import { BackgroundAgentResumeService } from '../agents/background-agent-resume.js';
 import { BackgroundShellRegistry } from '../services/backgroundShellRegistry.js';
 import { WorkflowRunRegistry } from '../agents/workflow-run-registry.js';
@@ -251,11 +236,7 @@ import { WorkspaceContext } from '../utils/workspaceContext.js';
 import { type ToolName } from '../tools/tool-utils.js';
 import { FatalConfigError, getErrorMessage } from '../utils/errors.js';
 import { normalizeProxyUrl } from '../utils/proxyUtils.js';
-import {
-  loadUndici,
-  setResolvedProxyUrlForRuntimeFetch,
-  redactProxyError,
-} from '../utils/runtimeFetchOptions.js';
+import { loadUndici, redactProxyError } from '../utils/runtimeFetchOptions.js';
 
 // Local config modules
 import type { FileFilteringOptions } from '../utils/file-filtering-options.js';
@@ -398,7 +379,6 @@ import {
   type RuntimeModelSnapshot,
 } from '../models/index.js';
 import { resolveModelId } from '../utils/modelId.js';
-import type { WebSearchSettings } from '../tools/web-search.js';
 import type { ClaudeMarketplaceConfig } from '../extension/claude-converter.js';
 
 export function parseVisionModelSetting(setting: string | undefined):
@@ -433,7 +413,7 @@ function normalizeAdvisorModel(model: string | undefined): string | undefined {
 }
 
 // Re-export types
-export type { AnyToolInvocation, FileFilteringOptions, MCPOAuthConfig };
+export type { AnyToolInvocation, FileFilteringOptions };
 export {
   DEFAULT_FILE_FILTERING_OPTIONS,
   DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
@@ -780,30 +760,13 @@ export type ExtensionOriginSource =
   | 'Gemini'
   | 'Qoder'
   | 'AgentPlugins';
-export type ExtensionNetworkPolicy = 'public';
 
 export interface ExtensionInstallMetadata {
   source: string;
-  type:
-    | 'git'
-    | 'local'
-    | 'link'
-    | 'github-release'
-    | 'npm'
-    | 'archive-url'
-    | 'snapshot';
-  installId?: string;
-  credentialPersistence?: 'stored';
+  type: 'local' | 'link';
   originSource?: ExtensionOriginSource;
-  releaseTag?: string; // Only present for github-release and npm installs.
-  gitCommit?: string; // Commit recorded when the installation source was cloned.
-  externalContent?: boolean; // Installed content came from a source nested outside the recorded source.
-  registryUrl?: string; // Only present for npm installs.
-  ref?: string;
-  allowPreRelease?: boolean;
   marketplaceConfig?: ClaudeMarketplaceConfig;
   pluginName?: string;
-  networkPolicy?: ExtensionNetworkPolicy;
 }
 
 export const DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD = 25_000;
@@ -825,7 +788,6 @@ export {
   matchesAnyServerPattern,
   MCPServerConfig,
   isSdkMcpServerConfig,
-  AuthProviderType,
 } from './mcp-server-config.js';
 
 export interface SandboxConfig {
@@ -1187,52 +1149,6 @@ export interface ConfigParameters {
   modelProposedGoals?: ModelProposedGoalsMode;
   artifactEnabled?: boolean;
   artifactAutoOpen?: boolean;
-  artifactPublisher?: 'local' | 'host' | 'oss';
-  artifactHost?: ArtifactHostConfig;
-  artifactOss?: ArtifactOssConfig;
-  /** Omni multimodal experiment: enable the upload-based media delivery
-   * pipeline (omni-experiment branch). */
-  omniEnabled?: boolean;
-  /** Per-file byte ceiling for omni media uploads (default 1 GiB). */
-  omniMaxUploadFileBytes?: number;
-  /** Estimated-token ceiling for omni media (0/unset = guard disabled). */
-  omniMaxEstimatedTokens?: number;
-  omniMaxDurationSeconds?: number;
-  /** Byte ceiling for omni URL downloads (unset = follow upload cap). */
-  omniUrlDownloadMaxFileBytes?: number;
-  /** Upload URL TTL in hours (0 disables the cache; default 47). */
-  omniUploadUrlTtlHours?: number;
-  /** Dedicated DashScope upload endpoint, independent of inference. */
-  omniUploadBaseUrl?: string;
-  /** Environment variable containing the dedicated upload API key. */
-  omniUploadApiKeyEnv?: string;
-  /** Model sent to the DashScope upload-policy endpoint. */
-  omniUploadModel?: string;
-  /** Raw `omni.processing.policyTools` map (per-tool settings/runtime/
-   * modelAccess). Normalized lazily by the omni policy modules. */
-  omniPolicyTools?: OmniPolicyToolsSettings;
-  /** Raw `omni.processing.fixedPolicies` map (id → policy | null
-   * tombstone). Normalized at startup against system defaults. */
-  omniFixedPolicies?: Record<string, unknown>;
-  /** Raw `omni.processing.transportGuard.policies` map. */
-  omniTransportGuardPolicies?: Record<string, unknown>;
-  /** Raw `omni.processing.limits` per-root derivation budgets. */
-  omniProcessingLimits?: Record<string, unknown>;
-  /** `omni.storage.quarantine.retentionDays` (default 7). */
-  omniQuarantineRetentionDays?: number;
-  /** `omni.storage.quarantine.maxBytes` (default 5 GiB). */
-  omniQuarantineMaxBytes?: number;
-  /** `omni.storage.retentionDays` — days an unreferenced object survives
-   * before GC may sweep it (default 14). */
-  omniStorageRetentionDays?: number;
-  /** `omni.storage.maxTotalBytes` — soft byte budget for the object
-   * store (default 20 GiB). */
-  omniStorageMaxTotalBytes?: number;
-  /** Raw `omni.memory` settings (collection/recall). Normalized at
-   * startup; invalid configuration aborts startup. */
-  omniMemory?: Record<string, unknown>;
-  /** Image generation model selected through `/model --image`. */
-  imageModel?: string;
   /**
    * P5 T7: suppress the one-time `Workflow` tool usage-warning banner.
    * When `true`, the registry-side warning latch is bypassed and the
@@ -1419,12 +1335,6 @@ export interface ConfigParameters {
   advisorModel?: string;
   advisorMaxUses?: number;
   /**
-   * Built-in WebSearch settings. `enabled: false` disables the tool; when the
-   * setting is omitted, the tool may derive a backend from the active provider
-   * at startup. An explicit model or env-declared backend takes precedence.
-   */
-  webSearch?: WebSearchSettings;
-  /**
    * Safe mode: disables all user customizations (context files, hooks,
    * extensions, skills, MCP servers, rules) for troubleshooting.
    * Activated via `--safe-mode` CLI flag or `QWEN_CODE_SAFE_MODE=true` env var.
@@ -1497,13 +1407,6 @@ export interface ConfigParameters {
   contextRuleExcludes?: string[];
   /** Warnings generated during configuration resolution */
   warnings?: string[];
-  /** Allowed HTTP hook URLs whitelist (from security.allowedHttpHookUrls) */
-  allowedHttpHookUrls?: string[];
-  /**
-   * When true, HTTP hooks may target private/link-local IP ranges
-   * (from security.allowPrivateNetworkHooks; trusted scopes only).
-   */
-  allowPrivateNetworkHooks?: boolean;
   /**
    * Callback for persisting a permission rule to settings.
    * Injected by the CLI layer; core uses this to write allow/ask/deny rules
@@ -1527,12 +1430,6 @@ export type ShellExecutionSandboxPolicy = ExecutionSandboxPolicy;
 export type TerminalImageRenderSupport =
   | { available: true }
   | { available: false; reason: string };
-
-export interface ImageGenerationConfig {
-  model: string;
-  baseUrl: string;
-  apiKeyEnv: string;
-}
 
 function normalizeConfigOutputFormat(
   format: OutputFormat | undefined,
@@ -2866,48 +2763,10 @@ export class Config {
   private readonly artifactEnabled: boolean = true;
   private artifactSnapshotsEnabled = false;
   private readonly artifactAutoOpen: boolean = true;
-  private readonly artifactPublisher: 'local' | 'host' | 'oss' = 'local';
-  private readonly artifactHost?: ArtifactHostConfig;
-  private readonly artifactOss?: ArtifactOssConfig;
-  private readonly omniEnabled: boolean = false;
-  private readonly omniMaxUploadFileBytes?: number;
-  private readonly omniMaxEstimatedTokens?: number;
-  private readonly omniMaxDurationSeconds?: number;
-  private readonly omniUrlDownloadMaxFileBytes?: number;
-  private readonly omniUploadUrlTtlHours?: number;
-  private readonly omniUploadBaseUrl?: string;
-  private readonly omniUploadApiKeyEnv?: string;
-  private readonly omniUploadModel?: string;
-  private omniUploadConfig?: OmniUploadConfig;
-  private readonly omniPolicyTools?: OmniPolicyToolsSettings;
-  private readonly omniFixedPolicies?: Record<string, unknown>;
-  private readonly omniTransportGuardPolicies?: Record<string, unknown>;
-  private readonly omniProcessingLimits?: Record<string, unknown>;
-  private readonly omniQuarantineRetentionDays?: number;
-  private readonly omniStorageRetentionDays?: number;
-  private readonly omniStorageMaxTotalBytes?: number;
-  private readonly omniQuarantineMaxBytes?: number;
-  private readonly omniMemory?: Record<string, unknown>;
-  /** Normalized `omni.processing` view; set once during initialize()
-   * (after the tool registry exists) when omni is enabled. */
-  private omniProcessingConfig?: NormalizedOmniProcessingConfig;
-  /** Normalized `omni.memory` view; set once during initialize() when
-   * omni is enabled. */
-  private omniMemoryConfig?: NormalizedOmniMemoryConfig;
-  /** Session-lifetime binder between persistent media-memory identities
-   * and the opaque resource handles the model sees (M §5.2); created
-   * lazily on first use, never persisted. */
-  private omniMediaResourceRegistry?: MediaResourceRegistry;
   private workflowsEnabled: boolean | undefined;
   private readonly sessionWorkflowEnabled: boolean;
   private sessionWorkflowEnabledProvider?: () => boolean;
   private sessionWorkflowPlanRevision?: SessionWorkflowPlanRevision;
-  /**
-   * Host-supplied factory for subagents that declare an `executor` block.
-   * `packages/core` has no ACP dependency, so the implementation lives in the
-   * host package. See `ExternalAgentExecutor` and `setExternalAgentExecutor`.
-   */
-  private externalAgentExecutor?: ExternalAgentExecutor;
   private readonly agentExecutionBackend?: 'container';
   private readonly executionEnvironmentFactory?: ExecutionEnvironmentFactory;
   private readonly executionEnvironment?: ExecutionEnvironment;
@@ -2958,8 +2817,6 @@ export class Config {
    * with the memory load that discovered them; surfaced by `getWarnings()`.
    */
   private ignoredExtensionRules: string[] = [];
-  private readonly allowedHttpHookUrls: string[];
-  private readonly allowPrivateNetworkHooks: boolean;
   private readonly onPersistPermissionRuleCallback?: (
     scope: 'project' | 'user',
     ruleType: 'allow' | 'ask' | 'deny',
@@ -3008,20 +2865,10 @@ export class Config {
   private advisorModel?: string;
   private readonly advisorMaxUses: number;
   private readonly advisorUsage = { calls: 0 };
-  private readonly webSearchSettings?: WebSearchSettings;
-  private webSearchNoticeEmitted = false;
-  /**
-   * Per-session web_search call count. An object that is never reassigned:
-   * derived Configs (`deriveConfig` → `Object.create(base)`) must mutate the
-   * same counter, and `this.count++` on a wrapper would create an own
-   * property that shadows the session-global value.
-   */
-  private readonly webSearchSessionUsage = { calls: 0 };
   private visionModel?: string;
   private compactionModel?: string;
   private reasoningSnapshot?: ReasoningSnapshot;
   private latestReasoningSnapshot?: ReasoningSnapshot;
-  private imageModel?: string;
   private readonly visionBridgeTimeoutMs: number | undefined;
   private readonly modelFallbacks: string[];
   private readonly disableAllHooks: boolean;
@@ -3283,27 +3130,6 @@ export class Config {
     this.agentTeamEnabled = params.agentTeamEnabled ?? false;
     this.artifactEnabled = params.artifactEnabled ?? true;
     this.artifactAutoOpen = params.artifactAutoOpen ?? true;
-    this.artifactPublisher = params.artifactPublisher ?? 'local';
-    this.artifactHost = params.artifactHost;
-    this.artifactOss = params.artifactOss;
-    this.omniEnabled = params.omniEnabled ?? false;
-    this.omniMaxUploadFileBytes = params.omniMaxUploadFileBytes;
-    this.omniMaxEstimatedTokens = params.omniMaxEstimatedTokens;
-    this.omniMaxDurationSeconds = params.omniMaxDurationSeconds;
-    this.omniUrlDownloadMaxFileBytes = params.omniUrlDownloadMaxFileBytes;
-    this.omniUploadUrlTtlHours = params.omniUploadUrlTtlHours;
-    this.omniUploadBaseUrl = params.omniUploadBaseUrl;
-    this.omniUploadApiKeyEnv = params.omniUploadApiKeyEnv;
-    this.omniUploadModel = params.omniUploadModel;
-    this.omniPolicyTools = params.omniPolicyTools;
-    this.omniFixedPolicies = params.omniFixedPolicies;
-    this.omniTransportGuardPolicies = params.omniTransportGuardPolicies;
-    this.omniProcessingLimits = params.omniProcessingLimits;
-    this.omniQuarantineRetentionDays = params.omniQuarantineRetentionDays;
-    this.omniQuarantineMaxBytes = params.omniQuarantineMaxBytes;
-    this.omniStorageRetentionDays = params.omniStorageRetentionDays;
-    this.omniStorageMaxTotalBytes = params.omniStorageMaxTotalBytes;
-    this.omniMemory = params.omniMemory;
     this.workflowsEnabled = params.workflowsEnabled;
     this.sessionWorkflowEnabled = params.sessionWorkflowEnabled ?? false;
     this.modelProposedGoals = params.modelProposedGoals ?? 'alwaysAsk';
@@ -3360,8 +3186,6 @@ export class Config {
     }
     this.warnings = params.warnings ?? [];
     this.addLegacyPlanLocationWarning();
-    this.allowedHttpHookUrls = params.allowedHttpHookUrls ?? [];
-    this.allowPrivateNetworkHooks = params.allowPrivateNetworkHooks ?? false;
     this.onPersistPermissionRuleCallback = params.onPersistPermissionRule;
 
     // (web search removed)
@@ -3531,10 +3355,6 @@ export class Config {
               httpsProxy: proxyUrl,
             }),
           );
-          // Paths that pin their own dispatcher off the global one (the MCP
-          // streamable HTTP fetch) read the explicit proxy back from here
-          // (#7195).
-          setResolvedProxyUrlForRuntimeFetch(proxyUrl);
         })
         .catch((error) => {
           // Redact before logging: the error can embed the proxy URL with
@@ -3601,10 +3421,8 @@ export class Config {
     this.advisorMaxUses = isValidAdvisorMaxUses(params.advisorMaxUses)
       ? params.advisorMaxUses
       : 0;
-    this.webSearchSettings = params.webSearch;
     this.visionModel = params.visionModel || undefined;
     this.compactionModel = params.compactionModel || undefined;
-    this.imageModel = params.imageModel || undefined;
     // Guard: nothing validates settings.json on the load path, so this is the
     // only real gate. `AbortSignal.timeout()` requires an integer in
     // [0, 2^31-1] — a fractional or out-of-range value (which the number-typed
@@ -3703,43 +3521,11 @@ export class Config {
       this.getFileService();
       await this.llmClient.initialize();
       await this.toolRegistry.warmAll({ strict: true });
-      await this.initializeOmniPolicies();
       logStartSession(this, new StartSessionEvent(this));
       this.provisionalWorkspaceActivated = true;
     })();
     this.provisionalWorkspaceActivation = activation;
     return activation;
-  }
-
-  private async initializeOmniPolicies(): Promise<void> {
-    // Normalize the omni fixed-policy configuration now that the tool
-    // registry can resolve policy-tool references. A violation throws
-    // OmniPolicyConfigError and aborts startup — a mis-configured
-    // transport guard must never degrade into sending over-limit media.
-    if (this.isOmniEnabled()) {
-      const { normalizeOmniProcessingConfig } = await import(
-        '../omni/policy/config.js'
-      );
-      this.omniProcessingConfig = normalizeOmniProcessingConfig(
-        {
-          fixedPolicies: this.omniFixedPolicies,
-          transportGuardPolicies: this.omniTransportGuardPolicies,
-          limits: this.omniProcessingLimits,
-          policyTools: this.omniPolicyTools,
-          maxUploadFileBytes: this.omniMaxUploadFileBytes,
-          maxEstimatedTokens: this.omniMaxEstimatedTokens,
-          urlTtlHours: this.omniUploadUrlTtlHours,
-        },
-        this.toolRegistry,
-      );
-
-      // Same stance for `omni.memory`: normalized once (idempotent —
-      // createToolRegistry already ran it to gate the recall tool's
-      // registration on `recall.mode`); an invalid memory configuration
-      // (bad budgets, unknown recall mode) throws OmniMemoryConfigError
-      // and aborts startup.
-      await this.ensureOmniMemoryConfig();
-    }
   }
 
   isProvisionalWorkspace(): boolean {
@@ -3827,24 +3613,6 @@ export class Config {
     this.debugLogger.info('Config initialization started');
     await this.proxyDispatcherReady;
     options?.signal?.throwIfAborted();
-    // Omni multimodal support declares ffmpeg/ffprobe as hard runtime
-    // prerequisites: fail fast at startup with an actionable message
-    // instead of erroring midway through the first video interaction.
-    if (this.isOmniEnabled()) {
-      const { normalizeDedicatedOmniUploadConfig } = await import(
-        '../omni/upload-config.js'
-      );
-      this.omniUploadConfig = normalizeDedicatedOmniUploadConfig({
-        baseUrl: this.omniUploadBaseUrl,
-        apiKeyEnv: this.omniUploadApiKeyEnv,
-        model: this.omniUploadModel,
-      });
-      const { assertOmniRuntimeDependencies } = await import(
-        '../omni/ffmpeg.js'
-      );
-      await assertOmniRuntimeDependencies();
-    }
-
     if (options?.skipFileCheckpointing === true || this.shellExecutionSandbox) {
       this.fileCheckpointingEnabled = false;
       this.fileHistoryService = undefined;
@@ -4389,11 +4157,6 @@ export class Config {
       });
       options?.signal?.throwIfAborted();
       recordStartupEvent('config_initialize_tool_warmup_end');
-    }
-
-    if (!this.provisionalWorkspace) {
-      await this.initializeOmniPolicies();
-      options?.signal?.throwIfAborted();
     }
 
     // Fire-and-forget MCP discovery. Each server's tools land in the
@@ -5504,11 +5267,9 @@ export class Config {
       // Skill grants belong to the session that loaded the skill; a resumed
       // session re-arms its own from history during `initialize()`.
       this.permissionManager?.clearSessionAllowRules();
-      // The web search budget belongs to the session, like the grants above.
-      this.webSearchSessionUsage.calls = 0;
-      // So does the Advisor budget, reset in place for the same reason the
-      // counter is an object: a derived Config must mutate this one, not
-      // shadow it with an own property.
+      // The Advisor budget belongs to the session, like the grants above.
+      // It is reset in place because the counter is an object: a derived
+      // Config must mutate this one, not shadow it with an own property.
       this.advisorUsage.calls = 0;
     }
     this.clearSessionRestoreProjection();
@@ -5993,22 +5754,6 @@ export class Config {
       : selector.modelId;
   }
 
-  /**
-   * Settings for the built-in WebSearch tool. Undefined when the feature was
-   * never configured.
-   */
-  getWebSearchSettings(): WebSearchSettings | undefined {
-    return this.webSearchSettings;
-  }
-
-  /**
-   * Mutable web_search call count for the current session, shared with
-   * derived Configs and reset by {@link startNewSession}.
-   */
-  getWebSearchSessionUsage(): { calls: number } {
-    return this.webSearchSessionUsage;
-  }
-
   private resolveFastModelSelector() {
     if (!this.fastModel) return undefined;
     try {
@@ -6151,22 +5896,6 @@ export class Config {
    */
   setCompactionModel(model: string | undefined): void {
     this.compactionModel = model || undefined;
-  }
-
-  /**
-   * Update the image generation model and make the tool available immediately
-   * when the selected provider route is valid.
-   */
-  async setImageModel(model: string | undefined): Promise<void> {
-    this.imageModel = model || undefined;
-    if (!this.initialized || !this.toolRegistry) {
-      return;
-    }
-    if (this.isImageGenerationEnabled()) {
-      await this.registerImageGenerationTool(this.toolRegistry);
-      await this.toolRegistry.ensureTool(ToolNames.IMAGE_GEN);
-    }
-    await this.llmClient.setTools();
   }
 
   /**
@@ -8314,13 +8043,6 @@ export class Config {
     return this.approvalMode;
   }
 
-  getSessionApprovalMode(): ApprovalMode {
-    if (isDerivedConfig(this)) {
-      return (Object.getPrototypeOf(this) as Config).getSessionApprovalMode();
-    }
-    return this.getApprovalMode();
-  }
-
   /**
    * Returns the AUTO approval mode classifier settings (hints + environment).
    * Returns an empty object when no settings are configured.
@@ -9139,192 +8861,12 @@ export class Config {
     return this.artifactEnabled;
   }
 
-  getArtifactPublisherKind(): 'local' | 'host' | 'oss' {
-    return this.artifactPublisher;
-  }
-
   isArtifactSnapshotsEnabled(): boolean {
     return this.artifactSnapshotsEnabled && this.chatRecordingEnabled;
   }
 
   setArtifactSnapshotsEnabled(enabled: boolean): void {
     this.artifactSnapshotsEnabled = enabled;
-  }
-
-  getArtifactHostConfig(): ArtifactHostConfig | undefined {
-    return this.artifactHost;
-  }
-
-  getArtifactOssConfig(): ArtifactOssConfig | undefined {
-    return this.artifactOss;
-  }
-
-  isOmniEnabled(): boolean {
-    // Bare mode means the minimal toolset and no experimental pipelines:
-    // gating here (the single choke point) keeps every omni surface off —
-    // tool registration, content normalization, the ffmpeg runtime
-    // assertion, and the delivery gate — and deliberately wins over the
-    // env-var opt-in below.
-    if (this.bareMode) return false;
-    // Omni is experimental and opt-in: enabled via settings or env var.
-    if (process.env['QWEN_CODE_ENABLE_OMNI'] === '1') return true;
-    return this.omniEnabled;
-  }
-
-  getOmniMaxUploadFileBytes(): number | undefined {
-    return this.omniMaxUploadFileBytes;
-  }
-
-  getOmniMaxEstimatedTokens(): number | undefined {
-    return this.omniMaxEstimatedTokens;
-  }
-
-  getOmniMaxDurationSeconds(): number | undefined {
-    return this.omniMaxDurationSeconds;
-  }
-
-  getOmniUrlDownloadMaxFileBytes(): number | undefined {
-    return this.omniUrlDownloadMaxFileBytes;
-  }
-
-  getOmniUploadUrlTtlHours(): number | undefined {
-    return this.omniUploadUrlTtlHours;
-  }
-
-  getOmniUploadConfig(): OmniUploadConfig | undefined {
-    return this.omniUploadConfig;
-  }
-
-  getOmniPolicyToolsSettings(): OmniPolicyToolsSettings | undefined {
-    return this.omniPolicyTools;
-  }
-
-  async loadOmniMediaReader(): Promise<typeof import('../omni/index.js')> {
-    return import('../omni/index.js');
-  }
-
-  /** Normalized `omni.processing` view. Undefined until tool warmup
-   * completes (or when omni is disabled). */
-  getOmniProcessingConfig(): NormalizedOmniProcessingConfig | undefined {
-    return this.omniProcessingConfig;
-  }
-
-  /** Normalized `omni.memory` view. Undefined until initialize()
-   * completes (or when omni is disabled). */
-  getOmniMemoryConfig(): NormalizedOmniMemoryConfig | undefined {
-    return this.omniMemoryConfig;
-  }
-
-  /** Normalize `omni.memory` on first use (idempotent). Called from
-   * createToolRegistry — which runs BEFORE initialize()'s omni
-   * normalization block and needs `recall.mode` to gate the recall
-   * tool's registration (D10) — and again from initialize() as a
-   * no-op backstop. Invalid settings throw OmniMemoryConfigError:
-   * startup-fatal on both paths. */
-  private async ensureOmniMemoryConfig(): Promise<NormalizedOmniMemoryConfig> {
-    if (!this.omniMemoryConfig) {
-      const { normalizeOmniMemoryConfig } = await import(
-        '../services/media-memory/config.js'
-      );
-      this.omniMemoryConfig = normalizeOmniMemoryConfig(this.omniMemory);
-    }
-    return this.omniMemoryConfig;
-  }
-
-  /** Session registry binding persistent media-memory identities to the
-   * opaque `resourceId` handles the model references (M §5.2). One
-   * instance per session; a handle is only meaningful in the session
-   * that minted it. */
-  getOmniMediaResourceRegistry(): MediaResourceRegistry {
-    this.omniMediaResourceRegistry ??= new MediaResourceRegistry();
-    return this.omniMediaResourceRegistry;
-  }
-
-  getOmniQuarantineRetentionDays(): number {
-    // A zero/negative/NaN setting would make the recovery sweep treat the
-    // whole quarantine as expired (or break its cutoff comparisons) —
-    // fall back to the default instead of propagating nonsense.
-    const days = this.omniQuarantineRetentionDays;
-    return typeof days === 'number' && Number.isFinite(days) && days > 0
-      ? days
-      : 7;
-  }
-
-  getOmniQuarantineMaxBytes(): number {
-    const bytes = this.omniQuarantineMaxBytes;
-    return typeof bytes === 'number' && Number.isFinite(bytes) && bytes > 0
-      ? bytes
-      : 5 * 1024 * 1024 * 1024;
-  }
-
-  getOmniStorageRetentionDays(): number {
-    // Zero/negative/NaN/sub-day values would gut the retention grace the
-    // GC's multi-process argument leans on — fall back to the default
-    // instead (the schema promises `minimum: 1`; enforce it here too,
-    // since settings loading never validates jsonSchemaOverride).
-    const days = this.omniStorageRetentionDays;
-    return typeof days === 'number' && Number.isFinite(days) && days >= 1
-      ? days
-      : 14;
-  }
-
-  getOmniStorageMaxTotalBytes(): number {
-    const bytes = this.omniStorageMaxTotalBytes;
-    return typeof bytes === 'number' && Number.isFinite(bytes) && bytes > 0
-      ? bytes
-      : 20 * 1024 * 1024 * 1024;
-  }
-
-  resolveImageGenerationModel(
-    setting: string | undefined,
-  ): ImageGenerationConfig | undefined {
-    const parsedSetting = parseVisionModelSetting(setting);
-    if (!parsedSetting) return undefined;
-
-    let selector;
-    try {
-      selector = resolveModelId(parsedSetting.selector);
-    } catch {
-      return undefined;
-    }
-    if (!selector) return undefined;
-
-    const routeMatches = this.getAllConfiguredModels().filter(
-      (model) =>
-        isImageGenerationCapable(model) &&
-        !model.fastOnly &&
-        !model.voiceOnly &&
-        model.id === selector.modelId &&
-        (!selector.authType || model.authType === selector.authType) &&
-        (!parsedSetting.baseUrl || model.baseUrl === parsedSetting.baseUrl),
-    );
-    if (routeMatches.length !== 1) return undefined;
-
-    const match = routeMatches[0]!;
-    const apiKeyEnv = match.envKey?.trim();
-    const configuredBaseUrl = match.registryBaseUrl?.trim();
-    if (!apiKeyEnv || !configuredBaseUrl) return undefined;
-
-    const baseUrl = normalizeImageGenerationBaseUrl(
-      parsedSetting.baseUrl ?? configuredBaseUrl,
-    );
-    if (!baseUrl) return undefined;
-
-    return {
-      model: match.id,
-      baseUrl,
-      apiKeyEnv,
-    };
-  }
-
-  getImageGenerationConfig(): ImageGenerationConfig | undefined {
-    if (this.bareMode || this.safeMode) return undefined;
-    return this.resolveImageGenerationModel(this.imageModel);
-  }
-
-  isImageGenerationEnabled(): boolean {
-    if (this.shellExecutionSandbox) return false;
-    return this.getImageGenerationConfig() !== undefined;
   }
 
   shouldAutoOpenArtifact(): boolean {
@@ -9372,23 +8914,6 @@ export class Config {
     if (!this.isSessionWorkflowEnabled()) {
       this.sessionWorkflowPlanRevision = undefined;
     }
-  }
-
-  /**
-   * Registers the host's factory for subagents that declare an `executor`
-   * block. `packages/core` has no ACP dependency, so the implementation lives
-   * in the host package; see `ExternalAgentExecutor`.
-   *
-   * A definition that declares an executor while none is registered fails
-   * loudly at spawn time rather than silently running in-process — silent
-   * substitution is the exact failure mode this seam exists to prevent.
-   */
-  setExternalAgentExecutor(executor?: ExternalAgentExecutor): void {
-    this.externalAgentExecutor = executor;
-  }
-
-  getExternalAgentExecutor(): ExternalAgentExecutor | undefined {
-    return this.externalAgentExecutor;
   }
 
   getAgentExecutionBackend(): 'container' | undefined {
@@ -10188,26 +9713,6 @@ export class Config {
    */
   getFolderTrust(): boolean {
     return this.folderTrust;
-  }
-
-  /**
-   * Returns the whitelist of allowed HTTP hook URL patterns.
-   * If empty, all URLs are allowed (subject to SSRF protection).
-   */
-  getAllowedHttpHookUrls(): string[] {
-    return this.getBareMode() || this.isSafeMode()
-      ? []
-      : this.allowedHttpHookUrls;
-  }
-
-  /**
-   * Returns whether HTTP hooks may target private/link-local IP ranges.
-   * Only settable from trusted settings scopes (User/System/SystemDefaults).
-   */
-  getAllowPrivateNetworkHooks(): boolean {
-    return this.getBareMode() || this.isSafeMode()
-      ? false
-      : this.allowPrivateNetworkHooks;
   }
 
   isTrustedFolder(): boolean {
@@ -11178,46 +10683,6 @@ export class Config {
     return registry.getAllToolNames().includes(ToolNames.WORKFLOW);
   }
 
-  private async registerImageGenerationTool(
-    registry: ToolRegistry,
-  ): Promise<void> {
-    if (
-      !this.isImageGenerationEnabled() ||
-      registry.getAllToolNames().includes(ToolNames.IMAGE_GEN)
-    ) {
-      return;
-    }
-    let status: ToolRegistrationStatus = 'registered';
-    try {
-      // Resolve through the getter, not the `permissionManager` field: on a
-      // Config derived via Object.create (scoped agent shims installed with
-      // deriveConfig), the field resolves through the prototype chain to the
-      // base manager and would silently bypass the scoped override's
-      // registration decisions (#10075).
-      const permissionManager = this.getPermissionManager();
-      status = permissionManager
-        ? await permissionManager.getToolRegistrationStatus(ToolNames.IMAGE_GEN)
-        : 'registered';
-    } catch (error) {
-      this.debugLogger.warn(
-        `Failed to check permissions for tool "${ToolNames.IMAGE_GEN}", skipping registration:`,
-        error,
-      );
-      return;
-    }
-    if (status === 'disabled') return;
-
-    const factory: ToolFactory = async () => {
-      const { ImageGenTool } = await import('../tools/image-gen.js');
-      return new ImageGenTool(this);
-    };
-    if (status === 'deferred') {
-      registry.registerPermissionDeferredFactory(ToolNames.IMAGE_GEN, factory);
-    } else {
-      registry.registerFactory(ToolNames.IMAGE_GEN, factory);
-    }
-  }
-
   private async syncAdvisorToolRegistration(
     registry: ToolRegistry,
   ): Promise<void> {
@@ -11361,45 +10826,6 @@ export class Config {
           const { TodoWriteTool } = await import('../tools/todoWrite.js');
           return new TodoWriteTool(this);
         });
-      }
-      await registerLazy(ToolNames.WEB_FETCH, async () => {
-        const { WebFetchTool } = await import('../tools/web-fetch.js');
-        return new WebFetchTool(this);
-      });
-      // WebSearch is opt-out: it registers whenever the gate can resolve a
-      // usable backend — either configured explicitly, or derived from the
-      // provider the main model runs on. `enabled: false` turns it off without
-      // importing anything. A gate failure surfaces a one-time startup notice
-      // only when the tool was actually asked for; a provider with no search
-      // backend fails silently (`gate.silent`), since warning about a feature
-      // the user never configured is noise.
-      const hasExplicitWebSearchBackend =
-        !!this.webSearchSettings?.model?.trim() ||
-        !!this.webSearchSettings?.baseUrl;
-      if (
-        !this.getBareMode() &&
-        !this.isSafeMode() &&
-        this.webSearchSettings?.enabled !== false &&
-        (this.webSearchSettings?.enabled === true ||
-          !hasExplicitWebSearchBackend)
-      ) {
-        const { evaluateWebSearchGate } = await import(
-          '../tools/web-search.js'
-        );
-        const gate = evaluateWebSearchGate(this);
-        if (gate.ok) {
-          await registerLazy(ToolNames.WEB_SEARCH, async () => {
-            const { WebSearchTool } = await import('../tools/web-search.js');
-            return new WebSearchTool(this);
-          });
-        } else if (
-          !gate.silent &&
-          !this.webSearchNoticeEmitted &&
-          !options?.forSubAgent
-        ) {
-          this.webSearchNoticeEmitted = true;
-          this.warnings.push(gate.notice);
-        }
       }
     };
 
@@ -11684,7 +11110,6 @@ export class Config {
         return new DisplayImageTool(this);
       });
     }
-    await this.registerImageGenerationTool(registry);
     if (this.isArtifactEnabled()) {
       await registerLazy(ToolNames.ARTIFACT, async () => {
         const { ArtifactTool } = await import(
@@ -11809,136 +11234,6 @@ export class Config {
     // Register workflow tool when enabled
     if (this.isWorkflowsEnabled()) {
       await this.registerWorkflowTool(registry);
-    }
-
-    // Omni media-policy tools: always registered when omni is enabled (the
-    // fixed-policy orchestrator must be able to find them), but hidden from
-    // every model-facing surface unless
-    // `omni.processing.policyTools.<name>.modelAccess.enabled` opens them up
-    // (see omni/policy/model-access.ts).
-    if (this.isOmniEnabled()) {
-      // Table-driven: each entry pairs the registered name with a lazy
-      // import-and-construct factory (the module loads on first use).
-      const omniPolicyToolFactories: Array<[ToolName, ToolFactory]> = [
-        [
-          ToolNames.OMNI_DOWNSAMPLE_IMAGE,
-          async () =>
-            new (
-              await import('../omni/policy/tools/downsample-image.js')
-            ).OmniDownsampleImageTool(this),
-        ],
-        [
-          ToolNames.OMNI_DOWNSCALE_VIDEO,
-          async () =>
-            new (
-              await import('../omni/policy/tools/downscale-video.js')
-            ).OmniDownscaleVideoTool(this),
-        ],
-        [
-          ToolNames.OMNI_DOWNSAMPLE_AUDIO,
-          async () =>
-            new (
-              await import('../omni/policy/tools/downsample-audio.js')
-            ).OmniDownsampleAudioTool(this),
-        ],
-        [
-          ToolNames.OMNI_EXTRACT_KEYFRAMES,
-          async () =>
-            new (
-              await import('../omni/policy/tools/extract-keyframes.js')
-            ).OmniExtractKeyframesTool(this),
-        ],
-        [
-          ToolNames.OMNI_EXTRACT_AUDIO,
-          async () =>
-            new (
-              await import('../omni/policy/tools/extract-audio.js')
-            ).OmniExtractAudioTool(this),
-        ],
-        [
-          ToolNames.OMNI_CLIP_VIDEO,
-          async () =>
-            new (
-              await import('../omni/policy/tools/clip-video.js')
-            ).OmniClipVideoTool(this),
-        ],
-        [
-          ToolNames.OMNI_CONVERT_IMAGE,
-          async () =>
-            new (
-              await import('../omni/policy/tools/convert-image.js')
-            ).OmniConvertImageTool(this),
-        ],
-        [
-          ToolNames.OMNI_TRANSCRIBE_AUDIO,
-          async () =>
-            new (
-              await import('../omni/policy/tools/transcribe-audio.js')
-            ).OmniTranscribeAudioTool(this),
-        ],
-        [
-          ToolNames.OMNI_CLIP_IMAGE,
-          async () =>
-            new (
-              await import('../omni/policy/tools/clip-image.js')
-            ).OmniClipImageTool(this),
-        ],
-        [
-          ToolNames.OMNI_CLIP_AUDIO,
-          async () =>
-            new (
-              await import('../omni/policy/tools/clip-audio.js')
-            ).OmniClipAudioTool(this),
-        ],
-        [
-          ToolNames.OMNI_CAPTION_IMAGE,
-          async () =>
-            new (
-              await import('../omni/policy/tools/caption-image.js')
-            ).OmniCaptionImageTool(this),
-        ],
-        [
-          ToolNames.OMNI_CAPTION_AUDIO,
-          async () =>
-            new (
-              await import('../omni/policy/tools/caption-audio.js')
-            ).OmniCaptionAudioTool(this),
-        ],
-        [
-          ToolNames.OMNI_OCR_IMAGE,
-          async () =>
-            new (
-              await import('../omni/policy/tools/ocr-image.js')
-            ).OmniOcrImageTool(this),
-        ],
-        [
-          ToolNames.OMNI_UNDERSTAND_VIDEO_SEGMENTS,
-          async () =>
-            new (
-              await import('../omni/policy/tools/understand-video-segments.js')
-            ).OmniUnderstandVideoSegmentsTool(this),
-        ],
-      ];
-      for (const [name, factory] of omniPolicyToolFactories) {
-        await registerLazy(name, factory);
-      }
-
-      // Active-mode memory recall (M §9, D10 mutual exclusion): the
-      // normalized `omni.memory` config decides at REGISTRATION time
-      // whether the tool exists at all — in sideQuery mode the passive
-      // selector runs instead and this tool must never be exposed.
-      // Normalized on demand because createToolRegistry runs before
-      // initialize()'s omni normalization block; invalid settings are
-      // startup-fatal on this path too.
-      const memoryConfig = await this.ensureOmniMemoryConfig();
-      if (memoryConfig.recall.mode === 'active') {
-        await registerLazy(ToolNames.OMNI_RECALL_MEDIA_MEMORY, async () => {
-          const { OmniRecallMediaMemoryTool } = await import(
-            '../omni/recall-media-memory-tool.js'
-          );
-          return new OmniRecallMediaMemoryTool(this);
-        });
-      }
     }
 
     // Register monitor tool

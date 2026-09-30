@@ -14,7 +14,7 @@
  *  - model list entries + the ModelDialog selection pipeline
  *    (`applyModelSelection`): mode-specific validation, the runtime
  *    switch/setter (`Config.switchModel`, setFastModel/setVisionModel/
- *    setCompactionModel/setImageModel), and persistence only after the
+ *    setCompactionModel), and persistence only after the
  *    runtime change succeeded;
  *  - permission rules / workspace directories (+ mutation handlers),
  *  - MCP server inventory,
@@ -28,7 +28,6 @@ import {
   isAdvisorModelEligible,
 } from '../../config/advisor-model.js';
 import process from 'node:process';
-import { EventEmitter } from 'node:events';
 import {
   AuthType,
   checkForExtensionUpdate,
@@ -36,16 +35,9 @@ import {
   getMCPServerStatus,
   isGatedMcpScope,
   isImageCapable,
-  isImageGenerationCapable,
   logModelSlashCommand,
   matchesAnyServerPattern,
-  MCPOAuthProvider,
-  MCPOAuthTokenStorage,
-  mcpServerRequiresOAuth,
-  MCPServerStatus,
   ModelSlashCommandEvent,
-  OAUTH_AUTH_URL_EVENT,
-  OAUTH_DISPLAY_MESSAGE_EVENT,
   parseVisionModelSetting,
   redactUrlCredentials,
   removeMCPServerStatus,
@@ -100,10 +92,9 @@ function advisorSelector(
 
 /**
  * Model list parity of ModelDialog's `availableModelEntries`: runtime entries
- * are listed (tagged) outside image mode, QWEN_OAUTH models only under that
- * auth type, voiceOnly entries never, imageOnly/fastOnly/visionOnly entries
- * only in their own selector modes, and image-mode rows additionally must resolve through
- * `Config.resolveImageGenerationModel`. Rows are keyed like ink's option
+ * are listed (tagged), QWEN_OAUTH models only under that auth type,
+ * voiceOnly and imageOnly entries never, fastOnly/visionOnly entries only in
+ * their own selector modes. Rows are keyed like ink's option
  * values: runtime rows by their `$runtime|...` snapshot id, registry rows by
  * `authType::modelId[\0baseUrl]`. The raw registry entry travels on `model`
  * so selection-time validation matches the ink dialog.
@@ -136,19 +127,7 @@ export function buildModelEntries(
           .available)
     )
       continue;
-    if (mode === 'image') {
-      // ink gates on isImageGenerationCapable (not just imageOnly): dual-role
-      // models with supportsImageGeneration and visionOnly image-capable
-      // models must both appear in the image selector.
-      if (model.isRuntimeModel || !isImageGenerationCapable(model)) continue;
-      const selector = encodeVisionModelSelector(
-        buildModelSelectionKey(model.authType, model.id, model.baseUrl),
-      );
-      if (config?.resolveImageGenerationModel?.(selector) === undefined) {
-        continue;
-      }
-    }
-    if (mode !== 'image' && model.imageOnly) continue;
+    if (model.imageOnly) continue;
     if (!model.isRuntimeModel) {
       if (
         model.authType === AuthType.QWEN_OAUTH &&
@@ -158,9 +137,9 @@ export function buildModelEntries(
       }
       if (mode !== 'fast' && mode !== 'advisor' && model.fastOnly) continue;
       if (model.voiceOnly) continue;
-      // ink keeps visionOnly models in vision AND image mode
-      // (ModelDialog.tsx: isVisionModelMode || isImageModelMode || !m.visionOnly).
-      if (mode !== 'vision' && mode !== 'image' && model.visionOnly) continue;
+      // ink keeps visionOnly models in vision mode
+      // (ModelDialog.tsx: isVisionModelMode || !m.visionOnly).
+      if (mode !== 'vision' && model.visionOnly) continue;
     }
     const key =
       model.isRuntimeModel && model.runtimeSnapshotId
@@ -223,8 +202,8 @@ export function resolveModelPersistScope(
  * The selection key to highlight when the `/model` dialog opens (ink
  * ModelDialog `preferredKey` parity): the active runtime snapshot or the
  * current auth/model/baseUrl row in primary mode, and the entry owning the
- * persisted selector in the auxiliary modes (fast/vision/compaction/
- * image). Returns undefined when nothing matches (the dialog then starts on
+ * persisted selector in the auxiliary modes (fast/vision/compaction).
+ * Returns undefined when nothing matches (the dialog then starts on
  * the first row, as in ink's `initialIndex === -1 → 0` fallback).
  */
 export function computeModelDialogInitialKey(params: {
@@ -288,9 +267,7 @@ export function computeModelDialogInitialKey(params: {
       ? settings.merged.fastModel
       : mode === 'vision'
         ? settings.merged.visionModel
-        : mode === 'compaction'
-          ? settings.merged.compactionModel
-          : settings.merged.imageModel;
+        : settings.merged.compactionModel;
   if (typeof rawSetting !== 'string' || !rawSetting.trim()) return undefined;
   const trimmed = rawSetting.trim();
   if (byKey.has(trimmed)) return trimmed;
@@ -366,9 +343,9 @@ export interface ApplyModelSelectionParams {
 /**
  * Parity of ModelDialog's `handleSelect`: mode-specific validation and the
  * runtime switch/setter come FIRST; settings are persisted only after the
- * runtime change succeeded. Fast/vision/compaction/image modes write their
- * own setting key (`fastModel` / `visionModel` / `compactionModel` /
- * `imageModel`) — never the generic `model.name` — and primary mode calls
+ * runtime change succeeded. Fast/vision/compaction modes write their
+ * own setting key (`fastModel` / `visionModel` / `compactionModel`) —
+ * never the generic `model.name` — and primary mode calls
  * `Config.switchModel` before persisting `model.name` / `model.baseUrl`.
  * Validation failures return the error so the dialog stays open.
  */
@@ -469,31 +446,6 @@ export async function applyModelSelection(
     return {
       ok: true,
       message: `${t('Compaction Model')}: ${compactionModelId}${scopeSuffix}`,
-    };
-  }
-
-  if (mode === 'image') {
-    if (!selectedEntry || !config) {
-      return { ok: false, error: t('Selected image model is unavailable.') };
-    }
-    const imageModel = encodeVisionModelSelector(selectionKey);
-    const imageModelDisplay =
-      parseVisionModelSetting(imageModel)?.selector ?? imageModel;
-    if (!config.resolveImageGenerationModel?.(imageModel)) {
-      return {
-        ok: false,
-        error: t(
-          "'{{model}}' must declare a valid HTTPS baseUrl and credential environment variable.",
-          { model: imageModelDisplay },
-        ),
-      };
-    }
-    await config.setImageModel(imageModel);
-    const scope = resolveModelPersistScope(settings, persistScope);
-    settings.setValue(scope, 'imageModel', imageModel);
-    return {
-      ok: true,
-      message: `${t('Image Model')}: ${imageModelDisplay}${scopeSuffix}`,
     };
   }
 
@@ -802,8 +754,6 @@ export function buildMcpServers(
       promptCount: serverPrompts.length,
       resourceCount: resourceRegistry?.getResourcesByServer(name)?.length ?? 0,
       isDisabled: config?.isMcpServerDisabled(name) ?? false,
-      hasOAuthTokens: false,
-      requiresAuth: false,
       ...(typedConfig.command ? { command: typedConfig.command } : {}),
       ...(typedConfig.cwd ? { workingDirectory: typedConfig.cwd } : {}),
     });
@@ -868,35 +818,23 @@ export function getMcpServerResources(
 }
 
 /**
- * Real OAuth token state (audit 01 G-6): ink's MCPManagementDialog reads
- * `MCPOAuthTokenStorage.getCredentials` per server and derives `requiresAuth`
- * from the 401 marker / declared-but-tokenless OAuth. `buildMcpServers` is
- * synchronous, so this async pass enriches its output before mounting.
+ * Live status + approval state (ink MCPManagementDialog parity).
+ * `buildMcpServers` is synchronous, so this async pass enriches its output
+ * before mounting.
  */
-export async function enrichMcpOAuthState(
+export async function enrichMcpServerState(
   config: Config | null | undefined,
   servers: McpServerInfo[],
 ): Promise<McpServerInfo[]> {
   const mcpServers = config?.getMcpServers?.() ?? {};
-  const tokenStorage = new MCPOAuthTokenStorage();
   // Approval state is keyed by the same project root discovery gated on
   // (`config.getWorkingDir()`, ink fetchServerData parity).
   const approvalRoot = config?.getWorkingDir?.();
   const approvals = approvalRoot ? loadMcpApprovals() : undefined;
   const enriched: McpServerInfo[] = [];
   for (const info of servers) {
-    let hasOAuthTokens = false;
-    try {
-      hasOAuthTokens = (await tokenStorage.getCredentials(info.name)) !== null;
-    } catch {
-      // Unreadable token store = no tokens.
-    }
     const serverConfig = mcpServers[info.name] as MCPServerConfig | undefined;
     const status = getMCPServerStatus(info.name);
-    const requiresAuth =
-      status !== MCPServerStatus.CONNECTED &&
-      (mcpServerRequiresOAuth.get(info.name) === true ||
-        (Boolean(serverConfig?.oauth?.enabled) && !hasOAuthTokens));
     // Why a gated (#4615) server is skipped by discovery: pending or
     // rejected. `approved` (and non-gated scopes) leave approvalState unset.
     let approvalState: McpServerInfo['approvalState'];
@@ -914,8 +852,6 @@ export async function enrichMcpOAuthState(
     enriched.push({
       ...info,
       status,
-      hasOAuthTokens,
-      requiresAuth,
       ...(approvalState ? { approvalState } : {}),
     });
   }
@@ -933,9 +869,7 @@ export interface McpActionResult {
  * Real server actions for the OpenTUI MCP dialog (audit 01 G-6 / 05 G-13),
  * mirroring MCPManagementDialog's handlers: enable/disable via the
  * extension-scoped flag or the user/workspace `mcp.excluded` lists,
- * reconnect via re-discovery, clear-auth via the token storage + disconnect,
- * approve via the gated-approval store, and authenticate via the real
- * MCPOAuthProvider (auth URL surfaced through the returned message).
+ * reconnect via re-discovery, and approve via the gated-approval store.
  */
 export async function applyMcpServerAction(
   config: Config | null | undefined,
@@ -952,17 +886,6 @@ export async function applyMcpServerAction(
           await toolRegistry.discoverToolsForServer(server.name);
         }
         return { message: `Reconnecting '${server.name}'…`, changed: true };
-      }
-      case 'clear-auth': {
-        const tokenStorage = new MCPOAuthTokenStorage();
-        await tokenStorage.deleteCredentials(server.name);
-        if (toolRegistry) {
-          await toolRegistry.disconnectServer(server.name);
-        }
-        return {
-          message: `Cleared OAuth tokens for '${server.name}'.`,
-          changed: true,
-        };
       }
       case 'approve': {
         const serverConfig = (config.getMcpServers?.() ?? {})[server.name];
@@ -1048,42 +971,6 @@ export async function applyMcpServerAction(
           await toolRegistry.disableMcpServer(server.name);
         }
         return { message: `Disabled '${server.name}'.`, changed: true };
-      }
-      case 'authenticate': {
-        const rawConfig = (config.getMcpServers?.() ?? {})[server.name] as
-          | { oauth?: { enabled?: boolean }; url?: string; httpUrl?: string }
-          | undefined;
-        const oauthConfig = rawConfig?.oauth ?? { enabled: false };
-        const events = new EventEmitter();
-        const notices: string[] = [];
-        events.on(OAUTH_DISPLAY_MESSAGE_EVENT, (message: unknown) => {
-          if (typeof message === 'string') notices.push(message);
-        });
-        events.on(OAUTH_AUTH_URL_EVENT, (url: unknown) => {
-          if (typeof url === 'string') {
-            notices.push(`Open this URL to authenticate:\n${url}`);
-          }
-        });
-        const provider = new MCPOAuthProvider(new MCPOAuthTokenStorage());
-        // Streamable-http servers expose httpUrl; ink passes it ahead of the
-        // SSE url (AuthenticateStep parity) — the provider's discovery only
-        // runs when a server URL is present.
-        await provider.authenticate(
-          server.name,
-          oauthConfig,
-          rawConfig?.httpUrl || rawConfig?.url,
-          events,
-        );
-        if (toolRegistry) {
-          await toolRegistry.discoverToolsForServer(server.name);
-        }
-        return {
-          message:
-            notices.length > 0
-              ? notices.join('\n')
-              : `Authenticated '${server.name}'.`,
-          changed: true,
-        };
       }
       default:
         return { message: null, changed: false };

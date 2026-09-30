@@ -499,7 +499,6 @@ export class BackgroundAgentResumeService {
         if (typeof subagentName !== 'string' || !subagentName) continue;
         const target = await this.resolveResumeTarget(
           subagentName,
-          meta.executor,
           meta.model,
           meta.persistedCliFlags?.model,
         );
@@ -880,7 +879,6 @@ export class BackgroundAgentResumeService {
       const subagentName = meta.subagentName ?? meta.agentType;
       const target = await this.resolveResumeTarget(
         subagentName,
-        meta.executor,
         meta.model,
         meta.persistedCliFlags?.model,
       );
@@ -1566,7 +1564,6 @@ export class BackgroundAgentResumeService {
 
   private async resolveResumeTarget(
     subagentName: string,
-    executor?: AgentMeta['executor'],
     ...legacyModels: Array<string | undefined>
   ): Promise<ResolvedResumeTarget> {
     if (resolveAgentExecutionBackend(this.config) === 'container') {
@@ -1576,12 +1573,9 @@ export class BackgroundAgentResumeService {
         unavailableReason: CONTAINER_EXECUTION_BLOCKED_REASON,
       };
     }
-    // Older external runs wrote a synthetic model label instead of provenance.
-    // It can deny replay, but never authorizes selecting an executor.
-    if (
-      executor !== undefined ||
-      legacyModels.some((model) => model?.startsWith('external-acp:'))
-    ) {
+    // Older external-agent runs wrote a synthetic model label; their sessions
+    // cannot be replayed in-process.
+    if (legacyModels.some((model) => model?.startsWith('external-acp:'))) {
       return {
         agentName: subagentName,
         isFork: false,
@@ -1614,7 +1608,7 @@ export class BackgroundAgentResumeService {
         };
       }
     } catch (error) {
-      // loadSubagent throws a recorded executor-block refusal (R10-2/R11) when a
+      // loadSubagent throws a recorded execution refusal (R10-2/R11) when a
       // same-named definition failed to load. This is resume *discovery*, not a
       // dispatch, so surface it as the existing "unavailable" shape — the row
       // stays listed with a resumeBlockedReason — instead of letting the throw
@@ -1636,12 +1630,6 @@ export class BackgroundAgentResumeService {
       };
     }
 
-    if (subagentConfig.executor !== undefined) {
-      return this.resolveResumeTarget(
-        subagentName,
-        subagentConfig.executor.kind,
-      );
-    }
     return {
       agentName: subagentConfig.name,
       isFork: false,

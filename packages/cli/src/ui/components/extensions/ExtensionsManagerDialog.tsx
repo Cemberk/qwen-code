@@ -11,18 +11,9 @@ import { useKeypress } from '../../hooks/useKeypress.js';
 import { useUIState } from '../../contexts/UIStateContext.js';
 import { useTerminalSize } from '../../hooks/useTerminalSize.js';
 import { t } from '../../../i18n/index.js';
-import { stripUnsafeCharacters } from '../../utils/textUtils.js';
 import type { ExtensionUpdateState } from '../../state/extensions.js';
-import {
-  EXTENSIONS_TABS,
-  type ExtensionsTab,
-  type ExtensionsTabDef,
-  type ExtensionsManagerDialogProps,
-} from './types.js';
-import { TabBar } from './TabBar.js';
-import { DiscoverTab } from './tabs/DiscoverTab.js';
+import type { ExtensionsManagerDialogProps } from './types.js';
 import { InstalledTab } from './tabs/InstalledTab.js';
-import { SourcesTab } from './tabs/SourcesTab.js';
 import { ConsentPrompt } from '../ConsentPrompt.js';
 import { SettingInputPrompt } from '../SettingInputPrompt.js';
 import { PluginChoicePrompt } from '../PluginChoicePrompt.js';
@@ -32,34 +23,9 @@ export interface StatusMessage {
   text: string;
 }
 
-const TABS: ExtensionsTabDef[] = [
-  { id: EXTENSIONS_TABS.INSTALLED, label: 'Installed' },
-  { id: EXTENSIONS_TABS.DISCOVER, label: 'Discover' },
-  { id: EXTENSIONS_TABS.SOURCES, label: 'Sources' },
-];
-
-// Literal t() calls keep the footer hints extractable for translation.
-function footerHint(tab: ExtensionsTab): string {
-  switch (tab) {
-    case EXTENSIONS_TABS.DISCOVER:
-      return t(
-        'Type to search · Space to toggle · Enter to view · Ctrl+R refresh · Esc to go back',
-      );
-    case EXTENSIONS_TABS.INSTALLED:
-      return t(
-        '↑↓ navigate · Space enable/disable · f favorite · Enter details · Esc close',
-      );
-    case EXTENSIONS_TABS.SOURCES:
-      return t('↑↓ navigate · Enter select · d remove marketplace · Esc close');
-    default:
-      return '';
-  }
-}
-
 export function ExtensionsManagerDialog({
   onClose,
   config,
-  initialTab,
 }: ExtensionsManagerDialogProps) {
   const {
     extensionsUpdateState,
@@ -74,57 +40,18 @@ export function ExtensionsManagerDialog({
   // and overflows its container, clipping the right-aligned status column.
   const boxWidth = Math.min(columns - 4, 100);
 
-  // Install flows raise interactive requests (consent, setting input, plugin
-  // choice). They are rendered here, inside the dialog, so the dialog stays
-  // mounted and keeps its tab/list state; DialogManager skips them while this
-  // dialog is open. (Unmounting would reset the active tab and drop the
-  // reload signal that refreshes the Installed tab after an install.)
+  // Install and update flows raise interactive requests (consent, setting
+  // input, plugin choice). They are rendered here, inside the dialog, so the
+  // dialog stays mounted and keeps its list state; DialogManager skips them
+  // while this dialog is open.
   const consentRequest = confirmUpdateExtensionRequests?.[0];
   const settingRequest = settingInputRequests?.[0];
   const pluginChoiceRequest = pluginChoiceRequests?.[0];
   const hasPendingRequest =
     !!consentRequest || !!settingRequest || !!pluginChoiceRequest;
 
-  const [activeTab, setActiveTab] = useState<ExtensionsTab>(
-    initialTab ?? EXTENSIONS_TABS.INSTALLED,
-  );
   const [tabLocked, setTabLocked] = useState(false);
   const [status, setStatus] = useState<StatusMessage | null>(null);
-  // Bumped to force tabs to re-load when a cross-tab change happens
-  // (e.g. installing from Discover should refresh Installed).
-  const [reloadSignal, setReloadSignal] = useState(0);
-  // When set, the Discover tab is restricted to this marketplace (set by the
-  // Marketplaces tab's "Browse plugins" action; cleared on manual tab switch).
-  const [discoverFilter, setDiscoverFilter] = useState<string | null>(null);
-  // Optional context-aware footer hint provided by the active tab.
-  const [tabFooter, setTabFooter] = useState<string | null>(null);
-
-  const cycleTab = useCallback((direction: 1 | -1) => {
-    setStatus(null);
-    setDiscoverFilter(null);
-    setTabFooter(null);
-    setActiveTab((current) => {
-      const index = TABS.findIndex((tab) => tab.id === current);
-      const next = (index + direction + TABS.length) % TABS.length;
-      return TABS[next].id;
-    });
-  }, []);
-
-  const handleBrowseSource = useCallback((marketplaceName: string) => {
-    setStatus(null);
-    setTabLocked(false);
-    // The marketplace name is untrusted (it originates from a remote
-    // marketplace.json). Scrub terminal escapes before it becomes the Discover
-    // filter: it is rendered as a hint AND compared against the
-    // already-sanitized DiscoveredPlugin.marketplaceName, so sanitizing here
-    // both blocks ANSI injection and keeps the filter comparison matching.
-    setDiscoverFilter(stripUnsafeCharacters(marketplaceName));
-    setActiveTab(EXTENSIONS_TABS.DISCOVER);
-  }, []);
-
-  const bumpReload = useCallback(() => {
-    setReloadSignal((value) => value + 1);
-  }, []);
 
   // Keeps the app's update-state map honest after an in-dialog update: the
   // extension is current again, so a stale "update available" entry must not
@@ -143,24 +70,10 @@ export function ExtensionsManagerDialog({
     setTabLocked(locked);
   }, []);
 
-  // Tab switching + close. Inactive while a tab owns a sub-view (locked).
+  // Close. Inactive while the list owns a sub-view (locked).
   useKeypress(
     (key) => {
-      if (key.name === 'tab') {
-        // On Discover with an active marketplace filter, Tab clears the filter
-        // in place (revealing all extensions) instead of leaving the tab — this
-        // is what the "(Tab to clear)" hint promises. Otherwise it cycles tabs.
-        if (activeTab === EXTENSIONS_TABS.DISCOVER && discoverFilter) {
-          setStatus(null);
-          setDiscoverFilter(null);
-        } else {
-          cycleTab(key.shift ? -1 : 1);
-        }
-      } else if (key.name === 'right') {
-        cycleTab(1);
-      } else if (key.name === 'left') {
-        cycleTab(-1);
-      } else if (key.name === 'escape') {
+      if (key.name === 'escape') {
         onClose();
       }
     },
@@ -222,49 +135,15 @@ export function ExtensionsManagerDialog({
         width={boxWidth}
         gap={1}
       >
-        <TabBar tabs={TABS} activeTab={activeTab} canSwitch={!tabLocked} />
-
         <Box flexDirection="column">
-          {activeTab === EXTENSIONS_TABS.DISCOVER && (
-            <DiscoverTab
-              config={config}
-              isActive={
-                activeTab === EXTENSIONS_TABS.DISCOVER && !hasPendingRequest
-              }
-              onLockChange={handleLockChange}
-              onStatus={setStatus}
-              onInstalled={bumpReload}
-              marketplaceFilter={discoverFilter ?? undefined}
-              reloadSignal={reloadSignal}
-            />
-          )}
-          {activeTab === EXTENSIONS_TABS.INSTALLED && (
-            <InstalledTab
-              config={config}
-              isActive={
-                activeTab === EXTENSIONS_TABS.INSTALLED && !hasPendingRequest
-              }
-              onLockChange={handleLockChange}
-              onStatus={setStatus}
-              extensionsUpdateState={extensionsUpdateState}
-              reloadSignal={reloadSignal}
-              onUpdateStateChange={handleUpdateStateChange}
-            />
-          )}
-          {activeTab === EXTENSIONS_TABS.SOURCES && (
-            <SourcesTab
-              config={config}
-              isActive={
-                activeTab === EXTENSIONS_TABS.SOURCES && !hasPendingRequest
-              }
-              onLockChange={handleLockChange}
-              onStatus={setStatus}
-              onChanged={bumpReload}
-              onBrowse={handleBrowseSource}
-              onFooter={setTabFooter}
-              reloadSignal={reloadSignal}
-            />
-          )}
+          <InstalledTab
+            config={config}
+            isActive={!hasPendingRequest}
+            onLockChange={handleLockChange}
+            onStatus={setStatus}
+            extensionsUpdateState={extensionsUpdateState}
+            onUpdateStateChange={handleUpdateStateChange}
+          />
         </Box>
 
         {status && (
@@ -284,13 +163,11 @@ export function ExtensionsManagerDialog({
         )}
 
         <Text color={theme.text.secondary}>
-          {/* A tab-provided hint wins even while a sub-view is locked, so a
-              locked view (e.g. a failed marketplace load offering R to retry)
-              can surface its own footer instead of the generic locked text. */}
-          {tabFooter ??
-            (tabLocked
-              ? t('Enter to select · Esc to go back')
-              : footerHint(activeTab))}
+          {tabLocked
+            ? t('Enter to select · Esc to go back')
+            : t(
+                '↑↓ navigate · Space enable/disable · f favorite · Enter details · Esc close',
+              )}
         </Text>
       </Box>
     </Box>

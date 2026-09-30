@@ -141,7 +141,6 @@ const KNOWN_RECORD_SUBTYPES = new Set([
   'file_history_snapshot',
   'session_source',
   'session_model',
-  'omni_recall',
   'session_execution_engine',
   'session_sources_snapshot',
   'session_approval_mode',

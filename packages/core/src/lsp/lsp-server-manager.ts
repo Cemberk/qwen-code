@@ -16,8 +16,6 @@ import {
   DEFAULT_LSP_COMMAND_CHECK_TIMEOUT_MS,
   DEFAULT_LSP_MAX_RESTARTS,
   DEFAULT_LSP_SHUTDOWN_TIMEOUT_MS,
-  DEFAULT_LSP_SOCKET_MAX_RETRY_DELAY_MS,
-  DEFAULT_LSP_SOCKET_RETRY_DELAY_MS,
   DEFAULT_LSP_STARTUP_TIMEOUT_MS,
   DEFAULT_LSP_WARMUP_DELAY_MS,
 } from './constants.js';
@@ -29,7 +27,6 @@ import type {
   LspServerConfig,
   LspServerHandle,
   LspServerStatus,
-  LspSocketOptions,
   LspTextDocumentSync,
 } from './types.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
@@ -54,7 +51,7 @@ export interface LspServerManagerOptions {
  * Owns the per-session lifecycle of configured LSP servers.
  *
  * The manager is deliberately session-local: it stores one handle per server
- * name, starts/stops subprocess or socket-backed connections, and reconciles
+ * name, starts/stops subprocess connections, and reconciles
  * config changes without replacing unchanged handles. Callers must pass only
  * configs that have already passed service-level admission checks.
  */
@@ -458,10 +455,7 @@ export class LspServerManager {
       );
 
       // Create LSP connection
-      const connection = await this.createLspConnection(
-        handle.config,
-        startupAbortController.signal,
-      );
+      const connection = await this.createLspConnection(handle.config);
       handle.connection = connection.connection;
       handle.process = connection.process;
       handle.processDiagnostics = connection.processDiagnostics;
@@ -578,7 +572,7 @@ export class LspServerManager {
 
   /**
    * Performs graceful LSP shutdown with a bounded wait, then always closes the
-   * underlying JSON-RPC connection to avoid retaining streams or sockets.
+   * underlying JSON-RPC connection to avoid retaining streams.
    */
   private async shutdownConnection(handle: LspServerHandle): Promise<void> {
     if (!handle.connection) {
@@ -611,7 +605,7 @@ export class LspServerManager {
       }
     } finally {
       // Always end the JSON-RPC connection, even if shutdown rejects or times
-      // out, so streams and socket handles are not retained.
+      // out, so stream handles are not retained.
       handle.connection.end();
     }
   }
@@ -802,70 +796,10 @@ export class LspServerManager {
     return { ...process.env, ...filteredEnv };
   }
 
-  private async connectSocketWithRetry(
-    socket: LspSocketOptions,
-    timeoutMs: number,
-    signal?: AbortSignal,
-  ): Promise<
-    Awaited<ReturnType<typeof LspConnectionFactory.createSocketConnection>>
-  > {
-    // Socket-based servers may need a short boot window after the command is
-    // spawned. Retry until the startup deadline instead of failing immediately.
-    const deadline = Date.now() + timeoutMs;
-    let attempt = 0;
-    while (true) {
-      this.throwIfStartupAborted(signal);
-      const remaining = deadline - Date.now();
-      if (remaining <= 0) {
-        throw new Error('LSP server connection timeout');
-      }
-      try {
-        return await this.raceStartupAbort(
-          LspConnectionFactory.createSocketConnection(socket, remaining),
-          signal,
-          (connection) => connection.connection.end(),
-        );
-      } catch (error) {
-        attempt += 1;
-        if (Date.now() >= deadline) {
-          throw error;
-        }
-        const delay = Math.min(
-          DEFAULT_LSP_SOCKET_RETRY_DELAY_MS * attempt,
-          DEFAULT_LSP_SOCKET_MAX_RETRY_DELAY_MS,
-        );
-        await this.delayWithAbort(delay, signal);
-      }
-    }
-  }
-
   private throwIfStartupAborted(signal: AbortSignal | undefined): void {
     if (signal?.aborted) {
       throw new Error('LSP server startup cancelled');
     }
-  }
-
-  private async delayWithAbort(
-    delayMs: number,
-    signal: AbortSignal | undefined,
-  ): Promise<void> {
-    if (!signal) {
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-      return;
-    }
-    this.throwIfStartupAborted(signal);
-    await new Promise<void>((resolve, reject) => {
-      const onAbort = () => {
-        clearTimeout(timerId);
-        signal.removeEventListener('abort', onAbort);
-        reject(new Error('LSP server startup cancelled'));
-      };
-      const timerId = setTimeout(() => {
-        signal.removeEventListener('abort', onAbort);
-        resolve();
-      }, delayMs);
-      signal.addEventListener('abort', onAbort, { once: true });
-    });
   }
 
   private async raceStartupAbort<T>(
@@ -924,230 +858,44 @@ export class LspServerManager {
   }
 
   /**
-   * Creates a transport-specific LSP connection.
-   *
-   * For stdio, the spawned process is always owned by this manager. For
-   * tcp/socket, the process is owned only when a command was provided; otherwise
-   * the connection is to an externally managed daemon.
+   * Creates a stdio LSP connection. The spawned process is always owned by
+   * this manager.
    */
   private async createLspConnection(
     config: LspServerConfig,
-    signal?: AbortSignal,
   ): Promise<LspConnectionResult> {
     const workspaceFolder = config.workspaceFolder ?? this.workspaceRoot;
     const startupTimeout =
       config.startupTimeout ?? DEFAULT_LSP_STARTUP_TIMEOUT_MS;
     const env = this.buildProcessEnv(config.env);
 
-    if (config.transport === 'stdio') {
-      if (!config.command) {
-        throw new Error('LSP stdio transport requires a command');
-      }
-
-      // Fix: use cwd as cwd instead of rootUri
-      const lspConnection = await LspConnectionFactory.createStdioConnection(
-        config.command,
-        config.args ?? [],
-        { cwd: workspaceFolder, env },
-        startupTimeout,
-      );
-
-      return {
-        connection: lspConnection.connection,
-        process: lspConnection.process as ChildProcess,
-        processDiagnostics: lspConnection.processDiagnostics,
-        shutdown: async () => {
-          await lspConnection.connection.shutdown();
-        },
-        exit: () => {
-          if (lspConnection.process && !lspConnection.process.killed) {
-            (lspConnection.process as ChildProcess).kill();
-          }
-          lspConnection.connection.end();
-        },
-        initialize: async (params: unknown) =>
-          lspConnection.connection.initialize(params),
-      };
-    } else if (config.transport === 'tcp' || config.transport === 'socket') {
-      if (!config.socket) {
-        throw new Error('LSP socket transport requires host/port or path');
-      }
-
-      let process: ChildProcess | undefined;
-      let processDiagnostics: LspProcessDiagnostics | undefined;
-      let earlyExit:
-        | {
-            promise: Promise<never>;
-            dispose: () => void;
-          }
-        | undefined;
-      if (config.command) {
-        this.throwIfStartupAborted(signal);
-        processDiagnostics = { stderrTail: '' };
-        process = spawn(config.command, config.args ?? [], {
-          cwd: workspaceFolder,
-          env,
-          stdio: ['ignore', 'ignore', 'pipe'],
-        });
-        process.stderr?.on('data', (chunk: Buffer | string) => {
-          processDiagnostics!.stderrTail = (
-            processDiagnostics!.stderrTail + chunk.toString()
-          ).slice(-4000);
-        });
-        earlyExit = this.watchSocketProcessEarlyExit(
-          process,
-          processDiagnostics,
-        );
-        await this.waitForSocketProcessSpawn(process, signal);
-      }
-
-      try {
-        const socketConnection = this.connectSocketWithRetry(
-          config.socket,
-          startupTimeout,
-          signal,
-        );
-        const lspConnection = process
-          ? await this.waitForSocketConnectionOrProcessExit(
-              socketConnection,
-              earlyExit!,
-            )
-          : await socketConnection;
-
-        return {
-          connection: lspConnection.connection,
-          process,
-          processDiagnostics,
-          shutdown: async () => {
-            await lspConnection.connection.shutdown();
-          },
-          exit: () => {
-            lspConnection.connection.end();
-          },
-          initialize: async (params: unknown) =>
-            lspConnection.connection.initialize(params),
-        };
-      } catch (error) {
-        if (
-          processDiagnostics &&
-          error instanceof Error &&
-          !('processDiagnostics' in error)
-        ) {
-          (
-            error as Error & { processDiagnostics: LspProcessDiagnostics }
-          ).processDiagnostics = processDiagnostics;
-        }
-        if (process && process.exitCode === null) {
-          process.kill();
-        }
-        throw error;
-      }
-    } else {
-      throw new Error(`Unsupported transport: ${config.transport}`);
+    if (!config.command) {
+      throw new Error('LSP stdio transport requires a command');
     }
-  }
 
-  private async waitForSocketConnectionOrProcessExit(
-    socketConnection: Promise<
-      Awaited<ReturnType<typeof LspConnectionFactory.createSocketConnection>>
-    >,
-    earlyExit: { promise: Promise<never>; dispose: () => void },
-  ): Promise<
-    Awaited<ReturnType<typeof LspConnectionFactory.createSocketConnection>>
-  > {
-    try {
-      return await Promise.race([socketConnection, earlyExit.promise]);
-    } finally {
-      earlyExit.dispose();
-    }
-  }
+    // Fix: use cwd as cwd instead of rootUri
+    const lspConnection = await LspConnectionFactory.createStdioConnection(
+      config.command,
+      config.args ?? [],
+      { cwd: workspaceFolder, env },
+      startupTimeout,
+    );
 
-  /**
-   * Waits for the LSP server child process to successfully spawn.
-   *
-   * Resolves when the 'spawn' event fires, rejects if an error occurs during
-   * spawning or if the provided abort signal is triggered. Ensures all event
-   * listeners are cleaned up regardless of outcome to prevent memory leaks.
-   *
-   * @param process - The child process to monitor for successful spawn
-   * @param signal - Optional AbortSignal to cancel the wait; if already aborted,
-   *                 the process is killed immediately and the promise rejects
-   */
-  private async waitForSocketProcessSpawn(
-    process: ChildProcess,
-    signal: AbortSignal | undefined,
-  ): Promise<void> {
-    this.throwIfStartupAborted(signal);
-    await new Promise<void>((resolve, reject) => {
-      let settled = false;
-      const cleanup = () => {
-        process.off('spawn', onSpawn);
-        process.off('error', onError);
-        signal?.removeEventListener('abort', onAbort);
-      };
-      const settle = (complete: () => void) => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        cleanup();
-        complete();
-      };
-      const onSpawn = () => settle(resolve);
-      const onError = (error: Error) =>
-        settle(() =>
-          reject(new Error(`Failed to spawn LSP server: ${error.message}`)),
-        );
-      const onAbort = () =>
-        settle(() => {
-          if (process.exitCode === null) {
-            try {
-              process.kill();
-            } catch (error) {
-              debugLogger.warn(
-                'Error killing aborted LSP socket process:',
-                error,
-              );
-            }
-          }
-          reject(new Error('LSP server startup cancelled'));
-        });
-
-      process.once('spawn', onSpawn);
-      process.once('error', onError);
-      signal?.addEventListener('abort', onAbort, { once: true });
-      if (signal?.aborted) {
-        onAbort();
-      }
-    });
-  }
-
-  private watchSocketProcessEarlyExit(
-    process: ChildProcess,
-    diagnostics: LspProcessDiagnostics | undefined,
-  ): { promise: Promise<never>; dispose: () => void } {
-    let onExit: (code: number | null, signal: NodeJS.Signals | null) => void;
-    const promise = new Promise<never>((_, reject) => {
-      onExit = (code, signal) => {
-        if (diagnostics) {
-          diagnostics.exitCode = code;
-          diagnostics.exitSignal = signal;
-        }
-        reject(
-          new Error(
-            `LSP server exited before socket connection was ready: code=${
-              code ?? 'unknown'
-            }, signal=${signal ?? 'none'}`,
-          ),
-        );
-      };
-      process.once('exit', onExit);
-    });
     return {
-      promise,
-      dispose: () => {
-        process.off('exit', onExit);
+      connection: lspConnection.connection,
+      process: lspConnection.process as ChildProcess,
+      processDiagnostics: lspConnection.processDiagnostics,
+      shutdown: async () => {
+        await lspConnection.connection.shutdown();
       },
+      exit: () => {
+        if (lspConnection.process && !lspConnection.process.killed) {
+          (lspConnection.process as ChildProcess).kill();
+        }
+        lspConnection.connection.end();
+      },
+      initialize: async (params: unknown) =>
+        lspConnection.connection.initialize(params),
     };
   }
 

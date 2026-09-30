@@ -840,13 +840,6 @@ export class SessionResetPendingError extends Error {
   }
 }
 
-export class McpAuthenticationInProgressError extends Error {
-  constructor() {
-    super('Another MCP authentication is already in progress');
-    this.name = 'McpAuthenticationInProgressError';
-  }
-}
-
 export class WorkspaceRuntimeStopError extends Error {
   constructor(
     readonly code:

@@ -14,10 +14,8 @@ import {
   removeMCPServerStatus,
   addMCPStatusChangeListener,
   removeMCPStatusChangeListener,
-  mcpServerRequiresOAuth,
-  MCPServerStatus,
+  type MCPServerStatus,
   DiscoveredMCPTool,
-  MCPOAuthTokenStorage,
   createDebugLogger,
   matchesAnyServerPattern,
 } from '@qwen-code/qwen-code-core';
@@ -28,7 +26,6 @@ import { ToolListStep } from '../../mcp/steps/ToolListStep.js';
 import { ToolDetailStep } from '../../mcp/steps/ToolDetailStep.js';
 import { ResourceListStep } from '../../mcp/steps/ResourceListStep.js';
 import { ResourceDetailStep } from '../../mcp/steps/ResourceDetailStep.js';
-import { AuthenticateStep } from '../../mcp/steps/AuthenticateStep.js';
 import { isToolValid, getToolInvalidReasons } from '../../mcp/utils.js';
 import type {
   MCPServerDisplayInfo,
@@ -44,8 +41,7 @@ type SubView =
   | 'tools'
   | 'tool-detail'
   | 'resources'
-  | 'resource-detail'
-  | 'authenticate';
+  | 'resource-detail';
 
 interface McpServerActionsViewProps {
   config: Config;
@@ -62,9 +58,8 @@ interface McpServerActionsViewProps {
 
 /**
  * MCP server detail + actions inside the extensions manager, reusing the
- * `/mcp` dialog's ServerDetailStep / ToolListStep / AuthenticateStep so the
- * behaviour (live status, view tools, enable/disable, re-authenticate, clear
- * auth) stays identical to `/mcp`.
+ * `/mcp` dialog's ServerDetailStep / ToolListStep so the behaviour (live
+ * status, view tools, enable/disable) stays identical to `/mcp`.
  */
 export const McpServerActionsView = ({
   config,
@@ -117,19 +112,6 @@ export const McpServerActionsView = ({
         source = 'user';
       }
 
-      let hasOAuthTokens = false;
-      try {
-        const credentials = await new MCPOAuthTokenStorage().getCredentials(
-          serverName,
-        );
-        hasOAuthTokens = credentials !== null;
-      } catch (error) {
-        // A broken credential store (e.g. missing libsecret, locked keychain)
-        // leaves hasOAuthTokens false, which can mislabel an authenticated
-        // server as needing auth — log it so that's diagnosable.
-        debugLogger.warn('OAuth token lookup failed for', serverName, error);
-      }
-
       return {
         name: serverName,
         status,
@@ -141,34 +123,15 @@ export const McpServerActionsView = ({
         promptCount: serverPrompts.length,
         resourceCount: serverResources.length,
         isDisabled: config.isMcpServerDisabled(serverName),
-        hasOAuthTokens,
-        // Needs (re-)authentication: a 401 during connect, or OAuth declared
-        // with no stored token. Only meaningful while not connected.
-        requiresAuth:
-          status !== MCPServerStatus.CONNECTED &&
-          (mcpServerRequiresOAuth.get(serverName) === true ||
-            (Boolean(serverConfig.oauth?.enabled) && !hasOAuthTokens)),
       };
     }, [config, serverName]);
 
-  // Re-stamp status (and the status-derived needs-auth flag) synchronously
-  // right before setState: a status change landing during buildServer's
-  // awaits would fire the listener against the old state and then be
-  // overwritten by the stale snapshot.
+  // Re-stamp status synchronously right before setState: a status change
+  // landing during buildServer's awaits would fire the listener against the
+  // old state and then be overwritten by the stale snapshot.
   const freshen = useCallback(
-    (info: MCPServerDisplayInfo | null): MCPServerDisplayInfo | null => {
-      if (!info) return info;
-      const status = getMCPServerStatus(info.name);
-      return {
-        ...info,
-        status,
-        requiresAuth:
-          status === MCPServerStatus.CONNECTED
-            ? false
-            : mcpServerRequiresOAuth.get(info.name) === true ||
-              info.requiresAuth,
-      };
-    },
+    (info: MCPServerDisplayInfo | null): MCPServerDisplayInfo | null =>
+      info ? { ...info, status: getMCPServerStatus(info.name) } : info,
     [],
   );
 
@@ -202,21 +165,7 @@ export const McpServerActionsView = ({
   useEffect(() => {
     const listener = (name: string, status?: MCPServerStatus) => {
       if (name !== serverName || status === undefined) return;
-      setServer((prev) =>
-        prev
-          ? {
-              ...prev,
-              status,
-              // Keep needs-auth in step with the live status (the 401 marker
-              // is written before the DISCONNECTED event fires).
-              requiresAuth:
-                status === MCPServerStatus.CONNECTED
-                  ? false
-                  : mcpServerRequiresOAuth.get(name) === true ||
-                    prev.requiresAuth,
-            }
-          : prev,
-      );
+      setServer((prev) => (prev ? { ...prev, status } : prev));
     };
     addMCPStatusChangeListener(listener);
     return () => removeMCPStatusChangeListener(listener);
@@ -338,35 +287,8 @@ export const McpServerActionsView = ({
     }
   }, [server, config, serverName, reload, onStatus]);
 
-  const handleClearAuth = useCallback(async () => {
-    try {
-      await new MCPOAuthTokenStorage().deleteCredentials(serverName);
-      await config.getToolRegistry()?.disconnectServer(serverName);
-      await reload();
-      onStatus({
-        type: 'success',
-        text: t('Cleared authentication for "{{name}}".', { name: serverName }),
-      });
-    } catch (error) {
-      onStatus({ type: 'error', text: getErrorMessage(error) });
-    }
-  }, [config, serverName, reload, onStatus]);
-
   if (loading && !server) {
     return <Text color={theme.text.secondary}>{t('Loading...')}</Text>;
-  }
-
-  if (sub === 'authenticate') {
-    return (
-      <AuthenticateStep
-        server={server}
-        isActive={isActive}
-        onBack={() => {
-          setSub('detail');
-          void reload();
-        }}
-      />
-    );
   }
 
   if (sub === 'tool-detail') {
@@ -427,8 +349,6 @@ export const McpServerActionsView = ({
       onViewResources={() => setSub('resources')}
       onReconnect={() => void handleReconnect()}
       onDisable={() => void handleToggleDisable()}
-      onAuthenticate={() => setSub('authenticate')}
-      onClearAuth={() => void handleClearAuth()}
       onBack={onExit}
     />
   );

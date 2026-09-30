@@ -4353,15 +4353,10 @@ describe('HookEventHandler', () => {
       });
     });
 
-    it('names non-command hooks by url, id, or a shortened prompt', async () => {
+    it('names non-command hooks by id or a shortened prompt', async () => {
       const longPrompt = `Check   that ${'x'.repeat(200)}`;
       runWith(
         [
-          {
-            type: HookType.Http,
-            url: 'https://hooks.example.com/audit',
-            source: HooksConfigSource.Project,
-          },
           {
             type: HookType.Function,
             id: 'goal-stop-hook',
@@ -4383,11 +4378,10 @@ describe('HookEventHandler', () => {
       const names = progress()
         .filter((m) => m['phase'] === 'start')
         .map((m) => m['hookName'] as string);
-      expect(names[0]).toBe('https://hooks.example.com/audit');
-      expect(names[1]).toBe('goal-stop-hook');
-      expect(names[2].startsWith('Check that x')).toBe(true);
-      expect(names[2].length).toBe(80);
-      expect(names[2].endsWith('…')).toBe(true);
+      expect(names[0]).toBe('goal-stop-hook');
+      expect(names[1].startsWith('Check that x')).toBe(true);
+      expect(names[1].length).toBe(80);
+      expect(names[1].endsWith('…')).toBe(true);
     });
 
     it('still returns the aggregated result when there is no bus', async () => {
@@ -4472,19 +4466,11 @@ describe('HookEventHandler', () => {
 
     /**
      * What each runner returns for each way a hook can end (the runner tests
-     * pin these shapes), and the outcome the bus must report for it. HTTP keeps
-     * `success: true` on its non-blocking failures, so the projection has to
-     * follow `outcome`, not `success`.
+     * pin these shapes), and the outcome the bus must report for it.
      */
     it.each([
       [
         'command',
-        'cancelled before start',
-        { success: false, outcome: 'cancelled' },
-        'cancelled',
-      ],
-      [
-        'http',
         'cancelled before start',
         { success: false, outcome: 'cancelled' },
         'cancelled',
@@ -4505,12 +4491,6 @@ describe('HookEventHandler', () => {
         'command',
         'cancelled while running',
         { success: false, outcome: 'cancelled' },
-        'cancelled',
-      ],
-      [
-        'http',
-        'cancelled while running',
-        { success: true, outcome: 'cancelled', output: { continue: true } },
         'cancelled',
       ],
       [
@@ -4529,12 +4509,6 @@ describe('HookEventHandler', () => {
         'command',
         'timed out',
         { success: false, outcome: 'timeout' },
-        'timeout',
-      ],
-      [
-        'http',
-        'timed out',
-        { success: true, outcome: 'timeout', output: { continue: true } },
         'timeout',
       ],
       [
@@ -4550,12 +4524,6 @@ describe('HookEventHandler', () => {
         'timeout',
       ],
       ['command', 'allowed', { success: true, outcome: 'success' }, 'success'],
-      [
-        'http',
-        'allowed',
-        { success: true, outcome: 'success', output: { continue: true } },
-        'success',
-      ],
       [
         'function',
         'allowed',
@@ -4576,16 +4544,6 @@ describe('HookEventHandler', () => {
         'command',
         'blocked',
         { success: false, outcome: 'blocking' },
-        'blocked',
-      ],
-      [
-        'http',
-        'blocked',
-        {
-          success: true,
-          outcome: 'blocking',
-          output: { decision: 'block', reason: 'no' },
-        },
         'blocked',
       ],
       [
@@ -4611,34 +4569,6 @@ describe('HookEventHandler', () => {
       [
         'command',
         'failed to spawn',
-        { success: false, outcome: 'non_blocking_error' },
-        'error',
-      ],
-      [
-        'http',
-        'non-2xx response',
-        {
-          success: true,
-          outcome: 'non_blocking_error',
-          error: new Error('HTTP hook returned 500'),
-          output: { continue: true },
-        },
-        'error',
-      ],
-      [
-        'http',
-        'connection failure',
-        {
-          success: true,
-          outcome: 'non_blocking_error',
-          error: new TypeError('fetch failed'),
-          output: { continue: true },
-        },
-        'error',
-      ],
-      [
-        'http',
-        'URL not allowed',
         { success: false, outcome: 'non_blocking_error' },
         'error',
       ],

@@ -291,7 +291,7 @@ describe('McpPromptLoader', () => {
   describe('loadCommands', () => {
     const mockConfigWithPrompts = {
       getMcpServers: () => ({
-        'test-server': { httpUrl: 'https://test-server.com' },
+        'test-server': { command: 'node' },
       }),
     } as unknown as Config;
 

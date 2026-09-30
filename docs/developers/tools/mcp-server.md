@@ -23,7 +23,7 @@ Qwen Code integrates with MCP servers through a sophisticated discovery and exec
 The discovery process is orchestrated by `discoverMcpTools()`, which:
 
 1. **Iterates through configured servers** from your `settings.json` `mcpServers` configuration
-2. **Establishes connections** using appropriate transport mechanisms (Stdio, SSE, or Streamable HTTP)
+2. **Establishes connections** over the stdio transport
 3. **Fetches tool definitions** from each server using the MCP protocol
 4. **Sanitizes and validates** tool schemas for compatibility with the Qwen API
 5. **Registers tools** in the global tool registry with conflict resolution
@@ -41,11 +41,11 @@ After a connection loss, the current invocation is replayed only for a trusted s
 
 ### Transport Mechanisms
 
-The CLI supports three MCP transport types:
+The CLI supports one MCP transport type:
 
 - **Stdio Transport:** Spawns a subprocess and communicates via stdin/stdout
-- **SSE Transport:** Connects to Server-Sent Events endpoints
-- **Streamable HTTP Transport:** Uses HTTP streaming for communication
+
+Remote transports (SSE, Streamable HTTP) are not supported.
 
 ## How to set up your MCP server
 
@@ -103,16 +103,13 @@ Add an `mcpServers` object to your `settings.json` file:
 
 Each server configuration supports the following properties:
 
-#### Required (one of the following)
+#### Required
 
 - **`command`** (string): Path to the executable for Stdio transport
-- **`url`** (string): SSE endpoint URL (e.g., `"http://localhost:8080/sse"`)
-- **`httpUrl`** (string): HTTP streaming endpoint URL
 
 #### Optional
 
 - **`args`** (string[]): Command-line arguments for Stdio transport
-- **`headers`** (object): Custom HTTP headers when using `url` or `httpUrl`
 - **`env`** (object): Environment variables for the server process. Values can reference environment variables using `$VAR_NAME` or `${VAR_NAME}` syntax
 - **`cwd`** (string): Working directory for Stdio transport
 - **`timeout`** (number): Request timeout in milliseconds (default: 600,000ms = 10 minutes)
@@ -120,141 +117,6 @@ Each server configuration supports the following properties:
 - **`trust`** (boolean): When `true`, bypasses tool call confirmations for this server in a trusted workspace (default: `false`)
 - **`includeTools`** (string[]): List of tool names to include from this MCP server. When specified, only the tools listed here will be available from this server (allowlist behavior). If not specified, all tools from the server are enabled by default.
 - **`excludeTools`** (string[]): List of tool names to exclude from this MCP server. Tools listed here will not be available to the model, even if they are exposed by the server. **Note:** `excludeTools` takes precedence over `includeTools` - if a tool is in both lists, it will be excluded.
-- **`targetAudience`** (string): The OAuth Client ID allowlisted on the IAP-protected application you are trying to access. Used with `authProviderType: 'service_account_impersonation'`.
-- **`targetServiceAccount`** (string): The email address of the Google Cloud Service Account to impersonate. Used with `authProviderType: 'service_account_impersonation'`.
-
-### OAuth Support for Remote MCP Servers
-
-Qwen Code supports OAuth 2.0 authentication for remote MCP servers using SSE or HTTP transports. This enables secure access to MCP servers that require authentication.
-
-#### Automatic OAuth Discovery
-
-For servers that support OAuth discovery, you can omit the OAuth configuration and let the CLI discover it automatically:
-
-```json
-{
-  "mcpServers": {
-    "discoveredServer": {
-      "url": "https://api.example.com/sse"
-    }
-  }
-}
-```
-
-The CLI will automatically:
-
-- Detect when a server requires OAuth authentication (401 responses)
-- Discover OAuth endpoints from server metadata
-- Perform dynamic client registration if supported
-- Handle the OAuth flow and token management
-
-#### Authentication Flow
-
-When connecting to an OAuth-enabled server:
-
-1. **Initial connection attempt** fails with 401 Unauthorized
-2. **OAuth discovery** finds authorization and token endpoints
-3. **Browser opens** for user authentication (requires local browser access)
-4. **Authorization code** is exchanged for access tokens
-5. **Tokens are stored** securely for future use
-6. **Connection retry** succeeds with valid tokens
-
-#### Browser Redirect Requirements
-
-**Important:** OAuth authentication requires that the redirect URI is accessible:
-
-- **Default behavior**: Redirects to `http://localhost:7777/oauth/callback` (works for local setups)
-- **Custom redirect URI**: Use `--oauth-redirect-uri` or configure `redirectUri` in settings.json to specify a public URL ending in `/oauth/callback`. Reverse-proxy that path to `http://127.0.0.1:7777/oauth/callback` on the machine running Qwen Code.
-
-For **remote/cloud server deployments** (e.g., web terminals, SSH sessions, cloud IDEs):
-
-- The default `localhost` redirect will NOT work
-- You MUST configure a custom `redirectUri` pointing to a publicly accessible URL ending in `/oauth/callback`
-- Terminate TLS at a reverse proxy and forward only that path to `http://127.0.0.1:7777/oauth/callback`
-
-Example for remote servers:
-
-```bash
-qwen mcp add --transport sse remote-server https://api.example.com/sse/ \
-  --oauth-redirect-uri https://your-remote-server.example.com/oauth/callback
-```
-
-OAuth will not work in:
-
-- Headless environments without browser access
-- Environments where the configured `redirectUri` is unreachable from the user's browser
-
-#### Managing OAuth Authentication
-
-Use the `/mcp` dialog inside an interactive Qwen Code session to inspect MCP
-servers and manage OAuth authentication.
-
-#### OAuth Configuration Properties
-
-- **`enabled`** (boolean): Enable OAuth for this server
-- **`clientId`** (string): OAuth client identifier (optional with dynamic registration)
-- **`clientSecret`** (string): OAuth client secret (optional for public clients)
-- **`authorizationUrl`** (string): OAuth authorization endpoint (auto-discovered if omitted)
-- **`tokenUrl`** (string): OAuth token endpoint (auto-discovered if omitted)
-- **`scopes`** (string[]): Required OAuth scopes
-- **`redirectUri`** (string): Custom redirect URI. **Critical for remote deployments**: Defaults to `http://localhost:7777/oauth/callback`. For remote use, set a public URL ending in `/oauth/callback` and reverse-proxy it to the local callback listener. Can be configured via `qwen mcp add --oauth-redirect-uri` or directly in settings.json.
-- **`tokenParamName`** (string): Query parameter name for tokens in SSE URLs
-- **`audiences`** (string[]): Audiences the token is valid for
-
-#### Token Management
-
-OAuth tokens are automatically:
-
-- **Stored** in `~/.qwen/mcp-oauth-tokens.json` (plaintext, mode 0600) by default. If `QWEN_CODE_FORCE_ENCRYPTED_FILE_STORAGE=true` is set, Qwen Code uses keychain-backed storage where available, or `~/.qwen/mcp-oauth-tokens-v2.json` with AES-256-GCM encryption.
-- **Refreshed** when expired (if refresh tokens are available)
-- **Validated** before each connection attempt
-- **Cleaned up** when invalid or expired
-
-> [!WARNING]
-> By default, OAuth tokens are stored unencrypted on disk. On shared or multi-user machines, set `QWEN_CODE_FORCE_ENCRYPTED_FILE_STORAGE=true` to protect credentials.
-
-#### Authentication Provider Type
-
-You can specify the authentication provider type using the `authProviderType` property:
-
-- **`authProviderType`** (string): Specifies the authentication provider. Can be one of the following:
-  - **`dynamic_discovery`** (default): The CLI will automatically discover the OAuth configuration from the server.
-  - **`google_credentials`**: The CLI will use the Google Application Default Credentials (ADC) to authenticate with the server. When using this provider, you must specify the required scopes.
-  - **`service_account_impersonation`**: The CLI will impersonate a Google Cloud Service Account to authenticate with the server. This is useful for accessing IAP-protected services (this was specifically designed for Cloud Run services).
-
-#### Google Credentials
-
-```json
-{
-  "mcpServers": {
-    "googleCloudServer": {
-      "httpUrl": "https://my-gcp-service.run.app/mcp",
-      "authProviderType": "google_credentials",
-      "oauth": {
-        "scopes": ["https://www.googleapis.com/auth/userinfo.email"]
-      }
-    }
-  }
-}
-```
-
-#### Service Account Impersonation
-
-To authenticate with a server using Service Account Impersonation, you must set the `authProviderType` to `service_account_impersonation` and provide the following properties:
-
-- **`targetAudience`** (string): The OAuth Client ID allowslisted on the IAP-protected application you are trying to access.
-- **`targetServiceAccount`** (string): The email address of the Google Cloud Service Account to impersonate.
-
-The CLI will use your local Application Default Credentials (ADC) to generate an OIDC ID token for the specified service account and audience. This token will then be used to authenticate with the MCP server.
-
-#### Setup Instructions
-
-1. **[Create](https://cloud.google.com/iap/docs/oauth-client-creation) or use an existing OAuth 2.0 client ID.** To use an existing OAuth 2.0 client ID, follow the steps in [How to share OAuth Clients](https://cloud.google.com/iap/docs/sharing-oauth-clients).
-2. **Add the OAuth ID to the allowlist for [programmatic access](https://cloud.google.com/iap/docs/sharing-oauth-clients#programmatic_access) for the application.** Since Cloud Run is not yet a supported resource type in gcloud iap, you must allowlist the Client ID on the project.
-3. **Create a service account.** [Documentation](https://cloud.google.com/iam/docs/service-accounts-create#creating), [Cloud Console Link](https://console.cloud.google.com/iam-admin/serviceaccounts)
-4. **Add both the service account and users to the IAP Policy** in the "Security" tab of the Cloud Run service itself or via gcloud.
-5. **Grant all users and groups** who will access the MCP Server the necessary permissions to [impersonate the service account](https://cloud.google.com/docs/authentication/use-service-account-impersonation) (i.e., `roles/iam.serviceAccountTokenCreator`).
-6. **[Enable](https://console.cloud.google.com/apis/library/iamcredentials.googleapis.com) the IAM Credentials API** for your project.
 
 ### Example Configurations
 
@@ -317,37 +179,6 @@ The CLI will use your local Application Default Credentials (ADC) to generate an
 }
 ```
 
-#### HTTP-based MCP Server
-
-```json
-{
-  "mcpServers": {
-    "httpServer": {
-      "httpUrl": "http://localhost:3000/mcp",
-      "timeout": 5000
-    }
-  }
-}
-```
-
-#### HTTP-based MCP Server with Custom Headers
-
-```json
-{
-  "mcpServers": {
-    "httpServerWithAuth": {
-      "httpUrl": "http://localhost:3000/mcp",
-      "headers": {
-        "Authorization": "Bearer your-api-token",
-        "X-Custom-Header": "custom-value",
-        "Content-Type": "application/json"
-      },
-      "timeout": 5000
-    }
-  }
-}
-```
-
 #### MCP Server with Tool Filtering
 
 ```json
@@ -364,21 +195,6 @@ The CLI will use your local Application Default Credentials (ADC) to generate an
 }
 ```
 
-### SSE MCP Server with SA Impersonation
-
-```json
-{
-  "mcpServers": {
-    "myIapProtectedServer": {
-      "url": "https://my-iap-service.run.app/sse",
-      "authProviderType": "service_account_impersonation",
-      "targetAudience": "YOUR_IAP_CLIENT_ID.apps.googleusercontent.com",
-      "targetServiceAccount": "your-sa@your-project.iam.gserviceaccount.com"
-    }
-  }
-}
-```
-
 ## Discovery Process Deep Dive
 
 When Qwen Code starts, it performs MCP server discovery through the following detailed process:
@@ -388,10 +204,7 @@ When Qwen Code starts, it performs MCP server discovery through the following de
 For each configured server in `mcpServers`:
 
 1. **Status tracking begins:** Server status is set to `CONNECTING`
-2. **Transport selection:** Based on configuration properties:
-   - `httpUrl` → `StreamableHTTPClientTransport`
-   - `url` → `SSEClientTransport`
-   - `command` → `StdioClientTransport`
+2. **Transport selection:** `command` → `StdioClientTransport`
 3. **Connection establishment:** The MCP client attempts to connect with the configured timeout
 4. **Error handling:** Connection failures are logged and the server status is set to `DISCONNECTED`
 
@@ -779,30 +592,22 @@ The `add` command configures a new MCP server in your `settings.json`. Based on 
 **Command:**
 
 ```bash
-qwen mcp add [options] <name> <commandOrUrl> [args...]
+qwen mcp add [options] <name> <command> [args...]
 ```
 
 - `<name>`: A unique name for the server.
-- `<commandOrUrl>`: The command to execute (for `stdio`) or the URL (for `http`/`sse`).
+- `<command>`: The command that starts the stdio server.
 - `[args...]`: Optional arguments for a `stdio` command.
 
 **Options (Flags):**
 
 - `-s, --scope`: Configuration scope (user or project). [default: "project"]
-- `-t, --transport`: Transport type (stdio, sse, http). [default: "stdio"]
 - `-e, --env`: Set environment variables (e.g. -e KEY=value).
-- `-H, --header`: Set HTTP headers for SSE and HTTP transports (e.g. -H "X-Api-Key: abc123" -H "Authorization: Bearer abc123").
 - `--timeout`: Set connection timeout in milliseconds.
 - `--trust`: Trust the server (bypass its tool call confirmations in a trusted workspace).
 - `--description`: Set the description for the server.
 - `--include-tools`: A comma-separated list of tools to include.
 - `--exclude-tools`: A comma-separated list of tools to exclude.
-- `--oauth-client-id`: OAuth client ID for MCP server authentication.
-- `--oauth-client-secret`: OAuth client secret for MCP server authentication.
-- `--oauth-redirect-uri`: OAuth redirect URI (e.g., `https://your-server.com/oauth/callback`). Defaults to `http://localhost:7777/oauth/callback` for local setups. **Important for remote deployments**: Use a public URL ending in `/oauth/callback` and reverse-proxy it to `http://127.0.0.1:7777/oauth/callback`.
-- `--oauth-authorization-url`: OAuth authorization URL.
-- `--oauth-token-url`: OAuth token URL.
-- `--oauth-scopes`: OAuth scopes (comma-separated).
 
 #### Adding an stdio server
 
@@ -817,43 +622,6 @@ qwen mcp add my-stdio-server -e API_KEY=123 /path/to/server arg1 arg2 arg3
 
 # Example: Adding a local python server
 qwen mcp add python-server python server.py --port 8080
-```
-
-#### Adding an HTTP server
-
-This transport is for servers that use the streamable HTTP transport.
-
-```bash
-# Basic syntax
-qwen mcp add --transport http <name> <url>
-
-# Example: Adding an HTTP server
-qwen mcp add --transport http http-server https://api.example.com/mcp/
-
-# Example: Adding an HTTP server with an authentication header
-qwen mcp add --transport http secure-http https://api.example.com/mcp/ --header "Authorization: Bearer abc123"
-```
-
-#### Adding an SSE server
-
-This transport is for servers that use Server-Sent Events (SSE).
-
-```bash
-# Basic syntax
-qwen mcp add --transport sse <name> <url>
-
-# Example: Adding an SSE server
-qwen mcp add --transport sse sse-server https://api.example.com/sse/
-
-# Example: Adding an SSE server with an authentication header
-qwen mcp add --transport sse secure-sse https://api.example.com/sse/ --header "Authorization: Bearer abc123"
-
-# Example: Adding an OAuth-enabled SSE server
-qwen mcp add --transport sse oauth-server https://api.example.com/sse/ \
-  --oauth-client-id your-client-id \
-  --oauth-redirect-uri https://your-server.com/oauth/callback \
-  --oauth-authorization-url https://provider.example.com/authorize \
-  --oauth-token-url https://provider.example.com/token
 ```
 
 ### Managing Servers (`/mcp`)

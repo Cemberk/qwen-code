@@ -21,7 +21,7 @@ export { COMBINED_PASS_TOLERANCE_FACTOR } from './truncation.js';
 // `maxOutputChars` (or when no budget resolver is supplied). Callers should
 // pass the configured global truncation threshold instead; this constant only
 // keeps a sane default for direct API use. Tools with wider budgets (agent
-// 32k, web-search 102k, MCP 500k) are resolved per-tool via
+// 32k, MCP 500k) are resolved per-tool via
 // `resolveToolBudgetChars`, and self-managed tools declare `Infinity`.
 export const OVERSIZED_TOOL_RESULT_THRESHOLD_CHARS = 30_000;
 

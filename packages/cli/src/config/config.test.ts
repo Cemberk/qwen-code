@@ -1298,22 +1298,6 @@ describe('loadCliConfig', () => {
     );
   });
 
-  it('registers the external agent executor factory so executor definitions dispatch (R1-7)', async () => {
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments();
-
-    const config = await loadCliConfig({}, argv);
-
-    // This single host-side registration is what the whole external-subagent
-    // feature dispatches through. Every dispatch test mocks
-    // getExternalAgentExecutor, so without this assertion deleting the
-    // injection would regress every valid executor definition to "registered no
-    // external agent executor" with the whole suite still green.
-    const factory = config.getExternalAgentExecutor();
-    expect(factory).toBeDefined();
-    expect(typeof factory?.create).toBe('function');
-  });
-
   it('enables debug file logging for --debug when QWEN_DEBUG_LOG_FILE is unset', async () => {
     delete process.env['QWEN_DEBUG_LOG_FILE'];
     process.argv = ['node', 'script.js', '--debug'];
@@ -2360,24 +2344,6 @@ describe('loadCliConfig', () => {
     );
   });
 
-  it('should propagate the image model selection', async () => {
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments();
-
-    await loadCliConfig(
-      {
-        imageModel: 'openai:qwen-image-2.0\0https://images.example.com/api/v1',
-      },
-      argv,
-    );
-
-    expect(mockConfigConstructorParams).toHaveBeenCalledWith(
-      expect.objectContaining({
-        imageModel: 'openai:qwen-image-2.0\0https://images.example.com/api/v1',
-      }),
-    );
-  });
-
   it('places session-injected (ACP/IDE) MCP servers at the top precedence tier', async () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments();
@@ -3162,186 +3128,6 @@ describe('loadCliConfig', () => {
       const settings: Settings = { proxy: 'http://localhost:7891' };
       const config = await loadCliConfig(settings, argv);
       expect(config.getProxy()).toBe('http://localhost:7890');
-    });
-  });
-
-  describe('web search settings resolution', () => {
-    const loadWithSettings = async (settings: Settings) => {
-      process.argv = ['node', 'script.js'];
-      const argv = await parseArguments();
-      return loadCliConfig(settings, argv);
-    };
-
-    it('returns undefined when neither settings nor env configure web search', async () => {
-      // `undefined` means "derive the backend from the active provider" —
-      // it must not be confused with an explicit opt-out.
-      const config = await loadWithSettings({});
-      expect(config.getWebSearchSettings()).toBeUndefined();
-    });
-
-    it('passes tools.webSearch through from settings', async () => {
-      const config = await loadWithSettings({
-        tools: { webSearch: { enabled: true, model: 'qwen3.6-plus' } },
-      });
-      expect(config.getWebSearchSettings()).toEqual({
-        enabled: true,
-        model: 'qwen3.6-plus',
-      });
-    });
-
-    it('lets ENABLE_WEB_SEARCH override the settings flag', async () => {
-      vi.stubEnv('ENABLE_WEB_SEARCH', 'false');
-      const config = await loadWithSettings({
-        tools: { webSearch: { enabled: true, model: 'qwen3.6-plus' } },
-      });
-      expect(config.getWebSearchSettings()?.enabled).toBe(false);
-    });
-
-    it('treats a set-but-empty ENABLE_WEB_SEARCH as unset', async () => {
-      vi.stubEnv('ENABLE_WEB_SEARCH', '');
-      const config = await loadWithSettings({
-        tools: { webSearch: { enabled: true, model: 'qwen3.6-plus' } },
-      });
-      expect(config.getWebSearchSettings()?.enabled).toBe(true);
-    });
-
-    it('lets WEB_SEARCH_MODEL and WEB_SEARCH_EXTRACTOR override settings', async () => {
-      vi.stubEnv('WEB_SEARCH_MODEL', 'env-model');
-      vi.stubEnv('WEB_SEARCH_EXTRACTOR', 'false');
-      const config = await loadWithSettings({
-        tools: {
-          webSearch: { enabled: true, model: 'settings-model' },
-        },
-      });
-      expect(config.getWebSearchSettings()).toEqual({
-        enabled: true,
-        model: 'env-model',
-        webExtractor: false,
-      });
-    });
-
-    it('resolves WEB_SEARCH_BASE_URL with the DASHSCOPE_API_KEY fallback', async () => {
-      vi.stubEnv(
-        'WEB_SEARCH_BASE_URL',
-        'https://dashscope.aliyuncs.com/api/v2',
-      );
-      const config = await loadWithSettings({});
-      expect(config.getWebSearchSettings()).toEqual({
-        baseUrl: 'https://dashscope.aliyuncs.com/api/v2',
-        apiKeyEnv: 'DASHSCOPE_API_KEY',
-      });
-    });
-
-    it('selects WEB_SEARCH_API_KEY when it is non-empty', async () => {
-      vi.stubEnv(
-        'WEB_SEARCH_BASE_URL',
-        'https://dashscope.aliyuncs.com/api/v2',
-      );
-      vi.stubEnv('WEB_SEARCH_API_KEY', 'sk-live');
-      const config = await loadWithSettings({});
-      expect(config.getWebSearchSettings()?.apiKeyEnv).toBe(
-        'WEB_SEARCH_API_KEY',
-      );
-    });
-
-    it('treats a whitespace-only WEB_SEARCH_API_KEY as unset', async () => {
-      vi.stubEnv(
-        'WEB_SEARCH_BASE_URL',
-        'https://dashscope.aliyuncs.com/api/v2',
-      );
-      vi.stubEnv('WEB_SEARCH_API_KEY', '   ');
-      const config = await loadWithSettings({});
-      expect(config.getWebSearchSettings()?.apiKeyEnv).toBe(
-        'DASHSCOPE_API_KEY',
-      );
-    });
-
-    it('lets WEB_SEARCH_TIMEOUT_MS override tools.webSearch.timeoutMs', async () => {
-      vi.stubEnv('WEB_SEARCH_TIMEOUT_MS', '90000');
-      const config = await loadWithSettings({
-        tools: { webSearch: { timeoutMs: 30000 } },
-      });
-      expect(config.getWebSearchSettings()?.timeoutMs).toBe(90000);
-    });
-
-    it('ignores an empty, non-numeric or non-positive WEB_SEARCH_TIMEOUT_MS', async () => {
-      for (const raw of ['', 'abc', '-5', '0']) {
-        vi.stubEnv('WEB_SEARCH_TIMEOUT_MS', raw);
-        const config = await loadWithSettings({
-          tools: { webSearch: { timeoutMs: 30000 } },
-        });
-        expect(config.getWebSearchSettings()?.timeoutMs).toBe(30000);
-      }
-    });
-
-    it('passes a budget-only setting through without other web search keys', async () => {
-      // Core still treats this as the automatic path: only model or an
-      // env-declared backend make the configuration explicit.
-      const config = await loadWithSettings({
-        tools: { webSearch: { timeoutMs: 45000 } },
-      });
-      expect(config.getWebSearchSettings()).toEqual({ timeoutMs: 45000 });
-    });
-
-    it('lets WEB_SEARCH_MAX_PER_SESSION override tools.webSearch.maxPerSession', async () => {
-      vi.stubEnv('WEB_SEARCH_MAX_PER_SESSION', '50');
-      const config = await loadWithSettings({
-        tools: { webSearch: { maxPerSession: 10 } },
-      });
-      expect(config.getWebSearchSettings()?.maxPerSession).toBe(50);
-    });
-
-    it('ignores an empty, non-numeric, fractional or non-positive WEB_SEARCH_MAX_PER_SESSION', async () => {
-      for (const raw of ['', 'abc', '1.5', '-5', '0']) {
-        vi.stubEnv('WEB_SEARCH_MAX_PER_SESSION', raw);
-        const config = await loadWithSettings({
-          tools: { webSearch: { maxPerSession: 10 } },
-        });
-        expect(config.getWebSearchSettings()?.maxPerSession).toBe(10);
-      }
-    });
-
-    it('passes a cap-only setting through without other web search keys', async () => {
-      const config = await loadWithSettings({
-        tools: { webSearch: { maxPerSession: 10 } },
-      });
-      expect(config.getWebSearchSettings()).toEqual({ maxPerSession: 10 });
-    });
-
-    // Both modes must turn the tool off explicitly: leaving the settings
-    // undefined would let the registry derive a backend from the provider.
-    it('disables web search in safe mode', async () => {
-      process.argv = ['node', 'script.js', '--safe-mode'];
-      const argv = await parseArguments();
-      const config = await loadCliConfig(
-        { tools: { webSearch: { enabled: true, model: 'qwen3.6-plus' } } },
-        argv,
-      );
-      expect(config.getWebSearchSettings()).toEqual({ enabled: false });
-    });
-
-    it('disables web search in safe mode even when nothing is configured', async () => {
-      process.argv = ['node', 'script.js', '--safe-mode'];
-      const argv = await parseArguments();
-      const config = await loadCliConfig({}, argv);
-      expect(config.getWebSearchSettings()).toEqual({ enabled: false });
-    });
-
-    it('disables web search in bare mode', async () => {
-      process.argv = ['node', 'script.js', '--bare'];
-      const argv = await parseArguments();
-      const config = await loadCliConfig(
-        { tools: { webSearch: { enabled: true, model: 'qwen3.6-plus' } } },
-        argv,
-      );
-      expect(config.getWebSearchSettings()).toEqual({ enabled: false });
-    });
-
-    it('disables web search in bare mode even when nothing is configured', async () => {
-      process.argv = ['node', 'script.js', '--bare'];
-      const argv = await parseArguments();
-      const config = await loadCliConfig({}, argv);
-      expect(config.getWebSearchSettings()).toEqual({ enabled: false });
     });
   });
 });
@@ -4502,53 +4288,6 @@ describe('loadCliConfig folderTrust', () => {
   });
 });
 
-describe('loadCliConfig allowPrivateNetworkHooks', () => {
-  const originalArgv = process.argv;
-
-  beforeEach(() => {
-    vi.resetAllMocks();
-    vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
-  });
-
-  afterEach(() => {
-    process.argv = originalArgv;
-    vi.unstubAllEnvs();
-    vi.restoreAllMocks();
-  });
-
-  it('should be false by default', async () => {
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments();
-    const config = await loadCliConfig({}, argv, undefined, []);
-    expect(config.getAllowPrivateNetworkHooks()).toBe(false);
-  });
-
-  it('should pass through security.allowPrivateNetworkHooks from settings', async () => {
-    process.argv = ['node', 'script.js'];
-    const settings: Settings = {
-      security: {
-        allowPrivateNetworkHooks: true,
-      },
-    };
-    const argv = await parseArguments();
-    const config = await loadCliConfig(settings, argv, undefined, []);
-    expect(config.getAllowPrivateNetworkHooks()).toBe(true);
-  });
-
-  it('should be false in bare mode even when enabled in settings', async () => {
-    process.argv = ['node', 'script.js', '--bare'];
-    const settings: Settings = {
-      security: {
-        allowPrivateNetworkHooks: true,
-      },
-    };
-    const argv = await parseArguments();
-    const config = await loadCliConfig(settings, argv, undefined, []);
-    expect(config.getAllowPrivateNetworkHooks()).toBe(false);
-  });
-});
-
 describe('loadCliConfig with includeDirectories', () => {
   const originalArgv = process.argv;
 
@@ -4707,8 +4446,8 @@ describe('loadCliConfig with includeDirectories', () => {
     const argv = await parseArguments();
     const settings: Settings = {
       tools: {
-        core: [ToolNames.WEB_FETCH],
-        allowed: [ToolNames.WEB_FETCH],
+        core: [ToolNames.WRITE_FILE],
+        allowed: [ToolNames.WRITE_FILE],
         exclude: [ToolNames.ASK_USER_QUESTION],
       },
       hooks: {
@@ -4716,9 +4455,6 @@ describe('loadCliConfig with includeDirectories', () => {
       } as Record<string, unknown>,
       memory: {
         enableManagedAutoMemory: true,
-      },
-      security: {
-        allowedHttpHookUrls: ['https://hooks.example.com/*'],
       },
       mcp: {
         allowed: ['test-server'],
@@ -4858,7 +4594,13 @@ describe('loadCliConfig with includeDirectories', () => {
   });
 
   it('should ignore coreTools overrides in bare mode', async () => {
-    process.argv = ['node', 'script.js', '--bare', '--core-tools', 'web_fetch'];
+    process.argv = [
+      'node',
+      'script.js',
+      '--bare',
+      '--core-tools',
+      'write_file',
+    ];
     const argv = await parseArguments();
     const config = await loadCliConfig({}, argv, undefined, []);
 
@@ -4931,7 +4673,7 @@ describe('loadCliConfig safe mode', () => {
     const argv = await parseArguments();
     const settings: Settings = {
       tools: {
-        core: [ToolNames.WEB_FETCH],
+        core: [ToolNames.WRITE_FILE],
       },
     };
     const config = await loadCliConfig(settings, argv, undefined, []);
@@ -5003,7 +4745,7 @@ describe('loadCliConfig safe mode', () => {
     const argv = await parseArguments();
     const settings: Settings = {
       tools: {
-        disabled: ['WebFetch', 'ReadFile'],
+        disabled: ['Lsp', 'ReadFile'],
       },
     };
     const config = await loadCliConfig(settings, argv, undefined, []);
@@ -5016,12 +4758,12 @@ describe('loadCliConfig safe mode', () => {
     const argv = await parseArguments();
     const settings: Settings = {
       tools: {
-        visible: ['web_fetch', 'monitor'],
+        visible: ['lsp', 'monitor'],
       },
     };
     const config = await loadCliConfig(settings, argv, undefined, []);
 
-    expect(config.getVisibleTools()).toEqual(new Set(['web_fetch', 'monitor']));
+    expect(config.getVisibleTools()).toEqual(new Set(['lsp', 'monitor']));
   });
 
   it('should default visibleTools to empty when settings.tools.visible is absent', async () => {
@@ -5038,7 +4780,7 @@ describe('loadCliConfig safe mode', () => {
     const argv = await parseArguments();
     const settings: Settings = {
       tools: {
-        visible: ['web_fetch'],
+        visible: ['lsp'],
       },
     };
     const config = await loadCliConfig(settings, argv, undefined, []);
@@ -5051,7 +4793,7 @@ describe('loadCliConfig safe mode', () => {
     const argv = await parseArguments();
     const settings: Settings = {
       tools: {
-        visible: ['web_fetch'],
+        visible: ['lsp'],
       },
     };
     const config = await loadCliConfig(settings, argv, undefined, []);
@@ -5064,17 +4806,12 @@ describe('loadCliConfig safe mode', () => {
     const argv = await parseArguments();
     const settings: Settings = {
       tools: {
-        visible: [
-          '  web_fetch  ',
-          'web_fetch',
-          '',
-          'monitor',
-        ] as unknown as string[],
+        visible: ['  lsp  ', 'lsp', '', 'monitor'] as unknown as string[],
       },
     };
     const config = await loadCliConfig(settings, argv, undefined, []);
 
-    expect(config.getVisibleTools()).toEqual(new Set(['web_fetch', 'monitor']));
+    expect(config.getVisibleTools()).toEqual(new Set(['lsp', 'monitor']));
   });
 
   it('should respect safe mode via QWEN_CODE_SAFE_MODE env var', async () => {
@@ -6502,63 +6239,6 @@ describe('loadCliConfig skills.directories', () => {
     const config = await loadCliConfig(settings, argv, undefined, []);
 
     expect(config.getCustomSkillDirs()).toEqual([]);
-  });
-});
-
-describe('loadCliConfig omni settings key validation', () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-    process.argv = ['node', 'script.js'];
-  });
-
-  it('accepts known nested omni keys (storage, memory, processing maps)', async () => {
-    const argv = await parseArguments();
-    const settings: Settings = {
-      omni: {
-        delivery: {
-          upload: {
-            baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-            apiKeyEnv: 'DASHSCOPE_API_KEY',
-            model: 'qwen3.5-omni-plus',
-          },
-        },
-        storage: { retentionDays: 7, maxTotalBytes: 1024 * 1024 * 1024 },
-        memory: { recall: { mode: 'active' } },
-        processing: {
-          // Free-form map: policy names are user-defined — the walk must
-          // stop at map nodes instead of rejecting every name.
-          fixedPolicies: {
-            'my-policy': { priority: 10, toolName: 'omni_extract_audio' },
-          },
-        },
-      },
-    } as Settings;
-
-    await expect(loadCliConfig(settings, argv)).resolves.toBeDefined();
-  });
-
-  it('rejects an unknown key directly under omni', async () => {
-    const argv = await parseArguments();
-    const settings = {
-      omni: { storag: { retentionDays: 7 } },
-    } as unknown as Settings;
-
-    await expect(loadCliConfig(settings, argv)).rejects.toThrow(
-      /unknown key\(s\) under "omni".*"storag"/s,
-    );
-  });
-
-  it('rejects an unknown NESTED key with its full path', async () => {
-    // The deletion-controlling knobs live at omni.storage.* — a typo
-    // there must fail loud instead of leaving the GC on defaults.
-    const argv = await parseArguments();
-    const settings = {
-      omni: { storage: { retentionDay: 7 } },
-    } as unknown as Settings;
-
-    await expect(loadCliConfig(settings, argv)).rejects.toThrow(
-      /unknown key\(s\) under "omni\.storage".*"retentionDay"/s,
-    );
   });
 });
 

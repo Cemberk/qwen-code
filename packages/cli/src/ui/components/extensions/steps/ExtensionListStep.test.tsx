@@ -23,8 +23,8 @@ const createMockExtension = (
     path: `/home/user/.qwen/extensions/${name}`,
     isActive,
     installMetadata: {
-      type: 'git',
-      source: `github:user/${name}`,
+      type: 'local',
+      source: `/src/${name}`,
     },
     mcpServers: {},
     commands: [],

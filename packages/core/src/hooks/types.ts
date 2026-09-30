@@ -102,23 +102,6 @@ export interface CommandHookConfig {
 }
 
 /**
- * Hook configuration entry for HTTP hooks
- */
-export interface HttpHookConfig {
-  type: HookType.Http;
-  url: string;
-  headers?: Record<string, string>;
-  allowedEnvVars?: string[];
-  timeout?: number;
-  if?: string;
-  name?: string;
-  description?: string;
-  statusMessage?: string;
-  once?: boolean;
-  source?: HooksConfigSource;
-}
-
-/**
  * Hook execution outcome - describes the result of hook execution
  */
 export type HookExecutionOutcome =
@@ -206,7 +189,6 @@ export type MessagesProvider = () => Array<Record<string, unknown>> | undefined;
 
 export type HookConfig =
   | CommandHookConfig
-  | HttpHookConfig
   | FunctionHookConfig
   | PromptHookConfig;
 
@@ -224,7 +206,6 @@ export interface HookDefinition {
  */
 export enum HookType {
   Command = 'command',
-  Http = 'http',
   Function = 'function',
   Prompt = 'prompt',
 }
@@ -237,8 +218,6 @@ export function getHookKey(hook: HookConfig): string {
   switch (hook.type) {
     case HookType.Command:
       return name ? `${name}:${hook.command}` : hook.command;
-    case HookType.Http:
-      return name ? `${name}:${hook.url}` : hook.url;
     case HookType.Function:
       return name
         ? `${name}:${hook.id ?? 'function'}`
@@ -393,9 +372,8 @@ export function createHookOutput(
 
 /**
  * Whether a hook's output is a blocking decision on this event: for PreToolUse
- * the permission decision wins over the generic `decision` field. The HTTP
- * runner and the progress reporting both use this one test, so they report
- * such a decision the same way.
+ * the permission decision wins over the generic `decision` field. The
+ * progress reporting uses this test.
  *
  * It covers decisions only. Output that stops the turn with `continue: false`,
  * or a PreToolUse `ask`, also keeps a tool call from proceeding but is not a

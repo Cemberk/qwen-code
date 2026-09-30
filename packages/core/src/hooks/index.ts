@@ -25,7 +25,6 @@ export type {
 } from './hooks-listing.js';
 
 // Export new hook runners
-export { HttpHookRunner } from './httpHookRunner.js';
 export { FunctionHookRunner } from './functionHookRunner.js';
 
 // Export session and async hook management
@@ -38,19 +37,10 @@ export {
 } from './registerSkillHooks.js';
 
 // Export utilities
-export {
-  interpolateEnvVars,
-  interpolateHeaders,
-  interpolateUrl,
-  hasEnvVarReferences,
-  extractEnvVarNames,
-} from './envInterpolator.js';
-export { UrlValidator, createUrlValidator } from './urlValidator.js';
 export { HOOK_EVENT_DISPLAY, hookEventDisplay } from './hook-event-display.js';
 export type { HookEventDisplayMeta } from './hook-event-display.js';
 export {
   DEFAULT_COMMAND_HOOK_TIMEOUT_SECONDS,
-  DEFAULT_HTTP_HOOK_TIMEOUT_SECONDS,
   DEFAULT_PROMPT_HOOK_TIMEOUT_SECONDS,
   DEFAULT_FUNCTION_HOOK_TIMEOUT_MS,
   describeHookTimeout,

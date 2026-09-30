@@ -77,11 +77,6 @@ describe('configured MCP SDK v2 negotiation', () => {
 
   it('keeps defaults, non-stdio, and explicit legacy configs on legacy', () => {
     expect(
-      mcpVersionNegotiationFor({
-        httpUrl: 'https://example.com/mcp',
-      } as MCPServerConfig),
-    ).toEqual({ mode: 'legacy' });
-    expect(
       mcpVersionNegotiationFor({ type: 'sdk' } as MCPServerConfig),
     ).toEqual({ mode: 'legacy' });
     expect(
@@ -355,104 +350,6 @@ describe('configured MCP SDK v2 negotiation', () => {
       );
     } finally {
       await client.close();
-    }
-  });
-
-  it('connects remote HTTP with the legacy initialize handshake', async () => {
-    const http = await import('node:http');
-    const methods: string[] = [];
-    const server = http.createServer((request, responseStream) => {
-      let body = '';
-      request.setEncoding('utf8');
-      request.on('data', (chunk: string) => {
-        body += chunk;
-      });
-      request.on('end', () => {
-        if (!body) {
-          responseStream.writeHead(405);
-          responseStream.end();
-          return;
-        }
-        const message = JSON.parse(body) as JSONRPCMessage;
-        if (!('method' in message) || typeof message.method !== 'string') {
-          responseStream.writeHead(400);
-          responseStream.end();
-          return;
-        }
-        methods.push(message.method);
-        if (message.method === 'server/discover') {
-          responseStream.writeHead(500);
-          responseStream.end();
-          return;
-        }
-        if (!('id' in message)) {
-          responseStream.writeHead(202);
-          responseStream.end();
-          return;
-        }
-
-        let result: Record<string, unknown>;
-        switch (message.method) {
-          case 'initialize':
-            result = {
-              protocolVersion: '2025-06-18',
-              capabilities: { tools: {} },
-              serverInfo: { name: 'http-legacy', version: '1.0.0' },
-            };
-            break;
-          case 'tools/list':
-            result = {
-              tools: [{ name: 'echo', inputSchema: { type: 'object' } }],
-            };
-            break;
-          case 'tools/call':
-            result = {
-              content: [{ type: 'text', text: 'ok' }],
-            };
-            break;
-          default:
-            responseStream.writeHead(500);
-            responseStream.end();
-            return;
-        }
-
-        responseStream.writeHead(200, { 'Content-Type': 'application/json' });
-        responseStream.end(
-          JSON.stringify(response(message as RequestMessage, result)),
-        );
-      });
-    });
-    await new Promise<void>((resolve) =>
-      server.listen(0, '127.0.0.1', resolve),
-    );
-    const address = server.address();
-    if (!address || typeof address === 'string') {
-      throw new Error('Expected the test server to listen on a TCP port');
-    }
-
-    let client: Awaited<ReturnType<typeof connectToMcpServer>> | undefined;
-    try {
-      client = await connectToMcpServer(
-        'remote-http',
-        {
-          httpUrl: `http://127.0.0.1:${address.port}/mcp`,
-        } as MCPServerConfig,
-        false,
-        workspaceContext(),
-      );
-      expect(client.getProtocolEra()).toBe('legacy');
-      await client.listTools();
-      await client.callTool({ name: 'echo' });
-      expect(methods).not.toContain('server/discover');
-      expect(methods[0]).toBe('initialize');
-      expect(methods).toEqual(
-        expect.arrayContaining(['initialize', 'tools/list', 'tools/call']),
-      );
-    } finally {
-      await client?.close();
-      await new Promise<void>((resolve, reject) =>
-        server.close((error) => (error ? reject(error) : resolve())),
-      );
     }
   });
 

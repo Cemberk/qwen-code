@@ -11,7 +11,6 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { EventEmitter } from 'node:events';
 
 // theme.ts (via the dialog modules) builds a SyntaxStyle at module scope,
 // which needs the OpenTUI native FFI — unavailable in the test runtime. Stub
@@ -26,7 +25,6 @@ import {
   MCPServerStatus,
   type AvailableModel,
   type Config,
-  type OAuthToken,
 } from '@qwen-code/qwen-code-core';
 import { SettingScope } from '../../config/settings.js';
 import type { LoadedSettings, Settings } from '../../config/settings.js';
@@ -47,7 +45,7 @@ import {
   buildPermissionsData,
   computeModelDialogInitialKey,
   deletePermissionRule,
-  enrichMcpOAuthState,
+  enrichMcpServerState,
   getMcpServerResources,
   getMcpServerTools,
 } from './dialog-data.js';
@@ -154,11 +152,10 @@ describe('buildModelEntries', () => {
       imageOnly: true,
     },
     {
-      id: 'dual1',
-      label: 'Dual vision/image',
+      id: 'vision1',
+      label: 'Vision',
       authType: AuthType.USE_OPENAI,
       visionOnly: true,
-      supportsImageGeneration: true,
     },
     {
       id: 'oauth1',
@@ -201,23 +198,6 @@ describe('buildModelEntries', () => {
     expect(
       buildModelEntries(config, 'fast').map((entry) => entry.modelId),
     ).toEqual(['m1', 'fast1', 'rt1']);
-  });
-
-  it('lists only image models in image mode', () => {
-    const config = stubConfig({
-      getAllConfiguredModels: (() =>
-        models) as Config['getAllConfiguredModels'],
-      getAuthType: () => AuthType.USE_OPENAI,
-      resolveImageGenerationModel: ((selector: string) =>
-        selector.includes('img1') || selector.includes('dual1')
-          ? { model: 'img1', baseUrl: 'https://img.example', apiKeyEnv: 'K' }
-          : undefined) as Config['resolveImageGenerationModel'],
-    } as Partial<Config>);
-    // dual1 is visionOnly AND image-capable: ink keeps it in the image
-    // selector (isVisionModelMode || isImageModelMode || !m.visionOnly).
-    expect(
-      buildModelEntries(config, 'image').map((entry) => entry.modelId),
-    ).toEqual(['img1', 'dual1']);
   });
 
   it('shows QWEN_OAUTH models only under that auth type', () => {
@@ -280,24 +260,6 @@ describe('buildModelEntries', () => {
     expect(byId.get('oa')).toBe(
       'Discontinued — switch to Coding Plan or API Key',
     );
-  });
-
-  it('drops image rows the runtime cannot resolve', () => {
-    const noResolver = stubConfig({
-      getAllConfiguredModels: (() =>
-        models) as Config['getAllConfiguredModels'],
-      getAuthType: () => AuthType.USE_OPENAI,
-    } as Partial<Config>);
-    expect(buildModelEntries(noResolver, 'image')).toEqual([]);
-
-    const rejectingResolver = stubConfig({
-      getAllConfiguredModels: (() =>
-        models) as Config['getAllConfiguredModels'],
-      getAuthType: () => AuthType.USE_OPENAI,
-      resolveImageGenerationModel: (() =>
-        undefined) as Config['resolveImageGenerationModel'],
-    } as Partial<Config>);
-    expect(buildModelEntries(rejectingResolver, 'image')).toEqual([]);
   });
 
   it('returns no entries without a config', () => {
@@ -656,69 +618,6 @@ describe('applyModelSelection', () => {
       expect(switchModel).not.toHaveBeenCalled();
       expect(outcome.ok).toBe(true);
     });
-
-    it('image mode applies the runtime image model before persisting imageModel', async () => {
-      const setImageModel = vi.fn(async () => {});
-      const switchModel = vi.fn(async () => {});
-      const baseUrl = 'https://img.example/v1';
-      const selector = `openai:img-gen\0${baseUrl}`;
-      const config = resolvedConfig({
-        setImageModel: setImageModel as Config['setImageModel'],
-        resolveImageGenerationModel: ((candidate: string) =>
-          candidate === selector
-            ? { model: 'img-gen', baseUrl, apiKeyEnv: 'IMG_KEY' }
-            : undefined) as Config['resolveImageGenerationModel'],
-        switchModel: switchModel as Config['switchModel'],
-      });
-      const { settings, written } = createFakeSettings();
-      const entries = [modelRow({ id: 'img-gen', baseUrl, imageOnly: true })];
-
-      const outcome = await applyModelSelection({
-        config,
-        settings,
-        entries,
-        mode: 'image',
-        selectionKey: entries[0].key,
-      });
-
-      expect(setImageModel).toHaveBeenCalledWith(selector);
-      expect(written).toContainEqual({
-        scope: SettingScope.User,
-        key: 'imageModel',
-        value: selector,
-      });
-      expect(
-        written.find((write) => write.key === 'model.name'),
-      ).toBeUndefined();
-      expect(switchModel).not.toHaveBeenCalled();
-      expect(outcome.ok).toBe(true);
-    });
-
-    it('image mode rejects models the runtime cannot resolve', async () => {
-      const setImageModel = vi.fn(async () => {});
-      const config = resolvedConfig({
-        setImageModel: setImageModel as Config['setImageModel'],
-        resolveImageGenerationModel: (() =>
-          undefined) as Config['resolveImageGenerationModel'],
-      });
-      const { settings, written } = createFakeSettings();
-      const entries = [modelRow({ id: 'img-gen', imageOnly: true })];
-
-      const outcome = await applyModelSelection({
-        config,
-        settings,
-        entries,
-        mode: 'image',
-        selectionKey: entries[0].key,
-      });
-
-      expect(setImageModel).not.toHaveBeenCalled();
-      expect(written).toEqual([]);
-      expect(outcome.ok).toBe(false);
-      if (!outcome.ok) {
-        expect(outcome.error).toContain('valid HTTPS baseUrl');
-      }
-    });
   });
 });
 
@@ -1011,7 +910,7 @@ describe('mcp and extension feeds', () => {
   });
 });
 
-describe('MCP OAuth enrichment (real token state)', () => {
+describe('MCP server state enrichment', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -1026,51 +925,10 @@ describe('MCP OAuth enrichment (real token state)', () => {
       promptCount: 0,
       resourceCount: 0,
       isDisabled: false,
-      hasOAuthTokens: false,
-      requiresAuth: false,
     };
   }
 
-  it('reads hasOAuthTokens from the token storage and derives requiresAuth', async () => {
-    const { MCPOAuthTokenStorage } = await import('@qwen-code/qwen-code-core');
-    vi.spyOn(
-      MCPOAuthTokenStorage.prototype,
-      'getCredentials',
-    ).mockImplementation(async (name: string) =>
-      name === 'with-token' ? ({} as never) : null,
-    );
-    const config = stubConfig({
-      getMcpServers: (() => ({
-        'with-token': { oauth: { enabled: true } },
-        'no-token-oauth': { oauth: { enabled: true } },
-        plain: {},
-      })) as unknown as Config['getMcpServers'],
-    } as Partial<Config>);
-    const enriched = await enrichMcpOAuthState(config, [
-      serverInfo('with-token'),
-      serverInfo('no-token-oauth'),
-      serverInfo('plain'),
-    ]);
-    expect(enriched[0]).toMatchObject({
-      hasOAuthTokens: true,
-      requiresAuth: false,
-    });
-    expect(enriched[1]).toMatchObject({
-      hasOAuthTokens: false,
-      requiresAuth: true,
-    });
-    expect(enriched[2]).toMatchObject({
-      hasOAuthTokens: false,
-      requiresAuth: false,
-    });
-  });
-
   it('carries approvalState for gated scopes, unset otherwise', async () => {
-    const { MCPOAuthTokenStorage } = await import('@qwen-code/qwen-code-core');
-    vi.spyOn(
-      MCPOAuthTokenStorage.prototype,
-      'getCredentials',
-    ).mockResolvedValue(null);
     const config = stubConfig({
       getMcpServers: (() => ({
         'gated-srv': { scope: 'project' },
@@ -1078,7 +936,7 @@ describe('MCP OAuth enrichment (real token state)', () => {
       })) as unknown as Config['getMcpServers'],
       getWorkingDir: (() => '/proj') as Config['getWorkingDir'],
     } as Partial<Config>);
-    const enriched = await enrichMcpOAuthState(config, [
+    const enriched = await enrichMcpServerState(config, [
       serverInfo('gated-srv'),
       serverInfo('user-srv'),
     ]);
@@ -1109,8 +967,6 @@ describe('applyMcpServerAction (real server actions)', () => {
       promptCount: 0,
       resourceCount: 0,
       isDisabled: false,
-      hasOAuthTokens: false,
-      requiresAuth: false,
       ...overrides,
     };
   }
@@ -1215,74 +1071,6 @@ describe('applyMcpServerAction (real server actions)', () => {
       ),
     ).toBe(true);
     expect(result.message).toContain('Enabled');
-  });
-
-  it('clear-auth deletes stored tokens and disconnects', async () => {
-    const { MCPOAuthTokenStorage } = await import('@qwen-code/qwen-code-core');
-    const deleteCredentials = vi
-      .spyOn(MCPOAuthTokenStorage.prototype, 'deleteCredentials')
-      .mockResolvedValue(undefined);
-    const disconnectServer = vi.fn(async () => {});
-    const config = stubConfig({
-      getToolRegistry: (() => ({
-        disconnectServer,
-      })) as unknown as Config['getToolRegistry'],
-    } as Partial<Config>);
-    const { settings } = createFakeSettings();
-    const result = await applyMcpServerAction(
-      config,
-      settings,
-      serverInfo({ hasOAuthTokens: true }),
-      'clear-auth',
-    );
-    expect(deleteCredentials).toHaveBeenCalledWith('srv');
-    expect(disconnectServer).toHaveBeenCalledWith('srv');
-    expect(result.changed).toBe(true);
-  });
-
-  it('authenticate passes httpUrl ahead of the SSE url', async () => {
-    const { MCPOAuthProvider } = await import('@qwen-code/qwen-code-core');
-    const authenticate = vi
-      .spyOn(MCPOAuthProvider.prototype, 'authenticate')
-      .mockResolvedValue({} as OAuthToken);
-    const config = stubConfig({
-      getMcpServers: (() => ({
-        srv: {
-          oauth: { enabled: true },
-          httpUrl: 'https://mcp.example/mcp',
-          url: 'https://mcp.example/sse',
-        },
-        'sse-only': { url: 'https://mcp.example/sse' },
-      })) as unknown as Config['getMcpServers'],
-      getToolRegistry: (() => ({
-        discoverToolsForServer: vi.fn(async () => {}),
-      })) as unknown as Config['getToolRegistry'],
-    } as Partial<Config>);
-    const { settings } = createFakeSettings();
-    await applyMcpServerAction(
-      config,
-      settings,
-      serverInfo({ name: 'srv', hasOAuthTokens: true }),
-      'authenticate',
-    );
-    expect(authenticate).toHaveBeenCalledWith(
-      'srv',
-      { enabled: true },
-      'https://mcp.example/mcp',
-      expect.any(EventEmitter),
-    );
-    await applyMcpServerAction(
-      config,
-      settings,
-      serverInfo({ name: 'sse-only' }),
-      'authenticate',
-    );
-    expect(authenticate).toHaveBeenLastCalledWith(
-      'sse-only',
-      { enabled: false },
-      'https://mcp.example/sse',
-      expect.any(EventEmitter),
-    );
   });
 
   it('reports failures instead of throwing', async () => {

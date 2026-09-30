@@ -482,7 +482,7 @@ describe('mcp reconnect command', () => {
       mockedLoadSettings.mockReturnValue({
         merged: {
           mcpServers: {
-            'test-server': { httpUrl: 'http://127.0.0.1:3939/mcp' },
+            'test-server': { command: 'node', args: ['server.js'] },
           },
         },
       });
@@ -548,7 +548,7 @@ describe('mcp reconnect command', () => {
       mockedLoadSettings.mockReturnValue({
         merged: {
           mcpServers: {
-            'test-server': { httpUrl: 'http://127.0.0.1:3939/mcp' },
+            'test-server': { command: 'node', args: ['server.js'] },
           },
         },
       });
@@ -572,7 +572,7 @@ describe('mcp reconnect command', () => {
       mockedLoadSettings.mockReturnValue({
         merged: {
           mcpServers: {
-            'server-one': { httpUrl: 'http://127.0.0.1:3939/mcp' },
+            'server-one': { command: 'node', args: ['server.js'] },
           },
         },
       });

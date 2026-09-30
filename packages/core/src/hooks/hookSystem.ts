@@ -31,7 +31,6 @@ import type {
   HookEventName,
   FunctionHookCallback,
   CommandHookConfig,
-  HttpHookConfig,
   PendingAsyncHook,
   PendingAsyncOutput,
   MessagesProvider,
@@ -64,12 +63,9 @@ export class HookSystem {
   private messagesProvider?: MessagesProvider;
 
   constructor(config: Config) {
-    // Get allowed HTTP URLs from config
-    const allowedHttpUrls = config.getAllowedHttpHookUrls();
-
     // Initialize components
     this.hookRegistry = new HookRegistry(config);
-    this.hookRunner = new HookRunner(allowedHttpUrls, config); // Pass config for prompt hooks
+    this.hookRunner = new HookRunner(config); // Pass config for prompt hooks
     this.hookAggregator = new HookAggregator();
     this.hookPlanner = new HookPlanner(this.hookRegistry);
     this.sessionHooksManager = new SessionHooksManager();
@@ -632,11 +628,11 @@ export class HookSystem {
   }
 
   /**
-   * Add a command or HTTP hook for a session
+   * Add a command hook for a session
    * @param sessionId Session ID
    * @param event Hook event name
    * @param matcher Matcher pattern
-   * @param hook Hook configuration (command or HTTP)
+   * @param hook Hook configuration (command)
    * @param options Additional options
    * @returns Hook ID
    */
@@ -644,7 +640,7 @@ export class HookSystem {
     sessionId: string,
     event: HookEventName,
     matcher: string,
-    hook: CommandHookConfig | HttpHookConfig,
+    hook: CommandHookConfig,
     options?: {
       sequential?: boolean;
       skillRoot?: string;
@@ -764,12 +760,5 @@ export class HookSystem {
    */
   checkAsyncHookTimeouts(): void {
     this.getAsyncRegistry().checkTimeouts();
-  }
-
-  /**
-   * Update allowed HTTP hook URLs
-   */
-  updateAllowedHttpUrls(allowedUrls: string[]): void {
-    this.hookRunner.updateAllowedHttpUrls(allowedUrls);
   }
 }

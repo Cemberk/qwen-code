@@ -33,17 +33,13 @@ import {
   createDebugLogger,
   NativeLspService,
   isBareMode,
-  isTruthy,
-  parsePositiveIntegerEnv,
   isSafeModeEnv,
   isToolEnabled,
   isTlsVerificationDisabled,
   SchemaValidator,
   type ConfigParameters,
   type MCPServerConfig,
-  type OmniPolicyToolsSettings,
   type SkillLevel,
-  type WebSearchSettings,
   MAX_SUBAGENT_DEPTH_LIMIT,
   addDaemonRequestAttribute,
   BUILT_IN_OUTPUT_STYLES,
@@ -62,7 +58,6 @@ import { hooksCommand } from '../commands/hooks.js';
 import { normalizeDisabledToolList } from './normalizeDisabledTools.js';
 import type { LoadedSettings, Settings } from './settings.js';
 import { loadSettings, SettingScope } from './settings.js';
-import { getSettingsSchema } from './settingsSchema.js';
 import { resolveHookSettingsForConfig } from './hook-settings.js';
 import {
   resolveCliGenerationConfig,
@@ -215,7 +210,6 @@ export interface CliArgs {
    * Start the session inside a git worktree. Accepted forms:
    * - bare `--worktree` (empty string from yargs) → auto-generated slug
    * - `--worktree foo` / `--worktree=foo` → explicit slug
-   * - `--worktree=#123` / `--worktree https://github.com/o/r/pull/123` → PR ref
    *
    * Consumed by `setupStartupWorktree()` before `loadCliConfig()`. When set,
    * the CLI chdirs into `<repoRoot>/.qwen/worktrees/<slug>/` and the entire
@@ -989,74 +983,6 @@ function resolveModelFallbacks(
 }
 
 /**
- * Resolve the built-in WebSearch tool settings, with env overrides taking
- * precedence over `tools.webSearch` (mirroring the QWEN_SANDBOX_IMAGE
- * pattern): ENABLE_WEB_SEARCH for the flag, WEB_SEARCH_MODEL for the model
- * selector, WEB_SEARCH_EXTRACTOR for page reading, WEB_SEARCH_TIMEOUT_MS for
- * the per-search budget, WEB_SEARCH_MAX_PER_SESSION for the per-session cap.
- *
- * Env-only backend: WEB_SEARCH_BASE_URL mirrors a modelProviders entry's
- * baseUrl for environments that cannot write settings.json; the API key
- * comes from WEB_SEARCH_API_KEY, falling back to DASHSCOPE_API_KEY. When
- * set, it takes precedence over modelProviders resolution in the gate.
- */
-function resolveWebSearchSettings(
-  settings: Settings,
-): WebSearchSettings | undefined {
-  const webSearch = settings.tools?.webSearch;
-  // A set-but-empty env var is "unset", not an override: dotenv templates and
-  // CI wrappers export empty values, which must not clobber a valid
-  // settings.json config (same rule as WEB_SEARCH_BASE_URL below).
-  const envEnabled = process.env['ENABLE_WEB_SEARCH']?.trim() || undefined;
-  const enabled =
-    envEnabled !== undefined ? isTruthy(envEnabled) : webSearch?.enabled;
-  const model = process.env['WEB_SEARCH_MODEL']?.trim() || webSearch?.model;
-  const envExtractor = process.env['WEB_SEARCH_EXTRACTOR']?.trim() || undefined;
-  const webExtractor =
-    envExtractor !== undefined
-      ? isTruthy(envExtractor)
-      : webSearch?.webExtractor;
-  // A non-numeric or non-positive override is ignored rather than zeroing the
-  // budget; the core resolver applies the default and the cap.
-  const envTimeoutMs = parsePositiveIntegerEnv(
-    process.env['WEB_SEARCH_TIMEOUT_MS'],
-    0,
-  );
-  const timeoutMs = envTimeoutMs > 0 ? envTimeoutMs : webSearch?.timeoutMs;
-  const envMaxPerSession = parsePositiveIntegerEnv(
-    process.env['WEB_SEARCH_MAX_PER_SESSION'],
-    0,
-  );
-  const maxPerSession =
-    envMaxPerSession > 0 ? envMaxPerSession : webSearch?.maxPerSession;
-  const baseUrl = process.env['WEB_SEARCH_BASE_URL']?.trim() || undefined;
-  const apiKeyEnv = baseUrl
-    ? process.env['WEB_SEARCH_API_KEY']?.trim()
-      ? 'WEB_SEARCH_API_KEY'
-      : 'DASHSCOPE_API_KEY'
-    : undefined;
-  if (
-    enabled === undefined &&
-    model === undefined &&
-    webExtractor === undefined &&
-    baseUrl === undefined &&
-    timeoutMs === undefined &&
-    maxPerSession === undefined
-  ) {
-    return undefined;
-  }
-  return {
-    enabled,
-    model,
-    webExtractor,
-    baseUrl,
-    apiKeyEnv,
-    timeoutMs,
-    maxPerSession,
-  };
-}
-
-/**
  * Resolves the wall-clock budget for a run. Returns seconds (`-1` =
  * unlimited). Order of precedence: `--max-wall-time` flag, then
  * `model.maxWallTimeSeconds` from settings, else unlimited.
@@ -1339,70 +1265,6 @@ export function buildDisabledSkillNamesProvider(
   return () => resolveSkillSettings(loadedSettings).disabledNames;
 }
 
-/**
- * Reject unknown keys directly under `omni`.
- *
- * The generic settings loader only scans TOP-LEVEL keys, and only writes a
- * debug line — so a nested typo is caught by nothing: `omni.memoryy` or
- * `omni.processingg` leaves `settings.omni?.memory` / `?.processing`
- * undefined, every downstream normalizer sees "not configured" and returns
- * defaults, and the session silently runs with the operator's entire
- * configuration discarded (probe: `omni.memoryy.recall.mode = sideQuery`
- * still registered the active-mode recall tool). The omni namespace's
- * declared stance is that a misconfiguration must fail loud, so this
- * mirrors the nested checks its own normalizers already perform.
- *
- * The allowed set is derived from the settings schema rather than
- * hardcoded, so it cannot drift as the namespace grows.
- */
-function assertKnownOmniSettingKeys(settings: Settings): void {
-  const omni = settings.omni;
-  if (omni === undefined || omni === null || typeof omni !== 'object') return;
-  const schemaOmni = getSettingsSchema()['omni'] as
-    | { properties?: Record<string, unknown> }
-    | undefined;
-  // No schema properties resolved (unexpected): stay silent rather than
-  // rejecting every valid key.
-  if (Object.keys(schemaOmni?.properties ?? {}).length === 0) return;
-
-  // Walk nested object settings too: the deletion-controlling knobs live
-  // at `omni.storage.*`, and a typo there would silently leave the GC on
-  // defaults. Free-form map nodes (fixedPolicies, policyTools — schema
-  // nodes without `properties`) stop the walk: their keys are
-  // user-defined.
-  const walk = (
-    value: unknown,
-    schemaNode: { properties?: Record<string, unknown> } | undefined,
-    label: string,
-  ): void => {
-    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-      return;
-    }
-    const props = schemaNode?.properties;
-    if (!props || Object.keys(props).length === 0) return;
-    const allowed = new Set(Object.keys(props));
-    const unknown = Object.keys(value).filter((key) => !allowed.has(key));
-    if (unknown.length > 0) {
-      throw new Error(
-        `Invalid settings: unknown key(s) under "${label}": ` +
-          `${unknown.map((k) => `"${k}"`).join(', ')}. ` +
-          `Allowed: ${[...allowed].sort().join(', ')}. ` +
-          `An unrecognized ${label} entry would be silently ignored, ` +
-          `leaving the session running with defaults instead of your ` +
-          `configuration.`,
-      );
-    }
-    for (const [key, child] of Object.entries(value)) {
-      walk(
-        child,
-        props[key] as { properties?: Record<string, unknown> } | undefined,
-        `${label}.${key}`,
-      );
-    }
-  };
-  walk(omni, schemaOmni, 'omni');
-}
-
 export function buildEnabledSkillNamesProvider(
   loadedSettings: LoadedSettings,
 ): () => ReadonlySet<string> {
@@ -1639,7 +1501,6 @@ export async function loadCliConfig(
   },
   enabledSkillNamesProvider?: () => ReadonlySet<string>,
 ): Promise<Config> {
-  assertKnownOmniSettingKeys(settings);
   const provisionalWorkspace = hostPolicy?.provisionalWorkspace === true;
   const debugMode = isDebugMode(argv);
   if (debugMode && process.env['QWEN_DEBUG_LOG_FILE'] === undefined) {
@@ -2527,53 +2388,6 @@ export async function loadCliConfig(
     agentTeamEnabled: settings.experimental?.agentTeam ?? false,
     artifactEnabled: settings.experimental?.artifact ?? true,
     artifactAutoOpen: settings.artifact?.autoOpen ?? true,
-    artifactPublisher: settings.artifact?.publisher ?? 'local',
-    artifactHost: settings.artifact?.host
-      ? {
-          uploadCommand: settings.artifact?.host?.uploadCommand ?? '',
-          urlTemplate: settings.artifact?.host?.urlTemplate ?? '',
-          keyPrefix: settings.artifact?.host?.keyPrefix,
-        }
-      : undefined,
-    artifactOss: settings.artifact?.oss
-      ? {
-          bucket: settings.artifact?.oss?.bucket ?? '',
-          endpoint: settings.artifact?.oss?.endpoint ?? '',
-          keyPrefix: settings.artifact?.oss?.keyPrefix,
-          acl: settings.artifact?.oss?.acl,
-          publicBaseUrl: settings.artifact?.oss?.publicBaseUrl,
-        }
-      : undefined,
-    omniEnabled: settings.omni?.enabled ?? false,
-    omniMaxUploadFileBytes:
-      settings.omni?.processing?.transportGuard?.maxUploadFileBytes,
-    omniMaxEstimatedTokens:
-      settings.omni?.processing?.transportGuard?.maxEstimatedTokens,
-    omniMaxDurationSeconds:
-      settings.omni?.processing?.transportGuard?.maxDurationSeconds,
-    omniUrlDownloadMaxFileBytes:
-      settings.omni?.ingestion?.localization?.url?.maxFileBytes,
-    omniUploadUrlTtlHours: settings.omni?.delivery?.upload?.urlTtlHours,
-    omniUploadBaseUrl: settings.omni?.delivery?.upload?.baseUrl,
-    omniUploadApiKeyEnv: settings.omni?.delivery?.upload?.apiKeyEnv,
-    omniUploadModel: settings.omni?.delivery?.upload?.model,
-    omniPolicyTools: settings.omni?.processing?.policyTools as
-      | OmniPolicyToolsSettings
-      | undefined,
-    omniFixedPolicies: settings.omni?.processing?.fixedPolicies as
-      | Record<string, unknown>
-      | undefined,
-    omniTransportGuardPolicies: settings.omni?.processing?.transportGuard
-      ?.policies as Record<string, unknown> | undefined,
-    omniProcessingLimits: settings.omni?.processing?.limits as
-      | Record<string, unknown>
-      | undefined,
-    omniQuarantineRetentionDays:
-      settings.omni?.storage?.quarantine?.retentionDays,
-    omniQuarantineMaxBytes: settings.omni?.storage?.quarantine?.maxBytes,
-    omniStorageRetentionDays: settings.omni?.storage?.retentionDays,
-    omniStorageMaxTotalBytes: settings.omni?.storage?.maxTotalBytes,
-    omniMemory: settings.omni?.memory as Record<string, unknown> | undefined,
     emitToolUseSummaries: settings.experimental?.emitToolUseSummaries ?? true,
     listExtensions: argv.listExtensions || false,
     locale: resolveLocaleForExtensions(settings),
@@ -2591,14 +2405,6 @@ export async function loadCliConfig(
     warnings: resolvedCliConfig.warnings,
     bareMode,
     safeMode,
-    allowedHttpHookUrls:
-      bareMode || safeMode
-        ? []
-        : (settings.security?.allowedHttpHookUrls ?? []),
-    allowPrivateNetworkHooks:
-      bareMode || safeMode
-        ? false
-        : (settings.security?.allowPrivateNetworkHooks ?? false),
     cliVersion: await getCliVersion(),
     chatCompression: settings.model?.chatCompression,
     autoCompactThreshold: settings.context?.autoCompactThreshold,
@@ -2661,15 +2467,8 @@ export async function loadCliConfig(
     fastModel: settings.fastModel || undefined,
     advisorModel,
     advisorMaxUses: settings.advisorMaxUses,
-    // Bare and safe mode must switch the tool off explicitly: `undefined`
-    // means "derive it" now that WebSearch is opt-out.
-    webSearch:
-      bareMode || safeMode
-        ? { enabled: false }
-        : resolveWebSearchSettings(settings),
     visionModel: settings.visionModel || undefined,
     compactionModel: settings.compactionModel || undefined,
-    imageModel: settings.imageModel || undefined,
     visionBridgeTimeoutMs: settings.visionBridgeTimeoutMs,
     modelFallbacks: resolveModelFallbacks(
       argv.fallbackModel,
@@ -2741,18 +2540,6 @@ export async function loadCliConfig(
       currentAuthType: selectedAuthType,
     });
   }
-
-  // Load the selected transport only when an external subagent is requested.
-  config.setExternalAgentExecutor({
-    create: (params) =>
-      params.spec.kind === 'codex'
-        ? import('../external-agents/codex-subagent-executor.js').then(
-            (module) => module.codexExternalAgentExecutor.create(params),
-          )
-        : import('../external-agents/acp-subagent-executor.js').then((module) =>
-            module.acpExternalAgentExecutor.create(params),
-          ),
-  });
 
   if (lspEnabled) {
     try {

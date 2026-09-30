@@ -4,52 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { mkdir, writeFile } from 'node:fs/promises';
-import * as path from 'node:path';
-
-const BINARY_APPLICATION_TYPES = new Set([
-  'application/pdf',
-  'application/zip',
-  'application/gzip',
-  'application/x-gzip',
-  'application/octet-stream',
-  'application/msword',
-  'application/vnd.ms-excel',
-  'application/vnd.ms-powerpoint',
-  'application/x-tar',
-  'application/x-7z-compressed',
-  'application/x-rar-compressed',
-  'application/vnd.rar',
-  'application/wasm',
-  'application/java-archive',
-]);
-
-/**
- * True when a content type carries bytes that cannot be meaningfully decoded
- * as UTF-8 text. Unknown application/* types default to TEXT: structured
- * text formats (yaml, ndjson, toml, sql, ...) are routinely served under
- * application/, and mislabeled binaries are still caught by magic-byte
- * sniffing downstream.
- */
-export function isBinaryContentType(contentType: string): boolean {
-  if (!contentType) return false;
-  const mt = (contentType.split(';')[0] ?? '').trim().toLowerCase();
-  if (mt.startsWith('text/')) return false;
-  if (mt.endsWith('+json') || mt.endsWith('+xml')) return false;
-  if (
-    mt.startsWith('image/') ||
-    mt.startsWith('audio/') ||
-    mt.startsWith('video/') ||
-    mt.startsWith('font/')
-  ) {
-    return true;
-  }
-  if (BINARY_APPLICATION_TYPES.has(mt)) return true;
-  if (mt.startsWith('application/vnd.openxmlformats')) return true;
-  if (mt.startsWith('application/vnd.oasis.opendocument')) return true;
-  return false;
-}
-
 const MIME_EXTENSIONS: ReadonlyMap<string, string> = new Map([
   ['application/pdf', 'pdf'],
   ['application/zip', 'zip'],
@@ -299,41 +253,4 @@ export function looksLikeText(bytes: Buffer): boolean {
     if (decoded[i] === '�' && ++bad > 2) return false;
   }
   return true;
-}
-
-export type PersistBinaryResult =
-  | { filepath: string; size: number; ext: string }
-  | { error: string };
-
-/**
- * Write raw fetched bytes to `dir` with the given extension so the file can
- * be consumed by native tools afterwards (read_file for PDFs/images, shell
- * tools for archives). Callers derive `ext` via sniffFileKind.
- */
-export async function persistBinaryContent(
-  bytes: Buffer,
-  ext: string,
-  dir: string,
-  persistId: string,
-): Promise<PersistBinaryResult> {
-  const filepath = path.join(dir, `${persistId}.${ext}`);
-  try {
-    // Owner-only: fetched content can be sensitive (private/localhost URLs),
-    // matching the 0600/0700 convention used for other persisted state.
-    await mkdir(dir, { recursive: true, mode: 0o700 });
-    await writeFile(filepath, bytes, { mode: 0o600 });
-  } catch (error) {
-    return { error: error instanceof Error ? error.message : String(error) };
-  }
-  return { filepath, size: bytes.length, ext };
-}
-
-export function formatByteSize(sizeInBytes: number): string {
-  const kb = sizeInBytes / 1024;
-  if (kb < 1) return `${sizeInBytes} bytes`;
-  const fmt = (n: number) => n.toFixed(1).replace(/\.0$/, '');
-  if (kb < 1024) return `${fmt(kb)}KB`;
-  const mb = kb / 1024;
-  if (mb < 1024) return `${fmt(mb)}MB`;
-  return `${fmt(mb / 1024)}GB`;
 }

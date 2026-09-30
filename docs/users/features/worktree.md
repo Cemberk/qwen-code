@@ -18,10 +18,6 @@ qwen --worktree my-feature
 # `=` form (recommended when also passing a positional prompt — see tip below)
 qwen --worktree=my-feature
 
-# PR reference — fetches refs/pull/<N>/head from `origin`
-qwen --worktree=#4174
-qwen --worktree https://github.com/QwenLM/qwen-code/pull/4174
-
 # Continue a previous --worktree session — re-attaches to the existing dir
 qwen --resume <session-id> --worktree=my-feature
 ```
@@ -68,12 +64,12 @@ Kept worktree experiment-a at .qwen/worktrees/experiment-a
 
 Worktrees are activated in four independent paths:
 
-| Trigger                                         | What happens                                                                                                                   |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| You launch with `--worktree`                    | The CLI creates the worktree before any model turn runs and chdirs the session into it. PR forms (`#N`, full URL) fetch first. |
-| You explicitly ask for a worktree mid-session   | Model calls `enter_worktree`; subsequent file edits go inside it.                                                              |
-| You explicitly ask to leave                     | Model calls `exit_worktree` with `keep` or `remove`.                                                                           |
-| Model spawns a sub-agent with isolation enabled | A throwaway worktree (`agent-<hex>`) is created automatically and cleaned up if the agent has no diffs.                        |
+| Trigger                                         | What happens                                                                                            |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| You launch with `--worktree`                    | The CLI creates the worktree before any model turn runs and chdirs the session into it.                 |
+| You explicitly ask for a worktree mid-session   | Model calls `enter_worktree`; subsequent file edits go inside it.                                       |
+| You explicitly ask to leave                     | Model calls `exit_worktree` with `keep` or `remove`.                                                    |
+| Model spawns a sub-agent with isolation enabled | A throwaway worktree (`agent-<hex>`) is created automatically and cleaned up if the agent has no diffs. |
 
 The two mid-session tools (`enter_worktree` / `exit_worktree`) are deliberately gated behind explicit phrasing — saying "fix this bug" or "create a branch" will **not** trigger them. You must say something like "use a worktree", "start a worktree", or "in a worktree". The `--worktree` CLI flag has no such guard; it always creates one when present.
 
@@ -86,8 +82,8 @@ Every Qwen-managed worktree is placed under your project's `.qwen` directory:
                           ↳ branch worktree-<slug>   # Created off your current branch
 ```
 
-- **Slug** — letters, digits, dot, underscore, hyphen; max 64 chars. If you don't specify a name, an `<adjective>-<noun>-<6hex>` slug is auto-generated (e.g. `tender-jemison-037f0a`). PR references produce `pr-<N>`.
-- **Branch** — always `worktree-<slug>`, branched from whichever branch you have checked out when you ask for the worktree (not necessarily the main working tree's `HEAD`). For PR worktrees the branch is `worktree-pr-<N>` and is based on `FETCH_HEAD` (the PR's tip on the GitHub side) rather than your local branch.
+- **Slug** — letters, digits, dot, underscore, hyphen; max 64 chars. If you don't specify a name, an `<adjective>-<noun>-<6hex>` slug is auto-generated (e.g. `tender-jemison-037f0a`).
+- **Branch** — always `worktree-<slug>`, branched from whichever branch you have checked out when you ask for the worktree (not necessarily the main working tree's `HEAD`).
 - **Hooks** — the worktree's `core.hooksPath` is automatically pointed at the main repo's `.husky/` (preferred) or `.git/hooks/` so commits inside the worktree still trigger your existing pre-commit / commit-msg hooks.
 - **Optional symlinks** — directories listed in `worktree.symlinkDirectories` (see [Settings](#settings)) are symlinked from the main repo into the new worktree so heavy dirs like `node_modules` can be reused without reinstalling.
 
@@ -294,21 +290,18 @@ See [Sub-Agents](./sub-agents.md) for the rest of the agent tool reference.
 
 ## CLI Reference
 
-### `--worktree [name | #N | url]`
+### `--worktree [name]`
 
 ```bash
 qwen --worktree                                               # auto-generate slug
 qwen --worktree my-feature                                    # explicit slug
 qwen --worktree=my-feature                                    # = form
-qwen --worktree=#123                                          # PR reference
-qwen --worktree https://github.com/owner/repo/pull/123        # PR URL
 ```
 
-| Input                         | Result                                                                                                                |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Bare flag (no value)          | Auto slug `<adjective>-<noun>-<6hex>`, branch `worktree-<slug>`, base = current branch.                               |
-| Plain slug                    | Branch `worktree-<slug>`, base = current branch. Slug validation: letters/digits/dot/underscore/hyphen, max 64 chars. |
-| `#N` or `<github-url>/pull/N` | Slug `pr-<N>`, branch `worktree-pr-<N>`, base = `FETCH_HEAD` after `git fetch origin pull/<N>/head` (30s timeout).    |
+| Input                | Result                                                                                                                |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Bare flag (no value) | Auto slug `<adjective>-<noun>-<6hex>`, branch `worktree-<slug>`, base = current branch.                               |
+| Plain slug           | Branch `worktree-<slug>`, base = current branch. Slug validation: letters/digits/dot/underscore/hyphen, max 64 chars. |
 
 `--worktree` cannot be combined with `--acp` / `--experimental-acp`.
 

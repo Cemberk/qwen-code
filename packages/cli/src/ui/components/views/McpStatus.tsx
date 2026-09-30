@@ -9,11 +9,7 @@ import { MCPServerStatus } from '@qwen-code/qwen-code-core/tools/mcp-status.js';
 import { Box, Text } from 'ink';
 import type React from 'react';
 import { theme } from '../../semantic-colors.js';
-import type {
-  HistoryItemMcpStatus,
-  JsonMcpPrompt,
-  JsonMcpTool,
-} from '../../types.js';
+import type { JsonMcpPrompt, JsonMcpTool } from '../../types.js';
 import { t } from '../../../i18n/index.js';
 
 interface McpStatusProps {
@@ -22,7 +18,6 @@ interface McpStatusProps {
   prompts: JsonMcpPrompt[];
   blockedServers: Array<{ name: string; extensionName: string }>;
   serverStatus: (serverName: string) => MCPServerStatus;
-  authStatus: HistoryItemMcpStatus['authStatus'];
   discoveryInProgress: boolean;
   connectingServers: string[];
   showDescriptions: boolean;
@@ -36,7 +31,6 @@ export const McpStatus: React.FC<McpStatusProps> = ({
   prompts,
   blockedServers,
   serverStatus,
-  authStatus,
   discoveryInProgress,
   connectingServers,
   showDescriptions,
@@ -137,23 +131,6 @@ export const McpStatus: React.FC<McpStatusProps> = ({
           );
         }
 
-        const serverAuthStatus = authStatus[serverName];
-        let authStatusNode: React.ReactNode = null;
-        if (serverAuthStatus === 'authenticated') {
-          authStatusNode = <Text> ({t('OAuth')})</Text>;
-        } else if (serverAuthStatus === 'expired') {
-          authStatusNode = (
-            <Text color={theme.status.error}> ({t('OAuth expired')})</Text>
-          );
-        } else if (serverAuthStatus === 'unauthenticated') {
-          authStatusNode = (
-            <Text color={theme.status.warning}>
-              {' '}
-              ({t('OAuth not authenticated')})
-            </Text>
-          );
-        }
-
         return (
           <Box key={serverName} flexDirection="column" marginBottom={1}>
             <Box>
@@ -166,7 +143,6 @@ export const McpStatus: React.FC<McpStatusProps> = ({
                   parts.length > 0 &&
                   ` (${parts.join(', ')})`}
               </Text>
-              {authStatusNode}
             </Box>
             {status === MCPServerStatus.CONNECTING && (
               <Text> ({t('tools and prompts will appear when ready')})</Text>
@@ -281,10 +257,6 @@ export const McpStatus: React.FC<McpStatusProps> = ({
             {'  '}- {t('Use')}{' '}
             <Text color={theme.text.accent}>/mcp nodesc</Text>{' '}
             {t('to hide descriptions')}
-          </Text>
-          <Text>
-            {'  '}- {t('Use')} <Text color={theme.text.accent}>/mcp</Text>{' '}
-            {t('to authenticate with OAuth-enabled servers')}
           </Text>
           <Text>
             {'  '}- {t('Press')} <Text color={theme.text.accent}>Ctrl+T</Text>{' '}

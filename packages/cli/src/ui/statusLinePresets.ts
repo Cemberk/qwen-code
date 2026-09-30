@@ -59,7 +59,6 @@ export interface StatusLinePresetData {
   currentDir: string;
   projectName: string | undefined;
   branch: string | undefined;
-  pullRequestNumber: string | undefined;
   contextWindowSize: number;
   usedPercentage: number;
   remainingPercentage: number;
@@ -130,7 +129,7 @@ export const STATUS_LINE_PRESET_ITEMS: readonly StatusLinePresetItem[] = [
   {
     id: 'pull-request-number',
     label: 'pull-request-number',
-    description: 'Open pull request number for the current branch',
+    description: 'Pull request number inferred from the branch name',
   },
   {
     id: 'branch-changes',
@@ -299,7 +298,6 @@ export function buildStatusLinePresetData(params: {
   reasoning?: StatusLinePresetReasoning;
   currentDir: string;
   branch: string | undefined;
-  pullRequestNumber?: string | undefined;
   contextWindowSize: number;
   currentUsage: number;
   totalInputTokens: number;
@@ -329,7 +327,6 @@ export function buildStatusLinePresetData(params: {
     currentDir: params.currentDir,
     projectName: nodePath.basename(params.currentDir) || undefined,
     branch: params.branch,
-    pullRequestNumber: params.pullRequestNumber,
     contextWindowSize: params.contextWindowSize,
     usedPercentage,
     remainingPercentage: Math.round((100 - usedPercentage) * 10) / 10,
@@ -374,8 +371,7 @@ function formatPresetItem(
       }
       return undefined;
     case 'pull-request-number': {
-      const prNumber =
-        data.pullRequestNumber ?? inferPullRequestNumber(data.branch);
+      const prNumber = inferPullRequestNumber(data.branch);
       if (prNumber) {
         return `#${prNumber}`;
       }

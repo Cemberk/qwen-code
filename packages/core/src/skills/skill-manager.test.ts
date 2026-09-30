@@ -2409,8 +2409,8 @@ hooks:
           command: 'echo "second"'
     - matcher: "Write"
       hooks:
-        - type: http
-          url: 'https://example.com/hook'
+        - type: command
+          command: 'echo "write"'
 ---
 Skill content`;
 
@@ -2425,21 +2425,16 @@ Skill content`;
       expect(config.hooks?.PreToolUse?.[1]?.matcher).toBe('Write');
     });
 
-    it('should parse HTTP hooks with headers', () => {
+    it('should ignore http hooks', () => {
       const markdown = `---
 name: http-hook-skill
-description: Skill with HTTP hooks
+description: Skill with an http hook
 hooks:
   PostToolUse:
     - matcher: "*"
       hooks:
         - type: http
           url: 'https://audit.example.com/log'
-          headers:
-            Authorization: 'Bearer token'
-          allowedEnvVars:
-            - API_KEY
-          timeout: 10
 ---
 Skill content`;
 
@@ -2449,15 +2444,7 @@ Skill content`;
         'user',
       );
 
-      expect(config.hooks?.PostToolUse).toHaveLength(1);
-      const hook = config.hooks?.PostToolUse?.[0]?.hooks?.[0];
-      expect(hook?.type).toBe('http');
-      if (hook?.type === 'http') {
-        expect(hook.url).toBe('https://audit.example.com/log');
-        expect(hook.headers).toEqual({ Authorization: 'Bearer token' });
-        expect(hook.allowedEnvVars).toEqual(['API_KEY']);
-        expect(hook.timeout).toBe(10);
-      }
+      expect(config.hooks?.PostToolUse).toBeUndefined();
     });
 
     it('should ignore unknown hook events', () => {

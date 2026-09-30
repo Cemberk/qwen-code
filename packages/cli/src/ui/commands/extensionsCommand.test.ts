@@ -167,20 +167,20 @@ describe('extensionsCommand', () => {
 
     it('should install extension successfully', async () => {
       mockParseInstallSource.mockResolvedValue({
-        type: 'git',
-        source: 'https://github.com/test/extension',
+        type: 'local',
+        source: '/path/to/extension',
       });
       mockInstallExtension.mockResolvedValue({
         name: 'test-extension',
         version: '1.0.0',
       });
 
-      await installAction(mockContext, 'https://github.com/test/extension');
+      await installAction(mockContext, '/path/to/extension');
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         {
           type: MessageType.INFO,
-          text: 'Installing extension from "https://github.com/test/extension"...',
+          text: 'Installing extension from "/path/to/extension"...',
         },
         expect.any(Number),
       );
@@ -196,8 +196,8 @@ describe('extensionsCommand', () => {
 
     it('shows a warning and reloads commands after a committed install warning', async () => {
       mockParseInstallSource.mockResolvedValue({
-        type: 'git',
-        source: 'https://github.com/test/extension',
+        type: 'local',
+        source: '/path/to/extension',
       });
       mockInstallExtension.mockRejectedValue(
         Object.assign(
@@ -211,7 +211,7 @@ describe('extensionsCommand', () => {
         ),
       );
 
-      await installAction(mockContext, 'https://github.com/test/extension');
+      await installAction(mockContext, '/path/to/extension');
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         {
@@ -225,7 +225,7 @@ describe('extensionsCommand', () => {
 
     it('should redact URL credentials in install progress messages', async () => {
       mockParseInstallSource.mockResolvedValue({
-        type: 'git',
+        type: 'local',
         source: 'https://user:token@example.com/test/extension',
       });
       mockInstallExtension.mockResolvedValue({

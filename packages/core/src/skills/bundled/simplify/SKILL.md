@@ -3,11 +3,8 @@ name: simplify
 description: Review recent code changes for reuse, code quality, and efficiency, then directly apply straightforward cleanup improvements. Use when the user wants a post-implementation cleanup pass, pre-PR polish, or asks to simplify/refine recent changes. Invoke with `/simplify` or `/simplify <focus>`.
 allowedTools:
   - agent
-  - run_shell_command
   - grep_search
   - read_file
-  - write_file
-  - edit
   - glob
 ---
 

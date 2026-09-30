@@ -235,7 +235,6 @@ export interface OpenDialogActionReturn {
     | 'advisor-model'
     | 'vision-model'
     | 'compaction-model'
-    | 'image-model'
     | 'subagent_create'
     | 'subagent_list'
     | 'skills_manage'

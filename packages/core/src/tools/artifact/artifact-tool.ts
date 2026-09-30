@@ -35,7 +35,7 @@ import {
   wrapArtifactHtml,
 } from './html.js';
 import { artifactIdFromPath, type ArtifactPublisher } from './publisher.js';
-import { createArtifactPublisher } from './create-publisher.js';
+import { LocalPublisher } from './local-publisher.js';
 import {
   deleteArtifactSnapshot,
   saveArtifactSnapshot,
@@ -54,7 +54,7 @@ export interface ArtifactToolParams {
   title?: string;
 }
 
-const DESCRIPTION = `Publishes a self-contained HTML page as an interactive Artifact, optionally opens it in the browser depending on settings, and returns a shareable link when a remote host is configured. Use it to turn session output into a durable, interactive page — a PR walkthrough, an architecture tour, a project dashboard.
+const DESCRIPTION = `Publishes a self-contained HTML page as an interactive Artifact on local disk and optionally opens it in the browser depending on settings. Use it to turn session output into a durable, interactive page — a PR walkthrough, an architecture tour, a project dashboard.
 
 Workflow:
 - Write the page to a file first (via Write/Edit), then call Artifact with that file's absolute path.
@@ -113,21 +113,10 @@ class ArtifactToolInvocation extends BaseToolInvocation<
       this.params.file_path,
       this.config.getTargetDir(),
     );
-    const backendLabel =
-      this.publisher.kind === 'host' ? 'custom upload' : this.publisher.kind;
     const openSuffix = this.shouldAutoOpen
       ? ' and open it in your browser'
       : '';
-    const remoteOpenSuffix = this.shouldAutoOpen
-      ? ' and opens the shareable link in your browser'
-      : '';
-    // Remote backends (host/oss) upload the HTML to a server and hand back a
-    // shareable link — say so in the prompt so the user knows the page leaves
-    // their machine before they approve.
-    const prompt =
-      this.publisher.kind === 'local'
-        ? `Publish ${shortenPath(relativePath)} as an interactive Artifact${openSuffix}.`
-        : `Publish ${shortenPath(relativePath)} as an interactive Artifact. This uploads the page to a remote host (${backendLabel})${remoteOpenSuffix}.`;
+    const prompt = `Publish ${shortenPath(relativePath)} as an interactive Artifact${openSuffix}.`;
     const details: ToolInfoConfirmationDetails = {
       type: 'info',
       title: 'Publish Artifact',
@@ -296,7 +285,7 @@ class ArtifactToolInvocation extends BaseToolInvocation<
         };
       }
     }
-    const llmContent = `Published artifact "${title}" to ${url}${saveVersion ? ' and saved a separate local HTML version for this turn' : ''}. Share or open this URL to view the latest interactive page. Re-run Artifact with the same file path to update it${saveVersion ? '; earlier saved versions remain unchanged' : ''}.`;
+    const llmContent = `Published artifact "${title}" to ${url}${saveVersion ? ' and saved a separate local HTML version for this turn' : ''}. Open this URL to view the latest interactive page. Re-run Artifact with the same file path to update it${saveVersion ? '; earlier saved versions remain unchanged' : ''}.`;
     return {
       llmContent,
       returnDisplay: `Published artifact **${title}**\n\n${url}`,
@@ -308,8 +297,7 @@ class ArtifactToolInvocation extends BaseToolInvocation<
 
 /**
  * The Artifact tool: publishes a self-contained HTML fragment as an interactive
- * page and opens it. The backend is pluggable via {@link ArtifactPublisher}
- * (local file://, a custom upload command, or native OSS).
+ * page on local disk (file://) and opens it.
  */
 export class ArtifactTool extends BaseDeclarativeTool<
   ArtifactToolParams,
@@ -346,7 +334,7 @@ export class ArtifactTool extends BaseDeclarativeTool<
         required: ['file_path'],
       },
     );
-    this.publisher = publisher ?? createArtifactPublisher(config);
+    this.publisher = publisher ?? new LocalPublisher();
   }
 
   protected override validateToolParamValues(

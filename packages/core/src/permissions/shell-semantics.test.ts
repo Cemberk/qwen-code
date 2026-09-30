@@ -16,8 +16,8 @@ const CWD = '/home/user/project';
 // Helper: sort ops for stable comparison
 function sorted(ops: ShellOperation[]) {
   return [...ops].sort((a, b) =>
-    `${a.virtualTool}:${a.filePath ?? ''}:${a.domain ?? ''}`.localeCompare(
-      `${b.virtualTool}:${b.filePath ?? ''}:${b.domain ?? ''}`,
+    `${a.virtualTool}:${a.filePath ?? ''}`.localeCompare(
+      `${b.virtualTool}:${b.filePath ?? ''}`,
     ),
   );
 }
@@ -550,14 +550,10 @@ describe('extractShellOperations', () => {
 
   // ── curl / wget ────────────────────────────────────────────────────────────
 
-  it('curl: extracts domain', () => {
-    const ops = extractShellOperations(
-      'curl https://api.example.com/data',
-      CWD,
-    );
-    expect(ops).toEqual([
-      { virtualTool: 'web_fetch', domain: 'api.example.com' },
-    ]);
+  it('curl: a bare URL emits no operation', () => {
+    expect(
+      extractShellOperations('curl https://api.example.com/data', CWD),
+    ).toEqual([]);
   });
 
   it('curl: -o flag value emits write op and is not treated as URL', () => {
@@ -566,7 +562,6 @@ describe('extractShellOperations', () => {
       CWD,
     );
     expect(sorted(ops)).toEqual([
-      { virtualTool: 'web_fetch', domain: 'api.example.com' },
       { virtualTool: 'write_file', filePath: '/tmp/out.json' },
     ]);
   });
@@ -577,7 +572,6 @@ describe('extractShellOperations', () => {
       CWD,
     );
     expect(sorted(ops)).toEqual([
-      { virtualTool: 'web_fetch', domain: 'api.example.com' },
       { virtualTool: 'write_file', filePath: '/tmp/out.json' },
     ]);
   });
@@ -588,17 +582,14 @@ describe('extractShellOperations', () => {
       CWD,
     );
     expect(sorted(ops)).toEqual([
-      { virtualTool: 'web_fetch', domain: 'api.example.com' },
       { virtualTool: 'write_file', filePath: '/tmp/out.json' },
     ]);
   });
 
-  it('wget: extracts domain', () => {
-    const ops = extractShellOperations(
-      'wget https://example.com/file.tar.gz',
-      CWD,
-    );
-    expect(ops).toEqual([{ virtualTool: 'web_fetch', domain: 'example.com' }]);
+  it('wget: a bare URL emits no operation', () => {
+    expect(
+      extractShellOperations('wget https://example.com/file.tar.gz', CWD),
+    ).toEqual([]);
   });
 
   it('wget: -O flag value emits write op and is not treated as URL', () => {
@@ -607,7 +598,6 @@ describe('extractShellOperations', () => {
       CWD,
     );
     expect(sorted(ops)).toEqual([
-      { virtualTool: 'web_fetch', domain: 'example.com' },
       { virtualTool: 'write_file', filePath: '/tmp/file.gz' },
     ]);
   });
@@ -618,7 +608,6 @@ describe('extractShellOperations', () => {
       CWD,
     );
     expect(sorted(ops)).toEqual([
-      { virtualTool: 'web_fetch', domain: 'example.com' },
       { virtualTool: 'write_file', filePath: '/tmp/file.gz' },
     ]);
   });
@@ -629,7 +618,6 @@ describe('extractShellOperations', () => {
       CWD,
     );
     expect(sorted(ops)).toEqual([
-      { virtualTool: 'web_fetch', domain: 'example.com' },
       { virtualTool: 'write_file', filePath: '/tmp/file.gz' },
     ]);
   });
@@ -656,11 +644,8 @@ describe('extractShellOperations', () => {
   });
 
   it('timeout cmd: transparent wrapper', () => {
-    const ops = extractShellOperations(
-      'timeout 30 wget https://example.com',
-      CWD,
-    );
-    expect(ops).toEqual([{ virtualTool: 'web_fetch', domain: 'example.com' }]);
+    const ops = extractShellOperations('timeout 30 cat /etc/hosts', CWD);
+    expect(ops).toEqual([{ virtualTool: 'read_file', filePath: '/etc/hosts' }]);
   });
 
   // ── Combination: command + redirect ───────────────────────────────────────

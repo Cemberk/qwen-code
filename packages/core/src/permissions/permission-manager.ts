@@ -445,9 +445,9 @@ export class PermissionManager {
    * For shell commands (run_shell_command), the result is the most restrictive
    * of:
    *   1. The base decision from Bash / command-pattern rules.
-   *   2. The decision derived from virtual file / network operations extracted
-   *      via `extractShellOperationsAcrossCommand` — allows Read/Edit/Write/WebFetch rules
-   *      to match equivalent shell commands (e.g. `cat` → Read, `curl` → WebFetch).
+   *   2. The decision derived from virtual file operations extracted via
+   *      `extractShellOperationsAcrossCommand` — allows Read/Edit/Write rules
+   *      to match equivalent shell commands (e.g. `cat` → Read).
    */
   private evaluateSingle(ctx: PermissionCheckContext): PermissionDecision {
     const {
@@ -456,7 +456,6 @@ export class PermissionManager {
       command,
       cwd,
       filePath,
-      domain,
       specifier,
       toolParams,
     } = ctx;
@@ -474,14 +473,13 @@ export class PermissionManager {
       toolName,
       command,
       filePath,
-      domain,
       pathCtx,
       specifier,
       toolParams,
       toolAliases,
     ] as const;
 
-    // Compute the base decision from explicit Bash/file/domain rules.
+    // Compute the base decision from explicit Bash/file rules.
     // Using an IIFE to keep the priority-cascade logic clean.
     const baseDecision: PermissionDecision = (() => {
       // Restrictive rules follow canonical destinations; allow rules stay
@@ -513,8 +511,8 @@ export class PermissionManager {
     // `deny` is the most restrictive result — no further checks needed.
     if (baseDecision === 'deny') return 'deny';
 
-    // For shell commands: evaluate virtual file/network operations extracted
-    // from the command string against Read/Edit/Write/WebFetch/ListFiles rules.
+    // For shell commands: evaluate virtual file operations extracted
+    // from the command string against Read/Edit/Write/ListFiles rules.
     //
     // Virtual ops can only ESCALATE a decision (to 'ask' or 'deny').
     // A 'default' virtual result means "shell semantics have no opinion" — it
@@ -550,7 +548,7 @@ export class PermissionManager {
    * or `'default'` if no rule matches any operation.
    *
    * Each operation is evaluated as if it were a direct invocation of its
-   * `virtualTool` (e.g. `read_file`, `web_fetch`, `edit`), so Read/Edit/etc.
+   * `virtualTool` (e.g. `read_file`, `edit`), so Read/Edit/etc.
    * rules are applied naturally.
    */
   private evaluateShellVirtualOps(
@@ -569,7 +567,6 @@ export class PermissionManager {
         toolName: op.virtualTool,
         cwd: pathCtx?.cwd,
         filePath: op.filePath,
-        domain: op.domain,
       });
 
       if (
@@ -757,8 +754,6 @@ export class PermissionManager {
     'run_shell_command',
     'list_directory',
     'read_mcp_resource',
-    'web_fetch',
-    'web_search',
     'todo_write',
     'save_memory',
     'manage_memory',
@@ -968,7 +963,6 @@ export class PermissionManager {
       command,
       cwd,
       filePath,
-      domain,
       specifier,
       toolParams,
     } = ctx;
@@ -984,8 +978,8 @@ export class PermissionManager {
     const denyRules = [...this.sessionRules.deny, ...this.persistentRules.deny];
 
     // ── Cross-command virtual-op pass (shell tools only) ─────────────────
-    // Mirrors evaluate(): a shell command can be denied by a Read/Edit/Write/
-    // WebFetch rule matching an operation extracted from the command, even
+    // Mirrors evaluate(): a shell command can be denied by a Read/Edit/Write
+    // rule matching an operation extracted from the command, even
     // though the deny rule's toolName (e.g. `read_file`) never matches the
     // shell tool name. Without this pass the citation silently drops.
     if (SHELL_TOOL_NAMES.has(toolName) && command !== undefined) {
@@ -996,7 +990,6 @@ export class PermissionManager {
           op.virtualTool,
           undefined,
           op.filePath,
-          op.domain,
           pathCtx,
           undefined,
         ] as const;
@@ -1031,7 +1024,6 @@ export class PermissionManager {
       toolName,
       command,
       filePath,
-      domain,
       pathCtx,
       specifier,
       toolParams,
@@ -1104,7 +1096,7 @@ export class PermissionManager {
    * as-is.
    *
    * "Relevant" means at least one rule's toolName matches AND, if the rule
-   * has a specifier, it also matches the context's command/filePath/domain.
+   * has a specifier, it also matches the context's command/filePath.
    *
    * Examples for Shell executing `git clone xxx`:
    *   - "Bash"               → matches (tool-level rule, no specifier)
@@ -1124,7 +1116,6 @@ export class PermissionManager {
       command,
       cwd,
       filePath,
-      domain,
       specifier,
       toolParams,
     } = ctx;
@@ -1170,7 +1161,6 @@ export class PermissionManager {
             op.virtualTool,
             undefined,
             op.filePath,
-            op.domain,
             pathCtx,
             undefined,
           ] as const;
@@ -1207,7 +1197,6 @@ export class PermissionManager {
       toolName,
       command,
       filePath,
-      domain,
       pathCtx,
       specifier,
       toolParams,
@@ -1238,7 +1227,6 @@ export class PermissionManager {
       command,
       cwd,
       filePath,
-      domain,
       specifier,
       toolParams,
     } = ctx;
@@ -1273,7 +1261,6 @@ export class PermissionManager {
             op.virtualTool,
             undefined,
             op.filePath,
-            op.domain,
             pathCtx,
             undefined,
           ] as const;
@@ -1305,7 +1292,6 @@ export class PermissionManager {
       toolName,
       command,
       filePath,
-      domain,
       pathCtx,
       specifier,
       toolParams,

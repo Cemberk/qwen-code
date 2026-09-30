@@ -36,21 +36,6 @@ function commandConfig(
   };
 }
 
-function httpConfig(
-  overrides: Partial<{ name: string; url: string }> = {},
-): HookConfigDisplayInfo {
-  return {
-    config: {
-      type: HookType.Http,
-      url: overrides.url ?? 'https://example.test/hook',
-      ...(overrides.name ? { name: overrides.name } : {}),
-    } as HookConfigDisplayInfo['config'],
-    source: HooksConfigSource.User,
-    sourceDisplay: 'User Settings',
-    enabled: true,
-  };
-}
-
 function functionConfig(
   overrides: Partial<{ name: string; id: string }> = {},
 ): HookConfigDisplayInfo {
@@ -109,29 +94,6 @@ describe('HandlerListBody', () => {
         />,
       );
       expect(lastFrame() ?? '').toContain('[command async]');
-    });
-
-    it('prefers the http hook name over the URL', () => {
-      const { lastFrame } = render(
-        <HandlerListBody
-          configs={[httpConfig({ name: 'webhook-A', url: 'https://x' })]}
-          selectedIndex={0}
-        />,
-      );
-      const out = lastFrame() ?? '';
-      expect(out).toContain('[http]');
-      expect(out).toContain('webhook-A');
-      expect(out).not.toContain('https://x');
-    });
-
-    it('falls back to the http URL when name is missing', () => {
-      const { lastFrame } = render(
-        <HandlerListBody
-          configs={[httpConfig({ url: 'https://example.test/hook' })]}
-          selectedIndex={0}
-        />,
-      );
-      expect(lastFrame() ?? '').toContain('https://example.test/hook');
     });
 
     it('prefers the function hook name over the id', () => {

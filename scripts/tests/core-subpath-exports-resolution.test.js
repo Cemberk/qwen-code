@@ -60,8 +60,6 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 // run from packages/cli; acp-bridge is a `file:` dependency there, so
 // acp-bridge-routed specifiers resolve identically from that cwd.
 const expectedDistTargets = {
-  '@qwen-code/qwen-code-core/omniPolicyCollection':
-    'packages/core/dist/src/omni/policy/model-call-collection.js',
   '@qwen-code/qwen-code-core/storage':
     'packages/core/dist/src/config/storage.js',
   '@qwen-code/qwen-code-core/atomicFileWrite':
@@ -121,8 +119,6 @@ describe('core subpath specifiers resolve under plain Node', () => {
 // @qwen-code/acp-bridge's transcript-replay — each mapped to the core source
 // file the matching named `paths` entry must resolve it to.
 const expectedSrcTargets = {
-  '@qwen-code/qwen-code-core/omniPolicyCollection':
-    'packages/core/src/omni/policy/model-call-collection.ts',
   '@qwen-code/qwen-code-core/storage': 'packages/core/src/config/storage.ts',
   '@qwen-code/qwen-code-core/atomicFileWrite':
     'packages/core/src/utils/atomicFileWrite.ts',

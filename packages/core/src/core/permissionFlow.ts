@@ -113,7 +113,7 @@ export async function evaluatePermissionFlow(
       // A specifier-scoped deny (e.g. `Bash(npm view *)`) blocks only this
       // invocation, not the whole tool. Say so explicitly so the model does
       // not abandon the tool entirely (issue #11405). Tool-wide catch-alls
-      // (`Bash(*)`, `Read(//**)`, `WebFetch(*)`) block the tool entirely and
+      // (`Bash(*)`, `Read(//**)`) block the tool entirely and
       // must NOT get this reassurance.
       const stillPermitted =
         matchingRule && !isToolWideDenyRule(matchingRule)
@@ -131,7 +131,7 @@ export async function evaluatePermissionFlow(
  * rather than a single scoped invocation.
  *
  * Tool-wide forms are the bare tool name (`Bash`), an empty specifier
- * (`Bash()`), the command/domain catch-all (`Bash(*)`, `WebFetch(*)`), and
+ * (`Bash()`), the command catch-all (`Bash(*)`), and
  * the filesystem-root path catch-all (`Read(//**)`). A rule like
  * `Bash(npm view *)` is scoped and returns false.
  */
@@ -146,7 +146,7 @@ function isToolWideDenyRule(raw: string): boolean {
     // `//**` resolves to the filesystem root (`/**`) and matches every path.
     return rule.specifier === '//**';
   }
-  // `*` is the documented catch-all for command and domain specifiers.
+  // `*` is the documented catch-all for command specifiers.
   return rule.specifier === '*';
 }
 

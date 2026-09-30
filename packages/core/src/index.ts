@@ -33,7 +33,6 @@ export {
   type ModelConfigSourcesInput,
   type ModelConfigValidationResult,
   ModelRegistry,
-  isImageGenerationCapable,
   modelRegistryKey,
   resolveProviderProtocol,
   resolveModelProtocol,
@@ -227,18 +226,6 @@ export type {
   TodoItem,
   TodoWriteParams,
 } from './tools/todoWrite.js';
-export type { WebFetchTool, WebFetchToolParams } from './tools/web-fetch.js';
-export type {
-  WebSearchTool,
-  WebSearchToolParams,
-  WebSearchSettings,
-} from './tools/web-search.js';
-export {
-  DEFAULT_WEB_SEARCH_MAX_PER_SESSION,
-  DEFAULT_WEB_SEARCH_TIMEOUT_MS,
-  MAX_WEB_SEARCH_MAX_PER_SESSION,
-  MAX_WEB_SEARCH_TIMEOUT_MS,
-} from './tools/web-search.js';
 export type { WriteFileTool, WriteFileToolParams } from './tools/write-file.js';
 // Exported for the cross-package contract test in packages/cli (see the
 // function's own doc comment) — the daemon's file-read route must resolve the
@@ -581,27 +568,6 @@ export * from './lsp/types.js';
 // MCP (Model Context Protocol)
 // ============================================================================
 
-export {
-  MCPOAuthProvider,
-  OAUTH_AUTH_URL_EVENT,
-  OAUTH_DISPLAY_MESSAGE_EVENT,
-} from './mcp/oauth-provider.js';
-export type {
-  MCPOAuthConfig,
-  OAuthDisplayMessage,
-  OAuthDisplayPayload,
-} from './mcp/oauth-provider.js';
-export { MCPOAuthTokenStorage } from './mcp/oauth-token-storage.js';
-export { KeychainTokenStorage } from './mcp/token-storage/keychain-token-storage.js';
-export type {
-  OAuthCredentials,
-  OAuthToken,
-} from './mcp/token-storage/types.js';
-export { OAuthUtils } from './mcp/oauth-utils.js';
-export type {
-  OAuthAuthorizationServerMetadata,
-  OAuthProtectedResourceMetadata,
-} from './mcp/oauth-utils.js';
 export { hashMcpServerConfig } from './mcp/configHash.js';
 
 // ============================================================================
@@ -684,7 +650,6 @@ export * from './utils/git-ignore.js';
 export * from './utils/gitIgnoreParser.js';
 export * from './utils/gitUtils.js';
 export * from './utils/github-prs.js';
-export * from './utils/github-pr-issues.js';
 export * from './utils/ignorePatterns.js';
 export * from './utils/invocation-context.js';
 export * from './utils/conversations-runtime-marker.js';
@@ -825,7 +790,6 @@ export {
 export type { HookEventDisplayMeta } from './hooks/hook-event-display.js';
 export {
   DEFAULT_COMMAND_HOOK_TIMEOUT_SECONDS,
-  DEFAULT_HTTP_HOOK_TIMEOUT_SECONDS,
   DEFAULT_PROMPT_HOOK_TIMEOUT_SECONDS,
   DEFAULT_FUNCTION_HOOK_TIMEOUT_MS,
   describeHookTimeout,
@@ -879,46 +843,5 @@ export {
   type StartupEventAttrs,
 } from './utils/startupEventSink.js';
 
-// ============================================================================
-// Omni multimodal experiment — upload-based media delivery
-// ============================================================================
-
-export {
-  isOmniDeliveryActive,
-  processMediaForOmniDelivery,
-  readMediaViaOmniDelivery,
-  parseHttpUrlRef,
-  downloadMediaUrl,
-  effectiveMaxDownloadFileBytes,
-  recognizeMediaFile,
-  formatDisclosureText,
-  formatOmissionText,
-  buildAdditionalMediaParts,
-  buildTranscriptParts,
-  OmniObjectStore,
-  OmniDeliveryError,
-  OmniDownloadError,
-  OmniTransportGuardError,
-  type OmniModality,
-  type OmniMediaDelivery,
-  type OmniAdditionalMediaDelivery,
-  type OmniAdditionalMediaPart,
-  type OmniTokenEstimate,
-  type DownloadedMedia,
-} from './omni/index.js';
-export { processToolResultOmniMedia } from './omni/tool-result-media.js';
-export {
-  resolveMediaPolicyModelAccess,
-  isMediaPolicyToolHiddenFromModel,
-  evaluateMediaPolicyToolCall,
-  type MediaPolicyConfigView,
-  type MediaPolicyCallGateResult,
-  type ResolvedMediaPolicyModelAccess,
-} from './omni/policy/model-access.js';
-export type {
-  OmniPolicyToolSettings,
-  OmniPolicyToolModelAccessSettings,
-  OmniPolicyToolsSettings,
-} from './omni/policy/types.js';
 export * from './services/session-sources.js';
 export { RecordSourceTool } from './tools/record-source.js';

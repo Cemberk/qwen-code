@@ -11,7 +11,6 @@ import { ICON } from '../../../constants.js';
 import { useKeypress } from '../../../hooks/useKeypress.js';
 import { keyMatchers, Command } from '../../../keyMatchers.js';
 import { t } from '../../../../i18n/index.js';
-import { MCPServerStatus } from '@qwen-code/qwen-code-core/tools/mcp-status.js';
 import type { ServerListStepProps, MCPServerDisplayInfo } from '../types.js';
 import {
   groupServersBySource,
@@ -111,18 +110,11 @@ export const ServerListStep: React.FC<ServerListStepProps> = ({
                 groupIndex === currentPosition.groupIndex &&
                 itemIndex === currentPosition.itemIndex;
               // 受门控（#4615）但未审批的 server：discovery 直接跳过，不会进入
-              // 连接/认证流程，所以审批原因优先于"需要认证"展示。
+              // 连接流程，所以审批原因优先展示。
               const awaitingApproval =
                 !server.isDisabled && !!server.approvalState;
-              // 未连接且需要认证时，状态以"需要认证"展示（requiresAuth 是
-              // 加载时的快照，状态被实时推到 connected 后不再适用）
-              const needsAuth =
-                !server.isDisabled &&
-                !awaitingApproval &&
-                !!server.requiresAuth &&
-                server.status !== MCPServerStatus.CONNECTED;
               const statusColor =
-                server.isDisabled || awaitingApproval || needsAuth
+                server.isDisabled || awaitingApproval
                   ? 'yellow'
                   : getStatusColor(server.status);
 
@@ -166,9 +158,7 @@ export const ServerListStep: React.FC<ServerListStepProps> = ({
                         ? server.approvalState === 'rejected'
                           ? t('rejected — edit config to re-approve')
                           : t('needs approval')
-                        : needsAuth
-                          ? t('needs authentication')
-                          : t(server.status)}
+                        : t(server.status)}
                   </Text>
                   {/* 显示无效工具警告 */}
                   {!!server.invalidToolCount && server.invalidToolCount > 0 && (

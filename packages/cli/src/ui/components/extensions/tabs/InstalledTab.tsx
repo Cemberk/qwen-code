@@ -24,8 +24,6 @@ import {
   removeMCPServerStatus,
   addMCPStatusChangeListener,
   removeMCPStatusChangeListener,
-  mcpServerRequiresOAuth,
-  MCPOAuthTokenStorage,
   createDebugLogger,
   matchesAnyServerPattern,
 } from '@qwen-code/qwen-code-core';
@@ -77,7 +75,6 @@ interface InstalledTabProps {
   onLockChange: (locked: boolean) => void;
   onStatus: (status: StatusMessage | null) => void;
   extensionsUpdateState: Map<string, string>;
-  reloadSignal: number;
   /** Adopt the state an update settled on into the app's update-state map. */
   onUpdateStateChange?: (name: string, state: ExtensionUpdateState) => void;
 }
@@ -99,7 +96,6 @@ export const InstalledTab = ({
   onLockChange,
   onStatus,
   extensionsUpdateState,
-  reloadSignal,
   onUpdateStateChange,
 }: InstalledTabProps) => {
   const [items, setItems] = useState<InstalledItem[]>([]);
@@ -168,57 +164,19 @@ export const InstalledTab = ({
         }
       }
 
-      // Servers that need (re-)authentication: either the connect attempt hit
-      // a 401 (runtime signal), or OAuth is declared but no token is stored.
-      // Connected servers are skipped — they are evidently authenticated.
-      const needsAuthNames = new Set<string>();
-      const tokenStorage = new MCPOAuthTokenStorage();
-      for (const [name, sc] of Object.entries(mcpServers)) {
-        if (getMCPServerStatus(name) === MCPServerStatus.CONNECTED) continue;
-        if (mcpServerRequiresOAuth.get(name)) {
-          needsAuthNames.add(name);
-          continue;
-        }
-        if (sc.oauth?.enabled) {
-          try {
-            const creds = await tokenStorage.getCredentials(name);
-            if (!creds) needsAuthNames.add(name);
-          } catch {
-            needsAuthNames.add(name);
-          }
-        }
-      }
-
       const buildMcpInfo = (
         name: string,
         serverConfig: MCPServerConfig,
         scope: InstalledMcpInfo['scope'],
         isDisabled: boolean,
-      ): InstalledMcpInfo => {
-        // Status (and the status-derived needs-auth flag) are read here, in
-        // the same synchronous tick as setItems, so a transition during the
-        // earlier token-check awaits can't leave a stale combination.
-        const status = getMCPServerStatus(name);
-        return {
-          name,
-          status,
-          scope,
-          isDisabled,
-          requiresAuth:
-            status === MCPServerStatus.CONNECTED
-              ? false
-              : mcpServerRequiresOAuth.get(name) === true ||
-                needsAuthNames.has(name),
-          transport: serverConfig.command
-            ? 'stdio'
-            : serverConfig.httpUrl
-              ? 'http'
-              : serverConfig.url
-                ? 'sse'
-                : 'unknown',
-          toolCount: toolCountByServer.get(name) ?? 0,
-        };
-      };
+      ): InstalledMcpInfo => ({
+        name,
+        status: getMCPServerStatus(name),
+        scope,
+        isDisabled,
+        transport: serverConfig.command ? 'stdio' : 'unknown',
+        toolCount: toolCountByServer.get(name) ?? 0,
+      });
 
       const mcpItems: InstalledItem[] = [];
       for (const [name, serverConfig] of Object.entries(mcpServers)) {
@@ -310,7 +268,7 @@ export const InstalledTab = ({
 
   useEffect(() => {
     load();
-  }, [load, reloadSignal]);
+  }, [load]);
 
   const selectedItem = items[selectedIndex] ?? null;
 
@@ -329,15 +287,7 @@ export const InstalledTab = ({
           it.kind === 'mcp' && it.mcp.name === serverName
             ? {
                 ...it,
-                mcp: {
-                  ...it.mcp,
-                  status,
-                  requiresAuth:
-                    status === MCPServerStatus.CONNECTED
-                      ? false
-                      : mcpServerRequiresOAuth.get(serverName) === true ||
-                        it.mcp.requiresAuth,
-                },
+                mcp: { ...it.mcp, status },
               }
             : it,
         ),
@@ -720,9 +670,6 @@ export const InstalledTab = ({
         <Text color={theme.text.secondary}>
           {t('No plugins or MCP servers installed.')}
         </Text>
-        <Text color={theme.text.secondary}>
-          {t('Use the Discover tab to find and install plugins.')}
-        </Text>
       </Box>
     );
   }
@@ -769,8 +716,7 @@ export const InstalledTab = ({
                 version: stripUnsafeCharacters(item.extension.version ?? ''),
               });
         // MCP rows surface the live connection state — "enabled" alone would
-        // read as usable even when the server failed to connect or still
-        // needs authentication.
+        // read as usable even when the server failed to connect.
         let statusLabel: string;
         let statusColor: string;
         if (item.kind === 'mcp') {
@@ -780,9 +726,6 @@ export const InstalledTab = ({
           } else if (item.mcp.status === MCPServerStatus.CONNECTED) {
             statusLabel = t('connected');
             statusColor = theme.status.success;
-          } else if (item.mcp.requiresAuth) {
-            statusLabel = t('needs authentication');
-            statusColor = theme.status.warning;
           } else if (item.mcp.status === MCPServerStatus.CONNECTING) {
             statusLabel = t('connecting');
             statusColor = theme.status.warning;

@@ -48,12 +48,6 @@ export const DEFAULT_LSP_DOCUMENT_RETRY_DELAY_MS = 2000;
 /** Default maximum number of server restart attempts */
 export const DEFAULT_LSP_MAX_RESTARTS = 3;
 
-/** Default initial delay between socket connection retries in milliseconds */
-export const DEFAULT_LSP_SOCKET_RETRY_DELAY_MS = 250;
-
-/** Default maximum delay between socket connection retries in milliseconds */
-export const DEFAULT_LSP_SOCKET_MAX_RETRY_DELAY_MS = 1000;
-
 // ============================================================================
 // LSP Protocol Labels
 // ============================================================================

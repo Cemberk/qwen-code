@@ -106,12 +106,6 @@ export function truncateText(text: string, maxLength: number): string {
  */
 export function formatServerCommand(server: MCPServerDisplayInfo): string {
   const config = server.config;
-  if (config.httpUrl) {
-    return `${config.httpUrl} (http)`;
-  }
-  if (config.url) {
-    return `${config.url} (sse)`;
-  }
   if (config.command) {
     const args = config.args?.join(' ') || '';
     return `${config.command} ${args} (stdio)`.trim();

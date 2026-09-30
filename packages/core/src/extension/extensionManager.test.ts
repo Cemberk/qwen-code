@@ -38,84 +38,16 @@ import {
   AGENT_PLUGIN_MCP_SCHEMA,
   AGENT_PLUGIN_SCHEMA,
 } from './agent-plugins-v1/index.js';
-import {
-  EXTENSION_GIT_CREDENTIAL_SELECTOR_FILENAME,
-  resolveStoredGitCredential,
-} from './extension-git-credentials.js';
-import { resetLocalGitVersionCacheForTesting } from './github.js';
-import { FileTokenStorage } from '../mcp/token-storage/file-token-storage.js';
 import { SkillManager } from '../skills/skill-manager.js';
 
-const mockGit = {
-  clone: vi.fn(),
-  getRemotes: vi.fn(),
-  fetch: vi.fn(),
-  checkout: vi.fn(),
-  listRemote: vi.fn(),
-  revparse: vi.fn(),
-  version: vi.fn(),
-  env: vi.fn(),
-  path: vi.fn(),
-};
-const mockDownloadFromArchiveUrl = vi.hoisted(() => vi.fn());
-const mockDownloadPublicGitHubArchiveFallback = vi.hoisted(() => vi.fn());
-const mockDownloadFromGitHubRelease = vi.hoisted(() =>
-  vi
-    .fn()
-    .mockRejectedValue(new Error('Mocked GitHub release download failure')),
-);
 const mockExtractArchiveFile = vi.hoisted(() => vi.fn());
-const mockDownloadFromNpmRegistry = vi.hoisted(() => vi.fn());
 
-vi.mock('simple-git', () => ({
-  CheckRepoActions: { IS_REPO_ROOT: 'is-repo-root' },
-  simpleGit: vi.fn((path: string) => {
-    mockGit.path.mockReturnValue(path);
-    return mockGit;
-  }),
-}));
-
-vi.mock('./github.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./github.js')>();
+vi.mock('./archive-extraction.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('./archive-extraction.js')>();
   return {
     ...actual,
-    downloadFromArchiveUrl: mockDownloadFromArchiveUrl,
-    downloadPublicGitHubArchiveFallback:
-      mockDownloadPublicGitHubArchiveFallback,
-    downloadFromGitHubRelease: mockDownloadFromGitHubRelease,
     extractArchiveFile: mockExtractArchiveFile,
-  };
-});
-
-// Wraps the real implementation (not a stub) so every existing scenario keeps
-// its actual validation behavior; only call-site wiring is asserted on.
-// afterEach's vi.restoreAllMocks() resets a bare vi.fn() back to a no-op, so
-// the real implementation is held here and re-attached in beforeEach on
-// every test, not just set once at module load.
-const mockAssertDirectorySymlinksAreSafe = vi.hoisted(() => vi.fn());
-const realAssertDirectorySymlinksAreSafe = vi.hoisted(() => ({
-  current: undefined as
-    | undefined
-    | (typeof import('./archive-safety.js'))['assertDirectorySymlinksAreSafe'],
-}));
-vi.mock('./archive-safety.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./archive-safety.js')>();
-  realAssertDirectorySymlinksAreSafe.current =
-    actual.assertDirectorySymlinksAreSafe;
-  mockAssertDirectorySymlinksAreSafe.mockImplementation(
-    actual.assertDirectorySymlinksAreSafe,
-  );
-  return {
-    ...actual,
-    assertDirectorySymlinksAreSafe: mockAssertDirectorySymlinksAreSafe,
-  };
-});
-
-vi.mock('./npm.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./npm.js')>();
-  return {
-    ...actual,
-    downloadFromNpmRegistry: mockDownloadFromNpmRegistry,
   };
 });
 
@@ -232,24 +164,7 @@ describe('extension tests', () => {
 
     mockHomedir.mockReturnValue(tempHomeDir);
     vi.spyOn(process, 'cwd').mockReturnValue(tempWorkspaceDir);
-    resetLocalGitVersionCacheForTesting();
-    Object.values(mockGit).forEach((fn) => fn.mockReset());
-    mockDownloadFromArchiveUrl.mockReset();
-    mockDownloadPublicGitHubArchiveFallback.mockReset();
-    mockDownloadFromGitHubRelease.mockReset();
-    mockDownloadFromGitHubRelease.mockRejectedValue(
-      new Error('Mocked GitHub release download failure'),
-    );
     mockExtractArchiveFile.mockReset();
-    mockDownloadFromNpmRegistry.mockReset();
-    mockGit.revparse.mockResolvedValue('sample-commit');
-    // vi.restoreAllMocks() in afterEach resets this bare vi.fn() back to a
-    // no-op, so the real passthrough implementation must be re-attached
-    // every test, not just cleared.
-    mockAssertDirectorySymlinksAreSafe.mockReset();
-    mockAssertDirectorySymlinksAreSafe.mockImplementation(
-      realAssertDirectorySymlinksAreSafe.current!,
-    );
   });
 
   afterEach(() => {
@@ -878,12 +793,8 @@ describe('extension tests', () => {
       expect(extension.hooks).toBeUndefined();
       expect(extension.settings).toBeUndefined();
       expect(extension.channels).toBeUndefined();
-      expect(Object.keys(extension.mcpServers ?? {})).toEqual([
-        'local',
-        'remote',
-      ]);
+      expect(Object.keys(extension.mcpServers ?? {})).toEqual(['local']);
       expect(extension.mcpServers?.['local']?.agentPluginV1).toBe(true);
-      expect(extension.mcpServers?.['remote']?.agentPluginV1).toBe(true);
       expect(requestConsent).toHaveBeenCalledWith(
         expect.objectContaining({
           originSource: 'AgentPlugins',
@@ -1073,391 +984,6 @@ describe('extension tests', () => {
       ).toBe(false);
     });
 
-    it('installs an Agent Plugin from Git', async () => {
-      mockGit.clone.mockImplementation(async () => {
-        createAgentPlugin(mockGit.path(), { name: 'git-agent-plugin' });
-      });
-      mockGit.getRemotes.mockResolvedValue([
-        {
-          name: 'origin',
-          refs: { fetch: 'https://github.com/example/portable-plugin' },
-        },
-      ]);
-      mockGit.fetch.mockResolvedValue(undefined);
-      mockGit.checkout.mockResolvedValue(undefined);
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-
-      const installed = await manager.installExtension(
-        {
-          type: 'git',
-          source: 'https://github.com/example/portable-plugin',
-        },
-        async () => {},
-      );
-
-      expect(installed.name).toBe('git-agent-plugin');
-      expect(installed.installMetadata).toMatchObject({
-        originSource: 'AgentPlugins',
-        gitCommit: 'sample-commit',
-      });
-      expect(
-        fs.existsSync(path.join(installed.path, 'qwen-extension.json')),
-      ).toBe(false);
-    });
-
-    it('materializes validated Agent Plugin symlinks from the old-Git archive fallback', async () => {
-      mockGit.version.mockResolvedValue({ major: 2, minor: 34, patch: 1 });
-      mockDownloadPublicGitHubArchiveFallback.mockImplementation(
-        async (_metadata: ExtensionInstallMetadata, destination: string) => {
-          createAgentPlugin(destination, { name: 'old-git-agent-plugin' });
-          fs.writeFileSync(path.join(destination, 'CLAUDE.md'), '# agents\n');
-          if (process.platform !== 'win32') {
-            fs.symlinkSync('CLAUDE.md', path.join(destination, 'AGENTS.md'));
-          }
-          return '0123456789abcdef0123456789abcdef01234567';
-        },
-      );
-      const manager = createExtensionManager({ networkPolicy: 'public' });
-      await manager.refreshCache();
-
-      const installed = await manager.installExtension(
-        {
-          type: 'git',
-          source: 'https://github.com/example/agent-plugin',
-        },
-        async () => {},
-      );
-
-      expect(installed.name).toBe('old-git-agent-plugin');
-      expect(installed.installMetadata).toMatchObject({
-        type: 'git',
-        source: 'https://github.com/example/agent-plugin',
-        gitCommit: '0123456789abcdef0123456789abcdef01234567',
-        originSource: 'AgentPlugins',
-      });
-      if (process.platform !== 'win32') {
-        const installedAgents = path.join(installed.path, 'AGENTS.md');
-        expect(fs.lstatSync(installedAgents).isFile()).toBe(true);
-        expect(fs.readFileSync(installedAgents, 'utf8')).toBe('# agents\n');
-      }
-      // Releases stay preferred over the archive fallback on older Git.
-      expect(mockDownloadFromGitHubRelease).toHaveBeenCalled();
-      expect(mockDownloadPublicGitHubArchiveFallback).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'git',
-          source: 'https://github.com/example/agent-plugin',
-        }),
-        expect.any(String),
-        undefined,
-      );
-      expect(mockGit.clone).not.toHaveBeenCalled();
-    });
-
-    it('re-validates symlinks on the post-conversion tree when the old-Git archive fallback feeds a converter', async () => {
-      // The archive-fallback validation only ever proves
-      // sourceBeforeConversion safe. When conversion actually relocates the
-      // tree (unlike the AgentPlugins case above, which never does), the
-      // post-conversion directory must be re-validated rather than trusted
-      // on the strength of a check that ran against a different directory.
-      let fallbackDestination: string | undefined;
-      mockGit.version.mockResolvedValue({ major: 2, minor: 34, patch: 1 });
-      mockDownloadPublicGitHubArchiveFallback.mockImplementation(
-        async (_metadata: ExtensionInstallMetadata, destination: string) => {
-          fallbackDestination = destination;
-          fs.writeFileSync(
-            path.join(destination, 'gemini-extension.json'),
-            JSON.stringify({
-              name: 'old-git-gemini-extension',
-              version: '1.0.0',
-            }),
-          );
-          return '0123456789abcdef0123456789abcdef01234567';
-        },
-      );
-      const manager = createExtensionManager({ networkPolicy: 'public' });
-      await manager.refreshCache();
-
-      const installed = await manager.installExtension(
-        {
-          type: 'git',
-          source: 'https://github.com/example/gemini-extension',
-        },
-        async () => {},
-      );
-
-      expect(installed.name).toBe('old-git-gemini-extension');
-      expect(installed.installMetadata).toMatchObject({
-        originSource: 'Gemini',
-      });
-      expect(fallbackDestination).toBeDefined();
-      // Real Gemini conversion always copies to a fresh temp dir, so this
-      // only passes when the guard's
-      // `localSourcePath !== sourceBeforeConversion` half is reachable —
-      // gating it on `isAgentPlugin` as well (the bug this test guards
-      // against) would make it structurally unreachable, since AgentPlugins
-      // conversion never relocates the tree.
-      // Escape regex metacharacters before building the pattern: on Windows
-      // fallbackDestination contains backslashes (e.g. `C:\Users\...`),
-      // which a raw RegExp would read as escape sequences rather than path
-      // separators, silently matching nothing and passing regardless of
-      // what path the guard was actually called with.
-      const escapedFallbackDestination = fallbackDestination!.replace(
-        /[.*+?^${}()|[\]\\]/g,
-        '\\$&',
-      );
-      expect(mockAssertDirectorySymlinksAreSafe).toHaveBeenCalledWith(
-        expect.not.stringMatching(
-          new RegExp(`^${escapedFallbackDestination}$`),
-        ),
-        undefined,
-      );
-    });
-
-    it('aborts the install when post-conversion re-validation rejects the relocated tree', async () => {
-      // The guard above only pins that re-validation is CALLED on the
-      // relocated directory. This pins the other half: when that
-      // re-validation actually rejects (the stale-trust scenario the guard
-      // exists to catch), the install must abort rather than silently
-      // proceeding with the unsafe tree.
-      mockGit.version.mockResolvedValue({ major: 2, minor: 34, patch: 1 });
-      mockDownloadPublicGitHubArchiveFallback.mockImplementation(
-        async (_metadata: ExtensionInstallMetadata, destination: string) => {
-          fs.writeFileSync(
-            path.join(destination, 'gemini-extension.json'),
-            JSON.stringify({
-              name: 'old-git-gemini-extension-unsafe',
-              version: '1.0.0',
-            }),
-          );
-          return '0123456789abcdef0123456789abcdef01234567';
-        },
-      );
-      mockAssertDirectorySymlinksAreSafe.mockRejectedValueOnce(
-        new Error('Tar archive contains unsupported link entry: escape'),
-      );
-      const manager = createExtensionManager({ networkPolicy: 'public' });
-      await manager.refreshCache();
-
-      await expect(
-        manager.installExtension(
-          {
-            type: 'git',
-            source: 'https://github.com/example/gemini-extension-unsafe',
-          },
-          async () => {},
-        ),
-      ).rejects.toThrow('unsupported link entry');
-
-      expect(
-        fs.existsSync(
-          path.join(
-            userExtensionsDir,
-            'old-git-gemini-extension-unsafe',
-            EXTENSIONS_CONFIG_FILENAME,
-          ),
-        ),
-      ).toBe(false);
-    });
-
-    it('keeps release installs ahead of the old-Git archive fallback', async () => {
-      mockGit.version.mockResolvedValue({ major: 2, minor: 34, patch: 1 });
-      mockDownloadFromGitHubRelease.mockImplementation(
-        async (_metadata: ExtensionInstallMetadata, destination: string) => {
-          writeExtractedExtension(destination, 'release-extension');
-          return { tagName: 'v2.0.0', type: 'github-release' as const };
-        },
-      );
-      const manager = createExtensionManager({ networkPolicy: 'public' });
-      await manager.refreshCache();
-
-      const installed = await manager.installExtension(
-        {
-          type: 'git',
-          source: 'https://github.com/owner/repo',
-        },
-        async () => {},
-      );
-
-      expect(installed.installMetadata).toMatchObject({
-        type: 'github-release',
-        source: 'https://github.com/owner/repo',
-        releaseTag: 'v2.0.0',
-      });
-      expect(mockDownloadPublicGitHubArchiveFallback).not.toHaveBeenCalled();
-      expect(mockGit.clone).not.toHaveBeenCalled();
-    });
-
-    it('persists a credentialed one-time install as a source-free snapshot', async () => {
-      mockGit.env.mockReturnValue(mockGit);
-      mockGit.clone.mockImplementation(async () => {
-        const destination = mockGit.path();
-        writeExtractedExtension(destination, 'one-time-extension');
-        fs.mkdirSync(path.join(destination, '.git'), { recursive: true });
-        fs.writeFileSync(
-          path.join(destination, '.git', 'config'),
-          'credential must not be copied',
-        );
-      });
-      mockGit.getRemotes.mockResolvedValue([
-        {
-          name: 'origin',
-          refs: { fetch: 'https://git.example.com/team/extension.git' },
-        },
-      ]);
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-
-      const prepared = await manager.prepareExtensionInstall({
-        installMetadata: {
-          type: 'git',
-          source: 'https://git.example.com/team/extension.git',
-        },
-        initialActivation: { scope: 'user' },
-        requestConsent: async () => {},
-        gitCredential: {
-          username: 'user',
-          password: 'fine-grained-token',
-          persistence: 'one_time',
-        },
-      });
-
-      expect(prepared.installMetadata).toMatchObject({
-        type: 'snapshot',
-        source: 'snapshot',
-        installId: expect.stringMatching(/^[a-f0-9]{64}$/),
-      });
-      expect(prepared.identity.id).toBe(prepared.installMetadata.installId);
-      expect(fs.existsSync(path.join(prepared.stagingDirectory, '.git'))).toBe(
-        false,
-      );
-      expect(
-        fs.existsSync(
-          path.join(
-            prepared.stagingDirectory,
-            EXTENSION_GIT_CREDENTIAL_SELECTOR_FILENAME,
-          ),
-        ),
-      ).toBe(false);
-      const stagedMetadata = fs.readFileSync(
-        path.join(prepared.stagingDirectory, INSTALL_METADATA_FILENAME),
-        'utf8',
-      );
-      expect(stagedMetadata).not.toContain('git.example.com');
-      expect(stagedMetadata).not.toContain('fine-grained-token');
-
-      const committed = await manager.commitPreparedExtension(prepared);
-      expect(committed.extension?.id).toBe(prepared.identity.id);
-      expect(committed.extension?.installMetadata?.type).toBe('snapshot');
-      const reloadedManager = createExtensionManager();
-      await reloadedManager.refreshCache();
-      expect(reloadedManager.getLoadedExtensions()[0]?.id).toBe(
-        prepared.identity.id,
-      );
-      await expect(
-        reloadedManager.updateExtension(
-          reloadedManager.getLoadedExtensions()[0]!,
-          ExtensionUpdateState.UPDATE_AVAILABLE,
-          () => {},
-        ),
-      ).rejects.toMatchObject({ code: 'extension_not_updatable' });
-      await manager.disposePreparedExtension(prepared);
-    });
-
-    it('stores managed Git credentials separately from install metadata', async () => {
-      process.env['QWEN_HOME'] = tempHomeDir;
-      process.env['QWEN_CODE_FORCE_FILE_STORAGE'] = 'true';
-      mockGit.env.mockReturnValue(mockGit);
-      mockGit.clone.mockImplementation(async () => {
-        writeExtractedExtension(mockGit.path(), 'stored-extension');
-      });
-      mockGit.getRemotes.mockResolvedValue([
-        {
-          name: 'origin',
-          refs: { fetch: 'https://git.example.com/team/extension.git' },
-        },
-      ]);
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-
-      const prepared = await manager.prepareExtensionInstall({
-        installMetadata: {
-          type: 'git',
-          source: 'https://git.example.com/team/extension.git',
-        },
-        initialActivation: { scope: 'user' },
-        requestConsent: async () => {},
-        gitCredential: {
-          username: 'user',
-          password: 'fine-grained-token',
-          persistence: 'stored',
-        },
-      });
-
-      expect(prepared.installMetadata).toMatchObject({
-        type: 'git',
-        source: 'https://git.example.com/team/extension.git',
-        credentialPersistence: 'stored',
-        installId: expect.stringMatching(/^[a-f0-9]{64}$/),
-      });
-      const metadata = fs.readFileSync(
-        path.join(prepared.stagingDirectory, INSTALL_METADATA_FILENAME),
-        'utf8',
-      );
-      expect(metadata).not.toContain('fine-grained-token');
-
-      const committed = await manager.commitPreparedExtension(prepared);
-      const resolved = await resolveStoredGitCredential(
-        committed.extension!.path,
-      );
-      expect(resolved).toMatchObject({
-        credential: { username: 'user', password: 'fine-grained-token' },
-      });
-      const originalId = committed.identity.id;
-
-      await manager.updateExtension(
-        committed.extension!,
-        ExtensionUpdateState.UPDATE_AVAILABLE,
-        () => {},
-      );
-
-      expect(manager.getLoadedExtensions()[0]?.id).toBe(originalId);
-      expect(mockGit.clone).toHaveBeenLastCalledWith(
-        'https://git.example.com/team/extension.git',
-        './',
-        expect.any(Array),
-      );
-      expect(mockGit.env).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          GIT_CONFIG_KEY_0:
-            'http.https://git.example.com/team/extension.git.extraHeader',
-        }),
-      );
-      const storage = new FileTokenStorage(
-        'Qwen Code Extension Git Credentials',
-      );
-      await expect(
-        storage.getSecret(resolved.selector.secretKey),
-      ).resolves.not.toBeNull();
-
-      fs.writeFileSync(
-        path.join(
-          userExtensionsDir,
-          'stored-extension',
-          EXTENSIONS_CONFIG_FILENAME,
-        ),
-        '{',
-      );
-      const unloadedManager = createExtensionManager();
-      await unloadedManager.refreshCache();
-      expect(unloadedManager.getLoadedExtensions()).toEqual([]);
-      await unloadedManager.uninstallExtensionById(originalId, false);
-      await expect(
-        storage.getSecret(resolved.selector.secretKey),
-      ).resolves.toBeNull();
-      await manager.disposePreparedExtension(prepared);
-    });
-
     it('installs and uninstalls within an injected extension store root', async () => {
       const archivePath = path.join(tempWorkspaceDir, 'custom-root.zip');
       fs.writeFileSync(archivePath, 'archive');
@@ -1599,8 +1125,8 @@ describe('extension tests', () => {
       await expect(
         manager.prepareExtensionInstall({
           installMetadata: {
-            type: 'git',
-            source: 'https://example.com/extension.git',
+            type: 'link',
+            source: tempWorkspaceDir,
           },
           localSourcePath: archivePath,
           initialActivation: { scope: 'user' },
@@ -1708,10 +1234,12 @@ describe('extension tests', () => {
       }
     });
 
-    it('stops archive preparation when cancellation follows download', async () => {
+    it('stops archive preparation when cancellation follows extraction', async () => {
+      const archivePath = path.join(tempWorkspaceDir, 'cancelled.zip');
+      fs.writeFileSync(archivePath, 'archive');
       const controller = new AbortController();
       const reason = new Error('preparation expired');
-      mockDownloadFromArchiveUrl.mockImplementationOnce(async () => {
+      mockExtractArchiveFile.mockImplementationOnce(async () => {
         controller.abort(reason);
       });
       const manager = createExtensionManager();
@@ -1719,8 +1247,8 @@ describe('extension tests', () => {
       await expect(
         manager.prepareExtensionInstall({
           installMetadata: {
-            type: 'archive-url',
-            source: 'https://example.com/extension.zip',
+            type: 'local',
+            source: archivePath,
           },
           initialActivation: { scope: 'user' },
           requestConsent: async () => {},
@@ -2049,48 +1577,17 @@ describe('extension tests', () => {
       );
     });
 
-    it.each([
-      {
+    it('should install a Qoder plugin from a local archive', async () => {
+      const resolvedInstallMetadata = {
         type: 'local' as const,
-        source: 'sample-qoder-plugin.zip',
-      },
-      {
-        type: 'archive-url' as const,
-        source: 'https://example.com/sample-qoder-plugin.zip',
-      },
-      {
-        type: 'npm' as const,
-        source: '@example/sample-qoder-plugin',
-      },
-    ])('should install a Qoder plugin from $type', async (installMetadata) => {
-      const resolvedInstallMetadata =
-        installMetadata.type === 'local'
-          ? {
-              ...installMetadata,
-              source: path.join(tempWorkspaceDir, installMetadata.source),
-            }
-          : installMetadata;
-      if (resolvedInstallMetadata.type === 'local') {
-        fs.writeFileSync(resolvedInstallMetadata.source, 'synthetic archive');
-        mockExtractArchiveFile.mockImplementation(
-          async (_source: string, destination: string) => {
-            writeQoderPlugin(destination);
-          },
-        );
-      } else if (installMetadata.type === 'archive-url') {
-        mockDownloadFromArchiveUrl.mockImplementation(
-          async (_metadata: ExtensionInstallMetadata, destination: string) => {
-            writeQoderPlugin(destination);
-          },
-        );
-      } else {
-        mockDownloadFromNpmRegistry.mockImplementation(
-          async (_metadata: ExtensionInstallMetadata, destination: string) => {
-            writeQoderPlugin(destination);
-            return { version: '1.0.0', type: 'npm' };
-          },
-        );
-      }
+        source: path.join(tempWorkspaceDir, 'sample-qoder-plugin.zip'),
+      };
+      fs.writeFileSync(resolvedInstallMetadata.source, 'synthetic archive');
+      mockExtractArchiveFile.mockImplementation(
+        async (_source: string, destination: string) => {
+          writeQoderPlugin(destination);
+        },
+      );
       const manager = createExtensionManager();
       await manager.refreshCache();
 
@@ -2104,250 +1601,6 @@ describe('extension tests', () => {
       expect(extension.contextFiles).toEqual([
         path.join(extension.path, 'system-prompt.md'),
       ]);
-    });
-
-    it('should install a Qoder plugin from Git', async () => {
-      mockGit.clone.mockImplementation(async () => {
-        writeQoderPlugin(mockGit.path());
-      });
-      mockGit.getRemotes.mockResolvedValue([
-        {
-          name: 'origin',
-          refs: { fetch: 'https://github.com/example/sample-qoder-plugin' },
-        },
-      ]);
-      mockGit.fetch.mockResolvedValue(undefined);
-      mockGit.checkout.mockResolvedValue(undefined);
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-
-      const extension = await manager.installExtension(
-        {
-          type: 'git',
-          source: 'https://github.com/example/sample-qoder-plugin',
-        },
-        async () => {},
-      );
-
-      expect(extension.name).toBe('sample-qoder-plugin');
-      expect(extension.installMetadata?.originSource).toBe('Qoder');
-      expect(extension.installMetadata?.gitCommit).toBe('sample-commit');
-    });
-
-    it('should retain the recorded commit for a converted Claude Git plugin', async () => {
-      mockGit.clone.mockImplementation(async () => {
-        const sourcePath = mockGit.path();
-        fs.mkdirSync(path.join(sourcePath, '.claude-plugin'), {
-          recursive: true,
-        });
-        fs.writeFileSync(
-          path.join(sourcePath, '.claude-plugin', 'plugin.json'),
-          JSON.stringify({ name: 'sample-claude-plugin', version: '1.0.0' }),
-        );
-      });
-      mockGit.getRemotes.mockResolvedValue([
-        {
-          name: 'origin',
-          refs: { fetch: 'https://github.com/example/sample-claude-plugin' },
-        },
-      ]);
-      mockGit.fetch.mockResolvedValue(undefined);
-      mockGit.checkout.mockResolvedValue(undefined);
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-
-      const extension = await manager.installExtension(
-        {
-          type: 'git',
-          source: 'https://github.com/example/sample-claude-plugin',
-        },
-        async () => {},
-      );
-
-      expect(extension.installMetadata?.originSource).toBe('Claude');
-      expect(extension.installMetadata?.gitCommit).toBe('sample-commit');
-    });
-
-    it('should retain the recorded commit when a marketplace plugin lives in the marketplace repo', async () => {
-      mockGit.clone.mockImplementation(async () => {
-        const sourcePath = mockGit.path();
-        fs.mkdirSync(path.join(sourcePath, '.claude-plugin'), {
-          recursive: true,
-        });
-        fs.writeFileSync(
-          path.join(sourcePath, '.claude-plugin', 'marketplace.json'),
-          JSON.stringify({
-            name: 'sample-marketplace',
-            owner: { name: 'Example', email: 'example@example.com' },
-            plugins: [
-              { name: 'sample-plugin', source: './plugins/sample-plugin' },
-            ],
-          }),
-        );
-        const pluginConfigDir = path.join(
-          sourcePath,
-          'plugins',
-          'sample-plugin',
-          '.claude-plugin',
-        );
-        fs.mkdirSync(pluginConfigDir, { recursive: true });
-        fs.writeFileSync(
-          path.join(pluginConfigDir, 'plugin.json'),
-          JSON.stringify({ name: 'sample-plugin', version: '1.0.0' }),
-        );
-        fs.writeFileSync(
-          path.join(path.dirname(pluginConfigDir), 'plugin.json'),
-          JSON.stringify({
-            $schema: AGENT_PLUGIN_SCHEMA,
-            name: 'carried-agent-plugin',
-          }),
-        );
-      });
-      mockGit.getRemotes.mockResolvedValue([
-        {
-          name: 'origin',
-          refs: { fetch: 'https://github.com/example/sample-marketplace' },
-        },
-      ]);
-      mockGit.fetch.mockResolvedValue(undefined);
-      mockGit.checkout.mockResolvedValue(undefined);
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-
-      const extension = await manager.installExtension(
-        {
-          type: 'git',
-          source: 'https://github.com/example/sample-marketplace',
-          pluginName: 'sample-plugin',
-        },
-        async () => {},
-      );
-
-      expect(extension.name).toBe('sample-plugin');
-      expect(extension.format).toBe('qwen');
-      expect(extension.installMetadata?.originSource).toBe('Claude');
-      expect(extension.installMetadata?.gitCommit).toBe('sample-commit');
-      expect(extension.installMetadata?.externalContent).toBe(false);
-      expect(fs.existsSync(path.join(extension.path, 'plugin.json'))).toBe(
-        false,
-      );
-    });
-
-    it('should drop the recorded commit when a marketplace plugin resolves from an external source', async () => {
-      let cloneCalls = 0;
-      mockGit.clone.mockImplementation(async () => {
-        const sourcePath = mockGit.path();
-        cloneCalls += 1;
-        fs.mkdirSync(path.join(sourcePath, '.claude-plugin'), {
-          recursive: true,
-        });
-        if (cloneCalls === 1) {
-          fs.writeFileSync(
-            path.join(sourcePath, '.claude-plugin', 'marketplace.json'),
-            JSON.stringify({
-              name: 'sample-marketplace',
-              owner: { name: 'Example', email: 'example@example.com' },
-              plugins: [
-                {
-                  name: 'sample-plugin',
-                  source: { source: 'github', repo: 'example/nested-plugin' },
-                },
-              ],
-            }),
-          );
-        } else {
-          fs.writeFileSync(
-            path.join(sourcePath, '.claude-plugin', 'plugin.json'),
-            JSON.stringify({ name: 'sample-plugin', version: '1.0.0' }),
-          );
-        }
-      });
-      mockGit.getRemotes.mockResolvedValue([
-        {
-          name: 'origin',
-          refs: { fetch: 'https://github.com/example/sample-marketplace' },
-        },
-      ]);
-      mockGit.fetch.mockResolvedValue(undefined);
-      mockGit.checkout.mockResolvedValue(undefined);
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-
-      const extension = await manager.installExtension(
-        {
-          type: 'git',
-          source: 'https://github.com/example/sample-marketplace',
-          pluginName: 'sample-plugin',
-        },
-        async () => {},
-      );
-
-      expect(extension.name).toBe('sample-plugin');
-      expect(extension.installMetadata?.originSource).toBe('Claude');
-      expect(extension.installMetadata?.gitCommit).toBeUndefined();
-      expect(extension.installMetadata?.externalContent).toBe(true);
-    });
-
-    it('should mark external marketplace content downloaded from a GitHub release as not independently updatable', async () => {
-      const { downloadFromGitHubRelease } = await import('./github.js');
-      vi.mocked(downloadFromGitHubRelease).mockImplementationOnce(
-        async (_metadata, destination) => {
-          fs.mkdirSync(path.join(destination, '.claude-plugin'), {
-            recursive: true,
-          });
-          fs.writeFileSync(
-            path.join(destination, '.claude-plugin', 'marketplace.json'),
-            JSON.stringify({
-              name: 'sample-marketplace',
-              owner: { name: 'Example', email: 'example@example.com' },
-              plugins: [
-                {
-                  name: 'sample-plugin',
-                  source: { source: 'github', repo: 'example/nested-plugin' },
-                },
-              ],
-            }),
-          );
-          return { type: 'github-release', tagName: 'v1.0.0' };
-        },
-      );
-      mockGit.clone.mockImplementation(async () => {
-        const sourcePath = mockGit.path();
-        fs.mkdirSync(path.join(sourcePath, '.claude-plugin'), {
-          recursive: true,
-        });
-        fs.writeFileSync(
-          path.join(sourcePath, '.claude-plugin', 'plugin.json'),
-          JSON.stringify({ name: 'sample-plugin', version: '1.0.0' }),
-        );
-      });
-      mockGit.getRemotes.mockResolvedValue([
-        {
-          name: 'origin',
-          refs: { fetch: 'https://github.com/example/nested-plugin' },
-        },
-      ]);
-      mockGit.fetch.mockResolvedValue(undefined);
-      mockGit.checkout.mockResolvedValue(undefined);
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-
-      const extension = await manager.installExtension(
-        {
-          type: 'git',
-          source: 'https://github.com/example/sample-marketplace',
-          pluginName: 'sample-plugin',
-        },
-        async () => {},
-      );
-
-      expect(extension.installMetadata).toMatchObject({
-        type: 'github-release',
-        releaseTag: 'v1.0.0',
-        originSource: 'Claude',
-        externalContent: true,
-      });
-      expect(extension.installMetadata?.gitCommit).toBeUndefined();
     });
 
     it('should emit mutation lifecycle events around install', async () => {
@@ -2376,77 +1629,6 @@ describe('extension tests', () => {
         { id: 1, phase: 'start', operation: 'installExtension' },
         { id: 1, phase: 'end', operation: 'installExtension' },
       ]);
-    });
-
-    it('should not reuse a dirty tempDir when falling back from GitHub release to git clone', async () => {
-      // Regression for #6334: downloadFromGitHubRelease can dirty tempDir
-      // (partial archive download / extraction) before failing. The fallback
-      // git clone must receive a clean directory, or `git clone` errors with
-      // "destination path '.' already exists and is not an empty directory".
-      vi.spyOn(ExtensionStorage, 'createTmpDir').mockImplementation(async () =>
-        fs.mkdtempSync(path.join(tempHomeDir, 'tracked-extension-')),
-      );
-      const { downloadFromGitHubRelease } = await import('./github.js');
-      const downloadMock = vi.mocked(downloadFromGitHubRelease);
-      downloadMock.mockImplementation(
-        async (_meta: ExtensionInstallMetadata, destination: string) => {
-          // Simulate a partial download that dirties tempDir before failing.
-          fs.mkdirSync(destination, { recursive: true });
-          fs.writeFileSync(path.join(destination, 'partial.tar.gz'), 'partial');
-          throw new Error('Mocked GitHub release download failure');
-        },
-      );
-
-      let cloneRanOnCleanDir = false;
-      mockGit.clone.mockImplementation(
-        async (_url: string, _target: string) => {
-          // cloneFromGit runs `git clone <url> ./` inside the tempDir it passed to
-          // simpleGit(). Real git fails on a non-empty directory; mirror that so
-          // the test fails (with the bug) if tempDir is not cleaned up first.
-          const dir = mockGit.path();
-          const isEmpty = fs.readdirSync(dir).length === 0;
-          cloneRanOnCleanDir = isEmpty;
-          if (!isEmpty) {
-            throw new Error(
-              "destination path '.' already exists and is not an empty directory.",
-            );
-          }
-          writeExtractedExtension(dir, 'git-extension');
-          return undefined;
-        },
-      );
-      mockGit.getRemotes.mockResolvedValue([
-        {
-          name: 'origin',
-          refs: { fetch: 'https://github.com/owner/repo' },
-        },
-      ]);
-      mockGit.fetch.mockResolvedValue(undefined);
-      mockGit.checkout.mockResolvedValue(undefined);
-
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-      const controller = new AbortController();
-
-      const extension = await manager.installExtension(
-        {
-          source: 'https://github.com/owner/repo',
-          type: 'git',
-        },
-        async () => {},
-        undefined,
-        undefined,
-        undefined,
-        { scope: 'user' },
-        controller.signal,
-      );
-
-      expect(downloadMock).toHaveBeenCalled();
-      // The fallback clone must run on a clean tempDir; without the cleanup it
-      // would throw "destination path '.' already exists and is not an empty
-      // directory" and installExtension would reject before reaching here.
-      expect(cloneRanOnCleanDir).toBe(true);
-      expect(extension.name).toBe('git-extension');
     });
 
     it('should clean up converted temp dir for local archive installs', async () => {
@@ -2499,94 +1681,6 @@ describe('extension tests', () => {
           ),
         ),
       ).toBe(true);
-    });
-
-    it('should install an extension from an archive URL', async () => {
-      mockDownloadFromArchiveUrl.mockImplementation(
-        async (_metadata: ExtensionInstallMetadata, destination: string) => {
-          writeExtractedExtension(destination, 'archive-url-extension');
-        },
-      );
-
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-      const controller = new AbortController();
-
-      const extension = await manager.installExtension(
-        {
-          source: 'https://example.com/archive-extension.zip',
-          type: 'archive-url',
-        },
-        async () => {},
-        undefined,
-        undefined,
-        undefined,
-        { scope: 'user' },
-        controller.signal,
-      );
-
-      expect(mockDownloadFromArchiveUrl).toHaveBeenCalledWith(
-        expect.objectContaining({
-          source: 'https://example.com/archive-extension.zip',
-          type: 'archive-url',
-        }),
-        expect.any(String),
-        controller.signal,
-      );
-      expect(extension.name).toBe('archive-url-extension');
-      expect(extension.installMetadata).toMatchObject({
-        source: 'https://example.com/archive-extension.zip',
-        type: 'archive-url',
-      });
-    });
-
-    it('forces the manager network policy onto remote operations', async () => {
-      mockDownloadFromArchiveUrl.mockImplementation(
-        async (_metadata: ExtensionInstallMetadata, destination: string) => {
-          writeExtractedExtension(destination, 'policy-extension');
-        },
-      );
-      const manager = createExtensionManager({ networkPolicy: 'public' });
-
-      await manager.installExtension(
-        {
-          source: 'https://example.com/policy-extension.zip',
-          type: 'archive-url',
-        },
-        async () => {},
-      );
-
-      expect(mockDownloadFromArchiveUrl).toHaveBeenCalledWith(
-        expect.objectContaining({ networkPolicy: 'public' }),
-        expect.any(String),
-        undefined,
-      );
-    });
-
-    it('should clean up the temp dir when archive URL download fails', async () => {
-      let tempDir: string | undefined;
-      mockDownloadFromArchiveUrl.mockImplementation(
-        async (_metadata: ExtensionInstallMetadata, destination: string) => {
-          tempDir = destination;
-          throw new Error('download failed');
-        },
-      );
-
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-
-      await expect(
-        manager.installExtension(
-          {
-            source: 'https://example.com/archive-extension.zip',
-            type: 'archive-url',
-          },
-          async () => {},
-        ),
-      ).rejects.toThrow('download failed');
-
-      expect(tempDir).toBeDefined();
-      expect(fs.existsSync(tempDir!)).toBe(false);
     });
 
     it('should clean up the temp dir when local archive extraction fails', async () => {
@@ -2920,9 +2014,8 @@ describe('extension tests', () => {
         name: 'qwen-ext',
         version: '1.2.3',
         installMetadata: {
-          type: 'git',
+          type: 'local',
           source: 'test-source',
-          credentialPersistence: 'stored',
         },
       });
       createAgentPlugin(path.join(userExtensionsDir, 'plugin-ext'), {
@@ -2944,7 +2037,7 @@ describe('extension tests', () => {
       const qwenExt = extensions.find((e) => e.name === 'qwen-ext');
       const pluginExt = extensions.find((e) => e.name === 'plugin-ext');
       expect(qwenExt?.version).toBe('1.2.3');
-      expect(qwenExt?.installMetadata?.credentialPersistence).toBe('stored');
+      expect(qwenExt?.installMetadata?.source).toBe('test-source');
       expect(pluginExt?.version).toBe('2.0.0');
       // Manifest-only: no subresource is populated on the returned entries.
       for (const extension of extensions) {
@@ -4035,34 +3128,6 @@ describe('extension tests', () => {
         'Extension with name missing-extension does not exist.',
       );
 
-      await expect(manager.addSource('   ')).rejects.toThrow(
-        'Marketplace source cannot be empty.',
-      );
-
-      // Imported dynamically (not at file top) so this suite's './github.js'
-      // mock keeps its registration order relative to the real marketplace
-      // module graph. Loopback port 1 fails instantly (ECONNREFUSED) — never
-      // touches the network, unlike an example.com fixture which performs a
-      // real DNS lookup and HTTP GET from this suite.
-      const { InsecureArchiveUrlError } = await import('./marketplace.js');
-      await expect(
-        manager.addSource('http://127.0.0.1:1/plugin.zip'),
-      ).rejects.toBeInstanceOf(InsecureArchiveUrlError);
-
-      // The reason the user sees — the offending URL plus the git@/SSH and
-      // local-path remedies — must survive the marketplace.ts → addSource
-      // boundary, not just the error type. A later edit that re-wraps the
-      // probe failure with a stripped-down message goes red here.
-      await expect(
-        manager.addSource('http://127.0.0.1:1/plugin.zip'),
-      ).rejects.toThrow(/Archive URLs must use https:\/\/ \(got /);
-
-      // Non-archive probe failures must keep the marketplace-specific
-      // guidance rather than surfacing the raw install-source error.
-      await expect(
-        manager.addSource('invalid-format-no-slash'),
-      ).rejects.toThrow(/No marketplace found at/);
-
       expect(events).toEqual([]);
     });
 
@@ -4172,135 +3237,12 @@ describe('extension tests', () => {
       manager.addMutationListener((event) => events.push(event));
 
       expect(manager.toggleFavorite('my-extension')).toBe(true);
-      fs.writeFileSync(
-        path.join(userExtensionsDir, 'marketplaces.json'),
-        JSON.stringify([
-          {
-            name: 'marketplace',
-            source: 'owner/repo',
-            type: 'github',
-            addedAt: '2026-01-01T00:00:00.000Z',
-          },
-        ]),
-      );
-      expect(manager.markSourceUpdated('marketplace')).toMatchObject({
-        name: 'marketplace',
-      });
 
       expect(events).toEqual([]);
     });
   });
 
   describe('updateExtension', () => {
-    it('fails before Git access when managed credentials are unavailable', async () => {
-      createExtension({
-        extensionsDir: userExtensionsDir,
-        installMetadata: {
-          type: 'git',
-          source: 'https://git.example.com/team/extension.git',
-          gitCommit: 'sample-commit',
-          credentialPersistence: 'stored',
-          installId: 'a'.repeat(64),
-        },
-      });
-      const manager = createExtensionManager({ networkPolicy: 'public' });
-      await manager.refreshCache();
-      const extension = manager.getLoadedExtensions()[0]!;
-
-      await expect(
-        manager.updateExtension(
-          extension,
-          ExtensionUpdateState.UPDATE_AVAILABLE,
-          () => {},
-        ),
-      ).rejects.toMatchObject({ code: 'extension_credential_unavailable' });
-      expect(mockGit.clone).not.toHaveBeenCalled();
-      expect(mockGit.listRemote).not.toHaveBeenCalled();
-    });
-
-    it('updates an old-Git public GitHub extension through a new archive SHA', async () => {
-      createExtension({
-        extensionsDir: userExtensionsDir,
-        version: '1.0.0',
-        installMetadata: {
-          type: 'git',
-          source: 'https://github.com/owner/repo',
-          gitCommit: '0123456789abcdef0123456789abcdef01234567',
-        },
-      });
-      mockGit.version.mockResolvedValue({ major: 2, minor: 34, patch: 1 });
-      mockDownloadPublicGitHubArchiveFallback.mockImplementation(
-        async (_metadata: ExtensionInstallMetadata, destination: string) => {
-          fs.mkdirSync(destination, { recursive: true });
-          fs.writeFileSync(
-            path.join(destination, EXTENSIONS_CONFIG_FILENAME),
-            JSON.stringify({ name: 'my-extension', version: '2.0.0' }),
-          );
-          return '89abcdef0123456789abcdef0123456789abcdef';
-        },
-      );
-      const manager = createExtensionManager({ networkPolicy: 'public' });
-      await manager.refreshCache();
-      const extension = manager.getLoadedExtensions()[0]!;
-
-      await manager.updateExtension(
-        extension,
-        ExtensionUpdateState.UPDATE_AVAILABLE,
-        () => {},
-      );
-
-      expect(manager.getLoadedExtensions()[0]?.installMetadata).toMatchObject({
-        source: 'https://github.com/owner/repo',
-        type: 'git',
-        gitCommit: '89abcdef0123456789abcdef0123456789abcdef',
-      });
-      // The manager mutates installMetadata in place (gitCommit gets the new
-      // SHA after the call), so pin only the immutable identity fields.
-      expect(mockDownloadPublicGitHubArchiveFallback).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'git',
-          source: 'https://github.com/owner/repo',
-        }),
-        expect.any(String),
-        undefined,
-      );
-      expect(mockGit.clone).not.toHaveBeenCalled();
-    });
-
-    it('applies the update network policy without mutating cached metadata', async () => {
-      createExtension({
-        extensionsDir: userExtensionsDir,
-        installMetadata: {
-          type: 'git',
-          source: 'https://github.com/owner/repo.git',
-        },
-      });
-      mockGit.version.mockResolvedValue({ major: 2, minor: 52 });
-      mockGit.env.mockReturnValue(mockGit);
-      mockGit.getRemotes.mockResolvedValue([
-        {
-          name: 'origin',
-          refs: { fetch: 'https://github.com/owner/repo.git' },
-        },
-      ]);
-      mockGit.listRemote.mockResolvedValue('same-hash\tHEAD');
-      mockGit.revparse.mockResolvedValue('same-hash');
-      const manager = createExtensionManager({ networkPolicy: 'public' });
-      await manager.refreshCache();
-      const extension = manager.getLoadedExtensions()[0]!;
-      expect(extension.installMetadata?.networkPolicy).toBeUndefined();
-
-      await manager.checkForAllExtensionUpdates(() => {});
-
-      expect(extension.installMetadata?.networkPolicy).toBeUndefined();
-      expect(mockGit.version).toHaveBeenCalled();
-      expect(mockGit.env).toHaveBeenCalled();
-      expect(mockGit.listRemote).toHaveBeenCalledWith([
-        'https://github.com/owner/repo.git',
-        'HEAD',
-      ]);
-    });
-
     it('rejects a stale direct update after the artifact changes', async () => {
       const archivePath = path.join(tempWorkspaceDir, 'direct-update.zip');
       fs.writeFileSync(archivePath, 'archive');
@@ -5060,46 +4002,6 @@ describe('extension tests', () => {
     });
 
     describe('getExtensionId', () => {
-      it('uses a persisted install id instead of the source', () => {
-        const installId = 'a'.repeat(64);
-        expect(
-          getExtensionId(
-            { name: 'test-ext', version: '1.0.0' },
-            {
-              type: 'git',
-              source: 'https://example.com/repo',
-              installId,
-              credentialPersistence: 'stored',
-            },
-          ),
-        ).toBe(installId);
-      });
-
-      it('ignores install ids on unmanaged metadata', () => {
-        const config = { name: 'test-ext', version: '1.0.0' };
-        const source = 'https://example.com/repo';
-        expect(
-          getExtensionId(config, {
-            type: 'git',
-            source,
-            installId: 'a'.repeat(64),
-          }),
-        ).toBe(getExtensionId(config, { type: 'git', source }));
-      });
-
-      it('rejects an invalid persisted install id', () => {
-        expect(() =>
-          getExtensionId(
-            { name: 'test-ext', version: '1.0.0' },
-            {
-              type: 'snapshot',
-              source: 'snapshot',
-              installId: '../invalid',
-            },
-          ),
-        ).toThrow('Stored extension install id is invalid');
-      });
-
       it('should use hashed name when no install metadata', () => {
         const config: ExtensionConfig = { name: 'test-ext', version: '1.0.0' };
         const id = getExtensionId(config);
@@ -5127,34 +4029,10 @@ describe('extension tests', () => {
         expect(first).not.toBe(second);
       });
 
-      it('should use GitHub URL for git install', () => {
-        const config: ExtensionConfig = { name: 'test-ext', version: '1.0.0' };
-        const metadata = {
-          type: 'git' as const,
-          source: 'https://github.com/owner/repo',
-        };
-        const id = getExtensionId(config, metadata);
-        expect(id).toBe(hashValue('https://github.com/owner/repo'));
-      });
-
-      it('should use source as-is for non-GitHub git URLs (e.g., GitLab)', () => {
-        // For non-GitHub git servers, fall back to using the source URL directly
-        const config: ExtensionConfig = { name: 'test-ext', version: '1.0.0' };
-        const metadata = {
-          type: 'git' as const,
-          source: 'https://gitlab.company.com/team/extension-repo',
-        };
-
-        const id = getExtensionId(config, metadata);
-        expect(id).toBe(
-          hashValue('https://gitlab.company.com/team/extension-repo'),
-        );
-      });
-
-      it('gives plugins from the same repository distinct ids (#7568)', () => {
+      it('gives plugins from the same marketplace distinct ids (#7568)', () => {
         const metadataFor = (pluginName: string) => ({
-          type: 'git' as const,
-          source: 'https://github.com/dotnet/skills',
+          type: 'local' as const,
+          source: '/path/to/skills',
           pluginName,
         });
         const dotnetId = getExtensionId(
@@ -5166,23 +4044,19 @@ describe('extension tests', () => {
           metadataFor('dotnet-test'),
         );
 
-        expect(dotnetId).toBe(
-          hashValue('https://github.com/dotnet/skills:dotnet'),
-        );
-        expect(dotnetTestId).toBe(
-          hashValue('https://github.com/dotnet/skills:dotnet-test'),
-        );
+        expect(dotnetId).toBe(hashValue('/path/to/skills:dotnet'));
+        expect(dotnetTestId).toBe(hashValue('/path/to/skills:dotnet-test'));
         expect(dotnetId).not.toBe(dotnetTestId);
       });
 
-      it('keeps the repo-only id when no plugin name is recorded', () => {
+      it('keeps the source-only id when no plugin name is recorded', () => {
         const config: ExtensionConfig = { name: 'solo-ext', version: '1.0.0' };
         const metadata = {
-          type: 'git' as const,
-          source: 'https://github.com/owner/solo',
+          type: 'local' as const,
+          source: '/path/to/solo',
         };
         expect(getExtensionId(config, metadata)).toBe(
-          hashValue('https://github.com/owner/solo'),
+          hashValue('/path/to/solo'),
         );
       });
     });

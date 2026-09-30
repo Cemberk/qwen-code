@@ -529,11 +529,9 @@ class ReadFileToolInvocation extends BaseToolInvocation<
 
 /**
  * Build the model-facing read_file description, tailored to the model's actual
- * input modalities. Audio/video are advertised — and the "read the clip you
- * just produced" contract stated — ONLY when the selected model can perceive
- * them. A text-only model must not be told it can "watch a video", or it will
- * call read_file expecting to see a clip it cannot ingest (the exact failure
- * behind fine-detail video QA where the model clips but never re-reads). The
+ * input modalities. Audio/video are advertised ONLY when the selected model
+ * can perceive them. A text-only model must not be told it can "watch a
+ * video", or it will call read_file expecting media it cannot ingest. The
  * PDF/text/image handling and the vision-bridge fallback are model-agnostic and
  * always stated. Recomputed live in {@link ReadFileTool.schema} so it tracks a
  * mid-session `/model` switch, not just the modalities at construction time.
@@ -564,9 +562,8 @@ export function buildReadFileDescription(modalities: InputModalities): string {
       : modalities.video
         ? 'watch a video (frames + audio)'
         : 'listen to an audio file';
-  const viewHear = modalities.video ? 'view/hear' : 'hear';
 
-  return `${preamble}Handles text, images (PNG, JPG, GIF, WEBP, SVG, BMP), ${nouns.join(', ')}, PDF files, and Jupyter notebooks (.ipynb); ${formats.join(' and ')} require the selected model to support the corresponding modality. When multimodal support is enabled, ${nouns.join(' and ')} files are delivered to you for DIRECT perception — you can actually ${perceive} by reading it. In particular, after you cut or downscale a media segment with a clip/extract tool, call read_file on the resulting clip to actually ${viewHear} that segment yourself before answering — do not assume its contents.${trailer}`;
+  return `${preamble}Handles text, images (PNG, JPG, GIF, WEBP, SVG, BMP), ${nouns.join(', ')}, PDF files, and Jupyter notebooks (.ipynb); ${formats.join(' and ')} require the selected model to support the corresponding modality. When multimodal support is enabled, ${nouns.join(' and ')} files are delivered to you for DIRECT perception — you can actually ${perceive} by reading it.${trailer}`;
 }
 
 /**

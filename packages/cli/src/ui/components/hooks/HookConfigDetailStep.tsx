@@ -53,13 +53,6 @@ export function HookConfigDetailStep({
     return '';
   };
 
-  const getUrl = (): string => {
-    if (hookConfig.config.type === 'http') {
-      return hookConfig.config.url;
-    }
-    return '';
-  };
-
   const commandBoxWidth = Math.min(terminalWidth - 6, 80);
 
   const labelWidth = 12;
@@ -165,23 +158,6 @@ export function HookConfigDetailStep({
             width={commandBoxWidth}
           >
             <Text color={theme.text.primary}>{getPrompt()}</Text>
-          </Box>
-        </>
-      )}
-
-      {hookConfig.config.type === 'http' && (
-        <>
-          <Box marginTop={1}>
-            <Text color={theme.text.secondary}>{t('URL:')}</Text>
-          </Box>
-          <Box
-            flexDirection="column"
-            borderStyle="round"
-            borderColor={theme.border.default}
-            paddingX={1}
-            width={commandBoxWidth}
-          >
-            <Text color={theme.text.primary}>{getUrl()}</Text>
           </Box>
         </>
       )}

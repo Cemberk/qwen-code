@@ -165,8 +165,7 @@ function withoutNullishThinkingKnobs(
 
 /**
  * Official DashScope regional API hosts (matched exactly or as a parent
- * domain of the endpoint hostname). Shared with the WebSearch side channel's
- * endpoint gate (tools/web-search.ts) so a new region is added in one place.
+ * domain of the endpoint hostname).
  */
 export const DASHSCOPE_REGIONAL_HOSTS: readonly string[] = [
   'dashscope.aliyuncs.com',
@@ -295,13 +294,6 @@ export class DashScopeOpenAICompatibleProvider extends DefaultOpenAICompatiblePr
       'X-DashScope-UserAgent': userAgent,
       'X-DashScope-AuthType': authType,
     };
-    // Omni experiment: oss:// media URLs from the temporary-upload channel
-    // are only resolved server-side when this header is present. Static
-    // injection (vs per-request threading) is deliberate — the header is
-    // harmless on requests without oss:// parts.
-    if (this.cliConfig.isOmniEnabled?.()) {
-      defaultHeaders['X-DashScope-OssResourceResolve'] = 'enable';
-    }
 
     return customHeaders
       ? { ...defaultHeaders, ...customHeaders }
@@ -361,7 +353,7 @@ export class DashScopeOpenAICompatibleProvider extends DefaultOpenAICompatiblePr
 
     // glm-* models served via DashScope only parse structured "content parts"
     // arrays when the request is in function-calling mode. A tool-less request
-    // (e.g. web_fetch's side-query: system + user, no tools, no tool messages)
+    // (e.g. a side-query: system + user, no tools, no tool messages)
     // with array content has its prompt silently dropped server-side —
     // prompt_tokens collapses and the model answers from an empty prompt. This
     // is glm-specific; other DashScope models read array content fine. Caching

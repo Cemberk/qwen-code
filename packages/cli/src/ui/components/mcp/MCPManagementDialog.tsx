@@ -23,22 +23,19 @@ import { ToolDetailStep } from './steps/ToolDetailStep.js';
 import { ResourceListStep } from './steps/ResourceListStep.js';
 import { ResourceDetailStep } from './steps/ResourceDetailStep.js';
 import { DisableScopeSelectStep } from './steps/DisableScopeSelectStep.js';
-import { AuthenticateStep } from './steps/AuthenticateStep.js';
 import { useConfig } from '../../contexts/ConfigContext.js';
 import {
   isGatedMcpScope,
   matchesAnyServerPattern,
 } from '@qwen-code/qwen-code-core/config/mcp-server-config.js';
 import type { MCPServerConfig } from '@qwen-code/qwen-code-core/config/mcp-server-config.js';
-import { MCPOAuthTokenStorage } from '@qwen-code/qwen-code-core/mcp/oauth-token-storage.js';
-import { mcpServerRequiresOAuth } from '@qwen-code/qwen-code-core/tools/mcp-client.js';
 import type { DiscoveredMCPPrompt } from '@qwen-code/qwen-code-core/tools/mcp-client.js';
 import {
   getMCPServerStatus,
   removeMCPServerStatus,
   addMCPStatusChangeListener,
   removeMCPStatusChangeListener,
-  MCPServerStatus,
+  type MCPServerStatus,
 } from '@qwen-code/qwen-code-core/tools/mcp-status.js';
 import { DiscoveredMCPTool } from '@qwen-code/qwen-code-core/tools/mcp-tool.js';
 import type { AnyDeclarativeTool } from '@qwen-code/qwen-code-core/tools/tools.js';
@@ -128,23 +125,6 @@ export const MCPManagementDialog: React.FC<MCPManagementDialogProps> = ({
         (t) => !t.name || !t.description,
       ).length;
 
-      // Check if OAuth tokens exist for this server
-      let hasOAuthTokens = false;
-      try {
-        const tokenStorage = new MCPOAuthTokenStorage();
-        const credentials = await tokenStorage.getCredentials(name);
-        hasOAuthTokens = credentials !== null;
-      } catch {
-        // Ignore errors when checking token existence
-      }
-
-      // Needs (re-)authentication: a 401 during connect, or OAuth declared
-      // with no stored token. Only meaningful while not connected.
-      const requiresAuth =
-        status !== MCPServerStatus.CONNECTED &&
-        (mcpServerRequiresOAuth.get(name) === true ||
-          (Boolean(serverConfig.oauth?.enabled) && !hasOAuthTokens));
-
       // Why a gated (#4615) server is skipped by discovery: `pending` (awaiting
       // a first/renewed approval) or `rejected`. Only gated scopes carry this;
       // `approved` (and all non-gated scopes) leave it undefined.
@@ -166,8 +146,6 @@ export const MCPManagementDialog: React.FC<MCPManagementDialogProps> = ({
         promptCount: serverPrompts.length,
         resourceCount: serverResources.length,
         isDisabled,
-        hasOAuthTokens,
-        requiresAuth,
         approvalState,
       });
     }
@@ -175,18 +153,11 @@ export const MCPManagementDialog: React.FC<MCPManagementDialogProps> = ({
     return serverInfos;
   }, [config]);
 
-  // Synchronously refresh status + needs-auth on a fetched snapshot.
-  const restampStatus = useCallback((s: MCPServerDisplayInfo) => {
-    const status = getMCPServerStatus(s.name);
-    return {
-      ...s,
-      status,
-      requiresAuth:
-        status === MCPServerStatus.CONNECTED
-          ? false
-          : mcpServerRequiresOAuth.get(s.name) === true || s.requiresAuth,
-    };
-  }, []);
+  // Synchronously refresh status on a fetched snapshot.
+  const restampStatus = useCallback(
+    (s: MCPServerDisplayInfo) => ({ ...s, status: getMCPServerStatus(s.name) }),
+    [],
+  );
 
   // Load MCP server data on initial render
   useEffect(() => {
@@ -194,8 +165,7 @@ export const MCPManagementDialog: React.FC<MCPManagementDialogProps> = ({
       setIsLoading(true);
       try {
         const serverInfos = await fetchServerData();
-        // Re-stamp statuses (and the status-derived needs-auth flag)
-        // synchronously right before setState: a status change landing
+        // Re-stamp statuses synchronously right before setState: a status change landing
         // during fetch's awaits would fire the listener against the OLD
         // state and then be overwritten by this snapshot.
         setServers(serverInfos.map(restampStatus));
@@ -215,22 +185,7 @@ export const MCPManagementDialog: React.FC<MCPManagementDialogProps> = ({
     const listener = (serverName: string, status?: MCPServerStatus) => {
       if (status === undefined) return; // removals are handled by reloads
       setServers((prev) =>
-        prev.map((s) =>
-          s.name === serverName
-            ? {
-                ...s,
-                status,
-                // Keep needs-auth in step with the live status: a connect
-                // proves auth works; a failure may have just set the 401
-                // marker (it is written before the DISCONNECTED event).
-                requiresAuth:
-                  status === MCPServerStatus.CONNECTED
-                    ? false
-                    : mcpServerRequiresOAuth.get(serverName) === true ||
-                      s.requiresAuth,
-              }
-            : s,
-        ),
+        prev.map((s) => (s.name === serverName ? { ...s, status } : s)),
       );
     };
     addMCPStatusChangeListener(listener);
@@ -343,11 +298,6 @@ export const MCPManagementDialog: React.FC<MCPManagementDialogProps> = ({
     handleNavigateToStep(MCP_MANAGEMENT_STEPS.RESOURCE_LIST);
   }, [handleNavigateToStep]);
 
-  // Authenticate
-  const handleAuthenticate = useCallback(() => {
-    handleNavigateToStep(MCP_MANAGEMENT_STEPS.AUTHENTICATE);
-  }, [handleNavigateToStep]);
-
   // Select tool
   const handleSelectTool = useCallback(
     (tool: MCPToolDisplayInfo) => {
@@ -379,36 +329,6 @@ export const MCPManagementDialog: React.FC<MCPManagementDialogProps> = ({
       setIsLoading(false);
     }
   }, [fetchServerData, restampStatus]);
-
-  // Clear OAuth authentication tokens and disconnect the server
-  const handleClearAuth = useCallback(async () => {
-    if (!config || !selectedServer) return;
-
-    try {
-      setIsLoading(true);
-      const tokenStorage = new MCPOAuthTokenStorage();
-      await tokenStorage.deleteCredentials(selectedServer.name);
-      debugLogger.info(
-        `Cleared OAuth tokens for server '${selectedServer.name}'`,
-      );
-
-      // Disconnect the server so it no longer appears as connected
-      const toolRegistry = config.getToolRegistry();
-      if (toolRegistry) {
-        await toolRegistry.disconnectServer(selectedServer.name);
-      }
-
-      // Reload to update hasOAuthTokens flag and server status
-      await reloadServers();
-    } catch (error) {
-      debugLogger.error(
-        `Error clearing OAuth tokens for server '${selectedServer.name}':`,
-        error,
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [config, selectedServer, reloadServers]);
 
   // Reconnect server
   const handleReconnect = useCallback(async () => {
@@ -740,15 +660,6 @@ export const MCPManagementDialog: React.FC<MCPManagementDialogProps> = ({
           </Box>
         );
         break;
-      case MCP_MANAGEMENT_STEPS.AUTHENTICATE:
-        headerText = (
-          <Box>
-            <Text color={theme.text.accent} bold>
-              {t('OAuth Authentication')}
-            </Text>
-          </Box>
-        );
-        break;
       case MCP_MANAGEMENT_STEPS.SERVER_LIST:
       default:
         break;
@@ -788,8 +699,6 @@ export const MCPManagementDialog: React.FC<MCPManagementDialogProps> = ({
             onApprove={handleApprove}
             onReconnect={handleReconnect}
             onDisable={handleDisable}
-            onAuthenticate={handleAuthenticate}
-            onClearAuth={handleClearAuth}
             onBack={handleNavigateBack}
           />
         );
@@ -836,17 +745,6 @@ export const MCPManagementDialog: React.FC<MCPManagementDialogProps> = ({
           />
         );
 
-      case MCP_MANAGEMENT_STEPS.AUTHENTICATE:
-        return (
-          <AuthenticateStep
-            server={selectedServer}
-            onBack={() => {
-              handleNavigateBack();
-              void reloadServers();
-            }}
-          />
-        );
-
       default:
         return (
           <Box>
@@ -867,15 +765,12 @@ export const MCPManagementDialog: React.FC<MCPManagementDialogProps> = ({
     handleReconnect,
     handleDisable,
     handleApprove,
-    handleAuthenticate,
-    handleClearAuth,
     handleNavigateBack,
     handleSelectTool,
     handleSelectResource,
     handleSelectDisableScope,
     getServerTools,
     getServerResources,
-    reloadServers,
   ]);
 
   // Render step footer
@@ -908,9 +803,6 @@ export const MCPManagementDialog: React.FC<MCPManagementDialogProps> = ({
         break;
       case MCP_MANAGEMENT_STEPS.RESOURCE_DETAIL:
         footerText = t('Esc to back');
-        break;
-      case MCP_MANAGEMENT_STEPS.AUTHENTICATE:
-        footerText = t('Esc to go back');
         break;
       default:
         footerText = t('Esc to close');

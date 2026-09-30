@@ -30,24 +30,23 @@ Hooks are user-defined scripts or programs that are automatically executed by Qw
 
 ### Browsing your hooks
 
-Run `/hooks` to open a read-only browser of the hooks this session runs. It moves from events to matchers to the individual hooks under a matcher; events without matcher support go straight to their hooks. A hook's details show its type, where it comes from, whether it is enabled, its command, URL or prompt, and, when they are set, its timeout, status message, HTTP `if` condition and whether it runs once or in the background. Hooks registered for the current session by skills or the SDK are listed with the source Session.
+Run `/hooks` to open a read-only browser of the hooks this session runs. It moves from events to matchers to the individual hooks under a matcher; events without matcher support go straight to their hooks. A hook's details show its type, where it comes from, whether it is enabled, its command or prompt, and, when they are set, its timeout, status message and whether it runs in the background. Hooks registered for the current session by skills or the SDK are listed with the source Session.
 
 The browser never edits your configuration: to add, change or remove a hook, edit `settings.json`. It does re-read it. Opening the interactive menu reloads hook definitions from the user, workspace and system (System and SystemDefaults) settings files used by this session, including when the session runs in a worktree, so definitions you added, changed or removed since the session started take effect without a restart. If the user or workspace file cannot be read or parsed, both previous settings snapshots and the running hooks are retained, the files are left untouched, and an error is shown. If a system settings file cannot be read or parsed, the hooks from the system files stay as they were, your other edits still take effect, the file is left untouched, and an error names it.
 
 Reloading requires this explicit menu-open action: saving a file, pulling changes or switching branches does not automatically arm new hook commands. The non-interactive `/hooks list` only displays the registry currently loaded by that process; it does not reload settings. In an interactive terminal, `/hooks list` opens the same menu as `/hooks`.
 
-This reload covers hook definitions, not hook controls or HTTP security settings. Changes to `disableAllHooks`, `stopHookBlockingCap`, `security.allowedHttpHookUrls` and `security.allowPrivateNetworkHooks` still require a restart. Hooks registered at runtime by skills or the SDK are not affected. Project hooks load only in a trusted folder. When hooks are turned off by `disableAllHooks`, `--safe-mode` or `--bare`, none load and the browser says so at the top.
+This reload covers hook definitions, not hook controls. Changes to `disableAllHooks` and `stopHookBlockingCap` still require a restart. Hooks registered at runtime by skills or the SDK are not affected. Project hooks load only in a trusted folder. When hooks are turned off by `disableAllHooks`, `--safe-mode` or `--bare`, none load and the browser says so at the top.
 
 ## Hook Types
 
-Qwen Code supports four hook executor types:
+Qwen Code supports three hook executor types:
 
-| Type       | Description                                                                                    |
-| :--------- | :--------------------------------------------------------------------------------------------- |
-| `command`  | Execute a shell command. Receives JSON via `stdin`, returns results via `stdout`.              |
-| `http`     | Send JSON as a `POST` request body to a specified URL. Returns results via HTTP response body. |
-| `function` | Directly call a registered JavaScript function (session-level hooks only).                     |
-| `prompt`   | Use an LLM to evaluate hook input and return a decision.                                       |
+| Type       | Description                                                                       |
+| :--------- | :-------------------------------------------------------------------------------- |
+| `command`  | Execute a shell command. Receives JSON via `stdin`, returns results via `stdout`. |
+| `function` | Directly call a registered JavaScript function (session-level hooks only).        |
+| `prompt`   | Use an LLM to evaluate hook input and return a decision.                          |
 
 ### Command Hooks
 
@@ -67,7 +66,7 @@ Command hooks execute commands via child processes. Input JSON is passed through
 | `shell`         | `"bash" \| "powershell"` | No       | Shell to use                                |
 | `statusMessage` | `string`                 | No       | Status message displayed during execution   |
 
-`timeout` is in seconds for command, HTTP and prompt hooks; SDK-registered function hooks keep milliseconds. Command hook timeouts used to be written in milliseconds, so for command hooks a value of `1000` or more is still read as milliseconds and existing settings keep working. To migrate, look for command hooks whose `timeout` is `1000` or more and rewrite the value in seconds, for example `10000` as `10`. To give a command hook a timeout of 1000 seconds or more, keep writing it in milliseconds, for example `1800000` for 30 minutes. A command hook `timeout` that is not a positive number, such as `"30s"`, is ignored and the 60 second default applies. With debug logging enabled (`QWEN_DEBUG_LOG_FILE=1`), each command hook with a millisecond or ignored `timeout` is named once per session in that session's debug log.
+`timeout` is in seconds for command and prompt hooks; SDK-registered function hooks keep milliseconds. Command hook timeouts used to be written in milliseconds, so for command hooks a value of `1000` or more is still read as milliseconds and existing settings keep working. To migrate, look for command hooks whose `timeout` is `1000` or more and rewrite the value in seconds, for example `10000` as `10`. To give a command hook a timeout of 1000 seconds or more, keep writing it in milliseconds, for example `1800000` for 30 minutes. A command hook `timeout` that is not a positive number, such as `"30s"`, is ignored and the 60 second default applies. With debug logging enabled (`QWEN_DEBUG_LOG_FILE=1`), each command hook with a millisecond or ignored `timeout` is named once per session in that session's debug log.
 
 **Example:**
 
@@ -95,161 +94,11 @@ Command hooks execute commands via child processes. Input JSON is passed through
 
 Migration: bash hooks used to have these variables replaced in the command text before the shell ran, and that replacement has been removed. A bash hook that leaves the variable unquoted in a project path containing spaces, or writes it inside single quotes such as `'$QWEN_PROJECT_DIR/hook.sh'`, must now double-quote it: `"$QWEN_PROJECT_DIR/hook.sh"`.
 
-### HTTP Hooks
-
-HTTP hooks send hook input as POST requests to specified URLs. They support URL whitelists, DNS-level SSRF protection, environment variable interpolation, and other security features.
-
-**Configuration:**
-
-| Field            | Type                     | Required | Description                                               |
-| :--------------- | :----------------------- | :------- | :-------------------------------------------------------- |
-| `type`           | `"http"`                 | Yes      | Hook type                                                 |
-| `url`            | `string`                 | Yes      | Target URL                                                |
-| `headers`        | `Record<string, string>` | No       | Request headers (supports env var interpolation)          |
-| `allowedEnvVars` | `string[]`               | No       | Whitelist of environment variables allowed in URL/headers |
-| `timeout`        | `number`                 | No       | Timeout in seconds, default 600                           |
-| `name`           | `string`                 | No       | Hook name (for logging)                                   |
-| `statusMessage`  | `string`                 | No       | Status message displayed during execution                 |
-| `once`           | `boolean`                | No       | Execute only once per event per session (HTTP hooks only) |
-
-**Security Features:**
-
-- **URL Whitelist**: Configure allowed URL patterns via `allowedUrls`
-- **SSRF Protection**: Blocks private IPs (10.x.x.x, 172.16-31.x.x, 192.168.x.x, etc.) but allows loopback addresses (127.0.0.1, ::1)
-- **DNS Validation**: Validates domain resolution before requests to prevent DNS rebinding attacks
-- **Environment Variable Interpolation**: `${VAR}` syntax, only allows variables in `allowedEnvVars` whitelist
-
-#### Allowing private-network hooks (managed environments only)
-
-By default, HTTP hooks cannot target private or link-local IP ranges. In platform-managed environments where the hook receiver is a first-party, VPC-internal endpoint (for example, an internal API gateway resolving to `172.16.0.0/12`), you can relax the IP-range checks with:
-
-```json
-{
-  "security": {
-    "allowPrivateNetworkHooks": true
-  }
-}
-```
-
-- This setting is **only honored from User, System, and SystemDefaults settings scopes**. A value set in Workspace (project) settings is ignored and logged as a warning, so a cloned repository can never self-grant this bypass.
-- The flag relaxes only the general private/CGNAT/link-local **range** checks. Cloud metadata endpoints stay blocked in every configuration: the `BLOCKED_HOSTS` list is matched literally (`metadata.google.internal`, `metadata.azure.internal`, ...), and the metadata IPs `169.254.169.254` and `100.100.100.200` are blocked in all serialized forms (including IPv4-mapped IPv6 such as `::ffff:a9fe:a9fe`) and after DNS resolution.
-- The `security.allowedHttpHookUrls` whitelist still applies independently. In managed environments, pair this flag with a whitelist so only the intended internal endpoints are reachable. A whitelist in Workspace (project) settings is honored only when no User, System, or SystemDefaults scope sets one; otherwise it is ignored and logged as a warning, so a repository can narrow where its hooks send data but never replace a whitelist you configured (an empty whitelist means "allow all").
-- HTTP hooks never follow redirects. A 3xx response is treated like any other non-2xx status: a non-blocking hook failure, and the redirect target is never contacted.
-
-> **Warning:** Enabling this flag lets hooks reach internal infrastructure on your network. Enable it only in trusted, managed settings — never in a repository you do not control.
-
-**Example:**
-
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "http",
-            "url": "http://127.0.0.1:8080/hooks/pre-tool-use",
-            "headers": {
-              "Authorization": "Bearer ${HOOK_API_KEY}"
-            },
-            "allowedEnvVars": ["HOOK_API_KEY"],
-            "timeout": 10,
-            "name": "remote-security-check"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-**Example: External Judgment Service Adapter**
-
-The `remote-security-check` config above expects `http://127.0.0.1:8080/hooks/pre-tool-use` to
-already be running a service that speaks this contract (POST `{tool_name, tool_input, ...}` in,
-`hookSpecificOutput.permissionDecision` out). Here is a minimal, stdlib-only adapter that fills
-in that missing half, wired to one concrete judgment backend so the whole thing is runnable and
-testable end to end rather than a stub. Only the `review()` function is backend-specific — swap
-its body and request/response shape for whichever service you use; everything else (the server,
-the fail-open handling, the hook response shape) stays the same regardless of backend.
-
-_Disclosure: the backend used below, [invinoveritas](https://api.babyblueviper.com), is a
-service the author is affiliated with — used here because it was the one that could be
-verified end to end for this example, not an endorsement. Any HTTP service that returns a
-JSON verdict works equally well; only `review()` needs to change._
-
-_Data handling: with `matcher: "*"`, the full `tool_input` of **every** tool call is sent to
-the judgment backend — treat that input as sensitive (it may contain file contents, paths, or
-secrets). Narrow the matcher (e.g. to `run_shell_command`) if you only need to judge shell
-commands._
-
-```python
-#!/usr/bin/env python3
-# judgment_hook.py -- run: JUDGMENT_API_KEY=... python3 judgment_hook.py
-import json, os, sys, urllib.request
-from http.server import BaseHTTPRequestHandler, HTTPServer
-
-JUDGMENT_API_KEY = os.environ["JUDGMENT_API_KEY"]
-JUDGMENT_URL = os.environ.get("JUDGMENT_URL", "https://api.babyblueviper.com/review")
-
-def review(tool_name, tool_input):
-    """POST the call to the judgment backend and return its verdict. This is the
-    one function to change for a different backend -- request/response shape
-    below matches invinoveritas's /review; adapt both to your own backend's
-    contract if you swap it out."""
-    body = json.dumps({
-        "artifact": json.dumps({"tool_name": tool_name, "tool_input": tool_input}),
-        "artifact_type": "shell_command" if tool_name in ("run_shell_command", "shell") else "general",
-        "context": f"qwen-code PreToolUse: {tool_name}",
-    }).encode()
-    req = urllib.request.Request(
-        JUDGMENT_URL, data=body,
-        headers={"Authorization": f"Bearer {JUDGMENT_API_KEY}", "Content-Type": "application/json"},
-    )
-    # Keep this below the HTTP hook's own timeout (10s in the config above), so a "deny"
-    # verdict is always returned before the hook gives up and fails open on its own.
-    with urllib.request.urlopen(req, timeout=8) as resp:
-        return json.loads(resp.read())  # response includes a "verdict" field: "reject" denies, anything else allows
-
-class Handler(BaseHTTPRequestHandler):
-    def do_POST(self):
-        payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
-        tool_name, tool_input = payload.get("tool_name", "unknown"), payload.get("tool_input", {})
-        try:
-            verdict = review(tool_name, tool_input)
-            decision = "deny" if verdict.get("verdict") == "reject" else "allow"
-            reason = verdict.get("summary", f"judgment verdict: {verdict.get('verdict')}")
-        except Exception as e:
-            decision, reason = "allow", "judgment backend unavailable, failing open"  # never block on a review-side outage
-            print(f"judgment backend unavailable for {tool_name}, failing open: {e}", file=sys.stderr)
-        out = {"continue": True, "decision": decision, "hookSpecificOutput": {
-            "hookEventName": "PreToolUse", "permissionDecision": decision, "permissionDecisionReason": reason,
-        }}
-        body = json.dumps(out).encode()
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-    def log_message(self, *a): pass
-
-if __name__ == "__main__":
-    HTTPServer(("127.0.0.1", 8080), Handler).serve_forever()
-```
-
-Tested live end to end against the real production API above: a genuinely destructive input
-(`{"tool_name": "run_shell_command", "tool_input": {"command": "rm -rf /important_data"}}`)
-returned `permissionDecision: "deny"` with a real explanation; a benign one (`ls -la`) returned
-`"allow"`. Fails open on any network/timeout/malformed-response issue from the judgment
-backend, so an outage never blocks legitimate tool calls — same discipline the `command`-hook
-examples above apply with their own exit codes.
-
 ### Function Hooks
 
 Function hooks directly call registered JavaScript/TypeScript functions. They are used internally by the Skill system and are not currently exposed as a public API for end users.
 
-**Note**: For most use cases, use **command hooks** or **HTTP hooks** instead, which can be configured in settings files.
+**Note**: For most use cases, use **command hooks** instead, which can be configured in settings files.
 
 ### Prompt Hooks
 
@@ -463,13 +312,12 @@ All hook executors receive the standardized event input. The delivery boundary d
 | Hook type  | Input recipient                                                 |
 | :--------- | :-------------------------------------------------------------- |
 | `command`  | Child process through JSON on `stdin`                           |
-| `http`     | Configured endpoint through a JSON `POST` body                  |
 | `function` | Trusted in-process callback                                     |
 | `prompt`   | Configured model provider after the input replaces `$ARGUMENTS` |
 
 Function hooks are trusted code running in the Qwen process. They receive an in-process object, so fields must not be treated as immutable against a function hook.
 
-Qwen does not control whether a hook process, endpoint, callback, or model provider retains or forwards its input. Review each configured executor's data-handling policy.
+Qwen does not control whether a hook process, callback, or model provider retains or forwards its input. Review each configured executor's data-handling policy.
 
 **Common Fields:**
 
@@ -494,7 +342,7 @@ Hook input is a forward-extensible JSON contract: new optional fields can be add
 
 ### Hook Output Structure
 
-Hook output is returned via `stdout` (command) or HTTP response body (http) as JSON.
+Hook output is returned via `stdout` (command) as JSON.
 
 **Exit Code Behavior (Command Hooks):**
 
@@ -504,7 +352,7 @@ Hook output is returned via `stdout` (command) or HTTP response body (http) as J
 | `2`       | **Blocking error**. Ignores `stdout`, passes `stderr` as error feedback to the model.                                                                                                                                                                                                                                                                                          |
 | Other     | Non-blocking error. `stderr` only shown in debug mode, execution continues.                                                                                                                                                                                                                                                                                                    |
 
-Adding plain text to the model context applies only to a command hook's `stdout`. An HTTP hook's response body is read as JSON only when its `Content-Type` is `application/json`; any other non-empty body becomes a `systemMessage` on every event. An HTTP hook that adds context must return JSON with `hookSpecificOutput.additionalContext`.
+Adding plain text to the model context applies only to a command hook's `stdout`.
 
 **Output Structure:**
 
@@ -716,7 +564,7 @@ Large-paste placeholders remain compact in `submitted_prompt`; the expanded past
 
 Any non-empty input present while Vim mode is enabled omits `submitted_prompt`, including after Vim is disabled, because Vim registers do not carry provenance in this version. This conservative rule also covers drafts entered before enabling Vim. Clearing the composer starts a new eligible input.
 
-This field is provenance, not authentication, tenant identity, authorization, or DLP. It is caller-supplied data. Every executor configured for this event receives it; in particular, HTTP hooks send it to their endpoint and prompt hooks send it to their model provider.
+This field is provenance, not authentication, tenant identity, authorization, or DLP. It is caller-supplied data. Every executor configured for this event receives it; in particular, prompt hooks send it to their model provider.
 
 When both fields are present, prompt-hook payloads contain overlapping text and can consume additional model input tokens. There is no per-hook field suppression in this version.
 
@@ -1640,36 +1488,7 @@ Configure in `.qwen/settings.json`:
 }
 ```
 
-### Example 2: HTTP Audit Hook
-
-A PostToolUse HTTP hook that sends all tool execution records to a remote audit service:
-
-```json
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "http",
-            "url": "https://audit.example.com/api/tool-execution",
-            "headers": {
-              "Authorization": "Bearer ${AUDIT_API_TOKEN}",
-              "Content-Type": "application/json"
-            },
-            "allowedEnvVars": ["AUDIT_API_TOKEN"],
-            "timeout": 10,
-            "name": "audit-logger"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-### Example 3: Submitted Prompt Validation Hook
+### Example 2: Submitted Prompt Validation Hook
 
 On the core/headless path, `prompt` can include generated or expanded content rather than original user input. On ACP it starts with the pre-expansion request text, so reading it does not inspect attachment bodies or the complete model input. `UserPromptSubmit` does not cover every model send. Do not silently fall back from `submitted_prompt` to `prompt` when source provenance is required.
 
@@ -1739,11 +1558,11 @@ sys.exit(0)
    - `[TRUSTED_HOOKS]`: `Hook <name> started for event <event>` and the matching `ended` line for each run, async hook status, and hook system messages
    - `[HOOK_MATCHER]`: matchers that are not valid regular expressions
    - `[HOOK_TIMEOUT]`: command hook `timeout` values read as milliseconds or ignored
-   - `[HTTP_HOOK_RUNNER]`, `[URL_VALIDATOR]`, `[PROMPT_HOOK_RUNNER]`, `[FUNCTION_HOOK_RUNNER]`, `[SKILL_HOOKS]`, `[SESSION_HOOKS_MANAGER]`, `[ASYNC_HOOK_REGISTRY]` and `[HOOK_AGGREGATOR]`: details from the individual runners and registries
+   - `[PROMPT_HOOK_RUNNER]`, `[FUNCTION_HOOK_RUNNER]`, `[SKILL_HOOKS]`, `[SESSION_HOOKS_MANAGER]`, `[ASYNC_HOOK_REGISTRY]` and `[HOOK_AGGREGATOR]`: details from the individual runners and registries
 
    Prompt-hook inputs can be written to the session debug log, so apply appropriate access and retention controls.
 
-6. **Edited during the session.** Hooks are read when the session starts. After editing hook definitions, open the interactive `/hooks` menu once to reload them, or restart Qwen Code. Changes to hook controls and HTTP security settings require a restart.
+6. **Edited during the session.** Hooks are read when the session starts. After editing hook definitions, open the interactive `/hooks` menu once to reload them, or restart Qwen Code. Changes to hook controls require a restart.
 
 ### Other checks
 

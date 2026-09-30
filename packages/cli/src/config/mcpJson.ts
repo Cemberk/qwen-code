@@ -96,8 +96,14 @@ export function loadProjectMcpServers(
       errors.push(`${filePath}: server "${name}" is not an object — skipped`);
       continue;
     }
-    // `.mcp.json` is the Claude Code convention, so entries may use Claude's
-    // `type`-based transport shape; normalize them to Qwen's field-based shape.
+    if (typeof (value as Record<string, unknown>)['command'] !== 'string') {
+      errors.push(
+        `${filePath}: server "${name}" is not a stdio server — skipped`,
+      );
+      continue;
+    }
+    // `.mcp.json` is the Claude Code convention, so entries may carry Claude's
+    // `type` transport discriminator; normalize them to Qwen's shape.
     servers[name] = {
       ...normalizeClaudeMcpServer(value as MCPServerConfig),
       scope: 'project',

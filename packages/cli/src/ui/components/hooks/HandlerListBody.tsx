@@ -77,8 +77,6 @@ function describeHook(info: HookConfigDisplayInfo): string {
   switch (config.type) {
     case HookType.Command:
       return config.command || '';
-    case HookType.Http:
-      return config.name || config.url || '';
     case HookType.Function:
       return config.name || config.id || 'function-hook';
     case HookType.Prompt: {

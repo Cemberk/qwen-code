@@ -170,9 +170,7 @@ describe('applyProviderInstallPlan', () => {
           syncAuthState,
         });
         expect(result.updatedModelProviders['openai']?.[0]).toMatchObject({
-          ...(purpose === 'image'
-            ? { imageOnly: true, supportsImageGeneration: true }
-            : { voiceOnly: true }),
+          ...(purpose === 'image' ? { imageOnly: true } : { voiceOnly: true }),
           generationConfig: { contextWindowSize: 65536 },
         });
         expect(result.updatedModelProviders['anthropic']).toEqual([
@@ -238,7 +236,6 @@ describe('applyProviderInstallPlan', () => {
           baseUrl,
           envKey: `${generateCustomEnvKey(AuthType.USE_OPENAI, baseUrl)}_IMAGE`,
           imageOnly: true,
-          supportsImageGeneration: true,
         },
       ],
     });
@@ -535,9 +532,7 @@ describe('applyProviderInstallPlan', () => {
         name: '[MiniMax] service',
         baseUrl: 'https://api.minimax.io/v1',
         envKey: 'MINIMAX_API_KEY',
-        ...(purpose === 'voice'
-          ? { voiceOnly: true }
-          : { imageOnly: true, supportsImageGeneration: true }),
+        ...(purpose === 'voice' ? { voiceOnly: true } : { imageOnly: true }),
       };
       const adapter = createAdapter({ openai: [service] });
       const plan = buildInstallPlan(minimaxProvider, {
@@ -587,7 +582,6 @@ describe('applyProviderInstallPlan', () => {
         baseUrl: 'https://api.minimax.io/v1',
         envKey: 'MINIMAX_API_KEY',
         imageOnly: true,
-        supportsImageGeneration: true,
       };
       // The owned model of the *other* purpose lives in a user-named bucket
       // that merely resolves to the same protocol. The install rewrites only
@@ -665,9 +659,7 @@ describe('applyProviderInstallPlan', () => {
         name: '[MiniMax] existing',
         baseUrl: 'https://api.minimax.io/v1',
         envKey: 'MINIMAX_API_KEY',
-        ...(scenario === 'reselect-chat'
-          ? {}
-          : { imageOnly: true, supportsImageGeneration: true }),
+        ...(scenario === 'reselect-chat' ? {} : { imageOnly: true }),
       };
       const plan = buildInstallPlan(minimaxProvider, {
         baseUrl: existing.baseUrl,
@@ -740,7 +732,6 @@ describe('applyProviderInstallPlan', () => {
         baseUrl: 'https://api.minimax.io/v1',
         envKey: 'MINIMAX_API_KEY',
         imageOnly: true,
-        supportsImageGeneration: true,
       };
       const adapter = createAdapter({ openai: [service] });
       const plan = buildInstallPlan(minimaxProvider, {
@@ -751,7 +742,6 @@ describe('applyProviderInstallPlan', () => {
       const replacement = plan.modelProviders![0]!.models[1]!;
       replacement.imageOnly = false;
       replacement.voiceOnly = purpose === 'voice';
-      replacement.supportsImageGeneration = false;
       plan.env = { TEST_API_KEY: 'must-not-write' };
       process.env['TEST_API_KEY'] = 'unchanged';
       await expect(

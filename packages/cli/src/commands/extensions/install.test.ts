@@ -86,72 +86,6 @@ describe('handleInstall', () => {
     vi.clearAllMocks();
   });
 
-  it('should install an extension from a http source', async () => {
-    const processSpy = vi
-      .spyOn(process, 'exit')
-      .mockImplementation(() => undefined as never);
-
-    mockParseInstallSource.mockResolvedValue({
-      type: 'http',
-      url: 'http://google.com',
-    });
-    mockInstallExtension.mockResolvedValue({ name: 'http-extension' });
-
-    await handleInstall({
-      source: 'http://google.com',
-    });
-
-    expect(mockWriteStdoutLine).toHaveBeenCalledWith(
-      'Extension "http-extension" installed successfully and enabled.',
-    );
-
-    processSpy.mockRestore();
-  });
-
-  it('should install an extension from a https source', async () => {
-    const processSpy = vi
-      .spyOn(process, 'exit')
-      .mockImplementation(() => undefined as never);
-
-    mockParseInstallSource.mockResolvedValue({
-      type: 'https',
-      url: 'https://google.com',
-    });
-    mockInstallExtension.mockResolvedValue({ name: 'https-extension' });
-
-    await handleInstall({
-      source: 'https://google.com',
-    });
-
-    expect(mockWriteStdoutLine).toHaveBeenCalledWith(
-      'Extension "https-extension" installed successfully and enabled.',
-    );
-
-    processSpy.mockRestore();
-  });
-
-  it('should install an extension from a git source', async () => {
-    const processSpy = vi
-      .spyOn(process, 'exit')
-      .mockImplementation(() => undefined as never);
-
-    mockParseInstallSource.mockResolvedValue({
-      type: 'git',
-      url: 'git@some-url',
-    });
-    mockInstallExtension.mockResolvedValue({ name: 'git-extension' });
-
-    await handleInstall({
-      source: 'git@some-url',
-    });
-
-    expect(mockWriteStdoutLine).toHaveBeenCalledWith(
-      'Extension "git-extension" installed successfully and enabled.',
-    );
-
-    processSpy.mockRestore();
-  });
-
   it('throws an error from an unknown source', async () => {
     const processSpy = vi
       .spyOn(process, 'exit')
@@ -172,28 +106,6 @@ describe('handleInstall', () => {
     processSpy.mockRestore();
   });
 
-  it('should install an extension from a sso source', async () => {
-    const processSpy = vi
-      .spyOn(process, 'exit')
-      .mockImplementation(() => undefined as never);
-
-    mockParseInstallSource.mockResolvedValue({
-      type: 'sso',
-      url: 'sso://google.com',
-    });
-    mockInstallExtension.mockResolvedValue({ name: 'sso-extension' });
-
-    await handleInstall({
-      source: 'sso://google.com',
-    });
-
-    expect(mockWriteStdoutLine).toHaveBeenCalledWith(
-      'Extension "sso-extension" installed successfully and enabled.',
-    );
-
-    processSpy.mockRestore();
-  });
-
   it('should install an extension from a local path', async () => {
     const processSpy = vi
       .spyOn(process, 'exit')
@@ -201,7 +113,7 @@ describe('handleInstall', () => {
 
     mockParseInstallSource.mockResolvedValue({
       type: 'local',
-      path: '/some/path',
+      source: '/some/path',
     });
     mockInstallExtension.mockResolvedValue({ name: 'local-extension' });
 
@@ -216,77 +128,20 @@ describe('handleInstall', () => {
     processSpy.mockRestore();
   });
 
-  it('should install an extension from an archive URL', async () => {
-    const processSpy = vi
-      .spyOn(process, 'exit')
-      .mockImplementation(() => undefined as never);
-
-    mockParseInstallSource.mockResolvedValue({
-      type: 'archive-url',
-      source: 'https://example.com/extension.zip',
-    });
-    mockInstallExtension.mockResolvedValue({ name: 'archive-extension' });
-
-    await handleInstall({
-      source: 'https://example.com/extension.zip',
-    });
-
-    expect(mockInstallExtension).toHaveBeenCalledWith(
-      expect.objectContaining({
-        source: 'https://example.com/extension.zip',
-        type: 'archive-url',
-      }),
-      expect.any(Function),
-      undefined,
-      expect.any(String),
-      undefined,
-      { scope: 'user' },
-    );
-    expect(mockWriteStdoutLine).toHaveBeenCalledWith(
-      'Extension "archive-extension" installed successfully and enabled.',
-    );
-
-    processSpy.mockRestore();
-  });
-
-  it('should reject --ref for archive URL extensions', async () => {
-    const processSpy = vi
-      .spyOn(process, 'exit')
-      .mockImplementation(() => undefined as never);
-
-    mockParseInstallSource.mockResolvedValue({
-      type: 'archive-url',
-      source: 'https://example.com/extension.zip',
-    });
-
-    await handleInstall({
-      source: 'https://example.com/extension.zip',
-      ref: 'v1.0.0',
-    });
-
-    expect(mockWriteStderrLine).toHaveBeenCalledWith(
-      '--ref is not applicable for archive URL extensions.',
-    );
-    expect(mockInstallExtension).not.toHaveBeenCalled();
-    expect(processSpy).toHaveBeenCalledWith(1);
-
-    processSpy.mockRestore();
-  });
-
   it('should throw an error if install extension fails', async () => {
     const processSpy = vi
       .spyOn(process, 'exit')
       .mockImplementation(() => undefined as never);
 
     mockParseInstallSource.mockResolvedValue({
-      type: 'git',
-      url: 'git@some-url',
+      type: 'local',
+      source: '/some/path',
     });
     mockInstallExtension.mockRejectedValue(
       new Error('Install extension failed'),
     );
 
-    await handleInstall({ source: 'git@some-url' });
+    await handleInstall({ source: '/some/path' });
 
     expect(mockWriteStderrLine).toHaveBeenCalledWith(
       'Install extension failed',
@@ -301,8 +156,8 @@ describe('handleInstall', () => {
       .spyOn(process, 'exit')
       .mockImplementation(() => undefined as never);
     mockParseInstallSource.mockResolvedValue({
-      type: 'git',
-      url: 'git@some-url',
+      type: 'local',
+      source: '/some/path',
     });
     mockInstallExtension.mockRejectedValue(
       Object.assign(
@@ -316,7 +171,7 @@ describe('handleInstall', () => {
       ),
     );
 
-    await handleInstall({ source: 'git@some-url', scope: 'project' });
+    await handleInstall({ source: '/some/path', scope: 'project' });
 
     expect(mockWriteStderrLine).toHaveBeenCalledWith(
       'Warning: Extension committed but could not be reloaded.',
@@ -332,12 +187,12 @@ describe('handleInstall', () => {
 
   it('commits project-scope activation with the install', async () => {
     mockParseInstallSource.mockResolvedValue({
-      type: 'git',
-      url: 'git@some-url',
+      type: 'local',
+      source: '/some/path',
     });
     mockInstallExtension.mockResolvedValue({ name: 'scoped-extension' });
 
-    await handleInstall({ source: 'git@some-url', scope: 'project' });
+    await handleInstall({ source: '/some/path', scope: 'project' });
 
     expect(mockSetExtensionScope).toHaveBeenCalledWith(
       'scoped-extension',
@@ -361,15 +216,15 @@ describe('handleInstall', () => {
 
   it('keeps a committed install successful when saving scope preference fails', async () => {
     mockParseInstallSource.mockResolvedValue({
-      type: 'git',
-      url: 'git@some-url',
+      type: 'local',
+      source: '/some/path',
     });
     mockInstallExtension.mockResolvedValue({ name: 'scoped-extension' });
     mockSetExtensionScope.mockImplementationOnce(() => {
       throw new Error('preference denied');
     });
 
-    await handleInstall({ source: 'git@some-url', scope: 'project' });
+    await handleInstall({ source: '/some/path', scope: 'project' });
 
     expect(mockWriteStdoutLine).toHaveBeenCalledWith(
       'Extension "scoped-extension" installed successfully and enabled for the current workspace.',
@@ -384,12 +239,12 @@ describe('handleInstall', () => {
       .spyOn(process, 'exit')
       .mockImplementation(() => undefined as never);
     mockParseInstallSource.mockResolvedValue({
-      type: 'git',
-      url: 'git@some-url',
+      type: 'local',
+      source: '/some/path',
     });
     mockInstallExtension.mockRejectedValue(new Error('atomic install failed'));
 
-    await handleInstall({ source: 'git@some-url', scope: 'project' });
+    await handleInstall({ source: '/some/path', scope: 'project' });
 
     expect(mockSetExtensionScope).not.toHaveBeenCalled();
     expect(mockWriteStderrLine).toHaveBeenCalledWith('atomic install failed');
@@ -399,12 +254,12 @@ describe('handleInstall', () => {
 
   it('should accept workspace as an alias of project scope', async () => {
     mockParseInstallSource.mockResolvedValue({
-      type: 'git',
-      url: 'git@some-url',
+      type: 'local',
+      source: '/some/path',
     });
     mockInstallExtension.mockResolvedValue({ name: 'scoped-extension' });
 
-    await handleInstall({ source: 'git@some-url', scope: 'workspace' });
+    await handleInstall({ source: '/some/path', scope: 'workspace' });
 
     expect(mockSetExtensionScope).toHaveBeenCalledWith(
       'scoped-extension',
@@ -422,12 +277,12 @@ describe('handleInstall', () => {
 
   it('should record user scope without re-scoping enablement', async () => {
     mockParseInstallSource.mockResolvedValue({
-      type: 'git',
-      url: 'git@some-url',
+      type: 'local',
+      source: '/some/path',
     });
     mockInstallExtension.mockResolvedValue({ name: 'user-extension' });
 
-    await handleInstall({ source: 'git@some-url', scope: 'user' });
+    await handleInstall({ source: '/some/path', scope: 'user' });
 
     expect(mockSetExtensionScope).toHaveBeenCalledWith(
       'user-extension',
@@ -452,8 +307,8 @@ describe('handleInstall', () => {
       .mockImplementation(() => undefined as never);
 
     mockParseInstallSource.mockResolvedValue({
-      type: 'git',
-      source: 'owner/repo',
+      type: 'local',
+      source: '/some/extension.zip',
     });
     mockInstallExtension.mockRejectedValue(
       new Error(
@@ -461,7 +316,7 @@ describe('handleInstall', () => {
       ),
     );
 
-    await handleInstall({ source: 'owner/repo' });
+    await handleInstall({ source: '/some/extension.zip' });
 
     expect(mockWriteStderrLine).toHaveBeenCalledWith(
       'Extension archive is missing a supported extension manifest. Expected qwen-extension.json, gemini-extension.json, .claude-plugin/marketplace.json, or .claude-plugin/plugin.json at the archive root, or inside a single top-level extension directory.',

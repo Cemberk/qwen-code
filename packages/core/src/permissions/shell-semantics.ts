@@ -8,16 +8,12 @@
  * Shell command semantic analysis for permission matching.
  *
  * Analyzes simple shell commands to extract "virtual tool operations" so that
- * Read / Edit / Write / WebFetch / ListFiles permission rules can match their
- * shell equivalents and prevent bypass via the shell tool.
+ * Read / Edit / Write / ListFiles permission rules can match their shell
+ * equivalents and prevent bypass via the shell tool.
  *
  * @example
  *   extractShellOperations('cat /etc/passwd', '/home/user')
  *   // → [{ virtualTool: 'read_file', filePath: '/etc/passwd' }]
- *
- * @example
- *   extractShellOperations('curl https://example.com/api', '/home/user')
- *   // → [{ virtualTool: 'web_fetch', domain: 'example.com' }]
  *
  * @example
  *   extractShellOperations('echo hi > /etc/motd', '/home/user')
@@ -44,8 +40,8 @@ const shellSemanticsDebugLogger = createDebugLogger('SHELL_SEMANTICS');
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * A virtual file or network operation extracted from a shell command.
- * Used to match Read / Edit / Write / WebFetch / ListFiles permission rules
+ * A virtual file operation extracted from a shell command.
+ * Used to match Read / Edit / Write / ListFiles permission rules
  * against shell commands that perform equivalent operations.
  */
 export interface ShellOperation {
@@ -58,12 +54,9 @@ export interface ShellOperation {
     | 'list_directory'
     | 'edit'
     | 'write_file'
-    | 'web_fetch'
     | 'grep_search';
   /** Absolute file or directory path (for file operations). */
   filePath?: string;
-  /** Domain name without port (for web_fetch operations). */
-  domain?: string;
   /**
    * True when this operation was extracted after a dynamic `cd` whose target
    * cannot be statically resolved. Consumers that enforce protected relative
@@ -202,7 +195,7 @@ function looksLikePath(s: string): boolean {
   if (/^\d+$/.test(s)) return false;
   // Script-like expressions (awk/sed programs, brace expansions)
   if (s.includes('{') || s.includes('}')) return false;
-  // URLs are handled separately by the web-fetch handlers
+  // URLs are not file paths
   if (s.includes('://')) return false;
   return true;
 }
@@ -490,17 +483,6 @@ function listOps(
     virtualTool: 'list_directory' as const,
     filePath: resolvePath(p, cwd),
   }));
-}
-
-/** Extract URL domain and return a web_fetch operation, or null on failure. */
-function webOp(url: string): ShellOperation | null {
-  try {
-    const normalized = url.includes('://') ? url : `https://${url}`;
-    const domain = new URL(normalized).hostname;
-    return domain ? { virtualTool: 'web_fetch', domain } : null;
-  } catch {
-    return null;
-  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1681,167 +1663,16 @@ const COMMANDS: Readonly<Record<string, CommandHandler>> = {
   },
   gawk: (a, d) => (COMMANDS['awk'] as CommandHandler)(a, d),
 
-  // ── WebFetch commands ─────────────────────────────────────────────────────
+  // ── Download commands (output-file writes) ────────────────────────────────
 
   curl: (args, cwd) => {
-    const flagsWithValue = new Set([
-      '-o',
-      '-O',
-      '--output',
-      '-u',
-      '--user',
-      '-A',
-      '--user-agent',
-      '-H',
-      '--header',
-      '-d',
-      '--data',
-      '--data-binary',
-      '--data-raw',
-      '--data-urlencode',
-      '-X',
-      '--request',
-      '-F',
-      '--form',
-      '-e',
-      '--referer',
-      '-T',
-      '--upload-file',
-      '--cacert',
-      '--capath',
-      '--cert',
-      '--key',
-      '--pass',
-      '-m',
-      '--max-time',
-      '--connect-timeout',
-      '-r',
-      '--range',
-      '--limit-rate',
-      '-b',
-      '--cookie',
-      '-c',
-      '--cookie-jar',
-      '--proxy',
-      '-U',
-      '--proxy-user',
-      '-K',
-      '--config',
-      '--netrc-file',
-      '--resolve',
-      '--connect-to',
-      '-w',
-      '--write-out',
-      '-x',
-      '-Y',
-      '--speed-limit',
-      '--speed-time',
-      '-y',
-      '--max-filesize',
-      '--proto',
-      '--proto-redir',
-      '-E',
-      '--cert-type',
-      '--key-type',
-    ]);
     const output = writeOpForFlag(args, cwd, '-o', '--output');
-    return [
-      ...(output ? [output] : []),
-      ...getPositionalArgs(args, flagsWithValue)
-        .filter(
-          (p) =>
-            p.includes('://') || /^https?:\/\//.test(p) || /^ftp:\/\//.test(p),
-        )
-        .flatMap((url) => {
-          const op = webOp(url);
-          return op ? [op] : [];
-        }),
-    ];
+    return output ? [output] : [];
   },
 
   wget: (args, cwd) => {
-    const flagsWithValue = new Set([
-      '-O',
-      '--output-document',
-      '-P',
-      '--directory-prefix',
-      '-o',
-      '--output-file',
-      '-a',
-      '--append-output',
-      '-U',
-      '--user-agent',
-      '--header',
-      '-e',
-      '--execute',
-      '--tries',
-      '-t',
-      '-T',
-      '--timeout',
-      '--wait',
-      '-w',
-      '--quota',
-      '-Q',
-      '--bind-address',
-      '--limit-rate',
-      '--user',
-      '--password',
-      '--proxy-user',
-      '--proxy-password',
-      '-i',
-      '--input-file',
-      '--base',
-      '--config',
-      '--referer',
-      '-D',
-      '--domains',
-      '--exclude-domains',
-      '-I',
-      '--include-directories',
-      '-X',
-      '--exclude-directories',
-      '--regex-type',
-      '-A',
-      '-R',
-      '--accept',
-      '--reject',
-      '--no-check-certificate',
-      '--ca-certificate',
-      '--ca-directory',
-      '--certificate',
-      '--private-key',
-    ]);
     const output = writeOpForFlag(args, cwd, '-O', '--output-document');
-    return [
-      ...(output ? [output] : []),
-      ...getPositionalArgs(args, flagsWithValue)
-        .filter((p) => p.includes('://') || /^https?:\/\//.test(p))
-        .flatMap((url) => {
-          const op = webOp(url);
-          return op ? [op] : [];
-        }),
-    ];
-  },
-
-  fetch: (args) => {
-    // BSD `fetch` utility
-    const flagsWithValue = new Set([
-      '-o',
-      '-q',
-      '-v',
-      '-a',
-      '-T',
-      '-S',
-      '--no-verify-peer',
-      '--no-verify-hostname',
-      '--ca-cert',
-    ]);
-    return getPositionalArgs(args, flagsWithValue)
-      .filter((p) => p.includes('://'))
-      .flatMap((url) => {
-        const op = webOp(url);
-        return op ? [op] : [];
-      });
+    return output ? [output] : [];
   },
 };
 

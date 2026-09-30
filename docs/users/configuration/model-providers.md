@@ -22,53 +22,6 @@ Use `modelProviders` to declare models per provider id that the `/model` picker 
 >
 > **Hot reload vs. restart:** `modelProviders` edits in `settings.json` are picked up by a running interactive session without a restart (the file watcher debounces ~300ms; reopen `/model` to see new entries, the current selection is kept). Changing the active model's `wireApi` creates a different route; select that route explicitly or restart to use it. Invalid API edits leave the prior registry usable. `providerProtocol` is read once at startup and **requires a restart**.
 
-### Image generation routes
-
-Set `supportsImageGeneration: true` when a route can be used by the built-in
-`image_gen` tool. This capability is independent from image input support such
-as `capabilities.vision` or `generationConfig.modalities.image`.
-
-Use `imageOnly: true` when the route is dedicated to image generation and must
-not appear in ordinary model selectors. For backward compatibility,
-`imageOnly: true` also implies image-generation capability, so existing settings
-do not need to be migrated.
-
-A dual-role route can be selected both as the main model and through
-`/model --image`:
-
-```json
-{
-  "modelProviders": {
-    "openai": [
-      {
-        "id": "omni-model",
-        "envKey": "MODEL_API_KEY",
-        "baseUrl": "https://gateway.example.com/model-api",
-        "supportsImageGeneration": true
-      }
-    ]
-  }
-}
-```
-
-A dedicated image route sets both fields. The legacy form with only
-`imageOnly: true` remains valid:
-
-```json
-{
-  "id": "image-model",
-  "envKey": "MODEL_API_KEY",
-  "baseUrl": "https://images.example.com/api/v1",
-  "supportsImageGeneration": true,
-  "imageOnly": true
-}
-```
-
-The selected route must declare an explicit HTTPS `baseUrl` and a non-empty
-`envKey`. Image generation uses the same endpoint and credential as the route;
-if chat and image generation require different endpoints or credentials,
-configure two routes instead.
-
 ## Override reasoning capabilities
 
 Set `capabilities.reasoning` on a model entry to override its reasoning format,

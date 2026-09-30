@@ -419,18 +419,6 @@ export interface LspInitializationOptions {
 }
 
 /**
- * Socket connection options for TCP or Unix socket transport.
- */
-export interface LspSocketOptions {
-  /** Host address for TCP connections */
-  host?: string;
-  /** Port number for TCP connections */
-  port?: number;
-  /** Path for Unix socket connections */
-  path?: string;
-}
-
-/**
  * Configuration for an LSP server instance.
  */
 export interface LspServerConfig {
@@ -438,12 +426,12 @@ export interface LspServerConfig {
   name: string;
   /** List of languages this server handles */
   languages: string[];
-  /** Command to start the server (required for stdio transport) */
+  /** Command to start the server */
   command?: string;
   /** Command line arguments */
   args?: string[];
-  /** Transport type: stdio, tcp, or socket */
-  transport: 'stdio' | 'tcp' | 'socket';
+  /** Transport type (only stdio is supported) */
+  transport: 'stdio';
   /** Environment variables for the server process */
   env?: Record<string, string>;
   /** LSP initialization options */
@@ -466,8 +454,6 @@ export interface LspServerConfig {
   maxRestarts?: number;
   /** Whether trusted workspace is required */
   trustRequired?: boolean;
-  /** Socket connection options */
-  socket?: LspSocketOptions;
 }
 
 /**

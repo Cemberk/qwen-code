@@ -27,8 +27,6 @@ export {
   resolveModelSelectionAuthType,
 } from './modelRegistry.js';
 
-export { isImageGenerationCapable } from './image-generation-capability.js';
-
 export {
   ModelsConfig,
   type ModelsConfigOptions,

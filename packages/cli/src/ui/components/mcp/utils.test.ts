@@ -123,13 +123,6 @@ describe('MCP utils', () => {
   });
 
   describe('formatServerCommand', () => {
-    it('should format http URL', () => {
-      const server = {
-        config: { httpUrl: 'http://localhost:3000' },
-      } as MCPServerDisplayInfo;
-      expect(formatServerCommand(server)).toBe('http://localhost:3000 (http)');
-    });
-
     it('should format stdio command', () => {
       const server = {
         config: { command: 'node', args: ['server.js'] },

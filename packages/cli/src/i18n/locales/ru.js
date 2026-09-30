@@ -532,8 +532,8 @@ export default {
   'Manage installed extensions': 'Управлять установленными расширениями',
   'Disable an extension': 'Отключить расширение',
   'Enable an extension': 'Включить расширение',
-  'Install an extension from a git repo or local path':
-    'Установить расширение из Git-репозитория или локального пути',
+  'Install an extension from a local path':
+    'Установить расширение из локального пути',
   'Uninstall an extension': 'Удалить расширение',
   'No extensions installed.': 'Расширения не установлены.',
   'Extension "{{name}}" not found.': 'Расширение "{{name}}" не найдено.',
@@ -570,15 +570,10 @@ export default {
   'Installation cancelled for "{{name}}".': 'Установка "{{name}}" отменена.',
   'You are installing an extension from {{originSource}}. Some features may not work perfectly with Qwen Code.':
     'Вы устанавливаете расширение от {{originSource}}. Некоторые функции могут работать не идеально с Qwen Code.',
-  '--ref is not applicable for marketplace extensions.':
-    '--ref неприменим для расширений из маркетплейса.',
   'Extension "{{name}}" installed successfully and enabled.':
     'Расширение "{{name}}" успешно установлено и включено.',
   'The github URL, local path, or marketplace source (marketplace-url:plugin-name) of the extension to install.':
     'URL GitHub, локальный путь или источник в маркетплейсе (marketplace-url:plugin-name) устанавливаемого расширения.',
-  'The git ref to install from.': 'Git-ссылка для установки.',
-  'Enable pre-release versions for this extension.':
-    'Включить пре-релизные версии для этого расширения.',
   'Acknowledge the security risks of installing an extension and skip the confirmation prompt.':
     'Подтвердить риски безопасности установки расширения и пропустить запрос подтверждения.',
   'The source argument must be provided.':
@@ -622,8 +617,6 @@ export default {
   'Path:': 'Путь:',
   'Source:': 'Источник:',
   'Type:': 'Тип:',
-  'Ref:': 'Ссылка:',
-  'Release tag:': 'Тег релиза:',
   'Enabled (User):': 'Включено (Пользователь):',
   'Enabled (Workspace):': 'Включено (Рабочее пространство):',
   'Context files:': 'Контекстные файлы:',
@@ -721,8 +714,8 @@ export default {
     'Это меню только для чтения. Чтобы добавить или изменить хуки, отредактируйте settings.json напрямую или спросите Qwen Code.',
   'Reopen this menu to reload hook definitions.':
     'Откройте это меню повторно, чтобы перезагрузить определения хуков.',
-  'Hook controls and HTTP security settings require a restart.':
-    'Изменения параметров управления хуками и настроек безопасности HTTP требуют перезапуска.',
+  'Hook controls require a restart.':
+    'Изменения параметров управления хуками требуют перезапуска.',
   'Failed to reload hook definitions: {{error}}':
     'Не удалось перезагрузить определения хуков: {{error}}',
   'Enter to select · Esc to cancel': 'Enter для выбора · Esc для отмены',
@@ -970,15 +963,6 @@ export default {
     'Консолидировать файлы тем управляемой автопамяти.',
   'Could not retrieve tool registry.':
     'Не удалось получить реестр инструментов.',
-  "Successfully authenticated and refreshed tools for '{{name}}'.":
-    "Успешно авторизовано и обновлены инструменты для '{{name}}'.",
-  "Re-discovering tools from '{{name}}'...":
-    "Повторное обнаружение инструментов от '{{name}}'...",
-  "Discovered {{count}} tool(s) from '{{name}}'.":
-    "Обнаружено {{count}} инструмент(ов) от '{{name}}'.",
-  'Authentication complete. Returning to server details...':
-    'Аутентификация завершена. Возврат к деталям сервера...',
-  'Authentication successful.': 'Аутентификация успешна.',
   // =========================================================
   // Команды - Резюме
   // ============================================================================
@@ -1091,9 +1075,6 @@ export default {
   // MCP Management - Core translations
   Disable: 'Отключить',
   Enable: 'Включить',
-  Authenticate: 'Аутентификация',
-  'Re-authenticate': 'Повторная аутентификация',
-  'Clear Authentication': 'Очистить аутентификацию',
   disabled: 'отключен',
   enabled: 'включен',
   'disabled (bare mode)': 'отключен (минимальный режим)',
@@ -1101,7 +1082,6 @@ export default {
   'disabled (disableAllHooks)': 'отключен (disableAllHooks)',
   'disabled (folder not trusted)': 'отключен (папка не доверенная)',
   'disabled (turned off for this session)': 'отключен (выключен в этой сессии)',
-  'Server:': 'Сервер:',
   Reconnect: 'Переподключить',
   'View tools': 'Просмотреть инструменты',
   'Error:': 'Ошибка:',
@@ -1348,8 +1328,6 @@ export default {
   '{{count}} prompts': '{{count}} промпта(ов)',
   '(from {{extensionName}})': '(от {{extensionName}})',
   OAuth: 'OAuth',
-  'OAuth expired': 'OAuth истек',
-  'OAuth not authenticated': 'OAuth не авторизован',
   'tools and prompts will appear when ready':
     'инструменты и промпты появятся, когда будут готовы',
   '{{count}} tools cached': '{{count}} инструмента(ов) в кэше',
@@ -1364,13 +1342,9 @@ export default {
     'для показа описаний сервера и инструментов',
   'to show tool parameter schemas': 'для показа tool parameter schemas',
   'to hide descriptions': 'для скрытия описаний',
-  'to authenticate with OAuth-enabled servers':
-    'для авторизации на серверах с поддержкой OAuth',
   Press: 'Нажмите',
   'to toggle tool descriptions on/off':
     'для переключения описаний инструментов',
-  "Starting OAuth authentication for MCP server '{{name}}'...":
-    "Начало авторизации OAuth для MCP server '{{name}}'...",
   // ============================================================================
   // Подсказки при запуске
   // ============================================================================
@@ -1820,9 +1794,6 @@ export default {
     'Запустите qwen --debug для просмотра журналов ошибок',
 
   // MCP OAuth Authentication
-  'OAuth Authentication': 'OAuth-аутентификация',
-  'Authenticating... Please complete the login in your browser.':
-    'Аутентификация... Пожалуйста, завершите вход в браузере.',
   // MCP Tool List
   'No tools available for this server.':
     'Для этого сервера нет доступных инструментов.',
@@ -2053,12 +2024,6 @@ export default {
   "Use '/extensions install' to install your first extension.":
     "Используйте '/extensions install', чтобы установить первое расширение.",
   'Value:': 'Значение:',
-  'Press c to copy the authorization URL to your clipboard.':
-    'Нажмите c, чтобы скопировать URL авторизации в буфер обмена.',
-  'Copy request sent to your terminal. If paste is empty, copy the URL above manually.':
-    'Запрос копирования отправлен в терминал. Если вставка пуста, скопируйте URL выше вручную.',
-  'Cannot write to terminal — copy the URL above manually.':
-    'Не удалось записать в терминал — скопируйте URL выше вручную.',
   'Tips:': 'Советы:',
   'Retrying in {{seconds}} seconds… (attempt {{attempt}}/{{maxRetries}})':
     'Повтор через {{seconds}} секунд… (попытка {{attempt}}/{{maxRetries}})',

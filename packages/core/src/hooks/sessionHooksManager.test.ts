@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SessionHooksManager } from './sessionHooksManager.js';
 import { HookEventName, HookType } from './types.js';
-import type { CommandHookConfig, HttpHookConfig } from './types.js';
+import type { CommandHookConfig } from './types.js';
 
 describe('SessionHooksManager', () => {
   let manager: SessionHooksManager;
@@ -94,29 +94,6 @@ describe('SessionHooksManager', () => {
       );
       expect(hooks.length).toBe(1);
       expect(hooks[0].config.type).toBe(HookType.Command);
-    });
-
-    it('should add an HTTP hook', () => {
-      const httpHook: HttpHookConfig = {
-        type: HookType.Http,
-        url: 'https://api.example.com/hook',
-        name: 'Test HTTP',
-      };
-
-      const hookId = manager.addSessionHook(
-        'session-1',
-        HookEventName.PostToolUse,
-        'Write',
-        httpHook,
-      );
-
-      expect(hookId).toBeDefined();
-      const hooks = manager.getHooksForEvent(
-        'session-1',
-        HookEventName.PostToolUse,
-      );
-      expect(hooks.length).toBe(1);
-      expect(hooks[0].config.type).toBe(HookType.Http);
     });
   });
 

@@ -22,7 +22,6 @@ export interface LearnVideoInput {
   source: string;
   focus?: string;
   mimeType: string;
-  kind: 'local' | 'remote' | 'youtube';
 }
 
 const DIRECT_VIDEO_MIME_TYPES = new Map([
@@ -31,27 +30,6 @@ const DIRECT_VIDEO_MIME_TYPES = new Map([
   ['.mov', 'video/quicktime'],
   ['.m4v', 'video/x-m4v'],
 ]);
-
-function isYouTubeVideoUrl(url: URL): boolean {
-  const hostname = url.hostname.toLowerCase();
-  if (hostname === 'youtu.be') {
-    return url.pathname.split('/').some(Boolean);
-  }
-
-  const isYouTubeHost =
-    hostname === 'youtube.com' ||
-    hostname.endsWith('.youtube.com') ||
-    hostname === 'youtube-nocookie.com' ||
-    hostname.endsWith('.youtube-nocookie.com');
-  if (!isYouTubeHost) return false;
-
-  if (url.pathname === '/watch') return Boolean(url.searchParams.get('v'));
-  return ['/embed/', '/shorts/', '/live/'].some(
-    (prefix) =>
-      url.pathname.startsWith(prefix) &&
-      Boolean(url.pathname.slice(prefix.length).split('/')[0]),
-  );
-}
 
 export function parseLearnVideoInput(rawInput: string): LearnVideoInput | null {
   const match = rawInput.trim().match(/^(\S+)(?:\s+([\s\S]*))?$/);
@@ -64,43 +42,10 @@ export function parseLearnVideoInput(rawInput: string): LearnVideoInput | null {
   );
 
   const focus = rawFocus?.trim();
-  if (!/^https?:\/\//i.test(source)) {
-    if (lowerSource.startsWith('file://')) return null;
-    if (!localVideoEntry) return null;
-    return {
-      source,
-      mimeType: localVideoEntry[1],
-      kind: 'local',
-      ...(focus ? { focus } : {}),
-    };
-  }
-
-  let url: URL;
-  try {
-    url = new URL(source);
-  } catch {
-    return null;
-  }
-
-  if (isYouTubeVideoUrl(url)) {
-    return {
-      source,
-      mimeType: 'video/mp4',
-      kind: 'youtube',
-      ...(focus ? { focus } : {}),
-    };
-  }
-
-  const lowerPath = url.pathname.toLowerCase();
-  const directVideoEntry = [...DIRECT_VIDEO_MIME_TYPES].find(([extension]) =>
-    lowerPath.endsWith(extension),
-  );
-  if (!directVideoEntry) return null;
-
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(source) || !localVideoEntry) return null;
   return {
     source,
-    mimeType: directVideoEntry[1],
-    kind: 'remote',
+    mimeType: localVideoEntry[1],
     ...(focus ? { focus } : {}),
   };
 }
@@ -139,7 +84,6 @@ export async function buildLearnSkillPrompt(
     '',
     existingLine,
     'Instructions:',
-    '- If the source is a URL, use web_fetch to retrieve the content.',
     '- If the source is a file/directory path, use read_file / glob to read it.',
     '- If the source is a text description, use it directly.',
     '- Distill the knowledge into a well-structured SKILL.md file.',
@@ -173,12 +117,8 @@ export async function buildLearnSkillPrompt(
 export async function buildLearnVideoSkillRequest(
   video: LearnVideoInput,
   projectRoot: string,
-  localVideoPart?: Part,
+  localVideoPart: Part,
 ): Promise<PartListUnion> {
-  if (video.kind === 'youtube') {
-    throw new Error('YouTube page URLs are not native video files.');
-  }
-
   const { skillsRoot, existingNames } = await buildSkillContext(projectRoot);
   const existingLine =
     existingNames.length === 0
@@ -204,7 +144,7 @@ export async function buildLearnVideoSkillRequest(
     '- If an exact command, selector, symbol, or literal value is not legible in the video, describe the observed behavior instead of inventing an exact value.',
     '- Check every example for internal consistency before writing: references must target the element or symbol they define, values must match their description, and one identifier or pseudo-element must not be assigned conflicting roles.',
     '- Do not execute commands, install dependencies, open services, or perform the demonstrated workflow during this learning turn.',
-    '- Do not use web_fetch or replace the attached video with webpage metadata, summaries, or a transcript.',
+    '- Do not replace the attached video with webpage metadata, summaries, or a transcript.',
     '- Do not add allowedTools, hooks, a model override, permission grants, or executable automation.',
     '- Do not claim the procedure was execution-verified.',
     '',
@@ -227,19 +167,5 @@ export async function buildLearnVideoSkillRequest(
     'During this turn, use file-writing tools only to create those two required files.',
   ].join('\n');
 
-  const videoPart =
-    video.kind === 'local'
-      ? localVideoPart
-      : {
-          fileData: {
-            fileUri: video.source,
-            mimeType: video.mimeType,
-            displayName: 'tutorial-video',
-          },
-        };
-  if (!videoPart) {
-    throw new Error('A local video part is required for local video input.');
-  }
-
-  return [videoPart, { text: prompt }];
+  return [localVideoPart, { text: prompt }];
 }

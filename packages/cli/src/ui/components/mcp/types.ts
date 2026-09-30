@@ -20,7 +20,6 @@ export const MCP_MANAGEMENT_STEPS = {
   TOOL_DETAIL: 'tool-detail',
   RESOURCE_LIST: 'resource-list',
   RESOURCE_DETAIL: 'resource-detail',
-  AUTHENTICATE: 'authenticate', // OAuth 认证步骤
 } as const;
 
 export type MCPManagementStep =
@@ -52,10 +51,6 @@ export interface MCPServerDisplayInfo {
   errorMessage?: string;
   /** 是否被禁用（在排除列表中） */
   isDisabled: boolean;
-  /** 是否存储有 OAuth 认证信息 */
-  hasOAuthTokens?: boolean;
-  /** 未连接且需要（重新）认证：连接时收到 401，或声明了 OAuth 但无已存 token */
-  requiresAuth?: boolean;
   /**
    * 对于受门控（gated，#4615）但尚未审批的 server：discovery 跳过它（保持
    * disconnected）的原因。`pending`=等待首次/重新审批，`rejected`=已被拒绝。
@@ -168,10 +163,6 @@ export interface ServerDetailStepProps {
   onApprove?: () => void;
   /** 禁用服务器回调 */
   onDisable?: () => void;
-  /** OAuth 认证回调 */
-  onAuthenticate?: () => void;
-  /** 清空认证信息回调 */
-  onClearAuth?: () => void;
   /** 返回回调 */
   onBack: () => void;
   /** 是否响应键盘输入（默认 true） */
@@ -240,18 +231,6 @@ export interface ResourceListStepProps {
 export interface ResourceDetailStepProps {
   /** 资源信息 */
   resource: MCPResourceDisplayInfo | null;
-  /** 返回回调 */
-  onBack: () => void;
-  /** 是否响应键盘输入（默认 true） */
-  isActive?: boolean;
-}
-
-/**
- * AuthenticateStep 组件属性
- */
-export interface AuthenticateStepProps {
-  /** 服务器信息 */
-  server: MCPServerDisplayInfo | null;
   /** 返回回调 */
   onBack: () => void;
   /** 是否响应键盘输入（默认 true） */

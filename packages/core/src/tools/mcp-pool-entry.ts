@@ -48,7 +48,7 @@ export interface PoolEntryOptions {
    * acquire/release flap. Defense against thrashing clients. Default 5min.
    */
   maxIdleMs: number;
-  /** Reconnect attempt cap before transitioning to `failed`. Default 3 for stdio/ws, 5 for http/sse. */
+  /** Reconnect attempt cap before transitioning to `failed`. Default 3. */
   maxReconnectAttempts: number;
   /** Reconnect delay strategy. */
   reconnectStrategy:
@@ -57,36 +57,21 @@ export interface PoolEntryOptions {
 }
 
 /**
- * Pool entry defaults by transport family. See reconnect backoff
- * in the design doc.
+ * Pool entry defaults. See reconnect backoff in the design doc.
  */
 export function defaultPoolEntryOptions(
-  transport: McpTransportKind,
+  _transport: McpTransportKind,
 ): PoolEntryOptions {
-  // include
-  // 'websocket' in the remote set so the classification matches
-  // `discoveryTimeoutFor` in `mcp-discovery-timeout.ts:47`
-  // (`!!(cfg.httpUrl || cfg.url || cfg.tcp)` — websocket configs
-  // populate `cfg.tcp`/`cfg.url` and got the 5s remote discovery
-  // timeout). Pre-fix websocket got remote-style discovery timing
-  // (5s) but local-style reconnect timing (3 attempts, fixed 5s
-  // delay).
   // NOTE: `maxReconnectAttempts` and `reconnectStrategy` are
   // currently unconsumed by any pool code path (pool mode has no
-  // health monitor — see `mcp-client-manager.ts:1383-1386`); the
-  // classification alignment is forward-looking for when the
-  // health monitor lands. Keeping the field populated rather than
-  // removing it because the design doc declares both as part of
-  // the entry-options contract.
-  const isRemote =
-    transport === 'http' || transport === 'sse' || transport === 'websocket';
+  // health monitor — see `mcp-client-manager.ts:1383-1386`). Keeping
+  // the field populated rather than removing it because the design
+  // doc declares both as part of the entry-options contract.
   return {
     drainDelayMs: 30_000,
     maxIdleMs: 5 * 60_000,
-    maxReconnectAttempts: isRemote ? 5 : 3,
-    reconnectStrategy: isRemote
-      ? { kind: 'exponential', baseMs: 1_000, capMs: 16_000 }
-      : { kind: 'fixed', delayMs: 5_000 },
+    maxReconnectAttempts: 3,
+    reconnectStrategy: { kind: 'fixed', delayMs: 5_000 },
   };
 }
 
@@ -245,7 +230,7 @@ export class PoolEntry {
     readonly serverName: string,
     readonly entryIndex: number,
     // `cfg` carries
-    // secrets (env API keys, header auth tokens, OAuth fields) and
+    // secrets (env API keys) and
     // must NOT be exposed publicly on the entry. Pool callers that
     // need transport classification go through `transportKind`
     // getter (computed via mcpTransportOf) instead of reading cfg
@@ -274,7 +259,7 @@ export class PoolEntry {
     // the module-level
     // `serverStatuses` map is shared across all entries for the same
     // `serverName`. When two entries A and B share a name (different
-    // fingerprints — e.g. divergent OAuth tokens), entry A's
+    // fingerprints — e.g. divergent env), entry A's
     // transport error writes DISCONNECTED to the shared map, and B's
     // listener fires with that status — corrupting B's `localStatus`
     // even though B's transport is healthy. Cross-check the incoming
@@ -393,7 +378,7 @@ export class PoolEntry {
         // emit→detach ordering at line 583-593.
         //
         // thread the upstream
-        // McpClient.onerror cause (EPIPE, OAuth 401, server crash)
+        // McpClient.onerror cause (EPIPE, server crash)
         // into `lastError` instead of emitting only the synthetic
         // marker. Pre-fix the only diagnostic carrier was the synthetic
         // string; operators triaging a 'failed' event had to grep
@@ -521,7 +506,7 @@ export class PoolEntry {
    * Transport family classification for snapshot consumers (e.g.
    * `subprocessCount` in `pool.getSnapshot()`). Exposed as a getter
    * instead of letting callers read `entry.cfg` so secrets in `cfg`
-   * (env API keys, header auth tokens, OAuth fields) stay
+   * (env API keys) stay
    * encapsulated.
    */
   get transportKind(): McpTransportKind {
@@ -837,7 +822,7 @@ export class PoolEntry {
    * `pnpm dlx`) get killed before their parent's transport closes.
    * Best-effort throughout: per-pid failures tolerated by
    * `sigtermPids`'s ESRCH-tolerant loop; pid lookup returns
-   * undefined for remote transports / already-exited stdio children.
+   * undefined for SDK transports / already-exited stdio children.
    *
    * Log levels: pid-sweep failure at `warn`
    * (operator should investigate orphan-process pressure);

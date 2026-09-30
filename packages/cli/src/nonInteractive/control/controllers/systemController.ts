@@ -27,11 +27,9 @@ import { getAvailableCommands } from '../../../nonInteractiveCliCommands.js';
 import {
   createDebugLogger,
   MCPServerConfig,
-  AuthProviderType,
   applyReasoningEffort,
   normalizeReasoningEffort,
   loadUsageDashboard,
-  type MCPOAuthConfig,
   type ReasoningEffortOverride,
 } from '@qwen-code/qwen-code-core';
 
@@ -244,20 +242,12 @@ export class SystemController extends BaseController {
           undefined, // args
           undefined, // env
           undefined, // cwd
-          undefined, // url
-          undefined, // httpUrl
-          undefined, // headers
-          undefined, // tcp
           undefined, // timeout
           true, // trust - SDK servers are trusted
           undefined, // description
           undefined, // includeTools
           undefined, // excludeTools
           undefined, // extensionName
-          undefined, // oauth
-          undefined, // authProviderType
-          undefined, // targetAudience
-          undefined, // targetServiceAccount
           'sdk', // type
         );
       }
@@ -378,30 +368,17 @@ export class SystemController extends BaseController {
       return null;
     }
 
-    const authProvider = this.normalizeAuthProviderType(
-      config.authProviderType,
-    );
-    const oauthConfig = this.normalizeOAuthConfig(config.oauth);
-
     return new MCPServerConfig(
       config.command,
       config.args,
       config.env,
       config.cwd,
-      config.url,
-      config.httpUrl,
-      config.headers,
-      config.tcp,
       config.timeout,
       config.trust,
       config.description,
       config.includeTools,
       config.excludeTools,
       config.extensionName,
-      oauthConfig,
-      authProvider,
-      config.targetAudience,
-      config.targetServiceAccount,
       undefined, // type
       undefined, // discoveryTimeoutMs
       undefined, // scope
@@ -411,47 +388,6 @@ export class SystemController extends BaseController {
       config.appResourceMaxBytes,
       config.appResourceTimeoutMs,
     );
-  }
-
-  private normalizeAuthProviderType(
-    value?: string,
-  ): AuthProviderType | undefined {
-    if (!value) {
-      return undefined;
-    }
-
-    switch (value) {
-      case AuthProviderType.DYNAMIC_DISCOVERY:
-      case AuthProviderType.GOOGLE_CREDENTIALS:
-      case AuthProviderType.SERVICE_ACCOUNT_IMPERSONATION:
-        return value;
-      default:
-        debugLogger.warn(
-          `[SystemController] Unsupported authProviderType '${value}', skipping`,
-        );
-        return undefined;
-    }
-  }
-
-  private normalizeOAuthConfig(
-    oauth?: CLIMcpServerConfig['oauth'],
-  ): MCPOAuthConfig | undefined {
-    if (!oauth) {
-      return undefined;
-    }
-
-    return {
-      enabled: oauth.enabled,
-      clientId: oauth.clientId,
-      clientSecret: oauth.clientSecret,
-      authorizationUrl: oauth.authorizationUrl,
-      tokenUrl: oauth.tokenUrl,
-      scopes: oauth.scopes,
-      audiences: oauth.audiences,
-      redirectUri: oauth.redirectUri,
-      tokenParamName: oauth.tokenParamName,
-      registrationUrl: oauth.registrationUrl,
-    };
   }
 
   /**

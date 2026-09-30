@@ -170,29 +170,6 @@ function normalizeMedia(
   return media;
 }
 
-function normalizeGeneratedImage(value: unknown): {
-  images: NormalizedMedia[];
-  outputHint: string;
-} {
-  if (
-    !isRecord(value) ||
-    typeof value['callId'] !== 'string' ||
-    value['name'] !== 'image_gen' ||
-    value['status'] !== 'success' ||
-    typeof value['output'] !== 'string' ||
-    !Array.isArray(value['content']) ||
-    value['content'].length === 0
-  ) {
-    throw new Error(
-      'generatedImage() expects the successful result returned by tools.image_gen().',
-    );
-  }
-  return {
-    images: value['content'].map((item) => normalizeMedia('image', item)),
-    outputHint: value['output'],
-  };
-}
-
 async function execute(message: ExecuteMessage): Promise<void> {
   if (message.source.length > CODE_MODE_MAX_SOURCE_CHARS) {
     throw new Error('JavaScript source exceeds the size limit.');
@@ -389,19 +366,6 @@ async function execute(message: ExecuteMessage): Promise<void> {
       appendMediaHelper.dispose();
     }
 
-    const appendGeneratedImage = vm.newFunction(
-      '__appendGeneratedImage',
-      (valueHandle) => {
-        const generated = normalizeGeneratedImage(vm.dump(valueHandle));
-        appendMedia(generated.images);
-        if (generated.outputHint) {
-          output = appendBounded(output, generated.outputHint, maxOutputChars);
-        }
-      },
-    );
-    vm.setProp(vm.global, '__appendGeneratedImage', appendGeneratedImage);
-    appendGeneratedImage.dispose();
-
     const setTimeoutHelper = vm.newFunction(
       '__setTimeout',
       (callbackHandle, delayHandle) => {
@@ -452,14 +416,12 @@ async function execute(message: ExecuteMessage): Promise<void> {
       const hostText = globalThis.__appendText;
       const hostImage = globalThis.__append_image;
       const hostAudio = globalThis.__append_audio;
-      const hostGeneratedImage = globalThis.__appendGeneratedImage;
       const hostSetTimeout = globalThis.__setTimeout;
       const hostClearTimeout = globalThis.__clearTimeout;
       delete globalThis.__callTool;
       delete globalThis.__appendText;
       delete globalThis.__append_image;
       delete globalThis.__append_audio;
-      delete globalThis.__appendGeneratedImage;
       delete globalThis.__setTimeout;
       delete globalThis.__clearTimeout;
       const toolTarget = Object.freeze(Object.assign(Object.create(null), {${toolEntries}}));
@@ -473,7 +435,6 @@ async function execute(message: ExecuteMessage): Promise<void> {
       const text = (value) => hostText(value);
       const image = (value) => hostImage(value);
       const audio = (value) => hostAudio(value);
-      const generatedImage = (value) => hostGeneratedImage(value);
       const setTimeout = (callback, delayMs) => hostSetTimeout(callback, delayMs);
       const clearTimeout = (timeoutId) => hostClearTimeout(timeoutId);
       const exit = () => { throw Object.freeze({ __codeModeExit: true }); };
@@ -483,7 +444,6 @@ async function execute(message: ExecuteMessage): Promise<void> {
         text: { value: text, writable: false, configurable: false },
         image: { value: image, writable: false, configurable: false },
         audio: { value: audio, writable: false, configurable: false },
-        generatedImage: { value: generatedImage, writable: false, configurable: false },
         setTimeout: { value: setTimeout, writable: false, configurable: false },
         clearTimeout: { value: clearTimeout, writable: false, configurable: false },
         exit: { value: exit, writable: false, configurable: false },

@@ -50,9 +50,6 @@ function isValidHookConfig(config: unknown): config is HookConfig {
   if (obj['type'] === 'command') {
     return 'command' in obj && typeof obj['command'] === 'string';
   }
-  if (obj['type'] === 'http') {
-    return 'url' in obj && typeof obj['url'] === 'string';
-  }
   if (obj['type'] === 'function') {
     return 'callback' in obj && typeof obj['callback'] === 'function';
   }

@@ -72,7 +72,6 @@ const ALL_DIALOG_KINDS: readonly InkDialogKind[] = [
   'advisor-model',
   'vision-model',
   'compaction-model',
-  'image-model',
   'subagent_create',
   'subagent_list',
   'skills_manage',
@@ -164,7 +163,6 @@ describe('routeDialogToOpenTui (ink dialog-switch parity)', () => {
       ['advisor-model', 'advisor'],
       ['vision-model', 'vision'],
       ['compaction-model', 'compaction'],
-      ['image-model', 'image'],
     ];
     for (const [dialog, mode] of cases) {
       const request = routeDialogToOpenTui({

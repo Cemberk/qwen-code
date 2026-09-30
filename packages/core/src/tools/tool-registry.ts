@@ -13,7 +13,6 @@ import type {
 } from './tools.js';
 import { Kind, BaseDeclarativeTool, BaseToolInvocation } from './tools.js';
 import { type Config, matchesAnyServerPattern } from '../config/config.js';
-import { isMediaPolicyToolHiddenFromModel } from '../omni/policy/model-access.js';
 import { spawn } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import type { SendSdkMcpMessage } from './mcp-client.js';
@@ -59,10 +58,9 @@ const debugLogger = createDebugLogger('TOOL_REGISTRY');
  * live value differs (#11321); a direct call never reaches that comparison.
  *
  * The free-text `description` is deliberately excluded. Shipped deferred tools
- * rebuild it from mutable state on every `schema` access — `WebSearchTool`
- * interpolates the current month/year and `ReadFileTool` the effective input
- * modalities — intentionally, so a long-lived `qwen serve`/ACP process is not
- * stale across a month boundary or a mid-session `/model` switch. Hashing that
+ * rebuild it from mutable state on every `schema` access — `ReadFileTool`
+ * interpolates the effective input modalities — intentionally, so a long-lived
+ * ACP process is not stale across a mid-session `/model` switch. Hashing that
  * prose made an unchanged tool's fingerprint drift and refuse a legitimate call
  * whose parameters still matched the reviewed schema.
  */
@@ -464,12 +462,6 @@ export class ToolRegistry {
     return tool.shouldDefer || this.permissionDeferred.has(tool.name);
   }
 
-  private isToolAvailable(name: string): boolean {
-    return (
-      name !== ToolNames.IMAGE_GEN || this.config.isImageGenerationEnabled()
-    );
-  }
-
   /**
    * Ensures a specific tool is loaded. Returns the cached instance if already
    * loaded, otherwise invokes the factory, caches the result, and returns it.
@@ -477,7 +469,6 @@ export class ToolRegistry {
    * factory is never executed more than once.
    */
   async ensureTool(name: string): Promise<AnyDeclarativeTool | undefined> {
-    if (!this.isToolAvailable(name)) return undefined;
     const cached = this.tools.get(name);
     if (cached) {
       // Clean up any stale factory for this name so warmAll() and bulk
@@ -497,7 +488,7 @@ export class ToolRegistry {
         this.tools.set(name, tool);
         this.factories.delete(name);
         this.inflight.delete(name);
-        return this.isToolAvailable(name) ? tool : undefined;
+        return tool;
       })
       .catch((err: unknown) => {
         this.inflight.delete(name);
@@ -908,7 +899,6 @@ export class ToolRegistry {
     }
     const includeDeferred = options?.includeDeferred === true;
     return Array.from(this.tools.values())
-      .filter((tool) => this.isToolAvailable(tool.name))
       .filter((tool) => this.isToolDeclared(tool.name))
       .filter((tool) => this.isMemoryRecallToolDeclared(tool.name))
       .filter(
@@ -967,7 +957,6 @@ export class ToolRegistry {
     const plan = planCodeModeBindings(
       Array.from(this.tools.values()).filter(
         (tool) =>
-          this.isToolAvailable(tool.name) &&
           this.isToolDeclared(tool.name) &&
           this.isMemoryRecallToolDeclared(tool.name),
       ),
@@ -1098,7 +1087,6 @@ export class ToolRegistry {
     const summary: DeferredToolSummary[] = [];
     this.tools.forEach((tool) => {
       if (
-        this.isToolAvailable(tool.name) &&
         this.isEffectivelyDeferred(tool) &&
         !tool.alwaysLoad &&
         this.isToolDeclared(tool.name) &&
@@ -1133,7 +1121,6 @@ export class ToolRegistry {
     const candidates: string[] = [];
     let totalChars = 0;
     for (const tool of this.tools.values()) {
-      if (!this.isToolAvailable(tool.name)) continue;
       if (!this.isEffectivelyDeferred(tool) || tool.alwaysLoad) continue;
       // Permission-deferred tools (#10075) are deliberately excluded: the
       // budget preload exists to stabilise the prompt cache for ordinary
@@ -1208,10 +1195,6 @@ export class ToolRegistry {
   }
 
   isToolDeclared(name: string): boolean {
-    const tool = this.tools.get(name);
-    if (tool && isMediaPolicyToolHiddenFromModel(this.config, tool)) {
-      return false;
-    }
     return (
       name !== ToolNames.PROPOSE_GOAL || this.config.isGoalProposalAvailable()
     );
@@ -1223,7 +1206,7 @@ export class ToolRegistry {
    */
   getAllToolNames(): string[] {
     const names = new Set([...this.tools.keys(), ...this.factories.keys()]);
-    return Array.from(names).filter((name) => this.isToolAvailable(name));
+    return Array.from(names);
   }
 
   /**
@@ -1239,9 +1222,9 @@ export class ToolRegistry {
           `Call warmAll() first to avoid incomplete results.`,
       );
     }
-    return Array.from(this.tools.values())
-      .filter((tool) => this.isToolAvailable(tool.name))
-      .sort((a, b) => a.displayName.localeCompare(b.displayName));
+    return Array.from(this.tools.values()).sort((a, b) =>
+      a.displayName.localeCompare(b.displayName),
+    );
   }
 
   /**
@@ -1261,7 +1244,7 @@ export class ToolRegistry {
    * Get the definition of a specific tool.
    */
   getTool(name: string): AnyDeclarativeTool | undefined {
-    return this.isToolAvailable(name) ? this.tools.get(name) : undefined;
+    return this.tools.get(name);
   }
 
   getMcpAppTool(

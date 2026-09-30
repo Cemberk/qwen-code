@@ -123,7 +123,7 @@ describe('claude MCP import', () => {
     );
   });
 
-  it('normalizes Claude transport types into Qwen URL fields', () => {
+  it('drops Claude transport types and skips remote servers', () => {
     writeJson(path.join(homeDir, '.claude.json'), {
       mcpServers: {
         httpServer: { type: 'http', url: 'https://example.com/mcp' },
@@ -133,7 +133,7 @@ describe('claude MCP import', () => {
     });
 
     const settings = createSettings();
-    importClaudeMcpServers({
+    const result = importClaudeMcpServers({
       source: 'claude-code',
       scope: 'user',
       settings,
@@ -141,33 +141,32 @@ describe('claude MCP import', () => {
       homeDir,
     });
 
-    // Claude's `type` discriminator is dropped on every transport (qwen reserves
-    // `type` for 'sdk'): http→httpUrl, sse→url, stdio keeps command only.
+    // Claude's `type` discriminator is dropped (qwen reserves `type` for
+    // 'sdk'); only stdio servers are imported.
     expect(settings.setValue).toHaveBeenCalledWith(
       SettingScope.User,
       'mcpServers',
       {
-        httpServer: { httpUrl: 'https://example.com/mcp' },
-        sseServer: { url: 'https://example.com/sse' },
         stdioServer: { command: 'node', args: ['s.js'] },
       },
+    );
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('"httpServer" is not a stdio server'),
+        expect.stringContaining('"sseServer" is not a stdio server'),
+      ]),
     );
   });
 
   it('preserves non-transport fields through normalization', () => {
     writeJson(path.join(homeDir, '.claude.json'), {
       mcpServers: {
-        httpServer: {
-          type: 'http',
-          url: 'https://example.com/mcp',
-          headers: { Authorization: 'Bearer x' },
-          timeout: 5000,
-        },
         stdioServer: {
           type: 'stdio',
           command: 'node',
           args: ['s.js'],
           env: { API_KEY: 'secret' },
+          timeout: 5000,
         },
       },
     });
@@ -185,15 +184,11 @@ describe('claude MCP import', () => {
       SettingScope.User,
       'mcpServers',
       {
-        httpServer: {
-          httpUrl: 'https://example.com/mcp',
-          headers: { Authorization: 'Bearer x' },
-          timeout: 5000,
-        },
         stdioServer: {
           command: 'node',
           args: ['s.js'],
           env: { API_KEY: 'secret' },
+          timeout: 5000,
         },
       },
     );

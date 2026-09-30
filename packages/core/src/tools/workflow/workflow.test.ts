@@ -79,7 +79,6 @@ async function grantMatches(
     undefined,
     undefined,
     undefined,
-    undefined,
     invocation.getPermissionMatchParams!(),
   );
 }

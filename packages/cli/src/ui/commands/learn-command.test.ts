@@ -54,7 +54,7 @@ describe('learnCommand', () => {
     expect(learnCommand.kind).toBe(CommandKind.BUILT_IN);
     expect(learnCommand.supportedModes).toContain('interactive');
     expect(learnCommand.supportedModes).toContain('acp');
-    expect(learnCommand.argumentHint).toMatch(/path|URL|text/i);
+    expect(learnCommand.argumentHint).toMatch(/path|text/i);
   });
 
   it('returns an error when no args are provided', async () => {
@@ -68,7 +68,7 @@ describe('learnCommand', () => {
 
   it('returns an error when config is not loaded', async () => {
     const ctx = createMockCommandContext({ services: { config: null } });
-    const result = await learnCommand.action!(ctx, 'https://example.com/docs');
+    const result = await learnCommand.action!(ctx, 'Our deploy process');
     expect(result).toMatchObject({
       type: 'message',
       messageType: 'error',
@@ -85,47 +85,30 @@ describe('learnCommand', () => {
         } as any,
       },
     });
-    const result = await learnCommand.action!(ctx, 'https://example.com/docs');
+    const result = await learnCommand.action!(ctx, 'Our deploy process');
     expect(result).toMatchObject({
       type: 'submit_prompt',
     });
     expect((result as SubmitPromptActionReturn).content).toContain(
-      'https://example.com/docs',
+      'Our deploy process',
     );
   });
 
-  it.each([AuthType.USE_OPENAI, AuthType.QWEN_OAUTH])(
-    'submits a native video part through %s',
-    async (authType) => {
-      const ctx = createMockCommandContext({
-        services: {
-          config: {
-            getProjectRoot: () => '/tmp/test-project',
-            getEffectiveInputModalities: () => ({ video: true }),
-            getContentGeneratorConfig: () => ({ authType }),
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          } as any,
-        },
-      });
-      const result = await learnCommand.action!(
-        ctx,
-        'https://cdn.example.com/tutorial.mp4 focus on visual verification',
-      );
-      const content = (result as SubmitPromptActionReturn).content;
+  it.each([
+    'https://example.com/docs',
+    'https://cdn.example.com/tutorial.mp4',
+    'https://youtu.be/abc123',
+  ])('rejects the URL source %s', async (source) => {
+    const ctx = createVideoCapableContext();
+    const result = await learnCommand.action!(ctx, source);
 
-      expect(result).toMatchObject({ type: 'submit_prompt' });
-      expect(content).toEqual([
-        {
-          fileData: {
-            fileUri: 'https://cdn.example.com/tutorial.mp4',
-            mimeType: 'video/mp4',
-            displayName: 'tutorial-video',
-          },
-        },
-        { text: expect.stringContaining('focus on visual verification') },
-      ]);
-    },
-  );
+    expect(result).toMatchObject({
+      type: 'message',
+      messageType: 'error',
+      content: expect.stringMatching(/URL sources are not supported/),
+    });
+    expect(mockReadPathFromWorkspace).not.toHaveBeenCalled();
+  });
 
   it('attaches a local video through the video-specific /learn path', async () => {
     const ctx = createVideoCapableContext();
@@ -218,39 +201,6 @@ describe('learnCommand', () => {
     });
   });
 
-  it('rejects a YouTube page URL with local-file guidance', async () => {
-    const ctx = createVideoCapableContext();
-    const result = await learnCommand.action!(ctx, 'https://youtu.be/abc123');
-
-    expect(result).toMatchObject({
-      type: 'message',
-      messageType: 'error',
-      content: expect.stringMatching(/download.*local video/i),
-    });
-  });
-
-  it('rejects a YouTube URL with download guidance even on a text-only model', async () => {
-    const ctx = createMockCommandContext({
-      services: {
-        config: {
-          getProjectRoot: () => '/tmp/test-project',
-          getEffectiveInputModalities: () => ({ video: false }),
-          getContentGeneratorConfig: () => ({
-            authType: AuthType.USE_OPENAI,
-          }),
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any,
-      },
-    });
-    const result = await learnCommand.action!(ctx, 'https://youtu.be/abc123');
-
-    expect(result).toMatchObject({
-      type: 'message',
-      messageType: 'error',
-      content: expect.stringMatching(/download.*local video/i),
-    });
-  });
-
   it('falls back to the text path when a local video path does not resolve', async () => {
     mockReadPathFromWorkspace.mockRejectedValueOnce(
       new Error('Absolute path is outside of the allowed workspace'),
@@ -294,10 +244,7 @@ describe('learnCommand', () => {
         } as any,
       },
     });
-    const result = await learnCommand.action!(
-      ctx,
-      'https://cdn.example.com/tutorial.mp4',
-    );
+    const result = await learnCommand.action!(ctx, './tutorial.mp4');
 
     expect(result).toMatchObject({
       type: 'message',

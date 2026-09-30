@@ -5,7 +5,6 @@
  */
 
 import * as cp from 'node:child_process';
-import * as net from 'node:net';
 import { StringDecoder } from 'node:string_decoder';
 import { DEFAULT_LSP_REQUEST_TIMEOUT_MS } from './constants.js';
 import type { JsonRpcMessage, LspProcessDiagnostics } from './types.js';
@@ -261,13 +260,6 @@ interface LspConnection {
   connection: JsonRpcConnection;
   process?: cp.ChildProcess;
   processDiagnostics?: LspProcessDiagnostics;
-  socket?: net.Socket;
-}
-
-interface SocketConnectionOptions {
-  host?: string;
-  port?: number;
-  path?: string;
 }
 
 export class LspConnectionFactory {
@@ -361,77 +353,6 @@ export class LspConnectionFactory {
   }
 
   /**
-   * 创建基于 TCP 的 LSP 连接
-   */
-  static async createTcpConnection(
-    host: string,
-    port: number,
-    timeoutMs = 10000,
-  ): Promise<LspConnection> {
-    return LspConnectionFactory.createSocketConnection(
-      { host, port },
-      timeoutMs,
-    );
-  }
-
-  /**
-   * 创建基于 socket 的 LSP 连接（支持 TCP 或 unix socket）
-   */
-  static async createSocketConnection(
-    options: SocketConnectionOptions,
-    timeoutMs = 10000,
-  ): Promise<LspConnection> {
-    return new Promise((resolve, reject) => {
-      let socketOptions: { path: string } | { host: string; port: number };
-
-      if (options.path) {
-        socketOptions = { path: options.path };
-      } else {
-        if (!options.port) {
-          reject(new Error('Socket transport requires port or path'));
-          return;
-        }
-        socketOptions = {
-          host: options.host ?? '127.0.0.1',
-          port: options.port,
-        };
-      }
-
-      const socket = net.createConnection(socketOptions);
-
-      const timeoutId = setTimeout(() => {
-        reject(new Error('LSP server connection timeout'));
-        socket.destroy();
-      }, timeoutMs);
-
-      const onError = (error: Error) => {
-        clearTimeout(timeoutId);
-        reject(new Error(`Failed to connect to LSP server: ${error.message}`));
-      };
-
-      socket.once('error', onError);
-
-      socket.on('connect', () => {
-        clearTimeout(timeoutId);
-        socket.off('error', onError);
-
-        const connection = new JsonRpcConnection(
-          (payload) => socket.write(payload),
-          () => socket.destroy(),
-        );
-        connection.listen(socket);
-        socket.once('close', () => connection.end());
-        socket.once('error', () => connection.end());
-
-        resolve({
-          connection,
-          socket,
-        });
-      });
-    });
-  }
-
-  /**
    * 关闭 LSP 连接
    */
   static async closeConnection(lspConnection: LspConnection): Promise<void> {
@@ -447,10 +368,6 @@ export class LspConnectionFactory {
 
     if (lspConnection.process && !lspConnection.process.killed) {
       lspConnection.process.kill();
-    }
-
-    if (lspConnection.socket && !lspConnection.socket.destroyed) {
-      lspConnection.socket.destroy();
     }
   }
 }

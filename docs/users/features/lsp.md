@@ -113,7 +113,7 @@ Example:
 | Option                  | Type     | Default   | Description                                             |
 | ----------------------- | -------- | --------- | ------------------------------------------------------- |
 | `args`                  | string[] | `[]`      | Command line arguments                                  |
-| `transport`             | string   | `"stdio"` | Transport type: `stdio`, `tcp`, or `socket`             |
+| `transport`             | string   | `"stdio"` | Transport type; only `stdio` is supported               |
 | `env`                   | object   | -         | Environment variables                                   |
 | `initializationOptions` | object   | -         | LSP initialization options                              |
 | `settings`              | object   | -         | Server settings via `workspace/didChangeConfiguration`  |
@@ -124,25 +124,6 @@ Example:
 | `restartOnCrash`        | boolean  | `false`   | Auto-restart on crash                                   |
 | `maxRestarts`           | number   | `3`       | Maximum restart attempts                                |
 | `trustRequired`         | boolean  | `true`    | Require trusted workspace                               |
-
-### TCP/Socket Transport
-
-For servers that use TCP or Unix socket transport:
-
-```json
-{
-  "remote-lsp": {
-    "transport": "tcp",
-    "socket": {
-      "host": "127.0.0.1",
-      "port": 9999
-    },
-    "extensionToLanguage": {
-      ".custom": "custom"
-    }
-  }
-}
-```
 
 ## Available LSP Operations
 

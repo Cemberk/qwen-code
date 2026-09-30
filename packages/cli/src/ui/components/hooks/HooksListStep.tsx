@@ -74,7 +74,7 @@ export function HooksListStep({
               {t('Reopen this menu to reload hook definitions.')}
             </Text>
             <Text color={theme.text.secondary}>
-              {t('Hook controls and HTTP security settings require a restart.')}
+              {t('Hook controls require a restart.')}
             </Text>
           </>
         )}

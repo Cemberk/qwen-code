@@ -267,8 +267,8 @@ describe('ArtifactTool', () => {
         getFileSystemService: () => ({ readTextFile }),
       } as unknown as Config,
       {
-        kind: 'oss',
-        publish: async () => ({ id: 'x', url: 'https://h/x' }),
+        kind: 'local',
+        publish: async () => ({ id: 'x', url: 'file:///tmp/x/index.html' }),
       },
       openSpy as unknown as UrlOpener,
     );
@@ -287,9 +287,9 @@ describe('ArtifactTool', () => {
     const failingTool = new ArtifactTool(
       makeConfig(),
       {
-        kind: 'oss',
+        kind: 'local',
         publish: async () => {
-          throw new Error('network timeout');
+          throw new Error('disk full');
         },
       },
       openSpy as unknown as UrlOpener,
@@ -298,7 +298,7 @@ describe('ArtifactTool', () => {
     const res = await failingTool.build({ file_path: file }).execute(signal);
 
     expect(res.error?.type).toBe(ToolErrorType.EXECUTION_FAILED);
-    expect(res.llmContent).toContain('network timeout');
+    expect(res.llmContent).toContain('disk full');
     expect(openSpy).not.toHaveBeenCalled();
   });
 
@@ -410,41 +410,6 @@ describe('ArtifactTool', () => {
     expect(html).toContain('<title>release-notes</title>');
   });
 
-  it('tells the user a remote backend uploads, but a local one does not', async () => {
-    const file = path.join(workdir, 'p.html');
-    const remoteTool = new ArtifactTool(
-      makeConfig(),
-      { kind: 'oss', publish: async () => ({ id: 'x', url: 'https://h/x' }) },
-      openSpy as unknown as UrlOpener,
-    );
-    const remote = await remoteTool
-      .build({ file_path: file })
-      .getConfirmationDetails(signal);
-    expect((remote as { prompt: string }).prompt).toMatch(
-      /remote host \(oss\)/i,
-    );
-
-    const hostTool = new ArtifactTool(
-      makeConfig(),
-      {
-        kind: 'host',
-        publish: async () => ({ id: 'x', url: 'https://h/x' }),
-      },
-      openSpy as unknown as UrlOpener,
-    );
-    const host = await hostTool
-      .build({ file_path: file })
-      .getConfirmationDetails(signal);
-    expect((host as { prompt: string }).prompt).toMatch(
-      /remote host \(custom upload\)/i,
-    );
-
-    const local = await tool
-      .build({ file_path: file })
-      .getConfirmationDetails(signal);
-    expect((local as { prompt: string }).prompt).not.toMatch(/remote/i);
-  });
-
   it('reports a cancellation when the publisher aborts', async () => {
     const file = await writeFragment('page.html', '<p>x</p>');
     const abortErr = Object.assign(new Error('aborted'), {
@@ -453,7 +418,7 @@ describe('ArtifactTool', () => {
     const cancelTool = new ArtifactTool(
       makeConfig(),
       {
-        kind: 'oss',
+        kind: 'local',
         publish: async () => {
           throw abortErr;
         },
@@ -474,7 +439,7 @@ describe('ArtifactTool', () => {
     const cancelTool = new ArtifactTool(
       makeConfig(),
       {
-        kind: 'oss',
+        kind: 'local',
         publish: async () => {
           throw abortErr;
         },
@@ -494,9 +459,9 @@ describe('ArtifactTool', () => {
     const cancelTool = new ArtifactTool(
       makeConfig(),
       {
-        kind: 'oss',
+        kind: 'local',
         publish: async () => {
-          throw new Error('network failure');
+          throw new Error('write failure');
         },
       },
       openSpy as unknown as UrlOpener,

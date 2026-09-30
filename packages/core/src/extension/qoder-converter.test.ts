@@ -51,7 +51,7 @@ describe('convertQoderPlugin', () => {
       path.join(root, '.mcp.json'),
       JSON.stringify({
         mcpServers: {
-          sample: { type: 'http', url: 'https://example.com/mcp' },
+          sample: { type: 'stdio', command: 'mcp-mcp' },
         },
       }),
       'utf-8',
@@ -92,7 +92,7 @@ describe('convertQoderPlugin', () => {
       contextFileName: ['QWEN.md', 'system-prompt.md'],
     });
     expect(result.config.mcpServers?.['sample']).toMatchObject({
-      httpUrl: 'https://example.com/mcp',
+      command: 'mcp-mcp',
     });
     expect(
       fs.existsSync(
@@ -243,7 +243,7 @@ describe('convertQoderPlugin', () => {
       path.join(root, '.mcp.json'),
       JSON.stringify({
         mcpServers: {
-          sample: { type: 'http', url: 'https://example.com/mcp' },
+          sample: { type: 'stdio', command: 'mcp-mcp' },
         },
       }),
       'utf-8',
@@ -253,7 +253,7 @@ describe('convertQoderPlugin', () => {
 
     expect(Object.keys(result.config.mcpServers ?? {})).toEqual(['sample']);
     expect(result.config.mcpServers?.['sample']).toMatchObject({
-      httpUrl: 'https://example.com/mcp',
+      command: 'mcp-mcp',
     });
     fs.rmSync(result.convertedDir, { recursive: true, force: true });
   });
@@ -262,14 +262,14 @@ describe('convertQoderPlugin', () => {
     writeManifest({
       name: 'sample-qoder-plugin',
       mcpServers: {
-        inline: { type: 'http', url: 'https://example.com/inline' },
+        inline: { type: 'stdio', command: 'inline-mcp' },
       },
     });
     fs.writeFileSync(
       path.join(root, '.mcp.json'),
       JSON.stringify({
         mcpServers: {
-          root: { type: 'http', url: 'https://example.com/root' },
+          root: { type: 'stdio', command: 'root-mcp' },
         },
       }),
       'utf-8',
@@ -290,7 +290,7 @@ describe('convertQoderPlugin', () => {
       path.join(root, '.mcp.json'),
       JSON.stringify({
         mcpServers: {
-          sample: { type: 'http', url: 'https://example.com/mcp' },
+          sample: { type: 'stdio', command: 'mcp-mcp' },
         },
       }),
       'utf-8',
@@ -402,7 +402,7 @@ describe('convertQoderPlugin', () => {
       externalMcp,
       JSON.stringify({
         mcpServers: {
-          sample: { type: 'http', url: 'https://example.com/mcp' },
+          sample: { type: 'stdio', command: 'mcp-mcp' },
         },
       }),
       'utf-8',

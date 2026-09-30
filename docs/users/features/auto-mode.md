@@ -322,7 +322,6 @@ projection exposes:
   old/new content. Full content is not forwarded.
 - `run_shell_command`: the full command (it has to — that's what the
   classifier judges).
-- `web_fetch`: the URL only. The prompt field is not forwarded.
 - `agent`: subagent type plus the full prompt. The prompt is the
   instruction the sub-agent will follow, so the classifier needs it
   in full to detect attacks that would steer the sub-agent toward

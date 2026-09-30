@@ -270,7 +270,6 @@ export function validateSettingValue(
 export const WORKSPACE_RESTRICTED_SETTINGS = [
   { section: 'tools', key: 'executionSandbox' },
   { section: 'tools', key: 'workflowsEnabled' },
-  { section: 'security', key: 'allowPrivateNetworkHooks' },
   { section: 'goals', key: 'modelProposed' },
 ] as const satisfies ReadonlyArray<{
   readonly section: keyof Settings;
@@ -326,21 +325,6 @@ export const WORKSPACE_TIGHTEN_ONLY_SETTINGS = [
 /** The restricted settings as flattened dotted keys, e.g. `tools.workflowsEnabled`. */
 export const WORKSPACE_RESTRICTED_SETTING_KEYS: readonly string[] =
   WORKSPACE_RESTRICTED_SETTINGS.map(({ section, key }) => `${section}.${key}`);
-
-/**
- * Settings a Workspace may set only when no higher scope (User, System,
- * SystemDefaults) sets them. Unlike WORKSPACE_RESTRICTED_SETTINGS they are
- * not dropped outright — a repository may still narrow where its own hooks
- * may send data — but a workspace value never replaces a boundary the user
- * or platform configured. Drives both the merge-time drop
- * (`stripWorkspaceOverrides`) and the warning that reports it.
- */
-export const WORKSPACE_NON_OVERRIDING_SETTINGS = [
-  { section: 'security', key: 'allowedHttpHookUrls' },
-] as const satisfies ReadonlyArray<{
-  readonly section: keyof Settings;
-  readonly key: string;
-}>;
 
 /**
  * Get all setting keys that should be shown in the dialog, sorted by display order.

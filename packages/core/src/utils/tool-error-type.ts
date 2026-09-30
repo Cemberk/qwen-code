@@ -117,17 +117,6 @@ export enum ToolErrorType {
   // DiscoveredTool-specific Errors
   DISCOVERED_TOOL_EXECUTION_ERROR = 'discovered_tool_execution_error',
 
-  // WebFetch-specific Errors
-  WEB_FETCH_NO_URL_IN_PROMPT = 'web_fetch_no_url_in_prompt',
-  WEB_FETCH_FALLBACK_FAILED = 'web_fetch_fallback_failed',
-  WEB_FETCH_PROCESSING_ERROR = 'web_fetch_processing_error',
-
-  // WebSearch-specific Errors
-  WEB_SEARCH_RATE_LIMITED = 'web_search_rate_limited',
-  WEB_SEARCH_BACKEND_FAILED = 'web_search_backend_failed',
-  WEB_SEARCH_NO_RESULTS = 'web_search_no_results',
-  WEB_SEARCH_NO_SEARCH_PERFORMED = 'web_search_no_search_performed',
-
   // Truncation Errors
   OUTPUT_TRUNCATED = 'output_truncated',
 

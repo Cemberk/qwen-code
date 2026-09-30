@@ -24,7 +24,6 @@ import { ExitPlanModeTool } from './exitPlanMode.js';
 import { ExitWorktreeTool } from './exit-worktree.js';
 import { GlobTool } from './glob.js';
 import { GrepTool } from './grep.js';
-import { ImageGenTool } from './image-gen.js';
 import { ListAgentsTool } from './list-agents.js';
 import { LoopWakeupTool } from './loop-wakeup.js';
 import { LSTool } from './ls.js';
@@ -52,8 +51,6 @@ import { TeamPlanApprovalTool } from './team-plan-approval.js';
 import { TodoWriteTool } from './todoWrite.js';
 import { ToolCallTool } from './tool-call.js';
 import { ToolSearchTool } from './tool-search.js';
-import { WebFetchTool } from './web-fetch.js';
-import { WebSearchTool } from './web-search.js';
 import { WriteFileTool } from './write-file.js';
 import { ZoomImageTool } from './zoom-image.js';
 import {
@@ -61,7 +58,6 @@ import {
   ProposeGoalTool,
   UpdateGoalTool,
 } from '../goals/goal-tools.js';
-import { OmniRecallMediaMemoryTool } from '../omni/recall-media-memory-tool.js';
 
 /**
  * Per-turn size budgets for the rest of the built-in tool surface (#12054).
@@ -166,7 +162,6 @@ const RESIDENT: ReadonlyArray<[name: string, build: Build, budget: number]> = [
   ['task_create', (c) => new TaskCreateTool(c), 650],
   ['tool_call', () => new ToolCallTool(), 650],
   ['team_plan_approval', (c) => new TeamPlanApprovalTool(c), 600],
-  ['image_gen', (c) => new ImageGenTool(c), 600],
   ['manage_memory', (c) => new ManageMemoryTool(c), 600],
   ['display_image', (c) => new DisplayImageTool(c), 550],
   ['get_goal', (c) => new GetGoalTool(c), 550],
@@ -186,7 +181,6 @@ const DEFERRED: ReadonlyArray<[name: string, build: Build]> = [
   ['loop_wakeup', (c) => new LoopWakeupTool(c)],
   ['lsp', (c) => new LspTool(c)],
   ['monitor', (c) => new MonitorTool(c)],
-  ['omni_recall_media_memory', (c) => new OmniRecallMediaMemoryTool(c)],
   ['read_mcp_resource', (c) => new ReadMcpResourceTool(c)],
   ['record_artifact', (c) => new RecordArtifactTool(c)],
   ['record_source', (c) => new RecordSourceTool(c)],
@@ -194,8 +188,6 @@ const DEFERRED: ReadonlyArray<[name: string, build: Build]> = [
   ['request_shutdown', (c) => new RequestShutdownTool(c)],
   ['send_message', (c) => new SendMessageTool(c)],
   ['task_stop', (c) => new TaskStopTool(c)],
-  ['web_fetch', (c) => new WebFetchTool(c)],
-  ['web_search', (c) => new WebSearchTool(c)],
   ['zoom_image', (c) => new ZoomImageTool(c)],
 ];
 
@@ -209,13 +201,6 @@ const NOT_BUDGETED_HERE: Readonly<Record<string, string>> = {
   [ToolNames.STRUCTURED_OUTPUT]: 'its schema is the user-supplied JSON Schema',
   [ToolNames.MEMORY]: 'legacy name, no longer registered as a tool',
 };
-
-/** Media-policy tools are generated from settings, so their size is not fixed. */
-function isMediaPolicyTool(name: string): boolean {
-  return (
-    name.startsWith('omni_') && name !== ToolNames.OMNI_RECALL_MEDIA_MEMORY
-  );
-}
 
 describe('built-in tool surface budget (#12054)', () => {
   describe.each(RESIDENT)('%s', (_name, build, budget) => {
@@ -245,7 +230,7 @@ describe('built-in tool surface budget (#12054)', () => {
       ...Object.keys(NOT_BUDGETED_HERE),
     ]);
     const unplaced = Object.values(ToolNames).filter(
-      (name) => !placed.has(name) && !isMediaPolicyTool(name),
+      (name) => !placed.has(name),
     );
 
     expect(unplaced).toEqual([]);

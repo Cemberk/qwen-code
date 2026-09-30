@@ -46,8 +46,6 @@ Qwen Code's built-in tools can be broadly categorized as follows:
 - **[File System Tools](./file-system.md):** For interacting with files and directories (reading, writing, listing, searching, etc.).
 - **[Shell Tool](./shell.md) (`run_shell_command`):** For executing shell commands.
 - **[Monitor Tool](./monitor.md) (`monitor`):** For running long-lived shell commands that stream output back as background task notifications.
-- **[Web Fetch Tool](./web-fetch.md) (`web_fetch`):** For retrieving content from URLs.
-- **[Web Search Tool](./web-search.md) (`web_search`):** For searching the web. Available at startup when a supported provider can back it.
 - **[Todo Write Tool](./todo-write.md) (`todo_write`):** An opt-in tool for creating and managing structured task lists during coding sessions.
 - **[Agent Tool](./task.md) (`agent`):** For delegating complex tasks to specialized subagents.
 - **[Exit Plan Mode Tool](./exit-plan-mode.md) (`exit_plan_mode`):** For exiting plan mode and proceeding with implementation.
@@ -56,5 +54,4 @@ Additionally, these tools incorporate:
 
 - **[MCP servers](./mcp-server.md)**: MCP servers act as a bridge between the model and your local environment or other services like APIs.
   - **[MCP User Guide](../../users/features/mcp.md)**: Configure MCP servers and manage them from Qwen Code
-  - **[Web Search via MCP](./web-search.md)**: Connect additional web search services (Bailian, Tavily, GLM) through MCP
 - **[Sandboxing](./sandbox.md)**: Sandboxing isolates the model and its changes from your environment to reduce potential risk.

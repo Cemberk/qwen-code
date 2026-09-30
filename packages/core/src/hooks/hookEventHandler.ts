@@ -151,8 +151,6 @@ function getHookDisplayName(config: HookConfig): string {
   switch (config.type) {
     case 'command':
       return config.command || 'command hook';
-    case 'http':
-      return config.url || 'http hook';
     case 'function':
       return config.id || 'function hook';
     case 'prompt': {

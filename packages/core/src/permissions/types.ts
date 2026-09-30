@@ -25,10 +25,9 @@ export type RuleScope = 'system' | 'user' | 'workspace' | 'session';
  *
  * - 'command': Shell command glob matching (for Bash / run_shell_command)
  * - 'path': File path gitignore-style matching (for Read / Edit / Write tools)
- * - 'domain': Domain matching with `domain:` prefix (for WebFetch)
  * - 'literal': Simple literal equality (fallback for unknown tool types)
  */
-export type SpecifierKind = 'command' | 'path' | 'domain' | 'literal';
+export type SpecifierKind = 'command' | 'path' | 'literal';
 
 /**
  * A parsed permission rule.
@@ -39,7 +38,6 @@ export type SpecifierKind = 'command' | 'path' | 'domain' | 'literal';
  *   "Bash(git *)"              → shell commands matching glob
  *   "Read(./secrets/**)"       → file reads matching path pattern
  *   "Edit(/src/**\/*.ts)"       → file edits matching path pattern
- *   "WebFetch(domain:x.com)"   → web fetch matching domain
  *   "Agent(model:opus)"        → subagent with model param matching
  *   "mcp__server__tool"        → specific MCP tool
  */
@@ -52,7 +50,6 @@ export interface PermissionRule {
    * Optional specifier for fine-grained matching.
    * For shell tools: a command pattern (e.g. "git *").
    * For file tools: a path pattern (e.g. "./secrets/**").
-   * For WebFetch: a domain pattern (e.g. "domain:example.com").
    * For tool param matching: the plain (non-key:value) part of the specifier.
    */
   specifier?: string;
@@ -96,7 +93,6 @@ export interface PermissionRuleSet {
  * Different fields are relevant depending on the tool type:
  * - Shell tools: provide `command`
  * - File tools: provide `filePath`
- * - WebFetch: provide `domain`
  * - Other tools: only `toolName` is needed
  */
 export interface PermissionCheckContext {
@@ -119,13 +115,9 @@ export interface PermissionCheckContext {
    */
   filePath?: string;
   /**
-   * The domain being fetched (only for WebFetch).
-   */
-  domain?: string;
-  /**
    * A generic specifier for literal matching (e.g. skill name for Skill,
    * subagent type for Task/Agent). Used when the rule has a literal
-   * specifier that doesn't fall into command/path/domain categories.
+   * specifier that doesn't fall into command/path categories.
    */
   specifier?: string;
   /**

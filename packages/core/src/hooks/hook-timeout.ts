@@ -16,9 +16,6 @@ const debugLogger = createDebugLogger('HOOK_TIMEOUT');
 /** Default timeout for a command hook, in seconds. */
 export const DEFAULT_COMMAND_HOOK_TIMEOUT_SECONDS = 60;
 
-/** Default timeout for an HTTP hook, in seconds. */
-export const DEFAULT_HTTP_HOOK_TIMEOUT_SECONDS = 600;
-
 /** Default timeout for a prompt hook, in seconds. */
 export const DEFAULT_PROMPT_HOOK_TIMEOUT_SECONDS = 30;
 
@@ -242,8 +239,6 @@ export function resolveCommandHookTimeoutMs(
  *   on MessageDisplay, StopFailure and SessionDelete run detached and install
  *   no timer, and async command hooks are checked by polling, where a delay
  *   above the timer limit is honoured; this still describes the timer.
- * - http: a falsy value uses the default; otherwise `timeout * 1000` goes to
- *   `combineAbortSignals`, which installs no timer unless it is above zero.
  * - prompt: `(timeout ?? default) * 1000` goes straight to `setTimeout`.
  * - function: `timeout ?? default`, in milliseconds, goes straight to
  *   `setTimeout`.
@@ -258,23 +253,6 @@ export function describeHookTimeout(
       return resolved.source === 'default'
         ? resolved
         : describeTimerDelay(resolved.timeoutMs, resolved.source);
-    }
-    case HookType.Http: {
-      if (!timeout) {
-        return defaultTimeout(
-          DEFAULT_HTTP_HOOK_TIMEOUT_SECONDS * 1000,
-          timeout,
-        );
-      }
-      const delayMs = Number(timeout) * 1000;
-      if (!(delayMs > 0)) {
-        return {
-          timeoutMs: null,
-          source: 'unusable',
-          ignoredConfiguredValue: false,
-        };
-      }
-      return describeTimerDelay(delayMs);
     }
     case HookType.Prompt:
       return timeout === undefined || timeout === null

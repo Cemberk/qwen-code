@@ -167,8 +167,6 @@ export function formatHookTimeout(row: HooksListingRow): string {
 
 function literalLabel(hookType: HookType): string {
   switch (hookType) {
-    case HookType.Http:
-      return t('URL:');
     case HookType.Prompt:
       return t('Prompt:');
     default:
@@ -225,10 +223,8 @@ export function hookDetailFields(
   if (row.statusMessage) {
     fields.push([t('Status message:'), row.statusMessage]);
   }
-  if (row.condition) fields.push([t('Condition:'), row.condition]);
   const options = [
     row.runsInBackground ? t('runs in background') : undefined,
-    row.runsOnce ? t('runs once') : undefined,
     row.sequential ? t('sequential') : undefined,
   ].filter((option): option is string => option !== undefined);
   if (options.length > 0) fields.push([t('Options:'), options.join(', ')]);

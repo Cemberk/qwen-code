@@ -69,7 +69,6 @@ export interface UIState {
   isAdvisorModelMode: boolean;
   isVisionModelMode: boolean;
   isCompactionModelMode: boolean;
-  isImageModelMode: boolean;
   modelDialogPersistScope: 'workspace' | 'user' | undefined;
   isTrustDialogOpen: boolean;
   activeArenaDialog: ArenaDialogType;

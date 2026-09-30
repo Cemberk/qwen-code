@@ -47,7 +47,6 @@ import {
   isSubagentLikeExecutionContext,
   isToolExcludedForCurrentContext,
 } from '../agents/runtime/subagent-plan-tool-policy.js';
-import { isMediaPolicyToolHiddenFromModel } from '../omni/policy/model-access.js';
 import {
   describeCodeModeBinding,
   ToolMode,
@@ -331,10 +330,7 @@ class ToolSearchInvocation extends BaseToolInvocation<
         !(
           isSubagentLikeExecutionContext() &&
           isToolExcludedForCurrentContext(t.name, maxSubagentDepth)
-        ) &&
-        // Media-policy tools without modelAccess.enabled must never be
-        // surfaced to the model — not even via keyword discovery.
-        !isMediaPolicyToolHiddenFromModel(this.config, t),
+        ),
     );
   }
 
@@ -391,12 +387,7 @@ class ToolSearchInvocation extends BaseToolInvocation<
         continue;
       }
       if (!registry.isToolDeclared(canonical)) {
-        const tool = registry.getTool(canonical);
-        if (tool && isMediaPolicyToolHiddenFromModel(this.config, tool)) {
-          blocked.push(canonical);
-        } else {
-          missing.push(requested);
-        }
+        missing.push(requested);
         continue;
       }
       if (
@@ -440,12 +431,6 @@ class ToolSearchInvocation extends BaseToolInvocation<
       }
       if (!tool) {
         missing.push(requested);
-        continue;
-      }
-      // Hidden media-policy tools cannot be reviewed by exact-name lookup
-      // either: modelAccess.enabled is the only switch that exposes them.
-      if (isMediaPolicyToolHiddenFromModel(this.config, tool)) {
-        blocked.push(canonical);
         continue;
       }
       // A visible tool remains safe to re-inspect and can be called directly.
@@ -526,10 +511,6 @@ class ToolSearchInvocation extends BaseToolInvocation<
         }
         if (isPlanLifecycleToolUnavailableInSubagent(name)) {
           return getSubagentPlanToolUnavailableMessage(name);
-        }
-        const tool = registry.getTool(name);
-        if (tool && isMediaPolicyToolHiddenFromModel(this.config, tool)) {
-          return `Tool "${name}" is a media policy tool and is not available to the model.`;
         }
         return getExcludedToolUnavailableMessage(name);
       });

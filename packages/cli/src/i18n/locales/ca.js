@@ -582,8 +582,8 @@ export default {
   'Manage installed extensions': 'Gestiona les extensions instal·lades',
   'Disable an extension': 'Desactiva una extensió',
   'Enable an extension': 'Activa una extensió',
-  'Install an extension from a git repo or local path':
-    "Instal·la una extensió des d'un dipòsit de Git o un camí local",
+  'Install an extension from a local path':
+    "Instal·la una extensió des d'un camí local",
   'Uninstall an extension': 'Desinstal·la una extensió',
   'No extensions installed.': 'No hi ha extensions instal·lades.',
   'Extension "{{name}}" not found.': 'Extensió "{{name}}" no trobada.',
@@ -620,16 +620,10 @@ export default {
     'Instal·lació cancel·lada per a "{{name}}".',
   'You are installing an extension from {{originSource}}. Some features may not work perfectly with Qwen Code.':
     'Esteu instal·lant una extensió des de {{originSource}}. Algunes funcions poden no funcionar perfectament amb Qwen Code.',
-  '--ref is not applicable for marketplace extensions.':
-    "--ref no s'aplica a les extensions del mercat.",
   'Extension "{{name}}" installed successfully and enabled.':
     'L\'extensió "{{name}}" s\'ha instal·lat i activat correctament.',
   'The github URL, local path, or marketplace source (marketplace-url:plugin-name) of the extension to install.':
     "La URL de GitHub, el camí local o la font del mercat (marketplace-url:nom-del-connector) de l'extensió a instal·lar.",
-  'The git ref to install from.':
-    'La referència git des de la qual instal·lar.',
-  'Enable pre-release versions for this extension.':
-    'Activar les versions preliminars per a aquesta extensió.',
   'Acknowledge the security risks of installing an extension and skip the confirmation prompt.':
     "Acceptar els riscos de seguretat d'instal·lar una extensió i ometre el missatge de confirmació.",
   'The source argument must be provided.': "Cal proporcionar l'argument font.",
@@ -672,7 +666,6 @@ export default {
   'Path:': 'Camí:',
   'Source:': 'Font:',
   'Type:': 'Tipus:',
-  'Release tag:': 'Etiqueta de versió:',
   'Enabled (User):': 'Activada (Usuari):',
   'Enabled (Workspace):': 'Activada (Espai de treball):',
   'Context files:': 'Fitxers de context:',
@@ -772,8 +765,8 @@ export default {
     'Aquest menú és de només lectura. Per afegir o modificar hooks, editeu settings.json directament o demaneu-ho a Qwen Code.',
   'Reopen this menu to reload hook definitions.':
     'Torneu a obrir aquest menú per recarregar les definicions dels hooks.',
-  'Hook controls and HTTP security settings require a restart.':
-    'Els controls dels hooks i la configuració de seguretat HTTP requereixen un reinici.',
+  'Hook controls require a restart.':
+    'Els controls dels hooks requereixen un reinici.',
   'Failed to reload hook definitions: {{error}}':
     'No s’han pogut recarregar les definicions dels hooks: {{error}}',
   'Enter to select · Esc to cancel':
@@ -1002,15 +995,6 @@ export default {
   'Open MCP management dialog': 'Obre el diàleg de gestió MCP',
   'Could not retrieve tool registry.':
     "No s'ha pogut recuperar el registre d'eines.",
-  "Successfully authenticated and refreshed tools for '{{name}}'.":
-    "S'ha autenticat correctament i s'han actualitzat les eines per a '{{name}}'.",
-  "Re-discovering tools from '{{name}}'...":
-    "Redescobrint les eines de '{{name}}'...",
-  "Discovered {{count}} tool(s) from '{{name}}'.":
-    "S'han descobert {{count}} eina(es) de '{{name}}'.",
-  'Authentication complete. Returning to server details...':
-    'Autenticació completada. Tornant als detalls del servidor...',
-  'Authentication successful.': 'Autenticació correcta.',
   // ============================================================================
   // Diàleg de gestió MCP
   // ============================================================================
@@ -1039,10 +1023,6 @@ export default {
   Reconnect: 'Reconnecta',
   Enable: 'Activa',
   Disable: 'Desactiva',
-  Authenticate: 'Autentica',
-  'Re-authenticate': 'Torna a autenticar',
-  'Clear Authentication': "Esborra l'autenticació",
-  'Server:': 'Servidor:',
   'Command:': 'Ordre:',
   'Working Directory:': 'Directori de treball:',
   'No server selected': 'Cap servidor seleccionat',
@@ -1062,15 +1042,6 @@ export default {
     'Afegiu MCP servers a la configuració per començar.',
   'Run qwen --debug to see error logs':
     "Executeu qwen --debug per veure els registres d'errors",
-  'OAuth Authentication': 'Autenticació OAuth',
-  'Authenticating... Please complete the login in your browser.':
-    "Autenticant... Completeu l'inici de sessió al vostre navegador.",
-  'Press c to copy the authorization URL to your clipboard.':
-    "Premeu c per copiar la URL d'autorització al porta-retalls.",
-  'Copy request sent to your terminal. If paste is empty, copy the URL above manually.':
-    'Sol·licitud de còpia enviada al vostre terminal. Si el que enganxeu és buit, copieu la URL anterior manualment.',
-  'Cannot write to terminal — copy the URL above manually.':
-    'No es pot escriure al terminal — copieu la URL anterior manualment.',
   'No tools available for this server.':
     'No hi ha eines disponibles per a aquest servidor.',
   destructive: 'destructiu',
@@ -1427,8 +1398,6 @@ export default {
   '{{count}} prompts': '{{count}} missatges',
   '(from {{extensionName}})': '(de {{extensionName}})',
   OAuth: 'OAuth',
-  'OAuth expired': 'OAuth expirat',
-  'OAuth not authenticated': 'OAuth no autenticat',
   'tools and prompts will appear when ready':
     'les eines i els missatges apareixeran quan estiguin a punt',
   '{{count}} tools cached': '{{count}} eines en memòria cau',
@@ -1443,13 +1412,9 @@ export default {
     'per mostrar les descripcions del servidor i de les eines',
   'to show tool parameter schemas': 'per mostrar tool parameter schemas',
   'to hide descriptions': 'per amagar les descripcions',
-  'to authenticate with OAuth-enabled servers':
-    'per autenticar-vos amb servidors OAuth',
   Press: 'Premeu',
   'to toggle tool descriptions on/off':
     'per activar/desactivar les descripcions de les eines',
-  "Starting OAuth authentication for MCP server '{{name}}'...":
-    "Iniciant l'autenticació OAuth per a MCP server '{{name}}'...",
   // ============================================================================
   // Consells d'inici
   // ============================================================================
@@ -2053,7 +2018,6 @@ export default {
     "La porta del planificador no ha vist la marca de temps d'aquest dream; el proper cicle de dream es pot tornar a executar abans del normal.",
   'Manage extension settings': 'Gestiona la configuració de les extensions',
   'Desc:': 'Descripció:',
-  'Ref:': 'Referència:',
   '中国 (China)': 'Xina',
   '中国 (China) - 阿里云百炼': 'Xina - 阿里云百炼',
 
@@ -2159,8 +2123,6 @@ export default {
   // ============================================================================
   'Cannot disable an extension-provided MCP server here.':
     'Aquí no es pot desactivar un MCP server proporcionat per una extensió.',
-  'Cleared authentication for "{{name}}".':
-    "S'ha esborrat l'autenticació de «{{name}}».",
   'MCP "{{name}}" disabled for all projects.':
     'MCP «{{name}}» desactivat per a tots els projectes.',
   'Enable extension "{{name}}" to manage this MCP server.':
@@ -2171,23 +2133,10 @@ export default {
   'Project level': 'Nivell de projecte',
   'Clipboard image paste is unavailable because the native clipboard module could not be loaded. Reinstall Qwen Code or use the npm installation method.':
     "L'enganxament d'imatges del porta-retalls no està disponible perquè no s'ha pogut carregar el mòdul natiu del porta-retalls. Reinstal·leu Qwen Code o useu el mètode d'instal·lació per npm.",
-  ' · {{marketplace}} (Tab to clear)': ' · {{marketplace}} (Tab per netejar)',
   '"{{name}}" {{state}}.': '«{{name}}» {{state}}.',
-  '(Tab / ←→ to switch)': '(Tab / ←→ per canviar)',
-  '+ Add new marketplace': '+ Afegeix un mercat nou',
-  '+ Install a new extension': '+ Instal·la una extensió nova',
   Actions: 'Accions',
-  'Add Marketplace': 'Afegeix un mercat',
-  'Add a marketplace in the Sources tab to discover extensions.':
-    'Afegiu un mercat a la pestanya Fonts per descobrir extensions.',
-  'Add new': 'Afegeix un element nou',
   'Add to Favorites': 'Afegeix als preferits',
   'Added "{{name}}" to favorites.': "S'ha afegit «{{name}}» als preferits.",
-  'Added marketplace "{{name}}".': "S'ha afegit el mercat «{{name}}».",
-  'Adding...': 'Afegint...',
-  'Back to extension list': "Torna a la llista d'extensions",
-  'Browse extensions ({{count}})': 'Explora les extensions ({{count}})',
-  'By: {{a}}': 'Per: {{a}}',
   'Change scope': "Canvia l'àmbit",
   'Change scope for "{{name}}":': "Canvia l'àmbit de «{{name}}»:",
   'Changing scope...': "Canviant l'àmbit...",
@@ -2203,122 +2152,54 @@ export default {
     "No es poden comprovar actualitzacions per a «{{name}}» (els connectors del mercat de Claude s'actualitzen reinstal·lant-los).",
   'Failed to check "{{name}}" for updates.':
     "No s'han pogut comprovar les actualitzacions de «{{name}}».",
-  'Claude plugin marketplace': 'Mercat de connectors de Claude',
-  Commands: 'Ordres',
   'Components:': 'Components:',
-  'Could not load this marketplace.': "No s'ha pogut carregar aquest mercat.",
   'Current: {{scope}}': 'Actual: {{scope}}',
   Disabled: 'Desactivat',
-  Discover: 'Descobrir',
   'Disabling "{{name}}"...': 'Desactivant «{{name}}»...',
   'Disabling MCP "{{name}}"...': 'Desactivant MCP «{{name}}»...',
-  'Discover extensions': 'Descobrir extensions',
-  'Discovering extensions...': 'Descobrint extensions...',
   'Enabling "{{name}}"...': 'Activant «{{name}}»...',
   'Enabling MCP "{{name}}"...': 'Activant MCP «{{name}}»...',
-  'Enter extension source:': "Introduïu la font de l'extensió:",
-  'Enter marketplace source (Claude format):':
-    'Introduïu la font del mercat (format Claude):',
   'Examples:': 'Exemples:',
-  'Extension details': "Detalls de l'extensió",
   'Extension v{{version}}': 'Extensió v{{version}}',
   'Extensions are not available in this environment.':
     'Les extensions no estan disponibles en aquest entorn.',
-  'Failed to open {{url}}': "No s'ha pogut obrir {{url}}",
   Favorites: 'Preferits',
   'Global (User Scope)': "Global (àmbit d'usuari)",
-  'Install Extension': "Instal·la l'extensió",
-  'Install for the current workspace (project scope)':
-    "Instal·la per a l'espai de treball actual (àmbit del projecte)",
-  'Install for you (user scope)': "Instal·la per a vós (àmbit d'usuari)",
-  'Install {{count}} extension(s) to which scope?':
-    'En quin àmbit voleu instal·lar {{count}} extensió/ns?',
-  Installed: 'Instal·lades',
-  'Installed extension "{{name}}".': "S'ha instal·lat l'extensió «{{name}}».",
-  'Installed extensions ({{count}}):': 'Extensions instal·lades ({{count}}):',
-  'Installed {{count}} extension(s).':
-    "S'han instal·lat {{count}} extensió/ns.",
   '{{name}}: installed, but the scope rollback failed — it may be disabled at all scopes; re-enable it from the Installed tab.':
     "{{name}}: instal·lada, però la restauració de l'àmbit ha fallat — pot estar desactivada a tots els àmbits; reactiveu-la des de la pestanya Instal·lades.",
   'Could not change scope, and the rollback also failed — "{{name}}" may be disabled at all scopes. Re-enable it from the Installed tab. ({{error}})':
     "No s'ha pogut canviar l'àmbit i la restauració també ha fallat — «{{name}}» pot estar desactivada a tots els àmbits. Reactiveu-la des de la pestanya Instal·lades. ({{error}})",
-  'Installed {{ok}}, failed {{fail}}: {{detail}}':
-    'Instal·lades {{ok}}, fallides {{fail}}: {{detail}}',
-  'Installing...': 'Instal·lant...',
-  'Last updated: {{date}}': 'Darrera actualització: {{date}}',
   MCP: 'MCP',
   'MCP "{{name}}" {{state}}.': 'MCP «{{name}}» {{state}}.',
   'MCP servers': 'MCP servers',
   'Mark for Update': 'Marca per actualitzar',
-  Marketplaces: 'Mercats',
-  'No extensions discovered.': "No s'ha descobert cap extensió.",
-  'No extensions match your search.':
-    'Cap extensió coincideix amb la vostra cerca.',
   'No extensions or marketplaces added yet.':
     "Encara no s'ha afegit cap extensió ni mercat.",
-  'No homepage available.': 'No hi ha pàgina principal disponible.',
-  'No installable extensions selected.':
-    "No s'ha seleccionat cap extensió instal·lable.",
   'No plugins or MCP servers installed.':
     'No hi ha connectors ni MCP servers instal·lats.',
   None: 'Cap',
   'Note: Uninstall permanently removes this extension.':
     'Nota: En desinstal·lar-la, s’eliminarà aquesta extensió permanentment.',
-  'Open homepage': 'Obre la pàgina principal',
   'Project (Workspace)': 'Projecte (espai de treball)',
-  'Refreshed {{count}} extension(s).': "S'han refrescat {{count}} extensió/ns.",
   'Remove from Favorites': 'Treu dels preferits',
-  'Remove marketplace': 'Treu el mercat',
-  'Remove marketplace "{{name}}"?': 'Voleu treure el mercat «{{name}}»?',
   'Removed "{{name}}" from favorites.': "S'ha tret «{{name}}» dels preferits.",
-  'Removed marketplace "{{name}}".': "S'ha tret el mercat «{{name}}».",
   'Scope:': 'Àmbit:',
   'Set "{{name}}" scope to {{scope}}.':
     "S'ha establert l'àmbit de «{{name}}» a {{scope}}.",
-  Sources: 'Fonts',
-  'Type to search · Space to toggle · Enter to view · Ctrl+R refresh · Esc to go back':
-    'Escriviu per cercar · Espai per commutar · Return per veure · Ctrl+R per refrescar · Esc per tornar',
   Uninstall: 'Desinstal·la',
   'Uninstalled "{{name}}".': "S'ha desinstal·lat «{{name}}».",
   'Update Now': 'Actualitza ara',
-  'Update marketplace': 'Actualitza el mercat',
-  'Update marketplace (last updated {{date}})':
-    'Actualitza el mercat (darrera actualització {{date}})',
-  'Could not update marketplace "{{name}}".':
-    "No s'ha pogut actualitzar el mercat «{{name}}».",
   'Updated "{{name}}".': "S'ha actualitzat «{{name}}».",
-  'Updated marketplace "{{name}}".': "S'ha actualitzat el mercat «{{name}}».",
-  'Use the Discover tab to find and install plugins.':
-    'Useu la pestanya Descobrir per trobar i instal·lar connectors.',
-  'Version: {{v}}': 'Versió: {{v}}',
-  'Will install:': 'Instal·larà:',
-  'Would open: {{url}}': 'Obriria: {{url}}',
-  'Y/Enter to confirm · N/Esc to cancel':
-    'Y/Return per confirmar · N/Esc per cancel·lar',
-  'Press R to retry · Esc to go back':
-    'Premeu R per tornar-ho a provar · Esc per tornar',
-  'Enter to select · R refresh · Esc to go back':
-    'Return per seleccionar · R per refrescar · Esc per tornar',
-  'from {{marketplace}}': 'de {{marketplace}}',
   installed: 'instal·lada',
   '{{count}} Agents': '{{count}} agents',
   '{{count}} Workflows': '{{count}} workflows',
   '{{count}} Commands': '{{count}} ordres',
   '{{count}} MCP': '{{count}} MCP',
   '{{count}} Skills': '{{count}} habilitats',
-  '{{count}} available extensions': '{{count}} extensions disponibles',
   '↑ more above': '↑ més amunt',
-  '↑↓ navigate · Enter open · d remove marketplace · Esc close':
-    '↑↓ navegar · Return per obrir · d treure el mercat · Esc per tancar',
-  '↑↓ navigate · Enter select · Esc close':
-    '↑↓ navegar · Return per seleccionar · Esc per tancar',
-  '↑↓ navigate · Enter select · d remove marketplace · Esc close':
-    '↑↓ navegar · Return per seleccionar · d treure el mercat · Esc per tancar',
   '↑↓ navigate · Space enable/disable · f favorite · Enter details · Esc close':
     '↑↓ navegar · Espai per activar/desactivar · f preferit · Return per veure els detalls · Esc per tancar',
   '↓ more below': '↓ més avall',
-  '⚠ Make sure you trust an extension before installing, updating, or using it. We cannot verify what MCP servers, files, or other software an extension includes, or that it works as intended. See the extension homepage for more information.':
-    "⚠ Assegureu-vos que confieu en una extensió abans d'instal·lar-la, actualitzar-la o usar-la. No podem verificar quins MCP servers, fitxers o altres programaris inclou una extensió, ni que funcioni tal com es pretén. Consulteu la pàgina principal de l'extensió per a més informació.",
 
   // ============================================================================
   // Noms d'eines (toolDisplayName.*)
@@ -2339,8 +2220,6 @@ export default {
   'toolDisplayName.Skill': 'Habilitat',
   'toolDisplayName.EnterPlanMode': 'Entra al mode de planificació',
   'toolDisplayName.ExitPlanMode': 'Surt del mode de planificació',
-  'toolDisplayName.WebFetch': 'Descàrrega web',
-  'toolDisplayName.WebSearch': 'Cerca web',
   'toolDisplayName.ListFiles': 'Llista fitxers',
   'toolDisplayName.Lsp': 'LSP',
   'toolDisplayName.AskUserQuestion': "Pregunta a l'usuari",
@@ -2404,39 +2283,16 @@ export default {
   '(new, partial)': '(nou, parcial)',
   '(deleted)': '(suprimit)',
   '(binary, deleted)': '(binari, suprimit)',
-  'Create a reusable skill from a knowledge source (file, URL, conversation, or text).':
-    "Crea una habilitat reutilitzable a partir d'una font de coneixement (fitxer, URL, conversa o text).",
+  'Create a reusable skill from a knowledge source (file, conversation, or text).':
+    "Crea una habilitat reutilitzable a partir d'una font de coneixement (fitxer, conversa o text).",
   'Show skill-specific usage statistics.':
     "Mostra estadístiques d'ús específiques de l'habilitat.",
   'The scope to install the extension in: "user" (global, default) or "project" (current workspace only).':
     "L'àmbit on instal·lar l'extensió: «user» (global, per defecte) o «project» (només l'espai de treball actual).",
   'Extension "{{name}}" installed successfully and enabled for the current workspace.':
     "L'extensió «{{name}}» s'ha instal·lat correctament i està activada per a l'espai de treball actual.",
-  'Marketplace "{{name}}" not found.': "No s'ha trobat el mercat «{{name}}».",
-  'No marketplace sources added yet.':
-    "Encara no s'ha afegit cap font de mercat.",
-  'No marketplaces added yet.': "Encara no s'ha afegit cap mercat.",
-  'Adds a marketplace source (Claude format).':
-    'Afegeix una font de mercat (format Claude).',
-  'The marketplace source to add: owner/repo (GitHub), a git or https URL, or a local path.':
-    'La font del mercat a afegir: propietari/repo (GitHub), una URL git o https, o un camí local.',
-  'Removes a marketplace source.': 'Treu una font de mercat.',
-  'The name of the marketplace to remove.': 'El nom del mercat a treure.',
-  'Lists configured marketplace sources.':
-    'Llista les fonts de mercat configurades.',
-  'Re-fetches a marketplace source and its plugin listing.':
-    'Torna a descarregar una font de mercat i la seva llista de connectors.',
-  'The name of the marketplace to update.': 'El nom del mercat a actualitzar.',
-  'Manage marketplace sources for discovering extensions.':
-    'Gestiona les fonts de mercat per descobrir extensions.',
   'You need at least one command before continuing.':
     'Cal com a mínim una ordre abans de continuar.',
-  '--registry is only applicable for npm extensions.':
-    "--registry només s'aplica a extensions npm.",
-  'Custom npm registry URL (only for npm extensions).':
-    'URL de registre npm personalitzat (només per a extensions npm).',
-  '--ref is not applicable for npm extensions. Use @version suffix instead (e.g. @scope/package@1.2.0).':
-    "--ref no s'aplica a extensions npm. Useu el sufix @versió (p. ex. @scope/paquet@1.2.0).",
   'Installs an extension from a git repository URL, local path, scoped npm package (@scope/name), or claude marketplace (marketplace-url:plugin-name).':
     "Instal·la una extensió des d'una URL de repositori git, un camí local, un paquet npm amb àmbit (@scope/nom) o del mercat de Claude (marketplace-url:nom-del-connector).",
   Description: 'Descripció',
@@ -2462,7 +2318,6 @@ export default {
   'View resources': 'Veure recursos',
   resource: 'recurs',
   resources: 'recursos',
-  'needs authentication': 'necessita autenticació',
   'No resources available for this server.':
     'No hi ha recursos disponibles per a aquest servidor.',
   'Resources for {{serverName}}': 'Recursos de {{serverName}}',

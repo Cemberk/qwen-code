@@ -29,7 +29,7 @@ import { buildPermissionRules } from '../permissions/rule-parser.js';
 /**
  * Build a {@link PermissionCheckContext} from raw tool invocation parameters.
  *
- * Extracts `command`, `filePath`, `domain`, and `specifier` fields from the
+ * Extracts `command`, `filePath`, and `specifier` fields from the
  * tool's params, resolving relative paths against `targetDir`.
  */
 export function buildPermissionCheckContext(
@@ -69,15 +69,6 @@ export function buildPermissionCheckContext(
       : path.resolve(targetDir, toolParams['path']);
   }
 
-  let domain: string | undefined;
-  if (typeof toolParams['url'] === 'string') {
-    try {
-      domain = new URL(toolParams['url']).hostname;
-    } catch {
-      // malformed URL — leave domain undefined
-    }
-  }
-
   // Generic specifier for literal matching (Skill name, Task subagent type,
   // read_mcp_resource server name, etc.)
   const specifier =
@@ -95,7 +86,6 @@ export function buildPermissionCheckContext(
     command,
     cwd,
     filePath,
-    domain,
     specifier,
     toolParams,
   };

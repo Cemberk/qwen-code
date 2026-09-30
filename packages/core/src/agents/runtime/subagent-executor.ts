@@ -4,19 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '../../config/config.js';
-import type { SubagentExecutorSpec } from '../../subagents/types.js';
 import type { RuntimeContentGeneratorView } from './agent-context.js';
-import type { AgentEventEmitter, AgentHooks } from './agent-events.js';
+import type { AgentEventEmitter } from './agent-events.js';
 import type { ContextState } from './agent-headless.js';
 import type { AgentStatsSummary } from './agent-statistics.js';
 import type {
   AgentExternalInput,
   AgentTerminateMode,
   ModelConfig,
-  PromptConfig,
-  RunConfig,
-  ToolConfig,
 } from './agent-types.js';
 
 export interface SubagentExecutorCore {
@@ -26,8 +21,6 @@ export interface SubagentExecutorCore {
 }
 
 export interface SubagentExecutor {
-  readonly continuationBlockedReason?: string;
-
   execute(
     context: ContextState,
     externalSignal?: AbortSignal,
@@ -53,24 +46,4 @@ export interface SubagentExecutor {
 
   /** Resolves after owned resources have been released. */
   dispose?(): void | Promise<void>;
-}
-
-export interface ExternalAgentExecutorParams {
-  spec: SubagentExecutorSpec;
-  name: string;
-  approvalMode?: string;
-  permissionMode?: string;
-  promptConfig: PromptConfig;
-  modelConfig: ModelConfig;
-  runConfig: RunConfig;
-  toolConfig?: ToolConfig;
-  eventEmitter?: AgentEventEmitter;
-  hooks?: AgentHooks;
-  taskName?: string;
-  subagentId?: string;
-  runtimeContext: Config;
-}
-
-export interface ExternalAgentExecutor {
-  create(params: ExternalAgentExecutorParams): Promise<SubagentExecutor>;
 }

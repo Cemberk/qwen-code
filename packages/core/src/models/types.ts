@@ -103,9 +103,7 @@ export interface ModelConfig {
    * model.
    */
   realtimeOnly?: boolean;
-  /** Whether this route can be used by the built-in image_gen tool */
-  supportsImageGeneration?: boolean;
-  /** When true, this model only appears in the image generation model selector */
+  /** When true, this model is a service-role route and never a chat model */
   imageOnly?: boolean;
 }
 
@@ -177,9 +175,7 @@ export interface AvailableModel {
   voiceOnly?: boolean;
   /** When true, this model only appears in the vision model selector */
   visionOnly?: boolean;
-  /** Whether this route can be used by the built-in image_gen tool */
-  supportsImageGeneration?: boolean;
-  /** When true, this model only appears in the image generation model selector */
+  /** When true, this model is a service-role route and never a chat model */
   imageOnly?: boolean;
 
   /** Whether this is a runtime model (not from modelProviders) */

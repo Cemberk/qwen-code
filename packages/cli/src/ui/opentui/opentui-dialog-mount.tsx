@@ -63,7 +63,7 @@ import {
   buildPermissionsData,
   computeModelDialogInitialKey,
   deletePermissionRule,
-  enrichMcpOAuthState,
+  enrichMcpServerState,
   getMcpServerResources,
   getMcpServerTools,
   removeWorkspaceDirectory,
@@ -172,14 +172,14 @@ export function OpenTuiDialogMount(props: OpenTuiDialogMountProps) {
   );
   const reloadPermissions = () => setPermissions(buildPermissionsData(config));
 
-  // --- mcp inventory (async OAuth enrich on open) -------------------------
+  // --- mcp inventory (async status enrich on open) ------------------------
   const [mcpServers, setMcpServers] = useState<McpServerInfo[]>([]);
   useEffect(() => {
     if (request.dialog !== 'mcp') return;
     let alive = true;
     const initial = buildMcpServers(config);
     setMcpServers(initial);
-    void enrichMcpOAuthState(config, initial).then((enriched) => {
+    void enrichMcpServerState(config, initial).then((enriched) => {
       if (alive) setMcpServers(enriched);
     });
     return () => {
@@ -194,7 +194,7 @@ export function OpenTuiDialogMount(props: OpenTuiDialogMountProps) {
         if (result.changed) {
           const next = buildMcpServers(config);
           setMcpServers(next);
-          void enrichMcpOAuthState(config, next).then(setMcpServers);
+          void enrichMcpServerState(config, next).then(setMcpServers);
         }
       },
     );
@@ -206,9 +206,6 @@ export function OpenTuiDialogMount(props: OpenTuiDialogMountProps) {
   );
   const [extBusy, setExtBusy] = useState(false);
   const [extStatus, setExtStatus] = useState<ExtensionsStatusMessage | null>(
-    null,
-  );
-  const [extDiscoverFilter, setExtDiscoverFilter] = useState<string | null>(
     null,
   );
   const reloadExtensions = () => setExtRows(buildExtensionRows(config));
@@ -541,8 +538,6 @@ export function OpenTuiDialogMount(props: OpenTuiDialogMountProps) {
           onClose={onClose}
           status={extStatus}
           busy={extBusy}
-          discoverFilter={extDiscoverFilter}
-          onDiscoverFilterChange={setExtDiscoverFilter}
           rowsByTab={rowsByTab}
           onRowAction={(row, action) =>
             runExtensionAction(row.key, action as ExtensionDetailAction)
@@ -564,9 +559,7 @@ export function OpenTuiDialogMount(props: OpenTuiDialogMountProps) {
             config?.getHookSystem()
               ? [
                   t('Reopen this menu to reload hook definitions.'),
-                  t(
-                    'Hook controls and HTTP security settings require a restart.',
-                  ),
+                  t('Hook controls require a restart.'),
                 ].join('\n')
               : undefined
           }

@@ -49,8 +49,8 @@ export class McpServerSpawnFailedError extends Error {
 
 /**
  * T2.8: thrown by `McpClientManager.addRuntimeMcpServer` when the
- * provided server config is structurally invalid (e.g. missing both
- * `command` and `url`/`httpUrl`).
+ * provided server config is structurally invalid (e.g. missing
+ * `command`).
  */
 export class InvalidMcpConfigError extends Error {
   readonly code = 'invalid_config' as const;

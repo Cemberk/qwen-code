@@ -19,24 +19,6 @@ export const AGENT_PLUGIN_MCP_SCHEMA =
   'https://agent-plugins.org/schemas/1.0.0/mcp.schema.json';
 
 const debugLogger = createDebugLogger('AGENT_PLUGINS_V1');
-const CLIENT_OWNED_HEADERS = new Set([
-  'accept',
-  'authorization',
-  'connection',
-  'content-encoding',
-  'content-length',
-  'content-type',
-  'host',
-  'last-event-id',
-  'mcp-protocol-version',
-  'mcp-session-id',
-  'proxy-authorization',
-  'te',
-  'trailer',
-  'transfer-encoding',
-  'upgrade',
-  'user-agent',
-]);
 
 export async function loadAgentPluginMcpServers(
   pluginRoot: string,
@@ -183,10 +165,6 @@ function normalizeServer(
   switch (value['type']) {
     case 'stdio':
       return normalizeStdioServer(value, pluginRoot, pluginDataRoot);
-    case 'streamable-http':
-      return normalizeHttpServer(value);
-    case 'sse':
-      throw new Error('Legacy SSE transport is not supported.');
     default:
       throw new Error(`Unsupported MCP transport "${value['type']}".`);
   }
@@ -307,102 +285,6 @@ function normalizeCwd(
     throw new Error('Expanded stdio cwd escapes its allowed root.');
   }
   return resolved;
-}
-
-function normalizeHttpServer(value: Record<string, unknown>): MCPServerConfig {
-  assertOnlyFields(value, ['type', 'url', 'headers']);
-  const rawUrl = value['url'];
-  if (typeof rawUrl !== 'string' || rawUrl.length === 0) {
-    throw new Error('Streamable HTTP url must be a non-empty string.');
-  }
-  validateHttpUrl(rawUrl);
-
-  const rawHeaders = value['headers'];
-  if (rawHeaders !== undefined && !isRecord(rawHeaders)) {
-    throw new Error('Streamable HTTP headers must be an object.');
-  }
-  const headers = rawHeaders ? normalizeHeaders(rawHeaders) : undefined;
-  return {
-    httpUrl: rawUrl,
-    ...(headers && Object.keys(headers).length > 0 ? { headers } : {}),
-    agentPluginV1: true,
-  };
-}
-
-function validateHttpUrl(rawUrl: string): void {
-  let parsed: URL;
-  try {
-    parsed = new URL(rawUrl);
-  } catch (error) {
-    throw new Error(
-      `Invalid Streamable HTTP url: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-  if (
-    (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
-    !parsed.hostname
-  ) {
-    throw new Error('Streamable HTTP url must be absolute HTTP or HTTPS.');
-  }
-  if (parsed.username || parsed.password || parsed.hash) {
-    throw new Error(
-      'Streamable HTTP url must not contain user information or a fragment.',
-    );
-  }
-  if (parsed.protocol === 'http:' && !isLoopbackHost(parsed.hostname)) {
-    throw new Error('Non-loopback Streamable HTTP endpoints must use HTTPS.');
-  }
-}
-
-function isLoopbackHost(hostname: string): boolean {
-  const normalized = hostname.replace(/^\[|\]$/g, '').toLowerCase();
-  if (normalized === 'localhost' || normalized === '::1') return true;
-  const ipv4 = normalized.split('.').map(Number);
-  return (
-    ipv4.length === 4 &&
-    ipv4.every(
-      (part, index) =>
-        Number.isInteger(part) &&
-        part >= 0 &&
-        part <= 255 &&
-        (index !== 0 || part === 127),
-    )
-  );
-}
-
-function normalizeHeaders(
-  value: Record<string, unknown>,
-): Record<string, string> {
-  const normalized: Record<string, string> = {};
-  const seen = new Set<string>();
-  for (const [name, rawValue] of Object.entries(value)) {
-    if (typeof rawValue !== 'string') {
-      throw new Error(`HTTP header "${name}" must have a string value.`);
-    }
-    const lowercaseName = name.toLowerCase();
-    if (seen.has(lowercaseName)) {
-      throw new Error(`Duplicate case-insensitive HTTP header "${name}".`);
-    }
-    seen.add(lowercaseName);
-    if (!/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(name)) {
-      throw new Error(`Invalid HTTP header name "${name}".`);
-    }
-    for (const character of rawValue) {
-      const code = character.charCodeAt(0);
-      if (code <= 8 || (code >= 10 && code <= 31) || code === 127) {
-        throw new Error(`Invalid HTTP header value for "${name}".`);
-      }
-    }
-    if (!CLIENT_OWNED_HEADERS.has(lowercaseName)) {
-      Object.defineProperty(normalized, name, {
-        value: rawValue,
-        enumerable: true,
-        configurable: true,
-        writable: true,
-      });
-    }
-  }
-  return normalized;
 }
 
 function assertOnlyFields(

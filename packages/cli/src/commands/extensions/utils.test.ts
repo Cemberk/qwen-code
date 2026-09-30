@@ -211,7 +211,7 @@ describe('extensionToOutputString', () => {
   it('should redact URL credentials in install source output', () => {
     const extension = createMockExtension({
       installMetadata: {
-        type: 'git',
+        type: 'local',
         source: 'https://user:token@example.com/owner/repo.git',
       },
     });

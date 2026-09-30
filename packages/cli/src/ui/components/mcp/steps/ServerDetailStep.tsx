@@ -10,7 +10,6 @@ import { theme } from '../../../semantic-colors.js';
 import { useKeypress } from '../../../hooks/useKeypress.js';
 import { RadioButtonSelect } from '../../shared/RadioButtonSelect.js';
 import { t } from '../../../../i18n/index.js';
-import { MCPServerStatus } from '@qwen-code/qwen-code-core';
 import type { ServerDetailStepProps } from '../types.js';
 import {
   getStatusColor,
@@ -26,9 +25,7 @@ type ServerAction =
   | 'view-resources'
   | 'approve'
   | 'reconnect'
-  | 'toggle-disable'
-  | 'authenticate'
-  | 'clear-auth';
+  | 'toggle-disable';
 
 export const ServerDetailStep: React.FC<ServerDetailStepProps> = ({
   server,
@@ -37,25 +34,15 @@ export const ServerDetailStep: React.FC<ServerDetailStepProps> = ({
   onApprove,
   onReconnect,
   onDisable,
-  onAuthenticate,
-  onClearAuth,
   onBack,
   isActive = true,
 }) => {
-  // 受门控（#4615）但未审批的 server 被 discovery 跳过，不会进入连接/认证流程，
+  // 受门控（#4615）但未审批的 server 被 discovery 跳过，不会进入连接流程，
   // 审批原因优先展示。
   const awaitingApproval =
     !!server && !server.isDisabled && !!server.approvalState;
-  // 未连接且需要认证时，状态以"需要认证"展示，避免误导用户去排查连接问题。
-  // requiresAuth 是加载时的快照，状态被实时推到 connected 后不再适用。
-  const needsAuth =
-    !!server &&
-    !server.isDisabled &&
-    !awaitingApproval &&
-    !!server.requiresAuth &&
-    server.status !== MCPServerStatus.CONNECTED;
   const statusColor = server
-    ? server.isDisabled || awaitingApproval || needsAuth
+    ? server.isDisabled || awaitingApproval
       ? 'yellow'
       : getStatusColor(server.status)
     : 'gray';
@@ -128,24 +115,6 @@ export const ServerDetailStep: React.FC<ServerDetailStepProps> = ({
       value: 'toggle-disable',
     });
 
-    // 已认证的服务器显示"重新认证"，未认证的显示"认证"。审批未通过时认证同样无法推进，隐藏。
-    if (!server.isDisabled && !awaitingApproval) {
-      result.push({
-        key: 'authenticate',
-        label: server.hasOAuthTokens ? t('Re-authenticate') : t('Authenticate'),
-        value: 'authenticate',
-      });
-    }
-
-    // 只在存储有 OAuth 认证信息时显示“清空认证”选项
-    if (!server.isDisabled && server.hasOAuthTokens) {
-      result.push({
-        key: 'clear-auth',
-        label: t('Clear Authentication'),
-        value: 'clear-auth',
-      });
-    }
-
     return result;
   }, [server, onViewResources, onApprove, awaitingApproval]);
 
@@ -191,9 +160,7 @@ export const ServerDetailStep: React.FC<ServerDetailStepProps> = ({
                   ? server.approvalState === 'rejected'
                     ? t('rejected — edit config to re-approve')
                     : t('needs approval')
-                  : needsAuth
-                    ? t('needs authentication')
-                    : t(server.status)}
+                  : t(server.status)}
             </Text>
           </Box>
         </Box>
@@ -319,12 +286,6 @@ export const ServerDetailStep: React.FC<ServerDetailStepProps> = ({
                 break;
               case 'toggle-disable':
                 onDisable?.();
-                break;
-              case 'authenticate':
-                onAuthenticate?.();
-                break;
-              case 'clear-auth':
-                onClearAuth?.();
                 break;
               default:
                 break;

@@ -9,7 +9,6 @@ import {
   isSdkMcpServerConfig,
   type MCPServerConfig,
 } from '../config/config.js';
-import type { MCPOAuthConfig } from '../mcp/oauth-provider.js';
 import { type McpTransportKind, mcpTransportOf } from './mcp-client-manager.js';
 import {
   effectiveAppResourceMaxBytes,
@@ -34,13 +33,12 @@ export type PoolKey = string;
 export { mcpTransportOf, type McpTransportKind } from './mcp-client-manager.js';
 
 /**
- * Default set of transports the pool will share. stdio + websocket
- * are true OS subprocesses whose state is observable and isolatable;
- * HTTP/SSE servers often bind state to the request stream and need
- * explicit operator opt-in. See `docs/design/f2-mcp-transport-pool.md`.
+ * Default set of transports the pool will share. stdio servers are true
+ * OS subprocesses whose state is observable and isolatable. See
+ * `docs/design/f2-mcp-transport-pool.md`.
  */
 export const POOLED_TRANSPORTS_DEFAULT: ReadonlySet<McpTransportKind> = new Set(
-  ['stdio', 'websocket'],
+  ['stdio'],
 );
 
 /**
@@ -57,46 +55,8 @@ export function isPoolable(
 }
 
 /**
- * Normalize OAuth config so functionally-equivalent shapes collapse
- * to the same fingerprint. `undefined`, `null`, `{}`, `{enabled: false}`
- * all mean "no OAuth" → all return `null`.
- *
- * Scopes / audiences sorted so callsite order doesn't matter; explicit
- * `null` defaults so an undefined field doesn't change the hash vs an
- * explicitly null one.
- *
- * hash every
- * `MCPOAuthConfig` field (oauth-provider.ts:51-62). Pre-fix only
- * `clientId` / `scopes` / `authorizationUrl` / `tokenUrl` were hashed
- * — so two configs differing ONLY in `clientSecret` / `audiences` /
- * `redirectUri` / `tokenParamName` / `registrationUrl` collapsed to
- * the same fingerprint and shared a pool entry, leaking the first
- * config's effective credentials/audience/redirect into the second
- * session's transport. Especially load-bearing for `clientSecret`
- * (confidential client) and `audiences` (multi-audience tokens).
- */
-export function canonicalOAuth(
-  o?: MCPOAuthConfig | null,
-): Record<string, unknown> | null {
-  if (!o || !o.enabled) return null;
-  return {
-    enabled: true,
-    clientId: o.clientId ?? null,
-    clientSecret: o.clientSecret ?? null,
-    scopes: o.scopes ? [...o.scopes].sort() : null,
-    audiences: o.audiences ? [...o.audiences].sort() : null,
-    authorizationUrl: o.authorizationUrl ?? null,
-    tokenUrl: o.tokenUrl ?? null,
-    redirectUri: o.redirectUri ?? null,
-    tokenParamName: o.tokenParamName ?? null,
-    registrationUrl: o.registrationUrl ?? null,
-  };
-}
-
-/**
  * Sort entries by key for stable JSON. Returns `[]` for nullish input
- * so callsites can treat `undefined` env / headers identically to
- * empty objects.
+ * so callsites can treat `undefined` env identically to empty objects.
  */
 function sortedEntries(
   obj: Record<string, string> | undefined | null,
@@ -109,7 +69,7 @@ function sortedEntries(
 
 /**
  * Compute the pool fingerprint for an MCP server config. Two configs
- * with identical transport, auth, env, and shared tool-snapshot settings
+ * with identical transport, env, and shared tool-snapshot settings
  * produce the same fingerprint and thus share a pool entry; any divergence
  * creates a distinct entry. App resource limits belong in the key because
  * discovery stores them in the shared tool snapshot without per-session
@@ -119,10 +79,8 @@ function sortedEntries(
  * second process for one server.
  *
  * Hashed fields (transport and shared tool-snapshot settings):
- *   transport, command, args, cwd, env, url, httpUrl, tcp, headers,
- *   timeout, appResourceMaxBytes, appResourceTimeoutMs, versionNegotiation,
- *   oauth, authProviderType, targetAudience,
- *   targetServiceAccount
+ *   transport, command, args, cwd, env,
+ *   timeout, appResourceMaxBytes, appResourceTimeoutMs, versionNegotiation
  *
  * Excluded fields (per-session filter / metadata; do NOT change the
  * underlying transport):
@@ -143,20 +101,12 @@ export function fingerprint(cfg: MCPServerConfig): PoolKey {
     args: cfg.args ?? [],
     cwd: cfg.cwd ?? null,
     env: sortedEntries(cfg.env),
-    url: cfg.url ?? null,
-    httpUrl: cfg.httpUrl ?? null,
-    tcp: cfg.tcp ?? null,
-    headers: sortedEntries(cfg.headers),
     timeout: cfg.timeout ?? null,
     appResourceMaxBytes: effectiveAppResourceMaxBytes(cfg.appResourceMaxBytes),
     appResourceTimeoutMs: effectiveAppResourceTimeoutMs(
       cfg.appResourceTimeoutMs,
     ),
     automaticVersionNegotiation: cfg.versionNegotiation === 'auto',
-    oauth: canonicalOAuth(cfg.oauth),
-    authProviderType: cfg.authProviderType ?? null,
-    targetAudience: cfg.targetAudience ?? null,
-    targetServiceAccount: cfg.targetServiceAccount ?? null,
   };
   return createHash('sha256')
     .update(JSON.stringify(canonical))
@@ -167,7 +117,7 @@ export function fingerprint(cfg: MCPServerConfig): PoolKey {
 /**
  * Build the `ConnectionId` from server name + computed fingerprint.
  * Form: `${name}::${fp16hex}`. Same name + different fingerprints
- * (e.g. divergent OAuth tokens or env between sessions) yields
+ * (e.g. divergent env between sessions) yields
  * distinct ConnectionIds — see global state coexistence for how
  * the global `serverStatuses` Map handles multi-entry name collisions.
  */

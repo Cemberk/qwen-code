@@ -29,10 +29,10 @@ describe('hashMcpServerConfig', () => {
     const a = hashMcpServerConfig({
       command: 'node',
       env: { A: '1', B: '2' },
-      headers: { X: 'x', Y: 'y' },
+      args: ['x'],
     });
     const b = hashMcpServerConfig({
-      headers: { Y: 'y', X: 'x' },
+      args: ['x'],
       env: { B: '2', A: '1' },
       command: 'node',
     });
@@ -41,7 +41,7 @@ describe('hashMcpServerConfig', () => {
 
   it('treats an absent field and an explicit-undefined field the same', () => {
     const a = hashMcpServerConfig({ command: 'node' });
-    const b = hashMcpServerConfig({ command: 'node', url: undefined });
+    const b = hashMcpServerConfig({ command: 'node', cwd: undefined });
     expect(a).toBe(b);
   });
 
@@ -117,23 +117,11 @@ describe('hashMcpServerConfig', () => {
       ).not.toBe(baseHash);
     });
 
-    it('remote url', () => {
-      expect(hashMcpServerConfig({ url: 'https://a.example' })).not.toBe(
-        hashMcpServerConfig({ url: 'https://b.example' }),
-      );
-    });
-
-    it('headers', () => {
+    it('env', () => {
       expect(
-        hashMcpServerConfig({
-          httpUrl: 'https://a.example',
-          headers: { Authorization: 'one' },
-        }),
+        hashMcpServerConfig({ command: 'node', env: { TOKEN: 'one' } }),
       ).not.toBe(
-        hashMcpServerConfig({
-          httpUrl: 'https://a.example',
-          headers: { Authorization: 'two' },
-        }),
+        hashMcpServerConfig({ command: 'node', env: { TOKEN: 'two' } }),
       );
     });
   });

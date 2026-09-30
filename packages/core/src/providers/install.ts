@@ -7,7 +7,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { getModelsForProviderProtocol } from './provider-config.js';
 import { AuthType } from '../core/contentGenerator.js';
-import { isImageGenerationCapable } from '../models/image-generation-capability.js';
 import {
   resolveModelProtocol,
   resolveProviderProtocol,
@@ -260,9 +259,7 @@ export async function applyProviderInstallPlan(
               (preserveSelection || patch.mergeStrategy !== 'append'))) &&
           (Boolean(existing.imageOnly) !== Boolean(model.imageOnly) ||
             Boolean(existing.voiceOnly) !== Boolean(model.voiceOnly) ||
-            Boolean(existing.realtimeOnly) !== Boolean(model.realtimeOnly) ||
-            (isImageGenerationCapable(existing) &&
-              !isImageGenerationCapable(model))),
+            Boolean(existing.realtimeOnly) !== Boolean(model.realtimeOnly)),
       ),
     );
     const removesConversation =

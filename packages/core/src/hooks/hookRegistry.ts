@@ -17,7 +17,7 @@ const debugLogger = createDebugLogger('HOOK_REGISTRY');
 /**
  * The identity the registry uses to spot a duplicate hook within one source,
  * event, matcher and `sequential` setting: the hook's name when it has one,
- * otherwise its full command, URL, function id or prompt. Exported so a
+ * otherwise its full command, function id or prompt. Exported so a
  * listing read straight from settings collapses the same entries the registry
  * would.
  */
@@ -25,8 +25,6 @@ export function hookRegistryIdentity(config: HookConfig): string {
   if (config.name) return config.name;
   if (config.type === 'command')
     return (config as { command?: string }).command || 'unknown-command';
-  if (config.type === 'http')
-    return (config as { url?: string }).url || 'unknown-url';
   if (config.type === 'function')
     return (config as { id?: string }).id || 'unknown-function';
   if (config.type === 'prompt')
@@ -407,7 +405,7 @@ export class HookRegistry {
           continue;
         }
 
-        // Add source to hook config (only for command and http hooks)
+        // Add source to hook config (not for function hooks)
         if (hookConfig.type !== 'function') {
           (hookConfig as { source?: HooksConfigSource }).source = source;
         }
@@ -441,7 +439,7 @@ export class HookRegistry {
   ): boolean {
     if (
       !config.type ||
-      !['command', 'http', 'function', 'prompt'].includes(config.type)
+      !['command', 'function', 'prompt'].includes(config.type)
     ) {
       debugLogger.warn(
         `Invalid hook ${eventName} from ${source} type: ${config.type}`,
@@ -452,13 +450,6 @@ export class HookRegistry {
     if (config.type === 'command' && !config.command) {
       debugLogger.warn(
         `Command hook ${eventName} from ${source} missing command field`,
-      );
-      return false;
-    }
-
-    if (config.type === 'http' && !config.url) {
-      debugLogger.warn(
-        `HTTP hook ${eventName} from ${source} missing url field`,
       );
       return false;
     }

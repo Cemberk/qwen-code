@@ -199,14 +199,8 @@ describe('parseEditCommit', () => {
   });
 
   it('parses integer settings as numbers instead of leaving them uneditable', () => {
-    expect(
-      parseEditCommit('tools.webSearch.maxPerSession', 'integer', ' 12 '),
-    ).toBe(12);
-    expect(
-      parseEditCommit('tools.webSearch.maxPerSession', 'integer', ''),
-    ).toBeNull();
-    expect(
-      parseEditCommit('tools.webSearch.maxPerSession', 'integer', 'x'),
-    ).toBeNull();
+    expect(parseEditCommit('advisorMaxUses', 'integer', ' 12 ')).toBe(12);
+    expect(parseEditCommit('advisorMaxUses', 'integer', '')).toBeNull();
+    expect(parseEditCommit('advisorMaxUses', 'integer', 'x')).toBeNull();
   });
 });

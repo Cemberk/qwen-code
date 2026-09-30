@@ -20,7 +20,6 @@ import {
   type ClaudeMarketplacePluginConfig,
   type ClaudeMarketplaceConfig,
 } from './claude-converter.js';
-import { cloneFromGit, downloadFromGitHubRelease } from './github.js';
 import { HookType } from '../hooks/types.js';
 import { performVariableReplacement } from './variables.js';
 import {
@@ -31,18 +30,6 @@ import type { SubagentError } from '../subagents/types.js';
 import type { Config } from '../config/config.js';
 import { Storage } from '../config/storage.js';
 import { loadExtensionWorkflows } from '../agents/runtime/workflow-extension.js';
-
-// The git-subdir source clones a repo; stub the network clone so the security
-// guards around the cloned subdirectory can be exercised against a real fs.
-// Other tests use local sources and never call these, so the stubs are inert.
-vi.mock('./github.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./github.js')>();
-  return {
-    ...actual,
-    cloneFromGit: vi.fn(),
-    downloadFromGitHubRelease: vi.fn(),
-  };
-});
 
 describe('convertClaudeToQwenConfig', () => {
   it('should convert basic Claude config', () => {
@@ -137,17 +124,14 @@ describe('convertClaudeAgentConfig', () => {
     expect(result['tools']).toEqual(['ReadFile', 'NotebookEdit', 'Edit']);
   });
 
-  it('should map Claude WebSearch to Qwen WebSearch', () => {
-    // WebSearch used to map to 'None' before qwen-code shipped a built-in
-    // web_search; reverting the mapping would silently strip search from
-    // converted Claude extensions.
+  it('should drop Claude WebSearch and WebFetch, which have no Qwen equivalent', () => {
     const result = convertClaudeAgentConfig({
       name: 'search-agent',
       description: 'Searches the web',
-      tools: ['WebSearch', 'WebFetch'],
+      tools: ['Read', 'WebSearch', 'WebFetch'],
     });
 
-    expect(result['tools']).toEqual(['WebSearch', 'WebFetch']);
+    expect(result['tools']).toEqual(['ReadFile']);
   });
 });
 
@@ -225,8 +209,6 @@ describe('convertClaudePluginPackage', () => {
   beforeEach(() => {
     // Create a temporary directory for test files
     testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-test-'));
-    vi.mocked(downloadFromGitHubRelease).mockReset();
-    vi.mocked(cloneFromGit).mockReset();
   });
 
   afterEach(() => {
@@ -402,8 +384,17 @@ describe('convertClaudePluginPackage', () => {
     fs.rmSync(secretDir, { recursive: true, force: true });
   });
 
-  it('treats uppercase HTTPS marketplace plugin sources as URLs', async () => {
-    const pluginSourceDir = path.join(testDir, 'plugin-uppercase-url');
+  it.each([
+    'HTTPS://github.com/owner/plugin',
+    { source: 'github', repo: 'owner/plugin' },
+    { source: 'url', url: 'https://example.com/plugin.git' },
+    {
+      source: 'git-subdir',
+      url: 'https://example.com/repo.git',
+      path: 'plugins/p',
+    },
+  ] as const)('rejects remote marketplace plugin source %j', async (source) => {
+    const pluginSourceDir = path.join(testDir, 'plugin-remote-source');
     const marketplaceDir = path.join(pluginSourceDir, '.claude-plugin');
     fs.mkdirSync(marketplaceDir, { recursive: true });
 
@@ -414,7 +405,7 @@ describe('convertClaudePluginPackage', () => {
         {
           name: 'remote',
           version: '1.0.0',
-          source: 'HTTPS://github.com/owner/plugin',
+          source,
           strict: false,
         },
       ],
@@ -424,60 +415,10 @@ describe('convertClaudePluginPackage', () => {
       JSON.stringify(marketplaceConfig, null, 2),
       'utf-8',
     );
-    vi.mocked(downloadFromGitHubRelease).mockResolvedValue(undefined as never);
-
-    const result = await convertClaudePluginPackage(pluginSourceDir, 'remote');
-
-    expect(result.config.name).toBe('remote');
-    expect(downloadFromGitHubRelease).toHaveBeenCalledWith(
-      {
-        source: 'HTTPS://github.com/owner/plugin',
-        type: 'git',
-        originSource: 'Claude',
-      },
-      expect.any(String),
-      undefined,
-    );
-    expect(cloneFromGit).not.toHaveBeenCalled();
-
-    fs.rmSync(result.convertedDir, { recursive: true, force: true });
-  });
-
-  it('does not fall back to cloning when conversion is aborted', async () => {
-    const pluginSourceDir = path.join(testDir, 'plugin-abort');
-    const marketplaceDir = path.join(pluginSourceDir, '.claude-plugin');
-    fs.mkdirSync(marketplaceDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(marketplaceDir, 'marketplace.json'),
-      JSON.stringify({
-        name: 'test-marketplace',
-        owner: { name: 'Test Owner', email: 'test@example.com' },
-        plugins: [
-          {
-            name: 'remote',
-            version: '1.0.0',
-            source: 'https://github.com/owner/plugin',
-            strict: false,
-          },
-        ],
-      } satisfies ClaudeMarketplaceConfig),
-    );
-    const controller = new AbortController();
-    const reason = new Error('conversion expired');
-    vi.mocked(downloadFromGitHubRelease).mockImplementationOnce(async () => {
-      controller.abort(reason);
-      throw new Error('download failed');
-    });
 
     await expect(
-      convertClaudePluginPackage(
-        pluginSourceDir,
-        'remote',
-        undefined,
-        controller.signal,
-      ),
-    ).rejects.toBe(reason);
-    expect(cloneFromGit).not.toHaveBeenCalled();
+      convertClaudePluginPackage(pluginSourceDir, 'remote'),
+    ).rejects.toThrow('uses a remote source, which is not supported');
   });
 
   it('should use all skills from folder when config does not specify skills', async () => {
@@ -1137,14 +1078,8 @@ describe('convertClaudePluginStandalone', () => {
     ).toBe(true);
     expect(result.config.name).toBe('clickhouse');
     expect(result.config.version).toBe('1.0.0');
-    // MCP server folded in from .mcp.json and remapped to Qwen's transport
-    // shape: Claude `type: 'http'` + `url` becomes `httpUrl` (streamable HTTP).
-    const mcp = result.config.mcpServers?.['clickhouse'] as
-      | { httpUrl?: string; url?: string; type?: string }
-      | undefined;
-    expect(mcp?.httpUrl).toBe('https://mcp.clickhouse.cloud/mcp');
-    expect(mcp?.url).toBeUndefined();
-    expect(mcp?.type).toBeUndefined();
+    // Remote MCP servers from .mcp.json are not carried over (stdio only).
+    expect(result.config.mcpServers?.['clickhouse']).toBeUndefined();
     // Skills folder preserved.
     expect(
       fs.existsSync(
@@ -1421,187 +1356,6 @@ describe('performVariableReplacement for Claude extensions', () => {
   });
 });
 
-describe('convertClaudePluginPackage — git-subdir source', () => {
-  let extDir: string;
-
-  beforeEach(() => {
-    extDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-gitsub-'));
-    vi.mocked(cloneFromGit).mockReset();
-  });
-
-  afterEach(() => {
-    if (fs.existsSync(extDir)) {
-      fs.rmSync(extDir, { recursive: true, force: true });
-    }
-  });
-
-  // Writes a marketplace.json declaring a single git-subdir plugin.
-  const writeMarketplace = (source: unknown) => {
-    const mp = path.join(extDir, '.claude-plugin');
-    fs.mkdirSync(mp, { recursive: true });
-    fs.writeFileSync(
-      path.join(mp, 'marketplace.json'),
-      JSON.stringify({
-        name: 'm',
-        owner: { name: 'o', email: 'e' },
-        plugins: [{ name: 'p', version: '1.0.0', source }],
-      }),
-      'utf-8',
-    );
-  };
-
-  it('clones, pins to the sha over the ref, and returns the subdirectory', async () => {
-    vi.mocked(cloneFromGit).mockImplementation(async (_meta, dir) => {
-      const sub = path.join(dir as string, 'packages', 'plugin');
-      fs.mkdirSync(path.join(sub, '.claude-plugin'), { recursive: true });
-      fs.writeFileSync(
-        path.join(sub, '.claude-plugin', 'plugin.json'),
-        JSON.stringify({ name: 'p', version: '1.0.0' }),
-        'utf-8',
-      );
-      return 'test-commit';
-    });
-
-    writeMarketplace({
-      source: 'git-subdir',
-      url: 'https://example.com/repo.git',
-      path: 'packages/plugin',
-      ref: 'main',
-      sha: 'abc123',
-    });
-
-    const result = await convertClaudePluginPackage(extDir, 'p', 'public');
-    expect(result.config.name).toBe('p');
-    // The immutable sha is preferred over the named ref when both are present.
-    const meta = vi.mocked(cloneFromGit).mock.calls[0][0] as {
-      ref?: string;
-      networkPolicy?: string;
-    };
-    expect(meta.ref).toBe('abc123');
-    expect(meta.networkPolicy).toBe('public');
-
-    fs.rmSync(result.convertedDir, { recursive: true, force: true });
-  });
-
-  it('rejects a subdirectory that escapes the repository root', async () => {
-    vi.mocked(cloneFromGit).mockResolvedValue(undefined as never);
-    writeMarketplace({
-      source: 'git-subdir',
-      url: 'https://example.com/repo.git',
-      path: '../../etc',
-    });
-    await expect(convertClaudePluginPackage(extDir, 'p')).rejects.toThrow(
-      /escapes the repository root/,
-    );
-  });
-
-  it('rejects an absolute subdirectory path', async () => {
-    vi.mocked(cloneFromGit).mockResolvedValue(undefined as never);
-    writeMarketplace({
-      source: 'git-subdir',
-      url: 'https://example.com/repo.git',
-      path: path.resolve(path.sep, 'etc'),
-    });
-    await expect(convertClaudePluginPackage(extDir, 'p')).rejects.toThrow(
-      /Invalid plugin subdirectory/,
-    );
-  });
-
-  it('rejects a missing subdirectory', async () => {
-    vi.mocked(cloneFromGit).mockImplementation(async (_meta, dir) => {
-      // The clone succeeded but does not contain the requested subdir.
-      fs.mkdirSync(path.join(dir as string, 'other'), { recursive: true });
-      return 'test-commit';
-    });
-    writeMarketplace({
-      source: 'git-subdir',
-      url: 'https://example.com/repo.git',
-      path: 'packages/missing',
-    });
-    await expect(convertClaudePluginPackage(extDir, 'p')).rejects.toThrow(
-      /not found/,
-    );
-  });
-
-  it('rejects a subdirectory that is a symlink escaping the clone', async () => {
-    const secretDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-secret-'));
-    fs.writeFileSync(path.join(secretDir, 'SKILL.md'), 'secret', 'utf-8');
-    vi.mocked(cloneFromGit).mockImplementation(async (_meta, dir) => {
-      // A hostile repo commits the subdir as a symlink whose name stays inside
-      // the clone but whose target escapes it.
-      fs.symlinkSync(secretDir, path.join(dir as string, 'sub'));
-      return 'test-commit';
-    });
-    writeMarketplace({
-      source: 'git-subdir',
-      url: 'https://example.com/repo.git',
-      path: 'sub',
-    });
-
-    await expect(convertClaudePluginPackage(extDir, 'p')).rejects.toThrow(
-      /resolves through a symlink/,
-    );
-
-    fs.rmSync(secretDir, { recursive: true, force: true });
-  });
-});
-
-describe('convertClaudePluginPackage — string URL source', () => {
-  let extDir: string;
-
-  beforeEach(() => {
-    extDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-url-'));
-    vi.mocked(downloadFromGitHubRelease).mockReset();
-    vi.mocked(cloneFromGit).mockReset();
-  });
-
-  afterEach(() => {
-    if (fs.existsSync(extDir)) {
-      fs.rmSync(extDir, { recursive: true, force: true });
-    }
-  });
-
-  const writeMarketplace = (source: string) => {
-    const mp = path.join(extDir, '.claude-plugin');
-    fs.mkdirSync(mp, { recursive: true });
-    fs.writeFileSync(
-      path.join(mp, 'marketplace.json'),
-      JSON.stringify({
-        name: 'm',
-        owner: { name: 'o', email: 'e' },
-        plugins: [{ name: 'p', version: '1.0.0', source }],
-      }),
-      'utf-8',
-    );
-  };
-
-  it('treats an uppercase HTTPS:// source as a URL download, not a local path', async () => {
-    // The scheme check was case-sensitive, so an uppercase URL fell through to
-    // local-path handling and failed with "Plugin source not found".
-    vi.mocked(downloadFromGitHubRelease).mockImplementation(
-      async (_meta, dir) => {
-        fs.mkdirSync(path.join(dir as string, '.claude-plugin'), {
-          recursive: true,
-        });
-        fs.writeFileSync(
-          path.join(dir as string, '.claude-plugin', 'plugin.json'),
-          JSON.stringify({ name: 'p', version: '1.0.0' }),
-          'utf-8',
-        );
-        return { tagName: 'v1.0.0', type: 'github-release' };
-      },
-    );
-
-    writeMarketplace('HTTPS://github.com/owner/repo');
-
-    const result = await convertClaudePluginPackage(extDir, 'p');
-    expect(result.config.name).toBe('p');
-    expect(vi.mocked(downloadFromGitHubRelease)).toHaveBeenCalled();
-
-    fs.rmSync(result.convertedDir, { recursive: true, force: true });
-  });
-});
-
 describe('normalizeClaudeMcpServer', () => {
   // Cast helpers: inputs may carry Claude-only fields (`type:'http'` etc.) that
   // aren't on MCPServerConfig, and outputs are inspected as plain records.
@@ -1610,18 +1364,6 @@ describe('normalizeClaudeMcpServer', () => {
       string,
       unknown
     >;
-
-  it('maps Claude type:http (url) to httpUrl and drops type/url', () => {
-    expect(norm({ type: 'http', url: 'https://example.com/mcp' })).toEqual({
-      httpUrl: 'https://example.com/mcp',
-    });
-  });
-
-  it('maps Claude type:sse (url) to url and drops type', () => {
-    expect(norm({ type: 'sse', url: 'https://example.com/sse' })).toEqual({
-      url: 'https://example.com/sse',
-    });
-  });
 
   it('drops type from a Claude stdio server, keeping command', () => {
     expect(norm({ type: 'stdio', command: 'node', args: ['s.js'] })).toEqual({
@@ -1642,33 +1384,22 @@ describe('normalizeClaudeMcpServer', () => {
     });
   });
 
-  it('drops a bogus non-sdk type from a websocket (tcp) config', () => {
-    // qwen reserves `type` for 'sdk' and selects websocket via the `tcp` field;
-    // any stray non-sdk `type` is meaningless and is removed.
-    expect(norm({ type: 'tcp', tcp: 'localhost:8000' })).toEqual({
-      tcp: 'localhost:8000',
-    });
-  });
-
-  it('preserves non-transport fields (headers, env, timeout)', () => {
+  it('preserves non-transport fields (env, timeout)', () => {
     expect(
       norm({
-        type: 'http',
-        url: 'https://example.com/mcp',
-        headers: { Authorization: 'Bearer x' },
+        type: 'stdio',
+        command: 'node',
+        env: { A: 'b' },
         timeout: 5000,
       }),
     ).toEqual({
-      httpUrl: 'https://example.com/mcp',
-      headers: { Authorization: 'Bearer x' },
+      command: 'node',
+      env: { A: 'b' },
       timeout: 5000,
     });
   });
 
   it('passes through an already-Qwen-shaped config unchanged', () => {
-    expect(norm({ httpUrl: 'https://example.com/mcp' })).toEqual({
-      httpUrl: 'https://example.com/mcp',
-    });
     expect(norm({ command: 'node', args: ['s.js'] })).toEqual({
       command: 'node',
       args: ['s.js'],
@@ -1687,8 +1418,6 @@ describe('convertClaudePluginPackage — workflows', () => {
 
   beforeEach(() => {
     testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-wf-'));
-    vi.mocked(downloadFromGitHubRelease).mockReset();
-    vi.mocked(cloneFromGit).mockReset();
   });
 
   const convertedDirs: string[] = [];

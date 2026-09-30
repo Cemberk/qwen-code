@@ -2865,16 +2865,13 @@ export interface AcpSessionBridge extends WorkspaceEventBridge {
 
   manageMcpServer(
     serverName: string,
-    action: 'approve' | 'enable' | 'disable' | 'authenticate' | 'clear-auth',
+    action: 'approve' | 'enable' | 'disable',
     originatorClientId: string | undefined,
   ): Promise<{
     serverName: string;
-    action: 'approve' | 'enable' | 'disable' | 'authenticate' | 'clear-auth';
+    action: 'approve' | 'enable' | 'disable';
     ok: true;
     changed?: boolean;
-    messages?: string[];
-    authUrl?: string;
-    pending?: boolean;
   }>;
 
   generateWorkspaceAgent(

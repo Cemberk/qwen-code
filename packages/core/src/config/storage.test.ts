@@ -86,11 +86,6 @@ describe('Storage – additional helpers', () => {
     const expected = path.join(projectRoot, '.qwen', 'commands');
     expect(storage.getProjectCommandsDir()).toBe(expected);
   });
-
-  it('getMcpOAuthTokensPath returns ~/.qwen/mcp-oauth-tokens.json', () => {
-    const expected = path.join(os.homedir(), '.qwen', 'mcp-oauth-tokens.json');
-    expect(Storage.getMcpOAuthTokensPath()).toBe(expected);
-  });
 });
 
 describe('Storage – getRuntimeBaseDir / setRuntimeBaseDir', () => {
@@ -484,12 +479,6 @@ describe('Storage – config paths remain at ~/.qwen regardless of runtime dir',
     );
   });
 
-  it('getMcpOAuthTokensPath still uses ~/.qwen', () => {
-    expect(Storage.getMcpOAuthTokensPath()).toBe(
-      path.join(globalQwenDir, 'mcp-oauth-tokens.json'),
-    );
-  });
-
   it('getOAuthCredsPath still uses ~/.qwen', () => {
     expect(Storage.getOAuthCredsPath()).toBe(
       path.join(globalQwenDir, 'oauth_creds.json'),
@@ -557,9 +546,6 @@ describe('Storage – QWEN_HOME env var', () => {
       path.join(configDir, 'settings.json'),
     );
     expect(Storage.getUserCommandsDir()).toBe(path.join(configDir, 'commands'));
-    expect(Storage.getMcpOAuthTokensPath()).toBe(
-      path.join(configDir, 'mcp-oauth-tokens.json'),
-    );
     expect(Storage.getOAuthCredsPath()).toBe(
       path.join(configDir, 'oauth_creds.json'),
     );

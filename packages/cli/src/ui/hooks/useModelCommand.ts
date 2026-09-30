@@ -14,14 +14,12 @@ interface UseModelCommandReturn {
   isAdvisorModelMode: boolean;
   isVisionModelMode: boolean;
   isCompactionModelMode: boolean;
-  isImageModelMode: boolean;
   modelDialogPersistScope: ModelDialogPersistScope | undefined;
   openModelDialog: (options?: {
     fastModelMode?: boolean;
     advisorModelMode?: boolean;
     visionModelMode?: boolean;
     compactionModelMode?: boolean;
-    imageModelMode?: boolean;
     persistScope?: ModelDialogPersistScope;
   }) => void;
   closeModelDialog: () => void;
@@ -33,7 +31,6 @@ export const useModelCommand = (): UseModelCommandReturn => {
   const [isAdvisorModelMode, setIsAdvisorModelMode] = useState(false);
   const [isVisionModelMode, setIsVisionModelMode] = useState(false);
   const [isCompactionModelMode, setIsCompactionModelMode] = useState(false);
-  const [isImageModelMode, setIsImageModelMode] = useState(false);
   const [modelDialogPersistScope, setModelDialogPersistScope] = useState<
     ModelDialogPersistScope | undefined
   >(undefined);
@@ -44,36 +41,24 @@ export const useModelCommand = (): UseModelCommandReturn => {
       advisorModelMode?: boolean;
       visionModelMode?: boolean;
       compactionModelMode?: boolean;
-      imageModelMode?: boolean;
       persistScope?: ModelDialogPersistScope;
     }) => {
       const advisorModelMode = options?.advisorModelMode ?? false;
       const visionModelMode = options?.visionModelMode ?? false;
       const compactionModelMode = options?.compactionModelMode ?? false;
-      const imageModelMode = options?.imageModelMode ?? false;
       // Modes are mutually exclusive; a specialized mode suppresses fast mode.
       setIsFastModelMode(
-        visionModelMode ||
-          compactionModelMode ||
-          imageModelMode ||
-          advisorModelMode
+        visionModelMode || compactionModelMode || advisorModelMode
           ? false
           : (options?.fastModelMode ?? false),
       );
       setIsAdvisorModelMode(
-        visionModelMode || compactionModelMode || imageModelMode
-          ? false
-          : advisorModelMode,
+        visionModelMode || compactionModelMode ? false : advisorModelMode,
       );
       setIsVisionModelMode(
-        advisorModelMode || compactionModelMode || imageModelMode
-          ? false
-          : visionModelMode,
+        advisorModelMode || compactionModelMode ? false : visionModelMode,
       );
-      setIsCompactionModelMode(
-        advisorModelMode || imageModelMode ? false : compactionModelMode,
-      );
-      setIsImageModelMode(imageModelMode);
+      setIsCompactionModelMode(advisorModelMode ? false : compactionModelMode);
       setModelDialogPersistScope(options?.persistScope);
       setIsModelDialogOpen(true);
     },
@@ -86,7 +71,6 @@ export const useModelCommand = (): UseModelCommandReturn => {
     setIsAdvisorModelMode(false);
     setIsVisionModelMode(false);
     setIsCompactionModelMode(false);
-    setIsImageModelMode(false);
     setModelDialogPersistScope(undefined);
   }, []);
 
@@ -96,7 +80,6 @@ export const useModelCommand = (): UseModelCommandReturn => {
     isAdvisorModelMode,
     isVisionModelMode,
     isCompactionModelMode,
-    isImageModelMode,
     modelDialogPersistScope,
     openModelDialog,
     closeModelDialog,

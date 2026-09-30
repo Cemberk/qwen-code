@@ -12,12 +12,8 @@ import * as path from 'node:path';
 import { glob } from 'glob';
 import type { ExtensionConfig } from './extensionManager.js';
 import { ExtensionStorage } from './storage.js';
-import type {
-  ExtensionInstallMetadata,
-  MCPServerConfig,
-} from '../config/config.js';
+import type { MCPServerConfig } from '../config/config.js';
 import type { HookEventName, HookDefinition } from '../hooks/types.js';
-import { cloneFromGit, downloadFromGitHubRelease } from './github.js';
 import { createHash } from 'node:crypto';
 import {
   copyDirectory,
@@ -132,8 +128,8 @@ const CLAUDE_TOOLS_MAPPING: Record<string, string | string[]> = {
   Skill: 'Skill',
   Task: 'Task',
   TodoWrite: 'TodoList',
-  WebFetch: 'WebFetch',
-  WebSearch: 'WebSearch',
+  WebFetch: 'None',
+  WebSearch: 'None',
   Write: 'WriteFile',
   LS: 'ListFiles',
 };
@@ -339,45 +335,27 @@ ${systemPrompt}
 
 /**
  * Maps a single Claude `.mcp.json` server entry to Qwen's MCPServerConfig shape.
- * Claude discriminates transport with a `type` field (`http`/`sse`/`stdio`),
- * whereas Qwen keys off which field is set: `httpUrl` (streamable HTTP),
- * `url` (SSE) or `command` (stdio). A Claude `type: 'http'` entry therefore has
- * to move its `url` to `httpUrl`. Qwen reserves `type` for `'sdk'`, so any other
- * `type` value (Claude's transport discriminator) is dropped while `'sdk'` —
- * which `isSdkMcpServerConfig` depends on — is always preserved.
+ * Claude discriminates transport with a `type` field (`stdio`/`http`/`sse`);
+ * Qwen only runs stdio servers (keyed off `command`) and reserves `type` for
+ * `'sdk'`, so any other `type` value is dropped while `'sdk'` — which
+ * `isSdkMcpServerConfig` depends on — is always preserved. Remote entries
+ * carry no `command` and are therefore never connected.
  */
 export function normalizeClaudeMcpServer(
   raw: MCPServerConfig,
 ): MCPServerConfig {
   const server = raw as unknown as Record<string, unknown>;
-  // stdio / already-Qwen-shaped configs pass through; only a non-sdk `type`
-  // (Claude's transport discriminator) is stripped.
-  if (server['command'] || server['httpUrl'] || server['tcp']) {
-    if (server['type'] === undefined || server['type'] === 'sdk') {
-      return raw;
-    }
-    const rest = { ...server };
-    delete rest['type'];
-    return rest as unknown as MCPServerConfig;
+  if (server['type'] === undefined || server['type'] === 'sdk') {
+    return raw;
   }
-  if (typeof server['url'] === 'string') {
-    const rest = { ...server };
-    delete rest['url'];
-    if (rest['type'] !== 'sdk') {
-      delete rest['type'];
-    }
-    return {
-      ...rest,
-      ...(server['type'] === 'http'
-        ? { httpUrl: server['url'] }
-        : { url: server['url'] }),
-    } as unknown as MCPServerConfig;
-  }
-  return raw;
+  const rest = { ...server };
+  delete rest['type'];
+  return rest as unknown as MCPServerConfig;
 }
 
 /**
- * Maps Claude `.mcp.json` server entries to Qwen's MCPServerConfig shape.
+ * Maps Claude `.mcp.json` server entries to Qwen's MCPServerConfig shape,
+ * skipping remote (command-less) servers.
  * @see normalizeClaudeMcpServer for the per-server transport mapping.
  */
 function normalizeClaudeMcpServers(
@@ -385,6 +363,12 @@ function normalizeClaudeMcpServers(
 ): Record<string, MCPServerConfig> {
   const normalized: Record<string, MCPServerConfig> = {};
   for (const [name, raw] of Object.entries(servers)) {
+    if (typeof raw.command !== 'string') {
+      debugLogger.warn(
+        `[Claude Converter] Skipping non-stdio MCP server "${name}"`,
+      );
+      continue;
+    }
     normalized[name] = normalizeClaudeMcpServer(raw);
   }
   return normalized;
@@ -458,12 +442,10 @@ export function convertClaudeToQwenConfig(
 export async function convertClaudePluginPackage(
   extensionDir: string,
   pluginName: string,
-  networkPolicy?: ExtensionInstallMetadata['networkPolicy'],
   signal?: AbortSignal,
 ): Promise<{
   config: ExtensionConfig;
   convertedDir: string;
-  externalContent: boolean;
 }> {
   signal?.throwIfAborted();
   // Step 1: Load marketplace.json
@@ -504,13 +486,12 @@ export async function convertClaudePluginPackage(
   );
   await fs.promises.mkdir(pluginDir, { recursive: true });
 
-  const { pluginSource, externalContent } = await resolvePluginSource(
+  const pluginSource = await resolvePluginSource(
     marketplacePlugin,
     extensionDir,
     pluginDir,
-    networkPolicy,
-    signal,
   );
+  signal?.throwIfAborted();
 
   if (!fs.existsSync(pluginSource)) {
     throw new Error(`Plugin source directory not found: ${pluginSource}`);
@@ -559,7 +540,7 @@ export async function convertClaudePluginPackage(
     pluginSource,
     mergedConfig,
   );
-  return { ...converted, externalContent };
+  return converted;
 }
 
 /**
@@ -1129,159 +1110,58 @@ export function isClaudePluginConfig(
 
 /**
  * Resolve plugin source from marketplace plugin configuration.
- * Returns the absolute path to the plugin source directory and whether the
- * plugin content was fetched from a source external to the marketplace
- * repository (in which case the marketplace clone's commit does not describe
- * the installed content).
+ * Returns the absolute path to the plugin source directory. Only plugins
+ * stored inside the marketplace directory are supported.
  */
 async function resolvePluginSource(
   pluginConfig: ClaudeMarketplacePluginConfig,
   marketplaceDir: string,
   pluginDir: string,
-  networkPolicy?: ExtensionInstallMetadata['networkPolicy'],
-  signal?: AbortSignal,
-): Promise<{ pluginSource: string; externalContent: boolean }> {
-  signal?.throwIfAborted();
+): Promise<string> {
   const source = pluginConfig.source;
 
-  // Handle string source (relative path or URL)
-  if (typeof source === 'string') {
-    // Check if it's a URL (scheme is case-insensitive, e.g. HTTPS://)
-    const lowerSource = source.toLowerCase();
-    if (
-      lowerSource.startsWith('http://') ||
-      lowerSource.startsWith('https://')
-    ) {
-      // Download from URL
-      const installMetadata: ExtensionInstallMetadata = {
-        source,
-        type: 'git',
-        originSource: 'Claude',
-        networkPolicy,
-      };
-      try {
-        await downloadFromGitHubRelease(installMetadata, pluginDir, signal);
-      } catch {
-        signal?.throwIfAborted();
-        await cloneFromGit(installMetadata, pluginDir, signal);
-      }
-      return { pluginSource: pluginDir, externalContent: true };
-    }
-
-    // Relative path within marketplace. Confine it: a manifest source like
-    // "../../../../etc/ssh" must not resolve outside the marketplace dir.
-    const pluginRoot = marketplaceDir;
-    const sourcePath = path.join(pluginRoot, source);
-    const resolvedSource = path.resolve(sourcePath);
-    const marketplaceBase = path.resolve(marketplaceDir);
-    if (
-      resolvedSource !== marketplaceBase &&
-      !resolvedSource.startsWith(marketplaceBase + path.sep)
-    ) {
-      throw new Error(
-        `Plugin source "${sanitizeForError(source)}" escapes the marketplace directory`,
-      );
-    }
-
-    if (!fs.existsSync(sourcePath)) {
-      throw new Error(
-        `Plugin source not found at ${sanitizeForError(sourcePath)}`,
-      );
-    }
-
-    // The lexical check is string-only; reject a source that reaches outside
-    // the marketplace dir through a symlink before copying it in.
-    if (!realPathWithin(sourcePath, marketplaceDir)) {
-      throw new Error(
-        `Plugin source "${sanitizeForError(source)}" resolves through a symlink outside the marketplace directory`,
-      );
-    }
-
-    // If source path equals marketplace dir (source is '.' or ''),
-    // return marketplaceDir directly to avoid copying to subdirectory of self
-    if (path.resolve(sourcePath) === path.resolve(marketplaceDir)) {
-      return { pluginSource: marketplaceDir, externalContent: false };
-    }
-
-    // Copy to plugin directory
-    await fs.promises.cp(sourcePath, pluginDir, { recursive: true });
-    return { pluginSource: pluginDir, externalContent: false };
+  if (typeof source !== 'string' || /^[a-z][a-z0-9+.-]*:\/\//i.test(source)) {
+    throw new Error(
+      `Plugin "${sanitizeForError(pluginConfig.name)}" uses a remote source, which is not supported. Only plugins stored inside the marketplace directory can be installed.`,
+    );
   }
 
-  // Handle object source (github or url)
-  if (source.source === 'github') {
-    const installMetadata: ExtensionInstallMetadata = {
-      source: `https://github.com/${source.repo}`,
-      type: 'git',
-      networkPolicy,
-    };
-    try {
-      await downloadFromGitHubRelease(installMetadata, pluginDir, signal);
-    } catch {
-      signal?.throwIfAborted();
-      await cloneFromGit(installMetadata, pluginDir, signal);
-    }
-    return { pluginSource: pluginDir, externalContent: true };
+  // Relative path within marketplace. Confine it: a manifest source like
+  // "../../../../etc/ssh" must not resolve outside the marketplace dir.
+  const pluginRoot = marketplaceDir;
+  const sourcePath = path.join(pluginRoot, source);
+  const resolvedSource = path.resolve(sourcePath);
+  const marketplaceBase = path.resolve(marketplaceDir);
+  if (
+    resolvedSource !== marketplaceBase &&
+    !resolvedSource.startsWith(marketplaceBase + path.sep)
+  ) {
+    throw new Error(
+      `Plugin source "${sanitizeForError(source)}" escapes the marketplace directory`,
+    );
   }
 
-  if (source.source === 'url') {
-    const installMetadata: ExtensionInstallMetadata = {
-      source: source.url,
-      type: 'git',
-      networkPolicy,
-    };
-    try {
-      await downloadFromGitHubRelease(installMetadata, pluginDir, signal);
-    } catch {
-      signal?.throwIfAborted();
-      await cloneFromGit(installMetadata, pluginDir, signal);
-    }
-    return { pluginSource: pluginDir, externalContent: true };
+  if (!fs.existsSync(sourcePath)) {
+    throw new Error(
+      `Plugin source not found at ${sanitizeForError(sourcePath)}`,
+    );
   }
 
-  if (source.source === 'git-subdir') {
-    // The plugin lives in a subdirectory of a git repository. Clone the repo
-    // (pinned to the provided ref/sha when present) and return the subdir.
-    const installMetadata: ExtensionInstallMetadata = {
-      source: source.url,
-      type: 'git',
-      // Prefer the immutable SHA pin when present; fall back to a named ref.
-      ref: source.sha || source.ref,
-      originSource: 'Claude',
-      networkPolicy,
-    };
-    await cloneFromGit(installMetadata, pluginDir, signal);
-    // `source.path` comes from an untrusted manifest. Confine it to the cloned
-    // repo so a value like "../../.ssh" (or an absolute path) cannot escape.
-    if (!source.path || source.path === '.' || path.isAbsolute(source.path)) {
-      throw new Error(
-        `Invalid plugin subdirectory "${sanitizeForError(String(source.path))}" for ${sanitizeForError(source.url)}`,
-      );
-    }
-    const subDir = path.resolve(pluginDir, source.path);
-    const repoRoot = path.resolve(pluginDir);
-    if (!subDir.startsWith(repoRoot + path.sep)) {
-      throw new Error(
-        `Plugin subdirectory "${sanitizeForError(source.path)}" escapes the repository root of ${sanitizeForError(source.url)}`,
-      );
-    }
-    if (!fs.existsSync(subDir)) {
-      throw new Error(
-        `Plugin subdirectory "${sanitizeForError(source.path)}" not found in ${sanitizeForError(source.url)} (ref: ${sanitizeForError(source.ref ?? source.sha ?? 'HEAD')})`,
-      );
-    }
-    // The lexical `startsWith` check above is string-only; `cloneFromGit`
-    // checks out symlinks on macOS/Linux, so a hostile repo can commit the
-    // subdir as a symlink whose name stays inside the clone but whose target
-    // escapes it (e.g. `evil -> /etc`). Re-verify the real path before
-    // returning it as the copy source.
-    if (!realPathWithin(subDir, pluginDir)) {
-      throw new Error(
-        `Plugin subdirectory "${sanitizeForError(source.path)}" resolves through a symlink outside the repository root of ${sanitizeForError(source.url)}`,
-      );
-    }
-    return { pluginSource: subDir, externalContent: true };
+  // The lexical check is string-only; reject a source that reaches outside
+  // the marketplace dir through a symlink before copying it in.
+  if (!realPathWithin(sourcePath, marketplaceDir)) {
+    throw new Error(
+      `Plugin source "${sanitizeForError(source)}" resolves through a symlink outside the marketplace directory`,
+    );
   }
 
-  throw new Error(`Unsupported plugin source type: ${JSON.stringify(source)}`);
+  // If source path equals marketplace dir (source is '.' or ''),
+  // return marketplaceDir directly to avoid copying to subdirectory of self
+  if (path.resolve(sourcePath) === path.resolve(marketplaceDir)) {
+    return marketplaceDir;
+  }
+
+  // Copy to plugin directory
+  await fs.promises.cp(sourcePath, pluginDir, { recursive: true });
+  return pluginDir;
 }

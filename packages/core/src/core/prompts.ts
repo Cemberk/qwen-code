@@ -832,12 +832,6 @@ export interface SystemPromptLayers {
    */
   base: string;
   /**
-   * Stable layer: the omni progressive-media-understanding contract
-   * (omni/media-guidance.ts) — fixed for the whole session (the omni
-   * config and provider do not change in-session).
-   */
-  mediaGuidance?: string | null;
-  /**
    * Context layer: concatenated context files (QWEN.md hierarchy, baseline
    * rules, extension files). Reloaded only on explicit refresh.
    */
@@ -861,7 +855,6 @@ export interface SystemPromptLayers {
 export function assembleSystemPrompt(layers: SystemPromptLayers): string {
   return (
     layers.base +
-    buildSystemPromptSuffix(layers.mediaGuidance ?? undefined) +
     buildSystemPromptSuffix(layers.contextFiles) +
     buildSystemPromptSuffix(layers.appendPrompt) +
     (layers.gitStatus ? `\n\n${layers.gitStatus}` : '') +

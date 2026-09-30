@@ -3,9 +3,6 @@ name: extension-creator
 description: Create, scaffold, customize, validate, and locally test Qwen Code extensions. Use when the user wants a new Qwen Code extension, needs help choosing an extension template, wants to add QWEN.md context, commands, skills, agents, MCP servers, settings, hooks, channels, or LSP servers, or asks how to link and test an extension locally. Invoke with `/extension-creator` followed by an extension path and optional template name.
 argument-hint: '<extension-path> [template]'
 allowedTools:
-  - run_shell_command
-  - write_file
-  - edit
   - read_file
   - glob
   - grep_search
@@ -56,9 +53,7 @@ scaffold command and bundled templates.
 7. If any command in the workflow fails, stop and report the error to the user.
    Do not proceed to the next step until the user confirms how to continue.
 8. Customize the generated files for the user's extension.
-9. Run the Local Test Flow trust review below. For the `mcp-server` and
-   `starter` templates, use that flow's `npm install --ignore-scripts` and
-   build sequence in the extension directory after the trust review is complete.
+9. Run the Local Test Flow trust review below.
 10. Run the Before Handoff checklist below. If any check fails, fix the issue
     and re-check before proceeding.
 11. Run the Linking Approval Procedure below before linking. If it skips or
@@ -198,31 +193,18 @@ for those resources.
 ## Local Test Flow
 
 Whether the path is pre-existing or freshly scaffolded, review
-`qwen-extension.json`, `.npmrc`, and lockfiles when present before running any
-npm command or linking the extension. If the extension has a `package.json`,
-review it before running any npm command. Pay special attention to npm lifecycle
-scripts such as `preinstall`, `install`, `postinstall`, `prebuild`,
-`postbuild`, `prepare`, and `prepublishOnly`, the requested `build` script
-itself, and any `pre<script>` or `post<script>` hook for a script you intend to
-run. Also inspect custom npm registries, auth config, and behavioral settings
-such as `script-shell` in `.npmrc`, dependency specs that use `file:`, git URLs,
-tarballs, or direct HTTP URLs, and extension execution fields such as `hooks`,
-`mcpServers`, `channels`, and `lspServers`. These fields can execute arbitrary
-code. When reporting `.npmrc` concerns, redact credential values such as
-`_authToken`, `_auth`, passwords, and credential-bearing registry URLs. Flag
-suspicious command values such as network downloads, piped shells, or encoded
-payloads. In `contextFileName`,
+`qwen-extension.json` before linking the extension. Inspect extension execution
+fields such as `hooks`, `mcpServers`, `channels`, and `lspServers`. These
+fields can execute arbitrary code. Flag suspicious command values such as
+network downloads, piped shells, or encoded payloads. In `contextFileName`,
 reject absolute paths, `..` traversal, and
 `$`-prefixed environment references unless the user explicitly approves the
 external target after you describe the risk. In `settings`, inspect each
 `envVar` for variables that modify process behavior, such as `NODE_OPTIONS`,
 `LD_PRELOAD`, `PATH`, or `DYLD_INSERT_LIBRARIES`. In `mcpServers`, inspect
-`trust`, local execution fields, and remote endpoint and credential fields such
-as `url`, `httpUrl`, `tcp`, `headers`, `oauth`, service-account impersonation
-settings, and any secret-bearing value that uses `$`-prefixed environment
-expansion. Require explicit user approval for `trust`, remote endpoints,
-secret-bearing headers, or credential forwarding. In `hooks`, `channels`, and
-`lspServers`, also inspect
+`trust`, local execution fields, and any secret-bearing value that uses
+`$`-prefixed environment expansion. Require explicit user approval for `trust`
+or credential forwarding. In `hooks`, `channels`, and `lspServers`, also inspect
 `env` or equivalent environment configuration for process-control variables,
 and inspect `cwd` for paths outside the extension root. Describe the concern to
 the user and ask whether to proceed.
@@ -230,46 +212,17 @@ the user and ask whether to proceed.
 If `hooks` is a file path, if `hooks/hooks.json` exists, or if `lspServers` is a
 JSON file path, resolve and realpath-check the file before reading it. Treat JSON
 parse failures as blocking. Apply the same command, argument, environment, and
-`cwd` audit to the loaded content before running build commands or linking the
-extension. For hooks, also audit HTTP `url`, `headers`, `allowedEnvVars`, prompt
-`prompt`, and `model` fields. For LSP config, also audit `transport`, `host`,
-`port`, and `socket`. Treat a clean-looking manifest that points to an external
-executable or transport config file as incomplete until that referenced file has
-also been reviewed.
+`cwd` audit to the loaded content before linking the extension. For hooks, also
+audit prompt `prompt` and `model` fields. Treat a clean-looking manifest that
+points to an external executable or config file as incomplete until that
+referenced file has also been reviewed.
 
-For the `mcp-server` and `starter` templates, which include TypeScript code:
+The `mcp-server` and `starter` templates include TypeScript MCP server code
+that needs npm dependencies and a build before the server can start. This skill
+does not install dependencies or run builds; tell the user the extension's MCP
+server must be built before it can be used.
 
-For directories scaffolded by `qwen extensions new` in the current session, run
-the build commands below. For pre-existing directories, only run the build
-commands after the trust review above is complete.
-
-Use `--ignore-scripts` so dependency install scripts cannot run before review.
-
-```bash
-cd -- "$extension_path" && npm install --ignore-scripts
-```
-
-After `npm install --ignore-scripts`, re-check any lockfile that was created or
-modified before running `npm run build`. Confirm the lockfile changes match the
-reviewed dependency set, or stop and ask the user whether to continue. Before
-`npm run build`, audit the full lifecycle that npm will run: `prebuild`,
-`build`, and `postbuild`; if any are present, summarize them and require
-explicit user approval before running the build.
-
-```bash
-cd -- "$extension_path" && npm run build
-```
-
-If the build requires install scripts, stop and ask the user whether to run
-`npm install` without `--ignore-scripts`, which runs all dependency lifecycle
-scripts, or to run a reviewed project-level npm script, which runs the named
-script plus its matching `pre<script>` and `post<script>` hooks. Explain what
-each option would execute. If any step exits non-zero, stop and report the error
-to the user. Do not run the Before Handoff checklist or link an extension that
-failed to build.
-
-For context, commands, skills, or agent-only extensions, no build command is
-required. Do not link from this Local Test Flow section. Run the Before Handoff
+Do not link from this Local Test Flow section. Run the Before Handoff
 checklist first, then use the main workflow's linking step.
 
 After linking, tell the user to restart Qwen Code if the new extension is not
@@ -290,11 +243,11 @@ visible in the current session.
 
 1. Make the file changes.
 2. Re-run the Local Test Flow trust review on all modified files.
-3. Run the relevant build or validation again. If it fails, stop and report the
+3. Run the relevant validation again. If it fails, stop and report the
    error to the user; do not continue to re-checking, restarting, uninstalling,
    or re-linking until the user confirms how to proceed.
 4. Re-run the Before Handoff checklist. For compiled templates, perform channel
-   `entry` checks after the build step.
+   `entry` checks once the build output exists.
 5. Restart Qwen Code if the updated extension behavior is not visible in the
    current session.
 6. If the update is still not picked up after restart, run

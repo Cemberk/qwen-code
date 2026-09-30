@@ -14,17 +14,16 @@ const server = new McpServer({
 });
 
 server.registerTool(
-  'fetch_posts',
+  'count_words',
   {
-    description: 'Fetches a list of posts from a public API.',
-    inputSchema: z.object({}).shape,
+    description: 'Count the words and characters in a passage of text.',
+    inputSchema: z.object({
+      text: z.string().describe('The text to measure.'),
+    }).shape,
   },
-  async () => {
-    const apiResponse = await fetch(
-      'https://jsonplaceholder.typicode.com/posts',
-    );
-    const posts = await apiResponse.json();
-    const response = { posts: posts.slice(0, 5) };
+  async ({ text }) => {
+    const words = text.trim() === '' ? 0 : text.trim().split(/\s+/).length;
+    const response = { words, characters: text.length };
     return {
       content: [
         {

@@ -562,11 +562,16 @@ describe('HookRegistry', () => {
       expect(registry.getAllHooks()).toHaveLength(0);
     });
 
-    it('should discard HTTP hooks without url field', async () => {
+    it('should discard hooks of the removed http type', async () => {
       const hooksConfig = {
         [HookEventName.PreToolUse]: [
           {
-            hooks: [{ type: HookType.Http } as HookConfig],
+            hooks: [
+              {
+                type: 'http',
+                url: 'http://localhost:8080/hook',
+              } as unknown as HookConfig,
+            ],
           },
         ],
       };
@@ -592,29 +597,6 @@ describe('HookRegistry', () => {
       await registry.initialize();
 
       expect(registry.getAllHooks()).toHaveLength(0);
-    });
-
-    it('should accept valid HTTP hooks with url', async () => {
-      const hooksConfig = {
-        [HookEventName.PreToolUse]: [
-          {
-            hooks: [
-              {
-                type: HookType.Http,
-                url: 'http://localhost:8080/hook',
-                name: 'http-hook',
-              },
-            ],
-          },
-        ],
-      };
-      mockConfig.getUserHooks = vi.fn().mockReturnValue(hooksConfig);
-
-      const registry = new HookRegistry(mockConfig);
-      await registry.initialize();
-
-      expect(registry.getAllHooks()).toHaveLength(1);
-      expect(registry.getAllHooks()[0].config.type).toBe(HookType.Http);
     });
 
     it('should accept valid function hooks with callback', async () => {
@@ -1282,55 +1264,6 @@ describe('HookRegistry', () => {
       expect(registry.getHooksForEvent(HookEventName.PreToolUse)).toHaveLength(
         0,
       );
-      expect(debugWarn).not.toHaveBeenCalled();
-    });
-
-    it('preserves disabled state of a named HTTP hook when its URL is edited on disk', async () => {
-      const userHooks = {
-        [HookEventName.PreToolUse]: [
-          {
-            hooks: [
-              {
-                type: HookType.Http,
-                url: 'http://old.example.com/hook',
-                name: 'my-http-hook',
-              },
-            ],
-          },
-        ],
-      };
-      mockConfig.getUserHooks = vi.fn().mockReturnValue(userHooks);
-
-      const registry = new HookRegistry(mockConfig);
-      await registry.initialize();
-      registry.setHookEnabled('my-http-hook', false);
-      expect(registry.getHooksForEvent(HookEventName.PreToolUse)).toHaveLength(
-        0,
-      );
-
-      const editedHooks = {
-        [HookEventName.PreToolUse]: [
-          {
-            hooks: [
-              {
-                type: HookType.Http,
-                url: 'http://new.example.com/hook',
-                name: 'my-http-hook',
-              },
-            ],
-          },
-        ],
-      };
-      mockConfig.getUserHooks = vi.fn().mockReturnValue(editedHooks);
-
-      await registry.reloadConfiguredHooks();
-
-      const after = registry.getAllHooks();
-      expect(after).toHaveLength(1);
-      expect((after[0].config as { url: string }).url).toBe(
-        'http://new.example.com/hook',
-      );
-      expect(after[0].enabled).toBe(false);
       expect(debugWarn).not.toHaveBeenCalled();
     });
 

@@ -1762,73 +1762,6 @@ describe('McpClientManager', () => {
     neverResolve();
   });
 
-  it('runs automatic OAuth outside the discovery timeout before reconnecting', async () => {
-    const order: string[] = [];
-    const connect = vi.fn().mockImplementation(async () => {
-      order.push('connect');
-    });
-    const discover = vi.fn().mockImplementation(async () => {
-      order.push('discover');
-    });
-    vi.mocked(McpClient).mockImplementation(
-      () =>
-        ({
-          connect,
-          discover,
-          disconnect: vi.fn().mockResolvedValue(undefined),
-          getStatus: vi.fn(),
-        }) as unknown as McpClient,
-    );
-    const mcpClientModule = await import('./mcp-client.js');
-    const authenticate = vi
-      .spyOn(mcpClientModule, 'attemptAutomaticMcpOAuth')
-      .mockImplementation(async () => {
-        order.push('authenticate');
-        return true;
-      });
-    const probe = vi
-      .spyOn(mcpClientModule, 'probeMcpServerForOAuth')
-      .mockImplementation(async () => {
-        order.push('probe');
-        await new Promise((resolve) => setTimeout(resolve, 60));
-        return true;
-      });
-    const serverConfig = {
-      httpUrl: 'https://example.com/mcp',
-      discoveryTimeoutMs: 50,
-    };
-    const mockConfig = {
-      isTrustedFolder: () => true,
-      getMcpServers: () => ({ oauth: serverConfig }),
-      getMcpServerCommand: () => undefined,
-      getTargetDir: () => '/session/worktree',
-      getPromptRegistry: () =>
-        ({ removePromptsByServer: vi.fn() }) as unknown as PromptRegistry,
-      getResourceRegistry: () => ({ removeResourcesByServer: vi.fn() }),
-      getWorkspaceContext: () => ({}) as WorkspaceContext,
-      getDebugMode: () => false,
-      isMcpServerDisabled: () => false,
-      isInteractive: () => true,
-      isBrowserLaunchSuppressed: () => false,
-    } as unknown as Config;
-    const manager = mkManager({ config: mockConfig });
-
-    await manager.discoverAllMcpToolsIncremental(mockConfig);
-
-    expect(probe).toHaveBeenCalledWith('oauth', serverConfig);
-    expect(authenticate).toHaveBeenCalledWith('oauth', serverConfig, true);
-    expect(connect).toHaveBeenCalledTimes(2);
-    expect(discover).toHaveBeenCalledTimes(2);
-    expect(order).toEqual([
-      'connect',
-      'discover',
-      'probe',
-      'authenticate',
-      'connect',
-      'discover',
-    ]);
-  });
-
   it('discoverAllMcpToolsIncremental skips servers flagged as disabled', async () => {
     // PR-A regression guard: the new incremental path used to iterate
     // `Object.entries(servers)` without consulting `isMcpServerDisabled`,
@@ -2315,57 +2248,6 @@ describe('McpClientManager', () => {
     expect(calls).not.toContain(10_000_000);
   });
 
-  it('discoveryTimeoutFor treats websocket (tcp) transport as remote', async () => {
-    // The remote-vs-stdio classification gates the 5s vs 30s default
-    // timeout. `tcp` is the WebSocket transport field on MCPServerConfig
-    // — without it, hung WS handshakes would block `waitForMcpReady()`
-    // for 30s instead of 5s.
-    const mockedMcpClient = {
-      connect: vi.fn().mockReturnValue(new Promise<void>(() => {})),
-      discover: vi.fn().mockResolvedValue(undefined),
-      disconnect: vi.fn().mockResolvedValue(undefined),
-      getStatus: vi.fn(),
-    };
-    vi.mocked(McpClient).mockReturnValue(
-      mockedMcpClient as unknown as McpClient,
-    );
-
-    const calls: number[] = [];
-    const realSetTimeout = globalThis.setTimeout;
-    const spy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
-      cb: () => void,
-      ms?: number,
-    ) => {
-      if (typeof ms === 'number') calls.push(ms);
-      // Fire immediately to settle quickly without waiting 5s/30s.
-      return realSetTimeout(cb, 1);
-    }) as unknown as typeof setTimeout);
-
-    const mockConfig = {
-      isTrustedFolder: () => true,
-      getMcpServers: () => ({ wsServer: { tcp: 'ws://example.test' } }),
-      getMcpServerCommand: () => undefined,
-      getTargetDir: () => '/session/worktree',
-      getPromptRegistry: () =>
-        ({ removePromptsByServer: vi.fn() }) as unknown as PromptRegistry,
-      getResourceRegistry: () => ({ removeResourcesByServer: vi.fn() }),
-      getWorkspaceContext: () => ({}) as WorkspaceContext,
-      getDebugMode: () => false,
-      isMcpServerDisabled: () => false,
-    } as unknown as Config;
-    const manager = mkManager({
-      config: mockConfig,
-      toolRegistry: {
-        removeMcpToolsByServer: vi.fn(),
-      } as unknown as ToolRegistry,
-    });
-    await manager.discoverAllMcpToolsIncremental(mockConfig);
-    spy.mockRestore();
-
-    expect(calls).toContain(5_000);
-    expect(calls).not.toContain(30_000);
-  });
-
   describe('discovery timeout process cleanup', () => {
     function makeTimedOutClient(rootPid?: number) {
       return {
@@ -2424,21 +2306,6 @@ describe('McpClientManager', () => {
       expect(listDescendantPids).toHaveBeenCalledWith(101);
       expect(sigtermPids).toHaveBeenCalledWith([201, 301]);
       expect(events).toEqual(['signal', 'disconnect']);
-    });
-
-    it('disconnects remote transports without enumerating pids', async () => {
-      const mockedMcpClient = makeTimedOutClient();
-      vi.mocked(listDescendantPids).mockClear();
-      vi.mocked(sigtermPids).mockClear();
-
-      await runTimedOutDiscovery(mockedMcpClient, {
-        httpUrl: 'https://example.test/mcp',
-        discoveryTimeoutMs: 100,
-      });
-
-      expect(listDescendantPids).not.toHaveBeenCalled();
-      expect(sigtermPids).not.toHaveBeenCalled();
-      expect(mockedMcpClient.disconnect).toHaveBeenCalledOnce();
     });
 
     it('skips signaling when a stdio transport has no descendants', async () => {
@@ -2725,9 +2592,6 @@ describe('McpClientManager — PR 14 guardrails', () => {
     expect(accounting.refusedServerNames).toEqual([]);
     expect(accounting.byTransport).toEqual({
       stdio: 0,
-      sse: 0,
-      http: 0,
-      websocket: 0,
       sdk: 0,
       unknown: 0,
     });
@@ -2738,9 +2602,7 @@ describe('McpClientManager — PR 14 guardrails', () => {
     const cfg = (overrides: Record<string, unknown>) =>
       overrides as unknown as import('../config/config.js').MCPServerConfig;
     expect(mcpTransportOf(cfg({ command: 'node' }))).toBe('stdio');
-    expect(mcpTransportOf(cfg({ httpUrl: 'http://x' }))).toBe('http');
-    expect(mcpTransportOf(cfg({ url: 'http://x' }))).toBe('sse');
-    expect(mcpTransportOf(cfg({ tcp: 'ws://x' }))).toBe('websocket');
+    expect(mcpTransportOf(cfg({ httpUrl: 'http://x' }))).toBe('unknown');
     expect(mcpTransportOf(cfg({}))).toBe('unknown');
     // SDK detection short-circuits: even with a placeholder command,
     // an SDK-marked server reports `sdk` (not `stdio`).
@@ -3446,7 +3308,7 @@ describe('McpClientManager — PR 14 guardrails', () => {
   });
 
   it('discoverMcpToolsForServerInternal rejects disabled servers (wenshao R7 #2 line 528)', async () => {
-    // Reachable from /mcp reconnect, OAuth re-discovery, and health
+    // Reachable from /mcp reconnect and health
     // monitor reconnect. Pre-fix none of these paths checked the
     // disabled flag, so a disabled server could be resurrected.
     let createdCount = 0;
@@ -3923,8 +3785,8 @@ describe('McpClientManager — PR 14b push events + hysteresis', () => {
     // budget 1, 3 servers → a connects, b+c refused.
     const config = configWithServers({
       a: { command: 'node' },
-      b: { httpUrl: 'http://b' },
-      c: { url: 'http://c' },
+      b: { command: 'node' },
+      c: { type: 'sdk', command: 'sdk' },
     });
     const manager = mkManager({
       config,
@@ -3946,8 +3808,8 @@ describe('McpClientManager — PR 14b push events + hysteresis', () => {
       budget: 1,
       mode: 'enforce',
       refusedServers: [
-        { name: 'b', transport: 'http', reason: 'budget_exhausted' },
-        { name: 'c', transport: 'sse', reason: 'budget_exhausted' },
+        { name: 'b', transport: 'stdio', reason: 'budget_exhausted' },
+        { name: 'c', transport: 'sdk', reason: 'budget_exhausted' },
       ],
     });
   });
@@ -4060,9 +3922,7 @@ describe('McpClientManager — PR 14b push events + hysteresis', () => {
     // Mixed transports refused; budget 1 admits the first only.
     const config = configWithServers({
       a: { command: 'node' }, // stdio (admitted)
-      b: { httpUrl: 'http://b' }, // http (refused)
-      c: { url: 'http://c' }, // sse (refused)
-      d: { tcp: 'ws://d' }, // websocket (refused)
+      b: { command: 'node' }, // stdio (refused)
       e: { type: 'sdk', command: 'sdk' }, // sdk (refused)
     });
     const manager = mkManager({
@@ -4082,7 +3942,7 @@ describe('McpClientManager — PR 14b push events + hysteresis', () => {
     expect(batches).toHaveLength(1);
     expect(
       batches[0].refusedServers.map((r) => `${r.name}:${r.transport}`),
-    ).toEqual(['b:http', 'c:sse', 'd:websocket', 'e:sdk']);
+    ).toEqual(['b:stdio', 'e:sdk']);
   });
 
   it('warn mode never emits refused_batch (only enforce refuses)', async () => {

@@ -61,7 +61,7 @@ const extension = {
   version: '1.0.0',
   path: '/extensions/demo',
   isActive: true,
-  installMetadata: { type: 'git', source: 'owner/demo' },
+  installMetadata: { type: 'local', source: '/src/demo' },
   mcpServers: {},
   commands: [],
   skills: [],

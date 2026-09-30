@@ -106,16 +106,6 @@ const MCP_CONNECTION_ERROR_PATTERNS = [
 // classification here.
 const MCP_REQUEST_TIMEOUT_CODE = -32001;
 
-// Structural dead-session signal. Per the MCP spec, an HTTP server that no
-// longer recognizes a request's `mcp-session-id` (the canonical state right
-// after a restart) MUST answer the POST with 404; the SDK surfaces that as
-// a `StreamableHTTPError` whose `code` is the HTTP status. The prose a
-// server wraps the 404 in is NOT spec-pinned — "Unknown session" is just as
-// dead as "Session not found" — so the structural code must trigger
-// recovery on its own, alongside `MCP_DEAD_SESSION_ERROR_PATTERN` (which
-// only covers enumerated phrasings) (issue #9944).
-const MCP_DEAD_SESSION_HTTP_CODE = 404;
-
 function isMcpRequestTimeout(error: unknown): boolean {
   return (
     typeof error === 'object' &&
@@ -137,15 +127,6 @@ function isMcpSdkRequestTimeout(error: unknown): boolean {
     error instanceof Error &&
     error.name === 'SdkError' &&
     (error as { code?: unknown }).code === MCP_SDK_REQUEST_TIMEOUT_CODE
-  );
-}
-
-function isMcpDeadSessionHttpError(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: unknown }).code === MCP_DEAD_SESSION_HTTP_CODE
   );
 }
 
@@ -591,14 +572,6 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
       return true;
     }
 
-    // Spec-pinned structural signal: HTTP 404 on the session POST means the
-    // server no longer knows our `mcp-session-id`, regardless of the prose
-    // it wrapped the 404 in — the patterns below only cover enumerated
-    // phrasings (issue #9944).
-    if (isMcpDeadSessionHttpError(error)) {
-      return true;
-    }
-
     const message = getErrorMessage(error);
     return MCP_CONNECTION_ERROR_PATTERNS.some((pattern) =>
       pattern.test(message),
@@ -753,7 +726,7 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
         });
       }
 
-      const transformedParts = await this.clampInlineMedia(
+      const transformedParts = clampMcpInlineMedia(
         transformMcpContentToParts(rawResponseParts),
       );
       const truncated = await this.truncateTextParts(transformedParts);
@@ -1005,7 +978,7 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
         return await this.buildMcpToolError(rawResponseParts, functionCalls[0]);
       }
 
-      const transformedParts = await this.clampInlineMedia(
+      const transformedParts = clampMcpInlineMedia(
         transformMcpContentToParts(rawResponseParts),
       );
       const truncated = await this.truncateTextParts(transformedParts);
@@ -1041,7 +1014,7 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
     let persistedOutputFiles: string[] | undefined;
     if (imageContent) {
       const truncatedContent = await this.truncateTextParts(
-        await this.clampInlineMedia(imageContent),
+        clampMcpInlineMedia(imageContent),
       );
       llmContent = truncatedContent.parts;
       persistedOutputFiles = truncatedContent.persistedOutputFiles;
@@ -1079,23 +1052,6 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
       signal,
       `${this.serverName}/${this.serverToolName}`,
     );
-  }
-
-  private async clampInlineMedia(parts: Part[]): Promise<Part[]> {
-    return clampMcpInlineMedia(parts, await this.isOmniMediaDeliveryActive());
-  }
-
-  /**
-   * Whether the omni funnel (`processToolResultOmniMedia`) takes over this
-   * result's image, audio and video parts. It uploads by reference under its
-   * own ceilings and bounds any part it keeps inline, so the inline clamp must
-   * not pre-empt it. `isOmniEnabled()` runs first so non-omni sessions skip
-   * the dynamic import, as in `fileUtils`.
-   */
-  private async isOmniMediaDeliveryActive(): Promise<boolean> {
-    if (!this.cliConfig?.isOmniEnabled?.()) return false;
-    const omni = await this.cliConfig.loadOmniMediaReader();
-    return omni.isOmniDeliveryActive(this.cliConfig);
   }
 
   /**
@@ -1595,21 +1551,12 @@ async function boundMcpImageBlocks(
 /**
  * Replace inline media over the inline limit with a text placeholder: images
  * the renderer could not bring under it, and audio or other blobs, which
- * `read_file` likewise refuses above the limit. Under omni delivery image,
- * audio and video parts are left to the funnel, which uploads them by
- * reference or clamps what it keeps inline.
+ * `read_file` likewise refuses above the limit.
  */
-function clampMcpInlineMedia(
-  parts: Part[],
-  omniDeliveryActive: boolean,
-): Part[] {
+function clampMcpInlineMedia(parts: Part[]): Part[] {
   const inlineByteCeiling = getMaxInlineMediaBytes();
   return parts.map((part) => {
-    const mimeType = part.inlineData?.mimeType;
-    if (
-      !part.inlineData ||
-      (omniDeliveryActive && /^(image|audio|video)\//.test(mimeType ?? ''))
-    ) {
+    if (!part.inlineData) {
       return part;
     }
     return clampInlineMediaPart(

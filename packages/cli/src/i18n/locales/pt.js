@@ -533,8 +533,8 @@ export default {
   'Manage installed extensions': 'Gerenciar extensões instaladas',
   'Disable an extension': 'Desativar uma extensão',
   'Enable an extension': 'Ativar uma extensão',
-  'Install an extension from a git repo or local path':
-    'Instalar uma extensão de um repositório git ou caminho local',
+  'Install an extension from a local path':
+    'Instalar uma extensão de um caminho local',
   'Uninstall an extension': 'Desinstalar uma extensão',
   'No extensions installed.': 'Nenhuma extensão instalada.',
   'Extension "{{name}}" not found.': 'Extensão "{{name}}" não encontrada.',
@@ -571,15 +571,10 @@ export default {
     'Instalação cancelada para "{{name}}".',
   'You are installing an extension from {{originSource}}. Some features may not work perfectly with Qwen Code.':
     'Você está instalando uma extensão de {{originSource}}. Alguns recursos podem não funcionar perfeitamente com o Qwen Code.',
-  '--ref is not applicable for marketplace extensions.':
-    '--ref não é aplicável para extensões de marketplace.',
   'Extension "{{name}}" installed successfully and enabled.':
     'Extensão "{{name}}" instalada com sucesso e ativada.',
   'The github URL, local path, or marketplace source (marketplace-url:plugin-name) of the extension to install.':
     'A URL do github, caminho local ou fonte do marketplace (marketplace-url:plugin-name) da extensão para instalar.',
-  'The git ref to install from.': 'A referência git para instalar.',
-  'Enable pre-release versions for this extension.':
-    'Ativar versões de pré-lançamento para esta extensão.',
   'Acknowledge the security risks of installing an extension and skip the confirmation prompt.':
     'Reconhecer os riscos de segurança de instalar uma extensão e pular o prompt de confirmação.',
   'The source argument must be provided.':
@@ -710,8 +705,8 @@ export default {
     'Este menu é somente leitura. Para adicionar ou modificar hooks, edite settings.json diretamente ou pergunte ao Qwen Code.',
   'Reopen this menu to reload hook definitions.':
     'Reabra este menu para recarregar as definições dos hooks.',
-  'Hook controls and HTTP security settings require a restart.':
-    'Os controles dos hooks e as configurações de segurança HTTP exigem uma reinicialização.',
+  'Hook controls require a restart.':
+    'Os controles dos hooks exigem uma reinicialização.',
   'Failed to reload hook definitions: {{error}}':
     'Falha ao recarregar as definições dos hooks: {{error}}',
   'Enter to select · Esc to cancel':
@@ -960,15 +955,6 @@ export default {
     'Consolidar arquivos de tópicos de memória automática gerenciada.',
   'Could not retrieve tool registry.':
     'Não foi possível recuperar o registro de ferramentas.',
-  "Successfully authenticated and refreshed tools for '{{name}}'.":
-    "Autenticado com sucesso e ferramentas atualizadas para '{{name}}'.",
-  "Re-discovering tools from '{{name}}'...":
-    "Redescobrindo ferramentas de '{{name}}'...",
-  "Discovered {{count}} tool(s) from '{{name}}'.":
-    "{{count}} ferramenta(s) descoberta(s) de '{{name}}'.",
-  'Authentication complete. Returning to server details...':
-    'Autenticação concluída. Retornando aos detalhes do servidor...',
-  'Authentication successful.': 'Autenticação bem-sucedida.',
   // =========================================================
   // Commands - Summary
   // ============================================================================
@@ -1103,9 +1089,6 @@ export default {
     'Enter para confirmar, Esc para cancelar',
   Disable: 'Desativar',
   Enable: 'Ativar',
-  Authenticate: 'Autenticar',
-  'Re-authenticate': 'Reautenticar',
-  'Clear Authentication': 'Limpar autenticação',
   disabled: 'desativado',
   enabled: 'ativado',
   'disabled (bare mode)': 'desativado (modo mínimo)',
@@ -1114,7 +1097,6 @@ export default {
   'disabled (folder not trusted)': 'desativado (pasta não confiável)',
   'disabled (turned off for this session)':
     'desativado (desligado nesta sessão)',
-  'Server:': 'Servidor:',
   Reconnect: 'Reconectar',
   'View tools': 'Ver ferramentas',
   'Source:': 'Fonte:',
@@ -1141,9 +1123,6 @@ export default {
     'Execute qwen --debug para ver os logs de erro',
 
   // MCP OAuth Authentication
-  'OAuth Authentication': 'Autenticação OAuth',
-  'Authenticating... Please complete the login in your browser.':
-    'Autenticando... Por favor, conclua o login no seu navegador.',
   // MCP Tool List
   'No tools available for this server.':
     'Nenhuma ferramenta disponível para este servidor.',
@@ -1401,8 +1380,6 @@ export default {
   '{{count}} prompts': '{{count}} prompts',
   '(from {{extensionName}})': '(de {{extensionName}})',
   OAuth: 'OAuth',
-  'OAuth expired': 'OAuth expirado',
-  'OAuth not authenticated': 'OAuth não autenticado',
   'tools and prompts will appear when ready':
     'ferramentas e prompts aparecerão quando estiverem prontos',
   '{{count}} tools cached': '{{count}} ferramentas em cache',
@@ -1416,13 +1393,9 @@ export default {
     'para mostrar descrições de servidores e ferramentas',
   'to show tool parameter schemas': 'para mostrar tool parameter schemas',
   'to hide descriptions': 'para ocultar descrições',
-  'to authenticate with OAuth-enabled servers':
-    'para autenticar com servidores habilitados para OAuth',
   Press: 'Pressione',
   'to toggle tool descriptions on/off':
     'para alternar descrições de ferramentas ligadas/desligadas',
-  "Starting OAuth authentication for MCP server '{{name}}'...":
-    "Iniciando autenticação OAuth para MCP server '{{name}}'...",
   // ============================================================================
   // Startup Tips
   // ============================================================================
@@ -2053,7 +2026,6 @@ export default {
     'O nome da extensão a ser atualizada.',
   'Path:': 'Caminho:',
   'Type:': 'Tipo:',
-  'Release tag:': 'Tag de lançamento:',
   'Enabled (User):': 'Ativado (usuário):',
   'Enabled (Workspace):': 'Ativado (workspace):',
   'Context files:': 'Arquivos de contexto:',
@@ -2061,12 +2033,6 @@ export default {
   'Agents:': 'Agentes:',
   'Workflows:': 'Fluxos de trabalho:',
   'MCP servers:': 'MCP servers:',
-  'Press c to copy the authorization URL to your clipboard.':
-    'Pressione c para copiar a URL de autorização para a área de transferência.',
-  'Copy request sent to your terminal. If paste is empty, copy the URL above manually.':
-    'Solicitação de cópia enviada ao terminal. Se a colagem estiver vazia, copie manualmente a URL acima.',
-  'Cannot write to terminal — copy the URL above manually.':
-    'Não foi possível escrever no terminal — copie manualmente a URL acima.',
   'You can switch permission mode quickly with Tab or /approval-mode.':
     'Você pode alternar rapidamente o modo de permissão com Tab ou /approval-mode.',
   'Retrying in {{seconds}} seconds… (attempt {{attempt}}/{{maxRetries}})':
@@ -2104,7 +2070,6 @@ export default {
 
   // === Same-as-English optimization ===
   '(workspace)': '(espaço de trabalho)',
-  'Ref:': 'Referência:',
   Runtime: 'Tempo de execução',
   Status: 'Estado',
   'Status:': 'Estado:',

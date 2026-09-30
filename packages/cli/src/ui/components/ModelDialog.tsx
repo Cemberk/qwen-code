@@ -15,7 +15,6 @@ import {
   logModelSlashCommand,
   MAINLINE_CODER_MODEL,
   isImageCapable,
-  isImageGenerationCapable,
   parseVisionModelSetting,
   resolveModelId,
   type AvailableModel as CoreAvailableModel,
@@ -122,7 +121,6 @@ interface ModelDialogProps {
   isAdvisorModelMode?: boolean;
   isVisionModelMode?: boolean;
   isCompactionModelMode?: boolean;
-  isImageModelMode?: boolean;
   /** Override which settings scope to persist the selection to. */
   persistScope?: 'workspace' | 'user';
   availableTerminalHeight?: number;
@@ -299,7 +297,6 @@ export function ModelDialog({
   isAdvisorModelMode,
   isVisionModelMode,
   isCompactionModelMode,
-  isImageModelMode,
   persistScope,
   availableTerminalHeight,
 }: ModelDialogProps): React.JSX.Element {
@@ -335,38 +332,29 @@ export function ModelDialog({
     );
 
     // Separate runtime models from registry models
-    const runtimeModels = isImageModelMode
-      ? []
-      : allModels.filter(
-          (m) =>
-            m.isRuntimeModel &&
-            (!isAdvisorModelMode ||
-              isAdvisorModelEligible(m, allowAdvisorFastOnly)),
-        );
+    const runtimeModels = allModels.filter(
+      (m) =>
+        m.isRuntimeModel &&
+        (!isAdvisorModelMode ||
+          isAdvisorModelEligible(m, allowAdvisorFastOnly)),
+    );
     const registryModels = allModels.filter((m) => {
-      const imageModelSelector = encodeVisionModelSelector(
-        buildModelSelectionKey(m.authType, m.id, m.baseUrl),
-      );
       const advisorModelSelector = `${m.authType}:${m.id}\0${m.registryBaseUrl ?? ''}`;
       const isAvailableAdvisorModel =
         !isAdvisorModelMode ||
         (config !== undefined &&
           checkAdvisorModelAvailability(config, advisorModelSelector)
             .available);
-      const isSelectableImageModel = isImageModelMode
-        ? isImageGenerationCapable(m) &&
-          config?.resolveImageGenerationModel(imageModelSelector) !== undefined
-        : m.imageOnly !== true;
       return (
         !m.isRuntimeModel &&
         (m.authType !== AuthType.QWEN_OAUTH ||
           authType === AuthType.QWEN_OAUTH) &&
-        isSelectableImageModel &&
+        m.imageOnly !== true &&
         (isFastModelMode ||
           (isAdvisorModelMode && isAvailableAdvisorModel) ||
           !m.fastOnly) &&
         !m.voiceOnly &&
-        (isVisionModelMode || isImageModelMode || !m.visionOnly) &&
+        (isVisionModelMode || !m.visionOnly) &&
         (!isAdvisorModelMode ||
           (isAvailableAdvisorModel &&
             isAdvisorModelEligible(m, allowAdvisorFastOnly)))
@@ -430,7 +418,6 @@ export function ModelDialog({
     config,
     isFastModelMode,
     isAdvisorModelMode,
-    isImageModelMode,
     isVisionModelMode,
   ]);
 
@@ -545,9 +532,7 @@ export function ModelDialog({
   const visionModelSetting = settings?.merged?.visionModel as
     | string
     | undefined;
-  const imageModelSetting = settings?.merged?.imageModel as string | undefined;
   const parsedVisionModelValue = parseVisionModelSetting(visionModelSetting);
-  const parsedImageModelValue = parseVisionModelSetting(imageModelSetting);
   const parsedFastModelSetting = useMemo(() => {
     if (!isFastModelMode) return undefined;
     try {
@@ -576,14 +561,6 @@ export function ModelDialog({
       return undefined;
     }
   }, [parsedVisionModelValue?.selector, isVisionModelMode]);
-  const parsedImageModelSetting = useMemo(() => {
-    if (!isImageModelMode) return undefined;
-    try {
-      return resolveModelId(parsedImageModelValue?.selector);
-    } catch {
-      return undefined;
-    }
-  }, [parsedImageModelValue?.selector, isImageModelMode]);
   const preferredModelId =
     isFastModelMode && parsedFastModelSetting
       ? parsedFastModelSetting.modelId
@@ -591,15 +568,12 @@ export function ModelDialog({
         ? parsedAdvisorModelSetting.modelId
         : isVisionModelMode && parsedVisionModelSetting
           ? parsedVisionModelSetting.modelId
-          : isImageModelMode && parsedImageModelSetting
-            ? parsedImageModelSetting.modelId
-            : config?.getModel() || MAINLINE_CODER_MODEL;
+          : config?.getModel() || MAINLINE_CODER_MODEL;
   const isAuxiliaryModelMode =
     isFastModelMode ||
     isAdvisorModelMode ||
     isVisionModelMode ||
-    isCompactionModelMode ||
-    isImageModelMode;
+    isCompactionModelMode;
   // Check if current model is a runtime model
   // Runtime snapshot ID is already in $runtime|${authType}|${modelId} format
   const activeRuntimeSnapshot = isAuxiliaryModelMode
@@ -663,23 +637,6 @@ export function ModelDialog({
               matchesVisionModelBaseUrl(model),
           )
       : undefined;
-  const preferredImageModelEntry =
-    isImageModelMode && parsedImageModelSetting
-      ? parsedImageModelSetting.authType
-        ? availableModelEntries.find(
-            ({ authType: t2, model }) =>
-              t2 === parsedImageModelSetting.authType &&
-              model.id === parsedImageModelSetting.modelId &&
-              (!parsedImageModelValue?.baseUrl ||
-                model.baseUrl === parsedImageModelValue.baseUrl),
-          )
-        : availableModelEntries.find(
-            ({ model }) =>
-              model.id === parsedImageModelSetting.modelId &&
-              (!parsedImageModelValue?.baseUrl ||
-                model.baseUrl === parsedImageModelValue.baseUrl),
-          )
-      : undefined;
   const parsedCompactionSetting = useMemo(() => {
     if (!isCompactionModelMode) return undefined;
     const raw = settings?.merged?.compactionModel?.trim();
@@ -718,31 +675,25 @@ export function ModelDialog({
               preferredCompactionModelEntry.model.id,
               preferredCompactionModelEntry.model.baseUrl,
             )
-          : preferredImageModelEntry
+          : preferredAdvisorModelEntry
             ? buildModelSelectionKey(
-                preferredImageModelEntry.authType,
-                preferredImageModelEntry.model.id,
-                preferredImageModelEntry.model.baseUrl,
+                preferredAdvisorModelEntry.authType,
+                preferredAdvisorModelEntry.model.id,
+                preferredAdvisorModelEntry.model.registryBaseUrl,
               )
-            : preferredAdvisorModelEntry
+            : preferredFastModelEntry
               ? buildModelSelectionKey(
-                  preferredAdvisorModelEntry.authType,
-                  preferredAdvisorModelEntry.model.id,
-                  preferredAdvisorModelEntry.model.registryBaseUrl,
+                  preferredFastModelEntry.authType,
+                  preferredFastModelEntry.model.id,
+                  preferredFastModelEntry.model.baseUrl,
                 )
-              : preferredFastModelEntry
+              : authType
                 ? buildModelSelectionKey(
-                    preferredFastModelEntry.authType,
-                    preferredFastModelEntry.model.id,
-                    preferredFastModelEntry.model.baseUrl,
+                    authType,
+                    preferredModelId,
+                    currentBaseUrl,
                   )
-                : authType
-                  ? buildModelSelectionKey(
-                      authType,
-                      preferredModelId,
-                      currentBaseUrl,
-                    )
-                  : '';
+                : '';
 
   // Escape can arrive twice in one stdin chunk before the parent unmounts
   // the dialog; latch so the close feedback and onClose fire only once.
@@ -1000,45 +951,6 @@ export function ModelDialog({
         return;
       }
 
-      if (isImageModelMode) {
-        if (!selectedEntry || !config) {
-          setErrorMessage(t('Selected image model is unavailable.'));
-          return;
-        }
-        const imageModel = encodeVisionModelSelector(selected);
-        const imageModelDisplay =
-          parseVisionModelSetting(imageModel)?.selector ?? imageModel;
-        if (!config.resolveImageGenerationModel(imageModel)) {
-          setErrorMessage(
-            t(
-              "'{{model}}' must declare a valid HTTPS baseUrl and credential environment variable.",
-              { model: imageModelDisplay },
-            ),
-          );
-          return;
-        }
-        const scope = resolvePersistScope(settings, persistScope);
-        settings.setValue(scope, 'imageModel', imageModel);
-        selectionInFlightRef.current = true;
-        try {
-          await config.setImageModel(imageModel);
-        } finally {
-          selectionInFlightRef.current = false;
-        }
-        const scopeSuffix =
-          persistScope === 'workspace'
-            ? t(' (this project)')
-            : persistScope === 'user'
-              ? t(' (global)')
-              : '';
-        reportAuxiliaryModelSelection({
-          type: 'success',
-          text: `${t('Image Model')}: ${imageModelDisplay}${scopeSuffix}`,
-        });
-        onClose();
-        return;
-      }
-
       // Block selection of discontinued qwen-oauth models
       // (only block non-runtime OAuth; runtime OAuth models from existing
       //  cached tokens are still allowed to work until the server rejects them)
@@ -1173,7 +1085,6 @@ export function ModelDialog({
       isAdvisorModelMode,
       isVisionModelMode,
       isCompactionModelMode,
-      isImageModelMode,
       availableModelEntries,
       persistScope,
       reportAuxiliaryModelSelection,
@@ -1195,13 +1106,11 @@ export function ModelDialog({
           ? t('Select Vision Model')
           : isCompactionModelMode
             ? t('Select Compaction Model')
-            : isImageModelMode
-              ? t('Select Image Model')
-              : isAdvisorModelMode
-                ? t('Select Advisor Model')
-                : isFastModelMode
-                  ? t('Select Fast Model')
-                  : t('Select Model')) +
+            : isAdvisorModelMode
+              ? t('Select Advisor Model')
+              : isFastModelMode
+                ? t('Select Fast Model')
+                : t('Select Model')) +
           (persistScope === 'workspace'
             ? t(' (this project)')
             : persistScope === 'user'

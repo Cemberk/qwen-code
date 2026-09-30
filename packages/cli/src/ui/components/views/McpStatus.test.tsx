@@ -38,7 +38,6 @@ describe('McpStatus', () => {
     prompts: [],
     blockedServers: [],
     serverStatus: () => MCPServerStatus.CONNECTED,
-    authStatus: {},
     discoveryInProgress: false,
     connectingServers: [],
     showDescriptions: true,
@@ -48,30 +47,6 @@ describe('McpStatus', () => {
 
   it('renders correctly with a connected server', () => {
     const { lastFrame } = render(<McpStatus {...baseProps} />);
-    expect(lastFrame()).toMatchSnapshot();
-  });
-
-  it('renders correctly with authenticated OAuth status', () => {
-    const { lastFrame } = render(
-      <McpStatus {...baseProps} authStatus={{ 'server-1': 'authenticated' }} />,
-    );
-    expect(lastFrame()).toMatchSnapshot();
-  });
-
-  it('renders correctly with expired OAuth status', () => {
-    const { lastFrame } = render(
-      <McpStatus {...baseProps} authStatus={{ 'server-1': 'expired' }} />,
-    );
-    expect(lastFrame()).toMatchSnapshot();
-  });
-
-  it('renders correctly with unauthenticated OAuth status', () => {
-    const { lastFrame } = render(
-      <McpStatus
-        {...baseProps}
-        authStatus={{ 'server-1': 'unauthenticated' }}
-      />,
-    );
     expect(lastFrame()).toMatchSnapshot();
   });
 

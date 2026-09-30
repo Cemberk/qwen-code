@@ -34,7 +34,6 @@ import {
   InvalidPermissionOptionError,
   InvalidSessionMetadataError,
   InvalidSessionScopeError,
-  McpAuthenticationInProgressError,
   NOT_CURRENTLY_GENERATING_CANCEL_MESSAGE,
   PromptDeadlineExceededError,
   PromptQueueFullError,
@@ -2851,132 +2850,6 @@ describe('createAcpSessionBridge', () => {
     await bridge.shutdown();
   });
 
-  it('serializes MCP authentication across workspace bridges', async () => {
-    let authenticationActive = false;
-    const acquireMcpAuthentication = () => {
-      if (authenticationActive) return undefined;
-      authenticationActive = true;
-      return () => {
-        authenticationActive = false;
-      };
-    };
-    const makeAuthenticationChannel = () =>
-      makeChannel({
-        extMethodImpl: async (method) => {
-          if (method === SERVE_CONTROL_EXT_METHODS.workspaceMcpManage) {
-            return {
-              serverName: 'aone',
-              action: 'authenticate',
-              ok: true,
-              pending: true,
-            };
-          }
-          if (method === SERVE_STATUS_EXT_METHODS.workspaceMcp) {
-            return {
-              discoveryState: 'completed',
-              servers: [{ name: 'aone', authenticationState: 'pending' }],
-            };
-          }
-          return {};
-        },
-      });
-    const firstHandle = makeAuthenticationChannel();
-    const secondHandle = makeAuthenticationChannel();
-    const first = makeBridge({
-      channelFactory: async () => firstHandle.channel,
-      acquireMcpAuthentication,
-    });
-    const second = makeBridge({
-      boundWorkspace: WS_B,
-      channelFactory: async () => secondHandle.channel,
-      acquireMcpAuthentication,
-    });
-
-    await expect(
-      first.manageMcpServer('aone', 'authenticate', undefined),
-    ).resolves.toMatchObject({ pending: true });
-    await expect(
-      second.manageMcpServer('aone', 'authenticate', undefined),
-    ).rejects.toBeInstanceOf(McpAuthenticationInProgressError);
-
-    await first.shutdown();
-    await expect(
-      second.manageMcpServer('aone', 'authenticate', undefined),
-    ).resolves.toMatchObject({ pending: true });
-    await second.shutdown();
-  });
-
-  it('keeps MCP authentication admission after a timed-out RPC until its channel exits', async () => {
-    vi.useFakeTimers();
-    try {
-      let authenticationActive = false;
-      const acquireMcpAuthentication = () => {
-        if (authenticationActive) return undefined;
-        authenticationActive = true;
-        return () => {
-          authenticationActive = false;
-        };
-      };
-      const stalledAuthentication = deferred<Record<string, unknown>>();
-      const firstHandle = makeChannel({
-        extMethodImpl: async (method) =>
-          method === SERVE_CONTROL_EXT_METHODS.workspaceMcpManage
-            ? await stalledAuthentication.promise
-            : {},
-      });
-      const secondHandle = makeChannel({
-        extMethodImpl: async (method) => {
-          if (method === SERVE_CONTROL_EXT_METHODS.workspaceMcpManage) {
-            return {
-              serverName: 'aone',
-              action: 'authenticate',
-              ok: true,
-              pending: true,
-            };
-          }
-          if (method === SERVE_STATUS_EXT_METHODS.workspaceMcp) {
-            return {
-              discoveryState: 'completed',
-              servers: [{ name: 'aone', authenticationState: 'pending' }],
-            };
-          }
-          return {};
-        },
-      });
-      const first = makeBridge({
-        channelFactory: async () => firstHandle.channel,
-        acquireMcpAuthentication,
-      });
-      const second = makeBridge({
-        boundWorkspace: WS_B,
-        channelFactory: async () => secondHandle.channel,
-        acquireMcpAuthentication,
-      });
-      const session = await first.spawnOrAttach({ workspaceCwd: WS_A });
-
-      const request = first.manageMcpServer('aone', 'authenticate', undefined);
-      void request.catch(() => undefined);
-      await vi.advanceTimersByTimeAsync(600_000);
-
-      await expect(request).rejects.toBeInstanceOf(BridgeTimeoutError);
-      expect(firstHandle.killed).toBe(false);
-      await expect(
-        second.manageMcpServer('aone', 'authenticate', undefined),
-      ).rejects.toBeInstanceOf(McpAuthenticationInProgressError);
-
-      await first.closeSession(session.sessionId);
-      await vi.waitFor(() => expect(firstHandle.killed).toBe(true));
-      await expect(
-        second.manageMcpServer('aone', 'authenticate', undefined),
-      ).resolves.toMatchObject({ pending: true });
-
-      await first.shutdown();
-      await second.shutdown();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
   it('does not reuse other MCP states after disabling in a fresh child', async () => {
     const discovery = makeChannel({
       extMethodImpl: async (method) => {
@@ -3069,87 +2942,6 @@ describe('createAcpSessionBridge', () => {
       ],
     });
     expect(channelFactory).toHaveBeenCalledTimes(2);
-
-    await bridge.shutdown();
-  });
-
-  it('does not reuse other MCP states while polling in a fresh child', async () => {
-    const discovery = makeChannel({
-      extMethodImpl: async (method) => {
-        if (method === SERVE_CONTROL_EXT_METHODS.workspaceMcpInitialize) {
-          return { accepted: true };
-        }
-        if (method === SERVE_STATUS_EXT_METHODS.workspaceMcp) {
-          return {
-            discoveryState: 'completed',
-            servers: [
-              { name: 'aone', mcpStatus: 'connected' },
-              { name: 'yuque', mcpStatus: 'connected' },
-            ],
-          };
-        }
-        return {};
-      },
-    });
-    let statusRequests = 0;
-    const authentication = makeChannel({
-      extMethodImpl: async (method) => {
-        if (method === SERVE_CONTROL_EXT_METHODS.workspaceMcpManage) {
-          return {
-            serverName: 'aone',
-            action: 'authenticate',
-            ok: true,
-            pending: true,
-          };
-        }
-        if (method === SERVE_STATUS_EXT_METHODS.workspaceMcp) {
-          statusRequests += 1;
-          return {
-            discoveryState: 'not_started',
-            servers: [
-              {
-                name: 'aone',
-                mcpStatus: statusRequests === 1 ? 'disconnected' : 'connected',
-                authenticationState:
-                  statusRequests === 1 ? 'pending' : 'succeeded',
-              },
-              { name: 'yuque', mcpStatus: 'disconnected' },
-            ],
-          };
-        }
-        return {};
-      },
-    });
-    const channelFactory = vi
-      .fn()
-      .mockResolvedValueOnce(discovery.channel)
-      .mockResolvedValueOnce(authentication.channel);
-    const bridge = makeBridge({ channelFactory });
-
-    await bridge.initializeWorkspaceMcp();
-    await bridge.queryWorkspaceStatus(
-      SERVE_STATUS_EXT_METHODS.workspaceMcp,
-      () => ({ discoveryState: 'not_started', servers: [] }),
-    );
-    await bridge.manageMcpServer('aone', 'authenticate', undefined);
-
-    await expect(
-      bridge.queryWorkspaceStatus(
-        SERVE_STATUS_EXT_METHODS.workspaceMcp,
-        () => ({ discoveryState: 'not_started', servers: [] }),
-      ),
-    ).resolves.toMatchObject({
-      discoveryState: 'not_started',
-      servers: [
-        expect.objectContaining({
-          name: 'aone',
-          mcpStatus: 'connected',
-          authenticationState: 'succeeded',
-        }),
-        expect.objectContaining({ name: 'yuque', mcpStatus: 'disconnected' }),
-      ],
-    });
-    expect(authentication.killed).toBe(true);
 
     await bridge.shutdown();
   });
@@ -28926,7 +28718,7 @@ describe('createAcpSessionBridge', () => {
       const bridge = makeBridge({
         channelFactory: runtimeAddFactory((params) => ({
           name: params['name'],
-          transport: 'sse',
+          transport: 'stdio',
           replaced: true,
           shadowedSettings: true,
           toolCount: 5,
@@ -28940,7 +28732,7 @@ describe('createAcpSessionBridge', () => {
         [Symbol.asyncIterator]();
       await bridge.addRuntimeMcpServer(
         'my-mcp',
-        { url: 'http://localhost:3000/sse' },
+        { command: 'node', args: ['server.js'] },
         session.clientId!,
       );
       const next = await it.next();
@@ -35916,13 +35708,6 @@ describe('preheat', () => {
       invoke: (bridge: ReturnType<typeof makeBridge>) =>
         bridge.initializeWorkspaceMcp(),
     },
-    {
-      label: 'MCP authentication',
-      method: SERVE_CONTROL_EXT_METHODS.workspaceMcpManage,
-      timeoutMs: 600_000,
-      invoke: (bridge: ReturnType<typeof makeBridge>) =>
-        bridge.manageMcpServer('aone', 'authenticate', undefined),
-    },
   ])(
     'retires a kept-alive channel when $label exceeds its physical lease',
     async ({ method, timeoutMs, invoke }) => {
@@ -36341,181 +36126,6 @@ describe('preheat', () => {
 
       await bridge.closeSession(session.sessionId);
       expect(handle.killed).toBe(true);
-      await bridge.shutdown();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('defers missing MCP auth retirement until active sessions drain', async () => {
-    vi.useFakeTimers();
-    try {
-      const handle = makeChannel({
-        extMethodImpl: async (method) => {
-          if (method === SERVE_CONTROL_EXT_METHODS.workspaceMcpManage) {
-            return {
-              serverName: 'aone',
-              action: 'authenticate',
-              ok: true,
-              pending: true,
-            };
-          }
-          if (method === SERVE_STATUS_EXT_METHODS.workspaceMcp) {
-            return {
-              v: 1,
-              workspaceCwd: WS_A,
-              initialized: true,
-              discoveryState: 'completed',
-              servers: [],
-            };
-          }
-          return {};
-        },
-      });
-      const bridge = makeBridge({
-        channelFactory: async () => handle.channel,
-        channelIdleTimeoutMs: 600_000,
-      });
-      const session = await bridge.spawnOrAttach({ workspaceCwd: WS_A });
-
-      await expect(
-        bridge.manageMcpServer('aone', 'authenticate', undefined),
-      ).resolves.toMatchObject({
-        serverName: 'aone',
-        action: 'authenticate',
-        pending: true,
-      });
-      expect(bridge.getWorkspaceRuntimeLifecycleSnapshot!()).toMatchObject({
-        state: 'active',
-        runtimeLive: true,
-        activeWork: true,
-      });
-
-      await vi.advanceTimersByTimeAsync(600_000);
-      expect(handle.killed).toBe(false);
-      expect(bridge.sessionCount).toBe(1);
-
-      await bridge.closeSession(session.sessionId);
-      expect(handle.killed).toBe(true);
-      expect(bridge.sessionCount).toBe(0);
-
-      await bridge.shutdown();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('rechecks MCP auth before its deadline can terminate active sessions', async () => {
-    vi.useFakeTimers();
-    try {
-      let statusRequests = 0;
-      const handle = makeChannel({
-        extMethodImpl: async (method) => {
-          if (method === SERVE_CONTROL_EXT_METHODS.workspaceMcpManage) {
-            return {
-              serverName: 'aone',
-              action: 'authenticate',
-              ok: true,
-              pending: true,
-            };
-          }
-          if (method === SERVE_STATUS_EXT_METHODS.workspaceMcp) {
-            statusRequests += 1;
-            return {
-              v: 1,
-              workspaceCwd: WS_A,
-              initialized: true,
-              discoveryState: 'completed',
-              servers: [
-                {
-                  name: 'aone',
-                  authenticationState:
-                    statusRequests === 1 ? 'pending' : 'succeeded',
-                },
-              ],
-            };
-          }
-          return {};
-        },
-      });
-      const bridge = makeBridge({
-        channelFactory: async () => handle.channel,
-      });
-      const session = await bridge.spawnOrAttach({ workspaceCwd: WS_A });
-
-      await bridge.manageMcpServer('aone', 'authenticate', undefined);
-      expect(statusRequests).toBe(1);
-
-      await vi.advanceTimersByTimeAsync(600_000);
-      await vi.waitFor(() => expect(statusRequests).toBe(2));
-      expect(handle.killed).toBe(false);
-      expect(bridge.getWorkspaceRuntimeLifecycleSnapshot!()).toMatchObject({
-        state: 'active',
-        runtimeLive: true,
-        activeWork: true,
-      });
-
-      await bridge.closeSession(session.sessionId);
-      expect(handle.killed).toBe(true);
-      await bridge.shutdown();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('does not let a superseded MCP auth timer terminate the renewed channel', async () => {
-    vi.useFakeTimers();
-    try {
-      let authenticationRequests = 0;
-      let statusRequests = 0;
-      const expiryStatusStarted = deferred<void>();
-      const expiryStatus = deferred<Record<string, unknown>>();
-      const handle = makeChannel({
-        extMethodImpl: async (method) => {
-          if (method === SERVE_CONTROL_EXT_METHODS.workspaceMcpManage) {
-            authenticationRequests++;
-            return {
-              serverName: 'aone',
-              action: 'authenticate',
-              ok: true,
-              pending: true,
-            };
-          }
-          if (method === SERVE_STATUS_EXT_METHODS.workspaceMcp) {
-            statusRequests++;
-            if (statusRequests === 2) {
-              expiryStatusStarted.resolve();
-              return await expiryStatus.promise;
-            }
-            return {
-              v: 1,
-              workspaceCwd: WS_A,
-              initialized: true,
-              discoveryState: 'completed',
-              servers: [{ name: 'aone', authenticationState: 'pending' }],
-            };
-          }
-          return {};
-        },
-      });
-      const bridge = makeBridge({ channelFactory: async () => handle.channel });
-      await bridge.spawnOrAttach({ workspaceCwd: WS_A });
-      await bridge.manageMcpServer('aone', 'authenticate', undefined);
-
-      const expiry = vi.advanceTimersByTimeAsync(600_000);
-      await expiryStatusStarted.promise;
-      const renewal = bridge.manageMcpServer('aone', 'authenticate', undefined);
-      await vi.waitFor(() => expect(authenticationRequests).toBe(2));
-      expiryStatus.resolve({
-        v: 1,
-        workspaceCwd: WS_A,
-        initialized: true,
-        discoveryState: 'completed',
-        servers: [{ name: 'aone', authenticationState: 'pending' }],
-      });
-      await Promise.all([expiry, renewal]);
-
-      expect(handle.killed).toBe(false);
       await bridge.shutdown();
     } finally {
       vi.useRealTimers();

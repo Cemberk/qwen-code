@@ -913,7 +913,6 @@ describe('useSlashCommandProcessor', () => {
       '/model --fast --project',
       '/model --vision --global',
       '/model --compaction',
-      '/model --image',
       '/stats 2026-01',
     ])('hides the invocation for the picker-only form %s', async (input) => {
       const [name] = input.slice(1).split(' ');
@@ -1237,25 +1236,6 @@ describe('useSlashCommandProcessor', () => {
 
       expect(mockOpenModelDialog).toHaveBeenCalledWith({
         visionModelMode: true,
-      });
-    });
-
-    it('should handle "dialog: image-model" action', async () => {
-      const command = createTestCommand({
-        name: 'imagemodelcmd',
-        action: vi
-          .fn()
-          .mockResolvedValue({ type: 'dialog', dialog: 'image-model' }),
-      });
-      const result = setupProcessorHook([command]);
-      await waitFor(() => expect(result.current.slashCommands).toHaveLength(1));
-
-      await act(async () => {
-        await result.current.handleSlashCommand('/imagemodelcmd');
-      });
-
-      expect(mockOpenModelDialog).toHaveBeenCalledWith({
-        imageModelMode: true,
       });
     });
 

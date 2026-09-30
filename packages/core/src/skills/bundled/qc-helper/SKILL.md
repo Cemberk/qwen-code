@@ -4,7 +4,6 @@ description: Answer any question about Qwen Code usage, features, configuration,
 argument-hint: '<question>'
 allowedTools:
   - read_file
-  - edit_file
   - grep_search
   - glob
   - read_many_files
@@ -85,7 +84,6 @@ Use this index to locate the right document for the user's question. Load only t
 | ------------------------------- | ---------------------------------------------- |
 | Extension introduction          | `docs/extension/introduction.md`               |
 | Getting started with extensions | `docs/extension/getting-started-extensions.md` |
-| Releasing extensions            | `docs/extension/extension-releasing.md`        |
 
 ### Reference & Support
 
@@ -116,16 +114,16 @@ When the user asks about configuration, the primary reference is `docs/configura
 
 ### Common Config Categories
 
-| Category      | Key Config Keys                                                      | Reference                                                                                        |
-| ------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Permissions   | `permissions.allow/ask/deny`                                         | `docs/configuration/settings.md`, `docs/features/approval-mode.md`                               |
-| MCP Servers   | `mcpServers.*`, `mcp.*`                                              | `docs/configuration/settings.md`, `docs/features/mcp.md`                                         |
-| Tool Approval | `tools.approvalMode`                                                 | `docs/configuration/settings.md`, `docs/features/approval-mode.md`, `docs/features/auto-mode.md` |
-| Hooks         | `hooks.*`                                                            | `docs/configuration/settings.md`, `docs/features/hooks.md`                                       |
-| Model         | `model.name`, `modelProviders`                                       | `docs/configuration/settings.md`, `docs/configuration/model-providers.md`                        |
-| General/UI    | `general.*`, `ui.*`, `ide.*`, `output.*`                             | `docs/configuration/settings.md`                                                                 |
-| Context       | `context.*`                                                          | `docs/configuration/settings.md`                                                                 |
-| Advanced      | `env`, `webSearch`, `security`, `privacy`, `telemetry`, `advanced.*` | `docs/configuration/settings.md`                                                                 |
+| Category      | Key Config Keys                                         | Reference                                                                                        |
+| ------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Permissions   | `permissions.allow/ask/deny`                            | `docs/configuration/settings.md`, `docs/features/approval-mode.md`                               |
+| MCP Servers   | `mcpServers.*`, `mcp.*`                                 | `docs/configuration/settings.md`, `docs/features/mcp.md`                                         |
+| Tool Approval | `tools.approvalMode`                                    | `docs/configuration/settings.md`, `docs/features/approval-mode.md`, `docs/features/auto-mode.md` |
+| Hooks         | `hooks.*`                                               | `docs/configuration/settings.md`, `docs/features/hooks.md`                                       |
+| Model         | `model.name`, `modelProviders`                          | `docs/configuration/settings.md`, `docs/configuration/model-providers.md`                        |
+| General/UI    | `general.*`, `ui.*`, `ide.*`, `output.*`                | `docs/configuration/settings.md`                                                                 |
+| Context       | `context.*`                                             | `docs/configuration/settings.md`                                                                 |
+| Advanced      | `env`, `security`, `privacy`, `telemetry`, `advanced.*` | `docs/configuration/settings.md`                                                                 |
 
 ---
 
@@ -145,7 +143,7 @@ When the user wants to modify their configuration:
 1. **Read the relevant doc** to understand the config key, its type, allowed values, and defaults
 2. **Ask which config level** to modify if not specified: user (`~/.qwen/settings.json`) or project (`.qwen/settings.json`)
 3. **Use `read_file`** to check the current content of the target settings file
-4. **Use `edit_file`** to apply the change with correct JSON syntax
+4. **Use the `edit` tool** to apply the change with correct JSON syntax
 5. **After every configuration change**, you MUST remind the user:
 
 > **Note: Most configuration changes require restarting Qwen Code (`/exit` then re-launch) to take effect.** Only a few settings (like `permissions`) are picked up dynamically.

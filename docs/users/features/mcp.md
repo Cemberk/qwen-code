@@ -24,10 +24,10 @@ Qwen Code loads MCP servers from `mcpServers` in your `settings.json`. You can c
 
 ### Add your first server
 
-1. Add a server (example: remote HTTP MCP server):
+1. Add a server (example: a local stdio MCP server):
 
 ```bash
-qwen mcp add --transport http my-server http://localhost:3000/mcp
+qwen mcp add my-server node ./my-mcp-server.js
 ```
 
 2. Start Qwen Code and open the MCP management dialog to view and manage
@@ -56,7 +56,7 @@ Most users only need these two scopes:
 Write to user scope:
 
 ```bash
-qwen mcp add --scope user --transport http my-server http://localhost:3000/mcp
+qwen mcp add --scope user my-server node ./my-mcp-server.js
 ```
 
 > [!tip]
@@ -65,19 +65,10 @@ qwen mcp add --scope user --transport http my-server http://localhost:3000/mcp
 
 ## Configure servers
 
-### Choose a transport
-
-| Transport | When to use                                                       | JSON field(s)                               |
-| --------- | ----------------------------------------------------------------- | ------------------------------------------- |
-| `http`    | Recommended for remote services; works well for cloud MCP servers | `httpUrl` (+ optional `headers`)            |
-| `sse`     | Legacy/deprecated servers that only support Server-Sent Events    | `url` (+ optional `headers`)                |
-| `stdio`   | Local process (scripts, CLIs, Docker) on your machine             | `command`, `args` (+ optional `cwd`, `env`) |
-
-> [!note]
->
-> If a server supports both, prefer **HTTP** over **SSE**.
-
 ### Configure via `settings.json` vs `qwen mcp add`
+
+Qwen Code runs MCP servers as local processes over stdio (`command`, `args`,
+optional `cwd` and `env`). Remote transports (HTTP, SSE) are not supported.
 
 Both approaches produce the same `mcpServers` entries in your `settings.json`—use whichever you prefer.
 
@@ -107,52 +98,6 @@ CLI (writes to user scope by default):
 ```bash
 qwen mcp add pythonTools -e DATABASE_URL=$DB_CONNECTION_STRING -e API_KEY=$EXTERNAL_API_KEY \
   --timeout 15000 python -m my_mcp_server --port 8080
-```
-
-#### HTTP server (remote streamable HTTP)
-
-JSON:
-
-```json
-{
-  "mcpServers": {
-    "httpServerWithAuth": {
-      "httpUrl": "http://localhost:3000/mcp",
-      "headers": {
-        "Authorization": "Bearer your-api-token"
-      },
-      "timeout": 5000
-    }
-  }
-}
-```
-
-CLI:
-
-```bash
-qwen mcp add --transport http httpServerWithAuth http://localhost:3000/mcp \
-  --header "Authorization: Bearer your-api-token" --timeout 5000
-```
-
-#### SSE server (remote Server-Sent Events)
-
-JSON:
-
-```json
-{
-  "mcpServers": {
-    "sseServer": {
-      "url": "http://localhost:8080/sse",
-      "timeout": 30000
-    }
-  }
-}
-```
-
-CLI:
-
-```bash
-qwen mcp add --transport sse sseServer http://localhost:8080/sse --timeout 30000
 ```
 
 ## Using MCP prompts and resources
@@ -233,10 +178,7 @@ one frame (~16 ms) of each server completing its discover handshake.
 
 Each MCP server gets a discovery-only timeout that caps how long the
 initial handshake (`connect` + `tools/list` + `prompts/list` +
-`resources/list`) is allowed to take. Defaults:
-
-- **stdio servers**: 30 s
-- **remote HTTP / SSE servers**: 5 s (network risk is higher)
+`resources/list`) is allowed to take. The default is 30 s.
 
 Override per server when needed:
 
@@ -247,10 +189,6 @@ Override per server when needed:
       "command": "node",
       "args": ["./slow-server.js"],
       "discoveryTimeoutMs": 60000,
-    },
-    "flaky-remote": {
-      "httpUrl": "https://example.com/mcp",
-      "discoveryTimeoutMs": 10000,
     },
   },
 }
@@ -302,96 +240,6 @@ Qwen Code only reconnects and replays the current MCP tool call when the server 
 Calls with missing annotations, conflicting annotations, an untrusted server, or an untrusted workspace are not replayed after a connection failure. Qwen Code reports that the result may be unknown because the server could have completed the operation before the response was lost. Verify the outcome before trying again. This conservative behavior can differ from earlier releases that transparently retried unannotated tools.
 
 Annotations are server-provided behavior hints, not permissions or an authorization boundary. Only configure `trust: true` for servers you control and whose annotations you have verified.
-
-### OAuth authentication
-
-Qwen Code supports OAuth 2.0 authentication for MCP servers. This is useful when accessing remote servers that require authentication.
-
-#### Basic usage
-
-When you add an MCP server with OAuth credentials, Qwen Code will automatically handle the authentication flow:
-
-```bash
-qwen mcp add --transport sse oauth-server https://api.example.com/sse/ \
-  --oauth-client-id your-client-id \
-  --oauth-redirect-uri https://your-server.com/oauth/callback \
-  --oauth-authorization-url https://provider.example.com/authorize \
-  --oauth-token-url https://provider.example.com/token
-```
-
-#### Important: Redirect URI configuration
-
-The OAuth flow requires a redirect URI where the authorization provider sends the authentication code.
-
-- **Local development**: By default, Qwen Code uses `http://localhost:7777/oauth/callback`. This works when running Qwen Code on your local machine with a local browser.
-
-- **Remote/cloud deployments**: When running Qwen Code on remote servers, cloud IDEs, or web terminals, the default `localhost` redirect will NOT work. Configure `--oauth-redirect-uri` with a public URL ending in `/oauth/callback`, then reverse-proxy that path to `http://127.0.0.1:7777/oauth/callback` on the machine running Qwen Code. Qwen Code does not terminate TLS; the proxy must do so.
-
-Example for remote servers:
-
-```bash
-qwen mcp add --transport sse remote-server https://api.example.com/sse/ \
-  --oauth-redirect-uri https://your-remote-server.example.com/oauth/callback
-```
-
-For example, a reverse proxy can forward only this callback path to the local listener:
-
-```nginx
-location = /oauth/callback {
-  proxy_pass http://127.0.0.1:7777;
-}
-```
-
-#### Manual configuration via settings.json
-
-You can also configure OAuth by editing `settings.json` directly:
-
-```json
-{
-  "mcpServers": {
-    "oauthServer": {
-      "url": "https://api.example.com/sse/",
-      "oauth": {
-        "enabled": true,
-        "clientId": "your-client-id",
-        "clientSecret": "your-client-secret",
-        "authorizationUrl": "https://provider.example.com/authorize",
-        "tokenUrl": "https://provider.example.com/token",
-        "redirectUri": "https://your-server.com/oauth/callback",
-        "scopes": ["read", "write"]
-      }
-    }
-  }
-}
-```
-
-OAuth configuration properties:
-
-| Property           | Description                                                                                                           |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| `enabled`          | Enable OAuth for this server (boolean)                                                                                |
-| `clientId`         | OAuth client identifier (string, optional with dynamic registration)                                                  |
-| `clientSecret`     | OAuth client secret (string, optional for public clients)                                                             |
-| `authorizationUrl` | OAuth authorization endpoint (string, auto-discovered if omitted)                                                     |
-| `tokenUrl`         | OAuth token endpoint (string, auto-discovered if omitted)                                                             |
-| `scopes`           | Required OAuth scopes (array of strings)                                                                              |
-| `redirectUri`      | Custom redirect URI (string). **Critical for remote deployments**. Defaults to `http://localhost:7777/oauth/callback` |
-| `tokenParamName`   | Query parameter name for tokens in SSE URLs (string)                                                                  |
-| `audiences`        | Audiences the token is valid for (array of strings)                                                                   |
-
-#### Token management
-
-OAuth tokens are automatically:
-
-- **Stored** in `~/.qwen/mcp-oauth-tokens.json` (plaintext, mode 0600) by default. If `QWEN_CODE_FORCE_ENCRYPTED_FILE_STORAGE=true` is set, Qwen Code uses keychain-backed storage where available, or `~/.qwen/mcp-oauth-tokens-v2.json` with AES-256-GCM encryption.
-- **Refreshed** when expired (if refresh tokens are available)
-- **Validated** before each connection attempt
-
-> [!WARNING]
-> By default, OAuth tokens are stored unencrypted on disk. On shared or multi-user machines, set `QWEN_CODE_FORCE_ENCRYPTED_FILE_STORAGE=true` to protect credentials.
-
-Use the `/mcp` dialog within Qwen Code to inspect MCP servers and manage
-authentication interactively.
 
 ### Tool filtering (allow/deny tools per server)
 
@@ -466,29 +314,24 @@ Add an `mcpServers` object to your `settings.json` file:
 
 Configuration properties:
 
-Required (one of the following):
+Required:
 
-| Property  | Description                                            |
-| --------- | ------------------------------------------------------ |
-| `command` | Path to the executable for Stdio transport             |
-| `url`     | SSE endpoint URL (e.g., `"http://localhost:8080/sse"`) |
-| `httpUrl` | HTTP streaming endpoint URL                            |
+| Property  | Description                                |
+| --------- | ------------------------------------------ |
+| `command` | Path to the executable for Stdio transport |
 
 Optional:
 
-| Property               | Type/Default                                  | Description                                                                                                                                                                                                                                                       |
-| ---------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `args`                 | array                                         | Command-line arguments for Stdio transport                                                                                                                                                                                                                        |
-| `headers`              | object                                        | Custom HTTP headers when using `url` or `httpUrl`                                                                                                                                                                                                                 |
-| `env`                  | object                                        | Environment variables for the server process. Values can reference environment variables using `$VAR_NAME` or `${VAR_NAME}` syntax                                                                                                                                |
-| `cwd`                  | string                                        | Working directory for Stdio transport                                                                                                                                                                                                                             |
-| `timeout`              | number<br>(default: 600,000)                  | Request timeout in milliseconds (default: 600,000ms = 10 minutes)                                                                                                                                                                                                 |
-| `versionNegotiation`   | `"auto" \| "legacy"`<br>(default: `"legacy"`) | For Stdio servers, `"auto"` opts into protocol negotiation on a disposable sibling process. The default `"legacy"` starts only the session process.                                                                                                               |
-| `trust`                | boolean<br>(default: false)                   | When `true`, bypasses tool call confirmations for this server in a trusted workspace (default: `false`)                                                                                                                                                           |
-| `includeTools`         | array                                         | List of tool names to include from this MCP server. When specified, only the tools listed here will be available from this server (allowlist behavior). If not specified, all tools from the server are enabled by default.                                       |
-| `excludeTools`         | array                                         | List of tool names to exclude from this MCP server. Tools listed here will not be available to the model, even if they are exposed by the server.<br>Note: `excludeTools` takes precedence over `includeTools` - if a tool is in both lists, it will be excluded. |
-| `targetAudience`       | string                                        | The OAuth Client ID allowlisted on the IAP-protected application you are trying to access. Used with `authProviderType: 'service_account_impersonation'`.                                                                                                         |
-| `targetServiceAccount` | string                                        | The email address of the Google Cloud Service Account to impersonate. Used with `authProviderType: 'service_account_impersonation'`.                                                                                                                              |
+| Property             | Type/Default                                  | Description                                                                                                                                                                                                                                                       |
+| -------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `args`               | array                                         | Command-line arguments for Stdio transport                                                                                                                                                                                                                        |
+| `env`                | object                                        | Environment variables for the server process. Values can reference environment variables using `$VAR_NAME` or `${VAR_NAME}` syntax                                                                                                                                |
+| `cwd`                | string                                        | Working directory for Stdio transport                                                                                                                                                                                                                             |
+| `timeout`            | number<br>(default: 600,000)                  | Request timeout in milliseconds (default: 600,000ms = 10 minutes)                                                                                                                                                                                                 |
+| `versionNegotiation` | `"auto" \| "legacy"`<br>(default: `"legacy"`) | For Stdio servers, `"auto"` opts into protocol negotiation on a disposable sibling process. The default `"legacy"` starts only the session process.                                                                                                               |
+| `trust`              | boolean<br>(default: false)                   | When `true`, bypasses tool call confirmations for this server in a trusted workspace (default: `false`)                                                                                                                                                           |
+| `includeTools`       | array                                         | List of tool names to include from this MCP server. When specified, only the tools listed here will be available from this server (allowlist behavior). If not specified, all tools from the server are enabled by default.                                       |
+| `excludeTools`       | array                                         | List of tool names to exclude from this MCP server. Tools listed here will not be available to the model, even if they are exposed by the server.<br>Note: `excludeTools` takes precedence over `includeTools` - if a tool is in both lists, it will be excluded. |
 
 ### MCP App resource limits
 
@@ -499,8 +342,9 @@ headroom in `settings.json`:
 ```json
 {
   "mcpServers": {
-    "amplitude": {
-      "httpUrl": "https://mcp.amplitude.com/mcp",
+    "apps": {
+      "command": "node",
+      "args": ["./apps-server.js"],
       "appResourceMaxBytes": 4194304,
       "appResourceTimeoutMs": 120000
     }
@@ -508,8 +352,8 @@ headroom in `settings.json`:
 }
 ```
 
-Amplitude still requires OAuth authentication. These settings do not enable
-additional App bridge capabilities or guarantee that every App is compatible.
+These settings do not enable additional App bridge capabilities or guarantee
+that every App is compatible.
 
 - `appResourceMaxBytes`: maximum decoded HTML size in UTF-8 bytes. Defaults to
   1,048,576 (1 MiB); clamped to 1–4,194,304 bytes (4 MiB).
@@ -543,31 +387,21 @@ You can always configure MCP servers by manually editing `settings.json`, but th
 #### Adding a server (`qwen mcp add`)
 
 ```bash
-qwen mcp add [options] <name> <commandOrUrl> [args...]
+qwen mcp add [options] <name> <command> [args...]
 ```
 
-| Argument/Option             | Description                                                         | Default                                | Example                                                            |
-| --------------------------- | ------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------ |
-| `<name>`                    | A unique name for the server.                                       | —                                      | `example-server`                                                   |
-| `<commandOrUrl>`            | The command to execute (for `stdio`) or the URL (for `http`/`sse`). | —                                      | `/usr/bin/python` or `http://localhost:8`                          |
-| `[args...]`                 | Optional arguments for a `stdio` command.                           | —                                      | `--port 5000`                                                      |
-| `-s`, `--scope`             | Configuration scope (user or project).                              | `user`                                 | `-s user`                                                          |
-| `-t`, `--transport`         | Transport type (`stdio`, `sse`, `http`).                            | `stdio`                                | `-t sse`                                                           |
-| `-e`, `--env`               | Set environment variables.                                          | —                                      | `-e KEY=value`                                                     |
-| `-H`, `--header`            | Set HTTP headers for SSE and HTTP transports.                       | —                                      | `-H "X-Api-Key: abc123"`                                           |
-| `--timeout`                 | Set connection timeout in milliseconds.                             | —                                      | `--timeout 30000`                                                  |
-| `--trust`                   | Trust the server; skip confirmations in trusted workspaces.         | — (`false`)                            | `--trust`                                                          |
-| `--description`             | Set the description for the server.                                 | —                                      | `--description "Local tools"`                                      |
-| `--include-tools`           | A comma-separated list of tools to include.                         | all tools included                     | `--include-tools mytool,othertool`                                 |
-| `--exclude-tools`           | A comma-separated list of tools to exclude.                         | none                                   | `--exclude-tools mytool`                                           |
-| `--oauth-client-id`         | OAuth client ID for MCP server authentication.                      | —                                      | `--oauth-client-id your-client-id`                                 |
-| `--oauth-client-secret`     | OAuth client secret for MCP server authentication.                  | —                                      | `--oauth-client-secret your-client-secret`                         |
-| `--oauth-redirect-uri`      | OAuth redirect URI for authentication callback.                     | `http://localhost:7777/oauth/callback` | `--oauth-redirect-uri https://your-server.com/oauth/callback`      |
-| `--oauth-authorization-url` | OAuth authorization URL.                                            | —                                      | `--oauth-authorization-url https://provider.example.com/authorize` |
-| `--oauth-token-url`         | OAuth token URL.                                                    | —                                      | `--oauth-token-url https://provider.example.com/token`             |
-| `--oauth-scopes`            | OAuth scopes (comma-separated).                                     | —                                      | `--oauth-scopes scope1,scope2`                                     |
-
-> `--oauth-*` flags apply only to `--transport sse` and `--transport http`. Combining them with `--transport stdio` is rejected.
+| Argument/Option   | Description                                                 | Default            | Example                            |
+| ----------------- | ----------------------------------------------------------- | ------------------ | ---------------------------------- |
+| `<name>`          | A unique name for the server.                               | —                  | `example-server`                   |
+| `<command>`       | The command that starts the stdio server.                   | —                  | `/usr/bin/python`                  |
+| `[args...]`       | Optional arguments for a `stdio` command.                   | —                  | `--port 5000`                      |
+| `-s`, `--scope`   | Configuration scope (user or project).                      | `user`             | `-s user`                          |
+| `-e`, `--env`     | Set environment variables.                                  | —                  | `-e KEY=value`                     |
+| `--timeout`       | Set connection timeout in milliseconds.                     | —                  | `--timeout 30000`                  |
+| `--trust`         | Trust the server; skip confirmations in trusted workspaces. | — (`false`)        | `--trust`                          |
+| `--description`   | Set the description for the server.                         | —                  | `--description "Local tools"`      |
+| `--include-tools` | A comma-separated list of tools to include.                 | all tools included | `--include-tools mytool,othertool` |
+| `--exclude-tools` | A comma-separated list of tools to exclude.                 | none               | `--exclude-tools mytool`           |
 
 #### Removing a server (`qwen mcp remove`)
 

@@ -167,7 +167,7 @@ describe('WorkspaceMcpBudget', () => {
       budget.tryReserve('b'); // refused
       budget.recordRefusal('b', 'stdio');
       budget.tryReserve('c'); // refused
-      budget.recordRefusal('c', 'sse');
+      budget.recordRefusal('c', 'sdk');
       budget.tryReserve('d'); // refused
       budget.recordRefusal('d', 'stdio');
       // No event yet — bulk pass open.

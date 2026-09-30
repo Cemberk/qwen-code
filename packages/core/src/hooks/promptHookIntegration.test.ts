@@ -51,12 +51,10 @@ describe('Prompt Hook Integration', () => {
         }),
       }),
       getProjectRoot: vi.fn().mockReturnValue('/test/project'),
-      getAllowedHttpHookUrls: vi.fn().mockReturnValue([]),
-      getAllowPrivateNetworkHooks: vi.fn().mockReturnValue(false),
       getHooks: vi.fn().mockReturnValue({}),
     } as unknown as Config;
 
-    hookRunner = new HookRunner(undefined, mockConfig);
+    hookRunner = new HookRunner(mockConfig);
   });
 
   afterEach(() => {

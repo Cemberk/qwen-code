@@ -73,19 +73,18 @@ const server = new McpServer({
   version: '1.0.0',
 });
 
-// Registers a new tool named 'fetch_posts'
+// Registers a new tool named 'count_words'
 server.registerTool(
-  'fetch_posts',
+  'count_words',
   {
-    description: 'Fetches a list of posts from a public API.',
-    inputSchema: z.object({}).shape,
+    description: 'Count the words and characters in a passage of text.',
+    inputSchema: z.object({
+      text: z.string().describe('The text to measure.'),
+    }).shape,
   },
-  async () => {
-    const apiResponse = await fetch(
-      'https://jsonplaceholder.typicode.com/posts',
-    );
-    const posts = await apiResponse.json();
-    const response = { posts: posts.slice(0, 5) };
+  async ({ text }) => {
+    const words = text.trim() === '' ? 0 : text.trim().split(/\s+/).length;
+    const response = { words, characters: text.length };
     return {
       content: [
         {
@@ -103,7 +102,7 @@ const transport = new StdioServerTransport();
 await server.connect(transport);
 ```
 
-This server defines a single tool called `fetch_posts` that fetches data from a public API.
+This server defines a single tool called `count_words` that counts the words and characters in a passage of text.
 
 ### `package.json` and `tsconfig.json`
 
@@ -136,7 +135,7 @@ Before you can use the extension, you need to compile the TypeScript code and li
     qwen extensions link .
     ```
 
-Now, restart your Qwen Code session. The new `fetch_posts` tool will be available. You can test it by asking: "fetch posts".
+Now, restart your Qwen Code session. The new `count_words` tool will be available. You can test it by asking: "count the words in 'hello extension world'".
 
 ## Step 4: Add a Custom Command
 
@@ -277,7 +276,7 @@ You can provide persistent context to the model by adding a `QWEN.md` file to yo
     ```markdown
     # My First Extension Instructions
 
-    You are an expert developer assistant. When the user asks you to fetch posts, use the `fetch_posts` tool. Be concise in your responses.
+    You are an expert developer assistant. When the user asks you to count words, use the `count_words` tool. Be concise in your responses.
     ```
 
 2.  Update your `qwen-extension.json` to tell the CLI to load this file:
@@ -299,11 +298,9 @@ You can provide persistent context to the model by adding a `QWEN.md` file to yo
 
 Restart the CLI again. The model will now have the context from your `QWEN.md` file in every session where the extension is active — and in every request of those sessions, which is why the note above asks you to keep it short and to reach for a skill for anything scenario-specific.
 
-## Step 7: Releasing Your Extension
+## Step 7: Sharing Your Extension
 
-Once you are happy with your extension, you can share it with others. The two primary ways of releasing extensions are via a Git repository or through GitHub Releases. Using a public Git repository is the simplest method.
-
-For detailed instructions on both methods, please refer to the [Extension Releasing Guide](extension-releasing.md).
+Once you are happy with your extension, you can share the directory, or a `.zip` / `.tar.gz` archive of it, with others. They install it from its local path with `qwen extensions install /path/to/my-first-extension` (or the archive path).
 
 ## Conclusion
 

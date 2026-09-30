@@ -9,13 +9,10 @@
  *
  * Runs after argv parsing and before `loadCliConfig()` / `Config` construction
  * so the resulting `process.cwd()` change feeds directly into the Config's
- * `targetDir`. Three entry forms are supported (see {@link setupStartupWorktree}):
+ * `targetDir`. Two entry forms are supported (see {@link setupStartupWorktree}):
  *
  * - Empty string (bare `--worktree`) → auto-generated `{adj}-{noun}-{6hex}` slug
  * - Plain slug (`--worktree my-feature`) → that exact slug
- * - PR reference (`--worktree=#123`, `--worktree https://github.com/o/r/pull/123`)
- *   → slug `pr-<N>`, fetched via `git fetch origin pull/<N>/head` and based
- *   off `FETCH_HEAD` (Phase D-3).
  *
  * Sidecar writing and `--resume` override accounting are NOT handled here —
  * those need a constructed `Config` and live in {@link persistStartupWorktreeSidecar}.
@@ -98,13 +95,9 @@ export interface StartupWorktreeContext {
   originalBranch: string;
   /** HEAD SHA captured at worktree-creation time (for WorktreeExitDialog). */
   originalHeadCommit: string;
-  /** True iff the input was a PR reference. */
-  isPullRequest: boolean;
   /**
    * True when the worktree directory already existed at startup and we
-   * re-attached to it. PR fetch is skipped
-   * on re-attach since the ref was materialized previously, and
-   * commit-count semantics in `WorktreeExitDialog` will track only this
+   * re-attached to it. Commit-count semantics in `WorktreeExitDialog` will track only this
    * session's new commits.
    */
   wasReattached: boolean;
@@ -186,24 +179,14 @@ export async function setupStartupWorktree(
   const service =
     repoRoot === launchCwd ? probe : new GitWorktreeService(repoRoot);
 
-  // Resolve slug. Branch on PR reference first so `#123` / URLs don't fall
-  // through to slug validation (which would reject `#`). For PR refs we
-  // DEFER the fetch until we've checked whether the worktree already
-  // exists on disk — re-attach skips the fetch since the ref was
-  // materialized on the first run.
-  const prNumber = GitWorktreeService.parsePRReference(trimmed);
-  const isPullRequest = prNumber !== null;
   let slug: string;
-  if (prNumber !== null) {
-    slug = `pr-${prNumber}`;
-  } else if (trimmed.length === 0) {
+  if (trimmed.length === 0) {
     slug = GitWorktreeService.generateAutoSlug();
   } else {
     // The reserved `pr-<N>` shape is tolerated HERE so an existing
-    // PR-backed worktree can be re-attached by its literal slug (`qwen
-    // --worktree pr-42` after `--worktree=#42` created it); the re-attach
-    // probe below re-applies the reservation when no such worktree exists,
-    // so a literal `pr-<N>` never creates one.
+    // PR-backed worktree can be re-attached by its literal slug; the
+    // re-attach probe below re-applies the reservation when no such
+    // worktree exists, so a literal `pr-<N>` never creates one.
     const validation = GitWorktreeService.validateUserWorktreeSlug(trimmed, {
       allowPrBackedShape: true,
     });
@@ -255,16 +238,13 @@ export async function setupStartupWorktree(
   } catch {
     registered = null;
   }
-  if (registered === null && !isPullRequest) {
+  if (registered === null) {
     // Nothing to re-attach: a user-typed `pr-<N>` would CREATE a worktree
     // in the reserved shape (binding the session to PR N it never touched)
-    // — the exact case the reservation exists for. Point at the PR form.
+    // — the exact case the reservation exists for.
     const reserved = GitWorktreeService.validateUserWorktreeSlug(slug);
     if (reserved) {
-      return {
-        ok: false,
-        error: `--worktree: ${reserved} Use \`--worktree=#${slug.slice('pr-'.length)}\` to create the worktree for that PR.`,
-      };
+      return { ok: false, error: `--worktree: ${reserved}` };
     }
   }
   if (registered !== null) {
@@ -300,48 +280,13 @@ export async function setupStartupWorktree(
         repoRoot,
         originalBranch: originalBranch ?? DETACHED_HEAD,
         originalHeadCommit: registered.headCommit,
-        isPullRequest,
         wasReattached: true,
       },
     };
   }
 
-  // Phase D-3: fetch the PR ref BEFORE creating the worktree, so the
-  // base ref (FETCH_HEAD) is available to `git worktree add`. Skipped
-  // on re-attach above. Fail-close: any fetch error stops startup before
-  // we create disk state.
-  //
-  // Lock FETCH_HEAD to an immutable SHA *immediately* after the fetch:
-  //   - closes a TOCTOU window in which a concurrent `git fetch` from
-  //     any other process sharing this repo would overwrite FETCH_HEAD
-  //     before `git worktree add` reads it, branching the new worktree
-  //     off an unrelated commit;
-  //   - lets us pass that same SHA back as `originalHeadCommit`, so
-  //     `WorktreeExitDialog`'s `rev-list <head>..HEAD` later inside the
-  //     worktree counts only the user's own new commits — not the
-  //     entire fetched PR's history.
-  let pullRequestHeadSha: string | null = null;
-  if (prNumber !== null) {
-    const fetchRes = await service.fetchPullRequestRef(prNumber);
-    if (!fetchRes.success) {
-      return { ok: false, error: `--worktree: ${fetchRes.error}` };
-    }
-    pullRequestHeadSha = await service.resolveRef('FETCH_HEAD');
-    if (pullRequestHeadSha === null) {
-      return {
-        ok: false,
-        error: `--worktree: fetched PR #${prNumber} but FETCH_HEAD did not resolve to a commit SHA. Refusing to proceed (the worktree would otherwise branch off an unknown commit).`,
-      };
-    }
-  }
-
-  // For PR worktrees the base ref is the SHA we just locked in (NOT the
-  // literal `FETCH_HEAD`, which is mutable); for regular slugs we anchor
-  // at the parent session's currently checked-out branch.
-  const baseRef = isPullRequest ? pullRequestHeadSha! : originalBranch;
-  const result = await service.createUserWorktree(slug, baseRef, {
+  const result = await service.createUserWorktree(slug, originalBranch, {
     symlinkDirectories: options?.symlinkDirectories,
-    prBacked: isPullRequest,
   });
   if (!result.success || !result.worktree) {
     return {
@@ -372,14 +317,7 @@ export async function setupStartupWorktree(
       branch: result.worktree.branch,
       repoRoot,
       originalBranch: originalBranch ?? DETACHED_HEAD,
-      // For PR worktrees, the worktree's HEAD starts at the fetched PR
-      // tip — not at the parent repo's HEAD. Use the SHA we locked in
-      // post-fetch so the exit-dialog rev-list counts only the user's
-      // new commits, not the entire PR history.
-      originalHeadCommit: isPullRequest
-        ? pullRequestHeadSha!
-        : originalHeadCommit,
-      isPullRequest,
+      originalHeadCommit,
       wasReattached: false,
     },
   };

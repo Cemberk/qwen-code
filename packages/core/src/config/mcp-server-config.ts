@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { MCPOAuthConfig } from '../mcp/oauth-provider.js';
-
 /**
  * Provenance of an MCP server config. Two purposes (see issue #4615):
  *
@@ -97,12 +95,6 @@ export function matchesAnyServerPattern(
   return patterns.some((p) => matchesServerPattern(name, p));
 }
 
-export enum AuthProviderType {
-  DYNAMIC_DISCOVERY = 'dynamic_discovery',
-  GOOGLE_CREDENTIALS = 'google_credentials',
-  SERVICE_ACCOUNT_IMPERSONATION = 'service_account_impersonation',
-}
-
 export class MCPServerConfig {
   constructor(
     // For stdio transport
@@ -110,13 +102,6 @@ export class MCPServerConfig {
     readonly args?: string[],
     readonly env?: Record<string, string>,
     readonly cwd?: string,
-    // For sse transport
-    readonly url?: string,
-    // For streamable http transport
-    readonly httpUrl?: string,
-    readonly headers?: Record<string, string>,
-    // For websocket transport
-    readonly tcp?: string,
     // Common
     readonly timeout?: number,
     readonly trust?: boolean,
@@ -125,22 +110,13 @@ export class MCPServerConfig {
     readonly includeTools?: string[],
     readonly excludeTools?: string[],
     readonly extensionName?: string,
-    // OAuth configuration
-    readonly oauth?: MCPOAuthConfig,
-    readonly authProviderType?: AuthProviderType,
-    // Service Account Configuration
-    /* targetAudience format: CLIENT_ID.apps.googleusercontent.com */
-    readonly targetAudience?: string,
-    /* targetServiceAccount format: <service-account-name>@<project-num>.iam.gserviceaccount.com */
-    readonly targetServiceAccount?: string,
     // SDK MCP server type - 'sdk' indicates server runs in SDK process
     readonly type?: 'sdk',
     /**
      * Per-server cap on the discovery handshake (`connect` + `tools/list` +
-     * `prompts/list` + `resources/list`). Defaults: 30s for stdio servers,
-     * 5s for remote HTTP/SSE. Tool-call timeout (`timeout` above) is
-     * unaffected — a long-running tool invocation is not a startup
-     * pathology. Appended at the end of the parameter list to avoid
+     * `prompts/list` + `resources/list`). Defaults to 30s. Tool-call
+     * timeout (`timeout` above) is unaffected — a long-running tool
+     * invocation is not a startup pathology. Appended at the end of the parameter list to avoid
      * shifting positional arguments at the many `new MCPServerConfig(...)`
      * call sites.
      */

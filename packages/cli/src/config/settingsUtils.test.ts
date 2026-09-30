@@ -712,22 +712,22 @@ describe('SettingsUtils', () => {
             description: 'Tools',
             showInDialog: false,
             properties: {
-              webSearch: {
+              shell: {
                 type: 'object',
-                label: 'Web Search',
+                label: 'Shell',
                 category: 'Tools',
                 requiresRestart: true,
                 default: {},
-                description: 'Web Search',
+                description: 'Shell',
                 showInDialog: false,
                 properties: {
-                  enabled: {
+                  enableInteractiveShell: {
                     type: 'boolean',
-                    label: 'Enable WebSearch',
+                    label: 'Interactive Shell',
                     category: 'Tools',
                     requiresRestart: true,
                     default: undefined,
-                    description: 'Enable WebSearch',
+                    description: 'Interactive Shell',
                     showInDialog: true,
                   },
                 },
@@ -738,7 +738,7 @@ describe('SettingsUtils', () => {
 
         expect(
           getDisplayValue(
-            'tools.webSearch.enabled',
+            'tools.shell.enableInteractiveShell',
             makeMockSettings({}),
             makeMockSettings({}),
             new Set(),
@@ -757,22 +757,22 @@ describe('SettingsUtils', () => {
             description: 'Tools',
             showInDialog: false,
             properties: {
-              webSearch: {
+              shell: {
                 type: 'object',
-                label: 'Web Search',
+                label: 'Shell',
                 category: 'Tools',
                 requiresRestart: true,
                 default: {},
-                description: 'Web Search',
+                description: 'Shell',
                 showInDialog: false,
                 properties: {
-                  enabled: {
+                  enableInteractiveShell: {
                     type: 'boolean',
-                    label: 'Enable WebSearch',
+                    label: 'Interactive Shell',
                     category: 'Tools',
                     requiresRestart: true,
                     default: undefined,
-                    description: 'Enable WebSearch',
+                    description: 'Interactive Shell',
                     showInDialog: true,
                   },
                 },
@@ -783,11 +783,17 @@ describe('SettingsUtils', () => {
 
         expect(
           getDisplayValue(
-            'tools.webSearch.enabled',
-            makeMockSettings({ tools: { webSearch: { enabled: true } } }),
-            makeMockSettings({ tools: { webSearch: { enabled: true } } }),
-            new Set(['tools.webSearch.enabled']),
-            makeMockSettings({ tools: { webSearch: { enabled: undefined } } }),
+            'tools.shell.enableInteractiveShell',
+            makeMockSettings({
+              tools: { shell: { enableInteractiveShell: true } },
+            }),
+            makeMockSettings({
+              tools: { shell: { enableInteractiveShell: true } },
+            }),
+            new Set(['tools.shell.enableInteractiveShell']),
+            makeMockSettings({
+              tools: { shell: { enableInteractiveShell: undefined } },
+            }),
           ),
         ).toBe('(not set)*');
       });
@@ -1122,21 +1128,21 @@ describe('SettingsUtils', () => {
         const setValue = vi.fn();
         const loadedSettings = {
           forScope: () => ({
-            settings: { tools: { webSearch: { enabled: true } } },
+            settings: { tools: { shell: { enableInteractiveShell: true } } },
           }),
           setValue,
         } as unknown as LoadedSettings;
 
         saveModifiedSettings(
-          new Set(['tools.webSearch.enabled']),
-          { tools: { webSearch: { enabled: undefined } } },
+          new Set(['tools.shell.enableInteractiveShell']),
+          { tools: { shell: { enableInteractiveShell: undefined } } },
           loadedSettings,
           SettingScope.User,
         );
 
         expect(setValue).toHaveBeenCalledWith(
           SettingScope.User,
-          'tools.webSearch.enabled',
+          'tools.shell.enableInteractiveShell',
           undefined,
         );
       });

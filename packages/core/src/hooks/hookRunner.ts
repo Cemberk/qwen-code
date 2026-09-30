@@ -31,7 +31,6 @@ import {
   type ShellType,
   type ShellConfiguration,
 } from '../utils/shell-utils.js';
-import { HttpHookRunner } from './httpHookRunner.js';
 import { FunctionHookRunner } from './functionHookRunner.js';
 import { PromptHookRunner } from './promptHookRunner.js';
 import { AsyncHookRegistry, generateHookId } from './asyncHookRegistry.js';
@@ -619,19 +618,14 @@ function createSurvivingHookInputFile(input: HookInput): string {
 }
 
 /**
- * Hook runner that executes command, HTTP, function, and prompt hooks
+ * Hook runner that executes command, function, and prompt hooks
  */
 export class HookRunner {
-  private readonly httpRunner: HttpHookRunner;
   private readonly functionRunner: FunctionHookRunner;
   private readonly promptRunner: PromptHookRunner | null;
   private readonly asyncRegistry: AsyncHookRegistry;
 
-  constructor(allowedHttpUrls?: string[], config?: Config) {
-    this.httpRunner = new HttpHookRunner(
-      allowedHttpUrls,
-      config?.getAllowPrivateNetworkHooks(),
-    );
+  constructor(config?: Config) {
     this.functionRunner = new FunctionHookRunner();
     this.promptRunner = config ? new PromptHookRunner(config) : null;
     this.asyncRegistry = new AsyncHookRegistry();
@@ -642,13 +636,6 @@ export class HookRunner {
    */
   getAsyncRegistry(): AsyncHookRegistry {
     return this.asyncRegistry;
-  }
-
-  /**
-   * Update allowed HTTP URLs
-   */
-  updateAllowedHttpUrls(allowedUrls: string[]): void {
-    this.httpRunner.updateAllowedUrls(allowedUrls);
   }
 
   /**
@@ -706,13 +693,6 @@ export class HookRunner {
             eventName,
             input,
             startTime,
-            signal,
-          );
-        case HookType.Http:
-          return await this.httpRunner.execute(
-            hookConfig,
-            eventName,
-            input,
             signal,
           );
         case HookType.Function: {
@@ -781,8 +761,6 @@ export class HookRunner {
     switch (hookConfig.type) {
       case HookType.Command:
         return hookConfig.command || 'unknown-command';
-      case HookType.Http:
-        return hookConfig.url || 'unknown-url';
       case HookType.Function:
         return hookConfig.id || 'unknown-function';
       case HookType.Prompt:

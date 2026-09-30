@@ -42,8 +42,6 @@ const COMPACTABLE_TOOLS = new Set<string>([
   ToolNames.SHELL,
   ToolNames.GREP,
   ToolNames.GLOB,
-  ToolNames.WEB_FETCH,
-  ToolNames.WEB_SEARCH,
   ToolNames.READ_MCP_RESOURCE,
   ToolNames.EDIT,
   ToolNames.WRITE_FILE,

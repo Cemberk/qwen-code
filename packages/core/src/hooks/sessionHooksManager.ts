@@ -7,7 +7,6 @@
 import { createDebugLogger } from '../utils/debugLogger.js';
 import type {
   CommandHookConfig,
-  HttpHookConfig,
   FunctionHookConfig,
   FunctionHookCallback,
   HookConfig,
@@ -139,18 +138,18 @@ export class SessionHooksManager {
   }
 
   /**
-   * Add a command or HTTP hook for a session
+   * Add a command hook for a session
    * @param sessionId Session ID
    * @param event Hook event name
    * @param matcher Matcher pattern
-   * @param hook Hook configuration (command or HTTP)
+   * @param hook Hook configuration (command)
    * @param options Additional options
    */
   addSessionHook(
     sessionId: string,
     event: HookEventName,
     matcher: string,
-    hook: CommandHookConfig | HttpHookConfig,
+    hook: CommandHookConfig,
     options?: {
       sequential?: boolean;
       skillRoot?: string;

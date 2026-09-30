@@ -1031,7 +1031,6 @@ describe('Session', () => {
       getAuthType: vi.fn().mockImplementation(() => currentAuthType),
       getAllConfiguredModels: vi.fn().mockReturnValue([]),
       reloadModelProvidersConfig: vi.fn(),
-      setImageModel: vi.fn(),
       isCronEnabled: vi.fn().mockReturnValue(false),
       getSessionTokenLimit: vi.fn().mockReturnValue(0),
       getStopHookBlockingCap: vi.fn().mockReturnValue(8),
@@ -1361,13 +1360,9 @@ describe('Session', () => {
     Object.assign(mockSettings.merged, {
       modelProviders,
       providerProtocol: { idealab: 'openai' },
-      imageModel: 'openai:image-01\0https://images.example/v1',
     });
 
     await session.reloadModelProvidersFromDisk();
-    expect(mockConfig.setImageModel).toHaveBeenCalledWith(
-      'openai:image-01\0https://images.example/v1',
-    );
 
     expect(mockSettings.reloadScopesFromDiskAtomically).toHaveBeenCalledWith([
       SettingScope.User,

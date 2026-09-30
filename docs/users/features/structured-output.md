@@ -229,8 +229,7 @@ metadata are preserved.
 
 > **Hooks see raw args.** The redaction described above only applies
 > to telemetry and chat-recording. `PreToolUse`, `PostToolUse`, and
-> `PostToolUseFailure` hooks (including HTTP hooks that can forward
-> payloads off-device) receive the unredacted `tool_input` for
+> `PostToolUseFailure` hooks receive the unredacted `tool_input` for
 > `structured_output`, since the hook contract is "see what the tool
 > sees." If you operate audit-style catch-all hooks, either disable
 > them for `structured_output` (filter on `tool_name`) or add

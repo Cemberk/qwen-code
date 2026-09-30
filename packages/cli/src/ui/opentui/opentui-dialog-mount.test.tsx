@@ -146,7 +146,7 @@ vi.mock('./dialog-data.js', () => ({
   addWorkspaceDirectory: vi.fn(),
   removeWorkspaceDirectory: vi.fn(),
   buildMcpServers: () => [],
-  enrichMcpOAuthState: async () => [],
+  enrichMcpServerState: async () => [],
   applyMcpServerAction: vi.fn(async () => ({ message: null, changed: false })),
   getMcpServerTools: () => [],
   getMcpServerResources: () => [],
@@ -333,7 +333,7 @@ describe('OpenTuiDialogMount routing', () => {
 
       expect(mocks.state.dialogProps['hooks']?.['notice']).toBe(
         available
-          ? 'Reopen this menu to reload hook definitions.\nHook controls and HTTP security settings require a restart.'
+          ? 'Reopen this menu to reload hook definitions.\nHook controls require a restart.'
           : undefined,
       );
     },

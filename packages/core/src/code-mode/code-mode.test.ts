@@ -271,7 +271,6 @@ describe('CodeModeOnly exposure', () => {
       'tools.a_tool(args: { "query": string })',
     );
     expect(buildExecDescription(first)).toContain('ImageContent');
-    expect(buildExecDescription(first)).toContain('generatedImage');
     expect(buildExecDescription(first)).toContain(
       'setTimeout(callback: () => void, delayMs?: number)',
     );
@@ -403,8 +402,8 @@ describe('code mode protocol', () => {
       id: 'large-media-result',
       ok: true,
       result: {
-        callId: 'image-gen',
-        name: 'image_gen',
+        callId: 'render-chart',
+        name: 'render_chart',
         status: 'success',
         output: 'generated',
         content: [{ type: 'image', mimeType: 'image/png', data }],
@@ -714,51 +713,22 @@ describe('isolated code mode host', () => {
     ]);
   });
 
-  it('accepts the Qwen image_gen result in generatedImage()', async () => {
-    const result = await executeCodeMode(
-      `generatedImage({
-        callId: 'image-gen',
-        name: 'image_gen',
-        status: 'success',
-        output: 'Generated image saved to /workspace/generated.png.',
-        content: [{
-          type: 'image',
-          mimeType: 'image/png',
-          data: 'QUJD',
-        }],
-      });`,
-      plan(),
-      runtime(async () => {
-        throw new Error('unused');
-      }),
-      new AbortController().signal,
-    );
-
-    expect(result).toEqual({
-      output: 'Generated image saved to /workspace/generated.png.',
-      content: [{ type: 'image', mimeType: 'image/png', data: 'QUJD' }],
-    });
-  });
-
-  it('preserves generated images larger than the control frame limit', async () => {
+  it('preserves tool images larger than the control frame limit', async () => {
     const data = 'QUJD'.repeat(350_000);
     const result = await executeCodeMode(
-      `const generated = await tools.image_gen({ prompt: 'large poster' });
-      generatedImage(generated);`,
-      plan('image_gen'),
+      `const rendered = await tools.render_chart({ prompt: 'large poster' });
+      rendered.content?.forEach(image);`,
+      plan('render_chart'),
       runtime(async (name) => ({
-        callId: 'large-image-gen',
+        callId: 'large-render-chart',
         name,
         status: 'success',
-        output: 'Generated image saved to /workspace/large.png.',
+        output: 'Rendered chart.',
         content: [{ type: 'image', mimeType: 'image/png', data }],
       })),
       new AbortController().signal,
     );
 
-    expect(result.output).toBe(
-      'Generated image saved to /workspace/large.png.',
-    );
     expect(result.content).toEqual([
       { type: 'image', mimeType: 'image/png', data },
     ]);
@@ -781,24 +751,6 @@ describe('isolated code mode host', () => {
         new AbortController().signal,
       ),
     ).rejects.toThrow('Qwen MCP ImageContent');
-    await expect(
-      executeCodeMode(
-        `generatedImage({
-          callId: 'other',
-          name: 'other_tool',
-          status: 'success',
-          output: 'not an image generator',
-          content: [{
-            type: 'image',
-            mimeType: 'image/png',
-            data: 'QUJD',
-          }],
-        });`,
-        plan(),
-        noTools,
-        new AbortController().signal,
-      ),
-    ).rejects.toThrow('tools.image_gen()');
   });
 
   it('rejects image output that is not a base64 data URL', async () => {

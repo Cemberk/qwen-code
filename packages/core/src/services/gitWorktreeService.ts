@@ -22,7 +22,7 @@ import { fileExists, isWithinRoot } from '../utils/fileUtils.js';
 import { NO_EXEC_CONFIG } from '../utils/gitUtils.js';
 import { runGitCapture } from '../utils/git-branches.js';
 import { loadSimpleGit } from '../utils/load-simple-git.js';
-import { gitEnv, gitRemoteEnv } from '../utils/git-branches.js';
+import { gitEnv } from '../utils/git-branches.js';
 import { initRepositoryWithMainBranch } from './gitInit.js';
 import { atomicWriteFile } from '../utils/atomicFileWrite.js';
 
@@ -1294,28 +1294,6 @@ export class GitWorktreeService {
   }
 
   /**
-   * Resolves a git ref name to a 40-char commit SHA. Returns `null` when
-   * the ref is unknown / unborn / not a commit.
-   *
-   * Used by Phase D-3 to lock in `FETCH_HEAD` immediately after
-   * `fetchPullRequestRef` succeeds, so the SHA passed to
-   * `git worktree add` is immutable against a concurrent `git fetch` from
-   * another process sharing the same repo, AND so `WorktreeExitDialog`'s
-   * `rev-list <originalHeadCommit>..HEAD` counts only THIS session's new
-   * work rather than every commit in the fetched PR.
-   */
-  async resolveRef(ref: string): Promise<string | null> {
-    try {
-      const out = (
-        await (await this.getGit()).raw(['rev-parse', '--verify', ref])
-      ).trim();
-      return /^[0-9a-f]{40}$/.test(out) ? out : null;
-    } catch {
-      return null;
-    }
-  }
-
-  /**
    * Creates a single worktree.
    */
   async createWorktree(
@@ -1974,49 +1952,6 @@ export class GitWorktreeService {
   }
 
   /**
-   * Parses a PR reference from a string. Recognised forms:
-   *
-   * - `#123` — shorthand PR number
-   * - `https://github.com/<owner>/<repo>/pull/123` — full GitHub URL
-   *   (any host, any query string, any fragment)
-   *
-   * Returns the parsed PR number on match, `null` otherwise. The slug for
-   * a PR worktree is derived by callers as `pr-<N>` and the branch as
-   * `worktree-pr-<N>` (see `createUserWorktree`).
-   *
-   * Mirrors claude-code's `parsePRReference` (utils/worktree.ts:633) so
-   * cross-CLI muscle memory transfers.
-   */
-  static parsePRReference(input: string): number | null {
-    if (typeof input !== 'string') return null;
-    const trimmed = input.trim();
-
-    // GitHub-style PR URL: https://<host>/owner/repo/pull/<N>
-    // - any host (public github.com or enterprise)
-    // - optional trailing slash, query string, or fragment
-    // - optional sub-path after `/pull/<N>/` (`/files`, `/commits`,
-    //   `/checks`, etc.) — users routinely copy URLs while browsing
-    //   files on a PR, and the PR number is still unambiguous
-    const urlMatch = trimmed.match(
-      /^https?:\/\/[^/]+\/[^/]+\/[^/]+\/pull\/(\d+)(?:\/[^?#]*)?(?:[?#].*)?$/i,
-    );
-    if (urlMatch?.[1]) {
-      const n = parseInt(urlMatch[1], 10);
-      return Number.isSafeInteger(n) && n > 0 ? n : null;
-    }
-
-    // `#N` shorthand. Reject leading zeros (`#0123`) to keep round-trips
-    // unambiguous — `gh pr view 0123` errors out anyway.
-    const hashMatch = trimmed.match(/^#([1-9]\d*)$/);
-    if (hashMatch?.[1]) {
-      const n = parseInt(hashMatch[1], 10);
-      return Number.isSafeInteger(n) && n > 0 ? n : null;
-    }
-
-    return null;
-  }
-
-  /**
    * Identifies the registered worktree at `worktreePath` as a member of
    * THIS repository (`sourceRepoPath`). Returns the branch + HEAD commit
    * SHA on success, or `null` when the path is not a worktree of this
@@ -2232,149 +2167,6 @@ export class GitWorktreeService {
   }
 
   /**
-   * Fetches the GitHub PR ref `refs/pull/<N>/head` from the `origin` remote
-   * so a subsequent `createUserWorktree(..., 'FETCH_HEAD')` call can branch
-   * off the PR's tip (Phase D-3). Returns `{ success: true }` on success,
-   * or `{ success: false, error }` with a user-facing reason on failure.
-   *
-   * Implementation notes:
-   *
-   * - Uses `git fetch origin pull/<N>/head` (no `gh` CLI dependency).
-   * - Hard timeout of 30s by default — overridable for tests. A hung git
-   *   process on a misconfigured corporate proxy would otherwise stall
-   *   the entire startup sequence.
-   * - Does NOT create a local branch — leaves the ref accessible only
-   *   via `FETCH_HEAD`. Subsequent `git worktree add -b <branch> <wt>
-   *   FETCH_HEAD` materialises the worktree branch off it.
-   *
-   * Error message taxonomy is friendly because this is the user's first
-   * impression when their `--worktree=#<N>` fails:
-   * - missing `origin` → tell them the remote is required + how to fix
-   * - timeout → mention the configured timeout so they can blame the network
-   * - generic failure → "PR may not exist or origin is unreachable"
-   */
-  async fetchPullRequestRef(
-    prNumber: number,
-    options?: { timeoutMs?: number },
-  ): Promise<{ success: true } | { success: false; error: string }> {
-    if (
-      !Number.isSafeInteger(prNumber) ||
-      prNumber <= 0 ||
-      prNumber > 1_000_000_000
-    ) {
-      // Out-of-range PR numbers can't sensibly hit GitHub. Reject locally
-      // rather than firing a doomed network call.
-      return {
-        success: false,
-        error: `Invalid PR number: ${prNumber}.`,
-      };
-    }
-    const timeoutMs = options?.timeoutMs ?? 30_000;
-
-    // Two-layer defense for the refspec argv element:
-    //
-    // 1. Regex digit-only validation at the call site — CodeQL's
-    //    `js/second-order-command-line-injection` rule recognises
-    //    `/^[1-9][0-9]*$/.test(x)` as a lexical sanitizer, which proves
-    //    `prNumber` cannot resemble a `--upload-pack=…` flag. The
-    //    entry guard above already establishes this at runtime, but
-    //    CodeQL's interprocedural taint tracker doesn't see through
-    //    that guard; the regex check IS the pattern its sanitizer
-    //    library recognises.
-    // 2. `--end-of-options` as a git-runtime marker. Even though
-    //    layer 1 makes a flag-shaped refspec impossible, the marker
-    //    tells git definitively that every subsequent argv element
-    //    is positional — defense-in-depth against a future
-    //    regression that loosens the entry guard.
-    const prNumberStr = String(prNumber);
-    if (!/^[1-9][0-9]*$/.test(prNumberStr)) {
-      // Unreachable given the entry guard; here to make the
-      // lexical sanitizer visible to static analyzers.
-      return {
-        success: false,
-        error: `Invalid PR number: ${prNumber}.`,
-      };
-    }
-    const refspec = `pull/${prNumberStr}/head`;
-
-    try {
-      // Force English git stderr so the error-taxonomy regexes below
-      // match. Without this, users with non-English locales fall
-      // through to the generic "PR may not exist" branch even for
-      // well-known cases like missing-origin. The git binary itself is
-      // unaffected by LANG/LC_ALL beyond message strings.
-      await execFileAsync(
-        'git',
-        ['fetch', '--end-of-options', 'origin', refspec],
-        {
-          cwd: this.sourceRepoPath,
-          timeout: timeoutMs,
-          env: gitRemoteEnv(),
-        },
-      );
-      return { success: true };
-    } catch (error) {
-      // execFile reports timeouts via `signal: 'SIGTERM'` on the
-      // error object; the stderr text gives us the underlying git error.
-      const err = error as NodeJS.ErrnoException & {
-        stderr?: string | Buffer;
-        signal?: string;
-      };
-      const stderr =
-        typeof err.stderr === 'string'
-          ? err.stderr
-          : err.stderr instanceof Buffer
-            ? err.stderr.toString('utf8')
-            : '';
-      const lower = stderr.toLowerCase();
-
-      if (err.signal === 'SIGTERM') {
-        return {
-          success: false,
-          error:
-            `Failed to fetch PR #${prNumber}: timed out after ${Math.round(timeoutMs / 1000)}s. ` +
-            `Check network connectivity and any HTTP(S) proxy settings.`,
-        };
-      }
-      if (
-        lower.includes('does not appear to be a git repository') ||
-        lower.includes('could not read from remote repository') ||
-        lower.includes("'origin' does not appear")
-      ) {
-        return {
-          success: false,
-          error:
-            `--worktree=#${prNumber} requires an "origin" remote that points at GitHub. ` +
-            `Add one with \`git remote add origin <url>\` and retry.`,
-        };
-      }
-      if (
-        lower.includes('no such ref') ||
-        lower.includes("couldn't find remote ref") ||
-        lower.includes("couldn't find remote ref pull/")
-      ) {
-        return {
-          success: false,
-          error:
-            `Failed to fetch PR #${prNumber}: the PR does not exist on origin, ` +
-            `or origin is not a GitHub repository (only GitHub exposes refs/pull/<N>/head).`,
-        };
-      }
-      // Generic fallback. Include the stderr first line so an operator
-      // running with --debug can correlate, but keep it terse.
-      const firstLine = stderr.split('\n').find((l) => l.trim().length > 0);
-      const detail = firstLine ? ` (${firstLine.trim()})` : '';
-      debugLogger.warn(
-        `fetchPullRequestRef: git fetch pull/${prNumber}/head failed: ${error}`,
-      );
-      return {
-        success: false,
-        error: `Failed to fetch PR #${prNumber}: PR may not exist, or origin remote is unreachable${detail}.`,
-      };
-    }
-  }
-
-  /**
    * Validates a worktree slug. Returns null on success, or an error message.
    *
    * Rules (mirrors claude-code's `validateWorktreeSlug`):
@@ -2408,9 +2200,9 @@ export class GitWorktreeService {
       /^pr-[1-9]\d{0,8}$/.test(slug) &&
       options?.allowPrBackedShape !== true
     ) {
-      // `--worktree=#<N>` launches own this shape; a user-chosen slug with
-      // it would bind the session to PR N (and take the sweep's state
-      // stamps) although the session never touched that PR.
+      // A user-chosen slug with this shape would bind the session to PR N
+      // (and take the sweep's state stamps) although the session never
+      // touched that PR.
       return (
         'Worktree name must not look like "pr-<number>": that shape is ' +
         'reserved for PR-backed worktrees.'
@@ -2451,14 +2243,9 @@ export class GitWorktreeService {
     baseBranch?: string,
     options?: {
       symlinkDirectories?: readonly string[];
-      /** The caller owns the pr-<N> shape (PR-backed startup). */
-      prBacked?: boolean;
     },
   ): Promise<CreateWorktreeResult> {
-    const validationError = GitWorktreeService.validateUserWorktreeSlug(
-      slug,
-      options?.prBacked === true ? { allowPrBackedShape: true } : undefined,
-    );
+    const validationError = GitWorktreeService.validateUserWorktreeSlug(slug);
     if (validationError) {
       debugLogger.warn(
         `createUserWorktree: invalid slug ${slug}: ${validationError}`,

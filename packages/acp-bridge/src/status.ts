@@ -320,13 +320,7 @@ export type ServeMcpServerRuntimeStatus =
   | 'connecting'
   | 'disconnected';
 
-export type ServeMcpTransport =
-  | 'stdio'
-  | 'sse'
-  | 'http'
-  | 'websocket'
-  | 'sdk'
-  | 'unknown';
+export type ServeMcpTransport = 'stdio' | 'sdk' | 'unknown';
 
 export interface ServeWorkspaceMcpServerStatus extends ServeStatusCell {
   kind: 'mcp_server';
@@ -334,11 +328,7 @@ export interface ServeWorkspaceMcpServerStatus extends ServeStatusCell {
   mcpStatus?: ServeMcpServerRuntimeStatus;
   transport: ServeMcpTransport;
   disabled: boolean;
-  hasOAuthTokens?: boolean;
-  requiresAuth?: boolean;
   approvalState?: 'pending' | 'rejected';
-  authenticationState?: 'pending' | 'succeeded' | 'failed';
-  authenticationError?: string;
   source?: 'user' | 'project' | 'extension';
   configOrigin?:
     | 'user_settings'
@@ -351,8 +341,6 @@ export interface ServeWorkspaceMcpServerStatus extends ServeStatusCell {
   config?: {
     command?: string;
     args?: string[];
-    httpUrl?: string;
-    url?: string;
     cwd?: string;
   };
   description?: string;
@@ -387,7 +375,7 @@ export interface ServeWorkspaceMcpServerStatus extends ServeStatusCell {
   /**
    * Pool-mode workspaces can hold multiple
    * `PoolEntry` instances under the same `name` when sessions inject
-   * different fingerprints (e.g. per-session OAuth headers). Absent on
+   * different fingerprints (e.g. per-session env). Absent on
    * older daemons and on daemons with `QWEN_SERVE_NO_MCP_POOL=1`;
    * present (≥1) when the pool advertises `mcp_workspace_pool`.
    * Operators use this to render an "N entries" badge or drill into
@@ -398,7 +386,7 @@ export interface ServeWorkspaceMcpServerStatus extends ServeStatusCell {
    * Per-entry breakdown for multi-entry server
    * names. `entryIndex` is a stable opaque integer assigned at entry
    * creation (V21-7) — NOT the raw fingerprint, which would leak
-   * OAuth/env rotation timing through snapshot diffs. `refs` is the
+   * env rotation timing through snapshot diffs. `refs` is the
    * count of sessions currently attached. `status` is the per-entry
    * runtime status (`connected` / `connecting` / `disconnected`) so
    * dashboards can show per-entry health when the aggregated
@@ -582,10 +570,7 @@ export interface ServeSessionResourcesStatus {
   /**
    * Session-scoped MCP snapshot. Status, discovery, and accounting come from
    * the selected session's manager; workspace-owned pool, budget, and
-   * discovery-error enrichments are absent. The name-keyed `hasOAuthTokens`,
-   * `requiresAuth`, `authenticationState`, and `authenticationError` fields
-   * are always absent; consumers must not treat their absence as a negative
-   * authentication state.
+   * discovery-error enrichments are absent.
    */
   mcp: ServeWorkspaceMcpStatus;
 }
@@ -1369,19 +1354,6 @@ export interface ServeCommandHookConfig {
   statusMessage?: string;
 }
 
-export interface ServeHttpHookConfig {
-  type: 'http';
-  url: string;
-  name?: string;
-  description?: string;
-  timeout?: number;
-  headers?: Record<string, string>;
-  allowedEnvVars?: string[];
-  if?: string;
-  statusMessage?: string;
-  once?: boolean;
-}
-
 export interface ServeFunctionHookConfig {
   type: 'function';
   id?: string;
@@ -1412,7 +1384,6 @@ export interface ServeUnknownHookConfig {
 
 export type ServeHookConfig =
   | ServeCommandHookConfig
-  | ServeHttpHookConfig
   | ServeFunctionHookConfig
   | ServePromptHookConfig
   | ServeUnknownHookConfig;
@@ -1527,14 +1498,7 @@ export const IDLE_HOOK_EVENTS: Record<HookEventName, ServeHookEventMeta> = {
 // Workspace extensions diagnostic surface.
 // ---------------------------------------------------------------------------
 
-export type ServeExtensionInstallType =
-  | 'git'
-  | 'local'
-  | 'link'
-  | 'github-release'
-  | 'npm'
-  | 'archive-url'
-  | 'snapshot';
+export type ServeExtensionInstallType = 'local' | 'link';
 
 export type ServeExtensionOriginSource =
   | 'QwenCode'
@@ -1587,8 +1551,6 @@ export interface ServeExtensionEntry {
   source?: string;
   installType?: ServeExtensionInstallType;
   originSource?: ServeExtensionOriginSource;
-  ref?: string;
-  credentialPersistence?: 'stored' | 'one_time';
   updateState?: ServeExtensionUpdateState;
   capabilities: ServeExtensionCapabilities;
   details?: ServeExtensionDetails;

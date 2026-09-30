@@ -73,7 +73,6 @@ describe('SAFE_TOOL_ALLOWLIST', () => {
       ToolNames.EDIT,
       ToolNames.WRITE_FILE,
       ToolNames.SHELL,
-      ToolNames.WEB_FETCH,
       ToolNames.AGENT,
       ToolNames.SKILL,
       ToolNames.MONITOR,
@@ -1599,7 +1598,6 @@ describe('shouldRunAutoModeForCall', () => {
       ToolNames.SHELL,
       ToolNames.EDIT,
       ToolNames.WRITE_FILE,
-      ToolNames.WEB_FETCH,
       ToolNames.AGENT,
       ToolNames.SKILL,
       ToolNames.READ_FILE,
@@ -1674,7 +1672,6 @@ describe('shouldClassifyAllShellForAutoMode', () => {
       ToolNames.EDIT,
       ToolNames.WRITE_FILE,
       ToolNames.READ_FILE,
-      ToolNames.WEB_FETCH,
     ]) {
       expect(
         shouldClassifyAllShellForAutoMode(

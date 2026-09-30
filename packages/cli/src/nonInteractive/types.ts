@@ -343,10 +343,6 @@ export interface CLIMcpServerConfig {
   args?: string[];
   env?: Record<string, string>;
   cwd?: string;
-  url?: string;
-  httpUrl?: string;
-  headers?: Record<string, string>;
-  tcp?: string;
   timeout?: number;
   versionNegotiation?: 'auto' | 'legacy';
   appResourceMaxBytes?: number;
@@ -356,24 +352,6 @@ export interface CLIMcpServerConfig {
   includeTools?: string[];
   excludeTools?: string[];
   extensionName?: string;
-  oauth?: {
-    enabled?: boolean;
-    clientId?: string;
-    clientSecret?: string;
-    authorizationUrl?: string;
-    tokenUrl?: string;
-    scopes?: string[];
-    audiences?: string[];
-    redirectUri?: string;
-    tokenParamName?: string;
-    registrationUrl?: string;
-  };
-  authProviderType?:
-    | 'dynamic_discovery'
-    | 'google_credentials'
-    | 'service_account_impersonation';
-  targetAudience?: string;
-  targetServiceAccount?: string;
 }
 
 export interface CLIControlInitializeRequest {

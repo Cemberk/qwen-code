@@ -153,7 +153,7 @@ describe('must-translate locale coverage', () => {
         'Manage installed extensions',
       );
       expect(extensionSubcommands.get('install')).not.toBe(
-        'Install an extension from a git repo or local path',
+        'Install an extension from a local path',
       );
       expect(extensionSubcommands.get('explore')).not.toBe(
         'Open extensions page in your browser',

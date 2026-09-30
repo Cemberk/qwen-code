@@ -184,12 +184,10 @@ const listCommand: SlashCommand = {
     const extractName = (config: {
       type: string;
       command?: string;
-      url?: string;
       name?: string;
     }): string =>
       config.name ||
       (config.type === 'command' ? config.command : undefined) ||
-      (config.type === 'http' ? config.url : undefined) ||
       'unnamed';
 
     for (const hook of configHooks) {
@@ -197,7 +195,6 @@ const listCommand: SlashCommand = {
       const config = configHook.config as {
         type: string;
         command?: string;
-        url?: string;
         name?: string;
       };
       addHook(configHook.eventName, normalizeMatcher(configHook.matcher), {
@@ -211,7 +208,6 @@ const listCommand: SlashCommand = {
       const config = sessionHook.config as {
         type: string;
         command?: string;
-        url?: string;
         name?: string;
       };
       addHook(sessionHook.eventName, normalizeMatcher(sessionHook.matcher), {

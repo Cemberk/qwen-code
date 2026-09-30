@@ -229,9 +229,9 @@ describe('hooks dialog helpers', () => {
     expect(
       formatHookTimeout(
         row({
-          hookType: HookType.Http,
+          hookType: HookType.Prompt,
           timeout: 5000,
-          config: { type: HookType.Http, url: 'https://h' },
+          config: { type: HookType.Prompt, prompt: 'check' },
         }),
       ),
     ).toBe('5000 s');

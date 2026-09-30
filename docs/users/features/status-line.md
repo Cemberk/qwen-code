@@ -94,7 +94,7 @@ Add a `statusLine` object under the `ui` key in `~/.qwen/settings.json`:
 | `total-output-tokens`  |         | Cumulative output tokens used in session (e.g. `5.0k total out`)   |
 | `current-dir`          |         | Current working directory                                          |
 | `project-name`         | Yes     | Project name (basename of working directory)                       |
-| `pull-request-number`  |         | Open PR number for the current branch (requires `gh` CLI)          |
+| `pull-request-number`  |         | PR number inferred from the branch name (e.g. `feature/pr-123`)    |
 | `branch-changes`       |         | Session file change stats (e.g. `+120 -30`)                        |
 | `context-used`         | Yes     | Percentage of context window used (e.g. `Context 34.3% used`)      |
 | `run-state`            |         | Compact session state (`Ready`, `Working`, or `Confirm`)           |
@@ -387,7 +387,6 @@ Then reference it in settings:
 
 - **No external dependencies**: Preset items are computed internally — no shell commands, no `jq`, no timeouts.
 - **Theme integration**: When `useThemeColors` is `true` (default), the status line text uses the active `/theme` color. When `false`, dimmed footer styling is applied.
-- **PR lookup**: The `pull-request-number` item runs `gh pr view` in the background (2s timeout). It only triggers when the branch changes, not on every update.
 
 ## Troubleshooting
 

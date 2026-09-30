@@ -8,7 +8,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_COMMAND_HOOK_TIMEOUT_SECONDS,
   DEFAULT_FUNCTION_HOOK_TIMEOUT_MS,
-  DEFAULT_HTTP_HOOK_TIMEOUT_SECONDS,
   DEFAULT_PROMPT_HOOK_TIMEOUT_SECONDS,
   LEGACY_MILLISECOND_TIMEOUT_THRESHOLD,
   describeHookTimeout,
@@ -186,23 +185,17 @@ describe('describeHookTimeout', () => {
     ignoredConfiguredValue,
   });
   // Node runs a timer whose delay is below 1 ms, NaN or above 2^31 - 1 ms
-  // after 1 ms; the HTTP runner installs no timer unless the delay is above 0.
+  // after 1 ms.
   const afterOneMs: HookTimeoutDescription = {
     timeoutMs: 1,
     source: 'unusable',
     ignoredConfiguredValue: false,
   };
-  const noTimer: HookTimeoutDescription = {
-    timeoutMs: null,
-    source: 'unusable',
-    ignoredConfiguredValue: false,
-  };
 
-  // [configured value, command, http, prompt, function]
+  // [configured value, command, prompt, function]
   const matrix: Array<
     [
       unknown,
-      HookTimeoutDescription,
       HookTimeoutDescription,
       HookTimeoutDescription,
       HookTimeoutDescription,
@@ -211,32 +204,18 @@ describe('describeHookTimeout', () => {
     [
       undefined,
       byDefault(60_000, false),
-      byDefault(600_000, false),
       byDefault(30_000, false),
       byDefault(5_000, false),
     ],
     [
       null,
       byDefault(60_000, true),
-      byDefault(600_000, true),
       byDefault(30_000, true),
       byDefault(5_000, true),
     ],
-    [
-      60,
-      configured(60_000),
-      configured(60_000),
-      configured(60_000),
-      configured(60),
-    ],
-    [
-      0,
-      byDefault(60_000, true),
-      byDefault(600_000, true),
-      afterOneMs,
-      afterOneMs,
-    ],
-    [-1, byDefault(60_000, true), noTimer, afterOneMs, afterOneMs],
+    [60, configured(60_000), configured(60_000), configured(60)],
+    [0, byDefault(60_000, true), afterOneMs, afterOneMs],
+    [-1, byDefault(60_000, true), afterOneMs, afterOneMs],
     [
       1000,
       {
@@ -245,33 +224,14 @@ describe('describeHookTimeout', () => {
         ignoredConfiguredValue: false,
       },
       configured(1_000_000),
-      configured(1_000_000),
       configured(1000),
     ],
-    [
-      '60',
-      configured(60_000),
-      configured(60_000),
-      configured(60_000),
-      configured(60),
-    ],
-    ['abc', byDefault(60_000, true), noTimer, afterOneMs, afterOneMs],
+    ['60', configured(60_000), configured(60_000), configured(60)],
+    ['abc', byDefault(60_000, true), afterOneMs, afterOneMs],
     // JavaScript coercion the runners already apply, not introduced here.
-    [
-      Number.NaN,
-      byDefault(60_000, true),
-      byDefault(600_000, true),
-      afterOneMs,
-      afterOneMs,
-    ],
-    [
-      true,
-      byDefault(60_000, true),
-      configured(1000),
-      configured(1000),
-      configured(1),
-    ],
-    [0.0005, afterOneMs, afterOneMs, afterOneMs, afterOneMs],
+    [Number.NaN, byDefault(60_000, true), afterOneMs, afterOneMs],
+    [true, byDefault(60_000, true), configured(1000), configured(1)],
+    [0.0005, afterOneMs, afterOneMs, afterOneMs],
     [
       3_000_000,
       {
@@ -280,17 +240,15 @@ describe('describeHookTimeout', () => {
         ignoredConfiguredValue: false,
       },
       afterOneMs,
-      afterOneMs,
       configured(3_000_000),
     ],
-    [3_000_000_000, afterOneMs, afterOneMs, afterOneMs, afterOneMs],
+    [3_000_000_000, afterOneMs, afterOneMs, afterOneMs],
   ];
 
   it.each(matrix)(
     'describes timeout %j for each hook type',
-    (timeout, command, http, prompt, fn) => {
+    (timeout, command, prompt, fn) => {
       expect(describeHookTimeout(HookType.Command, timeout)).toEqual(command);
-      expect(describeHookTimeout(HookType.Http, timeout)).toEqual(http);
       expect(describeHookTimeout(HookType.Prompt, timeout)).toEqual(prompt);
       expect(describeHookTimeout(HookType.Function, timeout)).toEqual(fn);
     },
@@ -306,9 +264,6 @@ describe('describeHookTimeout', () => {
   it('reads defaults from the exported constants', () => {
     expect(describeHookTimeout(HookType.Command, undefined).timeoutMs).toBe(
       DEFAULT_COMMAND_HOOK_TIMEOUT_SECONDS * 1000,
-    );
-    expect(describeHookTimeout(HookType.Http, undefined).timeoutMs).toBe(
-      DEFAULT_HTTP_HOOK_TIMEOUT_SECONDS * 1000,
     );
     expect(describeHookTimeout(HookType.Prompt, undefined).timeoutMs).toBe(
       DEFAULT_PROMPT_HOOK_TIMEOUT_SECONDS * 1000,

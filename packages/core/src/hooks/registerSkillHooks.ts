@@ -20,7 +20,6 @@ import {
   type HookEventName,
   type HookConfig,
   type CommandHookConfig,
-  type HttpHookConfig,
 } from './types.js';
 
 const debugLogger = createDebugLogger('SKILL_HOOKS');
@@ -58,7 +57,7 @@ export function registerSkillHooks(
       const matcherPattern = matcher.matcher || '';
 
       for (const hook of matcher.hooks) {
-        // Only register command and HTTP hooks (skip function hooks)
+        // Only register command hooks (skip function hooks)
         if (hook.type === HookType.Function) {
           debugLogger.debug(
             'Skipping function hook from skill (not supported in frontmatter)',
@@ -68,7 +67,7 @@ export function registerSkillHooks(
 
         // Register the hook with skillRoot for environment variable
         const hookConfig = prepareHookConfig(
-          hook as CommandHookConfig | HttpHookConfig,
+          hook as CommandHookConfig,
           skill.skillRoot,
         );
 
@@ -121,9 +120,9 @@ export function registerSkillHooks(
 
 /**
  * Identity key for dedup: the whole prepared config. Keying on only
- * type + command/url silently drops distinct hooks the frontmatter
- * admits per matcher (same command with different timeout/shell, same
- * URL with different headers) — the second of the pair is skipped even
+ * type + command silently drops distinct hooks the frontmatter
+ * admits per matcher (same command with different timeout/shell) — the
+ * second of the pair is skipped even
  * on first registration. Prepared configs from frontmatter carry no
  * functions, so a structural key is stable across reload cycles.
  */
@@ -139,9 +138,9 @@ function hookConfigKey(hook: HookConfig): string {
  * @returns Prepared hook configuration
  */
 function prepareHookConfig(
-  hook: CommandHookConfig | HttpHookConfig,
+  hook: CommandHookConfig,
   skillRoot?: string,
-): CommandHookConfig | HttpHookConfig {
+): CommandHookConfig {
   if (hook.type === 'command' && skillRoot) {
     // Add QWEN_SKILL_ROOT to environment variables
     return {

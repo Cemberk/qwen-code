@@ -11,24 +11,6 @@ import type {
 } from '@qwen-code/qwen-code-core';
 
 /**
- * Top-level tabs of the extensions manager dialog, aligned with the Claude Code
- * `/plugin` command. The Errors tab is intentionally deferred per the spec.
- */
-export const EXTENSIONS_TABS = {
-  DISCOVER: 'discover',
-  INSTALLED: 'installed',
-  SOURCES: 'sources',
-} as const;
-
-export type ExtensionsTab =
-  (typeof EXTENSIONS_TABS)[keyof typeof EXTENSIONS_TABS];
-
-export interface ExtensionsTabDef {
-  id: ExtensionsTab;
-  label: string;
-}
-
-/**
  * Scope groups used to organize the Installed tab.
  */
 export type InstalledGroup = 'favorites' | 'user' | 'project' | 'disabled';
@@ -41,8 +23,6 @@ export interface InstalledMcpInfo {
   isDisabled: boolean;
   transport: string;
   toolCount: number;
-  /** The server failed to connect because it needs (re-)authentication. */
-  requiresAuth: boolean;
 }
 
 /** A single row in the Installed tab — either a plugin/extension or an MCP. */
@@ -150,5 +130,4 @@ export type ExtensionAction =
 export interface ExtensionsManagerDialogProps {
   onClose: () => void;
   config: Config | null;
-  initialTab?: ExtensionsTab;
 }

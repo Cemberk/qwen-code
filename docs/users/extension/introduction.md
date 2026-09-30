@@ -2,7 +2,7 @@
 
 Qwen Code extensions package prompts, MCP servers, subagents, skills and custom commands into a familiar and user-friendly format. With extensions, you can expand the capabilities of Qwen Code and share those capabilities with others. They are designed to be easily installable and shareable.
 
-Extensions and plugins from [Gemini CLI Extensions Gallery](https://geminicli.com/extensions/), [Claude Code Marketplace](https://claudemarketplaces.com/), Qoder, and the portable [Agent Plugins v1](./agent-plugins.md) format can be directly installed into Qwen Code. This cross-platform compatibility gives you access to a rich ecosystem of extensions and plugins, dramatically expanding Qwen Code's capabilities without requiring extension authors to maintain separate versions.
+Extensions and plugins in the Gemini CLI, Claude Code plugin, Qoder, and portable [Agent Plugins v1](./agent-plugins.md) formats can be installed into Qwen Code from a local directory or archive. They are converted to Qwen Code format during installation.
 
 ## Extension management
 
@@ -12,18 +12,14 @@ We offer a suite of extension management tools using both `qwen extensions` CLI 
 
 You can manage extensions at runtime within the interactive CLI using `/extensions` slash commands. These commands support hot-reloading, meaning changes take effect immediately without restarting the application.
 
-| Command                               | Description                                                                                          |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `/extensions` or `/extensions manage` | Manage all installed extensions                                                                      |
-| `/extensions install <source>`        | Install an extension from a git URL, local path or archive, archive URL, npm package, or marketplace |
+| Command                               | Description                                       |
+| ------------------------------------- | ------------------------------------------------- |
+| `/extensions` or `/extensions manage` | Manage all installed extensions                   |
+| `/extensions install <source>`        | Install an extension from a local path or archive |
 
 #### The interactive extension manager
 
-Running `/extensions` (or `/extensions manage`) opens an interactive manager with three tabs. Press `Tab` or the `←`/`→` arrows to switch between them.
-
-- **Discover** — browse plugins from your configured marketplace sources. Type to search, `Enter` to view a plugin's details, and install it (you'll be asked to choose an install scope). Press `Ctrl+R` to re-fetch the listings, and `Esc` to go back.
-- **Installed** — your installed extensions, grouped by scope (**User level**, **Project level**, and favorites). Use `↑`/`↓` to navigate, `Space` to enable/disable an extension, `f` to favorite it, and `Enter` to open its details. MCP servers bundled by an extension appear nested under their parent extension with live connection status; you can enable or disable each server individually from there.
-- **Sources** — manage the marketplace sources that feed the Discover tab. Use `↑`/`↓` to navigate, `Enter` to select a source, and `d` to remove one. These are the same sources managed by the `qwen extensions sources` CLI commands described below.
+Running `/extensions` (or `/extensions manage`) opens an interactive manager that lists your installed extensions, grouped by scope (**User level**, **Project level**, and favorites). Use `↑`/`↓` to navigate, `Space` to enable/disable an extension, `f` to favorite it, and `Enter` to open its details. MCP servers bundled by an extension appear nested under their parent extension with live connection status; you can enable or disable each server individually from there.
 
 Changes made here hot-reload immediately, without restarting Qwen Code.
 
@@ -33,126 +29,7 @@ You can also manage extensions using `qwen extensions` CLI commands. Note that c
 
 ### Installing an extension
 
-You can install an extension using `qwen extensions install` from multiple sources:
-
-#### From Claude Code Marketplace
-
-Qwen Code also supports plugins from the [Claude Code Marketplace](https://claudemarketplaces.com/). Install from a marketplace and choose a plugin:
-
-```bash
-qwen extensions install <marketplace-name>
-# or
-qwen extensions install <marketplace-github-url>
-```
-
-If you want to install a specific plugin, you can use the format with plugin name:
-
-```bash
-qwen extensions install <marketplace-name>:<plugin-name>
-# or
-qwen extensions install <marketplace-github-url>:<plugin-name>
-```
-
-For example, to install the `prompts.chat` plugin from the [f/awesome-chatgpt-prompts](https://claudemarketplaces.com/plugins/f-prompts.chat) marketplace:
-
-```bash
-qwen extensions install f/awesome-chatgpt-prompts:prompts.chat
-# or
-qwen extensions install https://github.com/f/awesome-chatgpt-prompts:prompts.chat
-```
-
-Claude plugins are automatically converted to Qwen Code format during installation:
-
-- `claude-plugin.json` is converted to `qwen-extension.json`
-- Agent configurations are converted to Qwen subagent format
-- Skill configurations are converted to Qwen skill format
-- Tool mappings are automatically handled
-
-> **Cross-Platform Compatibility**: This allows you to leverage the rich extension ecosystems from both Gemini CLI and Claude Code, dramatically expanding the available functionality for Qwen Code users.
-
-#### From Gemini CLI Extensions
-
-Qwen Code fully supports extensions from the [Gemini CLI Extensions Gallery](https://geminicli.com/extensions/). Simply install them using the git URL:
-
-```bash
-qwen extensions install <gemini-cli-extension-github-url>
-# or
-qwen extensions install <owner>/<repo>
-```
-
-Gemini extensions are automatically converted to Qwen Code format during installation:
-
-- `gemini-extension.json` is converted to `qwen-extension.json`
-- TOML command files are automatically migrated to Markdown format
-- MCP servers, context files, and settings are preserved
-
-#### From Qoder Plugins
-
-Qwen Code supports [Qoder plugins](https://docs.qoder.com/en/cli/sdk/plugins) that contain a `.qoder-plugin/plugin.json` manifest. Install a local directory, archive, Git repository, archive URL, or scoped npm package with the existing `qwen extensions install` command:
-
-```bash
-qwen extensions install ./sample-qoder-plugin
-qwen extensions install ./sample-qoder-plugin.zip
-qwen extensions install owner/sample-qoder-plugin
-```
-
-The installer converts the Qoder manifest to `qwen-extension.json` and preserves standard `commands/`, `agents/`, and `skills/` directories. MCP servers declared in a root `.mcp.json` file are included as extension MCP servers.
-
-When a Qoder plugin contains `system-prompt.md` at its root, Qwen Code loads it as extension context. If the plugin also contains `QWEN.md` or declares other context files, all context files are retained and deduplicated.
-
-#### From Agent Plugins v1
-
-Qwen Code natively loads portable Agent Plugins v1 packages without converting or rewriting `plugin.json`, `mcp.json`, or `SKILL.md` files:
-
-```bash
-qwen extensions install ./my-agent-plugin
-qwen extensions link ./my-agent-plugin
-qwen extensions install owner/my-agent-plugin
-```
-
-The portable runtime supports Agent Skills plus stdio and Streamable HTTP MCP servers. Commands, agents, hooks, client namespaces, and legacy SSE MCP are not activated. See [Agent Plugins v1](./agent-plugins.md) for the complete support matrix.
-
-#### From npm Registry
-
-Qwen Code supports installing extensions from npm registries using scoped package names. This is ideal for teams with private registries that already have auth, versioning, and publishing infrastructure in place.
-
-```bash
-# Install the latest version
-qwen extensions install @scope/my-extension
-
-# Install a specific version
-qwen extensions install @scope/my-extension@1.2.0
-
-# Install from a custom registry
-qwen extensions install @scope/my-extension --registry https://your-registry.com
-```
-
-Only scoped packages (`@scope/package-name`) are supported to avoid ambiguity with the `owner/repo` GitHub shorthand format.
-
-**Registry resolution** follows this priority:
-
-1. `--registry` CLI flag (explicit override)
-2. Scoped registry from `.npmrc` (e.g. `@scope:registry=https://...`)
-3. Default registry from `.npmrc`
-4. Fallback: `https://registry.npmjs.org/`
-
-**Authentication** is handled automatically via the `NPM_TOKEN` environment variable or registry-specific `_authToken` entries in your `.npmrc` file.
-
-> **Note:** npm extensions must include either a native `qwen-extension.json` or an Agent Plugins v1 `plugin.json` at the package root. See [Extension Releasing](./extension-releasing.md#releasing-through-npm-registry) for packaging details.
-
-#### From Git Repository
-
-Git 2.37 or newer is required for credentialed, non-GitHub, nested marketplace, submodule, and Git LFS sources because Qwen Code uses `http.curloptResolve` to pin Git connections to validated DNS results. On older Git versions, Qwen Code supports only anonymous public `https://github.com/{owner}/{repo}[.git]` root repositories by resolving the requested ref to a commit and downloading GitHub's source archive with the same public-network and archive-safety checks.
-
-Because the older-Git fallback installs from a source archive rather than a clone, it cannot install repositories that rely on submodules or Git LFS, and it caps downloads at 100 MiB compressed and archives at 100,000 entries / 1 GiB expanded / 8 MiB path metadata, including files materialized from at most 100 symlinks. Symlinks directly targeting regular files in the repository are supported on systems that permit symlink creation; Windows may require Developer Mode or elevated privileges. The fallback rejects directory, chained, dangling, absolute, escaping, hard, and POSIX literal-backslash-target links. Other Agent Plugin install paths continue to omit symlinks. Release-based installs are still preferred when a repository publishes releases.
-
-```bash
-qwen extensions install https://github.com/github/github-mcp-server
-```
-
-This will install the github mcp server extension.
-
-#### From Local Path
+Extensions are installed from a local directory:
 
 ```bash
 qwen extensions install /path/to/your/extension
@@ -167,16 +44,58 @@ qwen extensions install /path/to/your/extension.tar.gz
 
 The archive must contain a complete extension at its root, or a single top-level directory containing the extension.
 
-Note that we create a copy of the installed extension, so you will need to run `qwen extensions update` to pull in changes from both locally-defined extensions and those on GitHub.
+Note that we create a copy of the installed extension, so you will need to run `qwen extensions update` to pull in changes from the source path. During development, `qwen extensions link /path/to/your/extension` loads the directory in place instead.
 
-#### From Archive URL
+#### Claude Code plugins
+
+A local directory containing a Claude Code plugin marketplace (`.claude-plugin/marketplace.json`) can be installed by choosing a plugin:
 
 ```bash
-qwen extensions install https://example.com/your/extension.zip
-qwen extensions install https://example.com/your/extension.tar.gz
+qwen extensions install /path/to/marketplace
+# or, to pick a specific plugin
+qwen extensions install /path/to/marketplace:<plugin-name>
 ```
 
-Archive URLs can be updated later as long as the URL continues to point at a newer archive for the same extension.
+Only plugins stored inside the marketplace directory can be installed; plugins whose source points at a remote repository or URL are rejected. A directory with a root `.claude-plugin/plugin.json` is installed as a single plugin.
+
+Claude plugins are automatically converted to Qwen Code format during installation:
+
+- `claude-plugin.json` is converted to `qwen-extension.json`
+- Agent configurations are converted to Qwen subagent format
+- Skill configurations are converted to Qwen skill format
+- Tool mappings are automatically handled
+
+#### Gemini CLI extensions
+
+A local directory containing `gemini-extension.json` is automatically converted to Qwen Code format during installation:
+
+- `gemini-extension.json` is converted to `qwen-extension.json`
+- TOML command files are automatically migrated to Markdown format
+- MCP servers, context files, and settings are preserved
+
+#### Qoder plugins
+
+Qwen Code supports [Qoder plugins](https://docs.qoder.com/en/cli/sdk/plugins) that contain a `.qoder-plugin/plugin.json` manifest:
+
+```bash
+qwen extensions install ./sample-qoder-plugin
+qwen extensions install ./sample-qoder-plugin.zip
+```
+
+The installer converts the Qoder manifest to `qwen-extension.json` and preserves standard `commands/`, `agents/`, and `skills/` directories. MCP servers declared in a root `.mcp.json` file are included as extension MCP servers.
+
+When a Qoder plugin contains `system-prompt.md` at its root, Qwen Code loads it as extension context. If the plugin also contains `QWEN.md` or declares other context files, all context files are retained and deduplicated.
+
+#### Agent Plugins v1
+
+Qwen Code natively loads portable Agent Plugins v1 packages without converting or rewriting `plugin.json`, `mcp.json`, or `SKILL.md` files:
+
+```bash
+qwen extensions install ./my-agent-plugin
+qwen extensions link ./my-agent-plugin
+```
+
+See [Agent Plugins v1](./agent-plugins.md) for the complete support matrix.
 
 #### Choosing an install scope
 
@@ -186,25 +105,7 @@ By default, an installed extension is enabled globally (user scope). Pass `--sco
 qwen extensions install <source> --scope project
 ```
 
-`--scope workspace` is accepted as an alias of `--scope project`. This matches the scope choice offered when installing from the `/extensions manage` Discover tab.
-
-### Managing marketplace sources
-
-Marketplace sources (Claude plugin marketplaces) power the Discover tab in `/extensions manage`. You can manage them from the CLI as well:
-
-```bash
-# Add a marketplace (owner/repo, git URL, https URL to marketplace.json, or local path)
-qwen extensions sources add <source>
-
-# List configured marketplaces
-qwen extensions sources list
-
-# Re-fetch a marketplace's plugin listing
-qwen extensions sources update <name>
-
-# Remove a marketplace
-qwen extensions sources remove <name>
-```
+`--scope workspace` is accepted as an alias of `--scope project`.
 
 ### Uninstalling an extension
 
@@ -228,7 +129,7 @@ This is useful if you have an extension disabled at the top-level and only enabl
 
 ### Updating an extension
 
-For extensions installed from a local path or archive, an archive URL, a git repository, or an npm registry, you can explicitly update to the latest version with `qwen extensions update extension-name`. For npm extensions installed without a version pin (e.g. `@scope/pkg`), updates check the `latest` dist-tag. For those installed with a specific dist-tag (e.g. `@scope/pkg@beta`), updates track that tag. Extensions pinned to an exact version (e.g. `@scope/pkg@1.2.0`) are always considered up-to-date.
+For extensions installed from a local path or archive, you can re-install the current version of the source with `qwen extensions update extension-name`. Linked extensions always load their source directory and need no update.
 
 You can update all extensions with:
 

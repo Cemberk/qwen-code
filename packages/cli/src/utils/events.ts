@@ -9,8 +9,6 @@ import { EventEmitter } from 'node:events';
 export enum AppEvent {
   OpenDebugConsole = 'open-debug-console',
   LogError = 'log-error',
-  OauthDisplayMessage = 'oauth-display-message',
-  OauthAuthUrl = 'oauth-auth-url',
   /**
    * A settings hot-reload changed the set of gated MCP servers pending
    * approval (e.g. an edit to a `workspace`/`project`-scoped server invalidated

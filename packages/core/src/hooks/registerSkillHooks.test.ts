@@ -101,36 +101,6 @@ describe('registerSkillHooks', () => {
     expect(count).toBe(2);
   });
 
-  it('should register HTTP hooks', () => {
-    const skill: SkillConfig = {
-      name: 'test-skill',
-      description: 'Test skill',
-      level: 'user',
-      filePath: '/path/to/skill/SKILL.md',
-      skillRoot,
-      body: 'Test body',
-      hooks: {
-        [HookEventName.PreToolUse]: [
-          {
-            matcher: 'Bash',
-            hooks: [
-              {
-                type: HookType.Http,
-                url: 'https://example.com/hook',
-                headers: {
-                  Authorization: 'Bearer token',
-                },
-              },
-            ],
-          },
-        ],
-      },
-    };
-
-    const count = registerSkillHooks(sessionHooksManager, sessionId, skill);
-    expect(count).toBe(1);
-  });
-
   it('should register hooks with matcher pattern', () => {
     const skill: SkillConfig = {
       name: 'test-skill',
@@ -369,38 +339,6 @@ describe('registerSkillHooks', () => {
                 type: HookType.Command,
                 command: 'echo hi',
                 timeout: 30,
-              },
-            ],
-          },
-        ],
-      },
-    };
-
-    expect(registerSkillHooks(sessionHooksManager, sessionId, skill)).toBe(2);
-  });
-
-  it('registers same-URL http hooks that differ only in headers (R1-1)', () => {
-    const skill: SkillConfig = {
-      name: 'test-skill',
-      description: 'Test skill',
-      level: 'user',
-      filePath: '/path/to/skill/SKILL.md',
-      skillRoot,
-      body: 'Test body',
-      hooks: {
-        [HookEventName.PreToolUse]: [
-          {
-            matcher: 'Bash',
-            hooks: [
-              {
-                type: HookType.Http,
-                url: 'http://gw.local/hook',
-                headers: { Authorization: 'Bearer a' },
-              },
-              {
-                type: HookType.Http,
-                url: 'http://gw.local/hook',
-                headers: { Authorization: 'Bearer b' },
               },
             ],
           },

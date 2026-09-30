@@ -400,22 +400,6 @@ describe('buildAgentContentGeneratorConfig', () => {
         );
       },
     );
-
-    it('allows dual-role models for agent content generation', () => {
-      const config = createMockConfig(parentConfig, {
-        ...resolvedModel,
-        supportsImageGeneration: true,
-      });
-
-      const result = buildAgentContentGeneratorConfig(
-        config,
-        'registry-model-id',
-        { authType: 'anthropic' },
-      );
-
-      expect(result.model).toBe('registry-model-id');
-      expect(result.authType).toBe('anthropic');
-    });
   });
 
   // A workflow `agent({ effort })` gets its tier through this builder. It has

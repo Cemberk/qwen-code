@@ -168,12 +168,6 @@ export function routeDialogToOpenTui(
         mode: 'compaction',
         ...(result.persistScope ? { persistScope: result.persistScope } : {}),
       };
-    case 'image-model':
-      return {
-        dialog: 'model',
-        mode: 'image',
-        ...(result.persistScope ? { persistScope: result.persistScope } : {}),
-      };
     default: {
       const unhandled: never = dialog;
       throw new Error(`Unhandled slash command dialog: ${unhandled}`);
@@ -298,13 +292,7 @@ export const OPEN_TUI_COMMAND_ROUTES: readonly CommandRouteSpec[] = [
   {
     name: 'model',
     results: ['dialog', 'message', 'submit_prompt'],
-    dialogs: [
-      'model',
-      'fast-model',
-      'vision-model',
-      'compaction-model',
-      'image-model',
-    ],
+    dialogs: ['model', 'fast-model', 'vision-model', 'compaction-model'],
   },
   {
     name: 'output-style',

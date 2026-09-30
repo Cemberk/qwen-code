@@ -8,13 +8,11 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 
 /**
- * Backend-agnostic contract for publishing an artifact. The local backend
- * writes to disk and returns a file:// URL; the host/oss backends upload to a
- * configured destination and return an https://
- * link. The {@link ArtifactTool} depends only on this interface so backends are
- * swappable without touching the tool.
+ * Contract for publishing an artifact. The local backend writes to disk and
+ * returns a file:// URL. The {@link ArtifactTool} depends only on this
+ * interface so tests can inject a publisher.
  */
-export type ArtifactPublisherKind = 'local' | 'host' | 'oss';
+export type ArtifactPublisherKind = 'local';
 
 export interface ArtifactPublisher {
   /** Backend identifier, e.g. 'local'. */
@@ -46,40 +44,6 @@ export interface PublishedArtifact {
   url: string;
   /** Absolute path of the published document, when the backend writes to disk. */
   filePath?: string;
-}
-
-/**
- * Config for the host publisher. The artifact is uploaded by running
- * a user-supplied command; `{file}` (the local HTML path) and `{key}` (the
- * remote object key) are substituted, and `urlTemplate`'s `{key}` yields the
- * shareable URL. Credentials live in the user's command/environment — qwen
- * never stores them.
- */
-export interface ArtifactHostConfig {
-  /** Upload command, e.g. `aws s3 cp {file} s3://bkt/{key} --content-type text/html`. */
-  uploadCommand: string;
-  /** Shareable URL template, e.g. `https://bkt.s3.amazonaws.com/{key}`. */
-  urlTemplate: string;
-  /** Remote key prefix (default `artifacts`). Key = `{prefix}/{id}/index.html`. */
-  keyPrefix?: string;
-}
-
-/**
- * Config for the native Aliyun OSS publisher (zero-dependency). The
- * artifact is uploaded with a self-signed PUT Object request. Credentials come
- * from the environment (OSS_* / ALIBABA_CLOUD_*), never from settings.
- */
-export interface ArtifactOssConfig {
-  /** Bucket name. */
-  bucket: string;
-  /** OSS endpoint host, e.g. `oss-cn-hangzhou.aliyuncs.com`. */
-  endpoint: string;
-  /** Remote key prefix (default `artifacts`). Key = `{prefix}/{id}/index.html`. */
-  keyPrefix?: string;
-  /** Object ACL (default `public-read` so the link is shareable). */
-  acl?: string;
-  /** Optional CDN / custom domain base for the returned URL (upload still uses endpoint). */
-  publicBaseUrl?: string;
 }
 
 /**

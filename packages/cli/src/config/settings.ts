@@ -39,7 +39,6 @@ import {
 import { resolveEnvVarsInObject } from '@qwen-code/qwen-code-core/envVarResolver';
 import {
   setNestedPropertySafe,
-  WORKSPACE_NON_OVERRIDING_SETTINGS,
   WORKSPACE_RESTRICTED_ROOT_SETTINGS,
   WORKSPACE_RESTRICTED_SETTINGS,
   WORKSPACE_TIGHTEN_ONLY_SETTINGS,
@@ -405,20 +404,6 @@ export function getSettingsWarnings(loadedSettings: LoadedSettings): string[] {
         `Warning: ${section}.${key} in workspace settings (${workspaceFile.path}) is ignored. This setting is only honored from User, System, or SystemDefaults scope settings.`,
       );
     }
-    for (const ref of WORKSPACE_NON_OVERRIDING_SETTINGS) {
-      if (!isSettingDefined(workspaceFile.originalSettings, ref)) continue;
-      const definingScope = [
-        SettingScope.System,
-        SettingScope.User,
-        SettingScope.SystemDefaults,
-      ].find((scope) =>
-        isSettingDefined(loadedSettings.forScope(scope).originalSettings, ref),
-      );
-      if (definingScope === undefined) continue;
-      warningSet.add(
-        `Warning: ${ref.section}.${ref.key} in workspace settings (${workspaceFile.path}) is ignored because ${definingScope} scope settings also set it. A workspace value is honored only when no User, System, or SystemDefaults scope sets this setting.`,
-      );
-    }
     // Tighten-only keys: the same verdict the merge applied, so the
     // warning and the strip cannot disagree about a value. A value that
     // merely repeats what is already in force is dropped without a
@@ -486,14 +471,6 @@ type SettingKeyRef = {
   readonly key: string;
 };
 
-function isSettingDefined(
-  settings: Settings,
-  { section, key }: SettingKeyRef,
-): boolean {
-  const sectionValue = settings[section] as Record<string, unknown> | undefined;
-  return sectionValue?.[key] !== undefined;
-}
-
 /**
  * Return `settings` without the given keys. Returns a shallow copy, and the
  * input unchanged when it carries none of them.
@@ -526,25 +503,6 @@ function stripWorkspaceRestrictedSettings(settings: Settings): Settings {
     stripped = rest as Settings;
   }
   return stripSettingKeys(stripped, WORKSPACE_RESTRICTED_SETTINGS);
-}
-
-/**
- * Drop the workspace's WORKSPACE_NON_OVERRIDING_SETTINGS values that a
- * higher scope also defines. A repository may narrow where its own HTTP
- * hooks send data, but it must never replace a whitelist the user or
- * platform configured: an empty whitelist means "allow all", so a replaced
- * list is a widened one.
- */
-function stripWorkspaceOverrides(
-  workspace: Settings,
-  higherScopes: readonly Settings[],
-): Settings {
-  return stripSettingKeys(
-    workspace,
-    WORKSPACE_NON_OVERRIDING_SETTINGS.filter((ref) =>
-      higherScopes.some((scope) => isSettingDefined(scope, ref)),
-    ),
-  );
 }
 
 type TightenOnlyEntry = (typeof WORKSPACE_TIGHTEN_ONLY_SETTINGS)[number];
@@ -630,14 +588,11 @@ function mergeSettings(
 ): Settings {
   const safeWorkspace = isTrusted
     ? tagMcpServerScope(
-        stripWorkspaceLoosenings(
-          stripWorkspaceOverrides(stripWorkspaceRestrictedSettings(workspace), [
-            systemDefaults,
-            user,
-            system,
-          ]),
-          { system, systemDefaults, user },
-        ),
+        stripWorkspaceLoosenings(stripWorkspaceRestrictedSettings(workspace), {
+          system,
+          systemDefaults,
+          user,
+        }),
         'workspace',
       )
     : ({} as Settings);

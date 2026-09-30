@@ -9,23 +9,6 @@ import { delay } from './retry.js';
 import { isTlsVerificationDisabled } from './runtimeFetchOptions.js';
 import { URL } from 'node:url';
 
-const PRIVATE_IP_RANGES = [
-  /^10\./,
-  /^127\./,
-  /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
-  /^192\.168\./,
-  // IPv4 link-local (incl. cloud metadata endpoints) and CGNAT 100.64.0.0/10.
-  /^169\.254\./,
-  /^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\./,
-  /^0\.0\.0\.0$/,
-  /^::1$/,
-  /^::$/,
-  // ULA fc00::/7 covers fc00: through fdff: (fd00: is the common prefix in
-  // practice); link-local fe80::/10 covers fe80: through febf:.
-  /^f[cd][0-9a-f]{2}:/i,
-  /^fe[89ab][0-9a-f]:/i,
-];
-
 const TLS_ERROR_CODES = new Set([
   'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
   'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
@@ -56,120 +39,13 @@ export class FetchError extends Error {
   }
 }
 
-// Errors indicating the connection/TLS handshake itself failed — the class
-// where falling back from an opportunistic https upgrade to the originally
-// requested http URL is reasonable (e.g. an intranet FQDN that resolves to
-// a private address and only serves plain http).
-//
-// Every member is an https→http downgrade trigger (tools/web-fetch.ts), so
-// fetch.test.ts pins this set's exact membership in both directions. Note the
-// ...TLS_ERROR_CODES spread is a shared-source coupling: TLS_ERROR_CODES also
-// drives the user-facing TLS hint in shouldShowTlsHint, so adding a code there
-// for hint purposes alone would silently widen the downgrade trigger.
-/** @internal Exported for the membership pin in fetch.test.ts only. */
-export const CONNECTION_LEVEL_ERROR_CODES: ReadonlySet<string> = new Set([
-  ...TLS_ERROR_CODES,
-  'ECONNREFUSED',
-  'EPROTO',
-  'ERR_SSL_WRONG_VERSION_NUMBER',
-  // Servers that don't speak TLS on 443 often reset during the handshake
-  // rather than refusing the connection. Safe to include: the http fallback
-  // only ever fires for URLs the caller requested as http.
-  'ECONNRESET',
-  'UND_ERR_SOCKET',
-  // Filtered port 443 (silent drop): undici's own bounded connect timeout.
-  // Deliberately NOT the full-budget ETIMEDOUT — that can fire mid-body on
-  // a healthy https server, and a fallback there would double a worst-case
-  // 60s wait for an ambiguous gain.
-  'UND_ERR_CONNECT_TIMEOUT',
-  // Port 443 unreachable at the network layer (ICMP host/net unreachable) —
-  // the routing-level sibling of ECONNREFUSED, same fallback rationale.
-  'EHOSTUNREACH',
-  'ENETUNREACH',
-]);
-
-export function isConnectionLevelError(error: unknown): boolean {
-  return (
-    error instanceof FetchError &&
-    error.code !== undefined &&
-    CONNECTION_LEVEL_ERROR_CODES.has(error.code)
-  );
-}
-
-// IPv4-mapped IPv6 (::ffff:a.b.c.d) — the URL API may normalize the tail to
-// hex groups (::ffff:7f00:1), so translate back to dotted form for the IPv4
-// range checks.
-function mappedIpv4(hostname: string): string | undefined {
-  const match = /^::ffff:(.+)$/i.exec(hostname);
-  if (!match) return undefined;
-  const tail = match[1]!;
-  if (tail.includes('.')) return tail;
-  const groups = tail.split(':');
-  if (groups.length !== 2) return undefined;
-  const hi = Number.parseInt(groups[0]!, 16);
-  const lo = Number.parseInt(groups[1]!, 16);
-  if (Number.isNaN(hi) || Number.isNaN(lo)) return undefined;
-  return `${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`;
-}
-
-/**
- * Classify a bare IP address (not a URL) against the private ranges.
- *
- * Hostname *text* only — a public-looking name whose A record points at a
- * private address is not caught here. Callers that hand fetched bytes to a
- * third party must resolve and pin the connection instead; see
- * `resolveNetworkTarget` in extension/network-policy.ts.
- */
-function isPrivateAddress(address: string): boolean {
-  // The URL API brackets IPv6 hostnames ([::1]); strip them so the IPv6
-  // ranges above can actually match.
-  const bare = address.replace(/^\[|\]$/g, '');
-  const target = mappedIpv4(bare) ?? bare;
-  return PRIVATE_IP_RANGES.some((range) => range.test(target));
-}
-
-export function isPrivateIp(url: string): boolean {
-  try {
-    return isPrivateAddress(new URL(url).hostname);
-  } catch (_e) {
-    return false;
-  }
-}
-
-// Suffixes conventionally used for non-public hostnames. Getting this wrong
-// only affects callers' https upgrades (an internal http host wrongly
-// upgraded would fail to connect), so err on the side of matching more.
-const INTERNAL_HOST_SUFFIXES = ['.local', '.internal', '.lan', '.home.arpa'];
-
-/** Generalizes isPrivateIp to hostnames that are never publicly routable. */
-export function isPrivateHost(url: string): boolean {
-  try {
-    const hostname = new URL(url).hostname.toLowerCase();
-    return (
-      hostname === 'localhost' ||
-      hostname.endsWith('.localhost') ||
-      hostname === 'host.docker.internal' ||
-      // Single-label hostnames (intranet, ci, printserver) are never public.
-      // IPv6 literals are bracketed and dot-free but CAN be public — they
-      // are classified by isPrivateIp below, not by this heuristic.
-      (!hostname.includes('.') && !hostname.startsWith('[')) ||
-      INTERNAL_HOST_SUFFIXES.some((suffix) => hostname.endsWith(suffix)) ||
-      isPrivateIp(url)
-    );
-  } catch {
-    return false;
-  }
-}
-
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 /**
  * A redirect is followed silently only when it stays on the same host
  * (allowing a leading "www." to be added or removed), same protocol and
  * port, and carries no credentials. Anything else is surfaced to the
- * caller: WebFetch permission rules are domain-scoped, so silently
- * following a cross-host redirect would fetch from a domain the user
- * never approved.
+ * caller rather than followed.
  */
 export function isPermittedRedirect(
   originalUrl: string,
@@ -331,15 +207,7 @@ async function fetchPolicyAttempt(
       (error instanceof Error
         ? getErrorCode((error as Error & { cause?: unknown }).cause)
         : undefined);
-    throw new FetchError(
-      getErrorMessage(error),
-      // A multi-address connect failure arrives as an AggregateError whose
-      // top-level code is only the FIRST attempt's, so a whitelisted attempt
-      // masked by a non-whitelisted one (e.g. ETIMEDOUT) must still classify
-      // as connection-level — otherwise the https→http fallback depends on
-      // address-attempt order (issue #12720).
-      findConnectionLevelCode(error) ?? code,
-    );
+    throw new FetchError(getErrorMessage(error), code);
   };
 
   let currentUrl = url;
@@ -466,57 +334,6 @@ function getErrorCode(error: unknown): string | undefined {
   }
 
   return undefined;
-}
-
-/**
- * Any-attempt-match classification for multi-address connect failures
- * (issue #12720): Node surfaces an exhausted dual-stack connect as an
- * AggregateError whose top-level `code` reflects only the FIRST attempted
- * address (lib/internal/errors.js NodeAggregateError), so reading a single
- * code makes the https→http fallback attempt-order dependent. If ANY
- * attempt's code is connection-level, the failure is connection-level;
- * per-attempt exemptions (e.g. ETIMEDOUT) hold simply by staying out of
- * CONNECTION_LEVEL_ERROR_CODES.
- *
- * Traversal mirrors describeCodedCause (utils/errors.ts): unwrap
- * AggregateError.errors[] and nested `.cause` chains — undici wraps each
- * attempt in its own `TypeError: fetch failed` — with a depth cap and a
- * visited set. A plain single-error chain resolves to the same code as
- * before (its own code when whitelisted, otherwise undefined here and the
- * caller keeps the first-derived code).
- */
-function findConnectionLevelCode(
-  error: unknown,
-  depth = 0,
-  visited = new Set<object>(),
-): string | undefined {
-  if (
-    error == null ||
-    depth >= 8 ||
-    typeof error !== 'object' ||
-    visited.has(error)
-  ) {
-    return undefined;
-  }
-  visited.add(error);
-
-  const code = getErrorCode(error);
-  if (code !== undefined && CONNECTION_LEVEL_ERROR_CODES.has(code)) {
-    return code;
-  }
-
-  if (error instanceof AggregateError && Array.isArray(error.errors)) {
-    for (const attempt of error.errors) {
-      const found = findConnectionLevelCode(attempt, depth + 1, visited);
-      if (found !== undefined) return found;
-    }
-  }
-
-  return findConnectionLevelCode(
-    (error as { cause?: unknown }).cause,
-    depth + 1,
-    visited,
-  );
 }
 
 function formatUnknownErrorMessage(error: unknown): string | undefined {

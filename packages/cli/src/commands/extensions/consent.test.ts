@@ -154,23 +154,6 @@ describe('extensionConsentString', () => {
     expect(result).toContain('node server.js');
   });
 
-  it('should include remote MCP servers', () => {
-    const config: ExtensionConfig = {
-      name: 'test-extension',
-      version: '1.0.0',
-      mcpServers: {
-        'remote-server': {
-          httpUrl: 'https://example.com/mcp',
-        },
-      },
-    };
-
-    const result = extensionConsentString(config);
-
-    expect(result).toContain('remote');
-    expect(result).toContain('https://example.com/mcp');
-  });
-
   it('should include commands when present', () => {
     const config: ExtensionConfig = {
       name: 'test-extension',

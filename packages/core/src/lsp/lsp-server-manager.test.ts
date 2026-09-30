@@ -12,7 +12,6 @@ import type { Config as CoreConfig } from '../config/config.js';
 import type { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import type { WorkspaceContext } from '../utils/workspaceContext.js';
 import { LspServerManager } from './lsp-server-manager.js';
-import { LspConnectionFactory } from './LspConnectionFactory.js';
 import type {
   LspServerHandle,
   LspConnectionInterface,
@@ -94,10 +93,6 @@ function createTrustedManager(): LspServerManager {
       workspaceRoot: '/workspace',
     },
   );
-}
-
-function pathToRootUri(rootPath: string): string {
-  return pathToFileURL(rootPath).toString();
 }
 
 describe('LspServerManager', () => {
@@ -232,20 +227,23 @@ describe('LspServerManager', () => {
       const connection = createMockConnection({
         initialize: vi.fn(async () => ({ capabilities: { textDocumentSync } })),
       });
-      const createSocket = vi
-        .spyOn(LspConnectionFactory, 'createSocketConnection')
-        .mockResolvedValue({ connection } as Awaited<
-          ReturnType<typeof LspConnectionFactory.createSocketConnection>
-        >);
-      try {
-        manager.setServerConfigs([
-          {
-            ...serverConfig,
-            command: undefined,
-            transport: 'socket',
-            socket: { port: 1234 },
+      const createConnection = vi
+        .spyOn(
+          manager as unknown as {
+            createLspConnection: (
+              config: LspServerConfig,
+            ) => Promise<LspConnectionResult>;
           },
-        ]);
+          'createLspConnection',
+        )
+        .mockResolvedValue({
+          connection,
+          shutdown: vi.fn(),
+          exit: vi.fn(),
+          initialize: (params: unknown) => connection.initialize(params),
+        } as unknown as LspConnectionResult);
+      try {
+        manager.setServerConfigs([{ ...serverConfig, command: undefined }]);
         await manager.startAll();
         expect(manager.getHandles().get('clangd')).toMatchObject({
           status: 'READY',
@@ -257,7 +255,7 @@ describe('LspServerManager', () => {
         );
       } finally {
         await manager.stopAll();
-        createSocket.mockRestore();
+        createConnection.mockRestore();
       }
     },
   );
@@ -1356,16 +1354,11 @@ describe('LspServerManager', () => {
     expect(manager.getHandles().get('clangd')?.status).toBe('READY');
   });
 
-  it('kills owned process after graceful shutdown for socket transports', async () => {
+  it('kills owned process after graceful shutdown', async () => {
     const manager = createTrustedManager();
     const connection = createMockConnection();
     const process = createMockProcess();
-    const socketConfig: LspServerConfig = {
-      ...serverConfig,
-      transport: 'tcp',
-      socket: { host: '127.0.0.1', port: 9876 },
-    };
-    manager.setServerConfigs([socketConfig]);
+    manager.setServerConfigs([serverConfig]);
     const handle = manager.getHandles().get('clangd');
     expect(handle).toBeDefined();
     handle!.connection = connection;
@@ -1379,98 +1372,7 @@ describe('LspServerManager', () => {
     expect(process.kill).toHaveBeenCalledOnce();
   });
 
-  it('cancels an in-flight socket startup retry when stopped', async () => {
-    const manager = createTrustedManager();
-    vi.spyOn(
-      manager as unknown as {
-        checkWorkspaceTrust: () => Promise<boolean>;
-      },
-      'checkWorkspaceTrust',
-    ).mockResolvedValue(true);
-    vi.spyOn(
-      manager as unknown as {
-        isPathSafe: () => boolean;
-      },
-      'isPathSafe',
-    ).mockReturnValue(true);
-    vi.spyOn(
-      manager as unknown as {
-        commandExists: () => Promise<boolean>;
-      },
-      'commandExists',
-    ).mockResolvedValue(true);
-    vi.spyOn(LspConnectionFactory, 'createSocketConnection').mockReturnValue(
-      new Promise(() => {}),
-    );
-    manager.setServerConfigs([
-      {
-        ...serverConfig,
-        command: process.execPath,
-        args: ['-e', 'setTimeout(() => {}, 10000);'],
-        transport: 'tcp',
-        socket: { host: '127.0.0.1', port: 65534 },
-        workspaceFolder: process.cwd(),
-        rootUri: pathToRootUri(process.cwd()),
-        startupTimeout: 30_000,
-      },
-    ]);
-
-    const startAll = manager.startAll();
-    await vi.waitFor(() => {
-      expect(LspConnectionFactory.createSocketConnection).toHaveBeenCalled();
-    });
-
-    const stopped = await Promise.race([
-      manager.stopAll().then(() => true),
-      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1000)),
-    ]);
-    await startAll;
-
-    expect(stopped).toBe(true);
-    expect(manager.getHandles().size).toBe(0);
-  });
-
-  it('cancels socket command spawn wait when startup is aborted', async () => {
-    const manager = createTrustedManager();
-    const controller = new AbortController();
-    const childProcess = {
-      exitCode: null,
-      kill: vi.fn(),
-      once: vi.fn(
-        (_event: string, _handler: (...args: unknown[]) => void) =>
-          childProcess,
-      ),
-      off: vi.fn(
-        (_event: string, _handler: (...args: unknown[]) => void) =>
-          childProcess,
-      ),
-    };
-    const privateView = manager as unknown as {
-      waitForSocketProcessSpawn(
-        process: ChildProcess,
-        signal: AbortSignal,
-      ): Promise<void>;
-    };
-
-    const wait = privateView.waitForSocketProcessSpawn(
-      childProcess as unknown as ChildProcess,
-      controller.signal,
-    );
-    controller.abort();
-
-    await expect(wait).rejects.toThrow('LSP server startup cancelled');
-    expect(childProcess.kill).toHaveBeenCalledOnce();
-    expect(childProcess.off).toHaveBeenCalledWith(
-      'spawn',
-      expect.any(Function),
-    );
-    expect(childProcess.off).toHaveBeenCalledWith(
-      'error',
-      expect.any(Function),
-    );
-  });
-
-  it('cleans up a socket connection that resolves after startup abort wins', async () => {
+  it('cleans up a connection that resolves after startup abort wins', async () => {
     const manager = createTrustedManager();
     const controller = new AbortController();
     const connection = { connection: { end: vi.fn() } };
@@ -1518,7 +1420,7 @@ describe('LspServerManager', () => {
     controller.abort();
     await expect(wait).rejects.toThrow('LSP server startup cancelled');
 
-    rejectStartup(new Error('late socket failure'));
+    rejectStartup(new Error('late startup failure'));
     await Promise.resolve();
   });
 
@@ -1574,59 +1476,6 @@ describe('LspServerManager', () => {
 
     expect(stopped).toBe(true);
     expect(manager.getHandles().size).toBe(0);
-  });
-
-  it('fails socket startup early when the child exits before connect', async () => {
-    const manager = createTrustedManager();
-    vi.spyOn(
-      manager as unknown as {
-        checkWorkspaceTrust: () => Promise<boolean>;
-      },
-      'checkWorkspaceTrust',
-    ).mockResolvedValue(true);
-    vi.spyOn(
-      manager as unknown as {
-        isPathSafe: () => boolean;
-      },
-      'isPathSafe',
-    ).mockReturnValue(true);
-    vi.spyOn(
-      manager as unknown as {
-        commandExists: () => Promise<boolean>;
-      },
-      'commandExists',
-    ).mockResolvedValue(true);
-    vi.spyOn(LspConnectionFactory, 'createSocketConnection').mockReturnValue(
-      new Promise(() => {}),
-    );
-    manager.setServerConfigs([
-      {
-        ...serverConfig,
-        command: process.execPath,
-        args: [
-          '-e',
-          'process.stderr.write("socket startup failed\\n"); process.exit(7);',
-        ],
-        transport: 'tcp',
-        socket: { host: '127.0.0.1', port: 65533 },
-        workspaceFolder: process.cwd(),
-        rootUri: pathToRootUri(process.cwd()),
-        startupTimeout: 30_000,
-      },
-    ]);
-
-    await manager.startAll();
-
-    const handle = manager.getHandles().get('clangd');
-    expect(handle?.status).toBe('FAILED');
-    expect(handle?.error?.message).toContain(
-      'LSP server exited before socket connection was ready',
-    );
-    expect(handle?.processDiagnostics).toMatchObject({
-      stderrTail: 'socket startup failed\n',
-      exitCode: 7,
-      exitSignal: null,
-    });
   });
 
   it('does not crash-restart a server that exits during protocol initialization', async () => {

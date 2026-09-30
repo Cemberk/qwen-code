@@ -81,9 +81,8 @@ async function makeTempRepo(): Promise<string> {
 }
 
 describe('setupStartupWorktree', () => {
-  // Real git operations + fetch through a local bare remote can take
-  // 10–15s on slower runners; bump the per-test ceiling so the PR-ref
-  // happy-path test doesn't flake.
+  // Real git operations can take 10–15s on slower runners; bump the
+  // per-test ceiling so they don't flake.
   const timeoutMs = process.env['RUNNER_NAME']?.startsWith('ecs-qwen-')
     ? 60_000
     : 30_000;
@@ -142,7 +141,6 @@ describe('setupStartupWorktree', () => {
       expect(res!.context.originalBranch).toBe('main');
       // 40-char SHA
       expect(res!.context.originalHeadCommit).toMatch(/^[0-9a-f]{40}$/);
-      expect(res!.context.isPullRequest).toBe(false);
 
       // process.cwd() was switched into the worktree.
       expect(process.cwd()).toBe(res!.context.worktreePath);
@@ -193,171 +191,33 @@ describe('setupStartupWorktree', () => {
     expect(process.cwd()).toBe(tempRepo);
   });
 
-  it('rejects #N PR references when origin remote is missing', async () => {
-    tempRepo = await makeTempRepo();
-    process.chdir(tempRepo);
-
-    // Temp repo has no `origin` remote — fetch should fail-close with a
-    // clear hint about adding origin.
-    const res = await setupStartupWorktree('#123');
-    expect(res).not.toBeNull();
-    expect(res!.ok).toBe(false);
-    if (!res!.ok) {
-      expect(res!.error).toContain('#123');
-      expect(res!.error.toLowerCase()).toContain('origin');
-    }
-
-    // No worktree directory was created — fail-close means no side effect.
-    const exists = await fs
-      .stat(path.join(tempRepo, '.qwen', 'worktrees'))
-      .then(() => true)
-      .catch(() => false);
-    expect(exists).toBe(false);
-  });
-
-  it('rejects full GitHub PR URLs when origin remote is missing', async () => {
-    tempRepo = await makeTempRepo();
-    process.chdir(tempRepo);
-
-    const res = await setupStartupWorktree(
-      'https://github.com/QwenLM/qwen-code/pull/4174',
-    );
-    expect(res).not.toBeNull();
-    expect(res!.ok).toBe(false);
-    if (!res!.ok) {
-      expect(res!.error).toContain('#4174');
-      expect(res!.error.toLowerCase()).toContain('origin');
-    }
-  });
-
-  it('creates a pr-<N> worktree from FETCH_HEAD when fetch succeeds (local fake remote)', async () => {
-    // Set up a fake "origin" repo that exposes refs/pull/<N>/head — git
-    // fetch only cares that the refspec exists on the remote, not that
-    // the remote is github.com. update-ref lets us materialise the ref
-    // locally without an actual GitHub round-trip.
-    const upstream = await fs.mkdtemp(
-      path.join(os.tmpdir(), 'qwen-wt-pr-upstream-'),
-    );
-    const upstreamResolved = await fs.realpath(upstream);
-    await exec('git', ['init', '-q', '--bare', '-b', 'main'], {
-      cwd: upstreamResolved,
-    });
-
-    tempRepo = await makeTempRepo();
-    process.chdir(tempRepo);
-    await exec('git', ['remote', 'add', 'origin', upstreamResolved], {
-      cwd: tempRepo,
-    });
-    await exec('git', ['push', '-q', 'origin', 'main'], { cwd: tempRepo });
-
-    // Author a "PR commit" on a feature branch in the local repo, push
-    // it to the upstream as refs/pull/42/head.
-    await exec('git', ['checkout', '-q', '-b', 'pr-source'], { cwd: tempRepo });
-    await fs.writeFile(path.join(tempRepo, 'pr-file.txt'), 'from PR 42\n');
-    await exec('git', ['add', 'pr-file.txt'], { cwd: tempRepo });
-    await exec('git', ['commit', '-q', '-m', 'PR 42 commit', '--no-verify'], {
-      cwd: tempRepo,
-    });
-    await exec('git', ['push', '-q', 'origin', 'HEAD:refs/pull/42/head'], {
-      cwd: tempRepo,
-    });
-    await exec('git', ['checkout', '-q', 'main'], { cwd: tempRepo });
-    // Drop the local pr-source branch so the worktree branch isn't
-    // confused with it.
-    await exec('git', ['branch', '-q', '-D', 'pr-source'], { cwd: tempRepo });
-
-    try {
-      const res = await setupStartupWorktree('#42');
-      expect(res).not.toBeNull();
-      expect(res!.ok).toBe(true);
-      if (res!.ok) {
-        expect(res!.context.slug).toBe('pr-42');
-        expect(res!.context.branch).toBe('worktree-pr-42');
-        expect(res!.context.isPullRequest).toBe(true);
-        expect(res!.context.worktreePath).toBe(
-          path.join(tempRepo, '.qwen', 'worktrees', 'pr-42'),
-        );
-
-        // The PR file lives inside the worktree (proving FETCH_HEAD was
-        // the base, not main).
-        const prFile = await fs.readFile(
-          path.join(res!.context.worktreePath, 'pr-file.txt'),
-          'utf8',
-        );
-        expect(prFile).toBe('from PR 42\n');
-
-        // Phase D-3 round 4: `originalHeadCommit` for PR worktrees must
-        // be the resolved FETCH_HEAD SHA (the PR tip), NOT the parent
-        // repo's HEAD. `WorktreeExitDialog`'s `rev-list <head>..HEAD`
-        // later relies on this to count only the user's own commits in
-        // the worktree, not the entire PR's history.
-        expect(res!.context.originalHeadCommit).toMatch(/^[0-9a-f]{40}$/);
-        // Resolve the PR ref directly and compare: must match.
-        const expectedSha = (
-          await exec('git', ['rev-parse', 'refs/pull/42/head'], {
-            cwd: upstreamResolved,
-          })
-        ).stdout.trim();
-        expect(res!.context.originalHeadCommit).toBe(expectedSha);
-        // Sanity: must NOT equal the parent repo's main HEAD.
-        const parentHead = (
-          await exec('git', ['rev-parse', 'HEAD'], { cwd: tempRepo })
-        ).stdout.trim();
-        expect(res!.context.originalHeadCommit).not.toBe(parentHead);
-      }
-    } finally {
-      // Restore cwd before rm so the upstream cleanup doesn't hit EBUSY.
-      process.chdir(prevCwd);
-      await fs.rm(upstreamResolved, { recursive: true, force: true });
-    }
-  });
-
   it('re-attaches an existing PR-backed worktree by its literal pr-<N> slug', async () => {
-    // `qwen --worktree=#42` created `.qwen/worktrees/pr-42`; a later
-    // `qwen --resume <sid> --worktree pr-42` names that same worktree by
-    // its slug. The reserved shape must not lock the user out of it:
-    // re-attach creates no slug and binds nothing.
-    const upstream = await fs.mkdtemp(
-      path.join(os.tmpdir(), 'qwen-wt-pr-reattach-upstream-'),
-    );
-    const upstreamResolved = await fs.realpath(upstream);
-    await exec('git', ['init', '-q', '--bare', '-b', 'main'], {
-      cwd: upstreamResolved,
-    });
+    // A `.qwen/worktrees/pr-42` worktree that already exists on disk is
+    // named by its slug. The reserved shape must not lock the user out of
+    // it: re-attach creates no slug and binds nothing.
     tempRepo = await makeTempRepo();
     process.chdir(tempRepo);
-    await exec('git', ['remote', 'add', 'origin', upstreamResolved], {
-      cwd: tempRepo,
-    });
-    await exec('git', ['push', '-q', 'origin', 'main'], { cwd: tempRepo });
-    await exec('git', ['push', '-q', 'origin', 'HEAD:refs/pull/42/head'], {
-      cwd: tempRepo,
-    });
-    try {
-      const created = await setupStartupWorktree('#42');
-      expect(created!.ok).toBe(true);
-      if (!created!.ok) return;
-      expect(created!.context.slug).toBe('pr-42');
+    const worktreePath = path.join(tempRepo, '.qwen', 'worktrees', 'pr-42');
+    await exec(
+      'git',
+      ['worktree', 'add', '-q', '-b', 'worktree-pr-42', worktreePath],
+      {
+        cwd: tempRepo,
+      },
+    );
 
-      process.chdir(tempRepo);
-      const reattached = await setupStartupWorktree('pr-42');
-      expect(reattached!.ok).toBe(true);
-      if (!reattached!.ok) return;
-      expect(reattached!.context.wasReattached).toBe(true);
-      expect(reattached!.context.slug).toBe('pr-42');
-      expect(reattached!.context.branch).toBe('worktree-pr-42');
-      expect(reattached!.context.worktreePath).toBe(
-        created!.context.worktreePath,
-      );
-    } finally {
-      process.chdir(tempRepo);
-      await fs.rm(upstream, { recursive: true, force: true });
-    }
+    const reattached = await setupStartupWorktree('pr-42');
+    expect(reattached!.ok).toBe(true);
+    if (!reattached!.ok) return;
+    expect(reattached!.context.wasReattached).toBe(true);
+    expect(reattached!.context.slug).toBe('pr-42');
+    expect(reattached!.context.branch).toBe('worktree-pr-42');
+    expect(reattached!.context.worktreePath).toBe(worktreePath);
   });
 
   it('rejects a literal pr-<N> slug when no such worktree exists', async () => {
     // Creating a worktree in the reserved shape would bind the session to
-    // PR N it never touched — only the `#N` form may create one.
+    // PR N it never touched.
     tempRepo = await makeTempRepo();
     process.chdir(tempRepo);
 
@@ -366,7 +226,6 @@ describe('setupStartupWorktree', () => {
     expect(res!.ok).toBe(false);
     if (res!.ok) return;
     expect(res!.error).toContain('reserved for PR-backed worktrees');
-    expect(res!.error).toContain('--worktree=#42');
     await expect(
       fs.stat(path.join(tempRepo, '.qwen', 'worktrees', 'pr-42')),
     ).rejects.toThrow();

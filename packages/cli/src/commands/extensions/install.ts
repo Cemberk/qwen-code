@@ -25,10 +25,7 @@ import { t, getCurrentLanguage } from '../../i18n/index.js';
 
 interface InstallArgs {
   source: string;
-  ref?: string;
-  allowPreRelease?: boolean;
   consent?: boolean;
-  registry?: string;
   scope?: string;
 }
 
@@ -42,41 +39,6 @@ export async function handleInstall(args: InstallArgs) {
   let extensionManager: ExtensionManager | undefined;
   try {
     const installMetadata = await parseInstallSource(args.source);
-
-    if (
-      installMetadata.type !== 'git' &&
-      installMetadata.type !== 'github-release' &&
-      installMetadata.type !== 'npm' &&
-      installMetadata.type !== 'archive-url'
-    ) {
-      if (args.ref) {
-        throw new Error(
-          t('--ref is not applicable for marketplace extensions.'),
-        );
-      }
-    }
-
-    if (
-      (installMetadata.type === 'npm' ||
-        installMetadata.type === 'archive-url') &&
-      args.ref
-    ) {
-      throw new Error(
-        t(
-          installMetadata.type === 'npm'
-            ? '--ref is not applicable for npm extensions. Use @version suffix instead (e.g. @scope/package@1.2.0).'
-            : '--ref is not applicable for archive URL extensions.',
-        ),
-      );
-    }
-
-    if (installMetadata.type !== 'npm' && args.registry) {
-      throw new Error(t('--registry is only applicable for npm extensions.'));
-    }
-
-    if (installMetadata.type === 'npm' && args.registry) {
-      installMetadata.registryUrl = args.registry;
-    }
 
     const requestConsent = args.consent
       ? () => Promise.resolve()
@@ -93,11 +55,7 @@ export async function handleInstall(args: InstallArgs) {
     await extensionManager.refreshCache();
 
     const extension = await extensionManager.installExtension(
-      {
-        ...installMetadata,
-        ref: args.ref,
-        allowPreRelease: args.allowPreRelease,
-      },
+      installMetadata,
       requestConsent,
       undefined,
       workspaceDir,
@@ -147,28 +105,16 @@ export async function handleInstall(args: InstallArgs) {
 export const installCommand: CommandModule = {
   command: 'install <source>',
   describe: t(
-    'Installs an extension from a git repository URL, local path or archive, archive URL, scoped npm package (@scope/name), or claude marketplace (marketplace-url:plugin-name).',
+    'Installs an extension from a local path or archive, or a plugin from a local claude marketplace (marketplace-path:plugin-name).',
   ),
   builder: (yargs) =>
     yargs
       .positional('source', {
         describe: t(
-          'The github URL, local path or archive, archive URL, or marketplace source (marketplace-url:plugin-name) of the extension to install.',
+          'The local path or archive, or local marketplace source (marketplace-path:plugin-name) of the extension to install.',
         ),
         type: 'string',
         demandOption: true,
-      })
-      .option('ref', {
-        describe: t('The git ref to install from.'),
-        type: 'string',
-      })
-      .option('pre-release', {
-        describe: t('Enable pre-release versions for this extension.'),
-        type: 'boolean',
-      })
-      .option('registry', {
-        describe: t('Custom npm registry URL (only for npm extensions).'),
-        type: 'string',
       })
       .option('consent', {
         describe: t(
@@ -193,10 +139,7 @@ export const installCommand: CommandModule = {
   handler: async (argv) => {
     await handleInstall({
       source: argv['source'] as string,
-      ref: argv['ref'] as string | undefined,
-      allowPreRelease: argv['pre-release'] as boolean | undefined,
       consent: argv['consent'] as boolean | undefined,
-      registry: argv['registry'] as string | undefined,
       scope: argv['scope'] as string | undefined,
     });
   },

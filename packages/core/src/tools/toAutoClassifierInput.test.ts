@@ -5,8 +5,8 @@
  *
  * Tests for each tool's `toAutoClassifierInput` projection. The projection
  * controls what the AUTO mode classifier sees about each tool call — it must
- * redact sensitive / voluminous fields (full edit content, web fetch prompts,
- * sub-agent prompts) while preserving enough for safety judgement.
+ * redact sensitive / voluminous fields (full edit content, sub-agent prompts)
+ * while preserving enough for safety judgement.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -15,7 +15,6 @@ import type { Config } from '../config/config.js';
 import { EditTool } from './edit.js';
 import { WriteFileTool } from './write-file.js';
 import { ShellTool } from './shell.js';
-import { WebFetchTool } from './web-fetch.js';
 import { SkillTool } from './skill.js';
 import { AgentTool } from './agent/agent.js';
 
@@ -137,22 +136,6 @@ describe('ShellTool.toAutoClassifierInput', () => {
       directory: '/some/subdir',
     } as never) as Record<string, unknown>;
     expect(result['cwd']).toBe('/some/subdir');
-  });
-});
-
-// WebFetchTool ────────────────────────────────────────────────────────────
-
-describe('WebFetchTool.toAutoClassifierInput', () => {
-  const tool = new WebFetchTool(minimalConfig());
-
-  it('forwards only the URL — never the prompt', () => {
-    const result = tool.toAutoClassifierInput({
-      url: 'https://example.com/path',
-      prompt: 'sensitive context about the user',
-    } as never) as Record<string, unknown>;
-    expect(result).toEqual({ url: 'https://example.com/path' });
-    // Explicit check: prompt must not leak through.
-    expect(JSON.stringify(result)).not.toContain('sensitive context');
   });
 });
 

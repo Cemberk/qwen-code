@@ -101,7 +101,6 @@ describe('modelDialogTitle', () => {
     expect(modelDialogTitle('fast')).toBe('Select Fast Model');
     expect(modelDialogTitle('vision')).toBe('Select Vision Model');
     expect(modelDialogTitle('compaction')).toBe('Select Compaction Model');
-    expect(modelDialogTitle('image')).toBe('Select Image Model');
   });
 
   it('appends the persist-scope suffix', () => {

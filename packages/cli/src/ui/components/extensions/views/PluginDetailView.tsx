@@ -30,8 +30,6 @@ interface PluginDetailViewProps {
   isFavorite: boolean;
   hasUpdateAvailable: boolean;
   isFocused: boolean;
-  /** Whether to offer the favorite toggle (hidden in the Sources tab). */
-  showFavorite?: boolean;
   /**
    * Action the cursor starts on. A busy action replaces this view with a
    * loading line, so it is remounted once the action settles and would
@@ -68,7 +66,6 @@ export const PluginDetailView = ({
   isFavorite,
   hasUpdateAvailable,
   isFocused,
-  showFavorite = true,
   initialAction,
   onAction,
 }: PluginDetailViewProps) => {
@@ -86,17 +83,11 @@ export const PluginDetailView = ({
         label: isActive ? t('Disable') : t('Enable'),
         value: 'toggle',
       },
-      ...(showFavorite
-        ? [
-            {
-              key: 'favorite',
-              label: isFavorite
-                ? t('Remove from Favorites')
-                : t('Add to Favorites'),
-              value: 'favorite' as const,
-            },
-          ]
-        : []),
+      {
+        key: 'favorite',
+        label: isFavorite ? t('Remove from Favorites') : t('Add to Favorites'),
+        value: 'favorite',
+      },
       {
         key: 'change-scope',
         label: t('Change scope'),
@@ -117,7 +108,7 @@ export const PluginDetailView = ({
       },
     ];
     return items;
-  }, [isActive, isFavorite, hasUpdateAvailable, showFavorite]);
+  }, [isActive, isFavorite, hasUpdateAvailable]);
 
   // Cursor seed, resolved ONCE per mount against the rows offered at that
   // moment: the index of `initialAction`, or the first row when it is absent

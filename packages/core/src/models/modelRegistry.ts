@@ -373,7 +373,6 @@ export class ModelRegistry {
         fastOnly: model.fastOnly,
         voiceOnly: model.voiceOnly,
         visionOnly: model.visionOnly,
-        supportsImageGeneration: model.supportsImageGeneration,
         imageOnly: model.imageOnly,
       }));
   }

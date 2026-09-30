@@ -93,7 +93,6 @@ Notes:
         ToolNames.GREP,
         ToolNames.GLOB,
         ToolNames.SHELL,
-        ToolNames.WEB_FETCH,
         ToolNames.SKILL,
         ToolNames.LSP,
         // ASK_USER_QUESTION is deliberately absent: Explore is a read-only
@@ -252,24 +251,6 @@ Guidelines:
 - If the script includes git commands, prefix them with GIT_OPTIONAL_LOCKS=0 to avoid index.lock contention (e.g. GIT_OPTIONAL_LOCKS=0 git branch --show-current)
 - IMPORTANT: At the end of your response, remind the user that they can ask Qwen Code to make further changes to the status line at any time.
 `,
-    },
-    {
-      name: 'claude-code',
-      description:
-        'Delegate to Claude Code through the installed claude-agent-acp adapter, using its own authentication and model settings. Foreground by default.',
-      systemPrompt:
-        'Complete the delegated task and report the verified result.',
-      background: false,
-      executor: { kind: 'acp', command: 'claude-agent-acp' },
-    },
-    {
-      name: 'codex',
-      description:
-        'Delegate one self-contained task to the installed Codex CLI using its own authentication and model settings. Foreground by default; optional background execution, no messages or resume.',
-      systemPrompt:
-        'Complete the delegated task and report the verified result.',
-      background: false,
-      executor: { kind: 'codex', command: 'codex' },
     },
   ];
 

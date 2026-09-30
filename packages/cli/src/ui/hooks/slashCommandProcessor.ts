@@ -181,7 +181,6 @@ export interface SlashCommandProcessorActions {
     advisorModelMode?: boolean;
     visionModelMode?: boolean;
     compactionModelMode?: boolean;
-    imageModelMode?: boolean;
     persistScope?: 'workspace' | 'user';
   }) => void;
   openTrustDialog: () => void;
@@ -1228,12 +1227,6 @@ export const useSlashCommandProcessor = (
                     case 'compaction-model':
                       actions.openModelDialog({
                         compactionModelMode: true,
-                        persistScope: result.persistScope,
-                      });
-                      return { type: 'handled' };
-                    case 'image-model':
-                      actions.openModelDialog({
-                        imageModelMode: true,
                         persistScope: result.persistScope,
                       });
                       return { type: 'handled' };

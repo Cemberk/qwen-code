@@ -111,38 +111,16 @@ describe('LspConfigLoader config-driven behavior', () => {
     expect(configs[0]?.args).toEqual(['--custom-flag']);
   });
 
-  it('accepts valid string socket ports from .lsp.json', async () => {
-    mock({
-      [workspaceRoot]: {
-        '.lsp.json': JSON.stringify({
-          typescript: {
-            transport: 'tcp',
-            host: '127.0.0.1',
-            port: '1234',
-          },
-        }),
-      },
-    });
-
-    const loader = new LspConfigLoader(workspaceRoot);
-    const configs = await loader.loadUserConfigs();
-
-    expect(configs).toHaveLength(1);
-    expect(configs[0]?.socket).toEqual({
-      host: '127.0.0.1',
-      port: 1234,
-    });
-  });
-
-  it('rejects malformed socket ports from .lsp.json', async () => {
-    for (const port of ['1.5', '0x10', 1.5, 0, 65_536]) {
+  it('rejects non-stdio transports from .lsp.json', async () => {
+    for (const transport of ['tcp', 'socket']) {
       mock({
         [workspaceRoot]: {
           '.lsp.json': JSON.stringify({
             typescript: {
-              transport: 'tcp',
+              command: 'typescript-language-server',
+              transport,
               host: '127.0.0.1',
-              port,
+              port: 1234,
             },
           }),
         },
@@ -151,7 +129,7 @@ describe('LspConfigLoader config-driven behavior', () => {
       const loader = new LspConfigLoader(workspaceRoot);
       const configs = await loader.loadUserConfigs();
 
-      expect(configs, `port ${JSON.stringify(port)}`).toHaveLength(0);
+      expect(configs).toHaveLength(0);
       mock.restore();
     }
   });

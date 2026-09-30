@@ -510,8 +510,8 @@ export default {
   'Manage installed extensions': 'Installierte Erweiterungen verwalten',
   'Disable an extension': 'Erweiterung deaktivieren',
   'Enable an extension': 'Erweiterung aktivieren',
-  'Install an extension from a git repo or local path':
-    'Erweiterung aus Git-Repository oder lokalem Pfad installieren',
+  'Install an extension from a local path':
+    'Erweiterung aus lokalem Pfad installieren',
   'Uninstall an extension': 'Erweiterung deinstallieren',
   'No extensions installed.': 'Keine Erweiterungen installiert.',
   'Extension "{{name}}" not found.': 'Erweiterung "{{name}}" nicht gefunden.',
@@ -549,15 +549,10 @@ export default {
     'Installation von "{{name}}" abgebrochen.',
   'You are installing an extension from {{originSource}}. Some features may not work perfectly with Qwen Code.':
     'Sie installieren eine Erweiterung von {{originSource}}. Einige Funktionen funktionieren möglicherweise nicht perfekt mit Qwen Code.',
-  '--ref is not applicable for marketplace extensions.':
-    '--ref ist nicht anwendbar für Marketplace-Erweiterungen.',
   'Extension "{{name}}" installed successfully and enabled.':
     'Erweiterung "{{name}}" erfolgreich installiert und aktiviert.',
   'The github URL, local path, or marketplace source (marketplace-url:plugin-name) of the extension to install.':
     'Die GitHub-URL, der lokale Pfad oder die Marketplace-Quelle (marketplace-url:plugin-name) der zu installierenden Erweiterung.',
-  'The git ref to install from.': 'Die Git-Referenz für die Installation.',
-  'Enable pre-release versions for this extension.':
-    'Pre-Release-Versionen für diese Erweiterung aktivieren.',
   'Acknowledge the security risks of installing an extension and skip the confirmation prompt.':
     'Sicherheitsrisiken der Erweiterungsinstallation bestätigen und Bestätigungsaufforderung überspringen.',
   'The source argument must be provided.':
@@ -604,7 +599,6 @@ export default {
   'Path:': 'Pfad:',
   'Source:': 'Quelle:',
   'Type:': 'Typ:',
-  'Release tag:': 'Release-Tag:',
   'Enabled (User):': 'Aktiviert (Benutzer):',
   'Enabled (Workspace):': 'Aktiviert (Arbeitsbereich):',
   'Context files:': 'Kontextdateien:',
@@ -704,8 +698,8 @@ export default {
     'Dieses Menü ist schreibgeschützt. Um Hooks hinzuzufügen oder zu ändern, bearbeiten Sie settings.json direkt oder fragen Sie Qwen Code.',
   'Reopen this menu to reload hook definitions.':
     'Öffnen Sie dieses Menü erneut, um Hook-Definitionen neu zu laden.',
-  'Hook controls and HTTP security settings require a restart.':
-    'Hook-Steuerungsoptionen und HTTP-Sicherheitseinstellungen erfordern einen Neustart.',
+  'Hook controls require a restart.':
+    'Hook-Steuerungsoptionen erfordern einen Neustart.',
   'Failed to reload hook definitions: {{error}}':
     'Hook-Definitionen konnten nicht neu geladen werden: {{error}}',
   'Enter to select · Esc to cancel': 'Enter zum Auswählen · Esc zum Abbrechen',
@@ -955,15 +949,6 @@ export default {
     'Verwaltete Auto-Speicher-Themendateien konsolidieren.',
   'Could not retrieve tool registry.':
     'Werkzeugregister konnte nicht abgerufen werden.',
-  "Successfully authenticated and refreshed tools for '{{name}}'.":
-    "Erfolgreich authentifiziert und Werkzeuge für '{{name}}' aktualisiert.",
-  "Re-discovering tools from '{{name}}'...":
-    "Werkzeuge von '{{name}}' werden neu erkannt...",
-  "Discovered {{count}} tool(s) from '{{name}}'.":
-    "{{count}} Werkzeug(e) von '{{name}}' entdeckt.",
-  'Authentication complete. Returning to server details...':
-    'Authentifizierung abgeschlossen. Zurück zu den Serverdetails...',
-  'Authentication successful.': 'Authentifizierung erfolgreich.',
   // =========================================================
   // Commands - Summary
   // ============================================================================
@@ -1101,9 +1086,6 @@ export default {
     'Enter zum Bestätigen, Esc zum Abbrechen',
   Disable: 'Deaktivieren',
   Enable: 'Aktivieren',
-  Authenticate: 'Authentifizieren',
-  'Re-authenticate': 'Erneut authentifizieren',
-  'Clear Authentication': 'Authentifizierung löschen',
   disabled: 'deaktiviert',
   enabled: 'aktiviert',
   'disabled (bare mode)': 'deaktiviert (Bare-Modus)',
@@ -1113,7 +1095,6 @@ export default {
     'deaktiviert (Ordner nicht vertrauenswürdig)',
   'disabled (turned off for this session)':
     'deaktiviert (für diese Sitzung ausgeschaltet)',
-  'Server:': 'Server:',
   Reconnect: 'Neu verbinden',
   'View tools': 'Werkzeuge anzeigen',
   'Status:': 'Status:',
@@ -1140,9 +1121,6 @@ export default {
     'Führen Sie qwen --debug aus, um Fehlerprotokolle anzuzeigen',
 
   // MCP OAuth Authentication
-  'OAuth Authentication': 'OAuth-Authentifizierung',
-  'Authenticating... Please complete the login in your browser.':
-    'Authentifizierung läuft... Bitte schließen Sie die Anmeldung in Ihrem Browser ab.',
   // MCP Tool List
   'No tools available for this server.':
     'Keine Werkzeuge für diesen Server verfügbar.',
@@ -1400,8 +1378,6 @@ export default {
   '{{count}} prompts': '{{count}} Prompts',
   '(from {{extensionName}})': '(von {{extensionName}})',
   OAuth: 'OAuth',
-  'OAuth expired': 'OAuth abgelaufen',
-  'OAuth not authenticated': 'OAuth nicht authentifiziert',
   'tools and prompts will appear when ready':
     'Werkzeuge und Prompts werden angezeigt, wenn bereit',
   '{{count}} tools cached': '{{count}} Werkzeuge zwischengespeichert',
@@ -1414,13 +1390,9 @@ export default {
     'um Server- und Werkzeugbeschreibungen anzuzeigen',
   'to show tool parameter schemas': 'um tool parameter schemas anzuzeigen',
   'to hide descriptions': 'um Beschreibungen auszublenden',
-  'to authenticate with OAuth-enabled servers':
-    'um sich bei OAuth-fähigen Servern zu authentifizieren',
   Press: 'Drücken Sie',
   'to toggle tool descriptions on/off':
     'um Werkzeugbeschreibungen ein-/auszuschalten',
-  "Starting OAuth authentication for MCP server '{{name}}'...":
-    "OAuth-Authentifizierung für MCP server '{{name}}' wird gestartet...",
   // ============================================================================
   // Startup Tips
   // ============================================================================
@@ -2074,12 +2046,6 @@ export default {
   "Use '/extensions install' to install your first extension.":
     "Verwenden Sie '/extensions install', um Ihre erste Erweiterung zu installieren.",
   'Value:': 'Wert:',
-  'Press c to copy the authorization URL to your clipboard.':
-    'Drücken Sie c, um die Autorisierungs-URL in die Zwischenablage zu kopieren.',
-  'Copy request sent to your terminal. If paste is empty, copy the URL above manually.':
-    'Kopieranfrage an Ihr Terminal gesendet. Wenn das Einfügen leer ist, kopieren Sie die URL oben manuell.',
-  'Cannot write to terminal — copy the URL above manually.':
-    'Schreiben ins Terminal nicht möglich — kopieren Sie die URL oben manuell.',
   'Tips:': 'Tipps:',
   'Retrying in {{seconds}} seconds… (attempt {{attempt}}/{{maxRetries}})':
     'Erneuter Versuch in {{seconds}} Sekunden… (Versuch {{attempt}}/{{maxRetries}})',
@@ -2121,7 +2087,6 @@ export default {
   Prompt: 'Eingabe',
   'Prompts:': 'Eingaben:',
   'Resources:': 'Ressourcen:',
-  'Ref:': 'Referenz:',
   'Skills:': 'Fähigkeiten:',
   remote: 'entfernt',
   '中国 (China)': 'China',

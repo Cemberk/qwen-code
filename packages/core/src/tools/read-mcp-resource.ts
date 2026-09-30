@@ -156,7 +156,7 @@ export class ReadMcpResourceTool extends BaseDeclarativeTool<
         'previously advertised by that server. Use this tool when the user ' +
         'asks you to read a specific MCP resource; for inline prompt ' +
         'references, prefer the @server:uri syntax.',
-      // Remote read with no side effects — same class as web_fetch. Using
+      // Remote read with no side effects. Using
       // Kind.Fetch (vs Kind.Other) also keeps it in CONCURRENCY_SAFE_KINDS so
       // multiple resource reads can run in parallel.
       Kind.Fetch,
@@ -185,7 +185,7 @@ export class ReadMcpResourceTool extends BaseDeclarativeTool<
       },
       true, // isOutputMarkdown
       false, // canUpdateOutput
-      true, // shouldDefer — MCP resource reads are infrequent (matches web_fetch)
+      true, // shouldDefer — MCP resource reads are infrequent
       false, // alwaysLoad
       'mcp resource read uri server fetch',
     );
@@ -207,7 +207,7 @@ export class ReadMcpResourceTool extends BaseDeclarativeTool<
     params: ReadMcpResourceToolParams,
   ): Record<string, unknown> {
     // Expose the read target so the AUTO-mode classifier can scrutinize a
-    // suspicious server/URI (mirrors web_fetch exposing { url }).
+    // suspicious server/URI.
     return { server_name: params.server_name, uri: params.uri };
   }
 

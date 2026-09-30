@@ -52,19 +52,18 @@ describe('loadProjectMcpServers', () => {
       }),
     );
     const { servers, errors } = loadProjectMcpServers(dir);
-    expect(errors).toEqual([]);
     expect(servers['slack']).toMatchObject({
       command: 'node',
       args: ['slack.js'],
       scope: 'project',
     });
-    expect(servers['remote']).toMatchObject({
-      httpUrl: 'https://example.test/mcp',
-      scope: 'project',
-    });
+    expect(servers['remote']).toBeUndefined();
+    expect(errors).toEqual([
+      expect.stringContaining('"remote" is not a stdio server'),
+    ]);
   });
 
-  it('normalizes Claude-style type-based transports (.mcp.json is a Claude convention)', () => {
+  it('drops Claude-style type fields and skips remote transports (.mcp.json is a Claude convention)', () => {
     write(
       JSON.stringify({
         mcpServers: {
@@ -75,16 +74,10 @@ describe('loadProjectMcpServers', () => {
       }),
     );
     const { servers, errors } = loadProjectMcpServers(dir);
-    expect(errors).toEqual([]);
+    expect(errors).toHaveLength(2);
 
-    expect(servers['httpServer']).toEqual({
-      httpUrl: 'https://example.test/mcp',
-      scope: 'project',
-    });
-    expect(servers['sseServer']).toEqual({
-      url: 'https://example.test/sse',
-      scope: 'project',
-    });
+    expect(servers['httpServer']).toBeUndefined();
+    expect(servers['sseServer']).toBeUndefined();
     expect(servers['stdioServer']).toEqual({
       command: 'node',
       args: ['s.js'],

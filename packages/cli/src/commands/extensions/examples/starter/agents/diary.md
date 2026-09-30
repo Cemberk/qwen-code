@@ -9,7 +9,6 @@ tools:
   - ReadFile
   - ReadManyFiles
   - NotebookRead
-  - WebFetch
   - TodoList
 modelConfig:
   model: qwen3-coder-plus

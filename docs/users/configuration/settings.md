@@ -270,12 +270,6 @@ The `extra_body` field allows you to add custom parameters to the request body s
 | ----------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
 | `compactionModel` | string | Model used for chat compression (auto-compaction). Leave empty to fall back to the main model. A smaller or faster model can reduce compression latency and cost. Can also be set or cleared via `/model --compaction`. | `""`    |
 
-#### imageModel
-
-| Setting      | Type   | Description                                                                                                                                                                                                                                                                              | Default |
-| ------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| `imageModel` | string | Model used by the built-in `image_gen` tool. The selected route must set `supportsImageGeneration: true` (or legacy `imageOnly: true`) and declare an HTTPS `baseUrl` plus `envKey` in `modelProviders`. Leave empty to keep the tool unavailable. Can also be set via `/model --image`. | `""`    |
-
 #### visionBridgeTimeoutMs
 
 | Setting                 | Type    | Description                                                                                                                                                                                                                                                        | Default |
@@ -409,7 +403,6 @@ The first matching rule wins. Rules use the format `"ToolName"` or `"ToolName(sp
 | `Grep`, `SearchFiles` | `grep_search`       |                           |
 | `Glob`, `FindFiles`   | `glob`              |                           |
 | `ListFiles`           | `list_directory`    |                           |
-| `WebFetch`            | `web_fetch`         |                           |
 | `Agent`               | `task`              |                           |
 | `Skill`               | `skill`             |                           |
 
@@ -428,17 +421,16 @@ Some rule names automatically cover multiple tools:
 
 **Rule syntax examples:**
 
-| Rule                          | Meaning                                                        |
-| ----------------------------- | -------------------------------------------------------------- |
-| `"Bash"`                      | All shell commands                                             |
-| `"Bash(git *)"`               | Shell commands starting with `git` (word boundary: NOT `gitk`) |
-| `"Bash(git push *)"`          | Shell commands like `git push origin main`                     |
-| `"Bash(npm run *)"`           | Any `npm run` script                                           |
-| `"Read"`                      | All file read operations (read, grep, glob, list)              |
-| `"Read(./secrets/**)"`        | Read any file under `./secrets/` recursively                   |
-| `"Edit(/src/**/*.ts)"`        | Edit TypeScript files under project root `/src/`               |
-| `"WebFetch(api.example.com)"` | Fetch from `api.example.com` and all its subdomains            |
-| `"mcp__puppeteer"`            | All tools from the puppeteer MCP server                        |
+| Rule                   | Meaning                                                        |
+| ---------------------- | -------------------------------------------------------------- |
+| `"Bash"`               | All shell commands                                             |
+| `"Bash(git *)"`        | Shell commands starting with `git` (word boundary: NOT `gitk`) |
+| `"Bash(git push *)"`   | Shell commands like `git push origin main`                     |
+| `"Bash(npm run *)"`    | Any `npm run` script                                           |
+| `"Read"`               | All file read operations (read, grep, glob, list)              |
+| `"Read(./secrets/**)"` | Read any file under `./secrets/` recursively                   |
+| `"Edit(/src/**/*.ts)"` | Edit TypeScript files under project root `/src/`               |
+| `"mcp__puppeteer"`     | All tools from the puppeteer MCP server                        |
 
 **Path pattern prefixes:**
 
@@ -452,7 +444,7 @@ Some rule names automatically cover multiple tools:
 
 **Shell command bypass prevention:**
 
-Permission rules for `Read`, `Edit`, and `WebFetch` are also enforced when the agent runs equivalent shell commands. For example, if `Read(./.env)` is in `deny`, the agent cannot bypass it via `cat .env` in a shell command. Supported shell commands include `cat`, `grep`, `curl`, `wget`, `cp`, `mv`, `rm`, `chmod`, and many more. Unknown/safe commands (e.g. `git`) are unaffected by file/network rules.
+Permission rules for `Read` and `Edit` are also enforced when the agent runs equivalent shell commands. For example, if `Read(./.env)` is in `deny`, the agent cannot bypass it via `cat .env` in a shell command. Supported shell commands include `cat`, `grep`, `cp`, `mv`, `rm`, `chmod`, and many more. Unknown/safe commands (e.g. `git`) are unaffected by file rules.
 
 **Migrating from legacy settings:**
 
@@ -469,7 +461,7 @@ Permission rules for `Read`, `Edit`, and `WebFetch` are also enforced when the a
   "permissions": {
     "allow": ["Bash(git *)", "Bash(npm run *)", "Read(//Users/alice/code/**)"],
     "ask": ["Bash(git push *)", "Edit"],
-    "deny": ["Bash(rm -rf *)", "Read(.env)", "WebFetch(malicious.com)"]
+    "deny": ["Bash(rm -rf *)", "Read(.env)"]
   }
 }
 ```
@@ -586,7 +578,7 @@ LSP server configuration is done through `.lsp.json` files in your project root 
 
 #### mcpServers
 
-Configures connections to one or more Model-Context Protocol (MCP) servers for discovering and using custom tools. Qwen Code attempts to connect to each configured MCP server to discover available tools. If multiple MCP servers expose a tool with the same name, the tool names will be prefixed with the server alias you defined in the configuration (e.g., `serverAlias__actualToolName`) to avoid conflicts. Note that the system might strip certain schema properties from MCP tool definitions for compatibility. At least one of `command`, `url`, or `httpUrl` must be provided. If multiple are specified, the order of precedence is `httpUrl`, then `url`, then `command`.
+Configures connections to one or more Model-Context Protocol (MCP) servers for discovering and using custom tools. Qwen Code attempts to connect to each configured MCP server to discover available tools. If multiple MCP servers expose a tool with the same name, the tool names will be prefixed with the server alias you defined in the configuration (e.g., `serverAlias__actualToolName`) to avoid conflicts. Note that the system might strip certain schema properties from MCP tool definitions for compatibility. Servers run as local processes over stdio, so `command` must be provided.
 
 | Property                                | Type             | Description                                                                                                                                                                                                                                                        | Optional |
 | --------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
@@ -594,9 +586,6 @@ Configures connections to one or more Model-Context Protocol (MCP) servers for d
 | `mcpServers.<SERVER_NAME>.args`         | array of strings | Arguments to pass to the command.                                                                                                                                                                                                                                  | Yes      |
 | `mcpServers.<SERVER_NAME>.env`          | object           | Environment variables to set for the server process.                                                                                                                                                                                                               | Yes      |
 | `mcpServers.<SERVER_NAME>.cwd`          | string           | The working directory in which to start the server.                                                                                                                                                                                                                | Yes      |
-| `mcpServers.<SERVER_NAME>.url`          | string           | The URL of an MCP server that uses Server-Sent Events (SSE) for communication.                                                                                                                                                                                     | Yes      |
-| `mcpServers.<SERVER_NAME>.httpUrl`      | string           | The URL of an MCP server that uses streamable HTTP for communication.                                                                                                                                                                                              | Yes      |
-| `mcpServers.<SERVER_NAME>.headers`      | object           | A map of HTTP headers to send with requests to `url` or `httpUrl`.                                                                                                                                                                                                 | Yes      |
 | `mcpServers.<SERVER_NAME>.timeout`      | number           | Timeout in milliseconds for requests to this MCP server.                                                                                                                                                                                                           | Yes      |
 | `mcpServers.<SERVER_NAME>.trust`        | boolean          | Trust this server and bypass its tool call confirmations in a trusted workspace.                                                                                                                                                                                   | Yes      |
 | `mcpServers.<SERVER_NAME>.description`  | string           | A brief description of the server, which may be used for display purposes.                                                                                                                                                                                         | Yes      |

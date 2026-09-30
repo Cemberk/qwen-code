@@ -69,7 +69,7 @@ export const MUST_TRANSLATE_KEYS = [
   'Show per-item context usage breakdown.',
   'Manage extensions',
   'Manage installed extensions',
-  'Install an extension from a git repo or local path',
+  'Install an extension from a local path',
   'Disable an extension',
   'Enable an extension',
   'Uninstall an extension',

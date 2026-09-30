@@ -553,14 +553,7 @@ describe('BackgroundAgentResumeService', () => {
     ).toBeUndefined();
   });
 
-  it.each([
-    'persisted',
-    'definition',
-    'legacy-model',
-    'legacy-flags',
-    'codex-persisted',
-    'codex-definition',
-  ] as const)(
+  it.each(['legacy-model', 'legacy-flags'] as const)(
     'blocks cold external resume using %s provenance',
     async (provenance) => {
       const sessionId = 'session-external';
@@ -573,10 +566,6 @@ describe('BackgroundAgentResumeService', () => {
         parentAgentId: null,
         createdAt: new Date().toISOString(),
         status: 'running',
-        ...(provenance === 'persisted' ? { executor: 'acp' as const } : {}),
-        ...(provenance === 'codex-persisted'
-          ? { executor: 'codex' as const }
-          : {}),
         ...(provenance === 'legacy-model'
           ? { model: 'external-acp:claude' }
           : {}),
@@ -594,18 +583,6 @@ describe('BackgroundAgentResumeService', () => {
         }) + '\n',
       );
       const { service, subagentManager } = createService();
-      if (provenance === 'definition' || provenance === 'codex-definition') {
-        subagentManager.loadSubagent.mockResolvedValue({
-          name: 'researcher',
-          color: 'cyan',
-          model: undefined,
-          approvalMode: undefined,
-          executor: {
-            kind: provenance === 'codex-definition' ? 'codex' : 'acp',
-            command: 'native-agent',
-          },
-        } as Awaited<ReturnType<typeof subagentManager.loadSubagent>>);
-      }
       const recovered = await service.loadPausedBackgroundAgents(sessionId);
       expect(recovered[0]?.resumeBlockedReason).toContain(
         'External subagent session cannot be restored',

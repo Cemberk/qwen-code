@@ -10,7 +10,6 @@ import * as path from 'node:path';
 import lockfile from 'proper-lockfile';
 import { isNodeError } from '../utils/errors.js';
 import { atomicWriteJSON } from '../utils/atomicFileWrite.js';
-import { SESSION_PR_ISSUE_LIST_LIMIT } from '../utils/github-pr-issues.js';
 
 /**
  * Persisted GitHub pull request binding for a session. Written by the daemon
@@ -65,6 +64,9 @@ export const SESSION_PR_LIST_LIMIT = 10;
 
 /** Upper bound for a bound PR URL; generous for enterprise hosts + long paths. */
 export const SESSION_PR_URL_MAX_LENGTH = 2048;
+
+/** Bound on the closing issues a session PR sidecar entry keeps. */
+export const SESSION_PR_ISSUE_LIST_LIMIT = 10;
 
 interface SessionPrList {
   prs: SessionPr[];

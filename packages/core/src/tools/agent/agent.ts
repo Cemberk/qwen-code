@@ -153,16 +153,6 @@ import {
 } from '../../skills/agent-delegation-skill.js';
 import type { BundledReferenceSurface } from '../../skills/bundled-reference.js';
 
-const EXTERNAL_USAGE_NOTICE =
-  '\n\n[External executor token usage and cost are unavailable.]';
-
-// ACP v1 has no mid-turn injection primitive, so an external agent cannot be
-// steered while a prompt is in flight — queued input is delivered at the next
-// turn boundary. Surface that on the result so a caller does not read a queued
-// steer as having been delivered mid-turn. (R3-6)
-const EXTERNAL_MID_TURN_INPUT_NOTICE =
-  '\n\n[External agents receive queued input only between turns; a message sent while a turn is running is delivered at the next turn boundary, not mid-turn.]';
-
 function persistBackgroundCancellation(
   metaPath: string,
   persistedStatus: 'running' | 'cancelled',
@@ -630,7 +620,6 @@ export interface ApprovalModeOverrideHandle {
 
 export interface ApprovalModeOverrideOptions {
   persistedCliFlags?: AgentPersistedCliFlags;
-  externalExecutor?: boolean;
 }
 
 function hasOwn(value: object, key: PropertyKey): boolean {
@@ -711,14 +700,7 @@ export async function createApprovalModeOverride(
   mode: ApprovalMode,
   options: ApprovalModeOverrideOptions = {},
 ): Promise<ApprovalModeOverrideHandle> {
-  const { config: override, cleanup } = deriveApprovalModeConfig(base, mode, {
-    hooks: options.externalExecutor
-      ? {
-          acquireAutoApprovalOverride: () => false,
-          releaseAutoApprovalOverride: () => {},
-        }
-      : undefined,
-  });
+  const { config: override, cleanup } = deriveApprovalModeConfig(base, mode);
   try {
     // Session Workflow plan-revision state is session-global on the base
     // Config; without the shim the prototype set/clear would assign it
@@ -2066,10 +2048,6 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
           return undefined;
         }
 
-        if (subagent.continuationBlockedReason) {
-          return `SubagentStop requested continuation: ${subagent.continuationBlockedReason}`;
-        }
-
         stopHookActive = true;
         const currentIterationCount = i + 1;
         if (currentIterationCount >= maxIterations) {
@@ -2259,7 +2237,6 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
       agentId: string;
       agentType: string;
       resolvedMode: PermissionMode;
-      externalExecutor?: boolean;
       signal?: AbortSignal;
       updateOutput?: (output: ToolResultDisplay) => void;
       /**
@@ -2324,9 +2301,7 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
         stopHookWarning,
       );
       const success = terminateMode === AgentTerminateMode.GOAL;
-      const executionSummary = opts.externalExecutor
-        ? undefined
-        : subagent.getExecutionSummary();
+      const executionSummary = subagent.getExecutionSummary();
 
       // Publish span outcome BEFORE side-effectful UI/registry calls — if
       // updateDisplay throws, the subagent's real terminal state must
@@ -2894,7 +2869,6 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
       if (backendError) throw new Error(backendError);
       if (this.executionBackend === 'container') {
         const unsupported = [
-          ['external executor', subagentConfig.executor],
           ['MCP servers', subagentConfig.mcpServers],
           ['agent hooks', subagentConfig.hooks],
         ].filter(([, value]) => value !== undefined);
@@ -2994,33 +2968,31 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
       }
 
       if (shouldRunInBackground) {
-        if (subagentConfig.executor === undefined) {
-          // Resolve the concrete model the sub-agent (or fork) will run with so the
-          // registry can apply a per-model cap. `subagentConfig.model` is a
-          // selector (omitted/"inherit"/"fast"/modelId/authType:modelId);
-          // resolveModelId maps it to the actual model ID, falling back to the
-          // parent's current model when the sub-agent inherits (forks always
-          // inherit, since FORK_AGENT has no model selector).
-          const resolvedSubagentModel = resolveModelId(
-            subagentConfig.model,
-            buildModelIdContext(this.config),
-          );
-          subagentModelId = resolvedSubagentModel?.modelId;
-          subagentModelId ??= this.config.getModel();
-          const parentContentGeneratorConfig =
-            this.config.getContentGeneratorConfig();
-          const authType =
-            resolvedSubagentModel?.authType ??
-            parentContentGeneratorConfig.authType;
-          subagentRuntimeAuthOverrides = authType
-            ? {
-                authType,
-                ...(authType === parentContentGeneratorConfig.authType
-                  ? { baseUrl: parentContentGeneratorConfig.baseUrl }
-                  : {}),
-              }
-            : undefined;
-        }
+        // Resolve the concrete model the sub-agent (or fork) will run with so the
+        // registry can apply a per-model cap. `subagentConfig.model` is a
+        // selector (omitted/"inherit"/"fast"/modelId/authType:modelId);
+        // resolveModelId maps it to the actual model ID, falling back to the
+        // parent's current model when the sub-agent inherits (forks always
+        // inherit, since FORK_AGENT has no model selector).
+        const resolvedSubagentModel = resolveModelId(
+          subagentConfig.model,
+          buildModelIdContext(this.config),
+        );
+        subagentModelId = resolvedSubagentModel?.modelId;
+        subagentModelId ??= this.config.getModel();
+        const parentContentGeneratorConfig =
+          this.config.getContentGeneratorConfig();
+        const authType =
+          resolvedSubagentModel?.authType ??
+          parentContentGeneratorConfig.authType;
+        subagentRuntimeAuthOverrides = authType
+          ? {
+              authType,
+              ...(authType === parentContentGeneratorConfig.authType
+                ? { baseUrl: parentContentGeneratorConfig.baseUrl }
+                : {}),
+            }
+          : undefined;
         const registry = this.config.getBackgroundTaskRegistry();
         backgroundSlotReservation = registry.tryReserveBackgroundSlot(
           subagentModelId,
@@ -3223,18 +3195,9 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
       }
 
       // Resolve the subagent's permission mode before creating it
-      const isCodex = subagentConfig.executor?.kind === 'codex';
-      const parentApprovalMode = isCodex
-        ? this.config.getSessionApprovalMode()
-        : this.config.getApprovalMode();
-      // Codex has no Qwen classifier: native writes need an explicit grant,
-      // not an intermediate subagent's implicit auto-edit or fork yolo mode.
       const resolvedMode = resolveSubagentApprovalMode(
-        isCodex && parentApprovalMode === ApprovalMode.AUTO
-          ? ApprovalMode.DEFAULT
-          : parentApprovalMode,
-        subagentConfig.approvalMode ??
-          (isCodex ? parentApprovalMode : undefined),
+        this.config.getApprovalMode(),
+        subagentConfig.approvalMode,
         this.config.isTrustedFolder(),
       );
       const resolvedApprovalMode = permissionModeToApprovalMode(resolvedMode);
@@ -3310,7 +3273,6 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
       const { config: agentConfig, cleanup } = await createApprovalModeOverride(
         executionConfig,
         resolvedApprovalMode,
-        { externalExecutor: subagentConfig.executor !== undefined },
       );
       restoreParentPM = cleanup;
 
@@ -3324,7 +3286,6 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
         // rows, and the meta sidecar all read this field.
         agentType: subagentConfig.name,
         resolvedMode,
-        externalExecutor: subagentConfig.executor !== undefined,
         signal,
         updateOutput,
       };
@@ -3542,7 +3503,6 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
               // resolves the parent's display name from parentAgentId.
               parentAgentId: backgroundOwnerId,
               depth: launchDepth,
-              resumeBlockedReason: bgSubagent.continuationBlockedReason,
             },
             registerOptions,
           );
@@ -3645,17 +3605,13 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
           ...(isFork && bgToolConfig?.disallowedTools?.length
             ? { disallowedTools: [...bgToolConfig.disallowedTools] }
             : {}),
-          executor: subagentConfig.executor?.kind,
-          persistedCliFlags:
-            subagentConfig.executor !== undefined
-              ? undefined
-              : capturePersistedCliFlags(
-                  this.config,
-                  resolvedApprovalMode,
-                  bgSubagent.getCore().modelConfig.model,
-                  bgSubagent.getCore().runtimeView?.contentGeneratorConfig ??
-                    subagentRuntimeAuthOverrides,
-                ),
+          persistedCliFlags: capturePersistedCliFlags(
+            this.config,
+            resolvedApprovalMode,
+            bgSubagent.getCore().modelConfig.model,
+            bgSubagent.getCore().runtimeView?.contentGeneratorConfig ??
+              subagentRuntimeAuthOverrides,
+          ),
           subagentName: subagentConfig.name,
           agentColor: subagentConfig.color,
           resumeCount: 0,
@@ -3682,12 +3638,7 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
         let liveToolCallCount = 0;
         const refreshLiveStats = () => {
           const entry = registry.get(hookOpts.agentId);
-          if (
-            !entry ||
-            entry.status !== 'running' ||
-            subagentConfig.executor !== undefined
-          )
-            return;
+          if (!entry || entry.status !== 'running') return;
           const summary = bgSubagent.getExecutionSummary();
           entry.stats = {
             totalTokens: summary.totalTokens,
@@ -3721,34 +3672,25 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
           : undefined;
 
         const cleanupOwnedMonitorNotifications =
-          bgSubagent.continuationBlockedReason
-            ? () => {}
-            : this.registerOwnedMonitorNotifications(
-                hookOpts.agentId,
-                (input) => registry.queueExternalInput(hookOpts.agentId, input),
-                () => registry.wakeExternalInputWaiters(hookOpts.agentId),
-              );
+          this.registerOwnedMonitorNotifications(
+            hookOpts.agentId,
+            (input) => registry.queueExternalInput(hookOpts.agentId, input),
+            () => registry.wakeExternalInputWaiters(hookOpts.agentId),
+          );
 
         // Wire external message drain so SendMessage and owned Monitor
         // notifications can inject inputs between tool rounds.
-        if (!bgSubagent.continuationBlockedReason) {
-          bgSubagent.setExternalMessageProvider(() =>
-            registry.drainMessages(hookOpts.agentId),
-          );
-          bgSubagent.setExternalMessageWaiter?.((waitSignal) =>
-            registry.waitForMessages(hookOpts.agentId, waitSignal),
-          );
-          bgSubagent.setExternalMessageWaitPredicate?.(() =>
-            this.config
-              .getMonitorRegistry()
-              .hasRunningForOwner(hookOpts.agentId),
-          );
-        }
+        bgSubagent.setExternalMessageProvider(() =>
+          registry.drainMessages(hookOpts.agentId),
+        );
+        bgSubagent.setExternalMessageWaiter?.((waitSignal) =>
+          registry.waitForMessages(hookOpts.agentId, waitSignal),
+        );
+        bgSubagent.setExternalMessageWaitPredicate?.(() =>
+          this.config.getMonitorRegistry().hasRunningForOwner(hookOpts.agentId),
+        );
 
         const getCompletionStats = () => {
-          // The shared summary requires known token counts. Keep external
-          // usage absent rather than describing an unmetered run as free.
-          if (subagentConfig.executor !== undefined) return undefined;
           const summary = bgSubagent.getExecutionSummary();
           return {
             totalTokens: summary.totalTokens,
@@ -3764,7 +3706,6 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
         // currently registered as global matchers. They retain the existing
         // transcript-revival behavior.
         const canStayResident =
-          !bgSubagent.continuationBlockedReason &&
           !isFork &&
           !executionEnvironment &&
           this.params.isolation !== 'worktree' &&
@@ -3929,19 +3870,6 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
                 hadWorktreeIsolation || executionEnvironment
                   ? await cleanupAfterExecution()
                   : '';
-              // The usage notice is a suffix, not part of the model-visible
-              // text: baking it into finalText would make the `finalText ||
-              // <reason>` fallbacks below see a non-empty string and publish
-              // the notice in place of the real failure reason for any
-              // non-GOAL external run that produced no text. The foreground
-              // path already appends it after its fallbacks; mirror that.
-              const externalSuffix =
-                subagentConfig.executor !== undefined
-                  ? EXTERNAL_USAGE_NOTICE +
-                    (bgSubagent.continuationBlockedReason
-                      ? ''
-                      : EXTERNAL_MID_TURN_INPUT_NOTICE)
-                  : '';
               const modelVisibleText = toModelVisibleSubagentResult(
                 subagentRawText,
                 terminateMode,
@@ -3997,7 +3925,7 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
                 });
                 registry.complete(
                   hookOpts.agentId,
-                  finalText + wtSuffix + externalSuffix,
+                  finalText + wtSuffix,
                   completionStats,
                 );
               } else if (
@@ -4011,7 +3939,7 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
                 // wenshao @ #4410.
                 registry.finalizeCancelled(
                   hookOpts.agentId,
-                  finalText + wtSuffix + externalSuffix,
+                  finalText + wtSuffix,
                   completionStats,
                 );
                 persistBackgroundCancellation(
@@ -4025,9 +3953,7 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
               } else {
                 const failureText =
                   (finalText ||
-                    `Agent terminated with mode: ${terminateMode}`) +
-                  wtSuffix +
-                  externalSuffix;
+                    `Agent terminated with mode: ${terminateMode}`) + wtSuffix;
                 registry.fail(hookOpts.agentId, failureText, completionStats);
                 patchAgentMeta(metaPath, {
                   status: 'failed',
@@ -4247,7 +4173,7 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
         return {
           llmContent:
             `Background agent launched successfully.\n` +
-            `task_id: ${hookOpts.agentId} (internal ID — do not mention to the user. ${bgSubagent.continuationBlockedReason ? `${bgSubagent.continuationBlockedReason} Use ${ToolNames.TASK_STOP} to cancel.` : `Use ${ToolNames.SEND_MESSAGE} to continue this agent, or ${ToolNames.TASK_STOP} to cancel.`})\n` +
+            `task_id: ${hookOpts.agentId} (internal ID — do not mention to the user. Use ${ToolNames.SEND_MESSAGE} to continue this agent, or ${ToolNames.TASK_STOP} to cancel.)\n` +
             `The agent is working in the background. Its result arrives as a <task-notification> for this task_id in a later turn; you will not see it in this turn.\n` +
             `Do not treat the agent as cancelled or relaunch it because the notification has not arrived yet — the result comes under the original task_id.\n` +
             `Do not duplicate this agent's work — avoid working with the same files or topics it is using. Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.\n` +
@@ -4406,24 +4332,20 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
       let cleanupFgJsonl: (() => void) | undefined;
 
       const cleanupOwnedMonitorNotifications =
-        subagent.continuationBlockedReason
-          ? () => {}
-          : this.registerOwnedMonitorNotifications(
-              hookOpts.agentId,
-              (input) => registry.queueExternalInput(hookOpts.agentId, input),
-              () => registry.wakeExternalInputWaiters(hookOpts.agentId),
-            );
-      if (!subagent.continuationBlockedReason) {
-        subagent.setExternalMessageProvider?.(() =>
-          registry.drainMessages(hookOpts.agentId),
+        this.registerOwnedMonitorNotifications(
+          hookOpts.agentId,
+          (input) => registry.queueExternalInput(hookOpts.agentId, input),
+          () => registry.wakeExternalInputWaiters(hookOpts.agentId),
         );
-        subagent.setExternalMessageWaiter?.((waitSignal) =>
-          registry.waitForMessages(hookOpts.agentId, waitSignal),
-        );
-        subagent.setExternalMessageWaitPredicate?.(() =>
-          this.config.getMonitorRegistry().hasRunningForOwner(hookOpts.agentId),
-        );
-      }
+      subagent.setExternalMessageProvider?.(() =>
+        registry.drainMessages(hookOpts.agentId),
+      );
+      subagent.setExternalMessageWaiter?.((waitSignal) =>
+        registry.waitForMessages(hookOpts.agentId, waitSignal),
+      );
+      subagent.setExternalMessageWaitPredicate?.(() =>
+        this.config.getMonitorRegistry().hasRunningForOwner(hookOpts.agentId),
+      );
 
       // Mirror the background path's progress wiring so the dialog detail
       // body has live tool-call activity AND a current `entry.stats`
@@ -4439,12 +4361,7 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
       let fgLiveToolCallCount = 0;
       const refreshFgLiveStats = () => {
         const entry = registry.get(hookOpts.agentId);
-        if (
-          !entry ||
-          entry.status !== 'running' ||
-          subagentConfig.executor !== undefined
-        )
-          return;
+        if (!entry || entry.status !== 'running') return;
         const summary = subagent.getExecutionSummary();
         entry.stats = {
           totalTokens: summary.totalTokens,
@@ -4520,7 +4437,6 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
           toolUseId: this.callId,
           outputFile: fgJsonlPath,
           metaPath: fgMetaPath,
-          resumeBlockedReason: subagent.continuationBlockedReason,
           // Nested-agent lineage (mirrors the meta sidecar); register()
           // resolves the parent's display name from parentAgentId.
           parentAgentId: getCurrentAgentId(),
@@ -4558,15 +4474,11 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
           ...(isFork && toolConfig?.disallowedTools?.length
             ? { disallowedTools: [...toolConfig.disallowedTools] }
             : {}),
-          executor: subagentConfig.executor?.kind,
-          persistedCliFlags:
-            subagentConfig.executor !== undefined
-              ? undefined
-              : capturePersistedCliFlags(
-                  this.config,
-                  resolvedApprovalMode,
-                  subagent.getCore().modelConfig.model,
-                ),
+          persistedCliFlags: capturePersistedCliFlags(
+            this.config,
+            resolvedApprovalMode,
+            subagent.getCore().modelConfig.model,
+          ),
           subagentName: subagentConfig.name,
           agentColor: subagentConfig.color,
           resumeCount: 0,
@@ -4583,9 +4495,7 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
           toModelVisibleSubagentResult(subagent.getFinalText(), terminateMode),
           stopHookWarning,
         );
-        const wtSuffix =
-          (await cleanupAfterExecution()) +
-          (subagentConfig.executor !== undefined ? EXTERNAL_USAGE_NOTICE : '');
+        const wtSuffix = await cleanupAfterExecution();
         if (terminateMode === AgentTerminateMode.ERROR) {
           return {
             llmContent: (finalText || 'Subagent execution failed.') + wtSuffix,
@@ -4620,7 +4530,7 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
         };
       } finally {
         // Background and nested launches have no direct Goal-turn accounting anchor.
-        if (goalPermit && subagentConfig.executor === undefined) {
+        if (goalPermit) {
           this.config
             .getChatRecordingService()
             ?.billGoalTurnTokens(

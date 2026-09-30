@@ -99,10 +99,6 @@ describe('buildHooksListing', () => {
         entries: () => [
           entry({ type: HookType.Command, command: './lint.sh' }),
           entry({
-            type: HookType.Http,
-            url: 'https://hooks.example.com/audit',
-          }),
-          entry({
             type: HookType.Function,
             id: 'fn-1',
             callback: async () => undefined,
@@ -121,17 +117,12 @@ describe('buildHooksListing', () => {
       ]),
     ).toEqual([
       ['command', './lint.sh', './lint.sh'],
-      [
-        'http',
-        'https://hooks.example.com/audit',
-        'https://hooks.example.com/audit',
-      ],
       ['function', 'fn-1', undefined],
       ['prompt', `${'x'.repeat(50)}...`, longPrompt],
     ]);
   });
 
-  it('marks an async command hook as running in the background, not once', () => {
+  it('marks an async command hook as running in the background', () => {
     const [row] = buildHooksListing(
       makeConfig({
         entries: () => [
@@ -141,26 +132,6 @@ describe('buildHooksListing', () => {
     ).rows;
 
     expect(row?.runsInBackground).toBe(true);
-    expect(row).not.toHaveProperty('runsOnce');
-  });
-
-  it('carries an HTTP hook once flag and its if condition', () => {
-    const [row] = buildHooksListing(
-      makeConfig({
-        entries: () => [
-          entry({
-            type: HookType.Http,
-            url: 'https://hooks.example.com/once',
-            once: true,
-            if: 'Bash(git *)',
-          }),
-        ],
-      }),
-    ).rows;
-
-    expect(row?.runsOnce).toBe(true);
-    expect(row?.condition).toBe('Bash(git *)');
-    expect(row).not.toHaveProperty('runsInBackground');
   });
 
   it('reads timeout and statusMessage from every hook type', () => {
@@ -172,12 +143,6 @@ describe('buildHooksListing', () => {
             command: 'a',
             timeout: 5,
             statusMessage: 'Linting…',
-          }),
-          entry({
-            type: HookType.Http,
-            url: 'https://hooks.example.com/b',
-            timeout: 6,
-            statusMessage: 'Auditing…',
           }),
           entry({
             type: HookType.Function,
@@ -200,7 +165,6 @@ describe('buildHooksListing', () => {
     expect(listing.rows.map((row) => [row.timeout, row.statusMessage])).toEqual(
       [
         [5, 'Linting…'],
-        [6, 'Auditing…'],
         [7, 'Checking goal…'],
         [8, 'Judging…'],
       ],
