@@ -60,15 +60,12 @@ const mockWriteStderrLine = vi.hoisted(() => vi.fn());
 const mockWriteStdoutLine = vi.hoisted(() => vi.fn());
 const mockConsumeLastRenderError = vi.hoisted(() => vi.fn());
 const mockHandleListExtensions = vi.hoisted(() => vi.fn());
-const mockStartEarlyStartupPrefetches = vi.hoisted(() => vi.fn());
 const mockStartPostRenderPrefetches = vi.hoisted(() => vi.fn());
 const mockRunAcpAgent = vi.hoisted(() => vi.fn());
 const mockStartNonInteractiveOpenAILogHousekeeping = vi.hoisted(() => vi.fn());
 const mockStopNonInteractiveOpenAILogHousekeeping = vi.hoisted(() =>
   vi.fn(async () => {}),
 );
-const mockUpdateBeforeRelaunch = vi.hoisted(() => vi.fn());
-const mockGetInstallationInfo = vi.hoisted(() => vi.fn());
 const mockRegisterSession = vi.hoisted(
   () =>
     (..._args: unknown[]) =>
@@ -254,19 +251,8 @@ vi.mock('./core/initializer.js', () => ({
 }));
 
 vi.mock('./startup/startup-prefetch.js', () => ({
-  startEarlyStartupPrefetches: (...args: unknown[]) =>
-    mockStartEarlyStartupPrefetches(...args),
   startPostRenderPrefetches: (...args: unknown[]) =>
     mockStartPostRenderPrefetches(...args),
-}));
-
-vi.mock('./ui/update-relaunch.js', () => ({
-  updateBeforeRelaunch: (...args: unknown[]) =>
-    mockUpdateBeforeRelaunch(...args),
-}));
-
-vi.mock('./utils/installationInfo.js', () => ({
-  getInstallationInfo: (...args: unknown[]) => mockGetInstallationInfo(...args),
 }));
 
 vi.mock('./acp-integration/acpAgent.js', () => ({
@@ -376,17 +362,11 @@ describe('llm.tsx main function', () => {
     mockStartNonInteractiveOpenAILogHousekeeping.mockClear();
     mockStopNonInteractiveOpenAILogHousekeeping.mockClear();
     lspConfigWatcherMock.instances.length = 0;
-    mockUpdateBeforeRelaunch.mockResolvedValue(true);
-    mockGetInstallationInfo.mockReturnValue({
-      updateCommand: 'npm install -g @qwen-code/qwen-code@latest',
-    });
     // Store and clear sandbox-related env variables to ensure a consistent test environment
     originalEnvGeminiSandbox = process.env['QWEN_SANDBOX'];
     originalEnvSandbox = process.env['SANDBOX'];
-    // QWEN_SANDBOX_IMAGE selects the custom-image relaunch branch in main(),
-    // which skips the host-update capability computation; CI environments that
-    // export a resolved sandbox image (e.g. the autofix runner) would otherwise
-    // flip these tests' code path.
+    // CI environments that export a resolved sandbox image (e.g. the autofix
+    // runner) would otherwise leak it into these tests.
     originalEnvQwenSandboxImage = process.env['QWEN_SANDBOX_IMAGE'];
     originalEnvQwenCodeSimple = process.env['QWEN_CODE_SIMPLE'];
     delete process.env['QWEN_SANDBOX'];
@@ -541,7 +521,6 @@ describe('llm.tsx main function', () => {
           QWEN_CODE_PRIVATE_RELAUNCH_ENV_PROVENANCE:
             '{"dotEnv":[],"settingsEnv":[]}',
         },
-        onUpdateRelaunch: expect.any(Function),
       }),
     );
     processExitSpy.mockRestore();
@@ -643,7 +622,6 @@ describe('llm.tsx main function', () => {
           QWEN_CODE_PRIVATE_RELAUNCH_ENV_PROVENANCE:
             '{"dotEnv":[],"settingsEnv":[]}',
         },
-        onUpdateRelaunch: expect.any(Function),
       }),
     );
     processExitSpy.mockRestore();
@@ -1172,7 +1150,7 @@ describe('llm.tsx main function', () => {
       },
       {
         label: 'headless slash-command prompt',
-        argv: { prompt: '/update' },
+        argv: { prompt: '/stats' },
         expected: 'in-process',
       },
       {
@@ -2072,7 +2050,6 @@ describe('llm.tsx main function', () => {
   const runSandboxRelaunch = async (
     argv: string[],
     sessionId = '123e4567-e89b-12d3-a456-426614174000',
-    command: 'docker' | 'podman' | 'sandbox-exec' = 'sandbox-exec',
   ): Promise<string[]> => {
     const originalArgv = process.argv;
     process.argv = argv;
@@ -2112,7 +2089,7 @@ describe('llm.tsx main function', () => {
       getProjectHooks: () => undefined,
     } as never);
     vi.mocked(loadSandboxConfig).mockResolvedValue({
-      command,
+      command: 'sandbox-exec',
       image: 'ghcr.io/qwenlm/qwen-code:1.0.0',
     });
     vi.mocked(loadCliConfig).mockResolvedValue({
@@ -2132,9 +2109,7 @@ describe('llm.tsx main function', () => {
     }
 
     expect(start_sandbox).toHaveBeenCalledOnce();
-    expect(relaunchOnExitCode).toHaveBeenCalledWith(expect.any(Function), {
-      onUpdateRelaunch: expect.any(Function),
-    });
+    expect(relaunchOnExitCode).toHaveBeenCalledWith(expect.any(Function));
     return vi.mocked(start_sandbox).mock.calls[0]![3]!;
   };
 
@@ -2149,44 +2124,6 @@ describe('llm.tsx main function', () => {
     expect(idx).not.toBe(-1);
     expect(sandboxArgs[idx + 1]).toBe(sessionId);
     expect(sandboxArgs).not.toContain('--session-id');
-  });
-
-  it('starts a fresh CLI after the host update completes', async () => {
-    await runSandboxRelaunch(['node', 'script.js', '--debug', '-p', 'hello']);
-    const { relaunchOnExitCode } = await import('./utils/relaunch.js');
-    const [, options] = vi.mocked(relaunchOnExitCode).mock.calls[0]!;
-
-    await expect(options?.onUpdateRelaunch?.(true)).resolves.toBe(44);
-
-    expect(mockUpdateBeforeRelaunch).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.any(String),
-      true,
-    );
-  });
-
-  it('passes host update capability into a container sandbox', async () => {
-    const originalCapability = process.env['QWEN_CODE_HOST_UPDATE_RELAUNCH'];
-
-    try {
-      await runSandboxRelaunch(
-        ['node', 'script.js', '--debug', '-p', 'hello'],
-        '',
-        'docker',
-      );
-
-      expect(mockGetInstallationInfo).toHaveBeenCalledWith(
-        expect.any(String),
-        true,
-      );
-      expect(process.env['QWEN_CODE_HOST_UPDATE_RELAUNCH']).toBe('true');
-    } finally {
-      if (originalCapability === undefined) {
-        delete process.env['QWEN_CODE_HOST_UPDATE_RELAUNCH'];
-      } else {
-        process.env['QWEN_CODE_HOST_UPDATE_RELAUNCH'] = originalCapability;
-      }
-    }
   });
 
   it('does not pass an empty session ID into the sandbox child process', async () => {
@@ -2609,9 +2546,6 @@ describe('llm.tsx OpenTUI renderer dispatch', () => {
       bare: undefined,
       approvalMode: undefined,
       telemetry: undefined,
-      telemetryTarget: undefined,
-      telemetryOtlpEndpoint: undefined,
-      telemetryOtlpProtocol: undefined,
       telemetryLogPrompts: undefined,
       telemetryOutfile: undefined,
       allowedMcpServerNames: undefined,
@@ -2643,7 +2577,6 @@ describe('llm.tsx OpenTUI renderer dispatch', () => {
       maxSubagentDepth: undefined,
       experimentalLsp: undefined,
       restoreAskUserQuestion: undefined,
-      channel: undefined,
       chatRecording: undefined,
       sessionId: undefined,
       fallbackModel: undefined,
@@ -2837,9 +2770,6 @@ describe('llm.tsx main function kitty protocol', () => {
       bare: undefined,
       approvalMode: undefined,
       telemetry: undefined,
-      telemetryTarget: undefined,
-      telemetryOtlpEndpoint: undefined,
-      telemetryOtlpProtocol: undefined,
       telemetryLogPrompts: undefined,
       telemetryOutfile: undefined,
       allowedMcpServerNames: undefined,
@@ -2871,7 +2801,6 @@ describe('llm.tsx main function kitty protocol', () => {
       maxSubagentDepth: undefined,
       experimentalLsp: undefined,
       restoreAskUserQuestion: undefined,
-      channel: undefined,
       chatRecording: undefined,
       sessionId: undefined,
       fallbackModel: undefined,
@@ -2891,9 +2820,6 @@ describe('llm.tsx main function kitty protocol', () => {
       {
         initializeTelemetry: true,
       },
-    );
-    expect(mockStartEarlyStartupPrefetches).toHaveBeenCalledWith(
-      expect.any(Object),
     );
   });
 
@@ -2962,9 +2888,6 @@ describe('llm.tsx main function kitty protocol', () => {
       bare: undefined,
       approvalMode: undefined,
       telemetry: undefined,
-      telemetryTarget: undefined,
-      telemetryOtlpEndpoint: undefined,
-      telemetryOtlpProtocol: undefined,
       telemetryLogPrompts: undefined,
       telemetryOutfile: undefined,
       allowedMcpServerNames: undefined,
@@ -2996,7 +2919,6 @@ describe('llm.tsx main function kitty protocol', () => {
       maxSubagentDepth: undefined,
       experimentalLsp: undefined,
       restoreAskUserQuestion: undefined,
-      channel: undefined,
       chatRecording: undefined,
       sessionId: undefined,
       fallbackModel: undefined,
@@ -3014,9 +2936,6 @@ describe('llm.tsx main function kitty protocol', () => {
       {
         initializeTelemetry: false,
       },
-    );
-    expect(mockStartEarlyStartupPrefetches).toHaveBeenCalledWith(
-      expect.any(Object),
     );
   });
 
@@ -3086,9 +3005,6 @@ describe('llm.tsx main function kitty protocol', () => {
       bare: undefined,
       approvalMode: undefined,
       telemetry: undefined,
-      telemetryTarget: undefined,
-      telemetryOtlpEndpoint: undefined,
-      telemetryOtlpProtocol: undefined,
       telemetryLogPrompts: undefined,
       telemetryOutfile: undefined,
       allowedMcpServerNames: undefined,
@@ -3120,7 +3036,6 @@ describe('llm.tsx main function kitty protocol', () => {
       maxSubagentDepth: undefined,
       experimentalLsp: undefined,
       restoreAskUserQuestion: undefined,
-      channel: undefined,
       chatRecording: undefined,
       sessionId: undefined,
       fallbackModel: undefined,
@@ -3206,9 +3121,6 @@ describe('llm.tsx main function kitty protocol', () => {
       bare: undefined,
       approvalMode: undefined,
       telemetry: undefined,
-      telemetryTarget: undefined,
-      telemetryOtlpEndpoint: undefined,
-      telemetryOtlpProtocol: undefined,
       telemetryLogPrompts: undefined,
       telemetryOutfile: undefined,
       allowedMcpServerNames: undefined,
@@ -3240,7 +3152,6 @@ describe('llm.tsx main function kitty protocol', () => {
       maxSubagentDepth: undefined,
       experimentalLsp: undefined,
       restoreAskUserQuestion: undefined,
-      channel: undefined,
       chatRecording: undefined,
       sessionId: undefined,
       fallbackModel: undefined,
@@ -3271,9 +3182,6 @@ describe('llm.tsx main function kitty protocol', () => {
       {
         privateParentCapability: undefined,
       },
-    );
-    expect(mockStartEarlyStartupPrefetches).toHaveBeenCalledWith(
-      expect.any(Object),
     );
 
     const acpFailure = new Error('ACP failed');
@@ -4148,40 +4056,6 @@ describe('startInteractiveUI', () => {
     expect(mockStartPostRenderPrefetches).toHaveBeenCalledWith(
       mockConfig,
       mockSettings,
-      { initializeTelemetry: true },
-    );
-  });
-
-  it('delegates disabled auto-update settings to post-render prefetch', async () => {
-    const settingsWithAutoUpdateDisabled = {
-      merged: {
-        general: {
-          enableAutoUpdate: false,
-        },
-        ui: {
-          hideWindowTitle: false,
-        },
-      },
-    } as LoadedSettings;
-
-    const mockInitializationResult = {
-      authError: null,
-      themeError: null,
-      shouldOpenAuthDialog: false,
-      memoryFileCount: 0,
-    };
-
-    await startInteractiveUI(
-      mockConfig,
-      settingsWithAutoUpdateDisabled,
-      mockStartupWarnings,
-      mockWorkspaceRoot,
-      mockInitializationResult,
-    );
-
-    expect(mockStartPostRenderPrefetches).toHaveBeenCalledWith(
-      mockConfig,
-      settingsWithAutoUpdateDisabled,
       { initializeTelemetry: true },
     );
   });

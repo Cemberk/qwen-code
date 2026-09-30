@@ -17,7 +17,6 @@ export const V1_TO_V2_MIGRATION_MAP: Record<string, string> = {
   allowMCPServers: 'mcp.allowed',
   autoAccept: 'tools.autoAccept',
   autoConfigureMaxOldSpaceSize: 'advanced.autoConfigureMemory',
-  bugCommand: 'advanced.bugCommand',
   chatCompression: 'model.chatCompression',
   checkpointing: 'general.checkpointing',
   coreTools: 'tools.core',
@@ -34,13 +33,11 @@ export const V1_TO_V2_MIGRATION_MAP: Record<string, string> = {
   fileFiltering: 'context.fileFiltering',
   folderTrustFeature: 'security.folderTrust.featureEnabled',
   folderTrust: 'security.folderTrust.enabled',
-  hasSeenIdeIntegrationNudge: 'ide.hasSeenNudge',
   hideWindowTitle: 'ui.hideWindowTitle',
   showStatusInTitle: 'ui.showStatusInTitle',
   hideTips: 'ui.hideTips',
   showLineNumbers: 'ui.showLineNumbers',
   showCitations: 'ui.showCitations',
-  ideMode: 'ide.enabled',
   includeDirectories: 'context.includeDirectories',
   loadMemoryFromIncludeDirectories: 'context.loadFromIncludeDirectories',
   maxSessionTurns: 'model.maxSessionTurns',
@@ -59,7 +56,6 @@ export const V1_TO_V2_MIGRATION_MAP: Record<string, string> = {
   theme: 'ui.theme',
   toolDiscoveryCommand: 'tools.discoveryCommand',
   toolCallCommand: 'tools.callCommand',
-  usageStatisticsEnabled: 'privacy.usageStatisticsEnabled',
   useExternalAuth: 'security.auth.useExternal',
   useRipgrep: 'tools.useRipgrep',
   vimMode: 'general.vimMode',
@@ -86,8 +82,6 @@ export const V2_CONTAINER_KEYS = new Set([
   'general',
   'context',
   'security',
-  'ide',
-  'privacy',
   'telemetry',
   'extensions',
 ]);
@@ -96,17 +90,10 @@ export const V2_CONTAINER_KEYS = new Set([
  * Legacy disable* keys that remain in disable* form for V2.
  */
 export const V1_TO_V2_PRESERVE_DISABLE_MAP: Record<string, string> = {
-  disableAutoUpdate: 'general.disableAutoUpdate',
-  disableUpdateNag: 'general.disableUpdateNag',
   disableLoadingPhrases: 'ui.accessibility.disableLoadingPhrases',
   disableFuzzySearch: 'context.fileFiltering.disableFuzzySearch',
   disableCacheControl: 'model.generationConfig.disableCacheControl',
 };
-
-export const CONSOLIDATED_DISABLE_KEYS = new Set([
-  'disableAutoUpdate',
-  'disableUpdateNag',
-]);
 
 /**
  * Keys that indicate V1-like top-level structure when holding primitive values.
@@ -123,7 +110,6 @@ export const V1_INDICATOR_KEYS = [
   'allowedTools',
   'allowMCPServers',
   'autoConfigureMaxOldSpaceSize',
-  'bugCommand',
   'chatCompression',
   'coreTools',
   'contextFileName',
@@ -138,12 +124,10 @@ export const V1_INDICATOR_KEYS = [
   'fileFiltering',
   'folderTrustFeature',
   'folderTrust',
-  'hasSeenIdeIntegrationNudge',
   'hideWindowTitle',
   'showStatusInTitle',
   'showLineNumbers',
   'showCitations',
-  'ideMode',
   'includeDirectories',
   'loadMemoryFromIncludeDirectories',
   'maxSessionTurns',
@@ -158,7 +142,6 @@ export const V1_INDICATOR_KEYS = [
   'skipNextSpeakerCheck',
   'toolDiscoveryCommand',
   'toolCallCommand',
-  'usageStatisticsEnabled',
   'useExternalAuth',
   'useRipgrep',
   'enableWelcomeBack',
@@ -170,8 +153,6 @@ export const V1_INDICATOR_KEYS = [
   'enableOpenAILogging',
   'tavilyApiKey',
   // From V1_TO_V2_PRESERVE_DISABLE_MAP - disable* keys that get nested in V2
-  'disableAutoUpdate',
-  'disableUpdateNag',
   'disableLoadingPhrases',
   'disableFuzzySearch',
   'disableCacheControl',

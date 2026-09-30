@@ -89,7 +89,6 @@ const createMockConfig = (
     getTool: () => undefined,
   }),
   getAgentsSettings: () => ({ arena: arenaSettings }),
-  getUsageStatisticsEnabled: () => false,
   getTelemetryEnabled: () => false,
   getTelemetryLogPromptsEnabled: () => false,
 });

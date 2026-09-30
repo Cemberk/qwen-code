@@ -25,7 +25,6 @@ import type {
 } from '../index.js';
 import type { PermissionDecision } from '../permissions/types.js';
 import { ToolCallEvent } from '../telemetry/types.js';
-import { QwenLogger } from '../telemetry/qwen-logger/qwen-logger.js';
 import { DEFAULT_MAX_SUBAGENT_DEPTH } from '../config/config.js';
 import {
   ApprovalMode,
@@ -700,7 +699,6 @@ describe('CoreToolScheduler', () => {
           ({
             getTool: () => undefined,
           }) as unknown as ToolRegistry,
-        getUsageStatisticsEnabled: () => false,
         getDebugMode: () => false,
         getChatRecordingService: () => undefined,
       } as unknown as Config,
@@ -742,7 +740,6 @@ describe('CoreToolScheduler', () => {
       getSessionId: () => 'test-session-id',
       getApprovalMode: () => ApprovalMode.DEFAULT,
       getToolRegistry: () => toolRegistry,
-      getUsageStatisticsEnabled: () => false,
       getDebugMode: () => false,
       getChatRecordingService: () => undefined,
       getLlmClient: () => ({ recordTrustedUserAnswers }),
@@ -1077,7 +1074,6 @@ describe('CoreToolScheduler', () => {
     const scheduler = new CoreToolScheduler({
       config: {
         getSessionId: () => 'test-session-id',
-        getUsageStatisticsEnabled: () => true,
         getDebugMode: () => false,
         getApprovalMode: () => options.approvalMode ?? ApprovalMode.YOLO,
         setApprovalMode: options.setApprovalMode ?? vi.fn(),
@@ -1170,9 +1166,6 @@ describe('CoreToolScheduler', () => {
     async (status) => {
       let now = 1_760_000_000_000;
       const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
-      const telemetry = vi
-        .spyOn(QwenLogger, 'getInstance')
-        .mockReturnValue(undefined);
       let controller = new AbortController();
       const tool = new MockTool({
         name: 'timed_tool',
@@ -1230,7 +1223,6 @@ describe('CoreToolScheduler', () => {
         const { startTime: _startTime, ...legacy } = completed[0]!;
         expect(new ToolCallEvent(legacy).started_at_ms).toBeUndefined();
       } finally {
-        telemetry.mockRestore();
         clock.mockRestore();
       }
     },
@@ -8022,7 +8014,6 @@ describe('CoreToolScheduler', () => {
 
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.DEFAULT,
       getPermissionsAllow: () => [],
@@ -8105,7 +8096,6 @@ describe('CoreToolScheduler', () => {
 
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.DEFAULT,
       getPermissionsAllow: () => [],
@@ -8192,7 +8182,6 @@ describe('CoreToolScheduler', () => {
 
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.DEFAULT,
       getPermissionsAllow: () => [],
@@ -9012,7 +9001,6 @@ describe('CoreToolScheduler', () => {
 
       const mockConfig = {
         getSessionId: () => 'test-session-id',
-        getUsageStatisticsEnabled: () => true,
         getDebugMode: () => false,
         getApprovalMode: () => ApprovalMode.DEFAULT,
         getPermissionsAllow: () => [],
@@ -9104,7 +9092,6 @@ describe('CoreToolScheduler', () => {
 
       const mockConfig = {
         getSessionId: () => 'test-session-id',
-        getUsageStatisticsEnabled: () => true,
         getDebugMode: () => false,
         getApprovalMode: () => ApprovalMode.DEFAULT,
         getPermissionsAllow: () => [],
@@ -9200,7 +9187,6 @@ describe('CoreToolScheduler with payload', () => {
 
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.DEFAULT,
       getPermissionsAllow: () => [],
@@ -9629,7 +9615,6 @@ describe('CoreToolScheduler edit cancellation', () => {
 
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.DEFAULT,
       getPermissionsAllow: () => [],
@@ -9738,7 +9723,6 @@ describe('CoreToolScheduler YOLO mode', () => {
     const onToolCallsUpdate = vi.fn();
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.YOLO,
       getPermissionsAllow: () => [],
@@ -9854,7 +9838,6 @@ describe('CoreToolScheduler YOLO mode', () => {
     // Configure the scheduler for YOLO mode.
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.YOLO,
       getPermissionsAllow: () => [],
@@ -10007,7 +9990,6 @@ describe('CoreToolScheduler cancellation during executing with live output', () 
 
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.DEFAULT,
       getContentGeneratorConfig: () => ({
@@ -10161,7 +10143,6 @@ describe('CoreToolScheduler cancellation during executing with live output', () 
     const outputUpdateHandler = vi.fn();
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.DEFAULT,
       getContentGeneratorConfig: () => ({
@@ -10298,7 +10279,6 @@ describe('CoreToolScheduler cancellation during executing with live output', () 
     const outputUpdateHandler = vi.fn();
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.DEFAULT,
       getContentGeneratorConfig: () => ({
@@ -10413,7 +10393,6 @@ describe('CoreToolScheduler request queueing', () => {
 
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.YOLO, // Use YOLO to avoid confirmation prompts
       getPermissionsAllow: () => [],
@@ -10539,7 +10518,6 @@ describe('CoreToolScheduler request queueing', () => {
 
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.YOLO,
       getPermissionsAllow: () => [],
@@ -10615,7 +10593,6 @@ describe('CoreToolScheduler request queueing', () => {
     let approvalMode = ApprovalMode.DEFAULT;
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => approvalMode,
       getPermissionsAllow: () => [],
@@ -10824,7 +10801,6 @@ describe('CoreToolScheduler request queueing', () => {
     } as unknown as ToolRegistry;
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.AUTO,
       getTargetDir: () => cwd,
@@ -11182,7 +11158,6 @@ describe('CoreToolScheduler truncated output protection', () => {
 
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.AUTO_EDIT,
       getPermissionsAllow: () => [],
@@ -11491,7 +11466,6 @@ describe('CoreToolScheduler Sequential Execution', () => {
 
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.YOLO, // Use YOLO to avoid confirmation prompts
       getPermissionsAllow: () => [],
@@ -11614,7 +11588,6 @@ describe('CoreToolScheduler Sequential Execution', () => {
 
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.YOLO,
       getPermissionsAllow: () => [],
@@ -11800,7 +11773,6 @@ describe('CoreToolScheduler plan mode with ask_user_question', () => {
 
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.PLAN,
       getSdkMode: () => options.sdkMode ?? false,
@@ -12635,7 +12607,6 @@ describe('CoreToolScheduler Plan shell routing', () => {
     const onToolCallsUpdate = vi.fn();
     const config = {
       getSessionId: () => 'plan-shell-session',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: options.mode ?? (() => ApprovalMode.PLAN),
       getApprovalModeRevision: options.revision ?? (() => 0),
@@ -13475,7 +13446,6 @@ describe('CoreToolScheduler telemetry spans', () => {
 
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => options.approvalMode ?? ApprovalMode.YOLO,
       getPermissionsAllow: () => [],
@@ -16197,7 +16167,6 @@ describe('CoreToolScheduler telemetry spans', () => {
     } as unknown as ToolRegistry;
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.DEFAULT,
       getPermissionsAllow: () => [],
@@ -16680,7 +16649,6 @@ describe('CoreToolScheduler telemetry spans', () => {
     } as unknown as ToolRegistry;
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.DEFAULT,
       getPermissionsAllow: () => [],
@@ -16782,7 +16750,6 @@ describe('CoreToolScheduler telemetry spans', () => {
     } as unknown as ToolRegistry;
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.DEFAULT,
       getPermissionsAllow: () => [],
@@ -17030,7 +16997,6 @@ describe('CoreToolScheduler telemetry spans', () => {
     } as unknown as ToolRegistry;
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.DEFAULT,
       getPermissionsAllow: () => [],
@@ -17100,7 +17066,6 @@ describe('CoreToolScheduler telemetry spans', () => {
     } as unknown as ToolRegistry;
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.DEFAULT,
       getPermissionsAllow: () => [],
@@ -17194,7 +17159,6 @@ describe('CoreToolScheduler telemetry spans', () => {
     };
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.DEFAULT,
       getPermissionsAllow: () => [],
@@ -17266,7 +17230,6 @@ describe('CoreToolScheduler telemetry spans', () => {
     } as unknown as ToolRegistry;
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.DEFAULT,
       getPermissionsAllow: () => [],
@@ -17396,7 +17359,6 @@ describe('CoreToolScheduler telemetry spans', () => {
     } as unknown as ToolRegistry;
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.DEFAULT,
       getPermissionsAllow: () => [],
@@ -17502,7 +17464,6 @@ describe('CoreToolScheduler telemetry spans', () => {
     // _executeToolCallBody. Make that call throw.
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.YOLO,
       getPermissionsAllow: () => [],
@@ -17667,7 +17628,6 @@ describe('CoreToolScheduler telemetry spans', () => {
     } as unknown as ToolRegistry;
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.PLAN,
       getSdkMode: () => false,
@@ -17903,7 +17863,6 @@ describe('CoreToolScheduler telemetry spans', () => {
     } as unknown as ToolRegistry;
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.DEFAULT,
       getPermissionsAllow: () => [],
@@ -18540,7 +18499,6 @@ describe('Fire hook functions integration', () => {
 
       const mockConfig = {
         getSessionId: () => 'test-session-id',
-        getUsageStatisticsEnabled: () => true,
         getDebugMode: () => false,
         getApprovalMode: () => ApprovalMode.AUTO_EDIT,
         getAllowedTools: () => [],
@@ -19259,7 +19217,6 @@ describe('CoreToolScheduler validation retry loop detection', () => {
 
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.YOLO,
       getPermissionsAllow: () => [],
@@ -19602,7 +19559,6 @@ describe('CoreToolScheduler validation retry loop detection', () => {
 
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.YOLO,
       getPermissionsAllow: () => [],
@@ -20023,7 +19979,6 @@ describe('CoreToolScheduler activation wiring', () => {
 
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.YOLO,
       getPermissionsAllow: () => [],
@@ -20344,7 +20299,6 @@ describe('CoreToolScheduler activation wiring', () => {
     const scheduler = new CoreToolScheduler({
       config: {
         getSessionId: () => 'test-session-id',
-        getUsageStatisticsEnabled: () => true,
         getDebugMode: () => false,
         getApprovalMode: () => ApprovalMode.YOLO,
         getPermissionsAllow: () => [],
@@ -20461,7 +20415,6 @@ describe('CoreToolScheduler activation wiring', () => {
     const onAllToolCallsComplete = vi.fn();
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.YOLO,
       getPermissionsAllow: () => [],
@@ -20582,7 +20535,6 @@ describe('CoreToolScheduler activation wiring', () => {
     const onAllToolCallsComplete = vi.fn();
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.YOLO,
       getPermissionsAllow: () => [],
@@ -20678,7 +20630,6 @@ describe('CoreToolScheduler activation wiring', () => {
     const onAllToolCallsComplete = vi.fn();
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.YOLO,
       getPermissionsAllow: () => [],
@@ -20775,7 +20726,6 @@ describe('CoreToolScheduler activation wiring', () => {
     const onAllToolCallsComplete = vi.fn();
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.YOLO,
       getPermissionsAllow: () => [],
@@ -21016,7 +20966,6 @@ describe('CoreToolScheduler shell-tool promote integration (#3831 PR-2)', () => 
     const onToolCallsUpdate = vi.fn();
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.YOLO,
       getContentGeneratorConfig: () => ({
@@ -21229,7 +21178,6 @@ describe('CoreToolScheduler prompt_id propagation', () => {
       };
       const mockConfig = {
         getSessionId: () => 'test-session-id',
-        getUsageStatisticsEnabled: () => true,
         getDebugMode: () => false,
         getTruncateToolOutputThreshold: () => 100_000,
         getTruncateToolOutputLines: () => 1_000,
@@ -21323,7 +21271,6 @@ describe('CoreToolScheduler prompt_id propagation', () => {
 
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.DEFAULT,
       getPermissionsAllow: () => [],
@@ -21395,7 +21342,6 @@ describe('CoreToolScheduler prompt_id propagation', () => {
 
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.DEFAULT,
       getPermissionsAllow: () => [],
@@ -21468,7 +21414,6 @@ describe('CoreToolScheduler prompt_id propagation', () => {
 
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.AUTO_EDIT,
       getPermissionsAllow: () => [],

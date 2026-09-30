@@ -51,7 +51,6 @@ function makeConfig(sessionId: string): Config {
     targetDir: tmpDir,
     debugMode: false,
     model: 'test-model',
-    usageStatisticsEnabled: false,
     bareMode: true,
     cliVersion: '0.0.0-test',
   });

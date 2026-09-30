@@ -38,7 +38,6 @@ export function createExecutionWorkerEnvironment(
     shouldUseNodePtyShell: false,
     telemetry: { enabled: false },
     deferTelemetryInitialization: true,
-    usageStatisticsEnabled: false,
     mcpServers: {},
   });
   // The host does not register worker artifacts, regardless of image env flags.

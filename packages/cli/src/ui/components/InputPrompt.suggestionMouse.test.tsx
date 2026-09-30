@@ -54,12 +54,11 @@ vi.mock('../hooks/useInputHistory.js');
 vi.mock('../hooks/useReverseSearchCompletion.js');
 vi.mock('../hooks/useExportCompletion.js');
 vi.mock('../contexts/UIStateContext.js', () => ({
-  useUIState: vi.fn(() => ({ isFeedbackDialogOpen: false, messageQueue: [] })),
+  useUIState: vi.fn(() => ({ messageQueue: [] })),
 }));
 vi.mock('../contexts/UIActionsContext.js', () => ({
   useUIActions: vi.fn(() => ({
     handleRetryLastPrompt: vi.fn(),
-    temporaryCloseFeedbackDialog: vi.fn(),
     popAllQueuedMessages: vi.fn(() => null),
     invalidateSubmittedPromptProvenance: vi.fn(),
   })),

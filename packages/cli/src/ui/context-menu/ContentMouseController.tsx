@@ -6,10 +6,7 @@
 
 import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
 import { useStdout } from 'ink';
-import {
-  createDebugLogger,
-  openBrowserSecurely,
-} from '@qwen-code/qwen-code-core';
+import { createDebugLogger } from '@qwen-code/qwen-code-core';
 import { useMouseEvents } from '../hooks/useMouseEvents.js';
 import type { MouseEvent } from '../utils/mouse.js';
 import { copyToClipboard } from '../utils/commandUtils.js';
@@ -61,18 +58,16 @@ interface ClickRecord {
  * Headless controller restoring the two mouse capabilities SGR tracking takes
  * from the terminal in VP mode:
  *
- * - **A plain click opens an OSC 8 link.** The URL is read from the
- *   composited frame cell under the pointer (ink preserves the OSC 8 escape
- *   in per-cell styles), so no markdown re-parsing or column math is
- *   involved. Cmd is not detectable through SGR (it never reaches the app),
- *   which is why the plain click — not a modifier gesture — is the opener.
- *   The click must land on the link cell: a press followed by a move to
- *   another cell is a drag (text selection keeps working), and the open is
- *   delayed by the multi-click window so a double/triple click keeps its
- *   word/line-selection priority — a follow-up press inside the window
- *   cancels the pending open.
- * - **Right-click opens a context menu** (Open Link / Copy Link Address over
- *   a link, Copy Selection over an active selection), rendered by
+ * - **A plain click copies an OSC 8 link's URL to the clipboard.** Links are
+ *   never opened in a browser. The URL is read from the composited frame cell
+ *   under the pointer (ink preserves the OSC 8 escape in per-cell styles), so
+ *   no markdown re-parsing or column math is involved. The click must land on
+ *   the link cell: a press followed by a move to another cell is a drag (text
+ *   selection keeps working), and the copy is delayed by the multi-click
+ *   window so a double/triple click keeps its word/line-selection priority —
+ *   a follow-up press inside the window cancels the pending copy.
+ * - **Right-click opens a context menu** (Copy Link Address over a link,
+ *   Copy Selection over an active selection), rendered by
  *   {@link ContextMenuOverlay}.
  *
  * While the menu is open this controller also owns its mouse interaction
@@ -126,16 +121,13 @@ export function ContentMouseController(
     [getBuffer, stdout],
   );
 
-  // Degrade an unopenable link to a clipboard copy with a user-visible hint
-  // (mirrors openBrowserSecurely's own manual-open warning) — intentionally
+  // Copy a clicked link with a user-visible hint — intentionally
   // console.warn, not the debug logger.
-  const fallbackCopy = useCallback((url: string) => {
+  const copyLink = useCallback((url: string) => {
     void copyToClipboard(url)
       .then(() => {
         // eslint-disable-next-line no-console
-        console.warn(
-          `Link copied to clipboard (not openable directly): ${url}`,
-        );
+        console.warn(`Link copied to clipboard: ${url}`);
       })
       .catch((error: unknown) => {
         // eslint-disable-next-line no-console
@@ -143,23 +135,6 @@ export function ContentMouseController(
         debugLogger.warn('Clipboard copy failed:', error);
       });
   }, []);
-
-  const openLink = useCallback(
-    (url: string) => {
-      if (/^https?:\/\//i.test(url)) {
-        // openBrowserSecurely still rejects http(s) URLs that fail strict
-        // validation (e.g. `https://` with no host — wrappable by the
-        // markdown renderer); catch so a crafted link cannot surface an
-        // unhandled rejection.
-        void openBrowserSecurely(url).catch(() => fallbackCopy(url));
-        return;
-      }
-      // OSC 8 also allows mailto:/ftp:/ssh: targets, which
-      // openBrowserSecurely rejects by policy.
-      fallbackCopy(url);
-    },
-    [fallbackCopy],
-  );
 
   const cancelPendingOpen = useCallback(() => {
     const pending = pendingOpenRef.current;
@@ -174,11 +149,11 @@ export function ContentMouseController(
       cancelPendingOpen();
       const timer = setTimeout(() => {
         pendingOpenRef.current = null;
-        openLink(url);
+        copyLink(url);
       }, MULTI_CLICK_MS);
       pendingOpenRef.current = { url, timer };
     },
-    [cancelPendingOpen, openLink],
+    [cancelPendingOpen, copyLink],
   );
 
   const handleMouse = useCallback(
@@ -288,11 +263,6 @@ export function ContentMouseController(
         const url = hyperlinkAtCell(frame, point.x, point.y);
         if (url) {
           items.push({
-            id: 'open-link',
-            label: 'Open Link',
-            onSelect: () => openLink(url),
-          });
-          items.push({
             id: 'copy-link',
             label: 'Copy Link Address',
             onSelect: () => {
@@ -336,7 +306,7 @@ export function ContentMouseController(
         return;
       }
 
-      // ── Left click: open the OSC 8 link under the pointer ────────────
+      // ── Left click: copy the OSC 8 link under the pointer ────────────
       if (event.name === 'left-press') {
         pressRef.current = point;
         // Multi-click chain (double = word, triple = line): the same `near`
@@ -379,7 +349,6 @@ export function ContentMouseController(
       menu,
       mapPoint,
       getBuffer,
-      openLink,
       armPendingOpen,
       cancelPendingOpen,
       columns,

@@ -22,7 +22,7 @@ describe('V1ToV2Migration', () => {
 
     it('should return true for V1 settings with disable* keys', () => {
       const v1Settings = {
-        disableAutoUpdate: true,
+        disableFuzzySearch: true,
         disableLoadingPhrases: false,
       };
 
@@ -41,7 +41,7 @@ describe('V1ToV2Migration', () => {
     it('should return false for V3 settings', () => {
       const v3Settings = {
         $version: 3,
-        general: { enableAutoUpdate: true },
+        general: { vimMode: true },
       };
 
       expect(migration.shouldMigrate(v3Settings)).toBe(false);
@@ -89,7 +89,7 @@ describe('V1ToV2Migration', () => {
     it('should migrate disable* keys to nested V2 paths without inversion', () => {
       const v1Settings = {
         theme: 'light',
-        disableAutoUpdate: true,
+        disableFuzzySearch: true,
         disableLoadingPhrases: false,
       };
 
@@ -99,18 +99,22 @@ describe('V1ToV2Migration', () => {
       };
 
       expect(result['$version']).toBe(2);
-      expect(result['general']).toEqual({ disableAutoUpdate: true });
+      expect(result['context']).toEqual({
+        fileFiltering: { disableFuzzySearch: true },
+      });
       expect(result['ui']).toEqual({
         theme: 'light',
         accessibility: { disableLoadingPhrases: false },
       });
     });
 
-    it('should normalize consolidated disable* non-boolean values to false', () => {
+    it('carries keys of removed settings over verbatim instead of relocating them', () => {
       const v1Settings = {
         theme: 'dark',
-        disableAutoUpdate: 'false',
-        disableUpdateNag: null,
+        disableAutoUpdate: true,
+        disableUpdateNag: false,
+        ideMode: true,
+        usageStatisticsEnabled: false,
       };
 
       const { settings: result } = migration.migrate(v1Settings, 'user') as {
@@ -118,10 +122,13 @@ describe('V1ToV2Migration', () => {
         warnings: unknown[];
       };
 
-      expect(result['$version']).toBe(2);
-      expect(result['general']).toEqual({
-        disableAutoUpdate: false,
+      expect(result).toEqual({
+        $version: 2,
+        ui: { theme: 'dark' },
+        disableAutoUpdate: true,
         disableUpdateNag: false,
+        ideMode: true,
+        usageStatisticsEnabled: false,
       });
     });
 
@@ -189,7 +196,7 @@ describe('V1ToV2Migration', () => {
     it('should preserve non-object parent path values on collision', () => {
       const v1Settings = {
         theme: 'dark',
-        disableAutoUpdate: true,
+        vimMode: true,
         ui: 'legacy-ui-string',
         general: 'legacy-general-string',
       };

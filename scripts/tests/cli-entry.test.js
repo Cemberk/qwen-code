@@ -8,22 +8,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const {
-  spawnSyncMock,
-  existsSyncMock,
-  homedirMock,
-  tmpdirMock,
-  enableCompileCacheMock,
-} = vi.hoisted(() => ({
-  spawnSyncMock: vi.fn(() => ({ status: 0, signal: null })),
-  existsSyncMock: vi.fn(() => false),
-  homedirMock: vi.fn(() => '/home/test-user'),
-  tmpdirMock: vi.fn(() => '/tmp'),
-  enableCompileCacheMock: vi.fn(() => ({
-    status: 1,
-    directory: '/tmp/node-compile-cache',
-  })),
-}));
+const { spawnSyncMock, existsSyncMock, enableCompileCacheMock } = vi.hoisted(
+  () => ({
+    spawnSyncMock: vi.fn(() => ({ status: 0, signal: null })),
+    existsSyncMock: vi.fn(() => false),
+    enableCompileCacheMock: vi.fn(() => ({
+      status: 1,
+      directory: '/tmp/node-compile-cache',
+    })),
+  }),
+);
 
 vi.mock('node:child_process', () => ({
   spawnSync: spawnSyncMock,
@@ -32,14 +26,7 @@ vi.mock('node:child_process', () => ({
 vi.mock('node:fs', async (importOriginal) => ({
   ...(await importOriginal()),
   existsSync: existsSyncMock,
-  realpathSync: vi.fn((p) => p),
   readFileSync: vi.fn(() => JSON.stringify({ version: '0.0.0-test' })),
-}));
-
-vi.mock('node:os', async (importOriginal) => ({
-  ...(await importOriginal()),
-  homedir: homedirMock,
-  tmpdir: tmpdirMock,
 }));
 
 // Mocked so the launcher never enables a real compile cache in the test worker.
@@ -60,16 +47,6 @@ describe('scripts/cli-entry.js production entry', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
-    homedirMock.mockReturnValue('/home/test-user');
-    tmpdirMock.mockReturnValue('/tmp');
-    // Every import stamps these into the real process.env, and the pin's
-    // bootstrap guard cannot tell two imports of this file apart — Vitest drops
-    // the cache-buster query from import.meta.url — so a leftover pin would be
-    // honoured as an inherited managed-version pin and its updateRoot would win
-    // over the home this test is trying to observe. Each test here drives a
-    // top-level invocation, which starts with neither.
-    delete process.env.QWEN_CODE_MANAGED_NPM_PIN;
-    delete process.env.QWEN_CODE_MANAGED_NPM_ROOT;
     // A non-fast-path command on Windows, so the entry takes the spawnSync
     // branch (mocked) instead of importing the real dist/cli.js in-process.
     process.argv = ['node', 'scripts/cli-entry.js', 'review', 'check'];
@@ -127,129 +104,6 @@ describe('scripts/cli-entry.js production entry', () => {
     } finally {
       if (inherited === undefined) delete process.env.QWEN_CODE_STARTUP_VERSION;
       else process.env.QWEN_CODE_STARTUP_VERSION = inherited;
-    }
-  });
-
-  it('clears the startup version before a managed-update relaunch', async () => {
-    // Behavioural, not source-text: the update child exits 44, and the
-    // relaunch through the launcher must NOT inherit the old session's
-    // stamp, so the new build stamps its own version.
-    const inherited = process.env.QWEN_CODE_STARTUP_VERSION;
-    const inheritedShim = process.env.QWEN_CODE_LAUNCHER_PATH;
-    process.env.QWEN_CODE_STARTUP_VERSION = '0.21.3';
-    process.env.QWEN_CODE_LAUNCHER_PATH = '/opt/qwen-standalone/bin/qwen';
-    existsSyncMock.mockImplementation(
-      (p) => normalizePath(p) === '/opt/qwen-standalone/bin/qwen',
-    );
-    // Snapshot the env AT call time: the mock records the object by
-    // reference, so asserting on it later would let a delete that happens
-    // AFTER the spawn mutate the record and hide the regression.
-    const spawnEnvs = [];
-    const spawnImpl = spawnSyncMock.getMockImplementation();
-    spawnSyncMock.mockImplementation((_cmd, _args, opts) => {
-      spawnEnvs.push({ ...opts.env });
-      return spawnEnvs.length === 1
-        ? { status: 44, signal: null }
-        : { status: 0, signal: null };
-    });
-    try {
-      await import('../cli-entry.js?clears-version-on-relaunch');
-      expect(spawnEnvs).toHaveLength(2);
-      // The pre-update child inherits the session's stamp...
-      expect(spawnEnvs[0].QWEN_CODE_STARTUP_VERSION).toBe('0.21.3');
-      // ...and the post-update relaunch does not.
-      expect('QWEN_CODE_STARTUP_VERSION' in spawnEnvs[1]).toBe(false);
-    } finally {
-      spawnSyncMock.mockImplementation(spawnImpl);
-      existsSyncMock.mockImplementation(() => false);
-      if (inherited === undefined) delete process.env.QWEN_CODE_STARTUP_VERSION;
-      else process.env.QWEN_CODE_STARTUP_VERSION = inherited;
-      if (inheritedShim === undefined)
-        delete process.env.QWEN_CODE_LAUNCHER_PATH;
-      else process.env.QWEN_CODE_LAUNCHER_PATH = inheritedShim;
-    }
-  });
-
-  it('hands the post-update relaunch command line to cmd.exe verbatim', async () => {
-    // #12687: the ""…"" idiom only reaches cmd intact when the spawn passes
-    // windowsVerbatimArguments — otherwise Node's MSVCRT escaping rewrites
-    // every embedded quote as \" and cmd /s rule 2 strips the line down to
-    // a literal \"\"path\"\" program name, which is exactly the reporter's
-    // error. The standalone Windows shim stamps an un-normalized
-    // bin\..\bin launcher path, so the fixture carries one.
-    const inheritedShim = process.env.QWEN_CODE_LAUNCHER_PATH;
-    const launcher =
-      'C:\\Users\\test\\AppData\\Local\\qwen-code\\qwen-code\\bin\\..\\bin\\qwen.cmd';
-    process.env.QWEN_CODE_LAUNCHER_PATH = launcher;
-    existsSyncMock.mockImplementation((p) => p === launcher);
-    let spawnCount = 0;
-    const spawnImpl = spawnSyncMock.getMockImplementation();
-    spawnSyncMock.mockImplementation(() => {
-      spawnCount += 1;
-      return spawnCount === 1
-        ? { status: 44, signal: null }
-        : { status: 0, signal: null };
-    });
-    try {
-      await import('../cli-entry.js?verbatim-cmd-relaunch');
-      // First spawn is the managed-update child (exit 44), second is the
-      // relaunch through the standalone shim. The interpreter mirrors the
-      // production `process.env['ComSpec'] ?? 'cmd.exe'` so the assertion
-      // also holds on a real Windows host, where ComSpec is always set.
-      expect(spawnSyncMock).toHaveBeenCalledTimes(2);
-      expect(spawnSyncMock).toHaveBeenLastCalledWith(
-        process.env['ComSpec'] ?? 'cmd.exe',
-        ['/d', '/s', '/c', `""${launcher}""`],
-        expect.objectContaining({
-          stdio: 'inherit',
-          windowsVerbatimArguments: true,
-        }),
-      );
-    } finally {
-      spawnSyncMock.mockImplementation(spawnImpl);
-      existsSyncMock.mockImplementation(() => false);
-      if (inheritedShim === undefined)
-        delete process.env.QWEN_CODE_LAUNCHER_PATH;
-      else process.env.QWEN_CODE_LAUNCHER_PATH = inheritedShim;
-    }
-  });
-
-  it('refuses a verbatim cmd relaunch when the launcher has cmd metacharacters', async () => {
-    // windowsVerbatimArguments drops Node's escaping safety net, so a
-    // launcher path containing cmd metacharacters would be re-tokenized
-    // into extra commands. The update itself already landed at that point,
-    // so the entry must skip the relaunch instead of spawning a malformed
-    // command line.
-    const inheritedShim = process.env.QWEN_CODE_LAUNCHER_PATH;
-    const launcher = 'C:\\evil&whoami\\bin\\qwen.cmd';
-    process.env.QWEN_CODE_LAUNCHER_PATH = launcher;
-    existsSyncMock.mockImplementation((p) => p === launcher);
-    let spawnCount = 0;
-    const spawnImpl = spawnSyncMock.getMockImplementation();
-    spawnSyncMock.mockImplementation(() => {
-      spawnCount += 1;
-      return spawnCount === 1
-        ? { status: 44, signal: null }
-        : { status: 0, signal: null };
-    });
-    const stderrSpy = vi
-      .spyOn(process.stderr, 'write')
-      .mockImplementation(() => true);
-    try {
-      await import('../cli-entry.js?unsafe-cmd-launcher');
-      // Only the managed-update child ran; no cmd.exe relaunch followed.
-      expect(spawnSyncMock).toHaveBeenCalledTimes(1);
-      expect(stderrSpy).toHaveBeenCalledWith(
-        expect.stringContaining('next run'),
-      );
-      expect(exitSpy).toHaveBeenCalledWith(0);
-    } finally {
-      stderrSpy.mockRestore();
-      spawnSyncMock.mockImplementation(spawnImpl);
-      existsSyncMock.mockImplementation(() => false);
-      if (inheritedShim === undefined)
-        delete process.env.QWEN_CODE_LAUNCHER_PATH;
-      else process.env.QWEN_CODE_LAUNCHER_PATH = inheritedShim;
     }
   });
 
@@ -355,23 +209,6 @@ describe('scripts/cli-entry.js production entry', () => {
     }
   });
 
-  it('falls back to tmpdir for tilde QWEN_HOME when homedir is unavailable', async () => {
-    const inheritedHome = process.env.QWEN_HOME;
-    homedirMock.mockImplementation(() => {
-      throw new Error('homedir unavailable');
-    });
-    process.env.QWEN_HOME = '~';
-    try {
-      await import('../cli-entry.js?tilde-home-fallback');
-      expect(normalizePath(process.env.QWEN_CODE_MANAGED_NPM_ROOT)).toBe(
-        '/tmp/updates/npm',
-      );
-    } finally {
-      if (inheritedHome === undefined) delete process.env.QWEN_HOME;
-      else process.env.QWEN_HOME = inheritedHome;
-    }
-  });
-
   describe('outside Windows', () => {
     const cliPath = fileURLToPath(new URL('../cli.js', import.meta.url));
 
@@ -417,37 +254,6 @@ describe('scripts/cli-entry.js production entry', () => {
         );
       } finally {
         delete process.versions.bun;
-      }
-    });
-
-    it('relaunches through the launcher when the CLI exits after an update', async () => {
-      const exitListeners = process.listeners('exit');
-      process.env.QWEN_CODE_LAUNCHER_PATH = '/opt/qwen-standalone/bin/qwen';
-      existsSyncMock.mockImplementation(
-        (p) => normalizePath(p) === '/opt/qwen-standalone/bin/qwen',
-      );
-      try {
-        await import('../cli-entry.js?in-process-update');
-        const hook = process
-          .listeners('exit')
-          .find((l) => !exitListeners.includes(l));
-
-        hook(0);
-        expect(spawnSyncMock).not.toHaveBeenCalled();
-
-        hook(44);
-        expect(spawnSyncMock).toHaveBeenCalledWith(
-          '/opt/qwen-standalone/bin/qwen',
-          [],
-          expect.objectContaining({
-            env: expect.objectContaining({
-              QWEN_CODE_RELAUNCH_ARGS: JSON.stringify(['review', 'check']),
-            }),
-          }),
-        );
-        process.removeListener('exit', hook);
-      } finally {
-        delete process.env.QWEN_CODE_LAUNCHER_PATH;
       }
     });
   });

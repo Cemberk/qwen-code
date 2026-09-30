@@ -67,7 +67,6 @@ const MAX_MERMAID_PNG_BYTES = 8 * 1024 * 1024;
 const MAX_RENDERER_OUTPUT_CHARS = 16 * 1024;
 const MAX_RENDER_TIMEOUT_MS = 60_000;
 const OUTPUT_TRUNCATION_MARKER = '\n... renderer output truncated ...';
-const NPX_MERMAID_CLI = 'npx:@mermaid-js/mermaid-cli@11.12.0';
 const PNG_SIGNATURE = '89504e470d0a1a0a';
 const KITTY_PLACEHOLDER = '\u{10EEEE}';
 const RENDERER_ENV_ALLOWLIST = [
@@ -410,7 +409,7 @@ export function renderMermaidImageSync({
     return {
       kind: 'unavailable',
       reason:
-        'Mermaid CLI (mmdc) was not found. Install @mermaid-js/mermaid-cli, set QWEN_CODE_MERMAID_MMD_CLI, or set QWEN_CODE_MERMAID_ALLOW_NPX=1.',
+        'Mermaid CLI (mmdc) was not found. Install @mermaid-js/mermaid-cli or set QWEN_CODE_MERMAID_MMD_CLI.',
     };
   }
 
@@ -556,7 +555,7 @@ export async function renderMermaidImageAsync({
     return {
       kind: 'unavailable',
       reason:
-        'Mermaid CLI (mmdc) was not found. Install @mermaid-js/mermaid-cli, set QWEN_CODE_MERMAID_MMD_CLI, or set QWEN_CODE_MERMAID_ALLOW_NPX=1.',
+        'Mermaid CLI (mmdc) was not found. Install @mermaid-js/mermaid-cli or set QWEN_CODE_MERMAID_MMD_CLI.',
     };
   }
 
@@ -846,17 +845,7 @@ function findMmdc(env: NodeJS.ProcessEnv): string | null {
   const explicit = env['QWEN_CODE_MERMAID_MMD_CLI'];
   if (explicit && isExecutable(explicit)) return explicit;
 
-  const mmdc = findExecutable('mmdc', env);
-  if (mmdc) return mmdc;
-
-  if (
-    env['QWEN_CODE_MERMAID_ALLOW_NPX'] === '1' &&
-    findExecutable('npx', env)
-  ) {
-    return NPX_MERMAID_CLI;
-  }
-
-  return null;
+  return findExecutable('mmdc', env);
 }
 
 export function findExecutable(
@@ -941,16 +930,10 @@ function renderPngWithMmdc(
       '-w',
       String(renderWidth),
     ];
-    const command =
-      mmdc === NPX_MERMAID_CLI ? findExecutable('npx', env)! : mmdc;
-    const args =
-      mmdc === NPX_MERMAID_CLI
-        ? ['-y', '@mermaid-js/mermaid-cli@11.12.0', ...mmdcArgs]
-        : mmdcArgs;
-    const result = spawnSync(command, args, {
+    const result = spawnSync(mmdc, mmdcArgs, {
       encoding: 'utf8',
       env: createRendererChildEnv(env),
-      shell: shouldRunThroughShell(command),
+      shell: shouldRunThroughShell(mmdc),
       timeout: getMermaidRenderTimeout(env),
     });
 
@@ -1006,15 +989,9 @@ async function renderPngWithMmdcAsync(
       '-w',
       String(renderWidth),
     ];
-    const command =
-      mmdc === NPX_MERMAID_CLI ? findExecutable('npx', env)! : mmdc;
-    const args =
-      mmdc === NPX_MERMAID_CLI
-        ? ['-y', '@mermaid-js/mermaid-cli@11.12.0', ...mmdcArgs]
-        : mmdcArgs;
-    const result = await runCommand(command, args, {
+    const result = await runCommand(mmdc, mmdcArgs, {
       env: createRendererChildEnv(env),
-      shell: shouldRunThroughShell(command),
+      shell: shouldRunThroughShell(mmdc),
       timeout: getMermaidRenderTimeout(env),
       signal,
     });

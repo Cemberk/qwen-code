@@ -38,14 +38,6 @@ export class TemplateRenderer {
       </div>
     </div>
 
-    <!-- React CDN -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-
-    <!-- CDN Libraries -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-
     <!-- Application Data -->
     <script>
       window.INSIGHT_DATA = ${insightJson};

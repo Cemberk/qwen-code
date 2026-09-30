@@ -210,10 +210,6 @@ export class Storage {
     return path.join(Storage.getGlobalQwenDir(), 'settings.json');
   }
 
-  static getInstallationIdPath(): string {
-    return path.join(Storage.getGlobalQwenDir(), 'installation_id');
-  }
-
   static getGoogleAccountsPath(): string {
     return path.join(Storage.getGlobalQwenDir(), GOOGLE_ACCOUNTS_FILENAME);
   }

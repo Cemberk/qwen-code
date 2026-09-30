@@ -11,7 +11,6 @@ import type {
   ContentGeneratorConfig,
 } from '../contentGenerator.js';
 import type { Config } from '../../config/config.js';
-import { InstallationManager } from '../../config/installationManager.js';
 
 export { LlmContentGenerator } from './llm-content-generator.js';
 
@@ -26,19 +25,9 @@ export function createLlmContentGenerator(
   const userAgent =
     config.userAgent ||
     `QwenCode/${version} (${process.platform}; ${process.arch})`;
-  const baseHeaders: Record<string, string> = {
+  const headers: Record<string, string> = {
     'User-Agent': userAgent,
   };
-
-  let headers: Record<string, string> = { ...baseHeaders };
-  if (gcConfig?.getUsageStatisticsEnabled()) {
-    const installationManager = new InstallationManager();
-    const installationId = installationManager.getInstallationId();
-    headers = {
-      ...headers,
-      'x-gemini-api-privileged-user-id': `${installationId}`,
-    };
-  }
   const httpOptions = config.baseUrl
     ? {
         headers,

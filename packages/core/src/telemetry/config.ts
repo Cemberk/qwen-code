@@ -12,7 +12,6 @@ import { FatalConfigError } from '../utils/errors.js';
 import {
   DEFAULT_SENSITIVE_SPAN_ATTRIBUTE_MAX_LENGTH,
   SENSITIVE_SPAN_ATTRIBUTE_MAX_LENGTH_LIMIT,
-  TelemetryTarget,
   isValidSensitiveSpanAttributeMaxLength,
 } from './index.js';
 import type { ResourceAttributeWarnings } from './resource-attributes.js';
@@ -30,22 +29,6 @@ export function parseBooleanEnvFlag(
 ): boolean | undefined {
   if (value === undefined) return undefined;
   return value === 'true' || value === '1';
-}
-
-/**
- * Normalize a telemetry target value into TelemetryTarget or undefined.
- */
-export function parseTelemetryTargetValue(
-  value: string | TelemetryTarget | undefined,
-): TelemetryTarget | undefined {
-  if (value === undefined) return undefined;
-  if (value === TelemetryTarget.LOCAL || value === 'local') {
-    return TelemetryTarget.LOCAL;
-  }
-  if (value === TelemetryTarget.GCP || value === 'gcp') {
-    return TelemetryTarget.GCP;
-  }
-  return undefined;
 }
 
 /**
@@ -105,9 +88,6 @@ function parseTelemetryUserId(
 
 export interface TelemetryArgOverrides {
   telemetry?: boolean;
-  telemetryTarget?: string | TelemetryTarget;
-  telemetryOtlpEndpoint?: string;
-  telemetryOtlpProtocol?: string;
   telemetryLogPrompts?: boolean;
   telemetryOutfile?: string;
 }
@@ -128,40 +108,6 @@ export async function resolveTelemetrySettings(options: {
     argv.telemetry ??
     parseBooleanEnvFlag(env['QWEN_TELEMETRY_ENABLED']) ??
     settings.enabled;
-
-  const rawTarget =
-    (argv.telemetryTarget as string | TelemetryTarget | undefined) ??
-    env['QWEN_TELEMETRY_TARGET'] ??
-    (settings.target as string | TelemetryTarget | undefined);
-  const target = parseTelemetryTargetValue(rawTarget);
-  if (rawTarget !== undefined && target === undefined) {
-    throw new FatalConfigError(
-      `Invalid telemetry target: ${String(
-        rawTarget,
-      )}. Valid values are: local, gcp`,
-    );
-  }
-
-  const otlpEndpoint =
-    argv.telemetryOtlpEndpoint ??
-    env['QWEN_TELEMETRY_OTLP_ENDPOINT'] ??
-    env['OTEL_EXPORTER_OTLP_ENDPOINT'] ??
-    settings.otlpEndpoint;
-
-  const rawProtocol =
-    (argv.telemetryOtlpProtocol as string | undefined) ??
-    env['QWEN_TELEMETRY_OTLP_PROTOCOL'] ??
-    settings.otlpProtocol;
-  const otlpProtocol = (['grpc', 'http'] as const).find(
-    (p) => p === rawProtocol,
-  );
-  if (rawProtocol !== undefined && otlpProtocol === undefined) {
-    throw new FatalConfigError(
-      `Invalid telemetry OTLP protocol: ${String(
-        rawProtocol,
-      )}. Valid values are: grpc, http`,
-    );
-  }
 
   const logPrompts =
     argv.telemetryLogPrompts ??
@@ -194,23 +140,6 @@ export async function resolveTelemetrySettings(options: {
 
   const outfile =
     argv.telemetryOutfile ?? env['QWEN_TELEMETRY_OUTFILE'] ?? settings.outfile;
-
-  // Per-signal endpoint overrides (HTTP only).
-  // Priority: QWEN_ env var > standard OTEL_ env var > settings.json
-  const otlpTracesEndpoint =
-    env['QWEN_TELEMETRY_OTLP_TRACES_ENDPOINT'] ??
-    env['OTEL_EXPORTER_OTLP_TRACES_ENDPOINT'] ??
-    settings.otlpTracesEndpoint;
-
-  const otlpLogsEndpoint =
-    env['QWEN_TELEMETRY_OTLP_LOGS_ENDPOINT'] ??
-    env['OTEL_EXPORTER_OTLP_LOGS_ENDPOINT'] ??
-    settings.otlpLogsEndpoint;
-
-  const otlpMetricsEndpoint =
-    env['QWEN_TELEMETRY_OTLP_METRICS_ENDPOINT'] ??
-    env['OTEL_EXPORTER_OTLP_METRICS_ENDPOINT'] ??
-    settings.otlpMetricsEndpoint;
 
   // Resource attributes: merge OTEL_RESOURCE_ATTRIBUTES (lowest), then
   // settings.resourceAttributes (settings wins on key conflict). RESERVED
@@ -257,12 +186,6 @@ export async function resolveTelemetrySettings(options: {
 
   return {
     enabled,
-    target,
-    otlpEndpoint,
-    otlpProtocol,
-    otlpTracesEndpoint,
-    otlpLogsEndpoint,
-    otlpMetricsEndpoint,
     logPrompts,
     userId,
     includeSensitiveSpanAttributes,

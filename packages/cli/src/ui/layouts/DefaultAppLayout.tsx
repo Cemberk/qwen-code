@@ -12,7 +12,6 @@ import {
   ScrollContext,
   type ScrollActions,
 } from '../contexts/ScrollContext.js';
-import { UpdateNotification } from '../components/UpdateNotification.js';
 import { DialogManager } from '../components/DialogManager.js';
 import { Composer } from '../components/Composer.js';
 import { ExitWarning } from '../components/ExitWarning.js';
@@ -62,7 +61,6 @@ export const DefaultAppLayout: React.FC = () => {
   const shouldShowStickyTodos =
     uiState.stickyTodos !== null &&
     !uiState.dialogsVisible &&
-    !uiState.isFeedbackDialogOpen &&
     uiState.streamingState === StreamingState.Responding;
 
   // Clear terminal on view switch so previous view's <Static> output
@@ -84,9 +82,6 @@ export const DefaultAppLayout: React.FC = () => {
           {/* Agent view: chat history + agent-specific composer */}
           <AgentChatView agentId={activeView} />
           <Box flexDirection="column" ref={uiState.mainControlsRef}>
-            {!uiState.dialogsVisible && uiState.updateInfo && (
-              <UpdateNotification message={uiState.updateInfo.message} />
-            )}
             <AgentComposer key={activeView} agentId={activeView} />
             <ExitWarning />
           </Box>
@@ -99,9 +94,6 @@ export const DefaultAppLayout: React.FC = () => {
             scrollActionsRef={scrollActionsRef}
           />
           <Box flexDirection="column" ref={uiState.mainControlsRef}>
-            {!uiState.dialogsVisible && uiState.updateInfo && (
-              <UpdateNotification message={uiState.updateInfo.message} />
-            )}
             {uiState.dialogsVisible ? (
               <Box
                 marginX={2}

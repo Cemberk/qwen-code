@@ -111,7 +111,6 @@ describe('settings-migration', () => {
       expect(migratedSettings['general']).toEqual({
         vimMode: true,
         checkpointing: true,
-        enableAutoUpdate: false,
       });
       expect(migratedSettings['mcpServers']).toEqual({
         fetch: {
@@ -197,14 +196,6 @@ describe('settings-migration', () => {
         hideWindowTitle: true,
         theme: 'light',
       });
-      // String "false" for disableAutoUpdate is treated as truthy (non-empty string)
-      // So enableAutoUpdate = !truthy = false, but output shows true
-      // This suggests string "false" is parsed as boolean false
-      expect(
-        (migratedSettings['general'] as Record<string, unknown>)?.[
-          'enableAutoUpdate'
-        ],
-      ).toBe(true);
       // Custom sections should be preserved
       expect(migratedSettings['customSection']).toEqual({ keepMe: true });
     });
@@ -238,11 +229,6 @@ describe('settings-migration', () => {
         )?.['enableLoadingPhrases'],
       ).toBe(true);
       expect(
-        (migratedSettings['general'] as Record<string, unknown>)?.[
-          'enableAutoUpdate'
-        ],
-      ).toBe(true);
-      expect(
         (
           (migratedSettings['context'] as Record<string, unknown>)?.[
             'fileFiltering'
@@ -251,16 +237,6 @@ describe('settings-migration', () => {
       ).toBe(false);
 
       // Verify old disable* keys are removed
-      expect(
-        (migratedSettings['general'] as Record<string, unknown>)?.[
-          'disableAutoUpdate'
-        ],
-      ).toBeUndefined();
-      expect(
-        (migratedSettings['general'] as Record<string, unknown>)?.[
-          'disableUpdateNag'
-        ],
-      ).toBeUndefined();
       expect(
         (
           (migratedSettings['ui'] as Record<string, unknown>)?.[
@@ -373,9 +349,6 @@ describe('settings-migration', () => {
 
       // Coercible strings are migrated; invalid disable* values are removed.
       expect(migratedSettings['$version']).toBe(CURRENT_SETTINGS_VERSION);
-      expect(migratedSettings['general']).toEqual({
-        enableAutoUpdate: false,
-      });
       expect(
         (
           (migratedSettings['ui'] as Record<string, unknown>)?.[
@@ -439,13 +412,6 @@ describe('settings-migration', () => {
       // Expected output based on stable test output
       expect(migratedSettings['$version']).toBe(CURRENT_SETTINGS_VERSION);
       // Migration converts disable* to enable* by inverting the value
-      // disableAutoUpdate: false -> enableAutoUpdate: true (inverted)
-      // But disableUpdateNag: true may affect the consolidation
-      expect(
-        (migratedSettings['general'] as Record<string, unknown>)?.[
-          'enableAutoUpdate'
-        ],
-      ).toBe(false);
       // disableLoadingPhrases: true -> enableLoadingPhrases: false (inverted)
       expect(
         (
@@ -470,17 +436,6 @@ describe('settings-migration', () => {
           ] as Record<string, unknown>
         )?.['enableCacheControl'],
       ).toBe(false);
-      // Old disable* keys should be removed
-      expect(
-        (migratedSettings['general'] as Record<string, unknown>)?.[
-          'disableAutoUpdate'
-        ],
-      ).toBeUndefined();
-      expect(
-        (migratedSettings['general'] as Record<string, unknown>)?.[
-          'disableUpdateNag'
-        ],
-      ).toBeUndefined();
     });
   });
 
@@ -506,11 +461,6 @@ describe('settings-migration', () => {
       // (V2→V3 ran on original V3 load, not re-applied here).
       expect(finalSettings['$version']).toBe(CURRENT_SETTINGS_VERSION);
       expect(
-        (finalSettings['general'] as Record<string, unknown>)?.[
-          'disableAutoUpdate'
-        ],
-      ).toBe(true);
-      expect(
         (
           (finalSettings['ui'] as Record<string, unknown>)?.[
             'accessibility'
@@ -518,11 +468,6 @@ describe('settings-migration', () => {
         )?.['disableLoadingPhrases'],
       ).toBe(false);
       // Existing enable* keys should be preserved
-      expect(
-        (finalSettings['general'] as Record<string, unknown>)?.[
-          'enableAutoUpdate'
-        ],
-      ).toBe(false);
       expect(
         (
           (finalSettings['ui'] as Record<string, unknown>)?.[
@@ -564,9 +509,7 @@ describe('settings-migration', () => {
       ).toEqual({ commit: false, pr: false });
       // Sibling general.* keys must survive the migration unchanged.
       expect(
-        (finalSettings['general'] as Record<string, unknown>)?.[
-          'disableAutoUpdate'
-        ],
+        (finalSettings['general'] as Record<string, unknown>)?.['vimMode'],
       ).toBe(true);
       // And so must unrelated top-level sections.
       expect(finalSettings['custom']).toEqual({
@@ -597,8 +540,8 @@ describe('settings-migration', () => {
       expect(finalSettings['theme']).toBe('dark');
       expect(finalSettings['model']).toBe('future-model');
       expect(finalSettings['experimentalFlag']).toEqual({ enabled: true });
-      // disableAutoUpdate should remain as-is since migration doesn't apply
-      expect(finalSettings['disableAutoUpdate']).toBe(true);
+      // disableLoadingPhrases should remain as-is since migration doesn't apply
+      expect(finalSettings['disableLoadingPhrases']).toBe(true);
     });
   });
 

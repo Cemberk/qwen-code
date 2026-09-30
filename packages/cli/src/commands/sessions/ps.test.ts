@@ -9,7 +9,6 @@ import stringWidth from 'string-width';
 import type { SessionRegistryRecord } from '@qwen-code/qwen-code-core';
 
 const listLiveSessions = vi.fn();
-const listAgentViewSessionStates = vi.fn();
 const ignoreBrokenPipe = vi.fn();
 
 vi.mock('@qwen-code/qwen-code-core', () => ({
@@ -24,18 +23,11 @@ vi.mock('@qwen-code/qwen-code-core', () => ({
     kind === undefined || kind.length === 0 ? 'tui' : kind,
 }));
 
-vi.mock('../../agent-view/supervisor-store.js', () => ({
-  listAgentViewSessionStates: (...args: unknown[]) =>
-    listAgentViewSessionStates(...args),
-}));
-
 const stdout: string[] = [];
-const stderr: string[] = [];
 
 vi.mock('../../utils/stdioHelpers.js', () => ({
   ignoreBrokenPipe,
   writeStdoutLine: (line: string) => stdout.push(line),
-  writeStderrLine: (line: string) => stderr.push(line),
 }));
 
 const { psCommand, formatAge, NAME_COL, KIND_COL, PID_COL, AGE_COL } =
@@ -58,17 +50,6 @@ function record(
   };
 }
 
-function managedState(
-  over: { ownership?: string; sessionId?: string; cwd?: string } = {},
-): Record<string, unknown> {
-  const {
-    ownership = 'managed',
-    sessionId = 'managed-1',
-    cwd = '/w/svc',
-  } = over;
-  return { ownership, sessionId, activeCwd: cwd };
-}
-
 async function run(argv: Record<string, unknown>): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (psCommand.handler as any)(argv);
@@ -76,11 +57,8 @@ async function run(argv: Record<string, unknown>): Promise<void> {
 
 beforeEach(() => {
   stdout.length = 0;
-  stderr.length = 0;
   listLiveSessions.mockReset();
-  listAgentViewSessionStates.mockReset();
   ignoreBrokenPipe.mockReset();
-  listAgentViewSessionStates.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -177,31 +155,7 @@ describe('qwen sessions ps', () => {
   it('says so plainly when nothing is registered', async () => {
     listLiveSessions.mockResolvedValue([]);
     await run({ json: false });
-    expect(stdout).toEqual([
-      'No Qwen Code sessions are registered or managed right now.',
-    ]);
-  });
-
-  it('lists managed records without claiming process liveness', async () => {
-    listLiveSessions.mockResolvedValue([]);
-    listAgentViewSessionStates.mockResolvedValue([
-      managedState(),
-      managedState({ ownership: 'adopting', sessionId: 'adopting-1' }),
-    ]);
-    await run({ json: false });
-
-    expect(stdout).toEqual([
-      'NAME'.padEnd(NAME_COL) +
-        'KIND'.padEnd(KIND_COL) +
-        'PID'.padEnd(PID_COL) +
-        'AGE'.padEnd(AGE_COL) +
-        'DIRECTORY',
-      'managed-1'.padEnd(NAME_COL) +
-        'managed'.padEnd(KIND_COL) +
-        '-'.padEnd(PID_COL) +
-        '-'.padEnd(AGE_COL) +
-        '/w/svc',
-    ]);
+    expect(stdout).toEqual(['No Qwen Code sessions are registered right now.']);
   });
 
   it('emits one JSON object per line with no header', async () => {
@@ -213,39 +167,21 @@ describe('qwen sessions ps', () => {
     expect(JSON.parse(stdout[1]).pid).toBe(7);
   });
 
-  it('installs the output error guard before reading the managed store', async () => {
-    // Both mocks only record that they ran; every expectation is raised
-    // afterwards, in the test body. An expectation thrown from inside a
-    // mock implementation rides out on the rejection that
-    // `readManagedSessions` deliberately catches, so it is swallowed
-    // along with the error and the case passes with the guard deleted.
+  it('installs the output error guard before reading the registry', async () => {
     const rec = record();
     const order: string[] = [];
     ignoreBrokenPipe.mockImplementation(() => {
       order.push('guard');
     });
-    listLiveSessions.mockResolvedValue([rec]);
-    listAgentViewSessionStates.mockImplementation(() => {
-      order.push('store');
-      return Promise.reject(new Error('broken store'));
+    listLiveSessions.mockImplementation(async () => {
+      order.push('registry');
+      return [rec];
     });
 
     await run({ json: true });
 
-    expect(order).toEqual(['guard', 'store']);
+    expect(order).toEqual(['guard', 'registry']);
     expect(stdout).toEqual([JSON.stringify(rec)]);
-  });
-
-  it('keeps registry JSON available when the supervisor store cannot be read', async () => {
-    const rec = record();
-    listLiveSessions.mockResolvedValue([rec]);
-    listAgentViewSessionStates.mockRejectedValue(new Error('broken\n\tstore'));
-    await run({ json: true });
-
-    expect(stdout).toEqual([JSON.stringify(rec)]);
-    expect(stderr).toEqual([
-      'Managed sessions could not be listed: brokenstore',
-    ]);
   });
 
   it('emits each record as one whole line of JSON Lines', async () => {
@@ -263,18 +199,6 @@ describe('qwen sessions ps', () => {
 
     expect(stdout).toEqual([expected]);
     expect(stdout[0]).not.toContain('\n');
-  });
-
-  it('keeps managed and registry records separate in JSON', async () => {
-    const rec = record({ sessionId: 'managed-1' });
-    listLiveSessions.mockResolvedValue([rec]);
-    listAgentViewSessionStates.mockResolvedValue([managedState()]);
-    await run({ json: true });
-
-    expect(stdout.map((line) => JSON.parse(line))).toEqual([
-      { sessionId: 'managed-1', cwd: '/w/svc', managed: true },
-      rec,
-    ]);
   });
 
   it('carries the kind into the JSON output, unfiltered', async () => {

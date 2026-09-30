@@ -67,7 +67,6 @@ function makeHarness(opts: {
 
   const config = {
     getSessionId: () => 'ask-user-question-session',
-    getUsageStatisticsEnabled: () => true,
     getDebugMode: () => false,
     getApprovalMode: () => ApprovalMode.DEFAULT,
     setApprovalMode: vi.fn(),

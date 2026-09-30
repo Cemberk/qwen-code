@@ -19,13 +19,7 @@ export default defineConfig({
       formats: ['iife'],
     },
     rollupOptions: {
-      external: ['react', 'react-dom', 'react-dom/client'],
       output: {
-        globals: {
-          react: 'React',
-          'react-dom': 'ReactDOM',
-          'react-dom/client': 'ReactDOM',
-        },
         assetFileNames: (assetInfo) => {
           if (assetInfo.name === 'style.css') return 'main.css';
           return assetInfo.name;

@@ -133,11 +133,6 @@ export interface UIActions {
   openHelpDialog: () => void;
   closeHelpDialog: () => void;
   setHelpTab: (tab: HelpTab) => void;
-  // Feedback dialog
-  openFeedbackDialog: () => void;
-  closeFeedbackDialog: () => void;
-  temporaryCloseFeedbackDialog: () => void;
-  submitFeedback: (rating: number) => void;
   // Rewind selector
   openRewindSelector: () => void;
   closeRewindSelector: () => void;

@@ -229,14 +229,12 @@ describe('handleInstall', () => {
 
     await handleInstall({
       source: 'https://example.com/extension.zip',
-      autoUpdate: true,
     });
 
     expect(mockInstallExtension).toHaveBeenCalledWith(
       expect.objectContaining({
         source: 'https://example.com/extension.zip',
         type: 'archive-url',
-        autoUpdate: true,
       }),
       expect.any(Function),
       undefined,

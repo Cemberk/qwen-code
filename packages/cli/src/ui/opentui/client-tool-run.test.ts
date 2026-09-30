@@ -5,7 +5,7 @@
  */
 
 /**
- * Client-initiated tool scheduling tests (/restore, /setup-github parity):
+ * Client-initiated tool scheduling tests (/restore parity):
  * the one-shot CoreToolScheduler runs with isClientInitiated requests, its
  * completion feeds tool-result/tool-end events, and the result never becomes
  * a model follow-up (the generator ends with `done`).

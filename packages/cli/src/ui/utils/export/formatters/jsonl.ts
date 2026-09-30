@@ -37,9 +37,6 @@ export function toJsonl(sessionData: ExportSessionData): string {
   if (sourceMetadata?.model) {
     metadata['model'] = sourceMetadata.model;
   }
-  if (sourceMetadata?.channel) {
-    metadata['channel'] = sourceMetadata.channel;
-  }
   if (sourceMetadata?.promptCount !== undefined) {
     metadata['promptCount'] = sourceMetadata.promptCount;
   }

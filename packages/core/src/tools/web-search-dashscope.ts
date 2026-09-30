@@ -7,7 +7,6 @@
 import OpenAI from 'openai';
 import type { Config } from '../config/config.js';
 import { resolveRequestTimeout } from '../core/openaiContentGenerator/constants.js';
-import { buildSessionAwareFetch } from '../core/outbound-session-id.js';
 import { buildRuntimeFetchOptions } from '../utils/runtimeFetchOptions.js';
 import { delay } from '../utils/retry.js';
 import { createDebugLogger, type DebugLogger } from '../utils/debugLogger.js';
@@ -254,11 +253,6 @@ export class DashScopeWebSearchBackend implements WebSearchBackend {
         ...(backend.customHeaders ?? {}),
       },
       ...(runtimeOptions || {}),
-      fetch: buildSessionAwareFetch(
-        runtimeOptions?.fetch,
-        this.config,
-        backend.customHeaders,
-      ),
     });
 
     // One total timeout across both attempts, combined with the caller's

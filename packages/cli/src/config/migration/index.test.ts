@@ -19,7 +19,7 @@ describe('Migration Framework Integration', () => {
       const v1Settings = {
         theme: 'dark',
         model: 'gemini',
-        disableAutoUpdate: true,
+        disableFuzzySearch: true,
         disableLoadingPhrases: false,
       };
 
@@ -45,17 +45,17 @@ describe('Migration Framework Integration', () => {
       });
       expect(settings['model']).toEqual({ name: 'gemini' });
 
-      // Check disableAutoUpdate was inverted to enableAutoUpdate: false
-      expect(
-        (settings['general'] as Record<string, unknown>)['enableAutoUpdate'],
-      ).toBe(false);
+      // Check disableFuzzySearch was inverted to enableFuzzySearch: false
+      expect(settings['context']).toEqual({
+        fileFiltering: { enableFuzzySearch: false },
+      });
     });
 
     it('should migrate V2 settings forward through the chain', () => {
       const v2Settings = {
         $version: 2,
         ui: { theme: 'light' },
-        general: { disableAutoUpdate: false },
+        context: { fileFiltering: { disableFuzzySearch: false } },
       };
 
       const result = runMigrations(v2Settings, 'user');
@@ -69,19 +69,16 @@ describe('Migration Framework Integration', () => {
 
       const settings = result.settings as Record<string, unknown>;
       expect(settings['$version']).toBe(SETTINGS_VERSION);
-      expect(
-        (settings['general'] as Record<string, unknown>)['enableAutoUpdate'],
-      ).toBe(true);
-      expect(
-        (settings['general'] as Record<string, unknown>)['disableAutoUpdate'],
-      ).toBeUndefined();
+      expect(settings['context']).toEqual({
+        fileFiltering: { enableFuzzySearch: true },
+      });
     });
 
     it('should not modify settings already at the current version', () => {
       const current = {
         $version: SETTINGS_VERSION,
         ui: { theme: 'dark' },
-        general: { enableAutoUpdate: true },
+        general: { vimMode: true },
       };
 
       const result = runMigrations(current, 'user');
@@ -94,7 +91,7 @@ describe('Migration Framework Integration', () => {
     it('should be idempotent', () => {
       const v1Settings = {
         theme: 'dark',
-        disableAutoUpdate: true,
+        disableFuzzySearch: true,
       };
 
       const result1 = runMigrations(v1Settings, 'user');
@@ -119,7 +116,7 @@ describe('Migration Framework Integration', () => {
     it('should return true for V2 settings with deprecated keys', () => {
       const v2Settings = {
         $version: 2,
-        general: { disableAutoUpdate: true },
+        context: { fileFiltering: { disableFuzzySearch: true } },
       };
 
       expect(needsMigration(v2Settings)).toBe(true);
@@ -138,7 +135,7 @@ describe('Migration Framework Integration', () => {
     it('should return false for settings already at the current version', () => {
       const current = {
         $version: SETTINGS_VERSION,
-        general: { enableAutoUpdate: true },
+        general: { vimMode: true },
       };
 
       expect(needsMigration(current)).toBe(false);
@@ -171,7 +168,7 @@ describe('Migration Framework Integration', () => {
 
       const v1Settings = {
         theme: 'dark',
-        disableAutoUpdate: true,
+        disableFuzzySearch: true,
         disableLoadingPhrases: true,
       };
 
@@ -182,9 +179,9 @@ describe('Migration Framework Integration', () => {
       const settings = result.settings as Record<string, unknown>;
       expect(settings['$version']).toBe(SETTINGS_VERSION);
       expect((settings['ui'] as Record<string, unknown>)['theme']).toBe('dark');
-      expect(
-        (settings['general'] as Record<string, unknown>)['enableAutoUpdate'],
-      ).toBe(false);
+      expect(settings['context']).toEqual({
+        fileFiltering: { enableFuzzySearch: false },
+      });
       expect(
         (
           (settings['ui'] as Record<string, unknown>)[
@@ -199,7 +196,7 @@ describe('Migration Framework Integration', () => {
     it('needsMigration should return true when runMigrations would execute migrations', () => {
       const v1Settings = {
         theme: 'dark',
-        disableAutoUpdate: true,
+        disableFuzzySearch: true,
       };
 
       // needsMigration should report that migration is needed
@@ -213,7 +210,7 @@ describe('Migration Framework Integration', () => {
     it('needsMigration should return false when runMigrations would execute no migrations', () => {
       const current = {
         $version: SETTINGS_VERSION,
-        general: { enableAutoUpdate: true },
+        general: { vimMode: true },
       };
 
       // needsMigration should report that no migration is needed
@@ -299,7 +296,7 @@ describe('Migration Framework Integration', () => {
       // Create settings with version equal to SETTINGS_VERSION
       const currentVersionSettings = {
         $version: SETTINGS_VERSION,
-        general: { enableAutoUpdate: true },
+        general: { vimMode: true },
       };
 
       // needsMigration should return false for current version
@@ -308,7 +305,7 @@ describe('Migration Framework Integration', () => {
       // Create settings with version less than SETTINGS_VERSION
       const oldVersionSettings = {
         $version: SETTINGS_VERSION - 1,
-        general: { disableAutoUpdate: true },
+        context: { fileFiltering: { disableFuzzySearch: true } },
       };
 
       // needsMigration should return true for old version
@@ -329,7 +326,7 @@ describe('Migration Framework Integration', () => {
       const settingsWithInvalidVersion = {
         $version: 'invalid',
         theme: 'dark',
-        disableAutoUpdate: true,
+        disableFuzzySearch: true,
       };
 
       // Should detect migration needed based on V1 shape
@@ -344,7 +341,7 @@ describe('Migration Framework Integration', () => {
     it('should not migrate non-numeric version with already-migrated shape (normalized by loader)', () => {
       const settingsWithInvalidVersionButMigratedShape = {
         $version: 'invalid',
-        general: { enableAutoUpdate: true },
+        general: { vimMode: true },
       };
 
       // needsMigration returns false because no migration applies to this shape
@@ -365,7 +362,7 @@ describe('Migration Framework Integration', () => {
       // Settings that might cause repeated migrations
       const current = {
         $version: SETTINGS_VERSION,
-        general: { enableAutoUpdate: true },
+        general: { vimMode: true },
       };
 
       // First check

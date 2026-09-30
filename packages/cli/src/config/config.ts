@@ -38,7 +38,6 @@ import {
   isSafeModeEnv,
   isToolEnabled,
   isTlsVerificationDisabled,
-  parseBooleanEnvFlag,
   SchemaValidator,
   type ConfigParameters,
   type MCPServerConfig,
@@ -165,9 +164,6 @@ export interface CliArgs {
   safeMode?: boolean | undefined;
   approvalMode: string | undefined;
   telemetry: boolean | undefined;
-  telemetryTarget: string | undefined;
-  telemetryOtlpEndpoint: string | undefined;
-  telemetryOtlpProtocol: string | undefined;
   telemetryLogPrompts: boolean | undefined;
   telemetryOutfile: string | undefined;
   allowedMcpServerNames: string[] | undefined;
@@ -234,7 +230,6 @@ export interface CliArgs {
   excludeTools: string[] | undefined;
   disabledSlashCommands: string[] | undefined;
   authType: string | undefined;
-  channel: string | undefined;
   jsonFd?: number | undefined;
   jsonFile?: string | undefined;
   jsonSchema?: string | undefined;
@@ -572,15 +567,6 @@ export async function parseArguments(): Promise<CliArgs> {
     .scriptName('qwen')
     .usage(TOP_LEVEL_USAGE)
     .option('telemetry', TOP_LEVEL_GLOBAL_OPTIONS.telemetry)
-    .option('telemetry-target', TOP_LEVEL_GLOBAL_OPTIONS['telemetry-target'])
-    .option(
-      'telemetry-otlp-endpoint',
-      TOP_LEVEL_GLOBAL_OPTIONS['telemetry-otlp-endpoint'],
-    )
-    .option(
-      'telemetry-otlp-protocol',
-      TOP_LEVEL_GLOBAL_OPTIONS['telemetry-otlp-protocol'],
-    )
     .option(
       'telemetry-log-prompts',
       TOP_LEVEL_GLOBAL_OPTIONS['telemetry-log-prompts'],
@@ -638,7 +624,6 @@ export async function parseArguments(): Promise<CliArgs> {
           'restore-ask-user-question',
           DEFAULT_COMMAND_OPTIONS['restore-ask-user-question'],
         )
-        .option('channel', DEFAULT_COMMAND_OPTIONS.channel)
         .option('allowed-mcp-server-names', {
           ...DEFAULT_COMMAND_OPTIONS['allowed-mcp-server-names'],
           string: true,
@@ -935,12 +920,6 @@ export async function parseArguments(): Promise<CliArgs> {
     if (!result['acp']) {
       (result as Record<string, unknown>)['acp'] = true;
     }
-  }
-
-  // Apply ACP fallback: if acp or experimental-acp is present but no explicit
-  // --channel, attribute the launch to ACP.
-  if ((result['acp'] || result['experimentalAcp']) && !result['channel']) {
-    (result as Record<string, unknown>)['channel'] = 'ACP';
   }
 
   return result as unknown as CliArgs;
@@ -2506,11 +2485,6 @@ export async function loadCliConfig(
     // before deferred init are an accepted startup-latency tradeoff. `qwen -i
     // "prompt"` still initializes eagerly because it auto-submits after render.
     deferTelemetryInitialization: isAcpMode || (interactive && !question),
-    outboundCorrelation: settings.outboundCorrelation,
-    usageStatisticsEnabled:
-      parseBooleanEnvFlag(process.env['QWEN_USAGE_STATISTICS_ENABLED']) ??
-      settings.privacy?.usageStatisticsEnabled ??
-      true,
     clearContextOnIdle: settings.context?.clearContextOnIdle,
     fileFiltering: settings.context?.fileFiltering,
     plansDirectory: settings.plansDirectory,
@@ -2523,7 +2497,6 @@ export async function loadCliConfig(
       process.env['http_proxy'],
     cwd,
     fileDiscoveryService: fileService,
-    bugCommand: settings.advanced?.bugCommand,
     model: resolvedModel,
     outputLanguageFilePath,
     sessionTokenLimit: settings.model?.sessionTokenLimit ?? -1,
@@ -2671,10 +2644,6 @@ export async function loadCliConfig(
       bareMode || safeMode
         ? false
         : (settings.memory?.enableTeamMemory ?? false),
-    enableTeamMemorySync:
-      bareMode || safeMode
-        ? false
-        : (settings.memory?.enableTeamMemorySync ?? false),
     enableStructuredMemoryRecall:
       bareMode || safeMode
         ? false
@@ -2716,7 +2685,6 @@ export async function loadCliConfig(
       bareMode || safeMode ? true : (settings.disableAllHooks ?? false),
     stopHookBlockingCap:
       bareMode || safeMode ? undefined : settings.stopHookBlockingCap,
-    channel: argv.channel,
     // CLI flag wins over settings.json. `--json-fd` is fd-only (no settings
     // equivalent — fd passing is a spawn-time concern). `--json-file` and
     // `--input-file` fall back to settings.dualOutput.* when the flag is

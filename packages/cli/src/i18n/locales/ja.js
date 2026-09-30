@@ -11,7 +11,6 @@ export default {
   // Help / UI Components
   // ============================================================================
   'Basics:': '基本操作:',
-  'Add context': 'コンテキストを追加',
   'Use {{symbol}} to specify files for context (e.g., {{example}}) to target specific files or folders.':
     '{{symbol}} を使用してコンテキスト用のファイルを指定します(例: {{example}}) また、特定のファイルやフォルダを対象にできます',
   '@': '@',
@@ -43,7 +42,6 @@ export default {
     '改行(一部のLinuxディストリビューションではAlt+Enterが有効)',
   'Clear the screen': '画面をクリア',
   'Open input in external editor': '外部エディタで入力を開く',
-  'Send message': 'メッセージを送信',
   'Initializing...': '初期化中...',
   'Connecting to MCP servers... ({{connected}}/{{total}})':
     'MCP servers に接続中... ({{connected}}/{{total}})',
@@ -60,14 +58,12 @@ export default {
   'docs/keyboard-shortcuts.md': 'docs/keyboard-shortcuts.md',
   'for help on Qwen Code': 'Qwen Code のヘルプ',
   'show version info': 'バージョン情報を表示',
-  'submit a bug report': 'バグレポートを送信',
   Model: 'モデル',
   'Fast Model': '高速モデル',
   Sandbox: 'サンドボックス',
   'Session ID': 'セッションID',
   'Base URL': 'Base URL',
   'Memory Usage': 'メモリ使用量',
-  'IDE Client': 'IDEクライアント',
 
   // ============================================================================
   // Commands - General
@@ -178,8 +174,6 @@ export default {
     '会話履歴をクリアしてコンテキストを解放',
   'Compresses the context by replacing it with a summary.':
     'コンテキストを要約に置き換えて圧縮',
-  'open full Qwen Code documentation in your browser':
-    'ブラウザで Qwen Code のドキュメントを開く',
   'Configuration not available.': '設定が利用できません',
   'Connect an LLM provider': 'LLM プロバイダーに接続',
   'Copy the last AI response to clipboard (/copy N for Nth-latest)':
@@ -454,15 +448,6 @@ export default {
   'Manage installed extensions': 'インストール済みの拡張機能を管理する',
   'You are installing an extension from {{originSource}}. Some features may not work perfectly with Qwen Code.':
     '{{originSource}} から拡張機能をインストールしています。一部の機能は Qwen Code で完全に動作しない可能性があります。',
-  'manage IDE integration': 'IDE連携を管理',
-  'check status of IDE integration': 'IDE連携の状態を確認',
-  'install required IDE companion for {{ideName}}':
-    '{{ideName}} 用の必要なIDEコンパニオンをインストール',
-  'enable IDE integration': 'IDE連携を有効化',
-  'disable IDE integration': 'IDE連携を無効化',
-  'IDE integration is not supported in your current environment. To use this feature, run Qwen Code in one of these supported IDEs: VS Code or VS Code forks.':
-    '現在の環境ではIDE連携はサポートされていません。この機能を使用するには、VS Code または VS Code 派生エディタで Qwen Code を実行してください',
-  'Set up GitHub Actions': 'GitHub Actions を設定',
   'Configure terminal keybindings for multiline input (VS Code, Cursor, Windsurf, Trae)':
     '複数行入力用のターミナルキーバインドを設定(VS Code、Cursor、Windsurf、Trae)',
   'Please restart your terminal for the changes to take effect.':
@@ -650,7 +635,6 @@ export default {
   // ============================================================================
   'Export current session message history to a file':
     '現在のセッションのメッセージ履歴をファイルにエクスポートする',
-  'Export session to HTML format': 'セッションを HTML 形式でエクスポートする',
   'Export session to JSON format': 'セッションを JSON 形式でエクスポートする',
   'Export session to JSONL format (one message per line)':
     'セッションを JSONL 形式でエクスポートする（1 行に 1 メッセージ）',
@@ -731,7 +715,6 @@ export default {
     'ワークスペースの承認モードが存在し、優先されます。ユーザーレベルの変更は効果がありません',
   'Apply To': '適用先',
   'Workspace Settings': 'ワークスペース設定',
-  'Open auto-memory folder': '自動メモリフォルダを開く',
   'Auto-memory: {{status}}': '自動メモリ: {{status}}',
   'Auto-dream: {{status}} · {{lastDream}} · /dream to run':
     '自動統合: {{status}} · {{lastDream}} · /dream で実行',
@@ -844,10 +827,6 @@ export default {
   'Current workspace directories:\n{{directories}}':
     '現在のワークスペースディレクトリ:\n{{directories}}',
   // Docs
-  'Please open the following URL in your browser to view the documentation:\n{{url}}':
-    'ドキュメントを表示するには、ブラウザで以下のURLを開いてください:\n{{url}}',
-  'Opening documentation in your browser: {{url}}':
-    '  ブラウザでドキュメントを開きました: {{url}}',
   // Dialogs - Tool Confirmation
   'Do you want to proceed?': '続行しますか?',
   'Yes, allow once': 'はい(今回のみ許可)',
@@ -1150,9 +1129,6 @@ export default {
     '既存のディレクトリによって既にカバーされています: {{dir}}',
   // Status Bar
   'Using:': '使用中:',
-  '{{count}} open file': '{{count}} 個のファイルを開いています',
-  '{{count}} open files': '{{count}} 個のファイルを開いています',
-  '(ctrl+g to view)': '(Ctrl+G で表示)',
   '{{count}} {{name}} file': '{{count}} {{name}} ファイル',
   '{{count}} {{name}} files': '{{count}} {{name}} ファイル',
   '{{count}} MCP server': '{{count}} MCP server',
@@ -1545,16 +1521,11 @@ export default {
     '(Enter でスコープを適用、Tab で戻る)',
   'Extension Agents': '拡張エージェント',
   'Terminal Bell Notification': 'ターミナルベル通知',
-  'Enable Usage Statistics': '使用統計を有効化',
   'Preferred Editor': '優先エディタ',
-  'Auto-connect to IDE': 'IDE に自動接続',
   'Language: UI': '言語: UI',
   'Language: Model': '言語: モデル',
   'Show Line Numbers in Code': 'コードの行番号を表示',
   'Show Welcome Back Dialog': 'おかえりダイアログを表示',
-  'Enable User Feedback': 'ユーザーフィードバックを有効化',
-  'How is Qwen doing this session? (optional)':
-    'このセッションでの Qwen の調子はどうですか？（任意）',
   'Interactive Shell (PTY)': '対話型シェル (PTY)',
   'Select Editor': 'エディタを選択',
   'Editor Preference': 'エディタ設定',
@@ -1685,17 +1656,12 @@ export default {
   OS: 'OS',
   Auth: '認証',
   Proxy: 'プロキシ',
-  'Updating...': '更新中...',
   Unknown: '不明',
   Error: 'エラー',
   'Version:': 'バージョン:',
   "Use '/extensions install' to install your first extension.":
     "'/extensions install' を使って最初の拡張機能をインストールしてください。",
   Theme: 'テーマ',
-  Bad: '悪い',
-  Fine: '普通',
-  Good: '良い',
-  Dismiss: '閉じる',
   'No extensions installed.': 'インストールされた拡張機能はありません。',
   'Extension "{{name}}" not found.': '拡張機能 "{{name}}" が見つかりません。',
   'No extensions to update.': '更新する拡張機能はありません。',
@@ -1730,15 +1696,13 @@ export default {
     'インストール済みのバージョンから次のワークフロースクリプトが変更されています: {{names}}。',
   'Installation cancelled for "{{name}}".':
     '"{{name}}" のインストールをキャンセルしました。',
-  '--ref and --auto-update are not applicable for marketplace extensions.':
-    '--ref と --auto-update はマーケットプレイス拡張機能には適用できません。',
+  '--ref is not applicable for marketplace extensions.':
+    '--ref はマーケットプレイス拡張機能には適用できません。',
   'Extension "{{name}}" installed successfully and enabled.':
     '拡張機能 "{{name}}" をインストールし、有効化しました。',
   'The github URL, local path, or marketplace source (marketplace-url:plugin-name) of the extension to install.':
     'インストールする拡張機能の GitHub URL、ローカルパス、またはマーケットプレイスソース (marketplace-url:plugin-name)。',
   'The git ref to install from.': 'インストール元の git ref。',
-  'Enable auto-update for this extension.':
-    'この拡張機能の自動更新を有効にします。',
   'Enable pre-release versions for this extension.':
     'この拡張機能でプレリリース版を有効にします。',
   'Acknowledge the security risks of installing an extension and skip the confirmation prompt.':
@@ -1889,15 +1853,6 @@ export default {
   'Preserve all command functionality': 'すべてのコマンド機能を保持',
   'TOML format will continue to work for now, but migration is recommended.':
     'TOML 形式は当面引き続き使用できますが、移行を推奨します。',
-  'Unknown extensions source: {{source}}.':
-    '不明な拡張機能ソースです: {{source}}。',
-  'Would open extensions page in your browser: {{url}} (skipped in test environment)':
-    'ブラウザで拡張機能ページを開く予定でした: {{url}} (テスト環境のためスキップ)',
-  'View available extensions at {{url}}': '{{url}} で利用可能な拡張機能を表示',
-  'Opening extensions page in your browser: {{url}}':
-    'ブラウザで拡張機能ページを開いています: {{url}}',
-  'Failed to open browser. Check out the extensions gallery at {{url}}':
-    'ブラウザを開けませんでした。拡張機能ギャラリーを {{url}} で確認してください',
   'Retrying in {{seconds}} seconds… (attempt {{attempt}}/{{maxRetries}})':
     '{{seconds}} 秒後に再試行します… ({{attempt}}/{{maxRetries}} 回目)',
   'Press Ctrl+Y to retry': 'Ctrl+Y で再試行',
@@ -1964,78 +1919,19 @@ export default {
 
   // Stats Dashboard — missing labels
   'API Requests': 'APIリクエスト',
-  'Tool Calls': 'ツール呼び出し',
   'Success rate': '成功率',
-  'Code Changes': 'コード変更',
   Tool: 'ツール',
   reqs: 'リクエスト',
   in: '入力',
   out: '出力',
   'In/Out': '入力/出力',
   // Update command
-  'Check for Qwen Code updates and install if available':
-    'Qwen Codeのアップデートを確認し、利用可能な場合はインストールします',
-  'Qwen Code update available! {{current}} → {{latest}}':
-    'Qwen Code のアップデートがあります！{{current}} → {{latest}}',
-  'A new version of Qwen Code is available! {{current}} → {{latest}}':
-    'Qwen Code の新しいバージョンがあります！{{current}} → {{latest}}',
-  'Qwen Code {{version}} is up to date!': 'Qwen Code {{version}} は最新です！',
-  'Failed to check for updates ({{reason}}). Please check your network or registry configuration.':
-    'アップデートの確認に失敗しました（{{reason}}）。ネットワークまたはレジストリ設定を確認してください。',
-  'Update check skipped ({{reason}}) — run /update to retry.':
-    'アップデートの確認をスキップしました（{{reason}}）— /update で再試行できます。',
-  'registry did not respond within {{seconds}}s':
-    'レジストリが {{seconds}} 秒以内に応答しませんでした',
-  'registry unreachable': 'レジストリに接続できません',
-  'registry error': 'レジストリエラー',
-  'Unable to check for updates: {{reason}}':
-    'アップデートを確認できません: {{reason}}',
-  'Update successful! The new version will be used on your next run.':
-    'アップデート成功！新バージョンは次回起動時に使用されます。',
-  'Update downloaded. It will be applied after you exit this session.':
-    'アップデートをダウンロードしました。現在のセッション終了後に適用されます。',
-  'Update failed: {{error}}': 'アップデート失敗：{{error}}',
-  'Downloading update...': 'アップデートをダウンロードしています...',
   'Update successful! Please restart Qwen Code to use the new version. Switching model providers before restarting may not work correctly.':
     'アップデートに成功しました！新しいバージョンを使用するには Qwen Code を再起動してください。再起動前にモデルプロバイダーを切り替えると正しく動作しない場合があります。',
-  'Automatic update failed. Please try updating manually.':
-    '自動アップデートに失敗しました。手動で更新してください。',
-  'Automatic update failed: {{error}}. Re-run the installer to update manually.':
-    '自動更新に失敗しました: {{error}}。手動で更新するにはインストーラーを再実行してください。',
-  'Running from a local git clone. Please update with "git pull".':
-    'ローカル Git クローンから実行中です。"git pull" で更新してください。',
-  'Running via npx, update not applicable.':
-    'npx 経由で実行中のため、更新は適用されません。',
-  'Running via pnpx, update not applicable.':
-    'pnpx 経由で実行中のため、更新は適用されません。',
-  'Running via bunx, update not applicable.':
-    'bunx 経由で実行中のため、更新は適用されません。',
-  'Installed via Homebrew. Please update with "brew upgrade".':
-    'Homebrew 経由でインストールされています。"brew upgrade" で更新してください。',
-  "Locally installed. Please update via your project's package.json.":
-    'ローカルにインストールされています。プロジェクトの package.json 経由で更新してください。',
-  'Update requires sudo. Please run:':
-    '更新には sudo が必要です。次を実行してください:',
-  'Standalone install detected. Attempting to automatically update now...':
-    'スタンドアロンインストールを検出しました。自動更新を試行しています...',
   'Standalone install detected. Please rerun the standalone installer to update:':
     'スタンドアロンインストールを検出しました。更新するにはスタンドアロンインストーラーを再実行してください:',
-  'Run the following to update:':
-    '以下のコマンドを実行してアップデートしてください：',
   'Unable to auto-update this standalone installation. Please reinstall from:':
     'このスタンドアロンインストールを自動更新できません。以下から再インストールしてください：',
-  'Manual update required. Please reinstall Qwen Code.':
-    '手動更新が必要です。Qwen Codeを再インストールしてください。',
-  'This session uses the custom sandbox image {{image}}. Update that image and restart Qwen Code.':
-    'このセッションではカスタムサンドボックスイメージ {{image}} を使用しています。イメージを更新して Qwen Code を再起動してください。',
-  'Update Qwen Code on the host, then restart the sandbox.':
-    'ホスト上の Qwen Code を更新してから、サンドボックスを再起動してください。',
-  'The update will be installed after you exit this session.':
-    'このセッションを終了すると、更新が自動的にインストールされます。',
-  'Run /update to install the update on the host.':
-    '/update を実行してホストに更新をインストールしてください。',
-  'Run /update to install the update.':
-    '/update を実行して更新をインストールしてください。',
 
   // ============================================================================
   // reload-plugins command

@@ -388,23 +388,20 @@ describe('resolveSeatbeltProfileFile', () => {
 });
 
 describe('getSandboxPassthroughEnvArgs', () => {
-  it('passes update relaunch state into container sandboxes', () => {
+  it('passes only the allowlisted variables into container sandboxes', () => {
     expect(
       getSandboxPassthroughEnvArgs({
-        QWEN_CODE_SKIP_UPDATE_CHECK_ONCE: 'true',
-        QWEN_CODE_CUSTOM_SANDBOX_IMAGE: 'example.com/qwen:1.0.0',
-        QWEN_CODE_HOST_UPDATE_RELAUNCH: 'false',
+        QWEN_DEBUG_LOG_FILE: '0',
+        QWEN_CODE_LEGACY_MCP_BLOCKING: '1',
         // Removed daemon/desktop attribution markers are not forwarded.
         QWEN_CODE_SERVE: '1',
         QWEN_CODE_DESKTOP: '1',
       }),
     ).toEqual([
       '--env',
-      'QWEN_CODE_SKIP_UPDATE_CHECK_ONCE=true',
+      'QWEN_DEBUG_LOG_FILE=0',
       '--env',
-      'QWEN_CODE_CUSTOM_SANDBOX_IMAGE=example.com/qwen:1.0.0',
-      '--env',
-      'QWEN_CODE_HOST_UPDATE_RELAUNCH=false',
+      'QWEN_CODE_LEGACY_MCP_BLOCKING=1',
     ]);
   });
 });

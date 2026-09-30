@@ -70,7 +70,6 @@ describe('SettingsSchema', () => {
         'mcpServers',
         'general',
         'ui',
-        'privacy',
         'telemetry',
         'model',
         'context',
@@ -130,7 +129,6 @@ describe('SettingsSchema', () => {
       const nestedSettings: Array<keyof Settings> = [
         'general',
         'ui',
-        'privacy',
         'model',
         'context',
         'tools',
@@ -440,7 +438,7 @@ describe('SettingsSchema', () => {
         telemetrySchema.properties?.sensitiveSpanAttributeMaxLength,
       ).toEqual({
         description:
-          'Maximum JavaScript string length for each sensitive native OTel span attribute content payload. Default: 1048576 (1 MiB). Maximum: 104857600 (100 MiB). Set lower if your collector or backend rejects large span attributes.',
+          'Maximum JavaScript string length for each sensitive native OTel span attribute content payload. Default: 1048576 (1 MiB). Maximum: 104857600 (100 MiB).',
         type: 'integer',
         minimum: 1,
         maximum: SENSITIVE_SPAN_ATTRIBUTE_MAX_LENGTH_LIMIT,
@@ -452,7 +450,7 @@ describe('SettingsSchema', () => {
       const telemetrySchema = getSettingsSchema().telemetry.jsonSchemaOverride;
       expect(telemetrySchema.properties?.userId).toEqual({
         description:
-          'Stable end-user identifier written to GenAI spans as gen_ai.user.id for ARMS session analysis. This value is linkable personal data: prefer a pseudonymous ID, and configure it only when one process represents one user.',
+          'Stable end-user identifier written to GenAI spans as gen_ai.user.id. This value is linkable personal data: prefer a pseudonymous ID, and configure it only when one process represents one user.',
         type: 'string',
       });
     });
@@ -558,9 +556,6 @@ describe('SettingsSchema', () => {
         true,
       );
       expect(
-        getSettingsSchema().general.properties.enableAutoUpdate.showInDialog,
-      ).toBe(true);
-      expect(
         getSettingsSchema().ui.properties.hideWindowTitle.showInDialog,
       ).toBe(false);
       expect(getSettingsSchema().ui.properties.hideTips.showInDialog).toBe(
@@ -568,10 +563,6 @@ describe('SettingsSchema', () => {
       );
       expect(
         getSettingsSchema().ui.properties.showResponseTokensPerSecond
-          .showInDialog,
-      ).toBe(true);
-      expect(
-        getSettingsSchema().privacy.properties.usageStatisticsEnabled
           .showInDialog,
       ).toBe(true);
 

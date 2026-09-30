@@ -4,15 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export enum TelemetryTarget {
-  GCP = 'gcp',
-  LOCAL = 'local',
-}
-
-const DEFAULT_TELEMETRY_TARGET = TelemetryTarget.LOCAL;
-const DEFAULT_OTLP_ENDPOINT = 'http://localhost:4317';
-
-export { DEFAULT_TELEMETRY_TARGET, DEFAULT_OTLP_ENDPOINT };
 export {
   DEFAULT_SENSITIVE_SPAN_ATTRIBUTE_MAX_LENGTH,
   SENSITIVE_SPAN_ATTRIBUTE_MAX_LENGTH_LIMIT,
@@ -25,11 +16,7 @@ export {
   refreshSessionContext,
   isTelemetrySdkInitialized,
 } from './sdk.js';
-export {
-  resolveTelemetrySettings,
-  parseBooleanEnvFlag,
-  parseTelemetryTargetValue,
-} from './config.js';
+export { resolveTelemetrySettings, parseBooleanEnvFlag } from './config.js';
 export {
   logStartSession,
   logSessionEnd,
@@ -48,18 +35,12 @@ export {
   logKittySequenceOverflow,
   logChatCompression,
   logToolOutputTruncated,
-  logExtensionEnable,
-  logExtensionInstallEvent,
-  logExtensionUninstall,
-  logExtensionDisable,
-  logExtensionUpdateEvent,
   logRipgrepFallback,
   logRipgrepRuntimeRecovery,
   logNextSpeakerCheck,
   logAuth,
   logSkillLaunch,
   recordSkillInvocation,
-  logUserFeedback,
   logArenaSessionStarted,
   logArenaAgentCompleted,
   logArenaSessionEnded,
@@ -97,8 +78,6 @@ export {
   NextSpeakerCheckEvent,
   AuthEvent,
   SkillLaunchEvent,
-  UserFeedbackEvent,
-  UserFeedbackRating,
   makeArenaSessionStartedEvent,
   makeArenaAgentCompletedEvent,
   makeArenaSessionEndedEvent,
@@ -176,8 +155,6 @@ export {
   ApiRequestPhase,
   FileOperation,
 } from './metrics.js';
-export { QwenLogger } from './qwen-logger/qwen-logger.js';
-export { sanitizeHookName } from './sanitize.js';
 export {
   startInteractionSpan,
   endInteractionSpan,

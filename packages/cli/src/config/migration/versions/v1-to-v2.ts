@@ -6,7 +6,6 @@
 
 import type { SettingsMigration } from '../types.js';
 import {
-  CONSOLIDATED_DISABLE_KEYS,
   V1_INDICATOR_KEYS,
   V1_TO_V2_MIGRATION_MAP,
   V1_TO_V2_PRESERVE_DISABLE_MAP,
@@ -109,9 +108,7 @@ export class V1ToV2Migration implements SettingsMigration {
    *    - If a source value is already an object and maps to a child path of itself
    *      (partial V2 shape), merge child properties into target path.
    * 2) Relocate disable* keys into V2 disable* locations.
-   *    - Consolidated keys (`disableAutoUpdate`, `disableUpdateNag`): normalize to
-   *      boolean with stable-compatible presence semantics (`value === true`).
-   *    - Other disable* keys: migrate only boolean values.
+   *    - disable* keys migrate only boolean values.
    * 3) Preserve `mcpServers` top-level placement.
    * 4) Carry over remaining keys:
    *    - If a key is parent of migrated nested paths, merge unprocessed object children.
@@ -183,12 +180,7 @@ export class V1ToV2Migration implements SettingsMigration {
     )) {
       if (v1Key in source) {
         const value = source[v1Key];
-        if (CONSOLIDATED_DISABLE_KEYS.has(v1Key)) {
-          // Preserve stable behavior: consolidated keys use presence semantics.
-          // Only literal true remains true; all other present values become false.
-          setNestedPropertySafe(result, v2Path, value === true);
-        } else if (typeof value === 'boolean') {
-          // Non-consolidated disable* keys only migrate when explicitly boolean.
+        if (typeof value === 'boolean') {
           setNestedPropertySafe(result, v2Path, value);
         }
         processedKeys.add(v1Key);

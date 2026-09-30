@@ -651,7 +651,6 @@ describe('Gemini Client (client.ts)', () => {
       }),
       getSessionTokenLimit: vi.fn().mockReturnValue(0),
       getNoBrowser: vi.fn().mockReturnValue(false),
-      getUsageStatisticsEnabled: vi.fn().mockReturnValue(true),
       getTelemetryIncludeSensitiveSpanAttributes: vi
         .fn()
         .mockReturnValue(false),

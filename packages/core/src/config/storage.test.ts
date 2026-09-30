@@ -478,12 +478,6 @@ describe('Storage – config paths remain at ~/.qwen regardless of runtime dir',
     );
   });
 
-  it('getInstallationIdPath still uses ~/.qwen', () => {
-    expect(Storage.getInstallationIdPath()).toBe(
-      path.join(globalQwenDir, 'installation_id'),
-    );
-  });
-
   it('getGoogleAccountsPath still uses ~/.qwen', () => {
     expect(Storage.getGoogleAccountsPath()).toBe(
       path.join(globalQwenDir, 'google_accounts.json'),
@@ -561,9 +555,6 @@ describe('Storage – QWEN_HOME env var', () => {
     process.env['QWEN_HOME'] = configDir;
     expect(Storage.getGlobalSettingsPath()).toBe(
       path.join(configDir, 'settings.json'),
-    );
-    expect(Storage.getInstallationIdPath()).toBe(
-      path.join(configDir, 'installation_id'),
     );
     expect(Storage.getUserCommandsDir()).toBe(path.join(configDir, 'commands'));
     expect(Storage.getMcpOAuthTokensPath()).toBe(

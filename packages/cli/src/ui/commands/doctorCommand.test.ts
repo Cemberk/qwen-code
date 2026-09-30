@@ -189,7 +189,6 @@ describe('doctorCommand', () => {
     await expect(doctorCommand.completion!(mockContext, '')).resolves.toEqual([
       'memory',
       'cpu-profile',
-      'rollback',
     ]);
     await expect(
       doctorCommand.completion!(mockContext, 'mem'),
@@ -197,9 +196,6 @@ describe('doctorCommand', () => {
     await expect(
       doctorCommand.completion!(mockContext, 'cpu'),
     ).resolves.toEqual(['cpu-profile']);
-    await expect(
-      doctorCommand.completion!(mockContext, 'roll'),
-    ).resolves.toEqual(['rollback']);
     await expect(doctorCommand.completion!(mockContext, 'x')).resolves.toEqual(
       [],
     );
@@ -1433,7 +1429,7 @@ describe('doctorCommand', () => {
 
   it('should advertise the memory subcommand on the parent doctor argumentHint', () => {
     expect(doctorCommand.argumentHint).toBe(
-      '[memory|cpu-profile|rollback] [--sample] [--snapshot] [--duration]',
+      '[memory|cpu-profile] [--sample] [--snapshot] [--duration]',
     );
   });
 

@@ -37,7 +37,6 @@ describe('approved Goal proposals and Plan mode', () => {
       approvalMode: ApprovalMode.DEFAULT,
       debugMode: false,
       chatRecording: false,
-      usageStatisticsEnabled: false,
       overrideExtensions: [],
     });
     const recordGoalState = vi.fn(async (): Promise<void> => undefined);

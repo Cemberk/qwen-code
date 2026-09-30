@@ -354,7 +354,6 @@ describe('OPEN_TUI_COMMAND_ROUTES (built-in registry parity)', () => {
       ['settings', ['dialog']],
       ['history', ['message']],
       ['restore', ['message', 'tool']],
-      ['setup-github', ['tool']],
       ['goal', ['goal_control', 'message']],
       ['cd', ['confirm_action', 'message']],
       ['init', ['confirm_action', 'message', 'submit_prompt']],

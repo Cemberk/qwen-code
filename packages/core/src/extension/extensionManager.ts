@@ -8,18 +8,12 @@ import type {
   MCPServerConfig,
   ExtensionInstallMetadata,
 } from '../config/config.js';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import { validateSkillName, type SkillConfig } from '../skills/types.js';
 import type { SubagentConfig, SubagentError } from '../subagents/types.js';
 import type { ClaudeMarketplaceConfig } from './claude-converter.js';
 import type { HookEventName, HookDefinition } from '../hooks/types.js';
 import { Storage } from '../config/storage.js';
-import {
-  logExtensionEnable,
-  logExtensionInstallEvent,
-  logExtensionUninstall,
-  logExtensionDisable,
-} from '../telemetry/loggers.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -87,18 +81,7 @@ import type {
   ExtensionSetting,
   ResolvedExtensionSetting,
 } from './extensionSettings.js';
-import type {
-  ExtensionOriginSource,
-  TelemetrySettings,
-} from '../config/config.js';
-import { logExtensionUpdateEvent } from '../telemetry/loggers.js';
-import {
-  ExtensionDisableEvent,
-  ExtensionEnableEvent,
-  ExtensionInstallEvent,
-  ExtensionUninstallEvent,
-  ExtensionUpdateEvent,
-} from '../telemetry/types.js';
+import type { ExtensionOriginSource } from '../config/config.js';
 import { loadSkillsFromDir } from '../skills/skill-load.js';
 import { loadSubagentFromDir } from '../subagents/subagent-manager.js';
 import {
@@ -287,7 +270,6 @@ export interface ExtensionManagerOptions {
   isWorkspaceTrusted: boolean;
   /** Locale code for resolving localizable fields (e.g., 'en', 'zh'). Defaults to 'en'. */
   locale?: string;
-  telemetrySettings?: TelemetrySettings;
   config?: Config;
   requestConsent?: (options?: ExtensionRequestOptions) => Promise<void>;
   requestSetting?: (setting: ExtensionSetting) => Promise<string>;
@@ -424,22 +406,6 @@ function ensureLeadingAndTrailingSlash(dirPath: string): string {
   return result;
 }
 
-function getTelemetryConfig(
-  cwd: string,
-  telemetrySettings?: TelemetrySettings,
-) {
-  const config = new Config({
-    telemetry: telemetrySettings,
-    interactive: false,
-    targetDir: cwd,
-    cwd,
-    model: '',
-    debugMode: false,
-    chatRecording: false,
-  });
-  return config;
-}
-
 function filterMcpConfig(original: MCPServerConfig): MCPServerConfig {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { trust, ...rest } = original;
@@ -524,7 +490,6 @@ export class ExtensionManager {
   }
 
   private config?: Config;
-  private telemetrySettings?: TelemetrySettings;
   private isWorkspaceTrusted: boolean;
   private readonly locale: string;
   private requestConsent: (options?: ExtensionRequestOptions) => Promise<void>;
@@ -559,7 +524,6 @@ export class ExtensionManager {
       options.requestChoicePlugin || (() => Promise.resolve(''));
     this.requestConsent = options.requestConsent || (() => Promise.resolve());
     this.config = options.config;
-    this.telemetrySettings = options.telemetrySettings;
     this.isWorkspaceTrusted = options.isWorkspaceTrusted;
   }
 
@@ -723,8 +687,6 @@ export class ExtensionManager {
         );
       }
       onCommitted?.(snapshot.generation);
-      const config = getTelemetryConfig(currentDir, this.telemetrySettings);
-      logExtensionEnable(config, new ExtensionEnableEvent(name, scope));
       this.applyStoreActivation(snapshot);
       const warning = await this.refreshToolsAfterActivation(name);
       return warning ? { ...snapshot, warnings: [warning] } : snapshot;
@@ -743,7 +705,6 @@ export class ExtensionManager {
     onCommitted?: ExtensionCommitCallback,
   ): Promise<ExtensionStoreMutationResult> {
     const currentDir = cwd ?? this.workspaceDir;
-    const config = getTelemetryConfig(currentDir, this.telemetrySettings);
     if (
       scope === SettingScope.System ||
       scope === SettingScope.SystemDefaults
@@ -775,7 +736,6 @@ export class ExtensionManager {
         );
       }
       onCommitted?.(snapshot.generation);
-      logExtensionDisable(config, new ExtensionDisableEvent(name, scope));
       this.applyStoreActivation(snapshot);
       const warning = await this.refreshToolsAfterActivation(name);
       return warning ? { ...snapshot, warnings: [warning] } : snapshot;
@@ -2251,10 +2211,6 @@ export class ExtensionManager {
       installMetadata.installId = randomBytes(32).toString('hex');
     }
     const currentDir = cwd ?? this.workspaceDir;
-    const telemetryConfig = getTelemetryConfig(
-      currentDir,
-      this.telemetrySettings,
-    );
     let extension: Extension | null;
     const redactedInstallSource =
       gitCredential?.persistence === 'one_time'
@@ -2462,25 +2418,6 @@ export class ExtensionManager {
               this.extensionStore.agentPluginDataRoot(extensionId),
             ),
           };
-        }
-
-        if (isUpdate && installMetadata.autoUpdate) {
-          const oldSettings = new Set(
-            previousExtensionConfig.settings?.map((s) => s.name) || [],
-          );
-          const newSettings = new Set(
-            newExtensionConfig.settings?.map((s) => s.name) || [],
-          );
-
-          const settingsAreEqual =
-            oldSettings.size === newSettings.size &&
-            [...oldSettings].every((value) => newSettings.has(value));
-
-          if (!settingsAreEqual && installMetadata.autoUpdate) {
-            throw new Error(
-              `Extension "${newExtensionConfig.name}" has settings changes and cannot be auto-updated. Please update manually.`,
-            );
-          }
         }
 
         const newExtensionName = newExtensionConfig.name;
@@ -2789,29 +2726,6 @@ export class ExtensionManager {
           this.extensionCache.set(extension.name, extension);
         }
 
-        if (isUpdate) {
-          logExtensionUpdateEvent(
-            telemetryConfig,
-            new ExtensionUpdateEvent(
-              newExtensionConfig.name,
-              getExtensionId(newExtensionConfig, installMetadata),
-              newExtensionConfig.version,
-              previousExtensionConfig.version,
-              installMetadata.type,
-              'success',
-            ),
-          );
-        } else {
-          logExtensionInstallEvent(
-            telemetryConfig,
-            new ExtensionInstallEvent(
-              newExtensionConfig.name,
-              newExtensionConfig!.version,
-              redactedInstallSource,
-              'success',
-            ),
-          );
-        }
         if (this.extensionCache) this.applyStoreActivation(snapshot);
         await this.refreshTools().catch((error) => {
           debugLogger.warn(
@@ -2888,33 +2802,6 @@ export class ExtensionManager {
           force: true,
         });
       }
-      const config = newExtensionConfig ?? previousExtensionConfig;
-      const extensionId = config
-        ? getExtensionId(config, installMetadata)
-        : undefined;
-      if (isUpdate) {
-        logExtensionUpdateEvent(
-          telemetryConfig,
-          new ExtensionUpdateEvent(
-            config?.name ?? '',
-            extensionId ?? '',
-            newExtensionConfig?.version ?? '',
-            previousExtensionConfig.version,
-            installMetadata.type,
-            isExtensionCommittedWithWarningsError(error) ? 'success' : 'error',
-          ),
-        );
-      } else {
-        logExtensionInstallEvent(
-          telemetryConfig,
-          new ExtensionInstallEvent(
-            newExtensionConfig?.name ?? '',
-            newExtensionConfig?.version ?? '',
-            redactedInstallSource,
-            'error',
-          ),
-        );
-      }
       throw error;
     } finally {
       endMutation();
@@ -2950,70 +2837,38 @@ export class ExtensionManager {
         )
       : () => undefined;
     try {
-      let snapshot: ExtensionStoreSnapshot;
-      try {
-        const stagedExtension = await this.loadExtension(
-          {
-            extensionDir: prepared.stagingDirectory,
-            workspaceDir: prepared.currentDir,
-          },
-          { throwOnError: true },
-        );
-        if (!stagedExtension) {
-          throw new Error('Prepared extension could not be loaded.');
-        }
-        if (
-          stagedExtension.id !== prepared.identity.id ||
-          stagedExtension.name !== prepared.identity.name ||
-          stagedExtension.version !== prepared.version
-        ) {
-          throw new Error('Prepared extension identity changed before commit.');
-        }
-        snapshot = await this.extensionStore.commitArtifact({
-          operation: prepared.operation,
-          identity: prepared.identity,
-          stagingDirectory: prepared.stagingDirectory,
-          destinationDirectory: prepared.destinationDirectory,
-          ...(prepared.operation === 'install'
-            ? { initialActivation: prepared.initialActivation }
-            : {
-                expectedArtifactGeneration:
-                  prepared.expectedArtifactGeneration ?? 0,
-              }),
-        });
-        prepared.commitGitCredential?.();
-        prepared.gitCredentialActivated = true;
-        prepared.settingsActivated = true;
-      } catch (error) {
-        const telemetryConfig = getTelemetryConfig(
-          prepared.currentDir,
-          this.telemetrySettings,
-        );
-        if (prepared.operation === 'update' && prepared.previousConfig) {
-          logExtensionUpdateEvent(
-            telemetryConfig,
-            new ExtensionUpdateEvent(
-              prepared.identity.name,
-              prepared.identity.id,
-              prepared.version,
-              prepared.previousConfig.version,
-              prepared.installMetadata.type,
-              'error',
-            ),
-          );
-        } else {
-          logExtensionInstallEvent(
-            telemetryConfig,
-            new ExtensionInstallEvent(
-              prepared.identity.name,
-              prepared.version,
-              redactUrlCredentials(prepared.installMetadata.source),
-              'error',
-            ),
-          );
-        }
-        throw error;
+      const stagedExtension = await this.loadExtension(
+        {
+          extensionDir: prepared.stagingDirectory,
+          workspaceDir: prepared.currentDir,
+        },
+        { throwOnError: true },
+      );
+      if (!stagedExtension) {
+        throw new Error('Prepared extension could not be loaded.');
       }
+      if (
+        stagedExtension.id !== prepared.identity.id ||
+        stagedExtension.name !== prepared.identity.name ||
+        stagedExtension.version !== prepared.version
+      ) {
+        throw new Error('Prepared extension identity changed before commit.');
+      }
+      const snapshot = await this.extensionStore.commitArtifact({
+        operation: prepared.operation,
+        identity: prepared.identity,
+        stagingDirectory: prepared.stagingDirectory,
+        destinationDirectory: prepared.destinationDirectory,
+        ...(prepared.operation === 'install'
+          ? { initialActivation: prepared.initialActivation }
+          : {
+              expectedArtifactGeneration:
+                prepared.expectedArtifactGeneration ?? 0,
+            }),
+      });
+      prepared.commitGitCredential?.();
+      prepared.gitCredentialActivated = true;
+      prepared.settingsActivated = true;
       const warnings: NonNullable<CommittedExtensionMutation['warnings']> = [];
       onCommitted?.(snapshot.generation);
       try {
@@ -3045,33 +2900,6 @@ export class ExtensionManager {
         });
       }
 
-      const telemetryConfig = getTelemetryConfig(
-        prepared.currentDir,
-        this.telemetrySettings,
-      );
-      if (prepared.operation === 'update' && prepared.previousConfig) {
-        logExtensionUpdateEvent(
-          telemetryConfig,
-          new ExtensionUpdateEvent(
-            prepared.identity.name,
-            prepared.identity.id,
-            prepared.version,
-            prepared.previousConfig.version,
-            prepared.installMetadata.type,
-            'success',
-          ),
-        );
-      } else {
-        logExtensionInstallEvent(
-          telemetryConfig,
-          new ExtensionInstallEvent(
-            prepared.identity.name,
-            prepared.version,
-            redactUrlCredentials(prepared.installMetadata.source),
-            'success',
-          ),
-        );
-      }
       try {
         await this.refreshTools();
       } catch (error) {
@@ -3161,11 +2989,6 @@ export class ExtensionManager {
   ): Promise<ExtensionStoreMutationResult> {
     const endMutation = this.beginMutation('uninstallExtension');
     try {
-      const currentDir = cwd ?? this.workspaceDir;
-      const telemetryConfig = getTelemetryConfig(
-        currentDir,
-        this.telemetrySettings,
-      );
       const installedExtensions = this.getLoadedExtensions();
       const extension = installedExtensions.find(
         (installed) =>
@@ -3183,7 +3006,6 @@ export class ExtensionManager {
           ? path.join(this.configDir, extension.name)
           : extension.path,
         isUpdate,
-        telemetryConfig,
         onCommitted,
         extension.installMetadata?.credentialPersistence === 'stored',
       );
@@ -3217,7 +3039,6 @@ export class ExtensionManager {
         { id: extensionId, name: policy.name },
         destinationDirectory,
         isUpdate,
-        getTelemetryConfig(cwd ?? this.workspaceDir, this.telemetrySettings),
         onCommitted,
         installMetadata?.credentialPersistence === 'stored',
       );
@@ -3230,7 +3051,6 @@ export class ExtensionManager {
     identity: { id: string; name: string },
     destinationDirectory: string,
     isUpdate: boolean,
-    telemetryConfig: Config,
     onCommitted?: ExtensionCommitCallback,
     hasStoredGitCredential = false,
   ): Promise<ExtensionStoreMutationResult> {
@@ -3288,10 +3108,6 @@ export class ExtensionManager {
         error: getErrorMessage(error),
       });
     }
-    logExtensionUninstall(
-      telemetryConfig,
-      new ExtensionUninstallEvent(identity.name, 'success'),
-    );
     return warnings.length > 0 ? { ...snapshot, warnings } : snapshot;
   }
 

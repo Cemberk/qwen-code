@@ -608,12 +608,9 @@ export { hashMcpServerConfig } from './mcp/configHash.js';
 // Telemetry
 // ============================================================================
 
-export { QwenLogger } from './telemetry/qwen-logger/qwen-logger.js';
 export * from './telemetry/index.js';
 export {
   logAuth,
-  logExtensionDisable,
-  logExtensionEnable,
   logLoopDetected,
   logRepeatedToolFailureGuard,
   logModelSlashCommand,
@@ -625,10 +622,6 @@ export {
 } from './telemetry/loggers.js';
 export {
   AuthEvent,
-  ExtensionDisableEvent,
-  ExtensionEnableEvent,
-  ExtensionInstallEvent,
-  ExtensionUninstallEvent,
   LoopDetectedEvent,
   LoopType,
   RepeatedToolFailureGuardEvent,

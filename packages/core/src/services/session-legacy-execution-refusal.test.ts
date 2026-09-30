@@ -48,7 +48,6 @@ beforeEach(async () => {
     debugMode: false,
     model: 'test-model',
     chatRecording: true,
-    usageStatisticsEnabled: false,
     overrideExtensions: [],
   });
 });

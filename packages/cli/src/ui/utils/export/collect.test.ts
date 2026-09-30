@@ -173,9 +173,7 @@ describe('collectSessionData', () => {
   });
 
   it('accepts the minimal daemon export config shape', async () => {
-    const minimalConfig: ExportConfig = {
-      getChannel: () => 'web-shell',
-    };
+    const minimalConfig: ExportConfig = {};
 
     const data = await collectSessionData(
       {
@@ -200,7 +198,7 @@ describe('collectSessionData', () => {
       minimalConfig,
     );
 
-    expect(data.metadata?.channel).toBe('web-shell');
+    expect(data.metadata?.sessionId).toBe('session-minimal');
     expect(data.messages[0]?.message?.parts?.[0]?.text).toBe('hello');
   });
 
@@ -208,7 +206,7 @@ describe('collectSessionData', () => {
     // The daemon export config is a Proxy that throws on any method it does not
     // implement, and it implements none of the /goal trust gates. Anything the
     // replayer asks of `config` beyond that shape takes the whole export down.
-    const minimalConfig: ExportConfig = { getChannel: () => 'daemon' };
+    const minimalConfig: ExportConfig = {};
 
     const data = await collectSessionData(
       {
@@ -237,7 +235,7 @@ describe('collectSessionData', () => {
       minimalConfig,
     );
 
-    expect(data.metadata?.channel).toBe('daemon');
+    expect(data.metadata?.sessionId).toBe('session-goal');
   });
 
   describe('goal_state records', () => {

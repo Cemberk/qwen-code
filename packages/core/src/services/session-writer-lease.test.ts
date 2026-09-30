@@ -666,7 +666,6 @@ describe('SessionWriterLease', () => {
           sessionWriterLeaseEnabled: true,
           bareMode: true,
           telemetry: { enabled: false },
-          usageStatisticsEnabled: false,
         }),
     );
 
@@ -726,7 +725,6 @@ describe('SessionWriterLease', () => {
             sessionWriterLeaseEnabled: true,
             bareMode: true,
             telemetry: { enabled: false },
-            usageStatisticsEnabled: false,
           }),
       );
     const initialize = (config: Config) =>
@@ -843,7 +841,6 @@ describe('SessionWriterLease', () => {
           sessionWriterLeaseEnabled: true,
           bareMode: true,
           telemetry: { enabled: false },
-          usageStatisticsEnabled: false,
         }),
     );
 
@@ -895,7 +892,6 @@ describe('SessionWriterLease', () => {
           sessionWriterLeaseEnabled: true,
           bareMode: true,
           telemetry: { enabled: false },
-          usageStatisticsEnabled: false,
         }),
     );
 

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import Anthropic, { type ClientOptions } from '@anthropic-ai/sdk';
+import Anthropic from '@anthropic-ai/sdk';
 import type {
   EmbedContentParameters,
   EmbedContentResponse,
@@ -35,7 +35,6 @@ type MessageCreateParamsNonStreaming =
   Anthropic.MessageCreateParamsNonStreaming;
 type MessageCreateParamsStreaming = Anthropic.MessageCreateParamsStreaming;
 type RawMessageStreamEvent = Anthropic.RawMessageStreamEvent;
-type AnthropicFetch = NonNullable<ClientOptions['fetch']>;
 import { AnthropicContentConverter } from './converter.js';
 import { buildAnthropicUsageMetadata } from './usage.js';
 import {
@@ -63,7 +62,6 @@ import { InvalidStreamError } from '../invalid-stream-error.js';
 import { parseToolCallArguments } from '../tool-call-arguments.js';
 import { classifyRetryError } from '../../utils/retryErrorClassification.js';
 import { getErrorStatus } from '../../utils/errors.js';
-import { buildSessionAwareFetch } from '../outbound-session-id.js';
 import {
   isRetryableStatuslessUpstreamError,
   isRetryableStreamTransportError,
@@ -299,11 +297,6 @@ export class AnthropicContentGenerator implements ContentGenerator {
       maxRetries: contentGeneratorConfig.maxRetries,
       defaultHeaders,
       ...runtimeOptions,
-      fetch: buildSessionAwareFetch(
-        runtimeOptions.fetch,
-        this.cliConfig,
-        this.contentGeneratorConfig.customHeaders,
-      ) as unknown as AnthropicFetch,
     });
 
     this.converter = new AnthropicContentConverter(

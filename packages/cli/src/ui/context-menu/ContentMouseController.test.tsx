@@ -11,7 +11,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useMouseEvents } from '../hooks/useMouseEvents.js';
 import type { MouseEvent } from '../utils/mouse.js';
 import { copyToClipboard } from '../utils/commandUtils.js';
-import { openBrowserSecurely } from '@qwen-code/qwen-code-core';
 import {
   getScreenBuffer,
   type ScreenBuffer,
@@ -40,7 +39,6 @@ vi.mock('@qwen-code/qwen-code-core', async (importOriginal) => {
   return {
     ...actual,
     createDebugLogger: () => ({ warn: mocks.warn }),
-    openBrowserSecurely: vi.fn().mockResolvedValue(undefined),
   };
 });
 
@@ -203,120 +201,96 @@ describe('ContentMouseController', () => {
       vi.advanceTimersByTime(MULTI_CLICK_MS);
     });
 
-  describe('single click opens links', () => {
-    it('opens the URL under the pointer on press+release in the same cell', () => {
+  describe('single click copies links', () => {
+    it('copies the URL under the pointer on press+release in the same cell', () => {
       const { fire } = mount();
       fire(makeEvent('left-press', 2, 1));
       fire(makeEvent('left-release', 2, 1));
       runOutWindow();
-      expect(openBrowserSecurely).toHaveBeenCalledWith(LINK_URL);
+      expect(copyToClipboard).toHaveBeenCalledWith(LINK_URL);
     });
 
-    it('opens only after the multi-click window has elapsed', () => {
+    it('copies only after the multi-click window has elapsed', () => {
       const { fire } = mount();
       fire(makeEvent('left-press', 2, 1));
       fire(makeEvent('left-release', 2, 1));
-      expect(openBrowserSecurely).not.toHaveBeenCalled();
+      expect(copyToClipboard).not.toHaveBeenCalled();
       act(() => {
         vi.advanceTimersByTime(MULTI_CLICK_MS - 1);
       });
-      expect(openBrowserSecurely).not.toHaveBeenCalled();
+      expect(copyToClipboard).not.toHaveBeenCalled();
       act(() => {
         vi.advanceTimersByTime(1);
       });
-      expect(openBrowserSecurely).toHaveBeenCalledTimes(1);
+      expect(copyToClipboard).toHaveBeenCalledTimes(1);
     });
 
-    it('does not open when release lands on a different cell (drag)', () => {
+    it('does not copy when release lands on a different cell (drag)', () => {
       const { fire } = mount();
       fire(makeEvent('left-press', 2, 1));
       fire(makeEvent('move', 3, 1));
       fire(makeEvent('left-release', 3, 1));
       runOutWindow();
-      expect(openBrowserSecurely).not.toHaveBeenCalled();
+      expect(copyToClipboard).not.toHaveBeenCalled();
     });
 
-    it('does not open when a drag returns to the starting cell', () => {
+    it('does not copy when a drag returns to the starting cell', () => {
       const { fire } = mount();
       fire(makeEvent('left-press', 2, 1));
       fire(makeEvent('move', 3, 1));
       fire(makeEvent('move', 2, 1));
       fire(makeEvent('left-release', 2, 1));
       runOutWindow();
-      expect(openBrowserSecurely).not.toHaveBeenCalled();
+      expect(copyToClipboard).not.toHaveBeenCalled();
     });
 
-    it('does not open when a scroll invalidates the press anchor', () => {
+    it('does not copy when a scroll invalidates the press anchor', () => {
       const { fire } = mount();
       fire(makeEvent('left-press', 2, 1));
       fire(makeEvent('scroll-down', 2, 1));
       fire(makeEvent('left-release', 2, 1));
       runOutWindow();
-      expect(openBrowserSecurely).not.toHaveBeenCalled();
+      expect(copyToClipboard).not.toHaveBeenCalled();
     });
 
-    it('does not open on plain cells', () => {
+    it('does not copy on plain cells', () => {
       const { fire } = mount();
       fire(makeEvent('left-press', 7, 1));
       fire(makeEvent('left-release', 7, 1));
       runOutWindow();
-      expect(openBrowserSecurely).not.toHaveBeenCalled();
+      expect(copyToClipboard).not.toHaveBeenCalled();
     });
 
-    it('does not open when the click completes a double-click chain', () => {
+    it('does not copy when the click completes a double-click chain', () => {
       const { fire } = mount();
       fire(makeEvent('left-press', 2, 1));
       fire(makeEvent('left-release', 2, 1));
       fire(makeEvent('left-press', 2, 1));
       fire(makeEvent('left-release', 2, 1));
       runOutWindow();
-      expect(openBrowserSecurely).not.toHaveBeenCalled();
+      expect(copyToClipboard).not.toHaveBeenCalled();
     });
 
-    it('a follow-up press inside the window cancels the pending open', () => {
+    it('a follow-up press inside the window cancels the pending copy', () => {
       const { fire } = mount();
       fire(makeEvent('left-press', 2, 1));
       fire(makeEvent('left-release', 2, 1));
       // 窗口内的再次按下可能是双击的起始，必须取消挂起的打开。
       fire(makeEvent('left-press', 7, 1));
       runOutWindow();
-      expect(openBrowserSecurely).not.toHaveBeenCalled();
+      expect(copyToClipboard).not.toHaveBeenCalled();
     });
 
-    it('a scroll after release cancels the pending open', () => {
+    it('a scroll after release cancels the pending copy', () => {
       const { fire } = mount();
       fire(makeEvent('left-press', 2, 1));
       fire(makeEvent('left-release', 2, 1));
       fire(makeEvent('scroll-down', 2, 1));
       runOutWindow();
-      expect(openBrowserSecurely).not.toHaveBeenCalled();
+      expect(copyToClipboard).not.toHaveBeenCalled();
     });
 
-    it('falls back to clipboard when the launcher rejects a crafted http(s) URL', async () => {
-      vi.mocked(openBrowserSecurely).mockRejectedValueOnce(
-        new Error('Invalid URL: https://'),
-      );
-      frame = {
-        ...frame,
-        cells: [[...'link'].map(() => makeCell('l', 'https://'))],
-      } as unknown as ReadonlyFrame;
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const { fire } = mount();
-      fire(makeEvent('left-press', 1, 1));
-      fire(makeEvent('left-release', 1, 1));
-      runOutWindow();
-      expect(openBrowserSecurely).toHaveBeenCalledWith('https://');
-      // The .catch fallback runs on a microtask after the rejection settles.
-      await Promise.resolve();
-      await Promise.resolve();
-      expect(copyToClipboard).toHaveBeenCalledWith('https://');
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Link copied to clipboard'),
-      );
-      warnSpy.mockRestore();
-    });
-
-    it('copies non-http(s) links to the clipboard instead', async () => {
+    it('copies non-http(s) links to the clipboard too', async () => {
       frame = {
         ...frame,
         cells: [[...'mail'].map(() => makeCell('m', 'mailto:dev@example.com'))],
@@ -326,7 +300,6 @@ describe('ContentMouseController', () => {
       fire(makeEvent('left-press', 1, 1));
       fire(makeEvent('left-release', 1, 1));
       runOutWindow();
-      expect(openBrowserSecurely).not.toHaveBeenCalled();
       expect(copyToClipboard).toHaveBeenCalledWith('mailto:dev@example.com');
       await Promise.resolve();
       await Promise.resolve();
@@ -336,7 +309,7 @@ describe('ContentMouseController', () => {
       warnSpy.mockRestore();
     });
 
-    it('reports a clipboard failure as a copy failure, not an open failure', async () => {
+    it('reports a clipboard failure as a copy failure', async () => {
       frame = {
         ...frame,
         cells: [[...'mail'].map(() => makeCell('m', 'mailto:dev@example.com'))],
@@ -368,10 +341,7 @@ describe('ContentMouseController', () => {
       fire(makeEvent('right-press', 2, 1));
       const menu = getMenu();
       expect(menu).not.toBeNull();
-      expect(menu!.items.map((item) => item.id)).toEqual([
-        'open-link',
-        'copy-link',
-      ]);
+      expect(menu!.items.map((item) => item.id)).toEqual(['copy-link']);
     });
 
     it('opens with Copy Selection when a selection is active on plain text', () => {
@@ -415,18 +385,23 @@ describe('ContentMouseController', () => {
       });
     });
 
-    it('clicking a menu item launches the browser and closes the menu', () => {
+    it('clicking a menu item copies the link and closes the menu', () => {
       const { fire, getMenu } = mount();
       fire(makeEvent('right-press', 2, 1)); // opens the menu at grid (1,0)
       expect(getMenu()).not.toBeNull();
       // Item 0 sits at grid row position.y+1=1 → terminal row 2, col 2.
       fire(makeEvent('left-press', 2, 2));
-      expect(openBrowserSecurely).toHaveBeenCalledWith(LINK_URL);
+      expect(copyToClipboard).toHaveBeenCalledWith(LINK_URL);
       expect(getMenu()).toBeNull();
     });
 
     it('hovering a menu row updates the selected index', () => {
-      const { fire, getMenu, getSelectedIndex } = mount();
+      const { fire, getMenu, getSelectedIndex } = mount({
+        sx: 5,
+        sy: 0,
+        ex: 8,
+        ey: 0,
+      });
       fire(makeEvent('right-press', 2, 1)); // grid (1,0), 2 items
       expect(getSelectedIndex()).toBe(0);
       // Item 1 at grid row 2 → terminal row 3.
@@ -434,7 +409,7 @@ describe('ContentMouseController', () => {
       expect(getSelectedIndex()).toBe(1);
       // Click then executes the hovered (second) item.
       fire(makeEvent('left-press', 2, 3));
-      expect(copyToClipboard).toHaveBeenCalledWith(LINK_URL);
+      expect(copyToClipboard).toHaveBeenCalledWith('here');
       expect(getMenu()).toBeNull();
     });
 
@@ -463,7 +438,6 @@ describe('ContentMouseController', () => {
       const { fire, getMenu } = mount({ sx: 5, sy: 0, ex: 8, ey: 0 });
       fire(makeEvent('right-press', 2, 1)); // over the link
       expect(getMenu()!.items.map((item) => item.id)).toEqual([
-        'open-link',
         'copy-link',
         'copy-selection',
       ]);
@@ -564,7 +538,7 @@ describe('ContentMouseController', () => {
       expect(latestMenu()).toBeNull();
     });
 
-    it('cancels a pending link open when the controller unmounts', () => {
+    it('cancels a pending link copy when the controller unmounts', () => {
       const { rerenderWith } = mountWithProbe();
       act(() => {
         const handler = vi.mocked(useMouseEvents).mock.calls.at(-1)![0];
@@ -573,7 +547,7 @@ describe('ContentMouseController', () => {
       });
       rerenderWith(false);
       runOutWindow();
-      expect(openBrowserSecurely).not.toHaveBeenCalled();
+      expect(copyToClipboard).not.toHaveBeenCalled();
     });
   });
 });

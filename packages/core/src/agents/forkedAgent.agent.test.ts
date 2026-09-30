@@ -83,7 +83,6 @@ describe('runForkedAgent (AgentHeadless path) bound-tool isolation', () => {
     targetDir: '/tmp',
     debugMode: false,
     model: 'test-model',
-    usageStatisticsEnabled: false,
     bareMode: true,
   };
 

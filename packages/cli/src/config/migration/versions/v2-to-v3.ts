@@ -24,31 +24,12 @@ import {
  * - Invalid values do not create enable* keys and produce warnings.
  */
 const V2_TO_V3_BOOLEAN_MAP: Record<string, string> = {
-  'general.disableAutoUpdate': 'general.enableAutoUpdate',
-  'general.disableUpdateNag': 'general.enableAutoUpdate',
   'ui.accessibility.disableLoadingPhrases':
     'ui.accessibility.enableLoadingPhrases',
   'context.fileFiltering.disableFuzzySearch':
     'context.fileFiltering.enableFuzzySearch',
   'model.generationConfig.disableCacheControl':
     'model.generationConfig.enableCacheControl',
-};
-
-/**
- * Consolidated old paths that collapse into one V3 field.
- *
- * Current policy:
- * - `general.disableAutoUpdate` and `general.disableUpdateNag` both drive
- *   `general.enableAutoUpdate`.
- * - If any valid normalized source is true, target becomes false.
- * - If at least one valid normalized source exists, consolidated target is emitted.
- * - Invalid present values are removed and warned, and do not contribute to target calculation.
- */
-const CONSOLIDATED_V2_PATHS: Record<string, string[]> = {
-  'general.enableAutoUpdate': [
-    'general.disableAutoUpdate',
-    'general.disableUpdateNag',
-  ],
 };
 
 /**
@@ -123,18 +104,11 @@ export class V2ToV3Migration implements SettingsMigration {
    *
    * Detailed strategy:
    * 1) Clone input.
-   * 2) Process consolidated paths first:
-   *    - Inspect each source path.
-   *    - Normalize each present value (boolean / coercible string / invalid).
-   *    - Always delete present deprecated source key.
-   *    - Valid normalized values contribute to aggregate.
-   *    - Invalid values emit warnings.
-   *    - Emit consolidated target when at least one valid source was consumed.
-   * 3) Process remaining one-to-one mappings:
-   *    - For each unmapped source, normalize value.
+   * 2) Process one-to-one mappings:
+   *    - For each source, normalize value.
    *    - If valid -> delete old key and write inverted target.
    *    - If invalid -> delete old key and emit warning.
-   * 4) Set `$version = 3`.
+   * 3) Set `$version = 3`.
    *
    * Guarantees:
    * - Input object is not mutated.
@@ -151,49 +125,10 @@ export class V2ToV3Migration implements SettingsMigration {
 
     // Deep clone to avoid mutating input
     const result = structuredClone(settings) as Record<string, unknown>;
-    const processedPaths = new Set<string>();
     const warnings: string[] = [];
 
-    // Step 1: Handle consolidated paths (multiple old paths → single new path)
-    // Policy: if ANY of the old disable* settings is true, the new enable* should be false
-    for (const [newPath, oldPaths] of Object.entries(CONSOLIDATED_V2_PATHS)) {
-      let hasAnyDisable = false;
-      let hasAnyBooleanValue = false;
-
-      for (const oldPath of oldPaths) {
-        const oldValue = getNestedProperty(result, oldPath);
-        const normalized = normalizeDisableValue(oldValue);
-        if (!normalized.isPresent) {
-          continue;
-        }
-
-        deleteNestedPropertySafe(result, oldPath);
-        processedPaths.add(oldPath);
-
-        if (normalized.isValid) {
-          hasAnyBooleanValue = true;
-          if (normalized.booleanValue === true) {
-            hasAnyDisable = true;
-          }
-        } else {
-          warnings.push(
-            `Removed deprecated setting '${oldPath}' from ${scope} settings because the value is invalid. Expected boolean.`,
-          );
-        }
-      }
-
-      if (hasAnyBooleanValue) {
-        // enableAutoUpdate = !hasAnyDisable (if any disable* was true, enable should be false)
-        setNestedPropertySafe(result, newPath, !hasAnyDisable);
-      }
-    }
-
-    // Step 2: Handle remaining individual disable* → enable* mappings
+    // Step 1: Handle individual disable* → enable* mappings
     for (const [oldPath, newPath] of Object.entries(V2_TO_V3_BOOLEAN_MAP)) {
-      if (processedPaths.has(oldPath)) {
-        continue;
-      }
-
       const oldValue = getNestedProperty(result, oldPath);
       const normalized = normalizeDisableValue(oldValue);
       if (!normalized.isPresent) {
@@ -211,7 +146,7 @@ export class V2ToV3Migration implements SettingsMigration {
       }
     }
 
-    // Step 3: Always update version to 3
+    // Step 2: Always update version to 3
     result['$version'] = 3;
 
     return { settings: result, warnings };

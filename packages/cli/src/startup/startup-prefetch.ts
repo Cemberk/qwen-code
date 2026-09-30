@@ -10,18 +10,10 @@ import {
   type Config,
 } from '@qwen-code/qwen-code-core';
 import type { LoadedSettings } from '../config/settings.js';
-import { preconnectApi } from '../utils/apiPreconnect.js';
 import { recordStartupEvent } from '../utils/startupProfiler.js';
-import {
-  CUSTOM_SANDBOX_IMAGE_ENV_VAR,
-  HOST_UPDATE_RELAUNCH_ENV_VAR,
-  SKIP_UPDATE_CHECK_ENV_VAR,
-  requestUpdateOnExit,
-} from '../utils/processUtils.js';
 
 const debugLogger = createDebugLogger('STARTUP_PREFETCH');
 
-const earlyStarted = new WeakSet<Config>();
 const postRenderStarted = new WeakSet<Config>();
 
 /**
@@ -43,37 +35,11 @@ function runDeferredTask(name: string, task: () => Promise<void> | void): void {
 }
 
 /**
- * Starts pre-render startup prefetches that benefit from maximum lead time.
- *
- * This runs after `loadCliConfig()` has produced a Config, but before
- * `initializeApp()` and UI rendering. Keep this phase limited to work that is
- * cheap to start, independent of Ink/React, and safe to ignore on failure.
- */
-export function startEarlyStartupPrefetches(config: Config): void {
-  if (earlyStarted.has(config)) return;
-  earlyStarted.add(config);
-
-  try {
-    const modelsConfig = config.getModelsConfig();
-    const authType = modelsConfig.getCurrentAuthType();
-    const resolvedBaseUrl = modelsConfig.getGenerationConfig().baseUrl;
-    const proxy = config.getProxy();
-    preconnectApi(authType, { resolvedBaseUrl, proxy });
-  } catch (error) {
-    debugLogger.debug(
-      `Preconnect skipped due to error getting authType: ${error}`,
-    );
-  }
-}
-
-export const UPDATE_CHECK_DELAY_MS = 3_000;
-
-/**
  * Starts post-render startup prefetches for ordinary interactive TUI sessions.
  *
  * This runs immediately after Ink's `render()` returns (`first_paint`). Tasks
- * here may load heavier modules or perform network/IPC work, but they must not
- * affect `startInteractiveUI()` success.
+ * here may load heavier modules, but they must not affect
+ * `startInteractiveUI()` success.
  */
 export function startPostRenderPrefetches(
   config: Config,
@@ -82,99 +48,6 @@ export function startPostRenderPrefetches(
 ): void {
   if (postRenderStarted.has(config)) return;
   postRenderStarted.add(config);
-
-  if (
-    settings.merged.general?.enableAutoUpdate !== false &&
-    process.env[SKIP_UPDATE_CHECK_ENV_VAR] !== 'true' &&
-    !process.env[CUSTOM_SANDBOX_IMAGE_ENV_VAR]
-  ) {
-    runDeferredTask('update_check', async () => {
-      // The check spawns npm (a second Node process); keep it off the
-      // window where the session is still starting up.
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, UPDATE_CHECK_DELAY_MS).unref?.();
-      });
-      const [
-        { checkForUpdatesDetailed, describeUpdateCheckFailure },
-        { handleAutoUpdate },
-        { getInstallationInfo },
-        { updateEventEmitter },
-        { t },
-      ] = await Promise.all([
-        import('../ui/utils/updateCheck.js'),
-        import('../ui/handleAutoUpdate.js'),
-        import('../utils/installationInfo.js'),
-        import('../utils/updateEventEmitter.js'),
-        import('../i18n/index.js'),
-      ]);
-      // The startup check is best-effort background work: surface failures as
-      // a soft warning with the concrete reason instead of an alarming error
-      // (#7049), while keeping the failure visible (#6857).
-      const updateCheckSkippedMessage = (error: unknown) =>
-        t('Update check skipped ({{reason}}) — run /update to retry.', {
-          reason: describeUpdateCheckFailure(error),
-        });
-      try {
-        const result = await checkForUpdatesDetailed();
-        if (result.status === 'update') {
-          const projectRoot = config.getProjectRoot();
-          const hostUpdateRelaunch = process.env[HOST_UPDATE_RELAUNCH_ENV_VAR];
-          if (hostUpdateRelaunch === 'true') {
-            updateEventEmitter.emit('update-info', {
-              message: `${result.info.message}\n${t(
-                'Run /update to install the update on the host.',
-              )}`,
-            });
-            return;
-          }
-          if (hostUpdateRelaunch === 'false') {
-            updateEventEmitter.emit('update-info', {
-              message: `${result.info.message}\n${t(
-                'Update Qwen Code on the host, then restart the sandbox.',
-              )}`,
-            });
-            return;
-          }
-          const installationInfo = getInstallationInfo(projectRoot, true);
-          if (installationInfo.packageManager === 'npm') {
-            void handleAutoUpdate(result.info, settings, projectRoot);
-            return;
-          }
-          if (
-            installationInfo.updateCommand ||
-            (installationInfo.isStandalone && installationInfo.standaloneDir)
-          ) {
-            if (requestUpdateOnExit()) {
-              updateEventEmitter.emit('update-info', {
-                message: `${result.info.message}\n${t(
-                  'The update will be installed after you exit this session.',
-                )}`,
-              });
-            } else {
-              updateEventEmitter.emit('update-info', {
-                message: `${result.info.message}\n${t(
-                  'Run /update to install the update.',
-                )}`,
-              });
-            }
-          } else {
-            void handleAutoUpdate(result.info, settings, projectRoot);
-          }
-        } else if (result.status === 'error') {
-          updateEventEmitter.emit('update-failed', {
-            message: updateCheckSkippedMessage(result.error),
-            severity: 'warning',
-          });
-        }
-      } catch (error) {
-        updateEventEmitter.emit('update-failed', {
-          message: updateCheckSkippedMessage(error),
-          severity: 'warning',
-        });
-        throw error;
-      }
-    });
-  }
 
   if (options.initializeTelemetry) {
     runDeferredTask('telemetry_init', () => initializeTelemetry(config));

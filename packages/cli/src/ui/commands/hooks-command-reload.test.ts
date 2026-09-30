@@ -86,7 +86,6 @@ describe('/hooks reload with real settings files', () => {
       cwd,
       debugMode: false,
       trustedFolder: trusted,
-      usageStatisticsEnabled: false,
       ...resolveHookSettingsForConfig(
         settings.merged.hooks,
         {

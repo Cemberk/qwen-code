@@ -121,7 +121,6 @@ import { useHistory } from './hooks/useHistoryManager.js';
 import { useMemoryMonitor } from './hooks/useMemoryMonitor.js';
 import { useWakeRepaint } from './hooks/use-wake-repaint.js';
 import { useThemeCommand } from './hooks/useThemeCommand.js';
-import { useFeedbackDialog } from './hooks/useFeedbackDialog.js';
 import { useAuthCommand } from './auth/useAuth.js';
 import { useEditorSettings } from './hooks/useEditorSettings.js';
 import { usePreferredEditor } from './hooks/usePreferredEditor.js';
@@ -194,10 +193,7 @@ import { type CommandMigrationNudgeResult } from './CommandFormatMigrationNudge.
 import { useCommandMigration } from './hooks/useCommandMigration.js';
 import { migrateTomlCommands } from '../services/command-migration-tool.js';
 import { sendNotification } from '../services/notificationService.js';
-import { type UpdateObject } from './utils/updateCheck.js';
-import { setUpdateHandler } from './handleAutoUpdate.js';
 import { registerCleanup, runExitCleanup } from '../utils/cleanup.js';
-import { exitCleanly } from '../utils/processUtils.js';
 import {
   useMessageQueue,
   type QueuedUserSubmission,
@@ -776,7 +772,6 @@ export const AppContainer = (props: AppContainerProps) => {
   const [modelSwitchedFromQuotaError, setModelSwitchedFromQuotaError] =
     useState<boolean>(false);
   const [historyRemountKey, setHistoryRemountKey] = useState(0);
-  const [updateInfo, setUpdateInfo] = useState<UpdateObject | null>(null);
   const [isTrustedFolder, setIsTrustedFolder] = useState<boolean | undefined>(
     config.isTrustedFolder(),
   );
@@ -838,11 +833,7 @@ export const AppContainer = (props: AppContainerProps) => {
     extensionsUpdateState,
     extensionsUpdateStateInternal,
     dispatchExtensionStateUpdate,
-  } = useExtensionUpdates(
-    extensionManager,
-    historyManager.addItem,
-    config.getWorkingDir(),
-  );
+  } = useExtensionUpdates();
 
   const { providerUpdateRequest, dismissProviderUpdate } = useProviderUpdates(
     settings,
@@ -1376,8 +1367,7 @@ export const AppContainer = (props: AppContainerProps) => {
     };
   }, [isConfigInitialized, config]);
 
-  // Track idle state via ref so the update handler can defer notifications
-  // while the model is streaming, without triggering re-renders.
+  // Track idle state via ref without triggering re-renders.
   // Note: isIdleRef.current is assigned after streamingState becomes available
   // (see the assignment below useLlmStream).
   const isIdleRef = useRef(true);
@@ -1387,21 +1377,6 @@ export const AppContainer = (props: AppContainerProps) => {
   // with it so the commit loop reads width and height consistently (both live).
   const availableTerminalHeightRef = useRef(0);
   const terminalWidthRef = useRef(0);
-  const updateHandlerRef = useRef<{
-    cleanup: () => void;
-    flush: () => void;
-  } | null>(null);
-
-  useEffect(() => {
-    const handler = setUpdateHandler(
-      historyManager.addItem,
-      setUpdateInfo,
-      isIdleRef,
-    );
-    updateHandlerRef.current = handler;
-    return () => handler?.cleanup();
-  }, [historyManager.addItem]);
-
   // Derive widths for InputPrompt using shared helper
   const { inputWidth, suggestionsWidth } = useMemo(() => {
     const { inputWidth, suggestionsWidth } =
@@ -2015,7 +1990,7 @@ export const AppContainer = (props: AppContainerProps) => {
         config.getLlmClient()?.requestShutdown();
         setTimeout(async () => {
           await runExitCleanup();
-          await exitCleanly(0);
+          process.exit(0);
         }, 100);
       },
       setDebugMessage,
@@ -2405,13 +2380,11 @@ export const AppContainer = (props: AppContainerProps) => {
   cancelOngoingRequestRef.current = cancelOngoingRequest;
   clearPendingStateRef.current = clearPendingState;
 
-  // Now that streamingState is available, keep isIdleRef in sync and
-  // flush any deferred update notifications when the model finishes responding.
+  // Now that streamingState is available, keep isIdleRef in sync.
   isIdleRef.current = streamingState === StreamingState.Idle;
 
   useEffect(() => {
     if (streamingState === StreamingState.Idle) {
-      updateHandlerRef.current?.flush();
       // P7-trigger: a steered turn has finished — drop the `workflow active`
       // indicator until the next keyword prompt re-arms it.
       setWorkflowKeywordActive(false);
@@ -3604,19 +3577,6 @@ export const AppContainer = (props: AppContainerProps) => {
     mcpApprovalRemaining,
     handleMcpApprovalSelect,
   } = useMcpApproval(config);
-  const {
-    isFeedbackDialogOpen,
-    openFeedbackDialog,
-    closeFeedbackDialog,
-    temporaryCloseFeedbackDialog,
-    submitFeedback,
-  } = useFeedbackDialog({
-    config,
-    settings,
-    streamingState,
-    history: historyManager.history,
-    sessionStats,
-  });
   const dialogsVisible =
     showWelcomeBackDialog ||
     shouldShowCommandMigrationNudge ||
@@ -3664,7 +3624,6 @@ export const AppContainer = (props: AppContainerProps) => {
   const shouldShowStickyTodos =
     stickyTodos !== null &&
     !dialogsVisible &&
-    !isFeedbackDialogOpen &&
     streamingState === StreamingState.Responding;
   const stickyTodoWidth = Math.min(mainAreaWidth, 64);
   const stickyTodoMaxVisibleItems = getStickyTodoMaxVisibleItemsForMode(
@@ -3711,12 +3670,11 @@ export const AppContainer = (props: AppContainerProps) => {
     dialogsVisible,
     stickyTodosLayoutKey,
     liveAgentPanelLayoutKey,
-    // Composer and update notification height also shift with these; without
+    // Composer height also shifts with these; without
     // them the footer isn't re-measured during a streaming turn and the VP
     // viewport bottom clips.
     // (elapsedTime/currentLoadingPhrase excluded: they tick without changing rows.)
     streamingState,
-    updateInfo,
     agentViewState.activeView,
     // The agent tab footer grows with its own status row / queued messages /
     // input text, none of which the deps above track; AgentComposer syncs
@@ -4729,7 +4687,6 @@ export const AppContainer = (props: AppContainerProps) => {
       terminalWidth,
       terminalHeight,
       mainControlsRef,
-      updateInfo,
       isRestarting,
       extensionsUpdateState,
       activePtyId,
@@ -4750,8 +4707,6 @@ export const AppContainer = (props: AppContainerProps) => {
       // Hooks dialog
       isHooksDialogOpen,
       isStatsDialogOpen,
-      // Feedback dialog
-      isFeedbackDialogOpen,
       // Per-task token tracking
       taskStartTokens,
       taskStartStreamingChars,
@@ -4869,7 +4824,6 @@ export const AppContainer = (props: AppContainerProps) => {
       terminalWidth,
       terminalHeight,
       mainControlsRef,
-      updateInfo,
       isRestarting,
       currentModel,
       extensionsUpdateState,
@@ -4892,8 +4846,6 @@ export const AppContainer = (props: AppContainerProps) => {
       // Hooks dialog
       isHooksDialogOpen,
       isStatsDialogOpen,
-      // Feedback dialog
-      isFeedbackDialogOpen,
       // Per-task token tracking
       taskStartTokens,
       taskStartStreamingChars,
@@ -4995,11 +4947,6 @@ export const AppContainer = (props: AppContainerProps) => {
       openHelpDialog,
       closeHelpDialog,
       setHelpTab,
-      // Feedback dialog
-      openFeedbackDialog,
-      closeFeedbackDialog,
-      temporaryCloseFeedbackDialog,
-      submitFeedback,
       // Rewind selector
       openRewindSelector,
       closeRewindSelector,
@@ -5084,11 +5031,6 @@ export const AppContainer = (props: AppContainerProps) => {
       openHelpDialog,
       closeHelpDialog,
       setHelpTab,
-      // Feedback dialog
-      openFeedbackDialog,
-      closeFeedbackDialog,
-      temporaryCloseFeedbackDialog,
-      submitFeedback,
       // Rewind selector
       openRewindSelector,
       closeRewindSelector,

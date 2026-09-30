@@ -40,9 +40,6 @@ export function toMarkdown(sessionData: ExportSessionData): string {
   if (metadata?.model) {
     lines.push(`- **Model**: ${sanitizeText(metadata.model)}`);
   }
-  if (metadata?.channel) {
-    lines.push(`- **Channel**: ${sanitizeText(metadata.channel)}`);
-  }
   if (metadata?.promptCount !== undefined) {
     lines.push(`- **Prompt Count**: ${metadata.promptCount}`);
   }

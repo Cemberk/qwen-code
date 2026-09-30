@@ -51,7 +51,6 @@ describe('late session source activation', () => {
         model: 'test-model',
         debugMode: false,
         chatRecording: false,
-        usageStatisticsEnabled: false,
         telemetry: { enabled: false },
         visibleTools: visible ? [ToolNames.RECORD_SOURCE] : [],
       });

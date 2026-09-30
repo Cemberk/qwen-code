@@ -72,7 +72,6 @@ import {
   getLiveAgentPanelVpMaxRows,
 } from './background-view/liveAgentPanelVisibility.js';
 import { panelDisplayOrder } from './background-view/agent-forest.js';
-import { FEEDBACK_DIALOG_KEYS } from '../FeedbackDialog.js';
 import { BaseTextInput } from './BaseTextInput.js';
 import type { RenderLineOptions } from './BaseTextInput.js';
 import { getApprovalModePromptStyle } from './approvalModeVisuals.js';
@@ -781,19 +780,6 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       // handler owns selection, open/close, and stop actions.
       if (bgDialogOpen) {
         return true;
-      }
-
-      // Handle feedback dialog keyboard interactions first so modal UI gets
-      // first chance to consume the key.
-      if (uiState.isFeedbackDialogOpen) {
-        // If it's one of the feedback option keys (1-4), let FeedbackDialog handle it
-        if ((FEEDBACK_DIALOG_KEYS as readonly string[]).includes(key.name)) {
-          return true;
-        } else {
-          // For any other key, close feedback dialog temporarily and continue with normal processing
-          uiActions.temporaryCloseFeedbackDialog();
-          // Continue processing the key for normal input handling
-        }
       }
 
       // When the Arena tab bar or background pill has focus, block

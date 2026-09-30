@@ -29,7 +29,6 @@ import {
 
 vi.mock('../telemetry/loggers.js', () => ({
   logLoopDetected: vi.fn(),
-  logLoopDetectionDisabled: vi.fn(),
 }));
 
 const TOOL_CALL_LOOP_THRESHOLD = 5;
@@ -264,7 +263,6 @@ describe('LoopDetectionService', () => {
 
     it('should not detect a loop when disabled for session', () => {
       service.disableForSession();
-      expect(loggers.logLoopDetectionDisabled).toHaveBeenCalledTimes(1);
       const event = createToolCallRequestEvent('testTool', { param: 'value' });
       for (let i = 0; i < TOOL_CALL_LOOP_THRESHOLD; i++) {
         expect(service.addAndCheck(event)).toBe(false);

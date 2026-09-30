@@ -632,7 +632,7 @@ describe('Settings Loading and Merging', () => {
       );
       const userSettingsContent = {
         [SETTINGS_VERSION_KEY]: SETTINGS_VERSION,
-        usageStatisticsEnabled: false,
+        vimMode: true,
       };
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
@@ -646,15 +646,11 @@ describe('Settings Loading and Merging', () => {
 
       expect(getSettingsWarnings(settings)).toEqual(
         expect.arrayContaining([
-          expect.stringContaining(
-            "Legacy setting 'usageStatisticsEnabled' will be ignored",
-          ),
+          expect.stringContaining("Legacy setting 'vimMode' will be ignored"),
         ]),
       );
       expect(getSettingsWarnings(settings)).toEqual(
-        expect.arrayContaining([
-          expect.stringContaining("'privacy.usageStatisticsEnabled'"),
-        ]),
+        expect.arrayContaining([expect.stringContaining("'general.vimMode'")]),
       );
     });
 
@@ -984,75 +980,6 @@ describe('Settings Loading and Merging', () => {
       expect(writtenContent[SETTINGS_VERSION_KEY]).toBe(SETTINGS_VERSION);
     });
 
-    it('should consolidate disableAutoUpdate and disableUpdateNag - both false means enableAutoUpdate is true', () => {
-      (mockFsExistsSync as Mock).mockImplementation(
-        (p: fs.PathLike) => p === USER_SETTINGS_PATH,
-      );
-      // V1 settings with both disable* settings as false
-      const legacySettingsContent = {
-        disableAutoUpdate: false,
-        disableUpdateNag: false,
-      };
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(legacySettingsContent);
-          return '{}';
-        },
-      );
-
-      const settings = loadSettings(MOCK_WORKSPACE_DIR);
-
-      // Both are false, so enableAutoUpdate should be true
-      expect(settings.merged.general?.enableAutoUpdate).toBe(true);
-    });
-
-    it('should consolidate disableAutoUpdate and disableUpdateNag - any true means enableAutoUpdate is false', () => {
-      (mockFsExistsSync as Mock).mockImplementation(
-        (p: fs.PathLike) => p === USER_SETTINGS_PATH,
-      );
-      // V1 settings with disableAutoUpdate=false but disableUpdateNag=true
-      const legacySettingsContent = {
-        disableAutoUpdate: false,
-        disableUpdateNag: true,
-      };
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(legacySettingsContent);
-          return '{}';
-        },
-      );
-
-      const settings = loadSettings(MOCK_WORKSPACE_DIR);
-
-      // disableUpdateNag is true, so enableAutoUpdate should be false
-      expect(settings.merged.general?.enableAutoUpdate).toBe(false);
-    });
-
-    it('should consolidate disableAutoUpdate and disableUpdateNag - disableAutoUpdate=true takes precedence', () => {
-      (mockFsExistsSync as Mock).mockImplementation(
-        (p: fs.PathLike) => p === USER_SETTINGS_PATH,
-      );
-      // V1 settings with disableAutoUpdate=true
-      const legacySettingsContent = {
-        disableAutoUpdate: true,
-        disableUpdateNag: false,
-      };
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(legacySettingsContent);
-          return '{}';
-        },
-      );
-
-      const settings = loadSettings(MOCK_WORKSPACE_DIR);
-
-      // disableAutoUpdate is true, so enableAutoUpdate should be false
-      expect(settings.merged.general?.enableAutoUpdate).toBe(false);
-    });
-
     it('should bump version to 3 even when V2 settings already have V3-compatible content', () => {
       (mockFsExistsSync as Mock).mockImplementation(
         (p: fs.PathLike) => p === USER_SETTINGS_PATH,
@@ -1061,7 +988,7 @@ describe('Settings Loading and Merging', () => {
       const v2SettingsWithV3Content = {
         $version: 2,
         general: {
-          enableAutoUpdate: true,
+          vimMode: true,
         },
       };
       (fs.readFileSync as Mock).mockImplementation(
@@ -1094,7 +1021,7 @@ describe('Settings Loading and Merging', () => {
       const invalidVersionSettings = {
         $version: 'invalid-version',
         general: {
-          enableAutoUpdate: true,
+          vimMode: true,
         },
       };
       (fs.readFileSync as Mock).mockImplementation(
@@ -1119,7 +1046,7 @@ describe('Settings Loading and Merging', () => {
       }
       const writtenContent = JSON.parse(writeCall[1] as string);
       expect(writtenContent.$version).toBe(SETTINGS_VERSION);
-      expect(writtenContent.general?.enableAutoUpdate).toBe(true);
+      expect(writtenContent.general?.vimMode).toBe(true);
     });
 
     it('should normalize legacy numeric version when no migration can execute', () => {

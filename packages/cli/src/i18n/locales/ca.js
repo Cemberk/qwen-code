@@ -15,7 +15,6 @@ export default {
     '← → seleccionar, Delete per eliminar, ↓ per sortir',
   'Attachments: ': 'Adjunts: ',
   'Basics:': 'Bàsic:',
-  'Add context': 'Afegeix context',
   'Use {{symbol}} to specify files for context (e.g., {{example}}) to target specific files or folders.':
     'Useu {{symbol}} per especificar fitxers de context (p. ex., {{example}}) per seleccionar fitxers o carpetes específics.',
   '@': '@',
@@ -67,7 +66,6 @@ export default {
     'Nova línia (Alt+Return funciona en certes distribucions de Linux)',
   'Clear the screen': 'Neteja la pantalla',
   'Open input in external editor': "Obre l'entrada en un editor extern",
-  'Send message': 'Envia el missatge',
   'Initializing...': 'Inicialitzant...',
   'Connecting to MCP servers... ({{connected}}/{{total}})':
     'Connectant a MCP servers... ({{connected}}/{{total}})',
@@ -86,7 +84,6 @@ export default {
   'docs/keyboard-shortcuts.md': 'docs/keyboard-shortcuts.md',
   'for help on Qwen Code': 'per a ajuda sobre Qwen Code',
   'show version info': 'mostra la informació de la versió',
-  'submit a bug report': "envia un informe d'error",
   Status: 'Estat',
 
   // ============================================================================
@@ -103,7 +100,6 @@ export default {
   'Base URL': 'Base URL',
   Proxy: 'Proxy',
   'Memory Usage': 'Ús de memòria',
-  'IDE Client': 'Client IDE',
 
   // ============================================================================
   // Ordres - General
@@ -225,8 +221,6 @@ export default {
     "Esborra l'historial de la conversa i allibera context",
   'Compresses the context by replacing it with a summary.':
     'Comprimeix el context substituint-lo per un resum.',
-  'open full Qwen Code documentation in your browser':
-    'obre la documentació completa de Qwen Code al navegador',
   'Configuration not available.': 'Configuració no disponible.',
   'Connect an LLM provider': "Connecta un proveïdor d'LLM",
   // ============================================================================
@@ -415,7 +409,6 @@ export default {
   'User Scope': "Àmbit d'usuari",
   'Workspace Scope': "Àmbit de l'espai de treball",
   'No extensions found.': "No s'han trobat extensions.",
-  'Updating...': 'Actualitzant...',
   Unknown: 'Desconegut',
   Error: 'Error',
   'Stopped because': 'Aturat perquè',
@@ -471,10 +464,8 @@ export default {
   'Vim Mode': 'Mode Vim',
   'Attribution: commit': 'Atribució: commit',
   'Terminal Bell Notification': 'Notificació de campana del terminal',
-  'Enable Usage Statistics': "Activa les estadístiques d'ús",
   Theme: 'Tema',
   'Preferred Editor': 'Editor preferit',
-  'Auto-connect to IDE': 'Connexió automàtica a IDE',
   'Debug Keystroke Logging': 'Registre de tecles per a depuració',
   'Language: UI': 'Idioma: Interfície',
   'Language: Model': 'Idioma: Model',
@@ -487,13 +478,6 @@ export default {
   'Show Citations': 'Mostra les cites',
   'Custom Witty Phrases': 'Frases enginyoses personalitzades',
   'Show Welcome Back Dialog': 'Mostra el diàleg de benvinguda',
-  'Enable User Feedback': 'Activa les valoracions dels usuaris',
-  'How is Qwen doing this session? (optional)':
-    'Com va Qwen en aquesta sessió? (opcional)',
-  Bad: 'Malament',
-  Fine: 'Bé',
-  Good: 'Molt bé',
-  Dismiss: 'Descarta',
   'Screen Reader Mode': 'Mode de lector de pantalla',
   'Max Session Turns': 'Torns màxims de sessió',
   'Skip Next Speaker Check': 'Omet la comprovació del proper parlant',
@@ -636,16 +620,14 @@ export default {
     'Instal·lació cancel·lada per a "{{name}}".',
   'You are installing an extension from {{originSource}}. Some features may not work perfectly with Qwen Code.':
     'Esteu instal·lant una extensió des de {{originSource}}. Algunes funcions poden no funcionar perfectament amb Qwen Code.',
-  '--ref and --auto-update are not applicable for marketplace extensions.':
-    "--ref i --auto-update no s'apliquen a les extensions del mercat.",
+  '--ref is not applicable for marketplace extensions.':
+    "--ref no s'aplica a les extensions del mercat.",
   'Extension "{{name}}" installed successfully and enabled.':
     'L\'extensió "{{name}}" s\'ha instal·lat i activat correctament.',
   'The github URL, local path, or marketplace source (marketplace-url:plugin-name) of the extension to install.':
     "La URL de GitHub, el camí local o la font del mercat (marketplace-url:nom-del-connector) de l'extensió a instal·lar.",
   'The git ref to install from.':
     'La referència git des de la qual instal·lar.',
-  'Enable auto-update for this extension.':
-    "Activar l'actualització automàtica per a aquesta extensió.",
   'Enable pre-release versions for this extension.':
     'Activar les versions preliminars per a aquesta extensió.',
   'Acknowledge the security risks of installing an extension and skip the confirmation prompt.':
@@ -739,16 +721,6 @@ export default {
     'Useu ↑↓ o j/k per navegar, Return per seleccionar, Escape per cancel·lar',
   '{{count}} more above': '{{count}} més amunt',
   '{{count}} more below': '{{count}} més avall',
-  'manage IDE integration': "gestiona la integració de l'IDE",
-  'check status of IDE integration':
-    "comprova l'estat de la integració de l'IDE",
-  'install required IDE companion for {{ideName}}':
-    "instal·la el complement d'IDE necessari per a {{ideName}}",
-  'enable IDE integration': "activa la integració de l'IDE",
-  'disable IDE integration': "desactiva la integració de l'IDE",
-  'IDE integration is not supported in your current environment. To use this feature, run Qwen Code in one of these supported IDEs: VS Code or VS Code forks.':
-    "La integració de l'IDE no és compatible en el vostre entorn actual. Per usar aquesta funció, executeu Qwen Code en un dels IDEs compatibles: VS Code o bifurcacions de VS Code.",
-  'Set up GitHub Actions': 'Configura GitHub Actions',
   'Configure terminal keybindings for multiline input (VS Code, Cursor, Windsurf, Trae)':
     'Configura les dreceres del terminal per a entrada multilínia (VS Code, Cursor, Windsurf, Trae)',
   'Please restart your terminal for the changes to take effect.':
@@ -918,7 +890,6 @@ export default {
   // ============================================================================
   'Export current session message history to a file':
     "Exportar l'historial de missatges de la sessió actual a un fitxer",
-  'Export session to HTML format': 'Exportar la sessió en format HTML',
   'Export session to JSON format': 'Exportar la sessió en format JSON',
   'Export session to JSONL format (one message per line)':
     'Exportar la sessió en format JSONL (un missatge per línia)',
@@ -1013,7 +984,6 @@ export default {
     "Existeix un mode d'aprovació de l'espai de treball i té prioritat. El canvi a nivell d'usuari no tindrà cap efecte.",
   'Apply To': 'Aplicar a',
   'Workspace Settings': "Configuració de l'espai de treball",
-  'Open auto-memory folder': 'Obre la carpeta de memòria automàtica',
   'Auto-memory: {{status}}': 'Memòria automàtica: {{status}}',
   'Auto-dream: {{status}} · {{lastDream}} · /dream to run':
     'Auto-dream: {{status}} · {{lastDream}} · /dream per executar',
@@ -1223,10 +1193,6 @@ export default {
   // ============================================================================
   // Ordres - Documentació
   // ============================================================================
-  'Please open the following URL in your browser to view the documentation:\n{{url}}':
-    'Obriu la URL següent al vostre navegador per veure la documentació:\n{{url}}',
-  'Opening documentation in your browser: {{url}}':
-    'Obrint la documentació al vostre navegador: {{url}}',
 
   // ============================================================================
   // Diàlegs - Confirmació d'eines
@@ -1431,9 +1397,6 @@ export default {
   // Barra d'estat
   // ============================================================================
   'Using:': 'En ús:',
-  '{{count}} open file': '{{count}} fitxer obert',
-  '{{count}} open files': '{{count}} fitxers oberts',
-  '(ctrl+g to view)': '(ctrl+g per veure)',
   '{{count}} {{name}} file': '{{count}} fitxer {{name}}',
   '{{count}} {{name}} files': '{{count}} fitxers {{name}}',
   '{{count}} MCP server': '{{count}} MCP server',
@@ -1830,16 +1793,6 @@ export default {
   // ============================================================================
   'Open extensions page in your browser':
     "Obrir la pàgina d'extensions al vostre navegador",
-  'Unknown extensions source: {{source}}.':
-    "Font d'extensions desconeguda: {{source}}.",
-  'Would open extensions page in your browser: {{url}} (skipped in test environment)':
-    "Obriria la pàgina d'extensions al vostre navegador: {{url}} (omès en entorn de proves)",
-  'View available extensions at {{url}}':
-    'Veure les extensions disponibles a {{url}}',
-  'Opening extensions page in your browser: {{url}}':
-    "Obrint la pàgina d'extensions al vostre navegador: {{url}}",
-  'Failed to open browser. Check out the extensions gallery at {{url}}':
-    "Error en obrir el navegador. Visiteu la galeria d'extensions a {{url}}",
   'Retrying in {{seconds}} seconds… (attempt {{attempt}}/{{maxRetries}})':
     'Reintentant en {{seconds}} segons… (intent {{attempt}}/{{maxRetries}})',
   'Press Ctrl+Y to retry': 'Premeu Ctrl+Y per reintentar',
@@ -2131,9 +2084,7 @@ export default {
 
   // Stats Dashboard — missing labels
   'API Requests': "Sol·licituds d'API",
-  'Tool Calls': "Crides d'eines",
   'Success rate': "Taxa d'èxit",
-  'Code Changes': 'Canvis de codi',
   Tool: 'Eina',
   reqs: 'sol.',
   in: 'ent.',
@@ -2160,69 +2111,12 @@ export default {
   'History collapsed: {{n}} messages hidden. Use /history expand-now to show.':
     'Història reduïda: {{n}} missatges ocults. Utilitzeu /history expand-now per mostrar.',
   // Update command
-  'Check for Qwen Code updates and install if available':
-    'Comprova les actualitzacions de Qwen Code i instal·la si estan disponibles',
-  'Qwen Code update available! {{current}} → {{latest}}':
-    'Actualització de Qwen Code disponible! {{current}} → {{latest}}',
-  'A new version of Qwen Code is available! {{current}} → {{latest}}':
-    'Hi ha una versió nova de Qwen Code disponible! {{current}} → {{latest}}',
-  'Qwen Code {{version}} is up to date!':
-    'Qwen Code {{version}} està actualitzat!',
-  'Failed to check for updates ({{reason}}). Please check your network or registry configuration.':
-    "No s'han pogut comprovar les actualitzacions ({{reason}}). Comproveu la xarxa o la configuració del registre.",
-  'Update check skipped ({{reason}}) — run /update to retry.':
-    "S'ha omès la comprovació d'actualitzacions ({{reason}}) — executeu /update per tornar-ho a provar.",
-  'registry did not respond within {{seconds}}s':
-    'el registre no ha respost en {{seconds}}s',
-  'registry unreachable': 'no es pot accedir al registre',
-  'registry error': 'error del registre',
-  'Unable to check for updates: {{reason}}':
-    'No es poden comprovar les actualitzacions: {{reason}}',
-  'Update successful! The new version will be used on your next run.':
-    "Actualització correcta! La nova versió s'utilitzarà en la propera execució.",
-  'Update downloaded. It will be applied after you exit this session.':
-    "Actualització descarregada. S'aplicarà després de sortir d'aquesta sessió.",
-  'Update failed: {{error}}': 'Actualització fallida: {{error}}',
-  'Downloading update...': "S'està baixant l'actualització...",
   'Update successful! Please restart Qwen Code to use the new version. Switching model providers before restarting may not work correctly.':
     'Actualització correcta! Reinicieu Qwen Code per utilitzar la nova versió. Canviar de proveïdor de models abans de reiniciar pot no funcionar correctament.',
-  'Automatic update failed. Please try updating manually.':
-    "L'actualització automàtica ha fallat. Proveu d'actualitzar manualment.",
-  'Automatic update failed: {{error}}. Re-run the installer to update manually.':
-    'Ha fallat l’actualització automàtica: {{error}}. Torneu a executar l’instal·lador per actualitzar manualment.',
-  'Running from a local git clone. Please update with "git pull".':
-    'S’està executant des d’un clon Git local. Actualitzeu amb "git pull".',
-  'Running via npx, update not applicable.':
-    'S’està executant via npx, l’actualització no és aplicable.',
-  'Running via pnpx, update not applicable.':
-    'S’està executant via pnpx, l’actualització no és aplicable.',
-  'Running via bunx, update not applicable.':
-    'S’està executant via bunx, l’actualització no és aplicable.',
-  'Installed via Homebrew. Please update with "brew upgrade".':
-    'Instal·lat via Homebrew. Actualitzeu amb "brew upgrade".',
-  "Locally installed. Please update via your project's package.json.":
-    'Instal·lat localment. Actualitzeu mitjançant el package.json del vostre projecte.',
-  'Update requires sudo. Please run:':
-    'L’actualització requereix sudo. Executeu:',
-  'Standalone install detected. Attempting to automatically update now...':
-    'S’ha detectat una instal·lació independent. S’intenta actualitzar automàticament...',
   'Standalone install detected. Please rerun the standalone installer to update:':
     'S’ha detectat una instal·lació independent. Torneu a executar l’instal·lador independent per actualitzar:',
-  'Run the following to update:': 'Executeu el següent per actualitzar:',
   'Unable to auto-update this standalone installation. Please reinstall from:':
     'No es pot actualitzar automàticament aquesta instal·lació autònoma. Reinstal·leu des de:',
-  'Manual update required. Please reinstall Qwen Code.':
-    'Actualització manual requerida. Reinstal·leu Qwen Code.',
-  'This session uses the custom sandbox image {{image}}. Update that image and restart Qwen Code.':
-    'Aquesta sessió utilitza la imatge de sandbox personalitzada {{image}}. Actualitzeu la imatge i reinicieu Qwen Code.',
-  'Update Qwen Code on the host, then restart the sandbox.':
-    "Actualitzeu Qwen Code a l'amfitrió i reinicieu l'entorn aïllat.",
-  'The update will be installed after you exit this session.':
-    "L'actualització s'instal·larà després de sortir d'aquesta sessió.",
-  'Run /update to install the update on the host.':
-    "Executeu /update per instal·lar l'actualització a l'amfitrió.",
-  'Run /update to install the update.':
-    "Executeu /update per instal·lar l'actualització.",
 
   // ============================================================================
   // reload-plugins command
@@ -2595,9 +2489,6 @@ export default {
     "La sobreescriptura d'un únic ús en línia no pot canviar de proveïdor. «{{model}}» pertany a un proveïdor diferent — executeu primer '/model {{model}}' i, després, envieu el vostre prompt.",
   "⚠ '{{model}}' is not a known image-capable model; the vision bridge may fail on images.":
     "⚠ «{{model}}» no és un model conegut amb suport d'imatges; el pont de visió pot fallar amb les imatges.",
-  'Toggle voice dictation input': 'Activar/desactivar el dictat de veu',
-  'Set the model for voice transcription':
-    'Establir el model per a la transcripció de veu',
   'Set the image-capable model used to transcribe images for a text-only main model':
     "Establir el model amb suport d'imatges usat per transcriure imatges per a un model principal només de text",
   'Persist the model selection to the project settings (workspace scope)':
@@ -2606,51 +2497,13 @@ export default {
     "Persistir la selecció de model a la configuració d'usuari (àmbit global)",
   'Select Fast Model': 'Selecciona el model ràpid',
   'Select Vision Model': 'Seleccionar el model de visió',
-  'Select Voice Model': 'Seleccionar el model de veu',
   'Vision Model': 'Model de visió',
-  'Voice Model': 'Model de veu',
-  'Selected voice model is unavailable.':
-    'El model de veu seleccionat no està disponible.',
-  "Voice model '{{model}}' is configured more than once. Remove duplicate model ids before selecting it for voice transcription.":
-    "El model de veu «{{model}}» està configurat més d'una vegada. Elimineu els identificadors de model duplicats abans de seleccionar-lo per a la transcripció de veu.",
-  'Voice dictation: {{status}} (mode: {{mode}}, {{modelText}}).':
-    'Dictat de veu: {{status}} (mode: {{mode}}, {{modelText}}).',
-  'model: {{voiceModel}}': 'model: {{voiceModel}}',
-  'no voice model selected': 'cap model de veu seleccionat',
-  'Voice dictation disabled.': 'Dictat de veu desactivat.',
-  'Usage: /voice [hold|tap|off|status]': 'Ús: /voice [hold|tap|off|status]',
-  'No voice model selected. Run /model --voice to choose one before enabling voice dictation.':
-    "Cap model de veu seleccionat. Executeu /model --voice per triar-ne un abans d'activar el dictat de veu.",
-  'Voice dictation enabled (tap mode). Tap Space at an empty prompt to start, tap again or pause to stop and submit, using {{voiceModel}}.':
-    'Dictat de veu activat (mode toc). Toqueu Espai amb un prompt buit per començar, toqueu de nou o feu una pausa per aturar i enviar, usant {{voiceModel}}.',
-  'Voice dictation enabled (hold mode). Hold Space at an empty prompt to dictate with {{voiceModel}}.':
-    'Dictat de veu activat (mode manteniment). Mantingueu premut Espai amb un prompt buit per dictar amb {{voiceModel}}.',
   'No models are configured.': 'No hi ha cap model configurat.',
   'Configured models: {{models}}.': 'Models configurats: {{models}}.',
-  'Configure a unique model id in settings.modelProviders or run /model --voice to select an available model.':
-    'Configureu un identificador de model únic a settings.modelProviders o executeu /model --voice per seleccionar un model disponible.',
-  "Voice model '{{modelName}}' is not configured.":
-    'El model de veu «{{modelName}}» no està configurat.',
   "Voice model '{{modelName}}' cannot be used for transcription.":
     'El model de veu «{{modelName}}» no es pot usar per a la transcripció.',
-  "Voice model '{{modelName}}' cannot be used for transcription. Configure an OpenAI-compatible model with baseUrl in settings.modelProviders.":
-    'El model de veu «{{modelName}}» no es pot usar per a la transcripció. Configureu un model compatible amb OpenAI amb baseUrl a settings.modelProviders.',
   'Configure an OpenAI-compatible model with baseUrl in settings.modelProviders.':
     'Configureu un model compatible amb OpenAI amb baseUrl a settings.modelProviders.',
-  'Microphone access is denied. Enable it for your terminal in System Settings → Privacy & Security → Microphone, then restart voice dictation.':
-    "L'accés al micròfon està denegat. Activeu-lo per al vostre terminal a Configuració del sistema → Privadesa i seguretat → Micròfon, després reinicieu el dictat de veu.",
-  'Voice dictation is not supported on {{platform}}.':
-    'El dictat de veu no està suportat a {{platform}}.',
-  'Voice dictation needs microphone access, which is unavailable in this WSL session. Use WSLg/PulseAudio, or run Qwen Code on a host with a microphone.':
-    'El dictat de veu necessita accés al micròfon, que no està disponible en aquesta sessió WSL. Useu WSLg/PulseAudio o executeu Qwen Code en un amfitrió amb micròfon.',
-  'Voice dictation needs microphone access. macOS will ask the first time you record — approve it, then start again. Your first recording may be empty while the dialog is open.':
-    'El dictat de veu necessita accés al micròfon. macOS ho preguntarà la primera vegada que enregistreu — aproveu-ho i, després, torneu a començar. El primer enregistrament pot estar buit mentre el diàleg estigui obert.',
-  'Voice: recording': 'Veu: enregistrant',
-  'Voice: transcribing': 'Veu: transcrivint',
-  'Voice: refining': 'Veu: refinant',
-  'listening…': 'escoltant…',
-  'transcribing…': 'transcrivint…',
-  'refining…': 'refinant…',
 
   // ============================================================================
   // Plans i subscripcions
@@ -2673,12 +2526,8 @@ export default {
   'Token Plan documentation': 'Documentació del Token Plan',
   ' (this project)': ' (aquest projecte)',
   ' (global)': ' (global)',
-  'Current voice model: {{voiceModel}}\nUse "/model --voice <model-id>" to set voice model.':
-    'Model de veu actual: {{voiceModel}}\nUseu «/model --voice <model-id>» per establir el model de veu.',
   'Current vision model: {{visionModel}}\nUse "/model --vision <model-id>" to set the vision bridge model.':
     'Model de visió actual: {{visionModel}}\nUseu «/model --vision <model-id>» per establir el model pont de visió.',
-  "Voice model '{{modelName}}' is ambiguous. Configure a unique model id before using /model --voice.":
-    "El model de veu «{{modelName}}» és ambigu. Configureu un identificador de model únic abans d'usar /model --voice.",
 
   // ============================================================================
   // Cua de missatges i sessions
@@ -2769,17 +2618,6 @@ export default {
     'Mostra els diagnòstics de memòria del procés actual',
   'Record a CPU profile for Chrome DevTools analysis':
     'Enregistra un perfil de CPU per analitzar-lo amb Chrome DevTools',
-  'Roll back a standalone update to the previous version':
-    'Reverteix una actualització autònoma a la versió anterior',
-  'Rollback is not available in ACP mode.':
-    'La reversió no està disponible en mode ACP.',
-  'Rollback is only available for standalone installations.':
-    'La reversió només està disponible per a instal·lacions autònomes.',
-  'Rollback successful. Restart your terminal to use the previous version.':
-    'Reversió correcta. Reinicieu el terminal per usar la versió anterior.',
-  'Rollback failed:': 'La reversió ha fallat:',
-  'Rollback on Windows requires manual intervention. Rename qwen-code.old to qwen-code in your installation directory.':
-    "La reversió a Windows requereix intervenció manual. Reanomeneu qwen-code.old a qwen-code dins del directori d'instal·lació.",
   'No compression needed.': 'No cal compressió.',
 
   // ============================================================================
@@ -2802,9 +2640,7 @@ export default {
   'No tool usage data yet.': "Encara no hi ha dades d'ús d'eines.",
   'N/A': 'N/D',
   days: 'dies',
-  'Tool calls': 'Crides a eines',
   'Code changes': 'Canvis de codi',
-  Name: 'Nom',
   '↑ tabs · r to cycle dates · esc to close':
     '↑ pestanyes · r per canviar de data · esc per tancar',
   Cost: 'Cost',

@@ -14,7 +14,6 @@ import {
   getMCPServerLastError,
   getMCPServerStatus,
   MCPServerStatus,
-  parseBooleanEnvFlag,
 } from '@qwen-code/qwen-code-core';
 import { isWorkspaceTrusted } from '../../config/trustedFolders.js';
 import type { MCPServerConfig } from '@qwen-code/qwen-code-core';
@@ -30,7 +29,6 @@ async function getMcpServersFromConfig(
     extensionManager ??
     new ExtensionManager({
       isWorkspaceTrusted: isWorkspaceTrusted(settings.merged).isTrusted ?? true,
-      telemetrySettings: settings.merged.telemetry,
       locale: getCurrentLanguage(),
     });
 
@@ -104,17 +102,8 @@ async function createMinimalConfig(): Promise<Config> {
     // untrusted-skip reporting below becomes unreachable, and this command
     // would attempt connections a normal session would not (issue #9944).
     trustedFolder: isWorkspaceTrusted(settings.merged).isTrusted ?? true,
-    // Mirror loadCliConfig's usage-statistics resolution (env ?? settings ??
-    // true): without it this throwaway Config defaults
-    // `usageStatisticsEnabled` to true, so `initialize()` flushes a
-    // session_start event even for users who opted out (issue #12844).
-    usageStatisticsEnabled:
-      parseBooleanEnvFlag(process.env['QWEN_USAGE_STATISTICS_ENABLED']) ??
-      settings.merged.privacy?.usageStatisticsEnabled ??
-      true,
     // Mirror loadCliConfig's proxy resolution (minus the --proxy flag this
-    // command does not take): without it the session_start flush above
-    // bypasses the proxy the user configured (issue #12844).
+    // command does not take).
     proxy:
       settings.merged.proxy ||
       process.env['HTTPS_PROXY'] ||
@@ -289,7 +278,6 @@ async function reconnectAllMcpServers(): Promise<void> {
   const settings = loadSettings();
   const extensionManager = new ExtensionManager({
     isWorkspaceTrusted: isWorkspaceTrusted(settings.merged).isTrusted ?? true,
-    telemetrySettings: settings.merged.telemetry,
     locale: getCurrentLanguage(),
   });
   await extensionManager.refreshCache();

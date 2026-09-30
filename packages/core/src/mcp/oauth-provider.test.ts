@@ -18,10 +18,6 @@ vi.mock('../utils/debugLogger.js', () => ({
 }));
 
 // Mock dependencies AT THE TOP
-const mockOpenBrowserSecurely = vi.hoisted(() => vi.fn());
-vi.mock('../utils/secure-browser-launcher.js', () => ({
-  openBrowserSecurely: mockOpenBrowserSecurely,
-}));
 vi.mock('node:crypto');
 vi.mock('./oauth-token-storage.js', () => {
   const mockSaveToken = vi.fn();
@@ -40,6 +36,7 @@ vi.mock('./oauth-token-storage.js', () => {
 });
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { EventEmitter } from 'node:events';
 import * as http from 'node:http';
 import * as crypto from 'node:crypto';
 import type {
@@ -47,7 +44,7 @@ import type {
   OAuthTokenResponse,
   OAuthClientRegistrationResponse,
 } from './oauth-provider.js';
-import { MCPOAuthProvider } from './oauth-provider.js';
+import { MCPOAuthProvider, OAUTH_AUTH_URL_EVENT } from './oauth-provider.js';
 import type { OAuthToken } from './token-storage/types.js';
 import { MCPOAuthTokenStorage } from './oauth-token-storage.js';
 import type {
@@ -152,7 +149,6 @@ describe('MCPOAuthProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockOpenBrowserSecurely.mockClear();
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -237,7 +233,7 @@ describe('MCPOAuthProvider', () => {
         expiresAt: expect.any(Number),
       });
 
-      expect(mockOpenBrowserSecurely).toHaveBeenCalledWith(
+      expect(mockDebugLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('authorize'),
       );
       expect(mockHttpServer.listen).toHaveBeenCalledWith(
@@ -1426,11 +1422,11 @@ describe('MCPOAuthProvider', () => {
 
   describe('Authorization URL building', () => {
     it('should build correct authorization URL with all parameters', async () => {
-      // Mock to capture the URL that would be opened
+      // Capture the authorization URL reported to the user
       let capturedUrl: string | undefined;
-      mockOpenBrowserSecurely.mockImplementation((url: string) => {
+      const events = new EventEmitter();
+      events.on(OAUTH_AUTH_URL_EVENT, (url: string) => {
         capturedUrl = url;
-        return Promise.resolve();
       });
 
       let callbackHandler: unknown;
@@ -1470,6 +1466,7 @@ describe('MCPOAuthProvider', () => {
         'test-server',
         mockConfig,
         'https://auth.example.com',
+        events,
       );
 
       expect(capturedUrl).toBeDefined();
@@ -1490,9 +1487,9 @@ describe('MCPOAuthProvider', () => {
     // full canonical URI "https://mcp.alibaba-inc.com/yuque/mcp", not just the host.
     it('should use full canonical URI as resource parameter (issue #1749)', async () => {
       let capturedAuthUrl: string | undefined;
-      mockOpenBrowserSecurely.mockImplementation((url: string) => {
+      const events = new EventEmitter();
+      events.on(OAUTH_AUTH_URL_EVENT, (url: string) => {
         capturedAuthUrl = url;
-        return Promise.resolve();
       });
 
       let callbackHandler: unknown;
@@ -1544,7 +1541,12 @@ describe('MCPOAuthProvider', () => {
       const serverName = 'yuque';
       const mcpServerUrl = 'https://mcp.alibaba-inc.com/yuque/mcp';
 
-      await authProvider.authenticate(serverName, mockConfig, mcpServerUrl);
+      await authProvider.authenticate(
+        serverName,
+        mockConfig,
+        mcpServerUrl,
+        events,
+      );
 
       // Verify the authorization URL contains the full canonical URI as resource
       expect(capturedAuthUrl).toBeDefined();
@@ -1562,11 +1564,11 @@ describe('MCPOAuthProvider', () => {
     });
 
     it('should correctly append parameters to an authorization URL that already has query params', async () => {
-      // Mock to capture the URL that would be opened
+      // Capture the authorization URL reported to the user
       let capturedUrl: string;
-      mockOpenBrowserSecurely.mockImplementation((url: string) => {
+      const events = new EventEmitter();
+      events.on(OAUTH_AUTH_URL_EVENT, (url: string) => {
         capturedUrl = url;
-        return Promise.resolve();
       });
 
       let callbackHandler: unknown;
@@ -1607,7 +1609,12 @@ describe('MCPOAuthProvider', () => {
       };
 
       const authProvider = new MCPOAuthProvider();
-      await authProvider.authenticate('test-server', configWithParamsInUrl);
+      await authProvider.authenticate(
+        'test-server',
+        configWithParamsInUrl,
+        undefined,
+        events,
+      );
 
       const url = new URL(capturedUrl!);
       expect(url.searchParams.get('audience')).toBe('1234');
@@ -1616,11 +1623,11 @@ describe('MCPOAuthProvider', () => {
     });
 
     it('should correctly append parameters to a URL with a fragment', async () => {
-      // Mock to capture the URL that would be opened
+      // Capture the authorization URL reported to the user
       let capturedUrl: string;
-      mockOpenBrowserSecurely.mockImplementation((url: string) => {
+      const events = new EventEmitter();
+      events.on(OAUTH_AUTH_URL_EVENT, (url: string) => {
         capturedUrl = url;
-        return Promise.resolve();
       });
 
       let callbackHandler: unknown;
@@ -1661,7 +1668,12 @@ describe('MCPOAuthProvider', () => {
       };
 
       const authProvider = new MCPOAuthProvider();
-      await authProvider.authenticate('test-server', configWithFragment);
+      await authProvider.authenticate(
+        'test-server',
+        configWithFragment,
+        undefined,
+        events,
+      );
 
       const url = new URL(capturedUrl!);
       expect(url.searchParams.get('client_id')).toBe('test-client-id');

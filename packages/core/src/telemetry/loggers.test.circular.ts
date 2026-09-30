@@ -24,7 +24,6 @@ describe('Circular Reference Handling', () => {
     // Create a mock config
     const mockConfig = {
       getTelemetryEnabled: () => true,
-      getUsageStatisticsEnabled: () => true,
       getSessionId: () => 'test-session',
       getModel: () => 'test-model',
       getEmbeddingModel: () => 'test-embedding',
@@ -81,7 +80,6 @@ describe('Circular Reference Handling', () => {
   it('should handle normal objects without circular references', () => {
     const mockConfig = {
       getTelemetryEnabled: () => true,
-      getUsageStatisticsEnabled: () => true,
       getSessionId: () => 'test-session',
       getModel: () => 'test-model',
       getEmbeddingModel: () => 'test-embedding',

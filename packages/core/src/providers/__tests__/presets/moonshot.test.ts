@@ -12,7 +12,6 @@ import {
   THIRD_PARTY_PROVIDERS,
   findProviderByCredentials,
   findProviderById,
-  getAllProviderBaseUrls,
 } from '../../all-providers.js';
 import { buildInstallPlan } from '../../provider-config.js';
 
@@ -44,8 +43,6 @@ describe('moonshotProvider', () => {
     expect(findProviderById('moonshot')).toBe(moonshotProvider);
     expect(ALL_PROVIDERS).toContain(moonshotProvider);
     expect(THIRD_PARTY_PROVIDERS).toContain(moonshotProvider);
-    expect(getAllProviderBaseUrls()).toContain(INTL_BASE_URL);
-    expect(getAllProviderBaseUrls()).toContain(CHINA_BASE_URL);
   });
 
   it('is found by its env key + base URL credentials', () => {

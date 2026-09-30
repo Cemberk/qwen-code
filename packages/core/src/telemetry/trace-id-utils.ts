@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 /**
  * Derive a deterministic 32-char hex traceId from a session ID.
  * Uses SHA-256 truncated to 128 bits to match the OTel trace ID format.
- * Shared by LogToSpanProcessor and debugLogger for consistent correlation.
+ * Used by debugLogger for consistent correlation.
  */
 export function deriveTraceId(sessionId: string): string {
   return createHash('sha256').update(sessionId).digest('hex').slice(0, 32);

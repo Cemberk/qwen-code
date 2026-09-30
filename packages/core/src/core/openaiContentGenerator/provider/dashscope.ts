@@ -25,7 +25,6 @@ import type { ReasoningEffort } from '../../reasoning-effort.js';
 import { getEffectiveReasoning } from '../../reasoning-overrides.js';
 import { clampReasoningEffort } from '../../reasoning-effort.js';
 import { DefaultOpenAICompatibleProvider } from './default.js';
-import { buildSessionAwareFetch } from '../../outbound-session-id.js';
 
 const debugLogger = createDebugLogger('DashScopeOpenAICompatibleProvider');
 
@@ -331,11 +330,6 @@ export class DashScopeOpenAICompatibleProvider extends DefaultOpenAICompatiblePr
       maxRetries,
       defaultHeaders,
       ...(runtimeOptions || {}),
-      fetch: buildSessionAwareFetch(
-        runtimeOptions?.fetch,
-        this.cliConfig,
-        this.contentGeneratorConfig.customHeaders,
-      ),
     });
   }
 
@@ -725,7 +719,7 @@ export class DashScopeOpenAICompatibleProvider extends DefaultOpenAICompatiblePr
    * own backend, `metadata` object included. Those backends type `metadata` as a
    * string, so the object fails to deserialize and the request is rejected with a
    * flat 400, making the model unusable through Qwen Code. `metadata` is a
-   * platform-private tracing field (sessionId / promptId / channel) that only
+   * platform-private tracing field (sessionId / promptId) that only
    * means anything to DashScope's own inference path, so gate it on the wire model
    * the same way `buildQwenEffortConfig` gates the qwen-only thinking knobs, for
    * the same stated reason: qwen-specific fields must not leak to a non-qwen model
@@ -768,13 +762,10 @@ export class DashScopeOpenAICompatibleProvider extends DefaultOpenAICompatiblePr
   }
 
   buildMetadata(userPromptId: string): DashScopeRequestMetadata {
-    const channel = this.cliConfig.getChannel?.();
-
     return {
       metadata: {
         sessionId: this.cliConfig.getSessionId?.(),
         promptId: userPromptId,
-        ...(channel ? { channel } : {}),
       },
     };
   }

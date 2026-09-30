@@ -58,16 +58,13 @@ const wasmBinaryPlugin = {
 
 // `@opentelemetry/sdk-node` eagerly require()s every exporter package to
 // support `OTEL_*_EXPORTER` env-based auto-configuration, which would drag
-// both OTLP protocol chains (~2 MiB) back into the sdk-impl static closure
-// and defeat the per-protocol dynamic imports in
-// `packages/core/src/telemetry/sdk-{impl,exporters-grpc,exporters-http}.ts`
-// (issue #7264). From sdk-node 0.221 the env auto-configuration helpers were
-// additionally extracted into `@opentelemetry/configuration` and the two
+// the OTLP network exporters (~2 MiB) into the bundle (issue #7264). From
+// sdk-node 0.221 the env auto-configuration helpers were additionally
+// extracted into `@opentelemetry/configuration` and the two
 // `otlp-*exporter-base` packages, which sdk-node requires eagerly; they get
-// the same treatment. qwen-code always passes explicit `spanProcessors` /
-// `logRecordProcessors` to NodeSDK, so those env code paths are unreachable
-// for traces and logs. Stub the packages ONLY when imported by
-// sdk-node itself — our own protocol modules keep resolving the real ones.
+// the same treatment. qwen-code always passes explicit file exporters to
+// NodeSDK and never exports telemetry over the network, so every import of
+// these packages resolves to the stub.
 // The stubbed constructors throw so an unexpectedly reached env path (e.g.
 // `OTEL_METRICS_EXPORTER=otlp`) fails loudly instead of exporting nowhere;
 // NodeSDK.start() is wrapped in try/catch in `sdk.ts`. The resolve decision
@@ -81,7 +78,7 @@ const sdkNodeExporterStubPlugin = {
           /^@opentelemetry\/(exporter-|configuration$|otlp-(grpc-)?exporter-base$)/,
       },
       (args) => {
-        if (!isStubbedSdkNodeExporterImport(args.path, args.importer)) {
+        if (!isStubbedSdkNodeExporterImport(args.path)) {
           return null;
         }
         return { path: args.path, namespace: 'sdk-node-exporter-stub' };

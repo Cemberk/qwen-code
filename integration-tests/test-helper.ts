@@ -236,7 +236,7 @@ export class TestRig {
     await rm(this.testDir, { recursive: true, force: true });
     mkdirSync(this.testDir, { recursive: true });
 
-    // Create a settings file to point the CLI to the local collector
+    // Create a settings file that writes telemetry to a local file
     const qwenDir = join(this.testDir, '.qwen');
     mkdirSync(qwenDir, { recursive: true });
     // In sandbox mode, use an absolute path for telemetry inside the container
@@ -246,8 +246,6 @@ export class TestRig {
     const settings = {
       telemetry: {
         enabled: true,
-        target: 'local',
-        otlpEndpoint: '',
         outfile: telemetryPath,
       },
       sandbox: env.QWEN_SANDBOX !== 'false' ? env.QWEN_SANDBOX : false,

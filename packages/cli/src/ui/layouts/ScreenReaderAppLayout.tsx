@@ -7,7 +7,6 @@
 import type React from 'react';
 import { Box } from 'ink';
 import { Notifications } from '../components/Notifications.js';
-import { UpdateNotification } from '../components/UpdateNotification.js';
 import { MainContent } from '../components/MainContent.js';
 import { DialogManager } from '../components/DialogManager.js';
 import { Composer } from '../components/Composer.js';
@@ -35,14 +34,10 @@ export const ScreenReaderAppLayout: React.FC = () => {
   const shouldShowStickyTodos =
     uiState.stickyTodos !== null &&
     !uiState.dialogsVisible &&
-    !uiState.isFeedbackDialogOpen &&
     uiState.streamingState === StreamingState.Responding;
 
   return (
     <Box flexDirection="column" width="90%" height="100%">
-      {!uiState.dialogsVisible && uiState.updateInfo && (
-        <UpdateNotification message={uiState.updateInfo.message} />
-      )}
       <Notifications />
       <Footer />
       <Box flexGrow={1} overflow="hidden">

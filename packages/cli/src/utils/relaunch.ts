@@ -5,18 +5,12 @@
  */
 
 import { spawn } from 'node:child_process';
-import {
-  RELAUNCH_EXIT_CODE,
-  UPDATE_ON_EXIT_MESSAGE,
-  UPDATE_RELAUNCH_EXIT_CODE,
-  getRelaunchExecArgv,
-} from './processUtils.js';
+import { RELAUNCH_EXIT_CODE, getRelaunchExecArgv } from './processUtils.js';
 import { writeStderrLine } from './stdioHelpers.js';
 
 interface RelaunchOptions {
   afterSpawn?: () => void;
   childEnv?: Readonly<Record<string, string>>;
-  onUpdateRelaunch?: (relaunchOnFailure: boolean) => Promise<number> | number;
   replaceProcess?: boolean;
   /**
    * `.env` files or `settings.env` injected values after this process's
@@ -26,18 +20,10 @@ interface RelaunchOptions {
   environmentChangedSinceBoot?: boolean;
 }
 
-export async function relaunchOnExitCode(
-  runner: () => Promise<number>,
-  options?: Pick<RelaunchOptions, 'onUpdateRelaunch'>,
-) {
+export async function relaunchOnExitCode(runner: () => Promise<number>) {
   while (true) {
     try {
       const exitCode = await runner();
-
-      if (exitCode === UPDATE_RELAUNCH_EXIT_CODE && options?.onUpdateRelaunch) {
-        const updatedExitCode = await options.onUpdateRelaunch(true);
-        process.exit(updatedExitCode);
-      }
 
       if (exitCode !== RELAUNCH_EXIT_CODE) {
         process.exit(exitCode);
@@ -124,26 +110,14 @@ export async function relaunchAppInChildProcess(
   }
 
   const runner = () => {
-    let updateOnExitRequested = false;
     const newEnv = createChildEnv();
 
     // The parent process should not be reading from stdin while the child is running.
     process.stdin.pause();
 
     const child = spawn(process.execPath, nodeArgs, {
-      stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
+      stdio: 'inherit',
       env: newEnv,
-    });
-
-    child.on('message', (message) => {
-      if (
-        typeof message === 'object' &&
-        message !== null &&
-        'type' in message &&
-        message.type === UPDATE_ON_EXIT_MESSAGE
-      ) {
-        updateOnExitRequested = true;
-      }
     });
 
     // Allow the parent to clean up process.env after spawn copies it
@@ -160,23 +134,10 @@ export async function relaunchAppInChildProcess(
       child.on('close', (code) => {
         // Resume stdin before the parent process exits.
         process.stdin.resume();
-        const exitCode = code ?? 1;
-        if (
-          exitCode === 0 &&
-          updateOnExitRequested &&
-          options?.onUpdateRelaunch
-        ) {
-          updateOnExitRequested = false;
-          void Promise.resolve(options.onUpdateRelaunch(false)).then(
-            (updatedExitCode) => resolve(updatedExitCode),
-            reject,
-          );
-          return;
-        }
-        resolve(exitCode);
+        resolve(code ?? 1);
       });
     });
   };
 
-  await relaunchOnExitCode(runner, options);
+  await relaunchOnExitCode(runner);
 }

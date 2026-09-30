@@ -26,7 +26,6 @@ import { t, getCurrentLanguage } from '../../i18n/index.js';
 interface InstallArgs {
   source: string;
   ref?: string;
-  autoUpdate?: boolean;
   allowPreRelease?: boolean;
   consent?: boolean;
   registry?: string;
@@ -50,11 +49,9 @@ export async function handleInstall(args: InstallArgs) {
       installMetadata.type !== 'npm' &&
       installMetadata.type !== 'archive-url'
     ) {
-      if (args.ref || args.autoUpdate) {
+      if (args.ref) {
         throw new Error(
-          t(
-            '--ref and --auto-update are not applicable for marketplace extensions.',
-          ),
+          t('--ref is not applicable for marketplace extensions.'),
         );
       }
     }
@@ -99,7 +96,6 @@ export async function handleInstall(args: InstallArgs) {
       {
         ...installMetadata,
         ref: args.ref,
-        autoUpdate: args.autoUpdate,
         allowPreRelease: args.allowPreRelease,
       },
       requestConsent,
@@ -166,10 +162,6 @@ export const installCommand: CommandModule = {
         describe: t('The git ref to install from.'),
         type: 'string',
       })
-      .option('auto-update', {
-        describe: t('Enable auto-update for this extension.'),
-        type: 'boolean',
-      })
       .option('pre-release', {
         describe: t('Enable pre-release versions for this extension.'),
         type: 'boolean',
@@ -202,7 +194,6 @@ export const installCommand: CommandModule = {
     await handleInstall({
       source: argv['source'] as string,
       ref: argv['ref'] as string | undefined,
-      autoUpdate: argv['auto-update'] as boolean | undefined,
       allowPreRelease: argv['pre-release'] as boolean | undefined,
       consent: argv['consent'] as boolean | undefined,
       registry: argv['registry'] as string | undefined,

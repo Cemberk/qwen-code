@@ -15,6 +15,7 @@ import { NodeSDK } from '@opentelemetry/sdk-node';
 
 vi.mock('@opentelemetry/sdk-node');
 vi.mock('../config/config.js');
+vi.mock('./file-exporters.js');
 
 describe('telemetry', () => {
   let mockConfig: Config;
@@ -30,8 +31,8 @@ describe('telemetry', () => {
       cwd: '/test/dir',
     });
     vi.spyOn(mockConfig, 'getTelemetryEnabled').mockReturnValue(true);
-    vi.spyOn(mockConfig, 'getTelemetryOtlpEndpoint').mockReturnValue(
-      'http://localhost:4317',
+    vi.spyOn(mockConfig, 'getTelemetryOutfile').mockReturnValue(
+      '/tmp/qwen-telemetry-test.log',
     );
     vi.spyOn(mockConfig, 'getSessionId').mockReturnValue('test-session-id');
     mockNodeSdk = {

@@ -55,13 +55,3 @@ export function formatTraceparent(ctx: TraceContext): string {
   const flags = (ctx.traceFlags & 0xff).toString(16).padStart(2, '0');
   return `00-${ctx.traceId}-${ctx.spanId}-${flags}`;
 }
-
-let shellTracePropagationEnabled = false;
-
-export function setShellTracePropagation(enabled: boolean): void {
-  shellTracePropagationEnabled = enabled;
-}
-
-export function isShellTracePropagationEnabled(): boolean {
-  return shellTracePropagationEnabled;
-}

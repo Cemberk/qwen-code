@@ -17,7 +17,6 @@ export default {
     '← → выбрать, Delete удалить, ↓ выйти',
   'Attachments: ': 'Вложения: ',
   'Basics:': 'Основы:',
-  'Add context': 'Добавить контекст',
   'Use {{symbol}} to specify files for context (e.g., {{example}}) to target specific files or folders.':
     'Используйте {{symbol}} для добавления файлов в контекст (например, {{example}}) для выбора конкретных файлов или папок).',
   '@': '@',
@@ -56,7 +55,6 @@ export default {
     'Новая строка (Alt+Enter работает только в некоторых дистрибутивах Linux)',
   'Clear the screen': 'Очистить экран',
   'Open input in external editor': 'Открыть ввод во внешнем редакторе',
-  'Send message': 'Отправить сообщение',
   'Initializing...': 'Инициализация...',
   'Connecting to MCP servers... ({{connected}}/{{total}})':
     'Подключение к MCP servers... ({{connected}}/{{total}})',
@@ -74,7 +72,6 @@ export default {
   'docs/keyboard-shortcuts.md': 'docs/keyboard-shortcuts.md',
   'for help on Qwen Code': 'Справка по Qwen Code',
   'show version info': 'Просмотр информации о версии',
-  'submit a bug report': 'Отправка отчёта об ошибке',
   Status: 'Статус',
 
   // Keyboard shortcuts panel descriptions
@@ -105,7 +102,6 @@ export default {
   'Base URL': 'Base URL',
   Proxy: 'Прокси',
   'Memory Usage': 'Использование памяти',
-  'IDE Client': 'Клиент IDE',
 
   // ============================================================================
   // Команды - Общие
@@ -226,8 +222,6 @@ export default {
     'Очистить историю диалога и освободить контекст',
   'Compresses the context by replacing it with a summary.':
     'Сжатие контекста заменой на краткую сводку',
-  'open full Qwen Code documentation in your browser':
-    'Открытие полной документации Qwen Code в браузере',
   'Configuration not available.': 'Конфигурация недоступна.',
   'Connect an LLM provider': 'Подключить провайдера LLM',
   'Copy the last AI response to clipboard (/copy N for Nth-latest)':
@@ -418,10 +412,8 @@ export default {
   'Vim Mode': 'Режим Vim',
   'Attribution: commit': 'Атрибуция: коммит',
   'Terminal Bell Notification': 'Звуковое уведомление терминала',
-  'Enable Usage Statistics': 'Включить сбор статистики использования',
   Theme: 'Тема',
   'Preferred Editor': 'Предпочтительный редактор',
-  'Auto-connect to IDE': 'Автоподключение к IDE',
   'Debug Keystroke Logging': 'Логирование нажатий клавиш для отладки',
   'Language: UI': 'Язык: интерфейс',
   'Language: Model': 'Язык: модель',
@@ -434,13 +426,6 @@ export default {
   'Show Citations': 'Показывать цитаты',
   'Custom Witty Phrases': 'Пользовательские остроумные фразы',
   'Show Welcome Back Dialog': 'Показывать диалог приветствия',
-  'Enable User Feedback': 'Включить отзывы пользователей',
-  'How is Qwen doing this session? (optional)':
-    'Как дела у Qwen в этой сессии? (необязательно)',
-  Bad: 'Плохо',
-  Fine: 'Нормально',
-  Good: 'Хорошо',
-  Dismiss: 'Отклонить',
   'Screen Reader Mode': 'Режим программы чтения с экрана',
   'Max Session Turns': 'Макс. количество ходов сессии',
   'Skip Next Speaker Check': 'Пропустить проверку следующего говорящего',
@@ -585,15 +570,13 @@ export default {
   'Installation cancelled for "{{name}}".': 'Установка "{{name}}" отменена.',
   'You are installing an extension from {{originSource}}. Some features may not work perfectly with Qwen Code.':
     'Вы устанавливаете расширение от {{originSource}}. Некоторые функции могут работать не идеально с Qwen Code.',
-  '--ref and --auto-update are not applicable for marketplace extensions.':
-    '--ref и --auto-update неприменимы для расширений из маркетплейса.',
+  '--ref is not applicable for marketplace extensions.':
+    '--ref неприменим для расширений из маркетплейса.',
   'Extension "{{name}}" installed successfully and enabled.':
     'Расширение "{{name}}" успешно установлено и включено.',
   'The github URL, local path, or marketplace source (marketplace-url:plugin-name) of the extension to install.':
     'URL GitHub, локальный путь или источник в маркетплейсе (marketplace-url:plugin-name) устанавливаемого расширения.',
   'The git ref to install from.': 'Git-ссылка для установки.',
-  'Enable auto-update for this extension.':
-    'Включить автообновление для этого расширения.',
   'Enable pre-release versions for this extension.':
     'Включить пре-релизные версии для этого расширения.',
   'Acknowledge the security risks of installing an extension and skip the confirmation prompt.':
@@ -686,15 +669,6 @@ export default {
     'Используйте ↑↓ или j/k для навигации, Enter для выбора, Escape для отмены',
   '{{count}} more above': 'ещё {{count}} выше',
   '{{count}} more below': 'ещё {{count}} ниже',
-  'manage IDE integration': 'Управление интеграцией с IDE',
-  'check status of IDE integration': 'Проверить статус интеграции с IDE',
-  'install required IDE companion for {{ideName}}':
-    'Установить необходимый компаньон IDE для {{ideName}}',
-  'enable IDE integration': 'Включение интеграции с IDE',
-  'disable IDE integration': 'Отключение интеграции с IDE',
-  'IDE integration is not supported in your current environment. To use this feature, run Qwen Code in one of these supported IDEs: VS Code or VS Code forks.':
-    'Интеграция с IDE не поддерживается в вашем окружении. Для использования этой функции запустите Qwen Code в одной из поддерживаемых IDE: VS Code или форках VS Code.',
-  'Set up GitHub Actions': 'Настройка GitHub Actions',
   'Configure terminal keybindings for multiline input (VS Code, Cursor, Windsurf, Trae)':
     'Настройка привязки клавиш терминала для многострочного ввода (VS Code, Cursor, Windsurf, Trae)',
   'Please restart your terminal for the changes to take effect.':
@@ -885,7 +859,6 @@ export default {
   // ============================================================================
   'Export current session message history to a file':
     'Экспортировать историю сообщений текущей сессии в файл',
-  'Export session to HTML format': 'Экспортировать сессию в формат HTML',
   'Export session to JSON format': 'Экспортировать сессию в формат JSON',
   'Export session to JSONL format (one message per line)':
     'Экспортировать сессию в формат JSONL (одно сообщение на строку)',
@@ -980,7 +953,6 @@ export default {
     'Режим подтверждения рабочего пространства существует и имеет приоритет. Изменение на уровне пользователя не будет иметь эффекта.',
   'Apply To': 'Применить к',
   'Workspace Settings': 'Настройки рабочего пространства',
-  'Open auto-memory folder': 'Открыть папку автопамяти',
   'Auto-memory: {{status}}': 'Автопамять: {{status}}',
   'Auto-dream: {{status}} · {{lastDream}} · /dream to run':
     'Автоконсолидация: {{status}} · {{lastDream}} · /dream для запуска',
@@ -1106,10 +1078,6 @@ export default {
   // ============================================================================
   // Команды - Документация
   // ============================================================================
-  'Please open the following URL in your browser to view the documentation:\n{{url}}':
-    'Пожалуйста, откройте следующий URL в браузере для просмотра документации:\n{{url}}',
-  'Opening documentation in your browser: {{url}}':
-    'Открытие документации в браузере: {{url}}',
 
   // ============================================================================
   // Диалоги - Подтверждение инструментов
@@ -1348,9 +1316,6 @@ export default {
   // Строка состояния
   // ============================================================================
   'Using:': 'Используется:',
-  '{{count}} open file': '{{count}} открытый файл',
-  '{{count}} open files': '{{count}} открытых файла(ов)',
-  '(ctrl+g to view)': '(ctrl+g для просмотра)',
   '{{count}} {{name}} file': '{{count}} файл {{name}}',
   '{{count}} {{name}} files': '{{count}} файла(ов) {{name}}',
   '{{count}} MCP server': '{{count}} MCP server',
@@ -1718,16 +1683,6 @@ export default {
   // ============================================================================
   'Open extensions page in your browser':
     'Открыть страницу расширений в браузере',
-  'Unknown extensions source: {{source}}.':
-    'Неизвестный источник расширений: {{source}}.',
-  'Would open extensions page in your browser: {{url}} (skipped in test environment)':
-    'Страница расширений была бы открыта в браузере: {{url}} (пропущено в тестовой среде)',
-  'View available extensions at {{url}}':
-    'Посмотреть доступные расширения на {{url}}',
-  'Opening extensions page in your browser: {{url}}':
-    'Открываем страницу расширений в браузере: {{url}}',
-  'Failed to open browser. Check out the extensions gallery at {{url}}':
-    'Не удалось открыть браузер. Посетите галерею расширений по адресу {{url}}',
   'Use /compress when the conversation gets long to summarize history and free up context.':
     'Используйте /compress, когда разговор становится длинным, чтобы подвести итог и освободить контекст.',
   'Start a fresh idea with /clear or /new; the previous session stays available in history.':
@@ -2092,7 +2047,6 @@ export default {
     'Показать разбивку использования контекста по элементам.',
 
   // === Missing key backfill ===
-  'Updating...': 'Обновление...',
   Unknown: 'Неизвестно',
   Error: 'Ошибка',
   'Version:': 'Версия:',
@@ -2173,77 +2127,19 @@ export default {
 
   // Stats Dashboard — missing labels
   'API Requests': 'API-запросы',
-  'Tool Calls': 'Вызовы инструментов',
   'Success rate': 'Успешность',
-  'Code Changes': 'Изменения кода',
   Tool: 'Инструмент',
   reqs: 'запр.',
   in: 'вх.',
   out: 'вых.',
   'In/Out': 'Вх/Вых',
   // Update command
-  'Check for Qwen Code updates and install if available':
-    'Проверить обновления Qwen Code и установить при наличии',
-  'Qwen Code update available! {{current}} → {{latest}}':
-    'Доступно обновление Qwen Code! {{current}} → {{latest}}',
-  'A new version of Qwen Code is available! {{current}} → {{latest}}':
-    'Доступна новая версия Qwen Code! {{current}} → {{latest}}',
-  'Qwen Code {{version}} is up to date!': 'Qwen Code {{version}} актуален!',
-  'Failed to check for updates ({{reason}}). Please check your network or registry configuration.':
-    'Не удалось проверить обновления ({{reason}}). Проверьте сеть или настройки registry.',
-  'Update check skipped ({{reason}}) — run /update to retry.':
-    'Проверка обновлений пропущена ({{reason}}) — выполните /update для повторной попытки.',
-  'registry did not respond within {{seconds}}s':
-    'registry не ответил за {{seconds}} с',
-  'registry unreachable': 'registry недоступен',
-  'registry error': 'ошибка registry',
-  'Unable to check for updates: {{reason}}':
-    'Невозможно проверить обновления: {{reason}}',
-  'Update successful! The new version will be used on your next run.':
-    'Обновление успешно! Новая версия будет использована при следующем запуске.',
-  'Update downloaded. It will be applied after you exit this session.':
-    'Обновление загружено. Оно будет применено после выхода из этого сеанса.',
-  'Update failed: {{error}}': 'Ошибка обновления: {{error}}',
-  'Downloading update...': 'Загрузка обновления...',
   'Update successful! Please restart Qwen Code to use the new version. Switching model providers before restarting may not work correctly.':
     'Обновление успешно! Перезапустите Qwen Code, чтобы использовать новую версию. Переключение поставщиков моделей до перезапуска может работать некорректно.',
-  'Automatic update failed. Please try updating manually.':
-    'Автоматическое обновление не удалось. Попробуйте обновить вручную.',
-  'Automatic update failed: {{error}}. Re-run the installer to update manually.':
-    'Автоматическое обновление не удалось: {{error}}. Повторно запустите установщик, чтобы обновить вручную.',
-  'Running from a local git clone. Please update with "git pull".':
-    'Запущено из локального клона Git. Обновите с помощью "git pull".',
-  'Running via npx, update not applicable.':
-    'Запущено через npx, обновление неприменимо.',
-  'Running via pnpx, update not applicable.':
-    'Запущено через pnpx, обновление неприменимо.',
-  'Running via bunx, update not applicable.':
-    'Запущено через bunx, обновление неприменимо.',
-  'Installed via Homebrew. Please update with "brew upgrade".':
-    'Установлено через Homebrew. Обновите с помощью "brew upgrade".',
-  "Locally installed. Please update via your project's package.json.":
-    'Установлено локально. Обновите через package.json вашего проекта.',
-  'Update requires sudo. Please run:':
-    'Для обновления требуется sudo. Выполните:',
-  'Standalone install detected. Attempting to automatically update now...':
-    'Обнаружена автономная установка. Выполняется попытка автоматического обновления...',
   'Standalone install detected. Please rerun the standalone installer to update:':
     'Обнаружена автономная установка. Повторно запустите автономный установщик для обновления:',
-  'Run the following to update:': 'Выполните следующую команду для обновления:',
   'Unable to auto-update this standalone installation. Please reinstall from:':
     'Невозможно автоматически обновить эту автономную установку. Переустановите с:',
-  'Manual update required. Please reinstall Qwen Code.':
-    'Требуется ручное обновление. Переустановите Qwen Code.',
-  'This session uses the custom sandbox image {{image}}. Update that image and restart Qwen Code.':
-    'В этом сеансе используется пользовательский образ песочницы {{image}}. Обновите образ и перезапустите Qwen Code.',
-  'Update Qwen Code on the host, then restart the sandbox.':
-    'Обновите Qwen Code на хосте, затем перезапустите песочницу.',
-  'The update will be installed after you exit this session.':
-    'Обновление будет установлено после выхода из этого сеанса.',
-  'Run /update to install the update on the host.':
-    'Запустите /update, чтобы установить обновление на хосте.',
-  'Run /update to install the update.':
-    'Запустите /update, чтобы установить обновление.',
 
   // ============================================================================
   // reload-plugins command

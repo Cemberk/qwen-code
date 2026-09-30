@@ -1588,7 +1588,6 @@ export interface ServeExtensionEntry {
   installType?: ServeExtensionInstallType;
   originSource?: ServeExtensionOriginSource;
   ref?: string;
-  autoUpdate?: boolean;
   credentialPersistence?: 'stored' | 'one_time';
   updateState?: ServeExtensionUpdateState;
   capabilities: ServeExtensionCapabilities;

@@ -76,7 +76,6 @@ import {
   WorktreeOwnershipConflictError,
   type StartupWorktreeContext,
 } from './startup/worktreeStartup.js';
-import { startEarlyStartupPrefetches } from './startup/startup-prefetch.js';
 import {
   cleanupCheckpoints,
   registerCleanup,
@@ -109,13 +108,7 @@ import { writeStderrLine, writeStderrLineSafe } from './utils/stdioHelpers.js';
 import { sanitizeTerminalText } from './ui/utils/textUtils.js';
 import { getHeadlessYoloSafetyWarning } from './utils/headlessSafetyWarnings.js';
 import { initializeLlmOutputLanguage } from './i18n/languageUtils.js';
-import {
-  CUSTOM_SANDBOX_IMAGE_ENV_VAR,
-  HOST_UPDATE_RELAUNCH_ENV_VAR,
-  UPDATE_COMPLETE_EXIT_CODE,
-  superviseInProcess,
-} from './utils/processUtils.js';
-import { getInstallationInfo } from './utils/installationInfo.js';
+import { superviseInProcess } from './utils/processUtils.js';
 
 const debugLogger = createDebugLogger('STARTUP');
 
@@ -641,46 +634,7 @@ export async function main() {
     const memoryArgs = settings.merged.advanced?.autoConfigureMemory
       ? getNodeMemoryArgs(isDebugMode)
       : [];
-    const updateProjectRoot = process.cwd();
-    const onUpdateRelaunch = async (relaunchOnFailure: boolean) => {
-      await initializeI18n(
-        resolveLanguageSetting(settings.merged.general?.language as string),
-      );
-      const { updateBeforeRelaunch } = await import('./ui/update-relaunch.js');
-      const shouldRelaunch = await updateBeforeRelaunch(
-        settings,
-        updateProjectRoot,
-        relaunchOnFailure,
-      );
-      return shouldRelaunch ? UPDATE_COMPLETE_EXIT_CODE : 0;
-    };
     const sandboxConfig = await loadSandboxConfig(settings.merged, argv);
-    const customSandboxImage =
-      argv.sandboxImage ??
-      process.env['QWEN_SANDBOX_IMAGE'] ??
-      settings.merged.tools?.sandboxImage;
-    // Only the container backends run an image with its own in-process updater;
-    // `sandbox-exec` confines this process in place, so neither the
-    // image handoff nor the host-update relaunch marker applies to them.
-    // Narrowed to the config (not a boolean) so `.image` stays type-safe below.
-    const containerSandbox =
-      sandboxConfig?.command === 'docker' || sandboxConfig?.command === 'podman'
-        ? sandboxConfig
-        : undefined;
-    if (containerSandbox?.image && customSandboxImage) {
-      // Images built before this handoff protocol must be rebuilt; they cannot
-      // be made to skip their in-process updater from the host.
-      process.env[CUSTOM_SANDBOX_IMAGE_ENV_VAR] = containerSandbox.image;
-    } else if (containerSandbox) {
-      const hostInstallationInfo = getInstallationInfo(updateProjectRoot, true);
-      process.env[HOST_UPDATE_RELAUNCH_ENV_VAR] = String(
-        Boolean(
-          hostInstallationInfo.updateCommand ||
-            (hostInstallationInfo.isStandalone &&
-              hostInstallationInfo.standaloneDir),
-        ),
-      );
-    }
     // We intentionally omit the list of extensions here because extensions
     // should not impact auth or setting up the sandbox.
     // TODO(jacobr): refactor loadCliConfig so there is a minimal version
@@ -800,18 +754,14 @@ export async function main() {
       // provenance travels in `privateAcpChildEnv`, which is spread last.
       delete process.env[PRIVATE_CONVERSATIONS_RUNTIME_ENV];
 
-      await relaunchOnExitCode(
-        () =>
-          start_sandbox(
-            sandboxConfig,
-            memoryArgs,
-            partialConfig,
-            sandboxArgs,
-            privateAcpChildEnv,
-          ),
-        {
-          onUpdateRelaunch,
-        },
+      await relaunchOnExitCode(() =>
+        start_sandbox(
+          sandboxConfig,
+          memoryArgs,
+          partialConfig,
+          sandboxArgs,
+          privateAcpChildEnv,
+        ),
       );
       process.exit(0);
     } else if (
@@ -827,7 +777,7 @@ export async function main() {
       // Nothing to add to this process's flags, and no env-file values that
       // already-loaded modules missed, so a relaunch would only load the whole
       // CLI a second time. Restarts re-exec in place instead.
-      superviseInProcess(onUpdateRelaunch);
+      superviseInProcess();
     } else {
       // Interactive and streaming modes keep a supervisor for in-session
       // restarts. A one-shot prompt can replace this already-loaded process.
@@ -835,7 +785,6 @@ export async function main() {
         afterSpawn: clearCorruptionEnvVars,
         childEnv: { ...privateAcpChildEnv, ...getRelaunchEnvProvenance() },
         environmentChangedSinceBoot: hasLoadedEnvironmentValues(),
-        onUpdateRelaunch,
         replaceProcess:
           !isAcpMode &&
           argv.inputFormat !== InputFormat.STREAM_JSON &&
@@ -1162,8 +1111,6 @@ export async function main() {
     // Before this point VP mode is not active, so Node's default stderr
     // output is visible and sufficient.
     setupUncaughtExceptionHandler(config);
-
-    startEarlyStartupPrefetches(config);
 
     const wasRaw = process.stdin.isRaw;
     let kittyProtocolDetectionComplete: Promise<boolean> | undefined;

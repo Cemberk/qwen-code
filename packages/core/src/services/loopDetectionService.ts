@@ -9,15 +9,8 @@ import type { Part } from '@google/genai';
 import type { ServerLlmStreamEvent } from '../core/turn.js';
 import { LlmEventType } from '../core/turn.js';
 import type { ThoughtSummary } from '../utils/thoughtUtils.js';
-import {
-  logLoopDetected,
-  logLoopDetectionDisabled,
-} from '../telemetry/loggers.js';
-import {
-  LoopDetectedEvent,
-  LoopDetectionDisabledEvent,
-  LoopType,
-} from '../telemetry/types.js';
+import { logLoopDetected } from '../telemetry/loggers.js';
+import { LoopDetectedEvent, LoopType } from '../telemetry/types.js';
 import type { Config } from '../config/config.js';
 import { getToolCallRepeatKey } from '../tools/tool-call-repeat-key.js';
 import { canonicalToolName, ToolNames } from '../tools/tool-names.js';
@@ -446,10 +439,6 @@ export class LoopDetectionService {
    */
   disableForSession(): void {
     this.disabledForSession = true;
-    logLoopDetectionDisabled(
-      this.config,
-      new LoopDetectionDisabledEvent(this.promptId),
-    );
   }
 
   /**

@@ -37,7 +37,6 @@ function makeConfig(targetDir: string, cache: FileReadCache, disabled = false) {
     getModel: () => 'test-model',
     getTruncateToolOutputLines: () => 2000,
     getTruncateToolOutputThreshold: () => 4_000_000,
-    getUsageStatisticsEnabled: () => false,
   };
   return new Proxy(explicit, {
     get(target, prop) {

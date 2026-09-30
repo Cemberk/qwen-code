@@ -56,7 +56,6 @@ describe('createApprovalModeOverride bound-tool isolation', () => {
     targetDir: '/tmp',
     debugMode: false,
     model: 'test-model',
-    usageStatisticsEnabled: false,
     bareMode: true,
     // Pin a DEFAULT baseline: these tests exercise override isolation and the
     // DEFAULT→AUTO rule strip/restore transitions, so they must not depend on

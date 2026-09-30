@@ -188,35 +188,10 @@ describe('DefaultOpenAICompatibleProvider', () => {
           defaultHeaders: {
             'User-Agent': `QwenCode/1.0.0 (${process.platform}; ${process.arch})`,
           },
-          fetch: expect.any(Function),
         }),
       );
 
       expect(client).toBeDefined();
-    });
-
-    it('installs session ID injection on the runtime fetch', async () => {
-      const runtimeFetch = vi.fn(
-        async (_input: string | URL | Request, _init?: RequestInit) =>
-          new Response(),
-      );
-      vi.mocked(buildRuntimeFetchOptions).mockReturnValue({
-        fetch: runtimeFetch,
-      });
-
-      const client = provider.buildClient() as unknown as {
-        config: { fetch: typeof fetch };
-      };
-      await client.config.fetch(
-        'https://routify-pub.alibaba-inc.com/protocol/openai/v1',
-      );
-      await client.config.fetch('https://api.openai.com/v1');
-
-      const routifyHeaders = new Headers(
-        runtimeFetch.mock.calls[0][1]?.headers,
-      );
-      expect(routifyHeaders.get('session_id')).toBe('session-1');
-      expect(runtimeFetch.mock.calls[1][1]).toBeUndefined();
     });
 
     it('should use default timeout and maxRetries when not provided', () => {

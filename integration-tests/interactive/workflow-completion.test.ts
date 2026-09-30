@@ -107,7 +107,6 @@ describe.skipIf(pickE2eRenderer() === 'opentui')(
       writeFileSync(
         join(qwenHome, 'settings.json'),
         JSON.stringify({
-          general: { enableAutoUpdate: false },
           tools: { workflowsEnabled: true },
           model: { skipWorkflowUsageWarning: true },
           memory: {

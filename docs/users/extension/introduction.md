@@ -16,7 +16,6 @@ You can manage extensions at runtime within the interactive CLI using `/extensio
 | ------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | `/extensions` or `/extensions manage` | Manage all installed extensions                                                                      |
 | `/extensions install <source>`        | Install an extension from a git URL, local path or archive, archive URL, npm package, or marketplace |
-| `/extensions explore [source]`        | Open extensions source page(Gemini or ClaudeCode) in your browser                                    |
 
 #### The interactive extension manager
 
@@ -68,18 +67,6 @@ Claude plugins are automatically converted to Qwen Code format during installati
 - Agent configurations are converted to Qwen subagent format
 - Skill configurations are converted to Qwen skill format
 - Tool mappings are automatically handled
-
-You can quickly browse available extensions from different marketplaces using the `/extensions explore` command:
-
-```bash
-# Open Gemini CLI Extensions marketplace
-/extensions explore Gemini
-
-# Open Claude Code marketplace
-/extensions explore ClaudeCode
-```
-
-This command opens the respective marketplace in your default browser, allowing you to discover new extensions to enhance your Qwen Code experience.
 
 > **Cross-Platform Compatibility**: This allows you to leverage the rich extension ecosystems from both Gemini CLI and Claude Code, dramatically expanding the available functionality for Qwen Code users.
 

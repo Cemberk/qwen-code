@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -18,17 +18,6 @@ import {
   registerSessionModel,
   unregisterSessionModel,
 } from '../utils/sessionIdContext.js';
-import {
-  isShellTracePropagationEnabled,
-  getTraceContext,
-  formatTraceparent,
-} from '../telemetry/trace-context.js';
-
-vi.mock('../telemetry/trace-context.js', () => ({
-  isShellTracePropagationEnabled: vi.fn().mockReturnValue(false),
-  getTraceContext: vi.fn().mockReturnValue(null),
-  formatTraceparent: vi.fn().mockReturnValue('00-aaaa-bbbb-01'),
-}));
 
 describe('getShellContextEnvVars', () => {
   let originalSessionId: string | undefined;
@@ -550,43 +539,9 @@ describe('getShellContextEnvVars', () => {
     // Empty strings will overwrite any stale inherited values in process.env
   });
 
-  describe('TRACEPARENT injection', () => {
-    afterEach(() => {
-      vi.mocked(isShellTracePropagationEnabled).mockReturnValue(false);
-      vi.mocked(getTraceContext).mockReturnValue(null);
-    });
-
-    it('does not inject TRACEPARENT when propagation is disabled', () => {
-      vi.mocked(isShellTracePropagationEnabled).mockReturnValue(false);
-      const env = getShellContextEnvVars();
-      expect(env['TRACEPARENT']).toBeUndefined();
-    });
-
-    it('injects TRACEPARENT when propagation is enabled and context exists', () => {
-      vi.mocked(isShellTracePropagationEnabled).mockReturnValue(true);
-      vi.mocked(getTraceContext).mockReturnValue({
-        traceId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-        spanId: 'bbbbbbbbbbbbbbbb',
-        traceFlags: 1,
-      });
-      vi.mocked(formatTraceparent).mockReturnValue(
-        '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01',
-      );
-
-      const env = getShellContextEnvVars();
-      expect(env['TRACEPARENT']).toBe(
-        '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01',
-      );
-      expect(env['TRACESTATE']).toBe('');
-    });
-
-    it('clears TRACEPARENT and TRACESTATE when propagation is enabled but no context', () => {
-      vi.mocked(isShellTracePropagationEnabled).mockReturnValue(true);
-      vi.mocked(getTraceContext).mockReturnValue(null);
-
-      const env = getShellContextEnvVars();
-      expect(env['TRACEPARENT']).toBe('');
-      expect(env['TRACESTATE']).toBe('');
-    });
+  it('never injects TRACEPARENT or TRACESTATE', () => {
+    const env = getShellContextEnvVars();
+    expect(env['TRACEPARENT']).toBeUndefined();
+    expect(env['TRACESTATE']).toBeUndefined();
   });
 });

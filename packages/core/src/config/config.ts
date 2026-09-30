@@ -171,9 +171,7 @@ import { resolveStopHookBlockingCap } from '../hooks/stopHookCap.js';
 import { DEFAULT_MAX_TOOL_CALLS_PER_TURN } from '../services/loopDetectionService.js';
 import { buildContextUsage } from '../hooks/context-usage.js';
 import {
-  DEFAULT_OTLP_ENDPOINT,
   DEFAULT_SENSITIVE_SPAN_ATTRIBUTE_MAX_LENGTH,
-  DEFAULT_TELEMETRY_TARGET,
   SENSITIVE_SPAN_ATTRIBUTE_MAX_LENGTH_LIMIT,
   isValidSensitiveSpanAttributeMaxLength,
   isTelemetrySdkInitialized,
@@ -188,7 +186,6 @@ import {
   goalStateEventFromSnapshot,
   RipgrepFallbackEvent,
   StartSessionEvent,
-  type TelemetryTarget,
 } from '../telemetry/index.js';
 import {
   ExtensionManager,
@@ -348,9 +345,7 @@ import {
   rebuildManagedAutoMemoryIndex,
   rebuildTeamAutoMemoryIndex,
   rebuildUserAutoMemoryIndex,
-  TeamMemoryRootSecurityError,
 } from '../memory/indexer.js';
-import { syncTeamMemory } from '../memory/team-memory-sync.js';
 import { getTeamMemoryShareabilityWarning } from '../memory/team-memory-git-status.js';
 import { MemoryManager } from '../memory/manager.js';
 import {
@@ -596,10 +591,6 @@ export interface AccessibilitySettings {
   screenReader?: boolean;
 }
 
-export interface BugCommandSettings {
-  urlTemplate: string;
-}
-
 export interface ChatCompressionSettings {
   /**
    * Estimated tokens for a single inline image / document part when
@@ -666,15 +657,6 @@ export interface ClearContextOnIdleSettings {
 
 export interface TelemetrySettings {
   enabled?: boolean;
-  target?: TelemetryTarget;
-  otlpEndpoint?: string;
-  otlpProtocol?: 'grpc' | 'http';
-  /** Per-signal endpoint override for traces (HTTP only). Used as-is without path appending. */
-  otlpTracesEndpoint?: string;
-  /** Per-signal endpoint override for logs (HTTP only). Used as-is without path appending. */
-  otlpLogsEndpoint?: string;
-  /** Per-signal endpoint override for metrics (HTTP only). Used as-is without path appending. */
-  otlpMetricsEndpoint?: string;
   logPrompts?: boolean;
   /**
    * Stable end-user identifier written to GenAI spans as `gen_ai.user.id`.
@@ -686,7 +668,7 @@ export interface TelemetrySettings {
   outfile?: string;
   /**
    * Static resource attributes attached to every span/log/metric the SDK
-   * exports (OTLP or file outfile — they share the same Resource).
+   * writes to the telemetry outfile.
    * Merged with `OTEL_RESOURCE_ATTRIBUTES`; settings win on key conflict.
    * Reserved keys (`service.version`, `session.id`) are dropped with a
    * `diag.warn`.
@@ -719,54 +701,6 @@ export interface TelemetryMetricsSettings {
    * short-term debugging — spans and logs still carry session.id.
    */
   includeSessionId?: boolean;
-}
-
-/**
- * Security-relevant settings controlling what client-side correlation
- * data qwen-code writes into outbound LLM API requests.
- *
- * **Why this is a separate namespace from `telemetry.*`:** telemetry
- * controls data flow into the user's OWN observability backend (OTLP
- * collector / file outfile). The settings here control data flow OUT of
- * the qwen-code process and INTO third-party LLM provider request
- * streams (DashScope, OpenAI, Anthropic, etc.). Different recipients =
- * different consent decision, so a different settings tree.
- *
- * All values default to off / no propagation. Operators who want to
- * propagate trace context for server-side trace stitching (e.g. ARMS
- * Tracing + DashScope) opt in explicitly.
- */
-export interface OutboundCorrelationSettings {
-  /**
-   * Inject W3C `traceparent` header on outbound HTTP requests
-   * originated by undici / global `fetch` (LLM SDK calls, MCP
-   * StreamableHTTP clients, WebFetch tool, etc.). Default: `false`.
-   *
-   * When `false`, the SDK is configured with a no-op
-   * `TextMapPropagator` so trace context stays internal to the user's
-   * OTLP collector (operator still gets client HTTP spans, but the
-   * trace id is not written onto third-party request streams).
-   *
-   * When `true`, the OTel default W3C composite propagator
-   * (`tracecontext` + `baggage`) is installed and `traceparent` is
-   * written on every outbound `fetch`. Useful when the LLM provider
-   * also reports into the operator's OTel collector — e.g. ARMS
-   * Tracing + DashScope — for cross-process trace stitching.
-   */
-  propagateTraceContext?: boolean;
-  /**
-   * Allow `modelProviders[].generationConfig.customHeaders` values to
-   * carry runtime placeholders such as `${session_id}`, expanded per
-   * request. Default: disabled — a value with a placeholder is dropped
-   * rather than sent.
-   *
-   * This is the consent decision, and it is the only part of the feature
-   * that is global: *which* hosts may receive the value, and *what* the
-   * header is called, are already answered by the provider entry the
-   * header is attached to. It controls only `${session_id}` expansion and
-   * cannot recover a header's provenance after settings are merged.
-   */
-  allowDynamicHeaderValues?: boolean;
 }
 
 export interface OutputSettings {
@@ -866,7 +800,6 @@ export interface ExtensionInstallMetadata {
   externalContent?: boolean; // Installed content came from a source nested outside the recorded source.
   registryUrl?: string; // Only present for npm installs.
   ref?: string;
-  autoUpdate?: boolean;
   allowPreRelease?: boolean;
   marketplaceConfig?: ClaudeMarketplaceConfig;
   pluginName?: string;
@@ -1153,9 +1086,7 @@ export interface ConfigParameters {
    * remain readable from Config; only the global SDK side effect is deferred.
    */
   deferTelemetryInitialization?: boolean;
-  outboundCorrelation?: OutboundCorrelationSettings;
   gitCoAuthor?: GitCoAuthorParam;
-  usageStatisticsEnabled?: boolean;
   /**
    * If true, disables the per-session FileReadCache short-circuit
    * (file_unchanged placeholder). Useful for sessions that may undergo
@@ -1178,7 +1109,6 @@ export interface ConfigParameters {
   cwd: string;
   fileDiscoveryService?: FileDiscoveryService;
   includeDirectories?: string[];
-  bugCommand?: BugCommandSettings;
   model?: string;
   outputLanguageFilePath?: string;
   maxSessionTurns?: number;
@@ -1406,7 +1336,6 @@ export interface ConfigParameters {
   bareMode?: boolean;
   sdkMode?: boolean;
   sessionSubagents?: SubagentConfig[];
-  channel?: string;
   /**
    * File descriptor number for structured JSON event output (dual output mode).
    * When set, Qwen Code outputs structured JSON events to this fd while
@@ -1452,7 +1381,6 @@ export interface ConfigParameters {
    * {@link Config.getTeamMemoryEnabled}.
    */
   enableTeamMemory?: boolean;
-  enableTeamMemorySync?: boolean;
   /**
    * Enable the structured on-demand memory recall protocol. Defaults to false
    * (opt-in): while it is off the corpus stays on the legacy flat-MEMORY.md
@@ -2839,9 +2767,7 @@ export class Config {
   private readonly showResponseTokensPerSecond: boolean;
   private readonly telemetrySettings: ResolvedTelemetrySettings;
   private readonly telemetryInitializationDeferred: boolean;
-  private readonly outboundCorrelationSettings: OutboundCorrelationSettings;
   private readonly gitCoAuthor: GitCoAuthorSettings;
-  private readonly usageStatisticsEnabled: boolean;
   private readonly fileReadCacheDisabled: boolean;
   private activeTodoReminders = new Map<string, string>();
   private activeTodoWorkChainOwners = new Map<string, string>();
@@ -2891,7 +2817,6 @@ export class Config {
   private readonly proxy: string | undefined;
   private cwd: string;
   private readonly explicitIncludeDirectories: string[];
-  private readonly bugCommand: BugCommandSettings | undefined;
   private outputLanguageFilePath?: string;
   private readonly noBrowser: boolean;
   private readonly folderTrustFeature: boolean;
@@ -3059,7 +2984,6 @@ export class Config {
   private readonly shellDefaultTimeoutMs: number | undefined;
   private readonly shellHeartbeatIntervalMs: number | undefined;
   private readonly eventEmitter?: EventEmitter;
-  private readonly channel: string | undefined;
   private readonly jsonFd: number | undefined;
   private readonly jsonFile: string | undefined;
   private readonly jsonSchema: Record<string, unknown> | undefined;
@@ -3070,7 +2994,6 @@ export class Config {
   private readonly enableManagedAutoMemory: boolean;
   private readonly enableManagedAutoDream: boolean;
   private readonly enableTeamMemory: boolean;
-  private readonly enableTeamMemorySync: boolean;
   private readonly enableStructuredMemoryRecall: boolean;
   // Latch (keyed by projectRoot) so the "team memory enabled but not shareable"
   // warning is emitted at most once per repo, even though refreshHierarchicalMemory
@@ -3258,12 +3181,6 @@ export class Config {
       params.showResponseTokensPerSecond ?? false;
     this.telemetrySettings = {
       enabled: params.telemetry?.enabled ?? false,
-      target: params.telemetry?.target ?? DEFAULT_TELEMETRY_TARGET,
-      otlpEndpoint: params.telemetry?.otlpEndpoint,
-      otlpProtocol: params.telemetry?.otlpProtocol,
-      otlpTracesEndpoint: params.telemetry?.otlpTracesEndpoint,
-      otlpLogsEndpoint: params.telemetry?.otlpLogsEndpoint,
-      otlpMetricsEndpoint: params.telemetry?.otlpMetricsEndpoint,
       logPrompts: params.telemetry?.logPrompts ?? true,
       userId: params.telemetry?.userId?.trim() || undefined,
       includeSensitiveSpanAttributes:
@@ -3278,18 +3195,11 @@ export class Config {
     };
     this.telemetryInitializationDeferred =
       params.deferTelemetryInitialization ?? false;
-    this.outboundCorrelationSettings = {
-      propagateTraceContext:
-        params.outboundCorrelation?.propagateTraceContext ?? false,
-      allowDynamicHeaderValues:
-        params.outboundCorrelation?.allowDynamicHeaderValues === true,
-    };
     this.gitCoAuthor = {
       ...normalizeGitCoAuthor(params.gitCoAuthor),
       name: 'Qwen-Coder',
       email: 'qwen-coder@alibabacloud.com',
     };
-    this.usageStatisticsEnabled = params.usageStatisticsEnabled ?? true;
     this.fileReadCacheDisabled = params.fileReadCacheDisabled ?? false;
     this.outputLanguageFilePath = params.outputLanguageFilePath;
 
@@ -3309,7 +3219,6 @@ export class Config {
     this.proxy = params.proxy;
     this.cwd = params.cwd ?? process.cwd();
     this.fileDiscoveryService = params.fileDiscoveryService ?? null;
-    this.bugCommand = params.bugCommand;
     this.maxSessionTurns = validateMaxSessionTurns(params.maxSessionTurns);
     this.goalTokenBudgetGrant = normalizeGoalTokenBudget(
       params.goalTokenBudget,
@@ -3505,7 +3414,6 @@ export class Config {
       params.shellHeartbeatIntervalMs <= 2_147_483_647
         ? params.shellHeartbeatIntervalMs
         : undefined;
-    this.channel = params.channel;
     this.jsonFd = params.jsonFd;
     this.jsonFile = params.jsonFile;
     this.jsonSchema = params.jsonSchema;
@@ -3666,7 +3574,6 @@ export class Config {
     this.enableManagedAutoMemory = params.enableManagedAutoMemory ?? true;
     this.enableManagedAutoDream = params.enableManagedAutoDream ?? true;
     this.enableTeamMemory = params.enableTeamMemory ?? false;
-    this.enableTeamMemorySync = params.enableTeamMemorySync ?? false;
     this.enableStructuredMemoryRecall =
       params.enableStructuredMemoryRecall ?? false;
     this.enableAutoSkill = params.enableAutoSkill ?? false;
@@ -4968,62 +4875,16 @@ export class Config {
           this.debugLogger.warn(shareabilityWarning);
         }
       }
-      // Rebuild the team index BEFORE syncing so the freshly generated MEMORY.md
-      // is what gets committed and pushed, not a stale one. Then, when opted in,
-      // best-effort git sync (never throws — a failure must not break session
-      // start): pull collaborators' updates and push local ones. If the sync
-      // PULLED new files, rebuild once more so the in-prompt index reflects them.
+      // Rebuild the team index so the in-prompt index reflects the team files.
+      // Best-effort: a failure (including a symlink/escape rejection) must not
+      // break session start.
       let teamAutoMemoryIndex: string | null = null;
       if (teamMemoryEnabled) {
-        // rebuildTeamAutoMemoryIndex throws for two distinct classes, and only
-        // ONE may block sync:
-        //   • SECURITY — a symlink/escape rejection (TeamMemoryRootSecurityError)
-        //     means the team root could redirect the committed index OUTSIDE the
-        //     repo. Sync MUST be blocked: otherwise syncTeamMemory would git
-        //     add/commit/push that out-of-repo dir, defeating the indexer's
-        //     refusal. This invariant is non-negotiable.
-        //   • OPERATIONAL — EACCES/ENOSPC/EPERM on lstat/readdir/write. Not a
-        //     security problem, so it must NOT permanently gate legitimate sync;
-        //     it self-corrects on the next successful rebuild. Log and sync on.
-        let teamRootSecurityBlocked = false;
         try {
           teamAutoMemoryIndex =
             await rebuildTeamAutoMemoryIndex(teamProjectRoot);
         } catch (err) {
-          if (err instanceof TeamMemoryRootSecurityError) {
-            teamRootSecurityBlocked = true;
-            this.debugLogger.warn(
-              'team memory root failed the symlink/escape safety check; skipping sync',
-              err,
-            );
-          } else {
-            this.debugLogger.warn(
-              'team memory index rebuild failed (operational); not security-gating sync',
-              err,
-            );
-          }
-        }
-        if (!teamRootSecurityBlocked && this.getTeamMemorySyncEnabled()) {
-          const syncResult = await syncTeamMemory(teamProjectRoot, {
-            message: 'chore(memory): sync team memory',
-          }).catch((err) => {
-            this.debugLogger.warn('team memory sync failed', err);
-            return undefined;
-          });
-          // Surface the silent no-op: the user opted into sync but, e.g., the
-          // repo has no upstream, so nothing is shared. Debug-level — not every
-          // session should warn loudly, but an operator can see why sync did
-          // nothing.
-          if (syncResult?.skippedReason) {
-            this.debugLogger.warn(
-              `team memory sync skipped: ${syncResult.skippedReason}`,
-            );
-          }
-          if (syncResult?.pulled) {
-            teamAutoMemoryIndex = await rebuildTeamAutoMemoryIndex(
-              teamProjectRoot,
-            ).catch(() => teamAutoMemoryIndex);
-          }
+          this.debugLogger.warn('team memory index rebuild failed', err);
         }
       }
       // The readiness scan walks the frontmatter of every memory file, so run
@@ -8952,30 +8813,6 @@ export class Config {
     return this.telemetrySettings.sensitiveSpanAttributeMaxLength;
   }
 
-  getTelemetryOtlpEndpoint(): string | undefined {
-    return this.telemetrySettings.otlpEndpoint ?? DEFAULT_OTLP_ENDPOINT;
-  }
-
-  getTelemetryOtlpProtocol(): 'grpc' | 'http' {
-    return this.telemetrySettings.otlpProtocol ?? 'grpc';
-  }
-
-  getTelemetryOtlpTracesEndpoint(): string | undefined {
-    return this.telemetrySettings.otlpTracesEndpoint;
-  }
-
-  getTelemetryOtlpLogsEndpoint(): string | undefined {
-    return this.telemetrySettings.otlpLogsEndpoint;
-  }
-
-  getTelemetryOtlpMetricsEndpoint(): string | undefined {
-    return this.telemetrySettings.otlpMetricsEndpoint;
-  }
-
-  getTelemetryTarget(): TelemetryTarget {
-    return this.telemetrySettings.target ?? DEFAULT_TELEMETRY_TARGET;
-  }
-
   getTelemetryResourceAttributes(): Record<string, string> {
     return this.telemetrySettings.resourceAttributes ?? {};
   }
@@ -8986,24 +8823,6 @@ export class Config {
 
   getTelemetryResourceAttributeWarnings(): readonly string[] {
     return this.telemetrySettings.resourceAttributeWarnings ?? [];
-  }
-
-  /**
-   * Whether to inject W3C `traceparent` on outbound `fetch` requests
-   * (LLM SDKs, MCP, WebFetch, etc.). Default false — see
-   * `OutboundCorrelationSettings` for rationale.
-   */
-  getOutboundCorrelationPropagateTraceContext(): boolean {
-    return this.outboundCorrelationSettings.propagateTraceContext ?? false;
-  }
-
-  /**
-   * Whether `customHeaders` values may carry runtime placeholders. See
-   * {@link OutboundCorrelationSettings.allowDynamicHeaderValues}; consumed by
-   * `core/outbound-dynamic-headers.ts`.
-   */
-  getOutboundAllowDynamicHeaderValues(): boolean {
-    return this.outboundCorrelationSettings.allowDynamicHeaderValues ?? false;
   }
 
   getTelemetryOutfile(): string | undefined {
@@ -9925,10 +9744,6 @@ export class Config {
     return this.cwd;
   }
 
-  getBugCommand(): BugCommandSettings | undefined {
-    return this.bugCommand;
-  }
-
   getFileService(): FileDiscoveryService {
     if (!this.fileDiscoveryService) {
       this.fileDiscoveryService = new FileDiscoveryService(
@@ -9937,10 +9752,6 @@ export class Config {
       );
     }
     return this.fileDiscoveryService;
-  }
-
-  getUsageStatisticsEnabled(): boolean {
-    return this.usageStatisticsEnabled;
   }
 
   /**
@@ -10060,27 +9871,6 @@ export class Config {
       return true;
     }
     return this.enableTeamMemory;
-  }
-
-  /**
-   * Whether the daemon/session should auto-sync team memory with the git
-   * remote (pull + commit + push). Resolves the `memory.enableTeamMemorySync`
-   * setting, with env `QWEN_CODE_MEMORY_TEAM_SYNC` ('0'/'1') as an override.
-   * Off by default since it mutates the repo and pushes. Inert in bare mode.
-   */
-  getTeamMemorySyncEnabled(): boolean {
-    if (this.shellExecutionSandbox) return false;
-    if (this.getBareMode() || this.provisionalWorkspace) {
-      return false;
-    }
-    const override = process.env['QWEN_CODE_MEMORY_TEAM_SYNC'];
-    if (override === '0') {
-      return false;
-    }
-    if (override === '1') {
-      return true;
-    }
-    return this.enableTeamMemorySync;
   }
 
   /**
@@ -10430,10 +10220,6 @@ export class Config {
 
   getCliVersion(): string | undefined {
     return this.cliVersion;
-  }
-
-  getChannel(): string | undefined {
-    return this.channel;
   }
 
   /**

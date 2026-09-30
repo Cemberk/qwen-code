@@ -45,7 +45,6 @@ describe('workflow turn budget ledger', () => {
       getAutoCompactThreshold: () => undefined,
       getToolRegistry: () => ({ getTool: () => undefined }),
       getSkillManager: () => null,
-      getUsageStatisticsEnabled: () => false,
       getChatRecordingService: () => undefined,
     } as unknown as Config;
 

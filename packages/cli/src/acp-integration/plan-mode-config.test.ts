@@ -76,7 +76,6 @@ it('carries real Config Plan policy through ACP control, context and mode notifi
     trustedFolder: true,
     approvalMode: ApprovalMode.DEFAULT,
     chatRecording: false,
-    usageStatisticsEnabled: false,
     telemetry: { enabled: false },
     overrideExtensions: [],
   });

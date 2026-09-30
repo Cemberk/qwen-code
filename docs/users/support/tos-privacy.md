@@ -62,22 +62,9 @@ When you authenticate with Google Cloud Vertex AI, the applicable Terms of Servi
 
 ## Usage Statistics and Telemetry
 
-Qwen Code may collect anonymous usage statistics and [telemetry](../../developers/development/telemetry) data to improve the user experience and product quality. This data collection is optional and can be controlled through configuration settings.
+Qwen Code does not collect usage statistics and does not send telemetry anywhere. [Telemetry](../../developers/development/telemetry) is off by default; when you enable it, it is only written to the local file set by `telemetry.outfile`.
 
-### What Data is Collected
-
-When enabled, Qwen Code may collect:
-
-- Anonymous usage statistics (commands run, performance metrics)
-- Error reports and crash data
-- Feature usage patterns
-
-### Data Collection by Authentication Method
-
-- **Qwen OAuth:** Usage statistics are governed by Qwen's privacy policy. You can opt-out through Qwen Code's configuration settings.
-- **Alibaba Cloud Coding Plan:** Usage statistics are governed by Alibaba Cloud's privacy policy. You can opt-out through Qwen Code's configuration settings.
-- **API Key:** No additional data is collected by Qwen Code beyond what your chosen API provider collects.
-- **Vertex AI:** Usage statistics are governed by Google Cloud's privacy policy. No additional data is collected by Qwen Code beyond what Google Cloud collects.
+This does not affect what data your chosen AI service provider may collect according to its own privacy policy.
 
 ## Frequently Asked Questions (FAQ)
 
@@ -95,26 +82,7 @@ Whether your code, including prompts and answers, is used to train AI models dep
 
 **Important**: Qwen Code itself does not use your prompts, code, or responses for model training. Any data usage for training purposes would be governed by the policies of the AI service provider you authenticate with.
 
-### 2. What are Usage Statistics and what does the opt-out control?
-
-The **Usage Statistics** setting controls optional data collection by Qwen Code for improving the user experience and product quality.
-
-When enabled, Qwen Code may collect:
-
-- Anonymous telemetry (commands run, performance metrics, feature usage)
-- Error reports and crash data
-- General usage patterns
-
-**What is NOT collected as usage statistics:**
-
-- Your code content
-- Prompts sent to AI models
-- Responses from AI models
-- Personal information
-
-The Usage Statistics setting only controls data collection by Qwen Code itself. It does not affect what data your chosen AI service provider (Qwen, OpenAI, etc.) may collect according to their own privacy policies.
-
-### 3. How do I switch between authentication methods?
+### 2. How do I switch between authentication methods?
 
 You can switch between Qwen OAuth, Alibaba Cloud Coding Plan, your own API key, and Vertex AI at any time:
 

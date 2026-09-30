@@ -14,7 +14,7 @@ describe('V2ToV3Migration', () => {
     it('should return true for V2 settings with deprecated disable* keys', () => {
       const v2Settings = {
         $version: 2,
-        general: { disableAutoUpdate: true },
+        context: { fileFiltering: { disableFuzzySearch: true } },
       };
 
       expect(migration.shouldMigrate(v2Settings)).toBe(true);
@@ -32,7 +32,7 @@ describe('V2ToV3Migration', () => {
     it('should return false for V3 settings', () => {
       const v3Settings = {
         $version: 3,
-        general: { enableAutoUpdate: true },
+        general: { vimMode: true },
       };
 
       expect(migration.shouldMigrate(v3Settings)).toBe(false);
@@ -41,7 +41,7 @@ describe('V2ToV3Migration', () => {
     it('should return false for V1 settings without version', () => {
       const v1Settings = {
         theme: 'dark',
-        disableAutoUpdate: true,
+        disableFuzzySearch: true,
       };
 
       expect(migration.shouldMigrate(v1Settings)).toBe(false);
@@ -51,7 +51,7 @@ describe('V2ToV3Migration', () => {
       const cleanV2Settings = {
         $version: 2,
         ui: { theme: 'dark' },
-        general: { enableAutoUpdate: true },
+        general: { vimMode: true },
       };
 
       // V2 settings should always be migrated to V3 to update the version number
@@ -69,26 +69,6 @@ describe('V2ToV3Migration', () => {
   });
 
   describe('migrate', () => {
-    it('should migrate disableAutoUpdate to enableAutoUpdate with inverted value', () => {
-      const v2Settings = {
-        $version: 2,
-        general: { disableAutoUpdate: true },
-      };
-
-      const { settings: result } = migration.migrate(v2Settings, 'user') as {
-        settings: Record<string, unknown>;
-        warnings: unknown[];
-      };
-
-      expect(result['$version']).toBe(3);
-      expect(
-        (result['general'] as Record<string, unknown>)['enableAutoUpdate'],
-      ).toBe(false);
-      expect(
-        (result['general'] as Record<string, unknown>)['disableAutoUpdate'],
-      ).toBeUndefined();
-    });
-
     it('should migrate disableLoadingPhrases to enableLoadingPhrases', () => {
       const v2Settings = {
         $version: 2,
@@ -146,53 +126,6 @@ describe('V2ToV3Migration', () => {
       });
     });
 
-    it('should handle consolidated disableAutoUpdate and disableUpdateNag', () => {
-      const v2Settings = {
-        $version: 2,
-        general: {
-          disableAutoUpdate: true,
-          disableUpdateNag: false,
-        },
-      };
-
-      const { settings: result } = migration.migrate(v2Settings, 'user') as {
-        settings: Record<string, unknown>;
-        warnings: unknown[];
-      };
-
-      expect(result['$version']).toBe(3);
-      // If ANY disable* is true, enable should be false
-      expect(
-        (result['general'] as Record<string, unknown>)['enableAutoUpdate'],
-      ).toBe(false);
-      expect(
-        (result['general'] as Record<string, unknown>)['disableAutoUpdate'],
-      ).toBeUndefined();
-      expect(
-        (result['general'] as Record<string, unknown>)['disableUpdateNag'],
-      ).toBeUndefined();
-    });
-
-    it('should set enableAutoUpdate to true when both disable* are false', () => {
-      const v2Settings = {
-        $version: 2,
-        general: {
-          disableAutoUpdate: false,
-          disableUpdateNag: false,
-        },
-      };
-
-      const { settings: result } = migration.migrate(v2Settings, 'user') as {
-        settings: Record<string, unknown>;
-        warnings: unknown[];
-      };
-
-      expect(result['$version']).toBe(3);
-      expect(
-        (result['general'] as Record<string, unknown>)['enableAutoUpdate'],
-      ).toBe(true);
-    });
-
     it('should preserve other settings during migration', () => {
       const v2Settings = {
         $version: 2,
@@ -225,12 +158,14 @@ describe('V2ToV3Migration', () => {
     it('should not modify the input object', () => {
       const v2Settings = {
         $version: 2,
-        general: { disableAutoUpdate: true },
+        context: { fileFiltering: { disableFuzzySearch: true } },
       };
 
       const result = migration.migrate(v2Settings, 'user');
 
-      expect(v2Settings.general).toEqual({ disableAutoUpdate: true });
+      expect(v2Settings.context).toEqual({
+        fileFiltering: { disableFuzzySearch: true },
+      });
       expect(result).not.toBe(v2Settings);
     });
 
@@ -246,7 +181,6 @@ describe('V2ToV3Migration', () => {
     it('should handle multiple deprecated keys in one migration', () => {
       const v2Settings = {
         $version: 2,
-        general: { disableAutoUpdate: false },
         ui: { accessibility: { disableLoadingPhrases: false } },
         context: { fileFiltering: { disableFuzzySearch: false } },
       };
@@ -257,9 +191,6 @@ describe('V2ToV3Migration', () => {
       };
 
       expect(result['$version']).toBe(3);
-      expect(
-        (result['general'] as Record<string, unknown>)['enableAutoUpdate'],
-      ).toBe(true);
       expect(
         (result['ui'] as Record<string, unknown>)['accessibility'],
       ).toEqual({
@@ -275,7 +206,7 @@ describe('V2ToV3Migration', () => {
     it('should coerce string "true" and remove deprecated key', () => {
       const v2Settings = {
         $version: 2,
-        general: { disableAutoUpdate: 'true' },
+        context: { fileFiltering: { disableFuzzySearch: 'true' } },
       };
 
       const { settings: result, warnings } = migration.migrate(
@@ -288,10 +219,18 @@ describe('V2ToV3Migration', () => {
 
       expect(result['$version']).toBe(3);
       expect(
-        (result['general'] as Record<string, unknown>)['disableAutoUpdate'],
+        (
+          (result['context'] as Record<string, unknown>)[
+            'fileFiltering'
+          ] as Record<string, unknown>
+        )['disableFuzzySearch'],
       ).toBeUndefined();
       expect(
-        (result['general'] as Record<string, unknown>)['enableAutoUpdate'],
+        (
+          (result['context'] as Record<string, unknown>)[
+            'fileFiltering'
+          ] as Record<string, unknown>
+        )['enableFuzzySearch'],
       ).toBe(false);
       expect(warnings).toHaveLength(0);
     });
@@ -299,7 +238,7 @@ describe('V2ToV3Migration', () => {
     it('should coerce string "false" and remove deprecated key', () => {
       const v2Settings = {
         $version: 2,
-        general: { disableAutoUpdate: 'false' },
+        context: { fileFiltering: { disableFuzzySearch: 'false' } },
       };
 
       const { settings: result, warnings } = migration.migrate(
@@ -312,21 +251,26 @@ describe('V2ToV3Migration', () => {
 
       expect(result['$version']).toBe(3);
       expect(
-        (result['general'] as Record<string, unknown>)['disableAutoUpdate'],
+        (
+          (result['context'] as Record<string, unknown>)[
+            'fileFiltering'
+          ] as Record<string, unknown>
+        )['disableFuzzySearch'],
       ).toBeUndefined();
       expect(
-        (result['general'] as Record<string, unknown>)['enableAutoUpdate'],
+        (
+          (result['context'] as Record<string, unknown>)[
+            'fileFiltering'
+          ] as Record<string, unknown>
+        )['enableFuzzySearch'],
       ).toBe(true);
       expect(warnings).toHaveLength(0);
     });
 
-    it('should coerce case-insensitive strings for consolidated keys', () => {
+    it('should coerce case-insensitive strings', () => {
       const v2Settings = {
         $version: 2,
-        general: {
-          disableAutoUpdate: 'TRUE',
-          disableUpdateNag: 'FALSE',
-        },
+        context: { fileFiltering: { disableFuzzySearch: 'TRUE' } },
       };
 
       const { settings: result, warnings } = migration.migrate(
@@ -339,13 +283,18 @@ describe('V2ToV3Migration', () => {
 
       expect(result['$version']).toBe(3);
       expect(
-        (result['general'] as Record<string, unknown>)['disableAutoUpdate'],
+        (
+          (result['context'] as Record<string, unknown>)[
+            'fileFiltering'
+          ] as Record<string, unknown>
+        )['disableFuzzySearch'],
       ).toBeUndefined();
       expect(
-        (result['general'] as Record<string, unknown>)['disableUpdateNag'],
-      ).toBeUndefined();
-      expect(
-        (result['general'] as Record<string, unknown>)['enableAutoUpdate'],
+        (
+          (result['context'] as Record<string, unknown>)[
+            'fileFiltering'
+          ] as Record<string, unknown>
+        )['enableFuzzySearch'],
       ).toBe(false);
       expect(warnings).toHaveLength(0);
     });
@@ -353,7 +302,7 @@ describe('V2ToV3Migration', () => {
     it('should remove number value and emit warning', () => {
       const v2Settings = {
         $version: 2,
-        general: { disableAutoUpdate: 123 },
+        context: { fileFiltering: { disableFuzzySearch: 123 } },
       };
 
       const { settings: result, warnings } = migration.migrate(
@@ -366,19 +315,27 @@ describe('V2ToV3Migration', () => {
 
       expect(result['$version']).toBe(3);
       expect(
-        (result['general'] as Record<string, unknown>)['disableAutoUpdate'],
+        (
+          (result['context'] as Record<string, unknown>)[
+            'fileFiltering'
+          ] as Record<string, unknown>
+        )['disableFuzzySearch'],
       ).toBeUndefined();
       expect(
-        (result['general'] as Record<string, unknown>)['enableAutoUpdate'],
+        (
+          (result['context'] as Record<string, unknown>)[
+            'fileFiltering'
+          ] as Record<string, unknown>
+        )['enableFuzzySearch'],
       ).toBeUndefined();
       expect(warnings).toHaveLength(1);
-      expect(warnings[0]).toContain('general.disableAutoUpdate');
+      expect(warnings[0]).toContain('context.fileFiltering.disableFuzzySearch');
     });
 
     it('should remove invalid string value and emit warning', () => {
       const v2Settings = {
         $version: 2,
-        general: { disableAutoUpdate: 'invalid-string' },
+        context: { fileFiltering: { disableFuzzySearch: 'invalid-string' } },
       };
 
       const { settings: result, warnings } = migration.migrate(
@@ -391,13 +348,21 @@ describe('V2ToV3Migration', () => {
 
       expect(result['$version']).toBe(3);
       expect(
-        (result['general'] as Record<string, unknown>)['disableAutoUpdate'],
+        (
+          (result['context'] as Record<string, unknown>)[
+            'fileFiltering'
+          ] as Record<string, unknown>
+        )['disableFuzzySearch'],
       ).toBeUndefined();
       expect(
-        (result['general'] as Record<string, unknown>)['enableAutoUpdate'],
+        (
+          (result['context'] as Record<string, unknown>)[
+            'fileFiltering'
+          ] as Record<string, unknown>
+        )['enableFuzzySearch'],
       ).toBeUndefined();
       expect(warnings).toHaveLength(1);
-      expect(warnings[0]).toContain('general.disableAutoUpdate');
+      expect(warnings[0]).toContain('context.fileFiltering.disableFuzzySearch');
     });
 
     it('should coerce disableCacheControl string "true"', () => {
@@ -477,43 +442,10 @@ describe('V2ToV3Migration', () => {
       );
     });
 
-    it('should handle mixed valid and invalid disableAutoUpdate and disableUpdateNag', () => {
-      const v2Settings = {
-        $version: 2,
-        general: {
-          disableAutoUpdate: true,
-          disableUpdateNag: 'invalid',
-        },
-      };
-
-      const { settings: result, warnings } = migration.migrate(
-        v2Settings,
-        'user',
-      ) as {
-        settings: Record<string, unknown>;
-        warnings: string[];
-      };
-
-      expect(result['$version']).toBe(3);
-      // Only valid values should contribute to the consolidated result
-      // Since disableAutoUpdate is true, enableAutoUpdate should be false
-      expect(
-        (result['general'] as Record<string, unknown>)['enableAutoUpdate'],
-      ).toBe(false);
-      expect(
-        (result['general'] as Record<string, unknown>)['disableAutoUpdate'],
-      ).toBeUndefined();
-      expect(
-        (result['general'] as Record<string, unknown>)['disableUpdateNag'],
-      ).toBeUndefined();
-      expect(warnings).toHaveLength(1);
-      expect(warnings[0]).toContain('general.disableUpdateNag');
-    });
-
     it('should remove object value for disable key and emit warning', () => {
       const v2Settings = {
         $version: 2,
-        general: { disableAutoUpdate: { nested: 'value' } },
+        context: { fileFiltering: { disableFuzzySearch: { nested: 'value' } } },
       };
 
       const { settings: result, warnings } = migration.migrate(
@@ -526,19 +458,27 @@ describe('V2ToV3Migration', () => {
 
       expect(result['$version']).toBe(3);
       expect(
-        (result['general'] as Record<string, unknown>)['disableAutoUpdate'],
+        (
+          (result['context'] as Record<string, unknown>)[
+            'fileFiltering'
+          ] as Record<string, unknown>
+        )['disableFuzzySearch'],
       ).toBeUndefined();
       expect(
-        (result['general'] as Record<string, unknown>)['enableAutoUpdate'],
+        (
+          (result['context'] as Record<string, unknown>)[
+            'fileFiltering'
+          ] as Record<string, unknown>
+        )['enableFuzzySearch'],
       ).toBeUndefined();
       expect(warnings).toHaveLength(1);
-      expect(warnings[0]).toContain('general.disableAutoUpdate');
+      expect(warnings[0]).toContain('context.fileFiltering.disableFuzzySearch');
     });
 
     it('should remove array value for disable key and emit warning', () => {
       const v2Settings = {
         $version: 2,
-        general: { disableAutoUpdate: [1, 2, 3] },
+        context: { fileFiltering: { disableFuzzySearch: [1, 2, 3] } },
       };
 
       const { settings: result, warnings } = migration.migrate(
@@ -551,19 +491,27 @@ describe('V2ToV3Migration', () => {
 
       expect(result['$version']).toBe(3);
       expect(
-        (result['general'] as Record<string, unknown>)['disableAutoUpdate'],
+        (
+          (result['context'] as Record<string, unknown>)[
+            'fileFiltering'
+          ] as Record<string, unknown>
+        )['disableFuzzySearch'],
       ).toBeUndefined();
       expect(
-        (result['general'] as Record<string, unknown>)['enableAutoUpdate'],
+        (
+          (result['context'] as Record<string, unknown>)[
+            'fileFiltering'
+          ] as Record<string, unknown>
+        )['enableFuzzySearch'],
       ).toBeUndefined();
       expect(warnings).toHaveLength(1);
-      expect(warnings[0]).toContain('general.disableAutoUpdate');
+      expect(warnings[0]).toContain('context.fileFiltering.disableFuzzySearch');
     });
 
     it('should remove null value for disable key and emit warning', () => {
       const v2Settings = {
         $version: 2,
-        general: { disableAutoUpdate: null },
+        context: { fileFiltering: { disableFuzzySearch: null } },
       };
 
       const { settings: result, warnings } = migration.migrate(
@@ -576,13 +524,21 @@ describe('V2ToV3Migration', () => {
 
       expect(result['$version']).toBe(3);
       expect(
-        (result['general'] as Record<string, unknown>)['disableAutoUpdate'],
+        (
+          (result['context'] as Record<string, unknown>)[
+            'fileFiltering'
+          ] as Record<string, unknown>
+        )['disableFuzzySearch'],
       ).toBeUndefined();
       expect(
-        (result['general'] as Record<string, unknown>)['enableAutoUpdate'],
+        (
+          (result['context'] as Record<string, unknown>)[
+            'fileFiltering'
+          ] as Record<string, unknown>
+        )['enableFuzzySearch'],
       ).toBeUndefined();
       expect(warnings).toHaveLength(1);
-      expect(warnings[0]).toContain('general.disableAutoUpdate');
+      expect(warnings[0]).toContain('context.fileFiltering.disableFuzzySearch');
     });
   });
 

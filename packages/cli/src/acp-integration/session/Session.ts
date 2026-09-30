@@ -909,18 +909,13 @@ function recordDaemonLoopDetected(
   loopType: LoopType,
   message: string,
   loopState: DaemonToolLoopState,
-  options: { recordToQwenLogger?: boolean } = {},
 ): true {
   if (!loopState.loopDetected) {
     loopState.loopDetected = true;
     loopState.loopType = loopType;
     debugLogger.warn(message);
     try {
-      logLoopDetected(
-        config,
-        new LoopDetectedEvent(loopType, promptId),
-        options,
-      );
+      logLoopDetected(config, new LoopDetectedEvent(loopType, promptId));
     } catch (error) {
       debugLogger.debug(
         '[Session] Failed to record loop detection telemetry',
@@ -8734,7 +8729,6 @@ export class Session implements SessionContext {
         LoopType.REPEATED_TOOL_EXECUTION_FAILURE,
         REPEATED_TOOL_FAILURE_STOP_MESSAGE,
         toolLoopState,
-        { recordToQwenLogger: false },
       );
       if (!rejectOnLoopDetected) {
         // Rejecting turns publish the structured turn_error as the

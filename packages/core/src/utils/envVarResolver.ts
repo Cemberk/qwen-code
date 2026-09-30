@@ -25,8 +25,8 @@ export interface ResolveEnvVarsOptions {
  * value is baked into hook commands, URLs or MCP configs before child-env
  * sanitization ever applies. Their placeholders are preserved exactly like
  * an unset variable's.
- * Session-ID placeholders are also reserved for per-request custom header
- * expansion, including bare, braced, and case-insensitive spellings.
+ * Session-ID placeholders (bare, braced, and case-insensitive spellings) are
+ * never expanded, so settings cannot bake the session ID into a value.
  *
  * @param value - The string that may contain environment variable placeholders
  * @param customEnv - Variables consulted before `process.env`

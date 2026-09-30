@@ -18585,7 +18585,6 @@ describe('QwenAgent MCP SSE/HTTP support', () => {
         enableAutoSkill: false,
         autoSkillConfirm: true,
         enableTeamMemory: false,
-        enableTeamMemorySync: false,
       },
     });
     await expect(
@@ -18614,7 +18613,6 @@ describe('QwenAgent MCP SSE/HTTP support', () => {
         enableAutoSkill: true,
         autoSkillConfirm: true,
         enableTeamMemory: false,
-        enableTeamMemorySync: false,
       },
     });
 

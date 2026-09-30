@@ -13,8 +13,6 @@ import {
   getSessionRootTraceContext,
   getTraceContext,
   formatTraceparent,
-  setShellTracePropagation,
-  isShellTracePropagationEnabled,
   ZERO_TRACE_ID,
 } from './trace-context.js';
 
@@ -52,7 +50,6 @@ describe('trace-context', () => {
     vi.mocked(trace.getActiveSpan).mockReturnValue(undefined);
     vi.mocked(trace.getSpan).mockReturnValue(undefined);
     vi.mocked(getSessionContext).mockReturnValue(undefined);
-    setShellTracePropagation(false);
   });
 
   describe('getActiveSpanTraceContext', () => {
@@ -214,20 +211,6 @@ describe('trace-context', () => {
           traceFlags: 0x1ff,
         }),
       ).toBe('00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-ff');
-    });
-  });
-
-  describe('shellTracePropagation', () => {
-    it('defaults to false', () => {
-      expect(isShellTracePropagationEnabled()).toBe(false);
-    });
-
-    it('can be enabled and disabled', () => {
-      setShellTracePropagation(true);
-      expect(isShellTracePropagationEnabled()).toBe(true);
-
-      setShellTracePropagation(false);
-      expect(isShellTracePropagationEnabled()).toBe(false);
     });
   });
 });

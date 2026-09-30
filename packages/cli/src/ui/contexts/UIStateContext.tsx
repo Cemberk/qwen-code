@@ -31,7 +31,6 @@ import type { DOMElement } from 'ink';
 import type { SessionStatsState } from '../contexts/SessionContext.js';
 import type { PendingMcpServer } from '../hooks/useMcpApproval.js';
 import type { ExtensionUpdateState } from '../state/extensions.js';
-import type { UpdateObject } from '../utils/updateCheck.js';
 
 import { type UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 import { type HelpTab } from './UIActionsContext.js';
@@ -168,7 +167,6 @@ export interface UIState {
   terminalWidth: number;
   terminalHeight: number;
   mainControlsRef: React.MutableRefObject<DOMElement | null>;
-  updateInfo: UpdateObject | null;
   isRestarting: boolean;
   extensionsUpdateState: Map<string, ExtensionUpdateState>;
   activePtyId: number | undefined;
@@ -192,8 +190,6 @@ export interface UIState {
   // Hooks dialog
   isHooksDialogOpen: boolean;
   isStatsDialogOpen: boolean;
-  // Feedback dialog
-  isFeedbackDialogOpen: boolean;
   // Per-task token tracking
   taskStartTokens: number;
   taskStartStreamingChars: number;

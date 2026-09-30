@@ -19664,7 +19664,6 @@ describe('Session', () => {
               loop_type: core.LoopType.REPEATED_TOOL_EXECUTION_FAILURE,
               prompt_id: 'test-session-id########1',
             }),
-            { recordToQwenLogger: false },
           );
           const telemetryPromptIds =
             logRepeatedToolFailureGuardSpy.mock.calls.map(
@@ -19780,7 +19779,6 @@ describe('Session', () => {
             expect.objectContaining({
               loop_type: core.LoopType.REPEATED_TOOL_EXECUTION_FAILURE,
             }),
-            { recordToQwenLogger: false },
           );
         } finally {
           restoreGuardMode();
@@ -24445,7 +24443,6 @@ describe('Session', () => {
           expect.objectContaining({
             loop_type: core.LoopType.TURN_TOOL_CALL_CAP,
           }),
-          {},
         );
         expect(mockClient.extMethod).not.toHaveBeenCalledWith(
           'qwen/control/channel-delivery',
@@ -24499,7 +24496,6 @@ describe('Session', () => {
           expect.objectContaining({
             loop_type: core.LoopType.TURN_TOOL_CALL_CAP,
           }),
-          {},
         );
         expect(mockClient.extMethod).not.toHaveBeenCalledWith(
           'qwen/control/channel-delivery',
@@ -24656,7 +24652,6 @@ describe('Session', () => {
           expect.objectContaining({
             loop_type: core.LoopType.TURN_TOOL_CALL_CAP,
           }),
-          {},
         );
         expect(mockMemoryManager.scheduleExtract).not.toHaveBeenCalled();
         expect(mockMemoryManager.scheduleDream).not.toHaveBeenCalled();
@@ -29176,7 +29171,6 @@ describe('Session', () => {
             expect.objectContaining({
               loop_type: core.LoopType.TURN_TOOL_CALL_CAP,
             }),
-            {},
           );
         });
         // Graceful end_turn settles the iteration; the goal is not paused.
@@ -29287,7 +29281,6 @@ describe('Session', () => {
               expect.objectContaining({
                 loop_type: core.LoopType.REPEATED_TOOL_EXECUTION_FAILURE,
               }),
-              { recordToQwenLogger: false },
             );
           });
           // Graceful end_turn settles the iteration; the goal is not paused.
@@ -37104,7 +37097,6 @@ describe('Session', () => {
         approvalMode: ApprovalMode.DEFAULT,
         debugMode: false,
         chatRecording: false,
-        usageStatisticsEnabled: false,
         overrideExtensions: [],
       });
       Object.assign(mockConfig, {
@@ -44490,7 +44482,6 @@ describe('Session', () => {
         expect.objectContaining({
           loop_type: core.LoopType.TURN_TOOL_CALL_CAP,
         }),
-        {},
       );
     });
 
@@ -51232,7 +51223,6 @@ describe('Session', () => {
         expect.objectContaining({
           loop_type: core.LoopType.TURN_TOOL_CALL_CAP,
         }),
-        {},
       );
       expect(
         vi.mocked(mockClient.sessionUpdate).mock.calls.some(([params]) => {
@@ -51326,7 +51316,6 @@ describe('Session', () => {
         expect.objectContaining({
           loop_type: core.LoopType.TURN_TOOL_CALL_CAP,
         }),
-        {},
       );
       expect(
         vi.mocked(mockClient.sessionUpdate).mock.calls.some(([params]) => {

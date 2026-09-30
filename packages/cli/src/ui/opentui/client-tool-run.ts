@@ -7,7 +7,7 @@
 /**
  * Client-initiated tool scheduling for the OpenTUI backend (audit 01 G-6b).
  *
- * Ink commands that return `{ type: 'tool' }` (/restore, /setup-github) are
+ * Ink commands that return `{ type: 'tool' }` (/restore) are
  * scheduled through `useGeminiStream`'s `schedule_tool` branch: a
  * `ToolCallRequestInfo` with `isClientInitiated: true` goes to the
  * `CoreToolScheduler`, and the completed calls are NOT fed back to the model

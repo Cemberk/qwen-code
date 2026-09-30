@@ -23,7 +23,6 @@ import type {
 import stripJsonComments from 'strip-json-comments';
 import {
   parseExecutionSandboxSettings,
-  readBareModeOperatorSettings,
   readOperatorSandboxSettings,
   selectOperatorExecutionSandbox,
   stripUtf8Bom,
@@ -944,7 +943,7 @@ export class LoadedSettings {
  * Used in stream-json mode where settings are ignored.
  */
 export function createMinimalSettings(): LoadedSettings {
-  const operator = readBareModeOperatorSettings();
+  const operator = readOperatorSandboxSettings();
   const executionSandbox = parseExecutionSandboxSettings(
     operator.tools?.executionSandbox,
   );
@@ -958,7 +957,6 @@ export function createMinimalSettings(): LoadedSettings {
           },
         }
       : {}),
-    ...(operator.privacy ? { privacy: operator.privacy } : {}),
   };
   const emptySettingsFile: SettingsFile = {
     path: '',

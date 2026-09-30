@@ -28,7 +28,6 @@ export interface ExportToolRegistry {
 }
 
 export interface ExportConfig {
-  getChannel?: () => string | undefined;
   getToolRegistry?: () => ExportToolRegistry | undefined;
 }
 
@@ -103,8 +102,6 @@ export interface ExportMetadata {
   gitBranch?: string;
   /** Model used in the session */
   model?: string;
-  /** Channel/source identifier */
-  channel?: string;
   /** Number of user prompts in the session */
   promptCount: number;
   /** Context window utilization percentage (0-100) */

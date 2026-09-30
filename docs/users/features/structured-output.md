@@ -207,8 +207,8 @@ payload a second time into on-device surfaces that may be exported off
 the machine, args are redacted with the placeholder
 `{ __redacted: 'structured_output payload (see stdout result)' }` on:
 
-- The `ToolCallEvent` telemetry path (OTLP exports, QwenLogger,
-  ui-telemetry stream, chat-recording UI event mirror).
+- The `ToolCallEvent` telemetry path (telemetry outfile, ui-telemetry
+  stream, chat-recording UI event mirror).
 - The on-disk chat-recording JSONL at
   `~/.qwen/projects/<sanitized-cwd>/chats/<sessionId>.jsonl` (re-fed
   into model context on `--continue` / `--resume`), including every

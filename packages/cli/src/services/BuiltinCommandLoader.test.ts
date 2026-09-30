@@ -74,10 +74,8 @@ import { CommandKind } from '../ui/commands/types.js';
 import { restoreCommand } from '../ui/commands/restoreCommand.js';
 
 vi.mock('../ui/commands/authCommand.js', () => ({ authCommand: {} }));
-vi.mock('../ui/commands/bugCommand.js', () => ({ bugCommand: {} }));
 vi.mock('../ui/commands/clearCommand.js', () => ({ clearCommand: {} }));
 vi.mock('../ui/commands/compressCommand.js', () => ({ compressCommand: {} }));
-vi.mock('../ui/commands/docsCommand.js', () => ({ docsCommand: {} }));
 vi.mock('../ui/commands/exportCommand.js', () => ({ exportCommand: {} }));
 vi.mock('../ui/commands/editorCommand.js', () => ({ editorCommand: {} }));
 vi.mock('../ui/commands/extensionsCommand.js', () => ({

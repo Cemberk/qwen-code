@@ -6,11 +6,6 @@ export default {
   overview: 'Overview',
   quickstart: 'QuickStart',
   'common-workflow': 'Command Workflows',
-  'Outside of the terminal': {
-    type: 'separator',
-    title: 'Outside of the terminal', // Title is optional
-  },
-  'integration-github-action': 'GitHub Actions',
   'Code with Qwen Code': {
     type: 'separator',
     title: 'Code with Qwen Code', // Title is optional

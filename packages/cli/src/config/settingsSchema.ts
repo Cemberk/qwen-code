@@ -6,9 +6,7 @@
 
 import type {
   MCPServerConfig,
-  BugCommandSettings,
   TelemetrySettings,
-  OutboundCorrelationSettings,
   AuthType,
   ChatCompressionSettings,
   ModelProvidersConfig,
@@ -418,16 +416,6 @@ const SETTINGS_SCHEMA = {
         requiresRestart: false,
         default: false,
         description: 'Enable Vim keybindings',
-        showInDialog: true,
-      },
-      enableAutoUpdate: {
-        type: 'boolean',
-        label: 'Enable Auto Update',
-        category: 'General',
-        requiresRestart: false,
-        default: true,
-        description:
-          'Enable automatic update checks and installations on startup.',
         showInDialog: true,
       },
       showSessionRecap: {
@@ -898,16 +886,6 @@ const SETTINGS_SCHEMA = {
           'Show welcome back dialog when returning to a project with conversation history. Choosing "Start new chat session" suppresses the dialog for that project until the project summary changes.',
         showInDialog: true,
       },
-      enableUserFeedback: {
-        type: 'boolean',
-        label: 'Enable User Feedback',
-        category: 'UI',
-        requiresRestart: false,
-        default: true,
-        description:
-          'Show optional feedback dialog after conversations to help improve Qwen performance.',
-        showInDialog: true,
-      },
       enableFollowupSuggestions: {
         type: 'boolean',
         label: 'Enable Follow-up Suggestions',
@@ -967,15 +945,6 @@ const SETTINGS_SCHEMA = {
             showInDialog: false,
           },
         },
-      },
-      feedbackLastShownTimestamp: {
-        type: 'number',
-        label: 'Feedback Last Shown Timestamp',
-        category: 'UI',
-        requiresRestart: false,
-        default: 0,
-        description: 'The last time the feedback dialog was shown.',
-        showInDialog: false,
       },
       compactMode: {
         type: 'boolean',
@@ -1145,27 +1114,6 @@ const SETTINGS_SCHEMA = {
     },
   },
 
-  privacy: {
-    type: 'object',
-    label: 'Privacy',
-    category: 'Privacy',
-    requiresRestart: true,
-    default: {},
-    description: 'Privacy-related settings.',
-    showInDialog: false,
-    properties: {
-      usageStatisticsEnabled: {
-        type: 'boolean',
-        label: 'Enable Usage Statistics',
-        category: 'Privacy',
-        requiresRestart: true,
-        default: true,
-        description: 'Enable collection of usage statistics',
-        showInDialog: true,
-      },
-    },
-  },
-
   telemetry: {
     type: 'object',
     label: 'Telemetry',
@@ -1179,18 +1127,18 @@ const SETTINGS_SCHEMA = {
       properties: {
         userId: {
           description:
-            'Stable end-user identifier written to GenAI spans as gen_ai.user.id for ARMS session analysis. This value is linkable personal data: prefer a pseudonymous ID, and configure it only when one process represents one user.',
+            'Stable end-user identifier written to GenAI spans as gen_ai.user.id. This value is linkable personal data: prefer a pseudonymous ID, and configure it only when one process represents one user.',
           type: 'string',
         },
         includeSensitiveSpanAttributes: {
           description:
-            'When enabled, user prompts, system prompts, tool inputs/outputs, and model responses are written to native OTel span attributes in addition to the log-to-span bridge. Warning: this may expose sensitive data (file contents, shell commands, conversation history) to your OTLP backend.',
+            'When enabled, user prompts, system prompts, tool inputs/outputs, and model responses are written to native OTel span attributes in the telemetry outfile. Warning: this writes sensitive data (file contents, shell commands, conversation history) to that file.',
           type: 'boolean',
           default: false,
         },
         sensitiveSpanAttributeMaxLength: {
           description:
-            'Maximum JavaScript string length for each sensitive native OTel span attribute content payload. Default: 1048576 (1 MiB). Maximum: 104857600 (100 MiB). Set lower if your collector or backend rejects large span attributes.',
+            'Maximum JavaScript string length for each sensitive native OTel span attribute content payload. Default: 1048576 (1 MiB). Maximum: 104857600 (100 MiB).',
           type: 'integer',
           minimum: 1,
           maximum: SENSITIVE_SPAN_ATTRIBUTE_MAX_LENGTH_LIMIT,
@@ -1198,19 +1146,19 @@ const SETTINGS_SCHEMA = {
         },
         resourceAttributes: {
           description:
-            'Static resource attributes attached to every span/log/metric the SDK exports (OTLP or file outfile — they share the same Resource). Merged with the OTEL_RESOURCE_ATTRIBUTES env var; settings win on key conflict. Reserved keys (service.version, session.id) are dropped with a warning.',
+            'Static resource attributes attached to every span/log/metric written to the telemetry outfile. Merged with the OTEL_RESOURCE_ATTRIBUTES env var; settings win on key conflict. Reserved keys (service.version, session.id) are dropped with a warning.',
           type: 'object',
           additionalProperties: { type: 'string' },
           default: {},
         },
         metrics: {
-          description: 'Per-signal cardinality controls for exported metrics.',
+          description: 'Per-signal cardinality controls for recorded metrics.',
           type: 'object',
           additionalProperties: false,
           properties: {
             includeSessionId: {
               description:
-                'Include session.id on every metric data point. WARNING: each CLI session creates a new value, causing unbounded metric time-series fan-out at the backend. Only enable for short-term debugging — spans and logs still carry session.id.',
+                'Include session.id on every metric data point. Spans and logs always carry session.id.',
               type: 'boolean',
               default: false,
             },
@@ -1218,35 +1166,6 @@ const SETTINGS_SCHEMA = {
         },
       },
       additionalProperties: true,
-    },
-  },
-
-  outboundCorrelation: {
-    type: 'object',
-    label: 'Outbound Correlation',
-    category: 'Advanced',
-    requiresRestart: true,
-    default: undefined as OutboundCorrelationSettings | undefined,
-    description:
-      "SECURITY-RELEVANT. Controls what client-side correlation data qwen-code writes into outbound LLM API requests (DashScope, OpenAI, Anthropic, etc.) — separate from `telemetry.*` which governs data flow into the operator's OWN OTLP collector. All values default to off. Opt in only when the LLM provider also reports into your OTel collector for cross-process trace stitching (e.g. ARMS Tracing + DashScope).",
-    showInDialog: false,
-    jsonSchemaOverride: {
-      type: 'object',
-      properties: {
-        propagateTraceContext: {
-          description:
-            "Requires `telemetry.enabled: true`. Inject W3C `traceparent` on outbound `fetch` requests (LLM SDK calls, MCP StreamableHTTP, WebFetch, ...) AND as a `TRACEPARENT` environment variable in shell child processes (Bash tool, hooks, monitor). When enabled, any existing `TRACEPARENT` in the parent environment is overwritten with qwen-code's own trace context. Default: false — trace context stays internal to the operator's OTLP collector. Set true when you want cross-process trace stitching with an OTel-aware LLM provider (e.g. ARMS+DashScope) or need shell scripts / CLI tools to participate in distributed tracing.",
-          type: 'boolean',
-          default: false,
-        },
-        allowDynamicHeaderValues: {
-          description:
-            'SECURITY-RELEVANT. Allow `modelProviders[].generationConfig.customHeaders` values to contain runtime placeholders — currently `${session_id}` — expanded per request instead of frozen at client construction. Default false: a value containing a placeholder is dropped rather than sent. Enable when a gateway requires a stable per-conversation identifier (e.g. OpenCode Go requires `x-opencode-session`). Which hosts receive the value and what the header is called are decided by the provider entry you attach the header to; this switch only decides whether `${session_id}` may be expanded from live session state and does not identify which settings source supplied the header.',
-          type: 'boolean',
-          default: false,
-        },
-      },
-      additionalProperties: false,
     },
   },
 
@@ -2043,16 +1962,6 @@ const SETTINGS_SCHEMA = {
         default: false,
         description:
           'Enable a project memory tier shared with collaborators via the git-tracked `.qwen/team-memory/` directory. Off by default; writes to it are secret-scanned and reviewable in the git diff.',
-        showInDialog: false,
-      },
-      enableTeamMemorySync: {
-        type: 'boolean',
-        label: 'Enable Team Memory Git Sync',
-        category: 'Memory',
-        requiresRestart: false,
-        default: false,
-        description:
-          'When team memory is enabled, automatically commit, fast-forward-pull, and push the `.qwen/team-memory/` directory at session start so collaborators stay in sync. Off by default; requires a configured git upstream.',
         showInDialog: false,
       },
       enableStructuredRecall: {
@@ -3147,15 +3056,6 @@ const SETTINGS_SCHEMA = {
         description: 'Environment variables to exclude from project context.',
         showInDialog: false,
         mergeStrategy: MergeStrategy.UNION,
-      },
-      bugCommand: {
-        type: 'object',
-        label: 'Bug Command',
-        category: 'Advanced',
-        requiresRestart: false,
-        default: undefined as BugCommandSettings | undefined,
-        description: 'Configuration for the bug report command.',
-        showInDialog: false,
       },
       runtimeOutputDir: {
         type: 'string',

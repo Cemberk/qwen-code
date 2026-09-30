@@ -157,7 +157,6 @@ export function getAllSettingKeys(): string[] {
  * 4. Display preferences
  * 5. Git behavior
  * 6. File filtering
- * 7. System settings (rarely changed)
  *
  * New settings with showInDialog: true that are not listed here
  * will appear at the end of the list.
@@ -180,7 +179,6 @@ const SETTINGS_DIALOG_ORDER: readonly string[] = [
 
   // Display Preferences
   'general.preferredEditor',
-  'ide.enabled',
   'ui.showLineNumbers',
   'ui.hideTips',
   'ui.showToolCallDetails',
@@ -194,12 +192,6 @@ const SETTINGS_DIALOG_ORDER: readonly string[] = [
   // File Filtering
   'context.fileFiltering.respectGitIgnore',
   'context.fileFiltering.respectQwenIgnore',
-
-  // System Settings - rarely changed
-  'general.disableAutoUpdate',
-
-  // Privacy
-  'privacy.usageStatisticsEnabled',
 ] as const;
 
 export const MAX_SETTING_STRING_VALUE_LENGTH = 1024;
@@ -280,7 +272,6 @@ export const WORKSPACE_RESTRICTED_SETTINGS = [
   { section: 'tools', key: 'workflowsEnabled' },
   { section: 'security', key: 'allowPrivateNetworkHooks' },
   { section: 'goals', key: 'modelProposed' },
-  { section: 'outboundCorrelation', key: 'allowDynamicHeaderValues' },
 ] as const satisfies ReadonlyArray<{
   readonly section: keyof Settings;
   readonly key: string;

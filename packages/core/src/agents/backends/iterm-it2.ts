@@ -48,44 +48,18 @@ function parseCreatedPaneId(output: string): string {
   return match[1];
 }
 
-// ─── Installation & Verification ───────────────────────────────
+// ─── Verification ──────────────────────────────────────────────
 
 export function isIt2Available(): boolean {
   return isCommandAvailable('it2').available;
 }
 
-async function tryInstallIt2(
-  command: string,
-  args: string[],
-): Promise<boolean> {
-  if (!isCommandAvailable(command).available) return false;
-  const result = await execCommand(command, args, {
-    preserveOutputOnError: true,
-  });
-  return result.code === 0;
-}
-
-export async function ensureIt2Installed(): Promise<void> {
-  if (isIt2Available()) return;
-
-  const installers: Array<{ cmd: string; args: string[] }> = [
-    { cmd: 'uv', args: ['tool', 'install', 'it2'] },
-    { cmd: 'pipx', args: ['install', 'it2'] },
-    { cmd: 'pip', args: ['install', '--user', 'it2'] },
-  ];
-
-  for (const installer of installers) {
-    const installed = await tryInstallIt2(installer.cmd, installer.args);
-    if (installed && isIt2Available()) return;
-  }
-
-  throw new Error(
-    'it2 is not installed. Install it2 via "uv tool install it2", "pipx install it2", or "pip install --user it2".',
-  );
-}
-
 export async function verifyITerm(): Promise<void> {
-  await ensureIt2Installed();
+  if (!isIt2Available()) {
+    throw new Error(
+      'it2 is not installed. Install it2 via "uv tool install it2", "pipx install it2", or "pip install --user it2".',
+    );
+  }
 
   const result = await it2Result(['session', 'list']);
   if (result.code === 0) return;

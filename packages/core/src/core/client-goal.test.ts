@@ -316,7 +316,6 @@ describe('LlmClient Goal admission', () => {
       });
     Object.assign(config, {
       takePendingGoalProposal,
-      getUsageStatisticsEnabled: vi.fn(() => false),
     });
 
     await drain(
@@ -407,7 +406,6 @@ describe('LlmClient Goal admission', () => {
     const store = pendingGoalProposalStore();
     Object.assign(config, {
       takePendingGoalProposal: store.take,
-      getUsageStatisticsEnabled: vi.fn(() => false),
     });
     turnMocks.run.mockImplementationOnce(() => {
       store.set({
@@ -456,7 +454,6 @@ describe('LlmClient Goal admission', () => {
     const store = pendingGoalProposalStore();
     Object.assign(config, {
       takePendingGoalProposal: store.take,
-      getUsageStatisticsEnabled: vi.fn(() => false),
     });
     turnMocks.run.mockImplementationOnce(() => {
       store.set({
@@ -505,7 +502,6 @@ describe('LlmClient Goal admission', () => {
     Object.assign(config, {
       takePendingGoalProposal,
       getSkipNextSpeakerCheck: vi.fn(() => true),
-      getUsageStatisticsEnabled: vi.fn(() => false),
     });
     turnMocks.run.mockImplementationOnce(() => {
       pending = {
@@ -556,7 +552,6 @@ describe('LlmClient Goal admission', () => {
         })),
       })),
       getStopHookBlockingCap: vi.fn(() => 1),
-      getUsageStatisticsEnabled: vi.fn(() => false),
     });
     turnMocks.run.mockImplementationOnce(() => {
       pending = {
@@ -604,7 +599,6 @@ describe('LlmClient Goal admission', () => {
         })),
       })),
       getStopHookBlockingCap: vi.fn(() => 1),
-      getUsageStatisticsEnabled: vi.fn(() => false),
     });
     turnMocks.run.mockImplementationOnce(() => {
       store.set({
@@ -679,7 +673,6 @@ describe('LlmClient Goal admission', () => {
     Object.assign(config, {
       takePendingGoalProposal,
       getMaxSessionTurns: vi.fn(() => 0),
-      getUsageStatisticsEnabled: vi.fn(() => false),
     });
     turnMocks.pendingToolCalls.push([{ name: 'read_file' }], []);
     turnMocks.run
@@ -751,7 +744,6 @@ describe('LlmClient Goal admission', () => {
     });
     Object.assign(config, {
       takePendingGoalProposal: store.take,
-      getUsageStatisticsEnabled: vi.fn(() => false),
     });
 
     const events = await collect(
@@ -789,7 +781,6 @@ describe('LlmClient Goal admission', () => {
     });
     Object.assign(config, {
       takePendingGoalProposal,
-      getUsageStatisticsEnabled: vi.fn(() => false),
     });
     let snapshot: GoalSnapshotV2 = { v: 2, activity: 'idle', goal: null };
     vi.mocked(runtime.getSnapshot).mockImplementation(() =>
@@ -866,7 +857,6 @@ describe('LlmClient Goal admission', () => {
     const store = pendingGoalProposalStore();
     Object.assign(config, {
       takePendingGoalProposal: store.take,
-      getUsageStatisticsEnabled: vi.fn(() => false),
       getSkipNextSpeakerCheck: vi.fn(() => true),
     });
     turnMocks.run
@@ -1024,7 +1014,6 @@ describe('LlmClient Goal admission', () => {
       Object.assign(config, {
         takePendingGoalProposal: store.take,
         getMaxSessionTurns: vi.fn(() => 0),
-        getUsageStatisticsEnabled: vi.fn(() => false),
       });
 
       if (exit === 'aborted') {
@@ -1141,7 +1130,6 @@ describe('LlmClient Goal admission', () => {
     Object.assign(config, {
       takePendingGoalProposal: store.take,
       getSkipNextSpeakerCheck: vi.fn(() => true),
-      getUsageStatisticsEnabled: vi.fn(() => false),
     });
 
     await drain(
@@ -1262,7 +1250,6 @@ describe('LlmClient Goal admission', () => {
         getMessageBus: vi.fn(
           () => messageBus as unknown as ReturnType<Config['getMessageBus']>,
         ),
-        getUsageStatisticsEnabled: vi.fn(() => false),
       });
       if (continuation === 'next-speaker') {
         nextSpeakerMocks.check.mockResolvedValue({ next_speaker: 'model' });
@@ -1314,7 +1301,6 @@ describe('LlmClient Goal admission', () => {
       .mockReturnValue(undefined);
     Object.assign(config, {
       takePendingGoalProposal,
-      getUsageStatisticsEnabled: vi.fn(() => false),
     });
 
     await drain(

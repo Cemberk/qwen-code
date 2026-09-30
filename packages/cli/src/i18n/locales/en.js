@@ -261,7 +261,6 @@ export default {
     '← → select, Delete to remove, ↓ to exit',
   'Attachments: ': 'Attachments: ',
   'Basics:': 'Basics:',
-  'Add context': 'Add context',
   'Use {{symbol}} to specify files for context (e.g., {{example}}) to target specific files or folders.':
     'Use {{symbol}} to specify files for context (e.g., {{example}}) to target specific files or folders.',
   '@': '@',
@@ -314,7 +313,6 @@ export default {
     'New line (Alt+Enter works for certain linux distros)',
   'Clear the screen': 'Clear the screen',
   'Open input in external editor': 'Open input in external editor',
-  'Send message': 'Send message',
   'Initializing...': 'Initializing...',
   'Connecting to MCP servers... ({{connected}}/{{total}})':
     'Connecting to MCP servers... ({{connected}}/{{total}})',
@@ -334,7 +332,6 @@ export default {
   'show version info': 'show version info',
   'show paths for current session files and logs':
     'show paths for current session files and logs',
-  'submit a bug report': 'submit a bug report',
   Status: 'Status',
 
   // ============================================================================
@@ -351,7 +348,6 @@ export default {
   'Base URL': 'Base URL',
   Proxy: 'Proxy',
   'Memory Usage': 'Memory Usage',
-  'IDE Client': 'IDE Client',
 
   // ============================================================================
   // Commands - General
@@ -474,8 +470,6 @@ export default {
     'Compresses the context by replacing it with a summary.',
   'Fast context compression without AI. Strips old tool outputs and thinking parts.':
     'Fast context compression without AI. Strips old tool outputs and thinking parts.',
-  'open full Qwen Code documentation in your browser':
-    'open full Qwen Code documentation in your browser',
   'Configuration not available.': 'Configuration not available.',
   'Connect an LLM provider': 'Connect an LLM provider',
   'Copy to clipboard: reply, code (by lang), LaTeX, or Mermaid. N = Nth-latest message, index = block number':
@@ -697,7 +691,6 @@ export default {
   'User Scope': 'User Scope',
   'Workspace Scope': 'Workspace Scope',
   'No extensions found.': 'No extensions found.',
-  'Updating...': 'Updating...',
   Unknown: 'Unknown',
   Error: 'Error',
   'Stopped because': 'Stopped because',
@@ -754,10 +747,8 @@ export default {
   'Vim Mode': 'Vim Mode',
   'Attribution: commit': 'Attribution: commit',
   'Terminal Bell Notification': 'Terminal Bell Notification',
-  'Enable Usage Statistics': 'Enable Usage Statistics',
   Theme: 'Theme',
   'Preferred Editor': 'Preferred Editor',
-  'Auto-connect to IDE': 'Auto-connect to IDE',
   'Debug Keystroke Logging': 'Debug Keystroke Logging',
   'Language: UI': 'Language: UI',
   'Language: Model': 'Language: Model',
@@ -770,13 +761,6 @@ export default {
   'Show Citations': 'Show Citations',
   'Custom Witty Phrases': 'Custom Witty Phrases',
   'Show Welcome Back Dialog': 'Show Welcome Back Dialog',
-  'Enable User Feedback': 'Enable User Feedback',
-  'How is Qwen doing this session? (optional)':
-    'How is Qwen doing this session? (optional)',
-  Bad: 'Bad',
-  Fine: 'Fine',
-  Good: 'Good',
-  Dismiss: 'Dismiss',
   'Screen Reader Mode': 'Screen Reader Mode',
   'Max Session Turns': 'Max Session Turns',
   'Skip Next Speaker Check': 'Skip Next Speaker Check',
@@ -944,8 +928,8 @@ export default {
     'Installation cancelled for "{{name}}".',
   'You are installing an extension from {{originSource}}. Some features may not work perfectly with Qwen Code.':
     'You are installing an extension from {{originSource}}. Some features may not work perfectly with Qwen Code.',
-  '--ref and --auto-update are not applicable for marketplace extensions.':
-    '--ref and --auto-update are not applicable for marketplace extensions.',
+  '--ref is not applicable for marketplace extensions.':
+    '--ref is not applicable for marketplace extensions.',
   'Extension "{{name}}" installed successfully and enabled.':
     'Extension "{{name}}" installed successfully and enabled.',
   'The github URL, local path, or marketplace source (marketplace-url:plugin-name) of the extension to install.':
@@ -961,8 +945,6 @@ export default {
     'Installs an extension from a git repository URL, local path, scoped npm package (@scope/name), or claude marketplace (marketplace-url:plugin-name).',
   Description: 'Description',
   'Delete Session': 'Delete Session',
-  'Enable auto-update for this extension.':
-    'Enable auto-update for this extension.',
   'Enable pre-release versions for this extension.':
     'Enable pre-release versions for this extension.',
   'Acknowledge the security risks of installing an extension and skip the confirmation prompt.':
@@ -1060,15 +1042,6 @@ export default {
     'Use ↑↓ or j/k to navigate, Enter to select, Escape to cancel',
   '{{count}} more above': '{{count}} more above',
   '{{count}} more below': '{{count}} more below',
-  'manage IDE integration': 'manage IDE integration',
-  'check status of IDE integration': 'check status of IDE integration',
-  'install required IDE companion for {{ideName}}':
-    'install required IDE companion for {{ideName}}',
-  'enable IDE integration': 'enable IDE integration',
-  'disable IDE integration': 'disable IDE integration',
-  'IDE integration is not supported in your current environment. To use this feature, run Qwen Code in one of these supported IDEs: VS Code or VS Code forks.':
-    'IDE integration is not supported in your current environment. To use this feature, run Qwen Code in one of these supported IDEs: VS Code or VS Code forks.',
-  'Set up GitHub Actions': 'Set up GitHub Actions',
   'Configure terminal keybindings for multiline input (VS Code, Cursor, Windsurf, Trae)':
     'Configure terminal keybindings for multiline input (VS Code, Cursor, Windsurf, Trae)',
   'Please restart your terminal for the changes to take effect.':
@@ -1272,7 +1245,6 @@ export default {
   // ============================================================================
   'Export current session message history to a file':
     'Export current session message history to a file',
-  'Export session to HTML format': 'Export session to HTML format',
   'Export session to JSON format': 'Export session to JSON format',
   'Export session to JSONL format (one message per line)':
     'Export session to JSONL format (one message per line)',
@@ -1384,7 +1356,6 @@ export default {
     'Workspace approval mode exists and takes priority. User-level change will have no effect.',
   'Apply To': 'Apply To',
   'Workspace Settings': 'Workspace Settings',
-  'Open auto-memory folder': 'Open auto-memory folder',
   'Auto-memory: {{status}}': 'Auto-memory: {{status}}',
   'Auto-dream: {{status}} · {{lastDream}} · /dream to run':
     'Auto-dream: {{status}} · {{lastDream}} · /dream to run',
@@ -1571,9 +1542,6 @@ export default {
     "⚠ '{{model}}' is not a known image-capable model; the vision bridge may fail on images.",
   'Set a lighter model for prompt suggestions and speculative execution':
     'Set a lighter model for prompt suggestions and speculative execution',
-  'Toggle voice dictation input': 'Toggle voice dictation input',
-  'Set the model for voice transcription':
-    'Set the model for voice transcription',
   'Set the image-capable model used to transcribe images for a text-only main model':
     'Set the image-capable model used to transcribe images for a text-only main model',
   'Set the model used to generate images':
@@ -1588,7 +1556,6 @@ export default {
   'Select Vision Model': 'Select Vision Model',
   'Select Image Model': 'Select Image Model',
   'Select Compaction Model': 'Select Compaction Model',
-  'Select Voice Model': 'Select Voice Model',
   'Vision Model': 'Vision Model',
   'Image Model': 'Image Model',
   'Compaction Model': 'Compaction Model',
@@ -1599,53 +1566,16 @@ export default {
     'not set (falls back to the main model)',
   'Configure models in settings.modelProviders and ensure the required environment variables are set. In interactive mode, run /auth to configure or switch providers, or run /model --compaction without a model to choose from configured models.':
     'Configure models in settings.modelProviders and ensure the required environment variables are set. In interactive mode, run /auth to configure or switch providers, or run /model --compaction without a model to choose from configured models.',
-  'Voice Model': 'Voice Model',
   'Selected compaction model is unavailable.':
     'Selected compaction model is unavailable.',
-  'Selected voice model is unavailable.':
-    'Selected voice model is unavailable.',
   'Selected image model is unavailable.':
     'Selected image model is unavailable.',
-  "Voice model '{{model}}' is configured more than once. Remove duplicate model ids before selecting it for voice transcription.":
-    "Voice model '{{model}}' is configured more than once. Remove duplicate model ids before selecting it for voice transcription.",
-  'Voice dictation: {{status}} (mode: {{mode}}, {{modelText}}).':
-    'Voice dictation: {{status}} (mode: {{mode}}, {{modelText}}).',
-  'model: {{voiceModel}}': 'model: {{voiceModel}}',
-  'no voice model selected': 'no voice model selected',
-  'Voice dictation disabled.': 'Voice dictation disabled.',
-  'Usage: /voice [hold|tap|off|status]': 'Usage: /voice [hold|tap|off|status]',
-  'No voice model selected. Run /model --voice to choose one before enabling voice dictation.':
-    'No voice model selected. Run /model --voice to choose one before enabling voice dictation.',
-  'Voice dictation enabled (tap mode). Tap Space at an empty prompt to start, tap again or pause to stop and submit, using {{voiceModel}}.':
-    'Voice dictation enabled (tap mode). Tap Space at an empty prompt to start, tap again or pause to stop and submit, using {{voiceModel}}.',
-  'Voice dictation enabled (hold mode). Hold Space at an empty prompt to dictate with {{voiceModel}}.':
-    'Voice dictation enabled (hold mode). Hold Space at an empty prompt to dictate with {{voiceModel}}.',
   'No models are configured.': 'No models are configured.',
   'Configured models: {{models}}.': 'Configured models: {{models}}.',
-  'Configure a unique model id in settings.modelProviders or run /model --voice to select an available model.':
-    'Configure a unique model id in settings.modelProviders or run /model --voice to select an available model.',
-  "Voice model '{{modelName}}' is not configured.":
-    "Voice model '{{modelName}}' is not configured.",
   "Voice model '{{modelName}}' cannot be used for transcription.":
     "Voice model '{{modelName}}' cannot be used for transcription.",
-  "Voice model '{{modelName}}' cannot be used for transcription. Configure an OpenAI-compatible model with baseUrl in settings.modelProviders.":
-    "Voice model '{{modelName}}' cannot be used for transcription. Configure an OpenAI-compatible model with baseUrl in settings.modelProviders.",
   'Configure an OpenAI-compatible model with baseUrl in settings.modelProviders.':
     'Configure an OpenAI-compatible model with baseUrl in settings.modelProviders.',
-  'Microphone access is denied. Enable it for your terminal in System Settings → Privacy & Security → Microphone, then restart voice dictation.':
-    'Microphone access is denied. Enable it for your terminal in System Settings → Privacy & Security → Microphone, then restart voice dictation.',
-  'Voice dictation is not supported on {{platform}}.':
-    'Voice dictation is not supported on {{platform}}.',
-  'Voice dictation needs microphone access, which is unavailable in this WSL session. Use WSLg/PulseAudio, or run Qwen Code on a host with a microphone.':
-    'Voice dictation needs microphone access, which is unavailable in this WSL session. Use WSLg/PulseAudio, or run Qwen Code on a host with a microphone.',
-  'Voice dictation needs microphone access. macOS will ask the first time you record — approve it, then start again. Your first recording may be empty while the dialog is open.':
-    'Voice dictation needs microphone access. macOS will ask the first time you record — approve it, then start again. Your first recording may be empty while the dialog is open.',
-  'Voice: recording': 'Voice: recording',
-  'Voice: transcribing': 'Voice: transcribing',
-  'Voice: refining': 'Voice: refining',
-  'listening…': 'listening…',
-  'transcribing…': 'transcribing…',
-  'refining…': 'refining…',
   'Content generator configuration not available.':
     'Content generator configuration not available.',
   'Authentication type not available.': 'Authentication type not available.',
@@ -1705,10 +1635,6 @@ export default {
   // ============================================================================
   // Commands - Docs
   // ============================================================================
-  'Please open the following URL in your browser to view the documentation:\n{{url}}':
-    'Please open the following URL in your browser to view the documentation:\n{{url}}',
-  'Opening documentation in your browser: {{url}}':
-    'Opening documentation in your browser: {{url}}',
 
   // ============================================================================
   // Dialogs - Tool Confirmation
@@ -1855,14 +1781,10 @@ export default {
   audio: 'audio',
   video: 'video',
   'not set': 'not set',
-  'Current voice model: {{voiceModel}}\nUse "/model --voice <model-id>" to set voice model.':
-    'Current voice model: {{voiceModel}}\nUse "/model --voice <model-id>" to set voice model.',
   'Current vision model: {{visionModel}}\nUse "/model --vision <model-id>" to set the vision bridge model.':
     'Current vision model: {{visionModel}}\nUse "/model --vision <model-id>" to set the vision bridge model.',
   'Current image model: {{imageModel}}\nUse "/model --image <model-id>" to set the image generation model.':
     'Current image model: {{imageModel}}\nUse "/model --image <model-id>" to set the image generation model.',
-  "Voice model '{{modelName}}' is ambiguous. Configure a unique model id before using /model --voice.":
-    "Voice model '{{modelName}}' is ambiguous. Configure a unique model id before using /model --voice.",
   "Image model '{{modelName}}' matches multiple configured endpoints. Run /model --image without an argument and choose the exact endpoint.":
     "Image model '{{modelName}}' matches multiple configured endpoints. Run /model --image without an argument and choose the exact endpoint.",
   "Image model '{{modelName}}' must declare a valid HTTPS baseUrl and credential environment variable.":
@@ -1943,9 +1865,6 @@ export default {
   // Status Bar
   // ============================================================================
   'Using:': 'Using:',
-  '{{count}} open file': '{{count}} open file',
-  '{{count}} open files': '{{count}} open files',
-  '(ctrl+g to view)': '(ctrl+g to view)',
   '{{count}} {{name}} file': '{{count}} {{name}} file',
   '{{count}} {{name}} files': '{{count}} {{name}} files',
   '{{count}} MCP server': '{{count}} MCP server',
@@ -2352,16 +2271,6 @@ export default {
   // ============================================================================
   'Open extensions page in your browser':
     'Open extensions page in your browser',
-  'Unknown extensions source: {{source}}.':
-    'Unknown extensions source: {{source}}.',
-  'Would open extensions page in your browser: {{url}} (skipped in test environment)':
-    'Would open extensions page in your browser: {{url}} (skipped in test environment)',
-  'View available extensions at {{url}}':
-    'View available extensions at {{url}}',
-  'Opening extensions page in your browser: {{url}}':
-    'Opening extensions page in your browser: {{url}}',
-  'Failed to open browser. Check out the extensions gallery at {{url}}':
-    'Failed to open browser. Check out the extensions gallery at {{url}}',
   'Retrying in {{seconds}} seconds… (attempt {{attempt}}/{{maxRetries}})':
     'Retrying in {{seconds}} seconds… (attempt {{attempt}}/{{maxRetries}})',
   'Press Ctrl+Y to retry': 'Press Ctrl+Y to retry',
@@ -2591,17 +2500,6 @@ export default {
     'Show current process memory diagnostics',
   'Record a CPU profile for Chrome DevTools analysis':
     'Record a CPU profile for Chrome DevTools analysis',
-  'Roll back a standalone update to the previous version':
-    'Roll back a standalone update to the previous version',
-  'Rollback is not available in ACP mode.':
-    'Rollback is not available in ACP mode.',
-  'Rollback is only available for standalone installations.':
-    'Rollback is only available for standalone installations.',
-  'Rollback successful. Restart your terminal to use the previous version.':
-    'Rollback successful. Restart your terminal to use the previous version.',
-  'Rollback failed:': 'Rollback failed:',
-  'Rollback on Windows requires manual intervention. Rename qwen-code.old to qwen-code in your installation directory.':
-    'Rollback on Windows requires manual intervention. Rename qwen-code.old to qwen-code in your installation directory.',
   'Save a durable memory to the memory system.':
     'Save a durable memory to the memory system.',
   'Ask a quick side question without affecting the main conversation':
@@ -2708,10 +2606,8 @@ export default {
   Sessions: 'Sessions',
   days: 'days',
   Input: 'Input',
-  'Tool calls': 'Tool calls',
   'Code changes': 'Code changes',
   Projects: 'Projects',
-  Name: 'Name',
   Duration: 'Duration',
   'Activity Heatmap': 'Activity Heatmap',
   'Loading stats...': 'Loading stats...',
@@ -2752,76 +2648,19 @@ export default {
   'Token Trend': 'Token Trend',
   'In/Out': 'In/Out',
   'API Requests': 'API Requests',
-  'Tool Calls': 'Tool Calls',
   'Success rate': 'Success rate',
-  'Code Changes': 'Code Changes',
   Tool: 'Tool',
   reqs: 'reqs',
   in: 'in',
   out: 'out',
 
   // Update command
-  'Check for Qwen Code updates and install if available':
-    'Check for Qwen Code updates and install if available',
-  'Qwen Code update available! {{current}} → {{latest}}':
-    'Qwen Code update available! {{current}} → {{latest}}',
-  'A new version of Qwen Code is available! {{current}} → {{latest}}':
-    'A new version of Qwen Code is available! {{current}} → {{latest}}',
-  'Qwen Code {{version}} is up to date!':
-    'Qwen Code {{version}} is up to date!',
-  'Failed to check for updates ({{reason}}). Please check your network or registry configuration.':
-    'Failed to check for updates ({{reason}}). Please check your network or registry configuration.',
-  'Update check skipped ({{reason}}) — run /update to retry.':
-    'Update check skipped ({{reason}}) — run /update to retry.',
-  'registry did not respond within {{seconds}}s':
-    'registry did not respond within {{seconds}}s',
-  'registry unreachable': 'registry unreachable',
-  'registry error': 'registry error',
-  'Unable to check for updates: {{reason}}':
-    'Unable to check for updates: {{reason}}',
-  'Update successful! The new version will be used on your next run.':
-    'Update successful! The new version will be used on your next run.',
-  'Update downloaded. It will be applied after you exit this session.':
-    'Update downloaded. It will be applied after you exit this session.',
-  'Update failed: {{error}}': 'Update failed: {{error}}',
-  'Downloading update...': 'Downloading update...',
   'Update successful! Please restart Qwen Code to use the new version. Switching model providers before restarting may not work correctly.':
     'Update successful! Please restart Qwen Code to use the new version. Switching model providers before restarting may not work correctly.',
-  'Automatic update failed. Please try updating manually.':
-    'Automatic update failed. Please try updating manually.',
-  'Automatic update failed: {{error}}. Re-run the installer to update manually.':
-    'Automatic update failed: {{error}}. Re-run the installer to update manually.',
-  'Running from a local git clone. Please update with "git pull".':
-    'Running from a local git clone. Please update with "git pull".',
-  'Running via npx, update not applicable.':
-    'Running via npx, update not applicable.',
-  'Running via pnpx, update not applicable.':
-    'Running via pnpx, update not applicable.',
-  'Running via bunx, update not applicable.':
-    'Running via bunx, update not applicable.',
-  'Installed via Homebrew. Please update with "brew upgrade".':
-    'Installed via Homebrew. Please update with "brew upgrade".',
-  "Locally installed. Please update via your project's package.json.":
-    "Locally installed. Please update via your project's package.json.",
-  'Update requires sudo. Please run:': 'Update requires sudo. Please run:',
-  'Standalone install detected. Attempting to automatically update now...':
-    'Standalone install detected. Attempting to automatically update now...',
   'Standalone install detected. Please rerun the standalone installer to update:':
     'Standalone install detected. Please rerun the standalone installer to update:',
-  'Run the following to update:': 'Run the following to update:',
   'Unable to auto-update this standalone installation. Please reinstall from:':
     'Unable to auto-update this standalone installation. Please reinstall from:',
-  'Manual update required. Please reinstall Qwen Code.':
-    'Manual update required. Please reinstall Qwen Code.',
-  'This session uses the custom sandbox image {{image}}. Update that image and restart Qwen Code.':
-    'This session uses the custom sandbox image {{image}}. Update that image and restart Qwen Code.',
-  'Update Qwen Code on the host, then restart the sandbox.':
-    'Update Qwen Code on the host, then restart the sandbox.',
-  'The update will be installed after you exit this session.':
-    'The update will be installed after you exit this session.',
-  'Run /update to install the update on the host.':
-    'Run /update to install the update on the host.',
-  'Run /update to install the update.': 'Run /update to install the update.',
   '⚠️ History gap: earlier conversation was lost before this point (storage interruption) and could not be recovered.':
     '⚠️ History gap: earlier conversation was lost before this point (storage interruption) and could not be recovered.',
 
@@ -2932,8 +2771,6 @@ export default {
   'Auto-skill curator changes are only available in trusted workspaces. Trust this folder via `/trust` and try again.':
     'Auto-skill curator changes are only available in trusted workspaces. Trust this folder via `/trust` and try again.',
   'Kept model as {{model}}': 'Kept model as {{model}}',
-  'Review messages held from other Qwen Code sessions (accept | deny), and manage trusted controllers (controllers | revoke)':
-    'Review messages held from other Qwen Code sessions (accept | deny), and manage trusted controllers (controllers | revoke)',
   'Create a git commit with an AI-drafted message':
     'Create a git commit with an AI-drafted message',
 };

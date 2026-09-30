@@ -49,7 +49,6 @@ export {
   findProviderByCredentials,
   findProviderById,
   generateCustomEnvKey,
-  getAllProviderBaseUrls,
   grokProvider,
   idealabProvider,
   minimaxProvider,

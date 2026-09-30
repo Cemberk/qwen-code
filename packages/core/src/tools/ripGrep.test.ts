@@ -58,7 +58,6 @@ describe('RipGrepTool', () => {
     getWorkingDir: () => tempRootDir,
     getDebugMode: () => false,
     getUseBuiltinRipgrep: () => true,
-    getUsageStatisticsEnabled: () => false,
     getTruncateToolOutputThreshold: () => 25000,
     getTruncateToolOutputLines: () => 1000,
   } as unknown as Config;

@@ -828,7 +828,6 @@ describe('DiscoveredMCPTool', () => {
           loadOmniMediaReader,
           getTruncateToolOutputThreshold: () => 1000,
           getTruncateToolOutputLines: () => 50,
-          getUsageStatisticsEnabled: () => false,
           isTrustedFolder: () => true,
           storage: { getProjectTempDir: () => '/tmp/test-project' },
         } as any;
@@ -2624,7 +2623,6 @@ describe('DiscoveredMCPTool', () => {
     const mockConfigWithTruncation = {
       getTruncateToolOutputThreshold: () => THRESHOLD,
       getTruncateToolOutputLines: () => TRUNCATE_LINES,
-      getUsageStatisticsEnabled: () => false,
       storage: {
         getProjectTempDir: () => '/tmp/test-project',
       },

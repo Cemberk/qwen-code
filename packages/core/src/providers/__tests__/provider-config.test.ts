@@ -1148,31 +1148,10 @@ describe('findProviderByCredentials', () => {
   });
 });
 
-describe('getAllProviderBaseUrls', () => {
-  it('returns a non-empty list including known preset URLs', () => {
-    const urls = getAllProviderBaseUrlsSrc();
-    expect(urls.length).toBeGreaterThan(0);
-    expect(urls).toContain('https://api.deepseek.com');
-    expect(urls).toContain('https://openrouter.ai/api/v1');
-  });
-
-  it('expands BaseUrlOption[] presets into each option URL', () => {
-    const urls = getAllProviderBaseUrlsSrc();
-    // coding-plan has China + Singapore options
-    expect(urls).toContain('https://coding.dashscope.aliyuncs.com/v1');
-    expect(urls).toContain('https://coding-intl.dashscope.aliyuncs.com/v1');
-    expect(urls).toContain(TOKEN_PLAN_CHINA_BASE_URL);
-    expect(urls).toContain(TOKEN_PLAN_GLOBAL_BASE_URL);
-  });
-});
-
 // The package-name imports above resolve to dist/, which lags the source on a
 // branch that hasn't been built yet. Re-import via the relative source path so
 // these new edge-case tests exercise the in-tree implementation.
-import {
-  findProviderByCredentials as findProviderByCredentialsSrc,
-  getAllProviderBaseUrls as getAllProviderBaseUrlsSrc,
-} from '../all-providers.js';
+import { findProviderByCredentials as findProviderByCredentialsSrc } from '../all-providers.js';
 import {
   buildInstallPlan as buildInstallPlanSrc,
   resolveBaseUrl as resolveBaseUrlSrc,

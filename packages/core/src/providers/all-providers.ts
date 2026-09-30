@@ -89,13 +89,3 @@ export function findProviderByCredentials(
     providerMatchesCredentials(p, baseUrl, envKey),
   );
 }
-
-/** All known provider base URLs (for preconnect, validation, etc.). */
-export function getAllProviderBaseUrls(): string[] {
-  return ALL_PROVIDERS.flatMap((p) => {
-    if (typeof p.baseUrl === 'string') return [p.baseUrl];
-    if (Array.isArray(p.baseUrl))
-      return p.baseUrl.map((o: { url: string }) => o.url);
-    return [];
-  });
-}

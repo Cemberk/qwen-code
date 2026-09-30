@@ -128,9 +128,6 @@ vi.mock('./live-turn.js', () => ({
     settleWaitingCall: () => {},
   }),
 }));
-vi.mock('../handleAutoUpdate.js', () => ({
-  setUpdateHandler: () => ({ cleanup: () => {}, flush: () => {} }),
-}));
 vi.mock('../hooks/useLogger.js', () => ({ useLogger: () => null }));
 vi.mock('../../startup/startup-prefetch.js', () => ({
   startPostRenderPrefetches: () => {},

@@ -5,11 +5,10 @@
  */
 
 /**
- * `qwen sessions ps` — list registered and managed Qwen Code sessions.
+ * `qwen sessions ps` — list registered Qwen Code sessions.
  *
  * The sibling `qwen sessions list` walks saved transcripts. This command shows
- * live registry records and Agent View records marked `managed`. The latter are
- * persistent records, not a liveness claim.
+ * live registry records.
  */
 
 import type { CommandModule, Argv } from 'yargs';
@@ -19,16 +18,11 @@ import {
   type SessionRegistryRecord,
 } from '@qwen-code/qwen-code-core';
 import stringWidth from 'string-width';
-import { listAgentViewSessionStates } from '../../agent-view/supervisor-store.js';
 import {
   sanitizeTerminalText,
   truncateToWidth,
 } from '../../ui/utils/textUtils.js';
-import {
-  ignoreBrokenPipe,
-  writeStderrLine,
-  writeStdoutLine,
-} from '../../utils/stdioHelpers.js';
+import { ignoreBrokenPipe, writeStdoutLine } from '../../utils/stdioHelpers.js';
 
 /** Fixed column widths for the human-readable table (exported for tests). */
 export const NAME_COL = 22;
@@ -39,11 +33,6 @@ export const AGE_COL = 10;
 
 interface PsArgs {
   json?: boolean;
-}
-
-interface ManagedSession {
-  sessionId: string;
-  cwd: string;
 }
 
 /**
@@ -83,11 +72,7 @@ export function formatAge(ms: number): string {
   return `${Math.floor(hours / 24)}d`;
 }
 
-function outputHuman(
-  records: SessionRegistryRecord[],
-  managed: ManagedSession[],
-  now: number,
-): void {
+function outputHuman(records: SessionRegistryRecord[], now: number): void {
   writeStdoutLine(
     padDisplay('NAME', NAME_COL) +
       padDisplay('KIND', KIND_COL) +
@@ -95,18 +80,6 @@ function outputHuman(
       padDisplay('AGE', AGE_COL) +
       'DIRECTORY',
   );
-  for (const session of managed) {
-    writeStdoutLine(
-      padDisplay(
-        truncateToWidth(sanitize(session.sessionId), NAME_COL - 2),
-        NAME_COL,
-      ) +
-        padDisplay('managed', KIND_COL) +
-        padDisplay('-', PID_COL) +
-        padDisplay('-', AGE_COL) +
-        sanitize(session.cwd),
-    );
-  }
   for (const record of records) {
     writeStdoutLine(
       padDisplay(
@@ -129,33 +102,13 @@ function outputHuman(
   }
 }
 
-async function readManagedSessions(): Promise<ManagedSession[]> {
-  try {
-    return (await listAgentViewSessionStates())
-      .filter((state) => state.ownership === 'managed')
-      .map(({ sessionId, activeCwd }) => ({ sessionId, cwd: activeCwd }));
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    writeStderrLine(
-      `Managed sessions could not be listed: ${sanitize(reason)}`,
-    );
-    return [];
-  }
-}
-
 async function handlePs(argv: PsArgs): Promise<void> {
   ignoreBrokenPipe();
   // listLiveSessions reports "cannot look" as "no sessions" rather than
   // throwing, so there is no failure path to surface here.
-  const [records, managed] = await Promise.all([
-    listLiveSessions(),
-    readManagedSessions(),
-  ]);
+  const records = await listLiveSessions();
 
   if (argv.json) {
-    for (const session of managed) {
-      writeStdoutLine(JSON.stringify({ ...session, managed: true }));
-    }
     for (const record of records) {
       // Deliberately raw: field values are emitted exactly as recorded,
       // with none of the table path's terminal sanitization. That keeps
@@ -167,19 +120,17 @@ async function handlePs(argv: PsArgs): Promise<void> {
     return;
   }
 
-  if (records.length === 0 && managed.length === 0) {
-    writeStdoutLine(
-      'No Qwen Code sessions are registered or managed right now.',
-    );
+  if (records.length === 0) {
+    writeStdoutLine('No Qwen Code sessions are registered right now.');
     return;
   }
 
-  outputHuman(records, managed, Date.now());
+  outputHuman(records, Date.now());
 }
 
 export const psCommand: CommandModule<unknown, PsArgs> = {
   command: 'ps',
-  describe: 'List registered and managed Qwen Code sessions',
+  describe: 'List registered Qwen Code sessions',
   builder: (yargs: Argv) =>
     yargs.option('json', {
       type: 'boolean',

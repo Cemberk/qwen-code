@@ -10,10 +10,9 @@
  * Hot-path modules (`loggers.ts`, `session-tracing.ts`) statically gate every
  * telemetry call on `isTelemetrySdkInitialized()`, so this module must stay
  * cheap: its only runtime `@opentelemetry/*` dependency is `@opentelemetry/api`.
- * All heavy SDK assembly (NodeSDK, instrumentations, and — one level further
- * down, per configured protocol — the OTLP exporter chains) lives in
- * `sdk-impl.ts` and is loaded via dynamic `import()` only when telemetry is
- * actually enabled.
+ * All heavy SDK assembly (NodeSDK, instrumentations, and the outfile
+ * exporters) lives in `sdk-impl.ts` and is loaded via dynamic `import()` only
+ * when telemetry is actually enabled.
  */
 
 import { DiagLogLevel, diag } from '@opentelemetry/api';
@@ -25,7 +24,6 @@ import { initializeMetrics } from './metrics.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
 import { createSessionRootContext } from './tracer.js';
 import { getCurrentSessionId, setSessionContext } from './session-context.js';
-import { setShellTracePropagation } from './trace-context.js';
 import { endAllInteractionSpans } from './session-tracing.js';
 import { emitSessionEnd, emitSessionStart } from './session-events.js';
 
@@ -73,9 +71,9 @@ function startSdkWithExplicitExporters(currentSdk: NodeSDK): void {
   }
 
   try {
-    // qwen-code supplies explicit exporters for every enabled signal. Prevent
-    // sdk-node's OTEL_*_EXPORTER auto-configuration from constructing a second
-    // exporter (the bundled CLI intentionally omits those packages).
+    // qwen-code supplies explicit file exporters for every signal. Prevent
+    // sdk-node's OTEL_*_EXPORTER auto-configuration from constructing a
+    // network exporter (the bundled CLI intentionally omits those packages).
     currentSdk.start();
   } finally {
     for (const name of OTEL_EXPORTER_ENV_VARS) {
@@ -106,11 +104,9 @@ export function initializeTelemetry(
     const debugLogger = createDebugLogger('OTEL');
     try {
       // The heavy SDK assembly is loaded on demand so disabled-telemetry
-      // processes — notably the ACP child on the daemon cold-start path —
-      // never pay the module-load cost. `startTelemetrySdk` in turn loads
-      // only the configured OTLP protocol chain (issue #7264). Both dynamic
-      // imports stay inside the try so a chunk-load failure degrades telemetry
-      // rather than rejecting — the daemon runtime awaits this without a catch.
+      // processes never pay the module-load cost. The dynamic import stays
+      // inside the try so a chunk-load failure degrades telemetry rather than
+      // rejecting.
       const { startTelemetrySdk } = await import('./sdk-impl.js');
       if (telemetryInitialized) return;
       const started = await startTelemetrySdk(config);
@@ -127,9 +123,6 @@ export function initializeTelemetry(
       // while shutdown still emits `session.end`. The session-events guard
       // dedupes the race-won case.
       emitSessionStart(sessionId);
-      setShellTracePropagation(
-        config.getOutboundCorrelationPropagateTraceContext(),
-      );
       initializeMetrics(config);
     } catch (error) {
       debugLogger.error('Error starting OpenTelemetry SDK:', error);
@@ -173,7 +166,7 @@ export function shutdownTelemetry(): Promise<void> {
     }
     if (!telemetryInitialized || !sdk) {
       // The awaited init did not finish initializing (telemetry disabled, no
-      // usable exporter, or `sdk.start()` threw). Clear the promise we just set
+      // outfile, or `sdk.start()` threw). Clear the promise we just set
       // so a later real shutdown isn't short-circuited by this stale no-op.
       telemetryShutdownPromise = undefined;
       return;
@@ -231,7 +224,6 @@ export function shutdownTelemetry(): Promise<void> {
       activeMetricReader = undefined;
       telemetryShutdownPromise = undefined;
       setSessionContext(undefined);
-      setShellTracePropagation(false);
     }
   })();
   return telemetryShutdownPromise;

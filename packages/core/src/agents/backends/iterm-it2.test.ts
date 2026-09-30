@@ -25,7 +25,6 @@ vi.mock('../../utils/debugLogger.js', () => ({
 
 import {
   isIt2Available,
-  ensureIt2Installed,
   verifyITerm,
   itermSplitPane,
   itermRunCommand,
@@ -54,92 +53,16 @@ describe('iterm-it2', () => {
     });
   });
 
-  // ─── ensureIt2Installed ──────────────────────────────────────
-
-  describe('ensureIt2Installed', () => {
-    it('does nothing if it2 is already available', async () => {
-      hoistedIsCommandAvailable.mockReturnValue({ available: true });
-      await ensureIt2Installed();
-      expect(hoistedExecCommand).not.toHaveBeenCalled();
-    });
-
-    it('installs via uv when uv is available', async () => {
-      // isIt2Available() → false; uv available; install succeeds; recheck → true
-      hoistedIsCommandAvailable
-        .mockReturnValueOnce({ available: false }) // isIt2Available() initial
-        .mockReturnValueOnce({ available: true }); // uv available
-      hoistedExecCommand.mockResolvedValue({
-        code: 0,
-        stdout: '',
-        stderr: '',
-      });
-      // After install, it2 is available
-      hoistedIsCommandAvailable.mockReturnValueOnce({ available: true });
-
-      await ensureIt2Installed();
-
-      expect(hoistedExecCommand).toHaveBeenCalledWith(
-        'uv',
-        ['tool', 'install', 'it2'],
-        expect.any(Object),
-      );
-    });
-
-    it('falls back to pipx when uv is unavailable', async () => {
-      hoistedIsCommandAvailable
-        .mockReturnValueOnce({ available: false }) // isIt2Available()
-        .mockReturnValueOnce({ available: false }) // uv not available
-        .mockReturnValueOnce({ available: true }); // pipx available
-      hoistedExecCommand.mockResolvedValue({
-        code: 0,
-        stdout: '',
-        stderr: '',
-      });
-      hoistedIsCommandAvailable.mockReturnValueOnce({ available: true }); // recheck
-
-      await ensureIt2Installed();
-
-      expect(hoistedExecCommand).toHaveBeenCalledWith(
-        'pipx',
-        ['install', 'it2'],
-        expect.any(Object),
-      );
-    });
-
-    it('falls back to pip when uv and pipx are unavailable', async () => {
-      hoistedIsCommandAvailable
-        .mockReturnValueOnce({ available: false }) // isIt2Available()
-        .mockReturnValueOnce({ available: false }) // uv
-        .mockReturnValueOnce({ available: false }) // pipx
-        .mockReturnValueOnce({ available: true }); // pip available
-      hoistedExecCommand.mockResolvedValue({
-        code: 0,
-        stdout: '',
-        stderr: '',
-      });
-      hoistedIsCommandAvailable.mockReturnValueOnce({ available: true }); // recheck
-
-      await ensureIt2Installed();
-
-      expect(hoistedExecCommand).toHaveBeenCalledWith(
-        'pip',
-        ['install', '--user', 'it2'],
-        expect.any(Object),
-      );
-    });
-
-    it('throws if no installer succeeds', async () => {
-      hoistedIsCommandAvailable.mockReturnValue({ available: false });
-
-      await expect(ensureIt2Installed()).rejects.toThrow(
-        'it2 is not installed',
-      );
-    });
-  });
-
   // ─── verifyITerm ──────────────────────────────────────────────
 
   describe('verifyITerm', () => {
+    it('throws without installing anything when it2 is missing', async () => {
+      hoistedIsCommandAvailable.mockReturnValue({ available: false });
+
+      await expect(verifyITerm()).rejects.toThrow('it2 is not installed');
+      expect(hoistedExecCommand).not.toHaveBeenCalled();
+    });
+
     it('succeeds when session list returns code 0', async () => {
       hoistedIsCommandAvailable.mockReturnValue({ available: true });
       hoistedExecCommand.mockResolvedValue({

@@ -12,7 +12,6 @@ import {
   THIRD_PARTY_PROVIDERS,
   findProviderByCredentials,
   findProviderById,
-  getAllProviderBaseUrls,
 } from '../../all-providers.js';
 import { buildInstallPlan } from '../../provider-config.js';
 
@@ -45,7 +44,6 @@ describe('grokProvider', () => {
     expect(findProviderById('grok')).toBe(grokProvider);
     expect(ALL_PROVIDERS).toContain(grokProvider);
     expect(THIRD_PARTY_PROVIDERS).toContain(grokProvider);
-    expect(getAllProviderBaseUrls()).toContain('https://api.x.ai/v1');
   });
 
   it('is found by its env key + base URL credentials', () => {

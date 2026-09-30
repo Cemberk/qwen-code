@@ -6,7 +6,6 @@
     "hideTips": false,
     "vimMode": true,
     "checkpointing": true,
-    "disableAutoUpdate": true,
     "disableLoadingPhrases": true,
     "mcpServers": {
       "fetch": {
@@ -23,22 +22,18 @@
     "hideTips": true,
     "vimMode": false,
     "checkpointing": true,
-    "disableAutoUpdate": true,
-    "disableUpdateNag": false,
     "disableLoadingPhrases": true,
     "disableFuzzySearch": false,
     "disableCacheControl": true,
     "allowedTools": ["read-file", "write-file"],
     "allowMCPServers": true,
     "autoConfigureMaxOldSpaceSize": true,
-    "bugCommand": "/bug",
     "chatCompression": "auto",
     "coreTools": ["edit", "bash"],
     "customThemes": [],
     "customWittyPhrases": [],
     "fileFiltering": true,
     "folderTrust": true,
-    "ideMode": true,
     "includeDirectories": ["src", "lib"],
     "maxSessionTurns": 50,
     "preferredEditor": "vscode",
@@ -60,14 +55,18 @@
     "includeDirectories": [],
     "disableFuzzySearch": "TRUE",
     "disableCacheControl": "FALSE",
-    "customArray": [{ "key": 1 }]
+    "customArray": [
+      {
+        "key": 1
+      }
+    ]
   },
   "v1ParentCollisionSettings": {
     "theme": "dark",
     "model": "gemini",
     "ui": "legacy-ui-string",
     "general": "legacy-general-string",
-    "disableAutoUpdate": true,
+    "vimMode": true,
     "disableLoadingPhrases": false,
     "notes": {
       "fromUser": "preserve-custom"
@@ -77,7 +76,6 @@
     "$version": "2",
     "theme": "light",
     "model": "qwen-plus",
-    "disableAutoUpdate": "false",
     "disableLoadingPhrases": "TRUE",
     "ui": {
       "hideWindowTitle": true
@@ -95,8 +93,6 @@
       }
     },
     "general": {
-      "disableAutoUpdate": false,
-      "disableUpdateNag": false,
       "checkpointing": false
     },
     "model": {
@@ -114,10 +110,6 @@
   },
   "v2BooleanStringSettings": {
     "$version": 2,
-    "general": {
-      "disableAutoUpdate": "TRUE",
-      "disableUpdateNag": "false"
-    },
     "ui": {
       "accessibility": {
         "disableLoadingPhrases": "FaLsE"
@@ -136,11 +128,6 @@
   },
   "v2PreexistingEnableSettings": {
     "$version": 2,
-    "general": {
-      "disableAutoUpdate": false,
-      "disableUpdateNag": true,
-      "enableAutoUpdate": true
-    },
     "ui": {
       "accessibility": {
         "disableLoadingPhrases": true,
@@ -162,10 +149,6 @@
   },
   "v3LegacyDisableSettings": {
     "$version": 3,
-    "general": {
-      "disableAutoUpdate": true,
-      "enableAutoUpdate": false
-    },
     "ui": {
       "accessibility": {
         "disableLoadingPhrases": false,
@@ -180,7 +163,7 @@
     "$version": 999,
     "theme": "dark",
     "model": "future-model",
-    "disableAutoUpdate": true,
+    "disableLoadingPhrases": true,
     "experimentalFlag": {
       "enabled": true
     }
@@ -189,7 +172,7 @@
     "$version": 3,
     "general": {
       "gitCoAuthor": false,
-      "disableAutoUpdate": true
+      "vimMode": true
     },
     "custom": {
       "note": "preserve me through v3->v4"

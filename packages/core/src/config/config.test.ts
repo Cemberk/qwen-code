@@ -45,10 +45,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { setMemoryFilename as mockSetMemoryFilename } from '../utils/memory-constants.js';
 import {
-  DEFAULT_TELEMETRY_TARGET,
-  DEFAULT_OTLP_ENDPOINT,
   SENSITIVE_SPAN_ATTRIBUTE_MAX_LENGTH_LIMIT,
-  QwenLogger,
   initializeTelemetry,
   isTelemetrySdkInitialized,
   shutdownTelemetry,
@@ -111,7 +108,6 @@ import {
   rebuildUserAutoMemoryIndex,
   TeamMemoryRootSecurityError,
 } from '../memory/indexer.js';
-import { syncTeamMemory } from '../memory/team-memory-sync.js';
 import { getTeamMemoryShareabilityWarning } from '../memory/team-memory-git-status.js';
 import * as runtimeStatus from '../utils/runtimeStatus.js';
 import * as sessionRegistry from '../services/session-registry.js';
@@ -289,11 +285,6 @@ vi.mock('../memory/indexer.js', async (importActual) => ({
   rebuildManagedAutoMemoryIndex: vi.fn().mockResolvedValue(null),
   rebuildTeamAutoMemoryIndex: vi.fn().mockResolvedValue(null),
   rebuildUserAutoMemoryIndex: vi.fn().mockResolvedValue(null),
-}));
-vi.mock('../memory/team-memory-sync.js', () => ({
-  syncTeamMemory: vi
-    .fn()
-    .mockResolvedValue({ committed: false, pulled: false, pushed: false }),
 }));
 vi.mock('../agents/forkedAgent.js', () => ({
   runForkedAgent: vi.fn(),
@@ -894,7 +885,6 @@ describe('Server Config (config.ts)', () => {
     telemetry: TELEMETRY_SETTINGS,
     model: MODEL,
     chatRecording: false,
-    usageStatisticsEnabled: false,
     overrideExtensions: [],
   };
 
@@ -925,9 +915,6 @@ describe('Server Config (config.ts)', () => {
     (fs.unlinkSync as Mock).mockImplementation(() => undefined);
     (fs.readFileSync as Mock).mockImplementation(() => undefined);
     vi.mocked(isTelemetrySdkInitialized).mockReturnValue(false);
-    vi.spyOn(QwenLogger.prototype, 'logStartSessionEvent').mockImplementation(
-      async () => undefined,
-    );
 
     // Setup default mock for resolveContentGeneratorConfigWithSources
     vi.mocked(resolveContentGeneratorConfigWithSources).mockImplementation(
@@ -2518,51 +2505,6 @@ describe('Server Config (config.ts)', () => {
     });
   });
 
-  describe('getTeamMemorySyncEnabled', () => {
-    const prevEnv = process.env['QWEN_CODE_MEMORY_TEAM_SYNC'];
-    afterEach(() => {
-      if (prevEnv === undefined) {
-        delete process.env['QWEN_CODE_MEMORY_TEAM_SYNC'];
-      } else {
-        process.env['QWEN_CODE_MEMORY_TEAM_SYNC'] = prevEnv;
-      }
-    });
-
-    it('is off by default and follows the enableTeamMemorySync setting', () => {
-      delete process.env['QWEN_CODE_MEMORY_TEAM_SYNC'];
-      expect(new Config(baseParams).getTeamMemorySyncEnabled()).toBe(false);
-      expect(
-        new Config({
-          ...baseParams,
-          enableTeamMemorySync: true,
-        }).getTeamMemorySyncEnabled(),
-      ).toBe(true);
-    });
-
-    it('QWEN_CODE_MEMORY_TEAM_SYNC overrides the setting', () => {
-      process.env['QWEN_CODE_MEMORY_TEAM_SYNC'] = '1';
-      expect(new Config(baseParams).getTeamMemorySyncEnabled()).toBe(true);
-      process.env['QWEN_CODE_MEMORY_TEAM_SYNC'] = '0';
-      expect(
-        new Config({
-          ...baseParams,
-          enableTeamMemorySync: true,
-        }).getTeamMemorySyncEnabled(),
-      ).toBe(false);
-    });
-
-    it('stays off in bare mode even with the setting and env both on', () => {
-      process.env['QWEN_CODE_MEMORY_TEAM_SYNC'] = '1';
-      expect(
-        new Config({
-          ...baseParams,
-          bareMode: true,
-          enableTeamMemorySync: true,
-        }).getTeamMemorySyncEnabled(),
-      ).toBe(false);
-    });
-  });
-
   it('should store a system prompt override', () => {
     const config = new Config({
       ...baseParams,
@@ -3199,7 +3141,6 @@ describe('Server Config (config.ts)', () => {
         enableManagedAutoMemory: true,
         enableManagedAutoDream: true,
         enableTeamMemory: true,
-        enableTeamMemorySync: true,
         agentTeamEnabled: true,
         workflowsEnabled: true,
         sessionWorkflowEnabled: true,
@@ -3231,7 +3172,6 @@ describe('Server Config (config.ts)', () => {
       expect(parent.isManagedMemoryAvailable()).toBe(false);
       expect(parent.getManagedAutoDreamEnabled()).toBe(false);
       expect(parent.getTeamMemoryEnabled()).toBe(false);
-      expect(parent.getTeamMemorySyncEnabled()).toBe(false);
       expect(parent.getAutoSkillEnabled()).toBe(false);
       expect(parent.isAgentTeamEnabled()).toBe(false);
       expect(parent.isWorkflowsEnabled()).toBe(false);
@@ -5608,14 +5548,12 @@ describe('Server Config (config.ts)', () => {
       lsp: { enabled: true },
       workflowsEnabled: true,
       enableTeamMemory: true,
-      enableTeamMemorySync: true,
       enableAutoSkill: true,
     });
 
     expect(config.isLspEnabled()).toBe(false);
     expect(config.isWorkflowsEnabled()).toBe(false);
     expect(config.getTeamMemoryEnabled()).toBe(false);
-    expect(config.getTeamMemorySyncEnabled()).toBe(false);
     expect(config.getAutoSkillEnabled()).toBe(false);
   });
 
@@ -9661,134 +9599,31 @@ describe('Server Config (config.ts)', () => {
     expect(getTeamMemoryShareabilityWarning).not.toHaveBeenCalled();
   });
 
-  it('refreshHierarchicalMemory must not sync when the team-root safety check rejects', async () => {
-    // The indexer THROWS when the team root is a symlink that could redirect the
-    // committed index outside the repo. Sync must respect that refusal: it must
-    // never git add/commit/push a dir that failed the safety check.
-    const prevSync = process.env['QWEN_CODE_MEMORY_TEAM_SYNC'];
-    process.env['QWEN_CODE_MEMORY_TEAM_SYNC'] = '1';
-    try {
-      const config = new Config({
-        ...baseParams,
-        enableTeamMemory: true,
-        enableTeamMemorySync: true,
-      });
-      vi.spyOn(config, 'isTrustedFolder').mockReturnValue(true);
-      vi.mocked(loadServerHierarchicalMemory).mockResolvedValue({
-        memoryContent: '--- Context from: QWEN.md ---\nProject rules',
-        fileCount: 1,
-        contextFilePaths: [],
-        ruleCount: 0,
-        conditionalRules: [],
-        projectRoot: '/tmp',
-      });
-      // Mirror the indexer's symlink-escape rejection: a SECURITY failure, which
-      // is the only class that blocks sync (see indexer.ts).
-      vi.mocked(rebuildTeamAutoMemoryIndex).mockRejectedValueOnce(
-        new TeamMemoryRootSecurityError(
-          'Refusing to write team memory index: /tmp/.qwen/team-memory is a ' +
-            'symlink, which could redirect the committed index outside the repository.',
-        ),
-      );
+  it('refreshHierarchicalMemory continues when the team-root safety check rejects', async () => {
+    // The indexer THROWS when the team root is a symlink that could redirect
+    // the index outside the repo. Session start must survive that refusal and
+    // simply omit the team index.
+    const config = new Config({ ...baseParams, enableTeamMemory: true });
+    vi.spyOn(config, 'isTrustedFolder').mockReturnValue(true);
+    vi.mocked(loadServerHierarchicalMemory).mockResolvedValue({
+      memoryContent: '--- Context from: QWEN.md ---\nProject rules',
+      fileCount: 1,
+      contextFilePaths: [],
+      ruleCount: 0,
+      conditionalRules: [],
+      projectRoot: '/tmp',
+    });
+    vi.mocked(rebuildTeamAutoMemoryIndex).mockRejectedValueOnce(
+      new TeamMemoryRootSecurityError(
+        'Refusing to write team memory index: /tmp/.qwen/team-memory is a ' +
+          'symlink, which could redirect the committed index outside the repository.',
+      ),
+    );
 
-      await config.refreshHierarchicalMemory();
+    await expect(config.refreshHierarchicalMemory()).resolves.toBeUndefined();
 
-      // Gate proof: sync is enabled, yet the security rejection must skip it
-      // entirely. Stop treating TeamMemoryRootSecurityError as blocking and this
-      // assertion fails.
-      expect(rebuildTeamAutoMemoryIndex).toHaveBeenCalledTimes(1);
-      expect(syncTeamMemory).not.toHaveBeenCalled();
-    } finally {
-      if (prevSync === undefined) {
-        delete process.env['QWEN_CODE_MEMORY_TEAM_SYNC'];
-      } else {
-        process.env['QWEN_CODE_MEMORY_TEAM_SYNC'] = prevSync;
-      }
-    }
-  });
-
-  it('still syncs when the team-index rebuild fails for an OPERATIONAL reason', async () => {
-    // An EACCES/ENOSPC/EPERM rebuild failure is not a security escape, so it must
-    // NOT permanently gate legitimate sync — it self-corrects on the next
-    // successful rebuild. Only TeamMemoryRootSecurityError blocks sync.
-    const prevSync = process.env['QWEN_CODE_MEMORY_TEAM_SYNC'];
-    process.env['QWEN_CODE_MEMORY_TEAM_SYNC'] = '1';
-    try {
-      const config = new Config({
-        ...baseParams,
-        enableTeamMemory: true,
-        enableTeamMemorySync: true,
-      });
-      vi.spyOn(config, 'isTrustedFolder').mockReturnValue(true);
-      vi.mocked(loadServerHierarchicalMemory).mockResolvedValue({
-        memoryContent: '--- Context from: QWEN.md ---\nProject rules',
-        fileCount: 1,
-        contextFilePaths: [],
-        ruleCount: 0,
-        conditionalRules: [],
-        projectRoot: '/tmp',
-      });
-      // A plain Error stands in for an operational IO failure (e.g. EACCES).
-      const operationalError = Object.assign(
-        new Error('EACCES: permission denied, lstat'),
-        {
-          code: 'EACCES',
-        },
-      );
-      vi.mocked(rebuildTeamAutoMemoryIndex).mockRejectedValueOnce(
-        operationalError,
-      );
-
-      await config.refreshHierarchicalMemory();
-
-      // Not security-gated: sync still runs despite the operational failure.
-      expect(rebuildTeamAutoMemoryIndex).toHaveBeenCalledTimes(1);
-      expect(syncTeamMemory).toHaveBeenCalledTimes(1);
-    } finally {
-      if (prevSync === undefined) {
-        delete process.env['QWEN_CODE_MEMORY_TEAM_SYNC'];
-      } else {
-        process.env['QWEN_CODE_MEMORY_TEAM_SYNC'] = prevSync;
-      }
-    }
-  });
-
-  it('syncs when the rebuild succeeds and sync is enabled (positive gate)', async () => {
-    // Complement to the negative branches: a successful rebuild on a trusted
-    // folder with sync enabled MUST call syncTeamMemory. Inverting or removing
-    // the sync condition is caught here.
-    const prevSync = process.env['QWEN_CODE_MEMORY_TEAM_SYNC'];
-    process.env['QWEN_CODE_MEMORY_TEAM_SYNC'] = '1';
-    try {
-      const config = new Config({
-        ...baseParams,
-        enableTeamMemory: true,
-        enableTeamMemorySync: true,
-      });
-      vi.spyOn(config, 'isTrustedFolder').mockReturnValue(true);
-      vi.mocked(loadServerHierarchicalMemory).mockResolvedValue({
-        memoryContent: '--- Context from: QWEN.md ---\nProject rules',
-        fileCount: 1,
-        contextFilePaths: [],
-        ruleCount: 0,
-        conditionalRules: [],
-        projectRoot: '/tmp',
-      });
-      vi.mocked(rebuildTeamAutoMemoryIndex).mockResolvedValueOnce(
-        '# Team Memory\n\n- [Shared](shared.md)',
-      );
-
-      await config.refreshHierarchicalMemory();
-
-      expect(rebuildTeamAutoMemoryIndex).toHaveBeenCalledTimes(1);
-      expect(syncTeamMemory).toHaveBeenCalledTimes(1);
-    } finally {
-      if (prevSync === undefined) {
-        delete process.env['QWEN_CODE_MEMORY_TEAM_SYNC'];
-      } else {
-        process.env['QWEN_CODE_MEMORY_TEAM_SYNC'] = prevSync;
-      }
-    }
+    expect(rebuildTeamAutoMemoryIndex).toHaveBeenCalledTimes(1);
+    expect(config.getUserMemory()).not.toContain('Team Memory');
   });
 
   it('refreshHierarchicalMemory surfaces a one-time warning when team memory is not git-shareable', async () => {
@@ -11418,38 +11253,6 @@ describe('Server Config (config.ts)', () => {
     expect(fileService).toBeDefined();
   });
 
-  describe('Usage Statistics', () => {
-    it('defaults usage statistics to enabled if not specified', () => {
-      const config = new Config({
-        ...baseParams,
-        usageStatisticsEnabled: undefined,
-      });
-
-      expect(config.getUsageStatisticsEnabled()).toBe(true);
-    });
-
-    it.each([{ enabled: true }, { enabled: false }])(
-      'sets usage statistics based on the provided value (enabled: $enabled)',
-      ({ enabled }) => {
-        const config = new Config({
-          ...baseParams,
-          usageStatisticsEnabled: enabled,
-        });
-        expect(config.getUsageStatisticsEnabled()).toBe(enabled);
-      },
-    );
-
-    it('logs the session start event', async () => {
-      const config = new Config({
-        ...baseParams,
-        usageStatisticsEnabled: true,
-      });
-      await config.initialize();
-
-      expect(QwenLogger.prototype.logStartSessionEvent).toHaveBeenCalledOnce();
-    });
-  });
-
   describe('GitCoAuthor Settings', () => {
     it('defaults both commit and pr to true when not specified', () => {
       const config = new Config({ ...baseParams, gitCoAuthor: undefined });
@@ -11540,34 +11343,6 @@ describe('Server Config (config.ts)', () => {
   });
 
   describe('Telemetry Settings', () => {
-    it('should return default telemetry target if not provided', () => {
-      const params: ConfigParameters = {
-        ...baseParams,
-        telemetry: { enabled: true },
-      };
-      const config = new Config(params);
-      expect(config.getTelemetryTarget()).toBe(DEFAULT_TELEMETRY_TARGET);
-    });
-
-    it('should return provided OTLP endpoint', () => {
-      const endpoint = 'http://custom.otel.collector:4317';
-      const params: ConfigParameters = {
-        ...baseParams,
-        telemetry: { enabled: true, otlpEndpoint: endpoint },
-      };
-      const config = new Config(params);
-      expect(config.getTelemetryOtlpEndpoint()).toBe(endpoint);
-    });
-
-    it('should return default OTLP endpoint if not provided', () => {
-      const params: ConfigParameters = {
-        ...baseParams,
-        telemetry: { enabled: true },
-      };
-      const config = new Config(params);
-      expect(config.getTelemetryOtlpEndpoint()).toBe(DEFAULT_OTLP_ENDPOINT);
-    });
-
     it('should return provided logPrompts setting', () => {
       const params: ConfigParameters = {
         ...baseParams,
@@ -11673,127 +11448,6 @@ describe('Server Config (config.ts)', () => {
           ),
         );
       }
-    });
-
-    it('should return default telemetry target if telemetry object is not provided', () => {
-      const paramsWithoutTelemetry: ConfigParameters = { ...baseParams };
-      delete paramsWithoutTelemetry.telemetry;
-      const config = new Config(paramsWithoutTelemetry);
-      expect(config.getTelemetryTarget()).toBe(DEFAULT_TELEMETRY_TARGET);
-    });
-
-    it('should return default OTLP endpoint if telemetry object is not provided', () => {
-      const paramsWithoutTelemetry: ConfigParameters = { ...baseParams };
-      delete paramsWithoutTelemetry.telemetry;
-      const config = new Config(paramsWithoutTelemetry);
-      expect(config.getTelemetryOtlpEndpoint()).toBe(DEFAULT_OTLP_ENDPOINT);
-    });
-
-    it('should return provided OTLP protocol', () => {
-      const params: ConfigParameters = {
-        ...baseParams,
-        telemetry: { enabled: true, otlpProtocol: 'http' },
-      };
-      const config = new Config(params);
-      expect(config.getTelemetryOtlpProtocol()).toBe('http');
-    });
-
-    it('should return default OTLP protocol if not provided', () => {
-      const params: ConfigParameters = {
-        ...baseParams,
-        telemetry: { enabled: true },
-      };
-      const config = new Config(params);
-      expect(config.getTelemetryOtlpProtocol()).toBe('grpc');
-    });
-
-    it('should return default OTLP protocol if telemetry object is not provided', () => {
-      const paramsWithoutTelemetry: ConfigParameters = { ...baseParams };
-      delete paramsWithoutTelemetry.telemetry;
-      const config = new Config(paramsWithoutTelemetry);
-      expect(config.getTelemetryOtlpProtocol()).toBe('grpc');
-    });
-  });
-
-  describe('Per-Signal OTLP Endpoint Configuration', () => {
-    it('should return per-signal endpoints when provided', () => {
-      const params: ConfigParameters = {
-        ...baseParams,
-        telemetry: {
-          enabled: true,
-          otlpTracesEndpoint: 'http://traces:4318/v1/traces',
-          otlpLogsEndpoint: 'http://logs:4318/v1/logs',
-          otlpMetricsEndpoint: 'http://metrics:4318/v1/metrics',
-        },
-      };
-      const config = new Config(params);
-      expect(config.getTelemetryOtlpTracesEndpoint()).toBe(
-        'http://traces:4318/v1/traces',
-      );
-      expect(config.getTelemetryOtlpLogsEndpoint()).toBe(
-        'http://logs:4318/v1/logs',
-      );
-      expect(config.getTelemetryOtlpMetricsEndpoint()).toBe(
-        'http://metrics:4318/v1/metrics',
-      );
-    });
-
-    it('should return undefined when per-signal endpoints are not provided', () => {
-      const params: ConfigParameters = {
-        ...baseParams,
-        telemetry: { enabled: true },
-      };
-      const config = new Config(params);
-      expect(config.getTelemetryOtlpTracesEndpoint()).toBeUndefined();
-      expect(config.getTelemetryOtlpLogsEndpoint()).toBeUndefined();
-      expect(config.getTelemetryOtlpMetricsEndpoint()).toBeUndefined();
-    });
-  });
-
-  describe('OutboundCorrelation Configuration', () => {
-    // Default-to-false is security-relevant — controls whether
-    // `traceparent` is written onto outbound LLM/fetch request streams.
-    it.each<{
-      label: string;
-      outboundCorrelation: ConfigParameters['outboundCorrelation'];
-      expected: boolean;
-    }>([
-      { label: 'omitted', outboundCorrelation: undefined, expected: false },
-      { label: 'empty object', outboundCorrelation: {}, expected: false },
-      {
-        label: 'explicit true',
-        outboundCorrelation: { propagateTraceContext: true },
-        expected: true,
-      },
-      {
-        label: 'explicit false',
-        outboundCorrelation: { propagateTraceContext: false },
-        expected: false,
-      },
-    ])(
-      'propagateTraceContext resolves to $expected when $label',
-      ({ outboundCorrelation, expected }) => {
-        const config = new Config({ ...baseParams, outboundCorrelation });
-        expect(config.getOutboundCorrelationPropagateTraceContext()).toBe(
-          expected,
-        );
-      },
-    );
-
-    it('only enables dynamic header values for boolean true', () => {
-      for (const value of [undefined, false, 'false', 1, {}, []]) {
-        const outboundCorrelation = {
-          allowDynamicHeaderValues: value,
-        } as unknown as ConfigParameters['outboundCorrelation'];
-        const config = new Config({ ...baseParams, outboundCorrelation });
-        expect(config.getOutboundAllowDynamicHeaderValues()).toBe(false);
-      }
-
-      const config = new Config({
-        ...baseParams,
-        outboundCorrelation: { allowDynamicHeaderValues: true },
-      });
-      expect(config.getOutboundAllowDynamicHeaderValues()).toBe(true);
     });
   });
 
@@ -14757,7 +14411,6 @@ describe('BaseLlmClient Lifecycle', () => {
     telemetry: TELEMETRY_SETTINGS,
     model: MODEL,
     chatRecording: false,
-    usageStatisticsEnabled: false,
   };
 
   it('should throw an error if getBaseLlmClient is called before refreshAuth', () => {
@@ -14830,7 +14483,6 @@ describe('Model Switching and Config Updates', () => {
     debugMode: false,
     model: 'qwen3-coder-plus',
     chatRecording: false,
-    usageStatisticsEnabled: false,
     telemetry: { enabled: false },
   };
 

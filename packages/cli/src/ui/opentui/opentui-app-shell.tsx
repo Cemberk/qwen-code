@@ -155,12 +155,6 @@ export interface OpenTuiAppProps {
   /** Vim-mode toggle owner (VimModeProvider in the entry layer). */
   onToggleVim?: () => Promise<boolean>;
   /**
-   * Reserved slot for the update-notification banner (parity gap G-3). Holds
-   * the same shape as ink's `updateInfo.message`; the update-check wiring
-   * that populates it lands with a later batch, so the layout stays fixed.
-   */
-  updateNotice?: string | null;
-  /**
    * Armed two-press quit warning from the entry layer's exit guard. ink paints
    * it in the footer's own hint slot, so it travels there rather than into the
    * transcript region.
@@ -234,7 +228,6 @@ export function OpenTuiApp(props: OpenTuiAppProps) {
     onTranscriptEvent,
     onStartNewSession,
     onToggleVim,
-    updateNotice,
     exitHint,
     streaming,
     streamingCharsRef,
@@ -956,13 +949,6 @@ export function OpenTuiApp(props: OpenTuiAppProps) {
         >
           <OpenTuiBanner config={config} settings={settings} />
           {renderMain ? renderMain() : null}
-          {!dialog &&
-          !activeModal &&
-          !activeToolCall &&
-          !mcpApproval.isMcpApprovalDialogOpen &&
-          updateNotice ? (
-            <text>{updateNotice}</text>
-          ) : null}
           {noticeText ? <text>{noticeText}</text> : null}
         </scrollbox>
         {/* The chrome below the scroll region must be locked against shrinking:

@@ -1,16 +1,14 @@
 # Observability with OpenTelemetry
 
-Learn how to enable and setup OpenTelemetry for Qwen Code.
+Learn how to enable and setup OpenTelemetry for Qwen Code. Telemetry is only
+ever written to a local file (`telemetry.outfile`); Qwen Code has no network
+telemetry exporter.
 
 - [Observability with OpenTelemetry](#observability-with-opentelemetry)
   - [Key Benefits](#key-benefits)
   - [OpenTelemetry Integration](#opentelemetry-integration)
   - [Configuration](#configuration)
-  - [Aliyun Telemetry](#aliyun-telemetry)
-    - [Manual OTLP Export](#manual-otlp-export)
   - [Local Telemetry](#local-telemetry)
-    - [File-based Output (Recommended)](#file-based-output-recommended)
-    - [Collector-Based Export (Advanced)](#collector-based-export-advanced)
   - [Logs and Metrics](#logs-and-metrics)
     - [Logs](#logs)
     - [Metrics](#metrics)
@@ -36,51 +34,34 @@ Learn how to enable and setup OpenTelemetry for Qwen Code.
   as they occur
 - **📊 Workflow Optimization**: Make informed decisions to improve
   configurations and processes
-- **🏢 Enterprise Governance**: Monitor usage across teams, track costs, ensure
-  compliance, and integrate with existing monitoring infrastructure
+- **🔒 Local Only**: Telemetry is written to a local file and never leaves
+  your machine
 
 ## OpenTelemetry Integration
 
 Built on **[OpenTelemetry]** — the vendor-neutral, industry-standard
 observability framework — Qwen Code's observability system provides:
 
-- **Universal Compatibility**: Export to any OpenTelemetry backend (Aliyun,
-  Jaeger, Prometheus, Datadog, etc.)
-- **Standardized Data**: Use consistent formats and collection methods across
-  your toolchain
-- **Future-Proof Integration**: Connect with existing and future observability
-  infrastructure
-- **No Vendor Lock-in**: Switch between backends without changing your
-  instrumentation
+- **Standardized Data**: Records use the OpenTelemetry data model, written as
+  JSON to the local `telemetry.outfile`
 
 [OpenTelemetry]: https://opentelemetry.io/
-[aliyun-opentelemetry-overview]: https://www.alibabacloud.com/help/en/arms/tracing-analysis/product-overview/what-is-tracing-analysis
-[aliyun-opentelemetry-get-started]: https://www.alibabacloud.com/help/en/arms/tracing-analysis/before-you-begin
-[aliyun-opentelemetry-console-cn]: https://trace.console.aliyun.com
-[aliyun-opentelemetry-console-cn-legacy]: https://tracing.console.aliyun.com
-[aliyun-opentelemetry-console-intl]: https://arms.console.alibabacloud.com
 
 ## Configuration
 
 All telemetry behavior is controlled through your `.qwen/settings.json` file.
 These settings can be overridden by environment variables or CLI flags.
 
-| Setting                           | Environment Variable                                 | CLI Flag                                                 | Description                                                                                                                            | Values            | Default                 |
-| --------------------------------- | ---------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------- | ----------------------- |
-| `enabled`                         | `QWEN_TELEMETRY_ENABLED`                             | `--telemetry` / `--no-telemetry`                         | Enable or disable telemetry                                                                                                            | `true`/`false`    | `false`                 |
-| `target`                          | `QWEN_TELEMETRY_TARGET`                              | `--telemetry-target <local\|gcp>` _(deprecated)_         | Informational destination label; does not control exporter routing — set `otlpEndpoint` or `outfile` to configure where data is sent   | `"gcp"`/`"local"` | `"local"`               |
-| `otlpEndpoint`                    | `QWEN_TELEMETRY_OTLP_ENDPOINT`                       | `--telemetry-otlp-endpoint <URL>`                        | OTLP collector endpoint                                                                                                                | URL string        | `http://localhost:4317` |
-| `otlpProtocol`                    | `QWEN_TELEMETRY_OTLP_PROTOCOL`                       | `--telemetry-otlp-protocol <grpc\|http>`                 | OTLP transport protocol                                                                                                                | `"grpc"`/`"http"` | `"grpc"`                |
-| `otlpTracesEndpoint`              | `QWEN_TELEMETRY_OTLP_TRACES_ENDPOINT`                | -                                                        | Per-signal endpoint override for traces (HTTP only)                                                                                    | URL string        | -                       |
-| `otlpLogsEndpoint`                | `QWEN_TELEMETRY_OTLP_LOGS_ENDPOINT`                  | -                                                        | Per-signal endpoint override for logs (HTTP only)                                                                                      | URL string        | -                       |
-| `otlpMetricsEndpoint`             | `QWEN_TELEMETRY_OTLP_METRICS_ENDPOINT`               | -                                                        | Per-signal endpoint override for metrics (HTTP only)                                                                                   | URL string        | -                       |
-| `outfile`                         | `QWEN_TELEMETRY_OUTFILE`                             | `--telemetry-outfile <path>`                             | Save telemetry to file (overrides OTLP export)                                                                                         | file path         | -                       |
-| `logPrompts`                      | `QWEN_TELEMETRY_LOG_PROMPTS`                         | `--telemetry-log-prompts` / `--no-telemetry-log-prompts` | Include user prompt content and API request/response text in telemetry logs                                                            | `true`/`false`    | `true`                  |
-| `userId`                          | `QWEN_TELEMETRY_USER_ID`                             | -                                                        | Stable end-user identifier written to GenAI spans as the ARMS extension `gen_ai.user.id`; prefer a pseudonymous value                  | string            | -                       |
-| `includeSensitiveSpanAttributes`  | `QWEN_TELEMETRY_INCLUDE_SENSITIVE_SPAN_ATTRIBUTES`   | -                                                        | Include standard GenAI messages, instructions, tool definitions, tool arguments, and successful tool results as native span attributes | `true`/`false`    | `false`                 |
-| `sensitiveSpanAttributeMaxLength` | `QWEN_TELEMETRY_SENSITIVE_SPAN_ATTRIBUTE_MAX_LENGTH` | -                                                        | Maximum compact JSON string length for each sensitive native span attribute. Set lower if your backend rejects large attributes.       | `1..104857600`    | `1048576`               |
-| `resourceAttributes`              | `OTEL_RESOURCE_ATTRIBUTES` (+ `OTEL_SERVICE_NAME`)   | -                                                        | Static resource attributes attached to every exported span / log / metric. See [Resource attributes](#resource-attributes) below.      | `key=value,…`     | `{}`                    |
-| `metrics.includeSessionId`        | `QWEN_TELEMETRY_METRICS_INCLUDE_SESSION_ID`          | -                                                        | Include `session.id` on metric data points. **Disabled by default** to protect metric backends from time-series fan-out.               | `true`/`false`    | `false`                 |
+| Setting                           | Environment Variable                                 | CLI Flag                                                 | Description                                                                                                                            | Values         | Default   |
+| --------------------------------- | ---------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------- | --------- |
+| `enabled`                         | `QWEN_TELEMETRY_ENABLED`                             | `--telemetry` / `--no-telemetry`                         | Enable or disable telemetry                                                                                                            | `true`/`false` | `false`   |
+| `outfile`                         | `QWEN_TELEMETRY_OUTFILE`                             | `--telemetry-outfile <path>`                             | Local file telemetry is written to; nothing is recorded without it                                                                     | file path      | -         |
+| `logPrompts`                      | `QWEN_TELEMETRY_LOG_PROMPTS`                         | `--telemetry-log-prompts` / `--no-telemetry-log-prompts` | Include user prompt content and API request/response text in telemetry logs                                                            | `true`/`false` | `true`    |
+| `userId`                          | `QWEN_TELEMETRY_USER_ID`                             | -                                                        | Stable end-user identifier written to GenAI spans as `gen_ai.user.id`; prefer a pseudonymous value                                     | string         | -         |
+| `includeSensitiveSpanAttributes`  | `QWEN_TELEMETRY_INCLUDE_SENSITIVE_SPAN_ATTRIBUTES`   | -                                                        | Include standard GenAI messages, instructions, tool definitions, tool arguments, and successful tool results as native span attributes | `true`/`false` | `false`   |
+| `sensitiveSpanAttributeMaxLength` | `QWEN_TELEMETRY_SENSITIVE_SPAN_ATTRIBUTE_MAX_LENGTH` | -                                                        | Maximum compact JSON string length for each sensitive native span attribute.                                                           | `1..104857600` | `1048576` |
+| `resourceAttributes`              | `OTEL_RESOURCE_ATTRIBUTES` (+ `OTEL_SERVICE_NAME`)   | -                                                        | Static resource attributes attached to every recorded span / log / metric. See [Resource attributes](#resource-attributes) below.      | `key=value,…`  | `{}`      |
+| `metrics.includeSessionId`        | `QWEN_TELEMETRY_METRICS_INCLUDE_SESSION_ID`          | -                                                        | Include `session.id` on metric data points.                                                                                            | `true`/`false` | `false`   |
 
 **Note on boolean environment variables:** For the boolean settings (`enabled`,
 `logPrompts`, `includeSensitiveSpanAttributes`), setting the
@@ -98,67 +79,45 @@ value is limited to 4096 UTF-16 code units and never includes dynamic invocation
 details.
 
 **Sensitive span attributes:** When `includeSensitiveSpanAttributes` is enabled,
-two things happen:
+native span attributes carry standard OpenTelemetry GenAI JSON:
 
-1. **Native span attributes** carry standard OpenTelemetry GenAI JSON:
-   - Main-agent and LLM input messages (`gen_ai.input.messages`)
-   - System instructions (`gen_ai.system_instructions`)
-   - Tool definitions (`gen_ai.tool.definitions`)
-   - Main-agent and LLM output messages (`gen_ai.output.messages`)
-   - Final executed tool arguments (`gen_ai.tool.call.arguments`)
-   - Successful tool results (`gen_ai.tool.call.result`)
-   - Interaction spans retain the compatibility `new_context` attribute.
+- Main-agent and LLM input messages (`gen_ai.input.messages`)
+- System instructions (`gen_ai.system_instructions`)
+- Tool definitions (`gen_ai.tool.definitions`)
+- Main-agent and LLM output messages (`gen_ai.output.messages`)
+- Final executed tool arguments (`gen_ai.tool.call.arguments`)
+- Successful tool results (`gen_ai.tool.call.result`)
+- Interaction spans retain the compatibility `new_context` attribute.
 
-   Main-agent input is one original user-text projection before context
-   expansion, and main-agent output is one final user-visible answer after all
-   tool and continuation work settles. LLM values still come from provider-final
-   SDK request objects and raw provider responses, so their input can include
-   history, expanded files, system instructions, and tool results, and their
-   output can include every provider candidate. Tool values come from the final
-   invocation parameters and successful model-facing result. Each
-   standard GenAI value is compact JSON and must be complete and schema-valid.
-   A value that is invalid, cyclic, or longer than
-   `sensitiveSpanAttributeMaxLength` is omitted as a whole; JSON is never
-   truncated and no preview, hash, or truncation metadata is emitted. The
-   interaction-specific `new_context` attribute retains its existing
-   truncation behavior. The default maximum is 1 MiB (`1048576`) per attribute
-   and the accepted range is `1..104857600` (100 MiB). The limit is measured as
-   JavaScript string length rather than UTF-8 bytes. Non-ASCII content can
-   therefore occupy more bytes after OTLP export.
+Main-agent input is one original user-text projection before context
+expansion, and main-agent output is one final user-visible answer after all
+tool and continuation work settles. LLM values still come from provider-final
+SDK request objects and raw provider responses, so their input can include
+history, expanded files, system instructions, and tool results, and their
+output can include every provider candidate. Tool values come from the final
+invocation parameters and successful model-facing result. Each
+standard GenAI value is compact JSON and must be complete and schema-valid.
+A value that is invalid, cyclic, or longer than
+`sensitiveSpanAttributeMaxLength` is omitted as a whole; JSON is never
+truncated and no preview, hash, or truncation metadata is emitted. The
+interaction-specific `new_context` attribute retains its existing
+truncation behavior. The default maximum is 1 MiB (`1048576`) per attribute
+and the accepted range is `1..104857600` (100 MiB). The limit is measured as
+JavaScript string length rather than UTF-8 bytes. Non-ASCII content can
+therefore occupy more bytes in the outfile.
 
-2. **Log-to-span bridge spans** (used when HTTP traces are exported without a
-   logs endpoint) retain `function_args`, `error`, `error.message`, and
-   `error_message`, plus `prompt`, `request_text`, and `response_text` when
-   `logPrompts` is also enabled, instead of dropping these attributes.
-
-⚠️ **Security warning:** enabling this flag streams full conversation history,
+⚠️ **Security warning:** enabling this flag writes full conversation history,
 file contents read by `read_file`, shell commands and their output (including
-secrets in env vars or arguments), and model responses to the configured OTLP
-backend. Treat the backend as a privileged data sink. The flag defaults to
-`false`.
-
-**Cost / payload size:** At the default limit, one LLM span can carry at most about 4 MiB across input, output, system instructions, and tool definitions; one Tool span can carry about 2 MiB across arguments and result; and one interaction can carry about 3 MiB across Agent input, Agent output, and compatibility `new_context`. This is Qwen Code's application-side cap, not a guarantee that every collector or backend accepts a single attribute that large. If spans are rejected or dropped, lower `sensitiveSpanAttributeMaxLength` (for example, to `61440`) and monitor exporter throughput.
+secrets in env vars or arguments), and model responses to the telemetry
+outfile. Treat the file as sensitive. The flag defaults to `false`.
 
 This setting does not disable sensitive data in OTel logs or other telemetry
 sinks; non-internal API response telemetry can populate `response_text`, so
 OTel logs, UI telemetry, and chat recording may receive response text
-independently of this setting. QwenLogger does not include `response_text`.
-
-**HTTP OTLP signal routing:** When using HTTP protocol (`otlpProtocol: "http"`),
-Qwen Code automatically appends signal-specific paths (`/v1/traces`, `/v1/logs`,
-`/v1/metrics`) to the base `otlpEndpoint`. For example, `http://collector:4318`
-becomes `http://collector:4318/v1/traces` for traces. If the URL already ends
-with a signal path, it is used as-is. Per-signal endpoint overrides
-(`otlpTracesEndpoint`, etc.) take precedence over the base endpoint and are used
-verbatim. gRPC protocol uses service-based routing and does not append paths.
-
-The per-signal endpoint environment variables also accept the standard
-OpenTelemetry names: `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`,
-`OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`, `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`.
-The `QWEN_TELEMETRY_OTLP_*` variants take precedence over the `OTEL_*` variants.
+independently of this setting.
 
 **End-user identity:** `telemetry.userId` and
-`QWEN_TELEMETRY_USER_ID` are explicit opt-ins for the ARMS span attribute
+`QWEN_TELEMETRY_USER_ID` are explicit opt-ins for the span attribute
 `gen_ai.user.id`. The environment variable takes precedence after both values
 are trimmed; a blank environment value falls back to settings. The identifier
 is written only to interaction, LLM, Tool, and Agent spans. It is not a Resource
@@ -172,8 +131,8 @@ For detailed information about all configuration options, see the
 ### Resource attributes
 
 Resource attributes are static key-value pairs attached to every span, log,
-and metric exported via OTLP. Use them to slice telemetry by team, environment,
-deployment region, or any other dimension your backend cares about.
+and metric written to the telemetry outfile. Use them to slice telemetry by
+team, environment, or any other dimension you care about.
 
 Two sources, merged in priority order (lowest → highest):
 
@@ -192,7 +151,7 @@ Two sources, merged in priority order (lowest → highest):
 export OTEL_RESOURCE_ATTRIBUTES="team=platform,env=prod,cost_center=eng-123"
 ```
 
-**Route to a per-tenant collector via `service.name`:**
+**Set a custom `service.name`:**
 
 ```bash
 export OTEL_SERVICE_NAME=qwen-code-ci
@@ -300,9 +259,7 @@ or:
 ```
 
 **Option B (recommended)** — move session-level analysis off metrics. Spans
-and logs still carry `session.id`, and trace / log backends (Jaeger, Tempo,
-Loki, Aliyun SLS / ARMS Tracing) handle per-session slicing natively without
-cardinality pressure.
+and logs still carry `session.id`.
 
 ### Client-side HTTP span on outbound fetch
 
@@ -315,207 +272,14 @@ lets you see network latency (TTFB / response body transfer) separately
 from upstream model processing time, which the existing
 `api.generateContent` span alone can't distinguish.
 
-These spans go to your **own** OTLP collector (or file outfile) just like
-the rest of the telemetry — they do not affect what is written onto the
-outbound HTTP request itself. Whether the W3C `traceparent` header is
-also written into the outgoing request stream is controlled by a
-**separate, security-relevant setting** documented in
-[outbound correlation](#outbound-correlation-security-relevant) below.
-
-**Feedback-loop avoidance.** OTel SDK uses `fetch` internally to upload OTLP
-data. Without protection, instrumenting `fetch` would trace those uploads,
-which would themselves be uploaded, causing an infinite loop. Qwen Code's
-undici instrumentation is configured with an `ignoreRequestHook` that skips
-URLs matching the configured `telemetry.otlpEndpoint` /
-`telemetry.otlpTracesEndpoint` / `telemetry.otlpLogsEndpoint` /
-`telemetry.otlpMetricsEndpoint` prefixes. In file-outfile mode there are no
-outbound HTTP uploads, so the hook is a no-op.
-
-## Outbound correlation (SECURITY-RELEVANT)
-
-These settings live in a **separate top-level namespace** from `telemetry.*`
-on purpose: telemetry controls data flow into the operator's own
-observability backend, while `outboundCorrelation.*` controls what
-client-side correlation data qwen-code writes **into outbound LLM API
-request streams** that reach third-party LLM provider endpoints
-(DashScope, OpenAI, Anthropic, etc.). Different recipients, different
-consent decision. **All values default to off.** See PR #4390 review
-discussion for the framing rationale.
-
-### `outboundCorrelation.propagateTraceContext`
-
-```jsonc
-"outboundCorrelation": {
-  "propagateTraceContext": false // default
-}
-```
-
-When `false` (default), Qwen Code installs a no-op `TextMapPropagator` on
-the OTel SDK. UndiciInstrumentation still creates client HTTP spans for
-your OTLP collector, but `propagation.inject()` is a no-op so **no
-`traceparent` is written onto outbound requests**. Trace IDs stay
-internal to the operator's collector.
-
-When `true`, the SDK's default W3C composite propagator
-(`tracecontext` + `baggage`) is installed and the standard `traceparent`
-header is written on every outbound `fetch`:
-
-```
-traceparent: 00-<32-hex traceId>-<16-hex parentSpanId>-<01-sampled | 00-not-sampled>
-```
-
-Additionally, `TRACEPARENT` and `TRACESTATE` environment variables are set in
-shell child processes (Bash tool, hooks, monitor) so that spawned commands can
-participate in the same distributed trace.
-
-Opt in only when the LLM provider also reports into your OTel collector
-for cross-process trace stitching — e.g. ARMS Tracing serving DashScope.
-For most operators the value is `false`; cross-vendor trace continuation
-is niche.
-
-**Depends on `telemetry.enabled: true`.** The OTel SDK only initializes
-when telemetry is enabled, so `propagateTraceContext` only takes effect
-in that state. Setting it to `true` while telemetry is disabled is a
-silent no-op — no SDK, no propagator, no `traceparent` on the wire.
-Verify both flags when wiring an ARMS+DashScope correlation setup:
-
-```jsonc
-{
-  "telemetry": {
-    "enabled": true,
-    "otlpTracesEndpoint": "http://tracing-analysis-...",
-  },
-  "outboundCorrelation": {
-    "propagateTraceContext": true,
-  },
-}
-```
-
-### Routify session affinity
-
-Qwen Code's LLM requests through the OpenAI-compatible, DashScope, Anthropic,
-Gemini, and Vertex provider paths include the current Qwen Code session ID in
-the `session_id` header when addressed over HTTPS directly to `routify.alibaba-inc.com`,
-`routify-online.alibaba-inc.com`, or `routify-pub.alibaba-inc.com`. Routify's
-ModelRouter uses this value for session affinity and traffic marking. This
-behavior is not controlled by `telemetry.enabled` or
-`outboundCorrelation.*`.
-
-The initial destination match is deliberately narrow: Qwen Code does not
-attach the header to subdomains, other `alibaba-inc.com` hosts, or other LLM
-endpoints. The standard fetch redirect behavior still applies after that
-match, so a Routify response can forward the header by redirecting the request.
-
-The session ID is read for every request, so a new session created by
-`/clear` gets a new affinity value without rebuilding the SDK client. Gemini
-requires an explicit Routify `baseUrl` so Qwen Code can verify the
-destination.
-
-`X-Qwen-Code-Request-Id` is not implemented.
-
-## Aliyun Telemetry
-
-### Manual OTLP Export
-
-To view Qwen Code telemetry in Alibaba Cloud Managed Service for
-OpenTelemetry, configure Qwen Code to export to the OTLP endpoint
-provided by ARMS.
-
-Setting `"target": "gcp"` alone does not configure the export
-destination. If `otlpEndpoint` is not set, Qwen Code still defaults to
-`http://localhost:4317`. If `outfile` is set, it overrides
-`otlpEndpoint` and telemetry is written to the file instead of being
-sent to Alibaba Cloud.
-
-1. Enable telemetry in your `.qwen/settings.json` and set the OTLP
-   endpoint:
-
-   **Option A: gRPC protocol** (standard OTLP endpoint):
-
-   ```json
-   {
-     "telemetry": {
-       "enabled": true,
-       "target": "gcp",
-       "otlpEndpoint": "https://<your-otlp-endpoint>",
-       "otlpProtocol": "grpc"
-     }
-   }
-   ```
-
-   **Option B: HTTP protocol with per-signal endpoints** (for backends
-   that use non-standard paths, e.g., `/api/otlp/traces` instead of
-   `/v1/traces`):
-
-   ```json
-   {
-     "telemetry": {
-       "enabled": true,
-       "otlpProtocol": "http",
-       "otlpTracesEndpoint": "http://<host>/<token>/api/otlp/traces",
-       "otlpLogsEndpoint": "http://<host>/<token>/api/otlp/logs",
-       "otlpMetricsEndpoint": "http://<host>/<token>/api/otlp/metrics"
-     }
-   }
-   ```
-
-   > **Note:** When using HTTP protocol with only `otlpEndpoint` (no
-   > per-signal overrides), Qwen Code appends standard OTLP paths
-   > (`/v1/traces`, `/v1/logs`, `/v1/metrics`) to the base URL. If your
-   > backend uses different paths, use per-signal endpoint overrides as
-   > shown in Option B.
-
-   To populate ARMS Session Analysis `User ID`, add a stable pseudonymous
-   identity as a span-level setting:
-
-   ```json
-   {
-     "telemetry": {
-       "userId": "user-079458",
-       "resourceAttributes": {
-         "acs.arms.service.feature": "genai_app"
-       }
-     }
-   }
-   ```
-
-   For container deployments, set
-   `QWEN_TELEMETRY_USER_ID=user-079458` instead. A custom
-   `telemetry.resourceAttributes.user.id` remains an unrelated Resource
-   dimension and does not populate ARMS Session Analysis; remove it when
-   migrating to the span-level setting.
-
-2. If your Alibaba Cloud endpoint requires authentication, provide OTLP
-   headers through standard OpenTelemetry environment variables such as
-   `OTEL_EXPORTER_OTLP_HEADERS` (or the signal-specific variants). Qwen
-   Code does not currently expose OTLP auth headers directly in
-   `.qwen/settings.json`.
-3. Run Qwen Code and send prompts.
-4. View telemetry in Managed Service for OpenTelemetry:
-   - Product overview:
-     [What is Managed Service for OpenTelemetry?][aliyun-opentelemetry-overview]
-   - Getting started:
-     [Get started with Managed Service for OpenTelemetry][aliyun-opentelemetry-get-started]
-   - Console entry points:
-     - China mainland:
-       [trace.console.aliyun.com][aliyun-opentelemetry-console-cn]
-       (legacy console:
-       [tracing.console.aliyun.com][aliyun-opentelemetry-console-cn-legacy])
-     - International:
-       [arms.console.alibabacloud.com][aliyun-opentelemetry-console-intl]
-   - In the console, use `Applications` to inspect traces and service
-     topology.
-   - To locate the OTLP endpoint and access information:
-     - **New console** (`trace.console.aliyun.com` or international):
-       navigate to `Integration Center`.
-     - **Legacy console** (`tracing.console.aliyun.com`): navigate to
-       `Cluster Configurations` → `Access point information`.
+These spans go to the telemetry outfile just like the rest of the
+telemetry — they do not affect what is written onto the outbound HTTP
+request itself. Qwen Code installs a no-op `TextMapPropagator`, so no
+`traceparent` header is ever written onto outbound requests.
 
 ## Local Telemetry
 
-For local development and debugging, you can capture telemetry data locally:
-
-### File-based Output (Recommended)
+To capture telemetry data locally:
 
 1. Enable telemetry in your `.qwen/settings.json`:
 
@@ -528,28 +292,8 @@ For local development and debugging, you can capture telemetry data locally:
    }
    ```
 
-   > **Note:** When `outfile` is set, OTLP export is automatically disabled.
-   > The `target` and `otlpEndpoint` settings are not needed for file-only
-   > output and can be safely omitted from your config.
-
 2. Run Qwen Code and send prompts.
 3. View logs and metrics in the specified file (e.g., `.qwen/telemetry.log`).
-
-### Collector-Based Export (Advanced)
-
-1. Run the automation script:
-   ```bash
-   npm run telemetry -- --target=local
-   ```
-   This will:
-   - Download and start Jaeger and OTEL collector
-   - Configure your workspace for local telemetry
-   - Provide a Jaeger UI at http://localhost:16686
-   - Save logs/metrics to `~/.qwen/tmp/<projectHash>/otel/collector.log`
-   - Stop collector on exit (e.g. `Ctrl+C`)
-2. Run Qwen Code and send prompts.
-3. View traces at http://localhost:16686 and logs/metrics in the collector log
-   file.
 
 ## Logs and Metrics
 
@@ -583,9 +327,6 @@ The following events are logged:
 
 - `qwen-code.conversation_finished`: A conversation turn sequence completes.
   - **Attributes**: `approvalMode` (string), `turnCount` (int)
-
-- `qwen-code.user_feedback`: User submits session feedback.
-  - **Attributes**: `session_id` (string), `rating` (int: 1=bad, 2=fine, 3=good), `model` (string), `approval_mode` (string), `prompt_id` (string, optional)
 
 #### Tool Events
 
@@ -637,7 +378,7 @@ The following events are logged:
 - `qwen-code.chat.invalid_chunk`: Invalid chunk received from stream.
   - **Attributes**: `error.message` (string, optional)
 
-#### Command & Extension Events
+#### Command Events
 
 - `qwen-code.slash_command`: User executes a slash command.
   - **Attributes**: `command` (string), `subcommand` (string, optional), `status` (string: "success" or "error", optional)
@@ -647,21 +388,6 @@ The following events are logged:
 
 - `qwen-code.skill_launch`: A skill is launched.
   - **Attributes**: `skill_name` (string), `success` (boolean), `prompt_id` (string)
-
-- `qwen-code.extension_install`: Extension installed.
-  - **Attributes**: `extension_name` (string), `extension_version` (string), `extension_source` (string), `status` (string: "success"/"error")
-
-- `qwen-code.extension_uninstall`: Extension uninstalled.
-  - **Attributes**: `extension_name` (string), `status` (string)
-
-- `qwen-code.extension_enable`: Extension enabled.
-  - **Attributes**: `extension_name` (string), `setting_scope` (string)
-
-- `qwen-code.extension_disable`: Extension disabled.
-  - **Attributes**: `extension_name` (string), `setting_scope` (string)
-
-- `qwen-code.extension_update`: Extension updated.
-  - **Attributes**: `extension_name` (string), `extension_id` (string), `extension_previous_version` (string), `extension_version` (string), `extension_source` (string), `status` (string: "success"/"error")
 
 - `qwen-code.auth`: Authentication event.
   - **Attributes**: `auth_type` (string), `action_type` ("auto", "manual", "coding-plan"), `status` ("success", "error", "cancelled"), `error_message` (optional)
@@ -852,8 +578,8 @@ resumptions (`--resume`, `--continue`, `--fork-session`) do not carry it.
 `/clear` and other replacement flows intentionally do not claim continuation
 because they discard the previous conversation.
 
-The existing Qwen-specific `qwen-code.config`/`cli_config` and RUM
-`session_start` records remain available for compatibility. GenAI request
+The existing Qwen-specific `qwen-code.config`/`cli_config` record remains
+available for compatibility. GenAI request
 spans continue to use `gen_ai.conversation.id` for the same owning session ID.
 
 - `qwen-code.interaction`: Main-agent invocation span. It covers all LLM requests, tool approval/execution, and continuations for one logical prompt. User queries, retries, cron prompts, notifications, teammate messages, and Goal turns create invocations; tool results, hooks, and steering reuse the exact active prompt ID.

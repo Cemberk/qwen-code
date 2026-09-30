@@ -45,7 +45,6 @@ function createConfig(params: Partial<ConfigParameters>): Config {
     debugMode: false,
     model: 'test-model',
     chatRecording: true,
-    usageStatisticsEnabled: false,
     overrideExtensions: [],
     ...params,
   });

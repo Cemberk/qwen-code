@@ -146,8 +146,6 @@ vi.mock('../core/client.js', () => {
 });
 
 vi.mock('../telemetry/index.js', () => ({
-  DEFAULT_TELEMETRY_TARGET: 'local',
-  DEFAULT_OTLP_ENDPOINT: 'http://localhost:4317',
   DEFAULT_SENSITIVE_SPAN_ATTRIBUTE_MAX_LENGTH: 1024 * 1024,
   isTelemetrySdkInitialized: vi.fn().mockReturnValue(false),
   initializeTelemetry: vi.fn(),
@@ -156,9 +154,6 @@ vi.mock('../telemetry/index.js', () => ({
   logStartSession: vi.fn(),
   logRipgrepFallback: vi.fn(),
   StartSessionEvent: vi.fn(),
-  QwenLogger: vi.fn().mockImplementation(() => ({
-    logStartSessionEvent: vi.fn(),
-  })),
 }));
 
 vi.mock('../telemetry/loggers.js', () => ({
@@ -190,7 +185,6 @@ const baseParams: ConfigParameters = {
   cwd: '/tmp',
   targetDir: '/tmp',
   debugMode: false,
-  usageStatisticsEnabled: false,
   overrideExtensions: [],
   model: 'test-model',
 };

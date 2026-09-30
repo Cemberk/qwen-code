@@ -60,7 +60,7 @@ import type {
 } from './types.js';
 import {
   createHookOutput,
-  HookPhase,
+  type HookPhase,
   isBlockingHookOutput,
   PermissionMode,
   PreToolUseHookOutput,
@@ -74,8 +74,6 @@ import { approvalModeToPermissionMode } from './permission-mode.js';
 import { getCurrentAgentId } from '../agents/runtime/agent-context.js';
 import { promptIdContext } from '../utils/promptIdContext.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
-import { logHookCall } from '../telemetry/loggers.js';
-import { HookCallEvent } from '../telemetry/types.js';
 import type { CronJob } from '../services/cronScheduler.js';
 import { ToolNames } from '../tools/tool-names.js';
 
@@ -1109,7 +1107,7 @@ export class HookEventHandler {
       this.processCommonHookOutputFields(aggregated);
 
       // Log hook execution for telemetry
-      this.logHookExecution(eventName, input, results, aggregated);
+      this.logHookExecution(eventName, results, aggregated);
 
       return aggregated;
     } catch (error) {
@@ -1212,43 +1210,11 @@ export class HookEventHandler {
     }
   }
 
-  private sanitizeHookInputForTelemetry(
-    eventName: HookEventName,
-    input: HookInput,
-  ): Record<string, unknown> {
-    const telemetryInput: Record<string, unknown> = { ...input };
-
-    if (eventName === HookEventName.TodoCreated) {
-      delete telemetryInput['todo_content'];
-      delete telemetryInput['all_todos'];
-      if ('phase' in telemetryInput) {
-        telemetryInput['phase'] =
-          telemetryInput['phase'] === HookPhase.PostWrite
-            ? HookPhase.PostWrite
-            : HookPhase.Validation;
-      }
-    }
-
-    if (eventName === HookEventName.TodoCompleted) {
-      delete telemetryInput['todo_content'];
-      delete telemetryInput['all_todos'];
-      if ('phase' in telemetryInput) {
-        telemetryInput['phase'] =
-          telemetryInput['phase'] === HookPhase.PostWrite
-            ? HookPhase.PostWrite
-            : HookPhase.Validation;
-      }
-    }
-
-    return telemetryInput;
-  }
-
   /**
    * Log hook execution for observability
    */
   private logHookExecution(
     eventName: HookEventName,
-    input: HookInput,
     results: HookExecutionResult[],
     aggregated: AggregatedHookResult,
   ): void {
@@ -1271,36 +1237,13 @@ export class HookEventHandler {
       );
     }
 
-    const telemetryInput = this.sanitizeHookInputForTelemetry(eventName, input);
-
-    for (const result of results) {
-      const hookName = this.getHookNameFromResult(result);
-      const hookType = this.getHookTypeFromResult(result);
-
-      const hookCallEvent = new HookCallEvent(
-        eventName,
-        hookType,
-        hookName,
-        telemetryInput,
-        result.duration,
-        result.success,
-        result.output ? { ...result.output } : undefined,
-        result.exitCode,
-        result.stdout,
-        result.stderr,
-        result.error?.message,
-      );
-
-      logHookCall(this.config, hookCallEvent);
-    }
-
     for (const error of aggregated.errors) {
       debugLogger.warn(`Hook execution error: ${error.message}`);
     }
   }
 
   /**
-   * Get hook name from config for display or telemetry
+   * Get hook name from config for display
    */
   private getHookName(config: HookConfig): string {
     if (config.type === 'command') {
@@ -1310,18 +1253,9 @@ export class HookEventHandler {
   }
 
   /**
-   * Get hook name from execution result for telemetry
+   * Get hook name from execution result for logging
    */
   private getHookNameFromResult(result: HookExecutionResult): string {
     return this.getHookName(result.hookConfig);
-  }
-
-  /**
-   * Get hook type from execution result for telemetry
-   */
-  private getHookTypeFromResult(
-    result: HookExecutionResult,
-  ): 'command' | 'http' | 'function' | 'prompt' {
-    return result.hookConfig.type;
   }
 }

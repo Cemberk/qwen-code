@@ -965,45 +965,6 @@ describe('parseArguments', () => {
     expect(argv.approvalMode).toBeUndefined();
   });
 
-  it('should accept desktop as a channel identifier', async () => {
-    process.argv = ['node', 'script.js', '--channel', 'desktop'];
-    const argv = await parseArguments();
-    expect(argv.channel).toBe('desktop');
-  });
-
-  it('should accept daemon as a channel identifier', async () => {
-    process.argv = ['node', 'script.js', '--channel', 'daemon'];
-    const argv = await parseArguments();
-    expect(argv.channel).toBe('daemon');
-  });
-
-  it('should default ACP mode to the ACP channel when no channel is provided', async () => {
-    process.argv = ['node', 'script.js', '--acp'];
-    const argv = await parseArguments();
-    expect(argv.channel).toBe('ACP');
-  });
-
-  it('keeps an explicit --channel when combined with --acp (the desktop invocation)', async () => {
-    process.argv = ['node', 'script.js', '--acp', '--channel', 'desktop'];
-    const argv = await parseArguments();
-    // The `!result['channel']` guard must not override an explicitly provided
-    // channel with the ACP default.
-    expect(argv.channel).toBe('desktop');
-    expect(argv.acp).toBe(true);
-  });
-
-  it('ignores the removed daemon and desktop launch markers for ACP attribution', async () => {
-    vi.stubEnv('QWEN_CODE_SERVE', '1');
-    vi.stubEnv('QWEN_CODE_DESKTOP', '1');
-    try {
-      process.argv = ['node', 'script.js', '--acp'];
-      const argv = await parseArguments();
-      expect(argv.channel).toBe('ACP');
-    } finally {
-      vi.unstubAllEnvs();
-    }
-  });
-
   it('should reject invalid --approval-mode values', async () => {
     process.argv = ['node', 'script.js', '--approval-mode', 'invalid'];
 
@@ -1441,29 +1402,6 @@ describe('loadCliConfig', () => {
     await loadCliConfig({}, argv);
 
     expect(process.env['QWEN_DEBUG_LOG_FILE']).toBeUndefined();
-  });
-
-  describe('usage statistics', () => {
-    it.each<[string, string | undefined, boolean | undefined, boolean]>([
-      ['defaults to enabled', undefined, undefined, true],
-      ['uses a disabled setting', undefined, false, false],
-      ['lets true override a disabled setting', 'true', false, true],
-      ['lets 1 override a disabled setting', '1', false, true],
-      ['lets false override an enabled setting', 'false', true, false],
-      ['lets 0 override an enabled setting', '0', true, false],
-    ])('%s', async (_name, envValue, settingValue, expected) => {
-      vi.stubEnv('QWEN_USAGE_STATISTICS_ENABLED', envValue);
-      process.argv = ['node', 'script.js'];
-      const argv = await parseArguments();
-      const settings: Settings =
-        settingValue === undefined
-          ? {}
-          : { privacy: { usageStatisticsEnabled: settingValue } };
-
-      const config = await loadCliConfig(settings, argv);
-
-      expect(config.getUsageStatisticsEnabled()).toBe(expected);
-    });
   });
 
   describe('model.goalTokenBudget', () => {
@@ -3529,73 +3467,6 @@ describe('loadCliConfig telemetry', () => {
     expect(config.getTelemetryEnabled()).toBe(false);
   });
 
-  it('should use telemetry OTLP endpoint from settings if CLI flag is not present', async () => {
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments();
-    const settings: Settings = {
-      telemetry: { otlpEndpoint: 'http://settings.example.com' },
-    };
-    const config = await loadCliConfig(settings, argv);
-    expect(config.getTelemetryOtlpEndpoint()).toBe(
-      'http://settings.example.com',
-    );
-  });
-
-  it('should prioritize --telemetry-otlp-endpoint CLI flag over settings', async () => {
-    process.argv = [
-      'node',
-      'script.js',
-      '--telemetry-otlp-endpoint',
-      'http://cli.example.com',
-    ];
-    const argv = await parseArguments();
-    const settings: Settings = {
-      telemetry: { otlpEndpoint: 'http://settings.example.com' },
-    };
-    const config = await loadCliConfig(settings, argv);
-    expect(config.getTelemetryOtlpEndpoint()).toBe('http://cli.example.com');
-  });
-
-  it('should use default endpoint if no OTLP endpoint is provided via CLI or settings', async () => {
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments();
-    const settings: Settings = { telemetry: { enabled: true } };
-    const config = await loadCliConfig(settings, argv);
-    expect(config.getTelemetryOtlpEndpoint()).toBe('http://localhost:4317');
-  });
-
-  it('should use telemetry target from settings if CLI flag is not present', async () => {
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments();
-    const settings: Settings = {
-      telemetry: { target: ServerConfig.DEFAULT_TELEMETRY_TARGET },
-    };
-    const config = await loadCliConfig(settings, argv);
-    expect(config.getTelemetryTarget()).toBe(
-      ServerConfig.DEFAULT_TELEMETRY_TARGET,
-    );
-  });
-
-  it('should prioritize --telemetry-target CLI flag over settings', async () => {
-    process.argv = ['node', 'script.js', '--telemetry-target', 'gcp'];
-    const argv = await parseArguments();
-    const settings: Settings = {
-      telemetry: { target: ServerConfig.DEFAULT_TELEMETRY_TARGET },
-    };
-    const config = await loadCliConfig(settings, argv);
-    expect(config.getTelemetryTarget()).toBe('gcp');
-  });
-
-  it('should use default target if no target is provided via CLI or settings', async () => {
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments();
-    const settings: Settings = { telemetry: { enabled: true } };
-    const config = await loadCliConfig(settings, argv);
-    expect(config.getTelemetryTarget()).toBe(
-      ServerConfig.DEFAULT_TELEMETRY_TARGET,
-    );
-  });
-
   it('should use telemetry log prompts from settings if CLI flag is not present', async () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments();
@@ -3666,55 +3537,25 @@ describe('loadCliConfig telemetry', () => {
     );
   });
 
-  it('should use telemetry OTLP protocol from settings if CLI flag is not present', async () => {
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments();
-    const settings: Settings = {
-      telemetry: { otlpProtocol: 'http' },
-    };
-    const config = await loadCliConfig(settings, argv);
-    expect(config.getTelemetryOtlpProtocol()).toBe('http');
-  });
+  it.each(['--telemetry-otlp-endpoint', '--telemetry-target'])(
+    'should reject the removed %s flag',
+    async (flag) => {
+      process.argv = ['node', 'script.js', flag, 'http://collector:4317'];
 
-  it('should prioritize --telemetry-otlp-protocol CLI flag over settings', async () => {
-    process.argv = ['node', 'script.js', '--telemetry-otlp-protocol', 'http'];
-    const argv = await parseArguments();
-    const settings: Settings = {
-      telemetry: { otlpProtocol: 'grpc' },
-    };
-    const config = await loadCliConfig(settings, argv);
-    expect(config.getTelemetryOtlpProtocol()).toBe('http');
-  });
+      const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
+        throw new Error('process.exit called');
+      });
+      mockWriteStderrLine.mockClear();
 
-  it('should use default protocol if no OTLP protocol is provided via CLI or settings', async () => {
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments();
-    const settings: Settings = { telemetry: { enabled: true } };
-    const config = await loadCliConfig(settings, argv);
-    expect(config.getTelemetryOtlpProtocol()).toBe('grpc');
-  });
+      await expect(parseArguments()).rejects.toThrow('process.exit called');
 
-  it('should reject invalid --telemetry-otlp-protocol values', async () => {
-    process.argv = [
-      'node',
-      'script.js',
-      '--telemetry-otlp-protocol',
-      'invalid',
-    ];
+      expect(mockWriteStderrLine).toHaveBeenCalledWith(
+        expect.stringContaining('Unknown argument'),
+      );
 
-    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit called');
-    });
-    mockWriteStderrLine.mockClear();
-
-    await expect(parseArguments()).rejects.toThrow('process.exit called');
-
-    expect(mockWriteStderrLine).toHaveBeenCalledWith(
-      expect.stringContaining('Invalid values:'),
-    );
-
-    mockExit.mockRestore();
-  });
+      mockExit.mockRestore();
+    },
+  );
 });
 
 describe('mergeExcludeTools', () => {
@@ -6275,51 +6116,6 @@ describe('Telemetry configuration via environment variables', () => {
     expect(config.getTelemetryEnabled()).toBe(true);
   });
 
-  it('should prioritize QWEN_TELEMETRY_TARGET over settings', async () => {
-    vi.stubEnv('QWEN_TELEMETRY_TARGET', 'gcp');
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments();
-    const settings: Settings = {
-      telemetry: { target: 'local' },
-    } as unknown as Settings;
-    const config = await loadCliConfig(settings, argv, undefined, []);
-    expect(config.getTelemetryTarget()).toBe('gcp');
-  });
-
-  it('should throw when QWEN_TELEMETRY_TARGET is invalid', async () => {
-    vi.stubEnv('QWEN_TELEMETRY_TARGET', 'bogus');
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments();
-    const settings: Settings = {
-      telemetry: { target: 'gcp' },
-    } as unknown as Settings;
-    await expect(loadCliConfig(settings, argv, undefined, [])).rejects.toThrow(
-      /Invalid telemetry configuration: .*Invalid telemetry target/i,
-    );
-    vi.unstubAllEnvs();
-  });
-
-  it('should prioritize QWEN_TELEMETRY_OTLP_ENDPOINT over settings and default env var', async () => {
-    vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://default.env.com');
-    vi.stubEnv('QWEN_TELEMETRY_OTLP_ENDPOINT', 'http://gemini.env.com');
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments();
-    const settings: Settings = {
-      telemetry: { otlpEndpoint: 'http://settings.com' },
-    };
-    const config = await loadCliConfig(settings, argv, undefined, []);
-    expect(config.getTelemetryOtlpEndpoint()).toBe('http://gemini.env.com');
-  });
-
-  it('should prioritize QWEN_TELEMETRY_OTLP_PROTOCOL over settings', async () => {
-    vi.stubEnv('QWEN_TELEMETRY_OTLP_PROTOCOL', 'http');
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments();
-    const settings: Settings = { telemetry: { otlpProtocol: 'grpc' } };
-    const config = await loadCliConfig(settings, argv, undefined, []);
-    expect(config.getTelemetryOtlpProtocol()).toBe('http');
-  });
-
   it('should prioritize QWEN_TELEMETRY_LOG_PROMPTS over settings', async () => {
     vi.stubEnv('QWEN_TELEMETRY_LOG_PROMPTS', 'false');
     process.argv = ['node', 'script.js'];
@@ -6369,17 +6165,6 @@ describe('Telemetry configuration via environment variables', () => {
     const settings: Settings = { telemetry: { enabled: true } };
     const config = await loadCliConfig(settings, argv, undefined, []);
     expect(config.getTelemetryEnabled()).toBe(true);
-  });
-
-  it('should use settings value when QWEN_TELEMETRY_TARGET is not set', async () => {
-    vi.stubEnv('QWEN_TELEMETRY_TARGET', undefined);
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments();
-    const settings: Settings = {
-      telemetry: { target: 'local' },
-    } as unknown as Settings;
-    const config = await loadCliConfig(settings, argv, undefined, []);
-    expect(config.getTelemetryTarget()).toBe('local');
   });
 
   it("should treat QWEN_TELEMETRY_ENABLED='1' as true", async () => {

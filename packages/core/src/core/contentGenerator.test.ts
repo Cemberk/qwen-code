@@ -144,7 +144,6 @@ describe('createContentGenerator', () => {
 
   it('should defer Gemini content generator creation until first use', async () => {
     const mockConfig = {
-      getUsageStatisticsEnabled: () => true,
       getContentGeneratorConfig: () => ({}),
       getCliVersion: () => '1.0.0',
       getTelemetryEnabled: () => false,
@@ -172,45 +171,6 @@ describe('createContentGenerator', () => {
       contents: 'hello',
     });
 
-    expect(GoogleGenAI).toHaveBeenCalledWith({
-      apiKey: 'test-api-key',
-      vertexai: undefined,
-      httpOptions: {
-        headers: {
-          'User-Agent': expect.any(String),
-          'x-gemini-api-privileged-user-id': expect.any(String),
-        },
-      },
-    });
-  });
-
-  it('should create a Gemini content generator with client install id logging disabled', async () => {
-    const mockConfig = {
-      getUsageStatisticsEnabled: () => false,
-      getContentGeneratorConfig: () => ({}),
-      getCliVersion: () => '1.0.0',
-      getTelemetryEnabled: () => false,
-      getSessionId: () => 'test-session',
-    } as unknown as Config;
-    const mockGenerator = {
-      models: {
-        embedContent: vi.fn().mockResolvedValue({ embeddings: [] }),
-      },
-    } as unknown as GoogleGenAI;
-    vi.mocked(GoogleGenAI).mockImplementation(() => mockGenerator as never);
-    const generator = await createContentGenerator(
-      {
-        model: 'test-model',
-        apiKey: 'test-api-key',
-        authType: AuthType.USE_GEMINI,
-      },
-      mockConfig,
-    );
-    expect(GoogleGenAI).not.toHaveBeenCalled();
-    await generator.embedContent({
-      model: 'test-model',
-      contents: 'hello',
-    });
     expect(GoogleGenAI).toHaveBeenCalledWith({
       apiKey: 'test-api-key',
       vertexai: undefined,
@@ -224,7 +184,6 @@ describe('createContentGenerator', () => {
 
   it('loads a provider once across concurrent first calls', async () => {
     const mockConfig = {
-      getUsageStatisticsEnabled: () => false,
       getContentGeneratorConfig: () => ({}),
       getCliVersion: () => '1.0.0',
       getTelemetryEnabled: () => false,
@@ -254,7 +213,6 @@ describe('createContentGenerator', () => {
     // generator is a LazyContentGenerator), so this must exercise a call,
     // not just check the returned object's shape.
     const mockConfig = {
-      getUsageStatisticsEnabled: () => false,
       getContentGeneratorConfig: () => ({}),
       getCliVersion: () => '1.0.0',
       getTelemetryEnabled: () => false,
@@ -299,7 +257,6 @@ describe('createContentGenerator', () => {
 
   it('loads a provider once across concurrent preload and first use', async () => {
     const mockConfig = {
-      getUsageStatisticsEnabled: () => false,
       getContentGeneratorConfig: () => ({}),
       getCliVersion: () => '1.0.0',
       getTelemetryEnabled: () => false,
@@ -324,7 +281,6 @@ describe('createContentGenerator', () => {
 
   it('discards an unused preload after session configuration changes', async () => {
     const mockConfig = {
-      getUsageStatisticsEnabled: () => false,
       getContentGeneratorConfig: () => ({}),
       getCliVersion: () => '1.0.0',
       getTelemetryEnabled: () => false,
@@ -351,7 +307,6 @@ describe('createContentGenerator', () => {
 
   it('does not discard a generator that has already been used', async () => {
     const mockConfig = {
-      getUsageStatisticsEnabled: () => false,
       getContentGeneratorConfig: () => ({}),
       getCliVersion: () => '1.0.0',
       getTelemetryEnabled: () => false,
@@ -388,7 +343,6 @@ describe('createContentGenerator', () => {
       }),
     ];
     const mockConfig = {
-      getUsageStatisticsEnabled: () => false,
       getContentGeneratorConfig: () => ({}),
       getCliVersion: () => '1.0.0',
       getTelemetryEnabled: () => false,
@@ -431,7 +385,6 @@ describe('createContentGenerator', () => {
     ];
     openaiMockState.deferredErrors = [preloadError];
     const mockConfig = {
-      getUsageStatisticsEnabled: () => false,
       getContentGeneratorConfig: () => ({}),
       getCliVersion: () => '1.0.0',
       getTelemetryEnabled: () => false,
@@ -476,7 +429,6 @@ describe('createContentGenerator', () => {
       authType: AuthType.QWEN_OAUTH,
     };
     const mockConfig = {
-      getUsageStatisticsEnabled: () => false,
       getContentGeneratorConfig: () => generatorConfig,
       getCliVersion: () => '1.0.0',
       getTelemetryEnabled: () => false,
@@ -501,7 +453,6 @@ describe('createContentGenerator', () => {
   it('rebuilds OpenAI logging with the relocated working directory', async () => {
     let workingDir = '/workspace/before';
     const mockConfig = {
-      getUsageStatisticsEnabled: () => false,
       getContentGeneratorConfig: () => ({}),
       getCliVersion: () => '1.0.0',
       getTelemetryEnabled: () => false,
@@ -535,7 +486,6 @@ describe('createContentGenerator', () => {
 
   it('memoizes preload rejection for the first use', async () => {
     const mockConfig = {
-      getUsageStatisticsEnabled: () => false,
       getContentGeneratorConfig: () => ({}),
       getCliVersion: () => '1.0.0',
       getTelemetryEnabled: () => false,
@@ -569,7 +519,6 @@ describe('createContentGenerator', () => {
 
   it('checks Qwen credentials before deferring provider creation', async () => {
     const mockConfig = {
-      getUsageStatisticsEnabled: () => false,
       getContentGeneratorConfig: () => ({}),
       getCliVersion: () => '1.0.0',
       getTelemetryEnabled: () => false,
@@ -592,7 +541,6 @@ describe('createContentGenerator', () => {
 
   it('rejects Qwen credential failures before returning a lazy generator', async () => {
     const mockConfig = {
-      getUsageStatisticsEnabled: () => false,
       getContentGeneratorConfig: () => ({}),
       getCliVersion: () => '1.0.0',
       getTelemetryEnabled: () => false,
@@ -616,7 +564,6 @@ describe('createContentGenerator', () => {
 
   it('should throw when the config has no authType', async () => {
     const mockConfig = {
-      getUsageStatisticsEnabled: () => true,
       getContentGeneratorConfig: () => ({}),
       getCliVersion: () => '1.0.0',
       getTelemetryEnabled: () => false,
@@ -635,7 +582,6 @@ describe('createContentGenerator', () => {
 
   it('should throw on an unsupported authType', async () => {
     const mockConfig = {
-      getUsageStatisticsEnabled: () => true,
       getContentGeneratorConfig: () => ({}),
       getCliVersion: () => '1.0.0',
       getTelemetryEnabled: () => false,
@@ -657,7 +603,6 @@ describe('createContentGenerator', () => {
 
 describe('createContentGenerator - ERR_MODULE_NOT_FOUND handling', () => {
   const mockConfig = {
-    getUsageStatisticsEnabled: () => true,
     getContentGeneratorConfig: () => ({}),
     getCliVersion: () => '1.0.0',
     getTelemetryEnabled: () => false,
@@ -829,7 +774,6 @@ describe('validateModelConfig - Vertex AI Application Default Credentials', () =
     const generator = await createContentGenerator(
       { model: 'gemini-2.5-pro', authType: AuthType.USE_VERTEX_AI },
       {
-        getUsageStatisticsEnabled: () => false,
         getContentGeneratorConfig: () => ({}),
         getCliVersion: () => '1.0.0',
         getTelemetryEnabled: () => false,

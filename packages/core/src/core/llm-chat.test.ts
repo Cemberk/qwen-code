@@ -184,7 +184,6 @@ describe('LlmChat', async () => {
     mockConfig = {
       getSessionId: () => 'test-session-id',
       getTelemetryLogPromptsEnabled: () => true,
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getContentGeneratorConfig: vi.fn().mockReturnValue({
         authType: 'gemini', // Ensure this is set for fallback tests

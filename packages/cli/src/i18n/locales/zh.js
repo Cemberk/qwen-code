@@ -251,7 +251,6 @@ export default {
   '← → select, Delete to remove, ↓ to exit': '← → 选择，Delete 删除，↓ 退出',
   'Attachments: ': '附件：',
   'Basics:': '基础功能：',
-  'Add context': '添加上下文',
   'Use {{symbol}} to specify files for context (e.g., {{example}}) to target specific files or folders.':
     '使用 {{symbol}} 指定文件作为上下文（例如，{{example}}），用于定位特定文件或文件夹',
   '@': '@',
@@ -303,7 +302,6 @@ export default {
     '换行（某些 Linux 发行版支持 Alt+Enter）',
   'Clear the screen': '清屏',
   'Open input in external editor': '在外部编辑器中打开输入',
-  'Send message': '发送消息',
   'Initializing...': '正在初始化...',
   'Connecting to MCP servers... ({{connected}}/{{total}})':
     '正在连接到 MCP servers... ({{connected}}/{{total}})',
@@ -322,7 +320,6 @@ export default {
   'for help on Qwen Code': '获取 Qwen Code 帮助',
   'show version info': '显示版本信息',
   'show paths for current session files and logs': '显示当前会话文件和日志路径',
-  'submit a bug report': '提交错误报告',
   Status: '状态',
 
   // ============================================================================
@@ -339,7 +336,6 @@ export default {
   'Base URL': 'Base URL',
   Proxy: '代理',
   'Memory Usage': '内存使用',
-  'IDE Client': 'IDE 客户端',
 
   // ============================================================================
   // Commands - General
@@ -458,8 +454,6 @@ export default {
     '通过摘要替换来压缩上下文',
   'Fast context compression without AI. Strips old tool outputs and thinking parts.':
     '无需 AI 的快速上下文压缩。清理旧工具输出并剥离思考过程。',
-  'open full Qwen Code documentation in your browser':
-    '在浏览器中打开完整的 Qwen Code 文档',
   'Configuration not available.': '配置不可用',
   'Connect an LLM provider': '连接 LLM 提供商',
   'Copy to clipboard: reply, code (by lang), LaTeX, or Mermaid. N = Nth-latest message, index = block number':
@@ -673,7 +667,6 @@ export default {
   'User Scope': '用户作用域',
   'Workspace Scope': '工作区作用域',
   'No extensions found.': '未找到扩展。',
-  'Updating...': '更新中...',
   Unknown: '未知',
   Error: '错误',
   'Stopped because': '停止原因',
@@ -750,10 +743,8 @@ export default {
   'Vim Mode': 'Vim 模式',
   'Attribution: commit': '署名：提交',
   'Terminal Bell Notification': '终端响铃通知',
-  'Enable Usage Statistics': '启用使用统计',
   Theme: '主题',
   'Preferred Editor': '首选编辑器',
-  'Auto-connect to IDE': '自动连接到 IDE',
   'Debug Keystroke Logging': '调试按键记录',
   'Language: UI': '语言：界面',
   'Language: Model': '语言：模型',
@@ -766,12 +757,6 @@ export default {
   'Show Citations': '显示引用',
   'Custom Witty Phrases': '自定义诙谐短语',
   'Show Welcome Back Dialog': '显示欢迎回来对话框',
-  'Enable User Feedback': '启用用户反馈',
-  'How is Qwen doing this session? (optional)': 'Qwen 这次表现如何？（可选）',
-  Bad: '不满意',
-  Fine: '还行',
-  Good: '满意',
-  Dismiss: '忽略',
   'Screen Reader Mode': '屏幕阅读器模式',
   'Max Session Turns': '最大会话轮次',
   'Skip Next Speaker Check': '跳过下一个说话者检查',
@@ -924,8 +909,8 @@ export default {
   'Installation cancelled for "{{name}}".': '已取消安装 "{{name}}"。',
   'You are installing an extension from {{originSource}}. Some features may not work perfectly with Qwen Code.':
     '您正在安装来自 {{originSource}} 的扩展。某些功能可能无法完美兼容 Qwen Code。',
-  '--ref and --auto-update are not applicable for marketplace extensions.':
-    '--ref 和 --auto-update 不适用于市场扩展。',
+  '--ref is not applicable for marketplace extensions.':
+    '--ref 不适用于市场扩展。',
   'Extension "{{name}}" installed successfully and enabled.':
     '扩展 "{{name}}" 安装成功并已启用。',
   'The github URL, local path, or marketplace source (marketplace-url:plugin-name) of the extension to install.':
@@ -941,7 +926,6 @@ export default {
     '从 Git 仓库 URL、本地路径、带作用域的 npm 包（@scope/name）或 Claude 市场源（marketplace-url:plugin-name）安装扩展。',
   Description: '描述',
   'Delete Session': '删除会话',
-  'Enable auto-update for this extension.': '为此扩展启用自动更新。',
   'Enable pre-release versions for this extension.': '为此扩展启用预发布版本。',
   'Acknowledge the security risks of installing an extension and skip the confirmation prompt.':
     '确认安装扩展的安全风险并跳过确认提示。',
@@ -1030,15 +1014,6 @@ export default {
     '使用 ↑↓ 或 j/k 导航，Enter 选择，Escape 取消',
   '{{count}} more above': '上方还有 {{count}} 项',
   '{{count}} more below': '下方还有 {{count}} 项',
-  'manage IDE integration': '管理 IDE 集成',
-  'check status of IDE integration': '检查 IDE 集成状态',
-  'install required IDE companion for {{ideName}}':
-    '安装 {{ideName}} 所需的 IDE 配套工具',
-  'enable IDE integration': '启用 IDE 集成',
-  'disable IDE integration': '禁用 IDE 集成',
-  'IDE integration is not supported in your current environment. To use this feature, run Qwen Code in one of these supported IDEs: VS Code or VS Code forks.':
-    '您当前环境不支持 IDE 集成。要使用此功能，请在以下支持的 IDE 之一中运行 Qwen Code：VS Code 或 VS Code 分支版本。',
-  'Set up GitHub Actions': '设置 GitHub Actions',
   'Configure terminal keybindings for multiline input (VS Code, Cursor, Windsurf, Trae)':
     '配置终端按键绑定以支持多行输入（VS Code、Cursor、Windsurf、Trae）',
   'Please restart your terminal for the changes to take effect.':
@@ -1233,7 +1208,6 @@ export default {
   // ============================================================================
   'Export current session message history to a file':
     '将当前会话的消息记录导出到文件',
-  'Export session to HTML format': '将会话导出为 HTML 文件',
   'Export session to JSON format': '将会话导出为 JSON 文件',
   'Export session to JSONL format (one message per line)':
     '将会话导出为 JSONL 文件（每行一条消息）',
@@ -1319,7 +1293,6 @@ export default {
     '工作区审批模式已存在并具有优先级。用户级别的更改将无效。',
   'Apply To': '应用于',
   'Workspace Settings': '工作区设置',
-  'Open auto-memory folder': '打开自动记忆文件夹',
   'Auto-memory: {{status}}': '自动记忆：{{status}}',
   'Auto-dream: {{status}} · {{lastDream}} · /dream to run':
     '自动整理：{{status}} · {{lastDream}} · /dream 立即运行',
@@ -1508,8 +1481,6 @@ export default {
     "⚠ '{{model}}' 不是已知的图像能力模型；视觉桥接处理图片时可能会失败。",
   'Set a lighter model for prompt suggestions and speculative execution':
     '设置用于输入建议和推测执行的轻量模型',
-  'Toggle voice dictation input': '切换语音听写输入',
-  'Set the model for voice transcription': '设置语音转写模型',
   'Set the image-capable model used to transcribe images for a text-only main model':
     '设置用于为纯文本主模型转写图像的图像能力模型',
   'Set the model used to generate images': '设置用于生成图像的模型',
@@ -1523,56 +1494,19 @@ export default {
   'Select Vision Model': '选择视觉模型',
   'Select Image Model': '选择图像模型',
   'Select Compaction Model': '选择压缩模型',
-  'Select Voice Model': '选择语音模型',
   'Vision Model': '视觉模型',
   'Image Model': '图像模型',
   'Compaction Model': '压缩模型',
   'Selected compaction model is unavailable.': '所选压缩模型不可用。',
   'Configure models in settings.modelProviders and ensure the required environment variables are set. In interactive mode, run /auth to configure or switch providers, or run /model --compaction without a model to choose from configured models.':
     '在 settings.modelProviders 中配置模型并确保设置了所需的环境变量。在交互模式下，运行 /auth 配置或切换 provider，或运行 /model --compaction（不带模型参数）从已配置的模型中选择。',
-  'Voice Model': '语音模型',
-  'Selected voice model is unavailable.': '所选语音模型不可用。',
   'Selected image model is unavailable.': '所选图像模型不可用。',
-  "Voice model '{{model}}' is configured more than once. Remove duplicate model ids before selecting it for voice transcription.":
-    "语音模型 '{{model}}' 被配置了多次。请先移除重复的模型 ID，再将其选为语音转写模型。",
-  'Voice dictation: {{status}} (mode: {{mode}}, {{modelText}}).':
-    '语音听写：{{status}}（模式：{{mode}}，{{modelText}}）。',
-  'model: {{voiceModel}}': '模型：{{voiceModel}}',
-  'no voice model selected': '未选择语音模型',
-  'Voice dictation disabled.': '语音听写已禁用。',
-  'Usage: /voice [hold|tap|off|status]': '用法：/voice [hold|tap|off|status]',
-  'No voice model selected. Run /model --voice to choose one before enabling voice dictation.':
-    '未选择语音模型。请先运行 /model --voice 选择模型，再启用语音听写。',
-  'Voice dictation enabled (tap mode). Tap Space at an empty prompt to start, tap again or pause to stop and submit, using {{voiceModel}}.':
-    '语音听写已启用（点击模式）。在空输入框中点击 Space 开始，再点击一次或停顿后停止并提交，使用 {{voiceModel}}。',
-  'Voice dictation enabled (hold mode). Hold Space at an empty prompt to dictate with {{voiceModel}}.':
-    '语音听写已启用（按住模式）。在空输入框中按住 Space，使用 {{voiceModel}} 听写。',
   'No models are configured.': '未配置模型。',
   'Configured models: {{models}}.': '已配置模型：{{models}}。',
-  'Configure a unique model id in settings.modelProviders or run /model --voice to select an available model.':
-    '请在 settings.modelProviders 中配置唯一的模型 ID，或运行 /model --voice 选择可用模型。',
-  "Voice model '{{modelName}}' is not configured.":
-    "语音模型 '{{modelName}}' 未配置。",
   "Voice model '{{modelName}}' cannot be used for transcription.":
     "语音模型 '{{modelName}}' 不能用于转写。",
-  "Voice model '{{modelName}}' cannot be used for transcription. Configure an OpenAI-compatible model with baseUrl in settings.modelProviders.":
-    "语音模型 '{{modelName}}' 不能用于转写。请在 settings.modelProviders 中配置带 baseUrl 的 OpenAI 兼容模型。",
   'Configure an OpenAI-compatible model with baseUrl in settings.modelProviders.':
     '请在 settings.modelProviders 中配置带 baseUrl 的 OpenAI 兼容模型。',
-  'Microphone access is denied. Enable it for your terminal in System Settings → Privacy & Security → Microphone, then restart voice dictation.':
-    '麦克风访问被拒绝。请在系统设置 → 隐私与安全性 → 麦克风中允许当前终端访问，然后重新启动语音听写。',
-  'Voice dictation is not supported on {{platform}}.':
-    '语音听写不支持 {{platform}}。',
-  'Voice dictation needs microphone access, which is unavailable in this WSL session. Use WSLg/PulseAudio, or run Qwen Code on a host with a microphone.':
-    '语音听写需要麦克风访问，但当前 WSL 会话不可用。请使用 WSLg/PulseAudio，或在带麦克风的宿主机上运行 Qwen Code。',
-  'Voice dictation needs microphone access. macOS will ask the first time you record — approve it, then start again. Your first recording may be empty while the dialog is open.':
-    '语音听写需要麦克风访问。macOS 会在你首次录音时弹出授权请求——请同意后重新开始。弹窗打开期间的首次录音可能为空。',
-  'Voice: recording': '语音：录音中',
-  'Voice: transcribing': '语音：转写中',
-  'Voice: refining': '语音：优化中',
-  'listening…': '聆听中…',
-  'transcribing…': '转写中…',
-  'refining…': '优化中…',
   'Content generator configuration not available.': '内容生成器配置不可用',
   'Authentication type not available.': '认证类型不可用',
   'No models available for the current authentication type ({{authType}}).':
@@ -1627,10 +1561,6 @@ export default {
   // ============================================================================
   // Commands - Docs
   // ============================================================================
-  'Please open the following URL in your browser to view the documentation:\n{{url}}':
-    '请在浏览器中打开以下 URL 以查看文档：\n{{url}}',
-  'Opening documentation in your browser: {{url}}':
-    '正在浏览器中打开文档：{{url}}',
 
   // ============================================================================
   // Dialogs - Tool Confirmation
@@ -1769,8 +1699,6 @@ export default {
   video: '视频',
   'not set': '未设置',
   'not set (falls back to the main model)': '未设置（回退到主模型）',
-  'Current voice model: {{voiceModel}}\nUse "/model --voice <model-id>" to set voice model.':
-    '当前语音模型：{{voiceModel}}\n使用 "/model --voice <model-id>" 设置语音模型。',
   'Current vision model: {{visionModel}}\nUse "/model --vision <model-id>" to set the vision bridge model.':
     '当前视觉模型：{{visionModel}}\n使用 "/model --vision <model-id>" 设置视觉桥接模型。',
   'Current image model: {{imageModel}}\nUse "/model --image <model-id>" to set the image generation model.':
@@ -1778,8 +1706,6 @@ export default {
   'Compaction model override cleared': '压缩模型覆盖已清除',
   'Current compaction model: {{compactionModel}}\nUse "/model --compaction <model-id>" to set compaction model, or "/model --compaction clear" to clear the override.':
     '当前压缩模型：{{compactionModel}}\n使用 "/model --compaction <model-id>" 设置压缩模型，或使用 "/model --compaction clear" 清除覆盖设置。',
-  "Voice model '{{modelName}}' is ambiguous. Configure a unique model id before using /model --voice.":
-    "语音模型 '{{modelName}}' 不唯一。请先配置唯一的模型 ID，再使用 /model --voice。",
   "Image model '{{modelName}}' matches multiple configured endpoints. Run /model --image without an argument and choose the exact endpoint.":
     "图像模型 '{{modelName}}' 匹配了多个已配置的端点。请运行 /model --image（不带参数）并选择确切的端点。",
   "Image model '{{modelName}}' must declare a valid HTTPS baseUrl and credential environment variable.":
@@ -1858,9 +1784,6 @@ export default {
   // Status Bar
   // ============================================================================
   'Using:': '已加载: ',
-  '{{count}} open file': '{{count}} 个打开的文件',
-  '{{count}} open files': '{{count}} 个打开的文件',
-  '(ctrl+g to view)': '（按 ctrl+g 查看）',
   '{{count}} {{name}} file': '{{count}} 个 {{name}} 文件',
   '{{count}} {{name}} files': '{{count}} 个 {{name}} 文件',
   '{{count}} MCP server': '{{count}} 个 MCP server',
@@ -2122,14 +2045,6 @@ export default {
   // Extensions - Explore Command
   // ============================================================================
   'Open extensions page in your browser': '在浏览器中打开扩展市场页面',
-  'Unknown extensions source: {{source}}.': '未知的扩展来源：{{source}}。',
-  'Would open extensions page in your browser: {{url}} (skipped in test environment)':
-    '将在浏览器中打开扩展页面：{{url}}（测试环境中已跳过）',
-  'View available extensions at {{url}}': '在 {{url}} 查看可用扩展',
-  'Opening extensions page in your browser: {{url}}':
-    '正在浏览器中打开扩展页面：{{url}}',
-  'Failed to open browser. Check out the extensions gallery at {{url}}':
-    '打开浏览器失败。请访问扩展市场：{{url}}',
   'Retrying in {{seconds}} seconds… (attempt {{attempt}}/{{maxRetries}})':
     '将于 {{seconds}} 秒后重试…（第 {{attempt}}/{{maxRetries}} 次）',
   'Press Ctrl+Y to retry': '按 Ctrl+Y 重试。',
@@ -2380,16 +2295,6 @@ export default {
   'Show current process memory diagnostics': '显示当前进程的内存诊断。',
   'Record a CPU profile for Chrome DevTools analysis':
     '录制 CPU 性能分析文件，用于 Chrome DevTools 分析',
-  'Roll back a standalone update to the previous version':
-    '将独立安装回滚到上一个版本',
-  'Rollback is not available in ACP mode.': '回滚在 ACP 模式下不可用。',
-  'Rollback is only available for standalone installations.':
-    '回滚仅适用于独立安装。',
-  'Rollback successful. Restart your terminal to use the previous version.':
-    '回滚成功。请重启终端以使用上一个版本。',
-  'Rollback failed:': '回滚失败：',
-  'Rollback on Windows requires manual intervention. Rename qwen-code.old to qwen-code in your installation directory.':
-    '在 Windows 上回滚需要手动操作。请将安装目录中的 qwen-code.old 重命名为 qwen-code。',
   'Save a durable memory to the memory system.':
     '将一条持久记忆保存到记忆系统。',
   'Show per-item context usage breakdown.': '显示按项目划分的上下文使用详情。',
@@ -2488,10 +2393,8 @@ export default {
   Sessions: '会话数',
   days: '天',
   Input: '输入',
-  'Tool calls': '工具调用',
   'Code changes': '代码变更',
   Projects: '项目统计',
-  Name: '名称',
   Duration: '时长',
   'Activity Heatmap': '用量热力统计',
   'Loading stats...': '加载统计数据...',
@@ -2513,9 +2416,7 @@ export default {
 
   // Stats Dashboard — missing labels
   'API Requests': 'API 请求',
-  'Tool Calls': '工具调用',
   'Success rate': '成功率',
-  'Code Changes': '代码变更',
   Tool: '工具',
   reqs: '请求',
   in: '输入',
@@ -2547,64 +2448,12 @@ export default {
   '阿里云百炼 (aliyun.com)': '阿里云百炼（aliyun.com）',
   'No compression needed.': '无需压缩。',
   // Update command
-  'Check for Qwen Code updates and install if available':
-    '检查 Qwen Code 更新并安装（如果可用）',
-  'Qwen Code update available! {{current}} → {{latest}}':
-    'Qwen Code 有可用更新！{{current}} → {{latest}}',
-  'A new version of Qwen Code is available! {{current}} → {{latest}}':
-    'Qwen Code 有新版本可用！{{current}} → {{latest}}',
-  'Qwen Code {{version}} is up to date!': 'Qwen Code {{version}} 已是最新！',
-  'Failed to check for updates ({{reason}}). Please check your network or registry configuration.':
-    '检查更新失败（{{reason}}）。请检查网络或 registry 配置。',
-  'Update check skipped ({{reason}}) — run /update to retry.':
-    '已跳过更新检查（{{reason}}）— 可运行 /update 重试。',
-  'registry did not respond within {{seconds}}s':
-    'registry 在 {{seconds}} 秒内未响应',
-  'registry unreachable': 'registry 无法连接',
-  'registry error': 'registry 错误',
-  'Unable to check for updates: {{reason}}': '无法检查更新：{{reason}}',
-  'Update successful! The new version will be used on your next run.':
-    '更新成功！新版本将在下次运行时生效。',
-  'Update downloaded. It will be applied after you exit this session.':
-    '更新已下载。将在退出当前会话后应用。',
-  'Update failed: {{error}}': '更新失败：{{error}}',
-  'Downloading update...': '正在下载更新...',
   'Update successful! Please restart Qwen Code to use the new version. Switching model providers before restarting may not work correctly.':
     '更新成功！请重启 Qwen Code 以使用新版本。重启前切换模型提供商可能无法正常工作。',
-  'Automatic update failed. Please try updating manually.':
-    '自动更新失败。请尝试手动更新。',
-  'Automatic update failed: {{error}}. Re-run the installer to update manually.':
-    '自动更新失败：{{error}}。请重新运行安装程序以手动更新。',
-  'Running from a local git clone. Please update with "git pull".':
-    '正在从本地 Git 克隆运行。请使用 "git pull" 更新。',
-  'Running via npx, update not applicable.': '正在通过 npx 运行，更新不适用。',
-  'Running via pnpx, update not applicable.':
-    '正在通过 pnpx 运行，更新不适用。',
-  'Running via bunx, update not applicable.':
-    '正在通过 bunx 运行，更新不适用。',
-  'Installed via Homebrew. Please update with "brew upgrade".':
-    '通过 Homebrew 安装。请使用 "brew upgrade" 更新。',
-  "Locally installed. Please update via your project's package.json.":
-    '本地安装。请通过项目的 package.json 更新。',
-  'Update requires sudo. Please run:': '更新需要 sudo。请运行：',
-  'Standalone install detected. Attempting to automatically update now...':
-    '检测到独立安装。正在尝试自动更新...',
   'Standalone install detected. Please rerun the standalone installer to update:':
     '检测到独立安装。请重新运行独立安装程序以更新：',
-  'Run the following to update:': '运行以下命令进行更新：',
   'Unable to auto-update this standalone installation. Please reinstall from:':
     '无法自动更新此独立安装。请从以下地址重新安装：',
-  'Manual update required. Please reinstall Qwen Code.':
-    '需要手动更新。请重新安装 Qwen Code。',
-  'This session uses the custom sandbox image {{image}}. Update that image and restart Qwen Code.':
-    '此会话使用自定义沙箱镜像 {{image}}。请更新该镜像并重启 Qwen Code。',
-  'Update Qwen Code on the host, then restart the sandbox.':
-    '请在宿主机上更新 Qwen Code，然后重启沙箱。',
-  'The update will be installed after you exit this session.':
-    '退出当前会话后将自动安装更新。',
-  'Run /update to install the update on the host.':
-    '运行 /update 在宿主机上安装更新。',
-  'Run /update to install the update.': '运行 /update 安装更新。',
   '⚠️ History gap: earlier conversation was lost before this point (storage interruption) and could not be recovered.':
     '⚠️ 历史记录缺口：此处之前的会话记录已丢失（存储中断），且无法找回。',
 
@@ -2708,8 +2557,6 @@ export default {
   'Auto-skill curator changes are only available in trusted workspaces. Trust this folder via `/trust` and try again.':
     '仅受信任的工作区可以更改自动技能管理器。请通过 `/trust` 信任此文件夹后重试。',
   'Kept model as {{model}}': '模型保持为 {{model}}',
-  'Review messages held from other Qwen Code sessions (accept | deny), and manage trusted controllers (controllers | revoke)':
-    '查看其他 Qwen Code 会话发来的待处理消息（accept | deny），并管理受信任控制器（controllers | revoke）',
   'Create a git commit with an AI-drafted message':
     '使用 AI 起草的提交信息创建 git 提交',
 };

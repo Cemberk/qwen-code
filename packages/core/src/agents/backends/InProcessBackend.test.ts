@@ -1230,7 +1230,6 @@ describe('InProcessBackend Session Workflow revision write-through', () => {
     targetDir: '/tmp',
     debugMode: false,
     model: 'test-model',
-    usageStatisticsEnabled: false,
     bareMode: true,
   };
 

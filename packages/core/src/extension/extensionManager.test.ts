@@ -128,30 +128,6 @@ vi.mock('os', async (importOriginal) => {
   };
 });
 
-const mockLogExtensionEnable = vi.hoisted(() => vi.fn());
-const mockLogExtensionInstallEvent = vi.hoisted(() => vi.fn());
-const mockLogExtensionUninstall = vi.hoisted(() => vi.fn());
-const mockLogExtensionDisable = vi.hoisted(() => vi.fn());
-const mockLogExtensionUpdateEvent = vi.hoisted(() => vi.fn());
-vi.mock('../telemetry/loggers.js', () => ({
-  logExtensionEnable: mockLogExtensionEnable,
-  logExtensionInstallEvent: mockLogExtensionInstallEvent,
-  logExtensionUninstall: mockLogExtensionUninstall,
-  logExtensionDisable: mockLogExtensionDisable,
-  logExtensionUpdateEvent: mockLogExtensionUpdateEvent,
-}));
-
-vi.mock('../index.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../index.js')>();
-  return {
-    ...actual,
-    logExtensionEnable: mockLogExtensionEnable,
-    logExtensionInstallEvent: mockLogExtensionInstallEvent,
-    logExtensionUninstall: mockLogExtensionUninstall,
-    logExtensionDisable: mockLogExtensionDisable,
-  };
-});
-
 const EXTENSIONS_DIRECTORY_NAME = path.join(QWEN_DIR, 'extensions');
 
 function createExtension({
@@ -1370,24 +1346,9 @@ describe('extension tests', () => {
       expect(stagedMetadata).not.toContain('git.example.com');
       expect(stagedMetadata).not.toContain('fine-grained-token');
 
-      mockLogExtensionInstallEvent.mockClear();
       const committed = await manager.commitPreparedExtension(prepared);
       expect(committed.extension?.id).toBe(prepared.identity.id);
       expect(committed.extension?.installMetadata?.type).toBe('snapshot');
-      expect(mockLogExtensionInstallEvent).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          extension_source: 'snapshot',
-          status: 'success',
-        }),
-      );
-      const telemetryEvents = mockLogExtensionInstallEvent.mock.calls.map(
-        ([, event]) => event,
-      );
-      expect(JSON.stringify(telemetryEvents)).not.toContain('git.example.com');
-      expect(JSON.stringify(telemetryEvents)).not.toContain(
-        'fine-grained-token',
-      );
       const reloadedManager = createExtensionManager();
       await reloadedManager.refreshCache();
       expect(reloadedManager.getLoadedExtensions()[0]?.id).toBe(
@@ -1947,7 +1908,7 @@ describe('extension tests', () => {
       });
     });
 
-    it('records error telemetry when a prepared install commit fails', async () => {
+    it('does not commit settings when a prepared install commit fails', async () => {
       const archivePath = path.join(tempWorkspaceDir, 'commit-failure.zip');
       fs.writeFileSync(archivePath, 'archive');
       mockExtractArchiveFile.mockImplementation(
@@ -1970,17 +1931,9 @@ describe('extension tests', () => {
         ExtensionStore.prototype,
         'commitArtifact',
       ).mockRejectedValueOnce(new Error('disk full'));
-      mockLogExtensionInstallEvent.mockClear();
 
       await expect(manager.commitPreparedExtension(prepared)).rejects.toThrow(
         'disk full',
-      );
-      expect(mockLogExtensionInstallEvent).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          extension_name: 'commit-failure',
-          status: 'error',
-        }),
       );
       expect(commitSettings).not.toHaveBeenCalled();
       await manager.disposePreparedExtension(prepared);

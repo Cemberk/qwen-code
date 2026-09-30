@@ -4,19 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ExtensionManager } from '@qwen-code/qwen-code-core/extension/extensionManager.js';
-import { getExtensionDisplayName } from '@qwen-code/qwen-code-core/extension/i18n.js';
-import { getCurrentLanguage } from '../../i18n/index.js';
-import { getErrorMessage } from '../../utils/errors.js';
 import {
-  ExtensionUpdateState,
+  type ExtensionUpdateState,
   extensionUpdatesReducer,
   initialExtensionUpdatesState,
 } from '../state/extensions.js';
-import { useCallback, useEffect, useMemo, useReducer } from 'react';
-import type { UseHistoryManagerReturn } from './useHistoryManager.js';
+import { useCallback, useMemo, useReducer } from 'react';
 import {
-  MessageType,
   type ConfirmationRequest,
   type SettingInputRequest,
   type PluginChoiceRequest,
@@ -212,126 +206,11 @@ export const usePluginChoiceRequests = () => {
   };
 };
 
-export const useExtensionUpdates = (
-  extensionManager: ExtensionManager,
-  addItem: UseHistoryManagerReturn['addItem'],
-  cwd: string,
-) => {
+export const useExtensionUpdates = () => {
   const [extensionsUpdateState, dispatchExtensionStateUpdate] = useReducer(
     extensionUpdatesReducer,
     initialExtensionUpdatesState,
   );
-  const extensions = extensionManager.getLoadedExtensions();
-
-  useEffect(() => {
-    (async () => {
-      const extensionsToCheck = extensions.filter((extension) => {
-        const currentStatus = extensionsUpdateState.extensionStatuses.get(
-          extension.name,
-        );
-        if (!currentStatus) return true;
-        const currentState = currentStatus.status;
-        return !currentState || currentState === ExtensionUpdateState.UNKNOWN;
-      });
-      if (extensionsToCheck.length === 0) return;
-      dispatchExtensionStateUpdate({ type: 'BATCH_CHECK_START' });
-      await extensionManager.checkForAllExtensionUpdates(
-        (extensionName: string, state: ExtensionUpdateState) => {
-          dispatchExtensionStateUpdate({
-            type: 'SET_STATE',
-            payload: { name: extensionName, state },
-          });
-        },
-      );
-      dispatchExtensionStateUpdate({ type: 'BATCH_CHECK_END' });
-    })();
-  }, [
-    extensions,
-    extensionManager,
-    extensionsUpdateState.extensionStatuses,
-    dispatchExtensionStateUpdate,
-  ]);
-
-  useEffect(() => {
-    if (extensionsUpdateState.batchChecksInProgress > 0) {
-      return;
-    }
-
-    let extensionsWithUpdatesCount = 0;
-    for (const extension of extensions) {
-      const currentState = extensionsUpdateState.extensionStatuses.get(
-        extension.name,
-      );
-      if (
-        !currentState ||
-        currentState.processed ||
-        currentState.status !== ExtensionUpdateState.UPDATE_AVAILABLE
-      ) {
-        continue;
-      }
-
-      // Mark as processed immediately to avoid re-triggering.
-      dispatchExtensionStateUpdate({
-        type: 'SET_PROCESSED',
-        payload: { name: extension.name, processed: true },
-      });
-
-      if (extension.installMetadata?.autoUpdate) {
-        extensionManager
-          .updateExtension(
-            extension,
-            currentState.status,
-            (extensionName, state) => {
-              dispatchExtensionStateUpdate({
-                type: 'SET_STATE',
-                payload: { name: extensionName, state },
-              });
-            },
-          )
-          .then((result) => {
-            if (!result) return;
-            if (result.warnings?.length) {
-              addItem(
-                {
-                  type: MessageType.WARNING,
-                  text: `Extension "${getExtensionDisplayName(extension, getCurrentLanguage())}" updated with warnings: ${result.warnings.map((warning) => `${warning.code}: ${warning.error}`).join('; ')}.`,
-                },
-                Date.now(),
-              );
-              return;
-            }
-            addItem(
-              {
-                type: MessageType.INFO,
-                text: `Extension "${getExtensionDisplayName(extension, getCurrentLanguage())}" successfully updated: ${result.originalVersion} → ${result.updatedVersion}.`,
-              },
-              Date.now(),
-            );
-          })
-          .catch((error) => {
-            addItem(
-              {
-                type: MessageType.ERROR,
-                text: getErrorMessage(error),
-              },
-              Date.now(),
-            );
-          });
-      } else {
-        extensionsWithUpdatesCount++;
-      }
-    }
-    if (extensionsWithUpdatesCount > 0) {
-      const s = extensionsWithUpdatesCount > 1 ? 's' : '';
-      addItem(
-        {
-          type: MessageType.INFO,
-          text: `You have ${extensionsWithUpdatesCount} extension${s} with an update available, run "/extensions list" for more information.`,
-        },
-        Date.now(),
-      );
-    }
-  }, [extensions, extensionManager, extensionsUpdateState, addItem, cwd]);
 
   const extensionsUpdateStateComputed = useMemo(() => {
     const result = new Map<string, ExtensionUpdateState>();

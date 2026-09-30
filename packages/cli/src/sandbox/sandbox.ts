@@ -28,11 +28,6 @@ import { writeStderrLine } from '../utils/stdioHelpers.js';
 import { parseSandboxImageName } from '../utils/sandboxImageName.js';
 import { isContainerPathWithinWorkdir } from '../utils/sandbox-path.js';
 import { parseSandboxMountSpec } from '../utils/sandboxMounts.js';
-import {
-  CUSTOM_SANDBOX_IMAGE_ENV_VAR,
-  HOST_UPDATE_RELAUNCH_ENV_VAR,
-  SKIP_UPDATE_CHECK_ENV_VAR,
-} from '../utils/processUtils.js';
 
 const execAsync = promisify(exec);
 
@@ -76,14 +71,9 @@ export const BUILTIN_SEATBELT_PROFILES = [
 export function getSandboxPassthroughEnvArgs(
   env: NodeJS.ProcessEnv = process.env,
 ): string[] {
-  return [
-    'QWEN_DEBUG_LOG_FILE',
-    'QWEN_CODE_LEGACY_MCP_BLOCKING',
-    SKIP_UPDATE_CHECK_ENV_VAR,
-    CUSTOM_SANDBOX_IMAGE_ENV_VAR,
-    HOST_UPDATE_RELAUNCH_ENV_VAR,
-  ].flatMap((envVar) =>
-    env[envVar] === undefined ? [] : ['--env', `${envVar}=${env[envVar]}`],
+  return ['QWEN_DEBUG_LOG_FILE', 'QWEN_CODE_LEGACY_MCP_BLOCKING'].flatMap(
+    (envVar) =>
+      env[envVar] === undefined ? [] : ['--env', `${envVar}=${env[envVar]}`],
   );
 }
 

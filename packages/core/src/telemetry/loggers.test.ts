@@ -39,10 +39,6 @@ import {
   EVENT_SESSION_END,
   EVENT_SESSION_START,
   EVENT_SKILL_LAUNCH,
-  EVENT_EXTENSION_ENABLE,
-  EVENT_EXTENSION_DISABLE,
-  EVENT_EXTENSION_INSTALL,
-  EVENT_EXTENSION_UNINSTALL,
   EVENT_TOOL_OUTPUT_TRUNCATED,
   EVENT_PROTOCOL_TAG_SANITIZED,
   EVENT_MEMORY_RECALL_DELIVERY,
@@ -69,11 +65,6 @@ import {
   logRipgrepRuntimeRecovery,
   logSkillLaunch,
   logToolOutputTruncated,
-  logExtensionEnable,
-  logExtensionDisable,
-  logExtensionInstallEvent,
-  logExtensionUninstall,
-  logHookCall,
   logApiError,
   logApiRetry,
   logProtocolTagSanitized,
@@ -86,7 +77,6 @@ import {
 } from './loggers.js';
 import * as metrics from './metrics.js';
 import { apiActivityTracker } from './api-activity-tracker.js';
-import { QwenLogger } from './qwen-logger/qwen-logger.js';
 import * as sdk from './sdk.js';
 import * as tokenUsageService from '../services/tokenUsageService.js';
 import { ToolCallDecision } from './tool-call-decision.js';
@@ -105,11 +95,6 @@ import {
   makeChatCompressionEvent,
   FileOperationEvent,
   ToolOutputTruncatedEvent,
-  ExtensionEnableEvent,
-  ExtensionDisableEvent,
-  ExtensionInstallEvent,
-  ExtensionUninstallEvent,
-  HookCallEvent,
   ApiErrorEvent,
   ApiRetryEvent,
   ProtocolTagSanitizedEvent,
@@ -189,24 +174,6 @@ describe('loggers', () => {
   describe('logChatCompression', () => {
     beforeEach(() => {
       vi.spyOn(metrics, 'recordChatCompressionMetrics');
-      vi.spyOn(QwenLogger.prototype, 'logChatCompressionEvent');
-    });
-
-    it('logs the chat compression event to QwenLogger', () => {
-      const mockConfig = makeFakeConfig({ sessionId: 'test-session-id' });
-
-      const event = makeChatCompressionEvent({
-        tokens_before: 9001,
-        tokens_after: 9000,
-        cache_sharing_attempted: true,
-        cache_sharing_used: false,
-      });
-
-      logChatCompression(mockConfig, event);
-
-      expect(QwenLogger.prototype.logChatCompressionEvent).toHaveBeenCalledWith(
-        event,
-      );
     });
 
     it('records the chat compression event to OTEL', () => {
@@ -228,9 +195,8 @@ describe('loggers', () => {
   });
 
   describe('logProtocolTagSanitized', () => {
-    it('emits a privacy-safe handled event to QwenLogger and OpenTelemetry', () => {
+    it('emits a privacy-safe handled event to OpenTelemetry', () => {
       const config = makeFakeConfig({ sessionId: 'test-session-id' });
-      vi.spyOn(QwenLogger.prototype, 'logProtocolTagSanitizedEvent');
       const event = new ProtocolTagSanitizedEvent({
         model: 'test-model',
         promptId: 'prompt-id',
@@ -241,9 +207,6 @@ describe('loggers', () => {
 
       logProtocolTagSanitized(config, event);
 
-      expect(
-        QwenLogger.prototype.logProtocolTagSanitizedEvent,
-      ).toHaveBeenCalledWith(event);
       expect(mockLogger.emit).toHaveBeenCalledWith({
         body: 'Suppressed a standalone closing think tag and preserved 2 tool call(s).',
         attributes: {
@@ -445,7 +408,6 @@ describe('loggers', () => {
         getTruncateToolOutputThreshold: () => 25000,
         getTruncateToolOutputLines: () => 1000,
         getTelemetryEnabled: () => true,
-        getUsageStatisticsEnabled: () => true,
         getTelemetryLogPromptsEnabled: () => true,
         getFileFilteringRespectGitIgnore: () => true,
         getFileFilteringAllowBuildArtifacts: () => false,
@@ -648,55 +610,22 @@ describe('loggers', () => {
   });
 
   describe('logLoopDetected', () => {
-    it('does not infer telemetry destinations from the loop type', () => {
+    it('emits the loop event to OpenTelemetry', () => {
       const config = makeFakeConfig({ sessionId: 'test-session-id' });
-      const logLoopDetectedEvent = vi.fn();
-      const getInstanceSpy = vi
-        .spyOn(QwenLogger, 'getInstance')
-        .mockReturnValue({
-          logLoopDetectedEvent,
-        } as unknown as QwenLogger);
       const event = new LoopDetectedEvent(
         LoopType.REPEATED_TOOL_EXECUTION_FAILURE,
         'prompt-id',
       );
 
-      try {
-        logLoopDetected(config, event);
+      logLoopDetected(config, event);
 
-        expect(logLoopDetectedEvent).toHaveBeenCalledWith(event);
-      } finally {
-        getInstanceSpy.mockRestore();
-      }
-    });
-
-    it('supports explicitly keeping a loop event out of QwenLogger', () => {
-      const config = makeFakeConfig({ sessionId: 'test-session-id' });
-      const logLoopDetectedEvent = vi.fn();
-      const getInstanceSpy = vi
-        .spyOn(QwenLogger, 'getInstance')
-        .mockReturnValue({
-          logLoopDetectedEvent,
-        } as unknown as QwenLogger);
-      const event = new LoopDetectedEvent(
-        LoopType.REPEATED_TOOL_EXECUTION_FAILURE,
-        'prompt-id',
-      );
-
-      try {
-        logLoopDetected(config, event, { recordToQwenLogger: false });
-
-        expect(logLoopDetectedEvent).not.toHaveBeenCalled();
-        expect(mockLogger.emit).toHaveBeenCalledWith({
-          body: `Loop detected. Type: ${LoopType.REPEATED_TOOL_EXECUTION_FAILURE}.`,
-          attributes: {
-            'session.id': 'test-session-id',
-            ...event,
-          },
-        });
-      } finally {
-        getInstanceSpy.mockRestore();
-      }
+      expect(mockLogger.emit).toHaveBeenCalledWith({
+        body: `Loop detected. Type: ${LoopType.REPEATED_TOOL_EXECUTION_FAILURE}.`,
+        attributes: {
+          'session.id': 'test-session-id',
+          ...event,
+        },
+      });
     });
   });
 
@@ -705,7 +634,6 @@ describe('loggers', () => {
       getSessionId: () => 'test-session-id',
       getTelemetryEnabled: () => true,
       getTelemetryLogPromptsEnabled: () => true,
-      getUsageStatisticsEnabled: () => true,
     } as unknown as Config;
 
     it('should log a user prompt', () => {
@@ -764,7 +692,6 @@ describe('loggers', () => {
         getTelemetryEnabled: () => true,
         getTelemetryLogPromptsEnabled: () => false,
         getTargetDir: () => 'target-dir',
-        getUsageStatisticsEnabled: () => true,
       } as unknown as Config;
       const event = new UserPromptEvent(
         11,
@@ -793,7 +720,6 @@ describe('loggers', () => {
     const mockConfig = {
       getSessionId: () => 'test-session-id',
       getTargetDir: () => 'target-dir',
-      getUsageStatisticsEnabled: () => true,
       getTelemetryEnabled: () => true,
       getTelemetryLogPromptsEnabled: () => true,
       getChatRecordingService: () => undefined,
@@ -958,30 +884,6 @@ describe('loggers', () => {
         tokenUsageService.recordTokenUsageFromApiResponseBestEffort,
       ).not.toHaveBeenCalled();
     });
-
-    it('does not record token usage when usage statistics are disabled', () => {
-      const configWithUsageStatsDisabled = {
-        ...mockConfig,
-        getUsageStatisticsEnabled: () => false,
-      } as unknown as Config;
-      const event = new ApiResponseEvent(
-        'test-response-id',
-        'test-model',
-        100,
-        'prompt-id-1',
-        AuthType.USE_GEMINI,
-        {
-          promptTokenCount: 1,
-          candidatesTokenCount: 2,
-        },
-      );
-
-      logApiResponse(configWithUsageStatsDisabled, event);
-
-      expect(
-        tokenUsageService.recordTokenUsageFromApiResponseBestEffort,
-      ).not.toHaveBeenCalled();
-    });
   });
 
   describe('logApiResponse skips chatRecordingService for internal prompt IDs', () => {
@@ -996,7 +898,6 @@ describe('loggers', () => {
         const mockRecordUiTelemetryEvent = vi.fn();
         const configWithRecording = {
           getSessionId: () => 'test-session-id',
-          getUsageStatisticsEnabled: () => false,
           getChatRecordingService: () => ({
             recordUiTelemetryEvent: mockRecordUiTelemetryEvent,
           }),
@@ -1019,7 +920,6 @@ describe('loggers', () => {
       const mockRecordUiTelemetryEvent = vi.fn();
       const configWithRecording = {
         getSessionId: () => 'test-session-id',
-        getUsageStatisticsEnabled: () => false,
         getChatRecordingService: () => ({
           recordUiTelemetryEvent: mockRecordUiTelemetryEvent,
         }),
@@ -1063,7 +963,6 @@ describe('loggers', () => {
       const mockRecordUiTelemetryEvent = vi.fn();
       const configWithRecording = {
         getSessionId: () => 'test-session-id',
-        getUsageStatisticsEnabled: () => false,
         getChatRecordingService: () => ({
           recordUiTelemetryEvent: mockRecordUiTelemetryEvent,
         }),
@@ -1091,7 +990,6 @@ describe('loggers', () => {
         const mockRecordUiTelemetryEvent = vi.fn();
         const configWithRecording = {
           getSessionId: () => 'test-session-id',
-          getUsageStatisticsEnabled: () => false,
           getChatRecordingService: () => ({
             recordUiTelemetryEvent: mockRecordUiTelemetryEvent,
           }),
@@ -1113,7 +1011,6 @@ describe('loggers', () => {
       const mockRecordUiTelemetryEvent = vi.fn();
       const configWithRecording = {
         getSessionId: () => 'test-session-id',
-        getUsageStatisticsEnabled: () => false,
         getChatRecordingService: () => ({
           recordUiTelemetryEvent: mockRecordUiTelemetryEvent,
         }),
@@ -1162,7 +1059,6 @@ describe('loggers', () => {
     const mockConfig = {
       getSessionId: () => 'test-session-id',
       getTargetDir: () => 'target-dir',
-      getUsageStatisticsEnabled: () => true,
       getTelemetryEnabled: () => true,
       getTelemetryLogPromptsEnabled: () => true,
     } as unknown as Config;
@@ -1224,7 +1120,6 @@ describe('loggers', () => {
   describe('logFlashFallback', () => {
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
     } as unknown as Config;
 
     it('should log flash fallback event', () => {
@@ -1247,12 +1142,10 @@ describe('loggers', () => {
   describe('logGoalState', () => {
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getTelemetryMetricsIncludeSessionId: () => false,
     } as unknown as Config;
 
     beforeEach(() => {
-      vi.spyOn(QwenLogger.prototype, 'logGoalStateEvent');
       vi.spyOn(metrics, 'recordGoalStateMetrics');
     });
 
@@ -1284,16 +1177,13 @@ describe('loggers', () => {
           tokens_used: 1_234,
         },
       });
-      expect(QwenLogger.prototype.logGoalStateEvent).toHaveBeenCalledWith(
-        event,
-      );
       expect(metrics.recordGoalStateMetrics).toHaveBeenCalledWith(
         mockConfig,
         event,
       );
     });
 
-    it('still reaches the analytics sink when the OpenTelemetry SDK is off', () => {
+    it('does not emit when the OpenTelemetry SDK is off', () => {
       vi.spyOn(sdk, 'isTelemetrySdkInitialized').mockReturnValue(false);
       const event = makeGoalStateEvent({
         cause: 'create',
@@ -1303,9 +1193,6 @@ describe('loggers', () => {
 
       logGoalState(mockConfig, event);
 
-      expect(QwenLogger.prototype.logGoalStateEvent).toHaveBeenCalledWith(
-        event,
-      );
       expect(mockLogger.emit).not.toHaveBeenCalled();
     });
   });
@@ -1313,12 +1200,7 @@ describe('loggers', () => {
   describe('logRipgrepFallback', () => {
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
     } as unknown as Config;
-
-    beforeEach(() => {
-      vi.spyOn(QwenLogger.prototype, 'logRipgrepFallbackEvent');
-    });
 
     it('should log ripgrep fallback event', () => {
       const event = new RipgrepFallbackEvent(
@@ -1328,8 +1210,6 @@ describe('loggers', () => {
       );
 
       logRipgrepFallback(mockConfig, event);
-
-      expect(QwenLogger.prototype.logRipgrepFallbackEvent).toHaveBeenCalled();
 
       const emittedEvent = mockLogger.emit.mock.calls[0][0];
       expect(emittedEvent.body).toBe('Switching to grep as fallback.');
@@ -1347,8 +1227,6 @@ describe('loggers', () => {
 
       logRipgrepFallback(mockConfig, event);
 
-      expect(QwenLogger.prototype.logRipgrepFallbackEvent).toHaveBeenCalled();
-
       const emittedEvent = mockLogger.emit.mock.calls[0][0];
       expect(emittedEvent.body).toBe('Switching to grep as fallback.');
       expect(emittedEvent.attributes).toEqual(
@@ -1364,12 +1242,7 @@ describe('loggers', () => {
   describe('logRipgrepRuntimeRecovery', () => {
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
     } as unknown as Config;
-
-    beforeEach(() => {
-      vi.spyOn(QwenLogger.prototype, 'logRipgrepRuntimeRecoveryEvent');
-    });
 
     it('logs privacy-safe runtime recovery fields', () => {
       const event = new RipgrepRuntimeRecoveryEvent({
@@ -1381,9 +1254,6 @@ describe('loggers', () => {
 
       logRipgrepRuntimeRecovery(mockConfig, event);
 
-      expect(
-        QwenLogger.prototype.logRipgrepRuntimeRecoveryEvent,
-      ).toHaveBeenCalledWith(event);
       const emittedEvent = mockLogger.emit.mock.calls[0][0];
       expect(emittedEvent.body).toBe('Ripgrep runtime recovery: eagain.');
       expect(emittedEvent.attributes).toEqual(
@@ -1405,21 +1275,12 @@ describe('loggers', () => {
   describe('logSkillLaunch', () => {
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
     } as unknown as Config;
 
-    beforeEach(() => {
-      vi.spyOn(QwenLogger.prototype, 'logSkillLaunchEvent');
-    });
-
-    it('forwards the event to QwenLogger and emits an OTLP record', () => {
+    it('emits an OpenTelemetry record', () => {
       const event = new SkillLaunchEvent('test-skill', true, 'prompt-id-42');
 
       logSkillLaunch(mockConfig, event);
-
-      expect(QwenLogger.prototype.logSkillLaunchEvent).toHaveBeenCalledWith(
-        event,
-      );
 
       const emittedEvent = mockLogger.emit.mock.calls[0][0];
       expect(emittedEvent.body).toBe(
@@ -1436,15 +1297,12 @@ describe('loggers', () => {
       );
     });
 
-    it('forwards to QwenLogger even when OTLP SDK is not initialized', () => {
+    it('does not emit when the OpenTelemetry SDK is not initialized', () => {
       vi.spyOn(sdk, 'isTelemetrySdkInitialized').mockReturnValue(false);
       const event = new SkillLaunchEvent('another-skill', false, 'prompt-id-7');
 
       logSkillLaunch(mockConfig, event);
 
-      expect(QwenLogger.prototype.logSkillLaunchEvent).toHaveBeenCalledWith(
-        event,
-      );
       expect(mockLogger.emit).not.toHaveBeenCalled();
     });
   });
@@ -1488,7 +1346,6 @@ describe('loggers', () => {
       getSessionId: () => 'test-session-id',
       getTargetDir: () => 'target-dir',
       getLlmClient: () => mockLlmClient,
-      getUsageStatisticsEnabled: () => true,
       getTelemetryEnabled: () => true,
       getTelemetryLogPromptsEnabled: () => true,
       getChatRecordingService: () => undefined,
@@ -1505,9 +1362,6 @@ describe('loggers', () => {
       );
       vi.spyOn(metrics, 'recordToolExecutionMetrics').mockImplementation(
         mockMetrics.recordToolExecutionMetrics,
-      );
-      vi.spyOn(QwenLogger.prototype, 'logToolCallEvent').mockImplementation(
-        () => undefined,
       );
       mockLogger.emit.mockReset();
     });
@@ -1542,9 +1396,6 @@ describe('loggers', () => {
         error: 'failed',
         error_type: ToolErrorType.UNKNOWN,
       });
-      expect(QwenLogger.prototype.logToolCallEvent).toHaveBeenCalledWith(
-        normalized,
-      );
       expect(mockUiEvent.addEvent).toHaveBeenCalledWith(
         normalized,
         'test-session-id',
@@ -1713,11 +1564,12 @@ describe('loggers', () => {
 
       logToolCall(mockConfig, event);
 
-      expect(QwenLogger.prototype.logToolCallEvent).toHaveBeenCalledWith(
+      expect(mockUiEvent.addEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           error_type: ToolErrorType.EXECUTION_FAILED,
           execution_status: 'unknown',
         }),
+        'test-session-id',
       );
       expect(mockLogger.emit.mock.calls[0][0].attributes).toMatchObject({
         error_type: ToolErrorType.EXECUTION_FAILED,
@@ -1753,10 +1605,11 @@ describe('loggers', () => {
           tool_type: 'native',
         },
       );
-      expect(QwenLogger.prototype.logToolCallEvent).toHaveBeenCalledWith(
+      expect(mockUiEvent.addEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           execution_status: 'unknown',
         }),
+        'test-session-id',
       );
     });
 
@@ -1782,8 +1635,7 @@ describe('loggers', () => {
 
         logToolCall(mockConfig, event);
 
-        const normalizedEvent = vi.mocked(QwenLogger.prototype.logToolCallEvent)
-          .mock.calls[0][0];
+        const normalizedEvent = mockUiEvent.addEvent.mock.calls[0][0];
         expect(normalizedEvent).toMatchObject({
           status,
           success: expectedSuccess,
@@ -1825,9 +1677,6 @@ describe('loggers', () => {
         execution_status: 'unknown',
         error_type: ToolErrorType.UNKNOWN,
       });
-      expect(QwenLogger.prototype.logToolCallEvent).toHaveBeenCalledWith(
-        normalized,
-      );
       expect(mockUiEvent.addEvent).toHaveBeenCalledWith(
         normalized,
         'test-session-id',
@@ -1841,14 +1690,6 @@ describe('loggers', () => {
       const chatSink = vi.fn(() => {
         throw new Error('chat sink failed');
       });
-      const qwenSink = vi.fn(() => {
-        throw new Error('qwen sink failed');
-      });
-      const qwenLoggerSpy = vi
-        .spyOn(QwenLogger, 'getInstance')
-        .mockReturnValue({
-          logToolCallEvent: qwenSink,
-        } as unknown as QwenLogger);
       mockUiEvent.addEvent.mockImplementationOnce(() => {
         throw new Error('ui sink failed');
       });
@@ -1884,7 +1725,6 @@ describe('loggers', () => {
       expect(() => logToolCall(config, event)).not.toThrow();
       expect(mockUiEvent.addEvent).toHaveBeenCalled();
       expect(chatSink).toHaveBeenCalled();
-      expect(qwenSink).toHaveBeenCalled();
       expect(mockLogger.emit).toHaveBeenCalled();
       expect(mockMetrics.recordToolCallMetrics).toHaveBeenCalled();
       expect(mockMetrics.recordToolExecutionMetrics).toHaveBeenCalledWith(
@@ -1894,7 +1734,6 @@ describe('loggers', () => {
           tool_type: 'native',
         },
       );
-      qwenLoggerSpy.mockRestore();
     });
 
     it('should log a tool call with all fields', () => {
@@ -2460,19 +2299,11 @@ describe('loggers', () => {
   });
 
   describe('logMalformedJsonResponse', () => {
-    beforeEach(() => {
-      vi.spyOn(QwenLogger.prototype, 'logMalformedJsonResponseEvent');
-    });
-
-    it('logs the event to Clearcut and OTEL', () => {
+    it('logs the event to OTEL', () => {
       const mockConfig = makeFakeConfig({ sessionId: 'test-session-id' });
       const event = new MalformedJsonResponseEvent('test-model');
 
       logMalformedJsonResponse(mockConfig, event);
-
-      expect(
-        QwenLogger.prototype.logMalformedJsonResponseEvent,
-      ).toHaveBeenCalledWith(event);
 
       expect(mockLogger.emit).toHaveBeenCalledWith({
         body: 'Malformed JSON response from test-model.',
@@ -2490,7 +2321,6 @@ describe('loggers', () => {
     const mockConfig = {
       getSessionId: () => 'test-session-id',
       getTargetDir: () => 'target-dir',
-      getUsageStatisticsEnabled: () => true,
       getTelemetryEnabled: () => true,
       getTelemetryLogPromptsEnabled: () => true,
     } as Config;
@@ -2548,7 +2378,6 @@ describe('loggers', () => {
   describe('logToolOutputTruncated', () => {
     const mockConfig = {
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
     } as unknown as Config;
 
     it('should log a tool output truncated event', () => {
@@ -2580,394 +2409,9 @@ describe('loggers', () => {
     });
   });
 
-  describe('logExtensionInstall', () => {
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-    } as unknown as Config;
-
-    beforeEach(() => {
-      vi.spyOn(QwenLogger.prototype, 'logExtensionInstallEvent');
-    });
-
-    afterEach(() => {
-      vi.resetAllMocks();
-    });
-
-    it('should log extension install event', () => {
-      const event = new ExtensionInstallEvent(
-        'vscode',
-        '0.1.0',
-        'git',
-        'success',
-      );
-
-      logExtensionInstallEvent(mockConfig, event);
-
-      expect(
-        QwenLogger.prototype.logExtensionInstallEvent,
-      ).toHaveBeenCalledWith(event);
-
-      expect(mockLogger.emit).toHaveBeenCalledWith({
-        body: 'Installed extension vscode',
-        attributes: {
-          'session.id': 'test-session-id',
-          'event.name': EVENT_EXTENSION_INSTALL,
-          'event.timestamp': '2025-01-01T00:00:00.000Z',
-          extension_name: 'vscode',
-          extension_version: '0.1.0',
-          extension_source: 'git',
-          status: 'success',
-        },
-      });
-    });
-  });
-
-  describe('logExtensionUninstall', () => {
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-    } as unknown as Config;
-
-    beforeEach(() => {
-      vi.spyOn(QwenLogger.prototype, 'logExtensionUninstallEvent');
-    });
-
-    afterEach(() => {
-      vi.resetAllMocks();
-    });
-
-    it('should log extension uninstall event', () => {
-      const event = new ExtensionUninstallEvent('vscode', 'success');
-
-      logExtensionUninstall(mockConfig, event);
-
-      expect(
-        QwenLogger.prototype.logExtensionUninstallEvent,
-      ).toHaveBeenCalledWith(event);
-
-      expect(mockLogger.emit).toHaveBeenCalledWith({
-        body: 'Uninstalled extension vscode',
-        attributes: {
-          'session.id': 'test-session-id',
-          'event.name': EVENT_EXTENSION_UNINSTALL,
-          'event.timestamp': '2025-01-01T00:00:00.000Z',
-          extension_name: 'vscode',
-          status: 'success',
-        },
-      });
-    });
-  });
-
-  describe('logExtensionEnable', () => {
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-    } as unknown as Config;
-
-    beforeEach(() => {
-      vi.spyOn(QwenLogger.prototype, 'logExtensionEnableEvent');
-    });
-
-    afterEach(() => {
-      vi.resetAllMocks();
-    });
-
-    it('should log extension enable event', () => {
-      const event = new ExtensionEnableEvent('vscode', 'user');
-
-      logExtensionEnable(mockConfig, event);
-
-      expect(QwenLogger.prototype.logExtensionEnableEvent).toHaveBeenCalledWith(
-        event,
-      );
-
-      expect(mockLogger.emit).toHaveBeenCalledWith({
-        body: 'Enabled extension vscode',
-        attributes: {
-          'session.id': 'test-session-id',
-          'event.name': EVENT_EXTENSION_ENABLE,
-          'event.timestamp': '2025-01-01T00:00:00.000Z',
-          extension_name: 'vscode',
-          setting_scope: 'user',
-        },
-      });
-    });
-  });
-
-  describe('logExtensionDisable', () => {
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-    } as unknown as Config;
-
-    beforeEach(() => {
-      vi.spyOn(QwenLogger.prototype, 'logExtensionDisableEvent');
-    });
-
-    afterEach(() => {
-      vi.resetAllMocks();
-    });
-
-    it('should log extension disable event', () => {
-      const event = new ExtensionDisableEvent('vscode', 'user');
-
-      logExtensionDisable(mockConfig, event);
-
-      expect(
-        QwenLogger.prototype.logExtensionDisableEvent,
-      ).toHaveBeenCalledWith(event);
-
-      expect(mockLogger.emit).toHaveBeenCalledWith({
-        body: 'Disabled extension vscode',
-        attributes: {
-          'session.id': 'test-session-id',
-          'event.name': EVENT_EXTENSION_DISABLE,
-          'event.timestamp': '2025-01-01T00:00:00.000Z',
-          extension_name: 'vscode',
-          setting_scope: 'user',
-        },
-      });
-    });
-  });
-
-  describe('logHookCall', () => {
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getTargetDir: () => 'target-dir',
-      getUsageStatisticsEnabled: () => true,
-      getTelemetryEnabled: () => true,
-      getTelemetryLogPromptsEnabled: () => true,
-    } as unknown as Config;
-
-    const mockQwenLogger = {
-      logHookCallEvent: vi.fn(),
-    };
-
-    beforeEach(() => {
-      vi.spyOn(QwenLogger, 'getInstance').mockReturnValue(
-        mockQwenLogger as unknown as QwenLogger,
-      );
-      mockQwenLogger.logHookCallEvent.mockClear();
-    });
-
-    it('should log a successful hook call to QwenLogger', () => {
-      const event = new HookCallEvent(
-        'UserPromptSubmit',
-        'command',
-        'check-secrets.sh',
-        { prompt: 'test prompt' },
-        150,
-        true,
-        { output: 'success' },
-        0,
-        'stdout message',
-        'stderr message',
-        undefined,
-      );
-
-      logHookCall(mockConfig, event);
-
-      // Should call QwenLogger
-      expect(mockQwenLogger.logHookCallEvent).toHaveBeenCalledWith(event);
-    });
-
-    it('should log a failed hook call with error', () => {
-      const event = new HookCallEvent(
-        'Stop',
-        'command',
-        'cleanup.sh',
-        { last_assistant_message: 'final message' },
-        200,
-        false,
-        undefined,
-        1,
-        'stdout message',
-        'stderr message',
-        'Error occurred',
-      );
-
-      logHookCall(mockConfig, event);
-
-      // Should call QwenLogger
-      expect(mockQwenLogger.logHookCallEvent).toHaveBeenCalledWith(event);
-    });
-
-    it('should handle when QwenLogger is not available', () => {
-      vi.spyOn(QwenLogger, 'getInstance').mockReturnValue(undefined);
-
-      const event = new HookCallEvent(
-        'UserPromptSubmit',
-        'command',
-        'test-hook.sh',
-        { prompt: 'test' },
-        100,
-        true,
-      );
-
-      // Should not throw when QwenLogger is not available
-      expect(() => logHookCall(mockConfig, event)).not.toThrow();
-    });
-
-    it('should log hook call with all optional fields', () => {
-      const event = new HookCallEvent(
-        'PreToolUse',
-        'command',
-        'validator.sh',
-        { tool_name: 'read_file', path: '/test/file.txt' },
-        250,
-        true,
-        { decision: 'allow', reason: 'validated' },
-        0,
-        'validation passed',
-        '',
-        undefined,
-      );
-
-      logHookCall(mockConfig, event);
-
-      expect(mockQwenLogger.logHookCallEvent).toHaveBeenCalledWith(event);
-    });
-
-    it('should log hook call with minimal fields', () => {
-      const event = new HookCallEvent(
-        'SessionStart',
-        'command',
-        'init.sh',
-        {},
-        10,
-        true,
-      );
-
-      logHookCall(mockConfig, event);
-
-      expect(mockQwenLogger.logHookCallEvent).toHaveBeenCalledWith(event);
-    });
-
-    it('should log hook call with exit code', () => {
-      const event = new HookCallEvent(
-        'PostToolUseFailure',
-        'command',
-        'error-handler.sh',
-        { tool_name: 'shell' },
-        50,
-        false,
-        undefined,
-        1,
-        '',
-        'error output',
-        'Command failed with exit code 1',
-      );
-
-      logHookCall(mockConfig, event);
-
-      expect(mockQwenLogger.logHookCallEvent).toHaveBeenCalledWith(event);
-    });
-
-    it('should log hook call with zero exit code on success', () => {
-      const event = new HookCallEvent(
-        'PostToolUse',
-        'command',
-        'success-handler.sh',
-        { tool_name: 'write_file' },
-        100,
-        true,
-        { result: 'ok' },
-        0,
-        'done',
-        '',
-        undefined,
-      );
-
-      logHookCall(mockConfig, event);
-
-      expect(mockQwenLogger.logHookCallEvent).toHaveBeenCalledWith(event);
-    });
-
-    it('should log hook call with non-zero exit code on failure', () => {
-      const event = new HookCallEvent(
-        'PostToolUseFailure',
-        'command',
-        'failure-handler.sh',
-        { tool_name: 'shell' },
-        75,
-        false,
-        undefined,
-        127,
-        '',
-        'command not found',
-        'Hook command not found',
-      );
-
-      logHookCall(mockConfig, event);
-
-      expect(mockQwenLogger.logHookCallEvent).toHaveBeenCalledWith(event);
-    });
-
-    it('should log all hook event types', () => {
-      const eventTypes = [
-        'PreToolUse',
-        'PostToolUse',
-        'PostToolUseFailure',
-        'Notification',
-        'UserPromptSubmit',
-        'SessionStart',
-        'SessionEnd',
-        'Stop',
-        'SubagentStart',
-        'SubagentStop',
-        'PreCompact',
-        'PermissionRequest',
-      ];
-
-      for (const eventType of eventTypes) {
-        mockQwenLogger.logHookCallEvent.mockClear();
-
-        const event = new HookCallEvent(
-          eventType,
-          'command',
-          'test-hook.sh',
-          {},
-          100,
-          true,
-        );
-
-        logHookCall(mockConfig, event);
-
-        expect(mockQwenLogger.logHookCallEvent).toHaveBeenCalledWith(event);
-      }
-    });
-
-    it('should pass the exact event object to QwenLogger', () => {
-      const event = new HookCallEvent(
-        'PreToolUse',
-        'command',
-        'test-hook.sh',
-        { tool_name: 'read_file' },
-        100,
-        true,
-      );
-
-      logHookCall(mockConfig, event);
-
-      // Verify the exact event object is passed
-      expect(mockQwenLogger.logHookCallEvent).toHaveBeenCalledTimes(1);
-      const passedEvent = mockQwenLogger.logHookCallEvent.mock.calls[0][0];
-      expect(passedEvent).toBe(event);
-    });
-  });
-
   // Phase 4b — logApiRetry: HTTP-status retry telemetry from retryWithBackoff.
   describe('logApiRetry (Phase 4b)', () => {
-    const mockQwenLogger = {
-      logApiRetryEvent: vi.fn(),
-    };
-
     beforeEach(() => {
-      vi.spyOn(QwenLogger, 'getInstance').mockReturnValue(
-        mockQwenLogger as unknown as QwenLogger,
-      );
-      mockQwenLogger.logApiRetryEvent.mockClear();
       vi.spyOn(metrics, 'recordApiRetry');
     });
 
@@ -2994,14 +2438,12 @@ describe('loggers', () => {
       });
     }
 
-    it('fans out to all 3 sinks: QwenLogger, OTel log, and metric counter', () => {
+    it('fans out to both sinks: OTel log and metric counter', () => {
       const mockConfig = makeFakeConfig({ sessionId: 'test-session-id' });
       const event = buildEvent();
       logApiRetry(mockConfig, event);
 
-      // 1. QwenLogger RUM
-      expect(mockQwenLogger.logApiRetryEvent).toHaveBeenCalledWith(event);
-      // 2. OTel log signal — picked up by LogToSpanProcessor to bridge as span
+      // 1. OTel log signal
       expect(mockLogger.emit).toHaveBeenCalledTimes(1);
       const logRecord = mockLogger.emit.mock.calls[0][0];
       expect(logRecord.body).toContain('API retry attempt 2');
@@ -3012,7 +2454,7 @@ describe('loggers', () => {
       expect(logRecord.attributes['retry_delay_ms']).toBe(1500);
       expect(logRecord.attributes['status_code']).toBe(429);
       expect(logRecord.attributes['model']).toBe('qwen3');
-      // 3. Metric counter — tagged with {model}
+      // 2. Metric counter — tagged with {model}
       expect(metrics.recordApiRetry).toHaveBeenCalledWith(mockConfig, {
         model: 'qwen3',
       });
@@ -3027,13 +2469,12 @@ describe('loggers', () => {
       expect(logRecord.attributes['subagent_name']).toBe('explore-agent');
     });
 
-    it('skips logger.emit and metric counter when SDK is not initialized (QwenLogger still called)', () => {
+    it('skips logger.emit and metric counter when SDK is not initialized', () => {
       vi.spyOn(sdk, 'isTelemetrySdkInitialized').mockReturnValue(false);
       const mockConfig = makeFakeConfig({ sessionId: 'test-session-id' });
       const event = buildEvent();
       logApiRetry(mockConfig, event);
 
-      expect(mockQwenLogger.logApiRetryEvent).toHaveBeenCalledWith(event);
       expect(mockLogger.emit).not.toHaveBeenCalled();
       expect(metrics.recordApiRetry).not.toHaveBeenCalled();
     });

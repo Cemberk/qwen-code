@@ -17,7 +17,6 @@ import { approvalModeCommand } from '../ui/commands/approvalModeCommand.js';
 import { authCommand } from '../ui/commands/authCommand.js';
 import { branchCommand } from '../ui/commands/branchCommand.js';
 import { btwCommand } from '../ui/commands/btwCommand.js';
-import { bugCommand } from '../ui/commands/bugCommand.js';
 import { cdCommand } from '../ui/commands/cdCommand.js';
 import { clearCommand } from '../ui/commands/clearCommand.js';
 import { commitCommand } from '../ui/commands/commit-command.js';
@@ -28,7 +27,6 @@ import { compressFastCommand } from '../ui/commands/compressFastCommand.js';
 import { contextCommand } from '../ui/commands/contextCommand.js';
 import { curatorCommand } from '../ui/commands/curator-command.js';
 import { copyCommand } from '../ui/commands/copyCommand.js';
-import { docsCommand } from '../ui/commands/docsCommand.js';
 import { doctorCommand } from '../ui/commands/doctorCommand.js';
 import { diffCommand } from '../ui/commands/diffCommand.js';
 import { directoryCommand } from '../ui/commands/directoryCommand.js';
@@ -69,12 +67,10 @@ import { terminalSetupCommand } from '../ui/commands/terminalSetupCommand.js';
 import { themeCommand } from '../ui/commands/themeCommand.js';
 import { toolsCommand } from '../ui/commands/toolsCommand.js';
 import { vimCommand } from '../ui/commands/vimCommand.js';
-import { setupGithubCommand } from '../ui/commands/setupGithubCommand.js';
 import { insightCommand } from '../ui/commands/insightCommand.js';
 import { learnCommand } from '../ui/commands/learn-command.js';
 import { statuslineCommand } from '../ui/commands/statuslineCommand.js';
 import { lspCommand } from '../ui/commands/lspCommand.js';
-import { updateCommand } from '../ui/commands/update-command.js';
 
 /**
  * Loads the core, hard-coded slash commands that are an integral part
@@ -108,7 +104,6 @@ export class BuiltinCommandLoader implements ICommandLoader {
       branchCommand,
       btwCommand,
       forkCommand,
-      bugCommand,
       cdCommand,
       clearCommand,
       commitCommand,
@@ -120,7 +115,6 @@ export class BuiltinCommandLoader implements ICommandLoader {
       copyCommand,
       diffCommand,
       deleteCommand,
-      docsCommand,
       doctorCommand,
       directoryCommand,
       editorCommand,
@@ -160,8 +154,6 @@ export class BuiltinCommandLoader implements ICommandLoader {
       toolsCommand,
       settingsCommand,
       vimCommand,
-      updateCommand,
-      setupGithubCommand,
       terminalSetupCommand,
       insightCommand,
       statuslineCommand,

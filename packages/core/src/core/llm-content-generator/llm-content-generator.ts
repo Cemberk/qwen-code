@@ -32,12 +32,6 @@ import {
   getEffectiveReasoning,
   resolveReasoningForModel,
 } from '../reasoning-overrides.js';
-import { buildSessionIdHeaders } from '../outbound-session-id.js';
-import {
-  expandDynamicHeaders,
-  hasDynamicPlaceholder,
-  warnIfDynamicHeadersDisabled,
-} from '../outbound-dynamic-headers.js';
 import { isResponsesReasoningSignature } from '../../utils/thoughtUtils.js';
 
 const debugLogger = createDebugLogger('GEMINI');
@@ -73,7 +67,6 @@ function observeLlmStream(
  */
 export class LlmContentGenerator implements ContentGenerator {
   private readonly googleGenAI: GoogleGenAI;
-  private readonly clientBaseUrl?: string;
   private readonly contentGeneratorConfig?: ContentGeneratorConfig;
   private readonly cliConfig?: Config;
   // Latch so the effort-clamp warning fires once per generator lifetime
@@ -89,19 +82,7 @@ export class LlmContentGenerator implements ContentGenerator {
     contentGeneratorConfig?: ContentGeneratorConfig,
     cliConfig?: Config,
   ) {
-    // Only placeholder-free entries may be baked into the client: a
-    // placeholder value put here would be frozen at whatever the session
-    // was when the client was built, and overriding it later would rely
-    // on the SDK letting request-level headers win over client-level
-    // ones. `buildHttpOptions` supplies the placeholder-bearing entries
-    // per request instead, so the literal never reaches the client.
-    const allCustomHeaders = contentGeneratorConfig?.customHeaders;
-    if (cliConfig) warnIfDynamicHeadersDisabled(allCustomHeaders, cliConfig);
-    const staticEntries = Object.entries(allCustomHeaders ?? {}).filter(
-      ([, value]) => typeof value !== 'string' || !hasDynamicPlaceholder(value),
-    );
-    const customHeaders =
-      staticEntries.length > 0 ? Object.fromEntries(staticEntries) : undefined;
+    const customHeaders = contentGeneratorConfig?.customHeaders;
     const finalOptions = customHeaders
       ? (() => {
           const baseHttpOptions = options.httpOptions;
@@ -121,39 +102,8 @@ export class LlmContentGenerator implements ContentGenerator {
       : options;
 
     this.googleGenAI = new GoogleGenAI(finalOptions);
-    this.clientBaseUrl = finalOptions.httpOptions?.baseUrl;
     this.contentGeneratorConfig = contentGeneratorConfig;
     this.cliConfig = cliConfig;
-  }
-
-  private buildHttpOptions(httpOptions?: HttpOptions): HttpOptions | undefined {
-    if (!this.cliConfig) return httpOptions;
-
-    // The placeholder-bearing entries were deliberately kept out of the
-    // client options (see the constructor), so this is the only place
-    // they are supplied — resolved fresh for each request.
-    const dynamicHeaders = expandDynamicHeaders(
-      this.contentGeneratorConfig?.customHeaders,
-      this.cliConfig,
-    );
-    const destination = httpOptions?.baseUrl ?? this.clientBaseUrl;
-    const sessionHeaders = destination
-      ? buildSessionIdHeaders(this.cliConfig, destination)
-      : {};
-    if (
-      Object.keys(sessionHeaders).length === 0 &&
-      Object.keys(dynamicHeaders).length === 0
-    ) {
-      return httpOptions;
-    }
-    return {
-      ...httpOptions,
-      headers: {
-        ...httpOptions?.headers,
-        ...dynamicHeaders,
-        ...sessionHeaders,
-      },
-    };
   }
 
   private buildGenerateContentConfig(
@@ -161,7 +111,6 @@ export class LlmContentGenerator implements ContentGenerator {
   ): GenerateContentConfig {
     const configSamplingParams = this.contentGeneratorConfig?.samplingParams;
     const requestConfig = request.config || {};
-    const httpOptions = this.buildHttpOptions(requestConfig.httpOptions);
 
     // Helper function to get parameter value with priority: config > request > default
     const getParameterValue = <T>(
@@ -178,7 +127,6 @@ export class LlmContentGenerator implements ContentGenerator {
 
     return {
       ...requestConfig,
-      ...(httpOptions ? { httpOptions } : {}),
       temperature: getParameterValue<number>(
         configSamplingParams?.temperature,
         'temperature',
@@ -461,10 +409,6 @@ export class LlmContentGenerator implements ContentGenerator {
   async embedContent(
     request: EmbedContentParameters,
   ): Promise<EmbedContentResponse> {
-    const httpOptions = this.buildHttpOptions(request.config?.httpOptions);
-    return this.googleGenAI.models.embedContent({
-      ...request,
-      ...(httpOptions ? { config: { ...request.config, httpOptions } } : {}),
-    });
+    return this.googleGenAI.models.embedContent(request);
   }
 }

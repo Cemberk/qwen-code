@@ -1446,7 +1446,6 @@ type QwenMemorySettings = {
   enableAutoSkill: boolean;
   autoSkillConfirm: boolean;
   enableTeamMemory: boolean;
-  enableTeamMemorySync: boolean;
 };
 
 type QwenMemoryPaths = {
@@ -1467,7 +1466,6 @@ type QwenCoreSettingKey =
   | 'general.language'
   | 'tools.approvalMode'
   | 'general.vimMode'
-  | 'general.enableAutoUpdate'
   | 'general.showSessionRecap'
   | 'general.sessionRecapAwayThresholdMinutes'
   | 'general.terminalBell'
@@ -1483,7 +1481,6 @@ type QwenCoreSettingKey =
   | 'memory.enableAutoSkill'
   | 'memory.autoSkillConfirm'
   | 'memory.enableTeamMemory'
-  | 'memory.enableTeamMemorySync'
   | 'disableAllHooks';
 
 type QwenMcpServerConfig = {
@@ -1538,7 +1535,6 @@ const QWEN_CORE_SETTING_DEFINITIONS = {
     values: APPROVAL_MODES,
   },
   'general.vimMode': { type: 'boolean' },
-  'general.enableAutoUpdate': { type: 'boolean' },
   'general.showSessionRecap': { type: 'boolean' },
   'general.sessionRecapAwayThresholdMinutes': { type: 'number', min: 1 },
   'general.terminalBell': { type: 'boolean' },
@@ -1560,7 +1556,6 @@ const QWEN_CORE_SETTING_DEFINITIONS = {
   'memory.enableAutoSkill': { type: 'boolean' },
   'memory.autoSkillConfirm': { type: 'boolean' },
   'memory.enableTeamMemory': { type: 'boolean' },
-  'memory.enableTeamMemorySync': { type: 'boolean' },
   disableAllHooks: { type: 'boolean' },
 } as const satisfies Record<
   QwenCoreSettingKey,
@@ -1583,7 +1578,6 @@ const DEFAULT_QWEN_MEMORY_SETTINGS: QwenMemorySettings = {
   enableAutoSkill: false,
   autoSkillConfirm: true,
   enableTeamMemory: false,
-  enableTeamMemorySync: false,
 };
 
 const QWEN_MEMORY_SETTING_KEYS = [
@@ -1592,7 +1586,6 @@ const QWEN_MEMORY_SETTING_KEYS = [
   'enableAutoSkill',
   'autoSkillConfirm',
   'enableTeamMemory',
-  'enableTeamMemorySync',
 ] as const satisfies ReadonlyArray<keyof QwenMemorySettings>;
 
 function normalizeQwenMemorySettings(value: unknown): QwenMemorySettings {
@@ -1622,10 +1615,6 @@ function normalizeQwenMemorySettings(value: unknown): QwenMemorySettings {
       typeof record['enableTeamMemory'] === 'boolean'
         ? record['enableTeamMemory']
         : DEFAULT_QWEN_MEMORY_SETTINGS.enableTeamMemory,
-    enableTeamMemorySync:
-      typeof record['enableTeamMemorySync'] === 'boolean'
-        ? record['enableTeamMemorySync']
-        : DEFAULT_QWEN_MEMORY_SETTINGS.enableTeamMemorySync,
   };
 }
 
@@ -9113,9 +9102,6 @@ class QwenAgent implements Agent {
               : {}),
             ...(ext.installMetadata?.ref
               ? { ref: ext.installMetadata.ref }
-              : {}),
-            ...(ext.installMetadata?.autoUpdate !== undefined
-              ? { autoUpdate: ext.installMetadata.autoUpdate }
               : {}),
             capabilities,
             updateState: ext.installMetadata ? 'unknown' : 'not updatable',

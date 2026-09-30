@@ -338,8 +338,6 @@ describe('applyModelSelection', () => {
         baseUrl: 'https://provider.example',
         apiKey: 'sk-1234567',
       })) as Config['getContentGeneratorConfig'],
-      getUsageStatisticsEnabled: (() =>
-        false) as Config['getUsageStatisticsEnabled'],
       ...overrides,
     } as Partial<Config>);
   }

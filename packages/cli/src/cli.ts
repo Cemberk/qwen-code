@@ -485,17 +485,6 @@ export async function runCliEntry(
   // before any route can start a child process.
   delete process.env['QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN'];
 
-  const managedUpdateVersion =
-    process.env['QWEN_CODE_MANAGED_NPM_UPDATE_VERSION'];
-  if (managedUpdateVersion) {
-    delete process.env['QWEN_CODE_MANAGED_NPM_UPDATE_VERSION'];
-    const { installManagedNpmUpdate } = await import(
-      './utils/managed-npm-update.js'
-    );
-    await installManagedNpmUpdate(managedUpdateVersion);
-    return;
-  }
-
   const argv = normalizeCliArgv(rawArgv);
   const route = resolveBootstrapRoute(argv);
 

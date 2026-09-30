@@ -11,13 +11,6 @@ import type { Mock } from 'vitest';
 vi.mock('node:fs');
 vi.mock('node:fs/promises');
 vi.mock('../telemetry/index.js', () => ({
-  QwenLogger: vi.fn().mockImplementation(() => ({
-    logStartSessionEvent: vi.fn().mockResolvedValue(undefined),
-    logEndSessionEvent: vi.fn().mockResolvedValue(undefined),
-    shutdown: vi.fn().mockResolvedValue(undefined),
-  })),
-  DEFAULT_TELEMETRY_TARGET: 'none',
-  DEFAULT_OTLP_ENDPOINT: '',
   DEFAULT_SENSITIVE_SPAN_ATTRIBUTE_MAX_LENGTH: 1024 * 1024,
   SENSITIVE_SPAN_ATTRIBUTE_MAX_LENGTH_LIMIT: 100 * 1024 * 1024,
   isTelemetrySdkInitialized: vi.fn().mockReturnValue(false),
@@ -81,7 +74,6 @@ const baseParams: ConfigParameters = {
   debugMode: false,
   model: 'test-model',
   telemetry: { enabled: false },
-  usageStatisticsEnabled: false,
   overrideExtensions: [],
 };
 

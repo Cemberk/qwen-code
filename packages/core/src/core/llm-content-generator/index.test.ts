@@ -20,7 +20,6 @@ describe('createLlmContentGenerator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockConfig = {
-      getUsageStatisticsEnabled: vi.fn().mockReturnValue(false),
       getContentGeneratorConfig: vi.fn().mockReturnValue({}),
       getCliVersion: vi.fn().mockReturnValue('1.0.0'),
       getTelemetryEnabled: vi.fn().mockReturnValue(false),

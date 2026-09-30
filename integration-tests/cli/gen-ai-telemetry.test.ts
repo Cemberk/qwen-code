@@ -140,7 +140,6 @@ describeLocal('GenAI telemetry fields', () => {
           },
         },
         ui: { enableFollowupSuggestions: false },
-        outboundCorrelation: { propagateTraceContext: true },
       },
     });
 
@@ -457,7 +456,7 @@ describeLocal('GenAI telemetry fields', () => {
 
     expect(server.requests).toHaveLength(2);
     for (const request of server.requests) {
-      expect(request.headers['traceparent']).toEqual(expect.any(String));
+      expect(request.headers['traceparent']).toBeUndefined();
       expect(String(request.headers['baggage'] ?? '')).not.toContain(
         'integration-user-079458',
       );

@@ -14,7 +14,6 @@ import {
 import { t, getCurrentLanguage } from '../../i18n/index.js';
 import {
   ExtensionManager,
-  openBrowserSecurely,
   parseInstallSource,
   createDebugLogger,
   redactUrlCredentials,
@@ -24,86 +23,6 @@ import {
 } from '@qwen-code/qwen-code-core';
 
 const debugLogger = createDebugLogger('EXTENSIONS_COMMAND');
-const EXTENSION_EXPLORE_URL = {
-  Gemini: 'https://geminicli.com/extensions/',
-  ClaudeCode: 'https://claudemarketplaces.com/',
-} as const;
-
-type ExtensionExploreSource = keyof typeof EXTENSION_EXPLORE_URL;
-
-async function exploreAction(context: CommandContext, args: string) {
-  const mode = context.executionMode ?? 'interactive';
-  if (mode !== 'interactive') {
-    return {
-      type: 'message' as const,
-      messageType: 'error' as const,
-      content: t('/extensions explore is only available in interactive mode.'),
-    };
-  }
-  const source = args.trim();
-  const extensionsUrl = source
-    ? EXTENSION_EXPLORE_URL[source as ExtensionExploreSource]
-    : '';
-  if (!extensionsUrl) {
-    context.ui.addItem(
-      {
-        type: MessageType.ERROR,
-        text: t('Unknown extensions source: {{source}}.', { source }),
-      },
-      Date.now(),
-    );
-    return;
-  }
-  // Only check for NODE_ENV for explicit test mode, not for unit test framework
-  if (process.env['NODE_ENV'] === 'test') {
-    context.ui.addItem(
-      {
-        type: MessageType.INFO,
-        text: t(
-          'Would open extensions page in your browser: {{url}} (skipped in test environment)',
-          { url: extensionsUrl },
-        ),
-      },
-      Date.now(),
-    );
-  } else if (
-    process.env['SANDBOX'] &&
-    process.env['SANDBOX'] !== 'sandbox-exec'
-  ) {
-    context.ui.addItem(
-      {
-        type: MessageType.INFO,
-        text: t('View available extensions at {{url}}', { url: extensionsUrl }),
-      },
-      Date.now(),
-    );
-  } else {
-    context.ui.addItem(
-      {
-        type: MessageType.INFO,
-        text: t('Opening extensions page in your browser: {{url}}', {
-          url: extensionsUrl,
-        }),
-      },
-      Date.now(),
-    );
-    try {
-      await openBrowserSecurely(extensionsUrl);
-    } catch (_error) {
-      context.ui.addItem(
-        {
-          type: MessageType.ERROR,
-          text: t(
-            'Failed to open browser. Check out the extensions gallery at {{url}}',
-            { url: extensionsUrl },
-          ),
-        },
-        Date.now(),
-      );
-    }
-  }
-  return undefined;
-}
 
 async function listAction(context: CommandContext, args: string) {
   const mode = context.executionMode ?? 'interactive';
@@ -317,28 +236,6 @@ export async function completeExtensionsAndScopes(
   ]);
 }
 
-export async function completeExtensionsExplore(
-  context: CommandContext,
-  partialArg: string,
-) {
-  const suggestions = Object.keys(EXTENSION_EXPLORE_URL).filter((name) =>
-    name.startsWith(partialArg),
-  );
-
-  return suggestions;
-}
-
-const exploreExtensionsCommand: SlashCommand = {
-  name: 'explore',
-  get description() {
-    return t('Open extensions page in your browser');
-  },
-  kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive'] as const,
-  action: exploreAction,
-  completion: completeExtensionsExplore,
-};
-
 const manageExtensionsCommand: SlashCommand = {
   name: 'manage',
   get description() {
@@ -376,12 +273,7 @@ export const extensionsCommand: SlashCommand = {
   },
   kind: CommandKind.BUILT_IN,
   supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
-  subCommands: [
-    listExtensionsCommand,
-    manageExtensionsCommand,
-    installCommand,
-    exploreExtensionsCommand,
-  ],
+  subCommands: [listExtensionsCommand, manageExtensionsCommand, installCommand],
   action: async (context, args) => {
     const executionMode = context.executionMode ?? 'interactive';
     if (executionMode === 'interactive') {

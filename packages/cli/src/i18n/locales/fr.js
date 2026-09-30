@@ -15,7 +15,6 @@ export default {
     '← → sélectionner, Delete pour retirer, ↓ pour quitter',
   'Attachments: ': 'Pièces jointes : ',
   'Basics:': 'Bases :',
-  'Add context': 'Ajouter du contexte',
   'Use {{symbol}} to specify files for context (e.g., {{example}}) to target specific files or folders.':
     'Utilisez {{symbol}} pour spécifier des fichiers de contexte (ex. {{example}}) pour cibler des fichiers ou dossiers spécifiques.',
   '@': '@',
@@ -66,7 +65,6 @@ export default {
     'Nouvelle ligne (Alt+Enter fonctionne sur certaines distributions Linux)',
   'Clear the screen': "Effacer l'écran",
   'Open input in external editor': "Ouvrir l'entrée dans un éditeur externe",
-  'Send message': 'Envoyer le message',
   'Initializing...': 'Initialisation...',
   'Connecting to MCP servers... ({{connected}}/{{total}})':
     'Connexion aux MCP servers... ({{connected}}/{{total}})',
@@ -85,7 +83,6 @@ export default {
   'docs/keyboard-shortcuts.md': 'docs/keyboard-shortcuts.md',
   'for help on Qwen Code': "pour l'aide de Qwen Code",
   'show version info': 'afficher les informations de version',
-  'submit a bug report': 'soumettre un rapport de bogue',
   Status: 'Statut',
 
   // ============================================================================
@@ -101,7 +98,6 @@ export default {
   'Base URL': 'Base URL',
   Proxy: 'Proxy',
   'Memory Usage': 'Utilisation mémoire',
-  'IDE Client': 'Client IDE',
 
   // ============================================================================
   // Commandes - Général
@@ -227,8 +223,6 @@ export default {
     "Effacer l'historique de conversation et libérer le contexte",
   'Compresses the context by replacing it with a summary.':
     'Compresse le contexte en le remplaçant par un résumé.',
-  'open full Qwen Code documentation in your browser':
-    'ouvrir la documentation complète de Qwen Code dans votre navigateur',
   'Configuration not available.': 'Configuration non disponible.',
   'Connect an LLM provider': 'Se connecter à un fournisseur LLM',
   'Copy the last AI response to clipboard (/copy N for Nth-latest)':
@@ -422,7 +416,6 @@ export default {
   'User Scope': 'Portée utilisateur',
   'Workspace Scope': 'Portée espace de travail',
   'No extensions found.': 'Aucune extension trouvée.',
-  'Updating...': 'Mise à jour...',
   Unknown: 'Inconnu',
   Error: 'Erreur',
   'Stopped because': 'Arrêté parce que',
@@ -479,10 +472,8 @@ export default {
   'Vim Mode': 'Mode Vim',
   'Attribution: commit': 'Attribution : commit',
   'Terminal Bell Notification': 'Notification sonore du terminal',
-  'Enable Usage Statistics': "Activer les statistiques d'utilisation",
   Theme: 'Thème',
   'Preferred Editor': 'Éditeur préféré',
-  'Auto-connect to IDE': "Connexion automatique à l'IDE",
   'Debug Keystroke Logging': 'Journalisation des frappes de débogage',
   'Language: UI': 'Langue : Interface',
   'Language: Model': 'Langue : Modèle',
@@ -495,13 +486,6 @@ export default {
   'Show Citations': 'Afficher les citations',
   'Custom Witty Phrases': 'Phrases personnalisées spirituelles',
   'Show Welcome Back Dialog': 'Afficher le dialogue de bienvenue',
-  'Enable User Feedback': 'Activer les retours utilisateur',
-  'How is Qwen doing this session? (optional)':
-    'Comment se passe cette session avec Qwen ? (facultatif)',
-  Bad: 'Mauvais',
-  Fine: 'Correct',
-  Good: 'Bien',
-  Dismiss: 'Ignorer',
   'Screen Reader Mode': "Mode lecteur d'écran",
   'Max Session Turns': 'Nombre maximum de tours de session',
   'Skip Next Speaker Check':
@@ -648,15 +632,13 @@ export default {
     'Installation annulée pour "{{name}}".',
   'You are installing an extension from {{originSource}}. Some features may not work perfectly with Qwen Code.':
     'Vous installez une extension depuis {{originSource}}. Certaines fonctionnalités peuvent ne pas fonctionner parfaitement avec Qwen Code.',
-  '--ref and --auto-update are not applicable for marketplace extensions.':
-    '--ref et --auto-update ne sont pas applicables aux extensions du marketplace.',
+  '--ref is not applicable for marketplace extensions.':
+    "--ref n'est pas applicable aux extensions du marketplace.",
   'Extension "{{name}}" installed successfully and enabled.':
     'Extension "{{name}}" installée et activée avec succès.',
   'The github URL, local path, or marketplace source (marketplace-url:plugin-name) of the extension to install.':
     "L'URL GitHub, le chemin local ou la source marketplace (marketplace-url:nom-plugin) de l'extension à installer.",
   'The git ref to install from.': 'La référence git depuis laquelle installer.',
-  'Enable auto-update for this extension.':
-    'Activer la mise à jour automatique pour cette extension.',
   'Enable pre-release versions for this extension.':
     'Activer les versions pré-release pour cette extension.',
   'Acknowledge the security risks of installing an extension and skip the confirmation prompt.':
@@ -753,15 +735,6 @@ export default {
     'Utilisez ↑↓ ou j/k pour naviguer, Enter pour sélectionner, Escape pour annuler',
   '{{count}} more above': '{{count}} de plus au-dessus',
   '{{count}} more below': '{{count}} de plus en dessous',
-  'manage IDE integration': "gérer l'intégration IDE",
-  'check status of IDE integration': "vérifier le statut de l'intégration IDE",
-  'install required IDE companion for {{ideName}}':
-    'installer le compagnon IDE requis pour {{ideName}}',
-  'enable IDE integration': "activer l'intégration IDE",
-  'disable IDE integration': "désactiver l'intégration IDE",
-  'IDE integration is not supported in your current environment. To use this feature, run Qwen Code in one of these supported IDEs: VS Code or VS Code forks.':
-    "L'intégration IDE n'est pas prise en charge dans votre environnement actuel. Pour utiliser cette fonctionnalité, exécutez Qwen Code dans l'un des IDEs pris en charge : VS Code ou ses dérivés.",
-  'Set up GitHub Actions': 'Configurer GitHub Actions',
   'Configure terminal keybindings for multiline input (VS Code, Cursor, Windsurf, Trae)':
     'Configurer les raccourcis du terminal pour la saisie multiligne (VS Code, Cursor, Windsurf, Trae)',
   'Please restart your terminal for the changes to take effect.':
@@ -944,7 +917,6 @@ export default {
   // ============================================================================
   'Export current session message history to a file':
     "Exporter l'historique des messages de la session actuelle vers un fichier",
-  'Export session to HTML format': 'Exporter la session au format HTML',
   'Export session to JSON format': 'Exporter la session au format JSON',
   'Export session to JSONL format (one message per line)':
     'Exporter la session au format JSONL (un message par ligne)',
@@ -1233,10 +1205,6 @@ export default {
   // ============================================================================
   // Commandes - Documentation
   // ============================================================================
-  'Please open the following URL in your browser to view the documentation:\n{{url}}':
-    "Veuillez ouvrir l'URL suivante dans votre navigateur pour voir la documentation :\n{{url}}",
-  'Opening documentation in your browser: {{url}}':
-    'Ouverture de la documentation dans votre navigateur : {{url}}',
 
   // ============================================================================
   // Boîtes de dialogue - Confirmation d'outil
@@ -1451,9 +1419,6 @@ export default {
   // Barre de statut
   // ============================================================================
   'Using:': 'Utilisation :',
-  '{{count}} open file': '{{count}} fichier ouvert',
-  '{{count}} open files': '{{count}} fichiers ouverts',
-  '(ctrl+g to view)': '(ctrl+g pour afficher)',
   '{{count}} {{name}} file': '{{count}} fichier {{name}}',
   '{{count}} {{name}} files': '{{count}} fichiers {{name}}',
   '{{count}} MCP server': '{{count}} MCP server',
@@ -1843,16 +1808,6 @@ export default {
   // ============================================================================
   'Open extensions page in your browser':
     'Ouvrir la page des extensions dans votre navigateur',
-  'Unknown extensions source: {{source}}.':
-    "Source d'extensions inconnue : {{source}}.",
-  'Would open extensions page in your browser: {{url}} (skipped in test environment)':
-    'Ouvrirait la page des extensions dans votre navigateur : {{url}} (ignoré en environnement de test)',
-  'View available extensions at {{url}}':
-    'Voir les extensions disponibles sur {{url}}',
-  'Opening extensions page in your browser: {{url}}':
-    'Ouverture de la page des extensions dans votre navigateur : {{url}}',
-  'Failed to open browser. Check out the extensions gallery at {{url}}':
-    "Échec de l'ouverture du navigateur. Consultez la galerie d'extensions sur {{url}}",
   'Retrying in {{seconds}} seconds… (attempt {{attempt}}/{{maxRetries}})':
     'Nouvelle tentative dans {{seconds}} secondes… (tentative {{attempt}}/{{maxRetries}})',
   'Press Ctrl+Y to retry': 'Appuyez sur Ctrl+Y pour réessayer',
@@ -2114,7 +2069,6 @@ export default {
   'The name of the extension to update.':
     "Le nom de l'extension à mettre à jour.",
   'Session (temporary)': 'Session (temporaire)',
-  'Open auto-memory folder': 'Ouvrir le dossier de mémoire automatique',
   'Auto-memory: {{status}}': 'Mémoire automatique : {{status}}',
   'Auto-dream: {{status}} · {{lastDream}} · /dream to run':
     'Rêve automatique : {{status}} · {{lastDream}} · /dream pour lancer',
@@ -2203,78 +2157,19 @@ export default {
 
   // Stats Dashboard — missing labels
   'API Requests': 'Requêtes API',
-  'Tool Calls': "Appels d'outils",
   'Success rate': 'Taux de réussite',
-  'Code Changes': 'Modifications du code',
   Tool: 'Outil',
   reqs: 'req.',
   in: 'ent.',
   out: 'sort.',
   'In/Out': 'Ent/Sort',
   // Update command
-  'Check for Qwen Code updates and install if available':
-    'Vérifier les mises à jour de Qwen Code et installer si disponible',
-  'Qwen Code update available! {{current}} → {{latest}}':
-    'Mise à jour de Qwen Code disponible ! {{current}} → {{latest}}',
-  'A new version of Qwen Code is available! {{current}} → {{latest}}':
-    'Une nouvelle version de Qwen Code est disponible ! {{current}} → {{latest}}',
-  'Qwen Code {{version}} is up to date!': 'Qwen Code {{version}} est à jour !',
-  'Failed to check for updates ({{reason}}). Please check your network or registry configuration.':
-    'Échec de la vérification des mises à jour ({{reason}}). Vérifiez votre réseau ou la configuration du registre.',
-  'Update check skipped ({{reason}}) — run /update to retry.':
-    'Vérification des mises à jour ignorée ({{reason}}) — exécutez /update pour réessayer.',
-  'registry did not respond within {{seconds}}s':
-    "le registre n'a pas répondu en {{seconds}}s",
-  'registry unreachable': 'registre inaccessible',
-  'registry error': 'erreur du registre',
-  'Unable to check for updates: {{reason}}':
-    'Impossible de vérifier les mises à jour : {{reason}}',
-  'Update successful! The new version will be used on your next run.':
-    'Mise à jour réussie ! La nouvelle version sera utilisée lors de la prochaine exécution.',
-  'Update downloaded. It will be applied after you exit this session.':
-    'Mise à jour téléchargée. Elle sera appliquée après avoir quitté cette session.',
-  'Update failed: {{error}}': 'Échec de la mise à jour : {{error}}',
-  'Downloading update...': 'Téléchargement de la mise à jour...',
   'Update successful! Please restart Qwen Code to use the new version. Switching model providers before restarting may not work correctly.':
     'Mise à jour réussie ! Redémarrez Qwen Code pour utiliser la nouvelle version. Changer de fournisseur de modèle avant le redémarrage peut ne pas fonctionner correctement.',
-  'Automatic update failed. Please try updating manually.':
-    'La mise à jour automatique a échoué. Essayez de mettre à jour manuellement.',
-  'Automatic update failed: {{error}}. Re-run the installer to update manually.':
-    'Échec de la mise à jour automatique : {{error}}. Relancez le programme d’installation pour mettre à jour manuellement.',
-  'Running from a local git clone. Please update with "git pull".':
-    'Exécution depuis un clone Git local. Veuillez mettre à jour avec "git pull".',
-  'Running via npx, update not applicable.':
-    'Exécution via npx, mise à jour non applicable.',
-  'Running via pnpx, update not applicable.':
-    'Exécution via pnpx, mise à jour non applicable.',
-  'Running via bunx, update not applicable.':
-    'Exécution via bunx, mise à jour non applicable.',
-  'Installed via Homebrew. Please update with "brew upgrade".':
-    'Installé via Homebrew. Veuillez mettre à jour avec "brew upgrade".',
-  "Locally installed. Please update via your project's package.json.":
-    'Installé localement. Veuillez mettre à jour via le package.json de votre projet.',
-  'Update requires sudo. Please run:':
-    'La mise à jour nécessite sudo. Veuillez exécuter :',
-  'Standalone install detected. Attempting to automatically update now...':
-    'Installation autonome détectée. Tentative de mise à jour automatique...',
   'Standalone install detected. Please rerun the standalone installer to update:':
     'Installation autonome détectée. Veuillez relancer l’installateur autonome pour mettre à jour :',
-  'Run the following to update:':
-    'Exécutez la commande suivante pour mettre à jour :',
   'Unable to auto-update this standalone installation. Please reinstall from:':
     'Impossible de mettre à jour automatiquement cette installation autonome. Veuillez réinstaller depuis :',
-  'Manual update required. Please reinstall Qwen Code.':
-    'Mise à jour manuelle requise. Veuillez réinstaller Qwen Code.',
-  'This session uses the custom sandbox image {{image}}. Update that image and restart Qwen Code.':
-    'Cette session utilise l’image de bac à sable personnalisée {{image}}. Mettez à jour l’image et redémarrez Qwen Code.',
-  'Update Qwen Code on the host, then restart the sandbox.':
-    'Mettez à jour Qwen Code sur l’hôte, puis redémarrez le bac à sable.',
-  'The update will be installed after you exit this session.':
-    'La mise à jour sera installée après la fermeture de cette session.',
-  'Run /update to install the update on the host.':
-    'Exécutez /update pour installer la mise à jour sur l’hôte.',
-  'Run /update to install the update.':
-    'Exécutez /update pour installer la mise à jour.',
 
   // ============================================================================
   // reload-plugins command

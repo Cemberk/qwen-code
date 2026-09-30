@@ -91,24 +91,7 @@ export const TOP_LEVEL_GLOBAL_OPTIONS = {
   telemetry: {
     type: 'boolean' as const,
     description:
-      'Enable telemetry? This flag specifically controls if telemetry is sent. Other --telemetry-* flags set specific values but do not enable telemetry on their own.',
-  },
-  'telemetry-target': {
-    type: 'string' as const,
-    choices: ['local', 'gcp'] as const,
-    description:
-      'Set the telemetry target (local or gcp). Overrides settings files.',
-  },
-  'telemetry-otlp-endpoint': {
-    type: 'string' as const,
-    description:
-      'Set the OTLP endpoint for telemetry. Overrides environment variables and settings files.',
-  },
-  'telemetry-otlp-protocol': {
-    type: 'string' as const,
-    choices: ['grpc', 'http'] as const,
-    description:
-      'Set the OTLP protocol for telemetry (grpc or http). Overrides settings files.',
+      'Enable telemetry? Telemetry is only written to the file set by --telemetry-outfile (or "telemetry.outfile"). Other --telemetry-* flags set specific values but do not enable telemetry on their own.',
   },
   'telemetry-log-prompts': {
     type: 'boolean' as const,
@@ -156,12 +139,6 @@ export const TOP_LEVEL_GLOBAL_OPTIONS = {
 export const TOP_LEVEL_DEPRECATED_OPTIONS = {
   telemetry:
     'Use the "telemetry.enabled" setting in settings.json instead. This flag will be removed in a future version.',
-  'telemetry-target':
-    'Use the "telemetry.target" setting in settings.json instead. This flag will be removed in a future version.',
-  'telemetry-otlp-endpoint':
-    'Use the "telemetry.otlpEndpoint" setting in settings.json instead. This flag will be removed in a future version.',
-  'telemetry-otlp-protocol':
-    'Use the "telemetry.otlpProtocol" setting in settings.json instead. This flag will be removed in a future version.',
   'telemetry-log-prompts':
     'Use the "telemetry.logPrompts" setting in settings.json instead. This flag will be removed in a future version.',
   'telemetry-outfile':
@@ -260,11 +237,6 @@ export const DEFAULT_COMMAND_OPTIONS = {
     description:
       'On daemon session load/resume, re-hang a trailing unanswered ask_user_question instead of synthesizing a failed tool result',
     default: false,
-  },
-  channel: {
-    type: 'string' as const,
-    choices: ['VSCode', 'ACP', 'SDK', 'CI', 'desktop', 'daemon'] as const,
-    description: 'Channel identifier (VSCode, ACP, SDK, CI, desktop, daemon)',
   },
   'allowed-mcp-server-names': {
     type: 'array' as const,

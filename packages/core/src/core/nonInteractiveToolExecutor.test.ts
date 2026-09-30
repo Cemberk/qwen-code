@@ -46,7 +46,6 @@ describe('executeToolCall', () => {
       getApprovalMode: () => ApprovalMode.DEFAULT,
       getAllowedTools: () => [],
       getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getContentGeneratorConfig: () => ({
         model: 'test-model',

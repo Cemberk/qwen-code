@@ -68,13 +68,11 @@ import {
   SessionStatsProvider,
   useSessionStats,
 } from '../contexts/SessionContext.js';
-import { MessageType, type HistoryItemWithoutId } from '../types.js';
-import { useUpdateNoticeFlush } from './use-update-notice-flush.js';
+import type { HistoryItemWithoutId } from '../types.js';
 import { applyOpenTuiTheme } from './theme.js';
 import { getActiveOpenTuiTheme } from './theme-parity.js';
 import { useLogger } from '../hooks/useLogger.js';
 import { useAwaySummary } from '../hooks/useAwaySummary.js';
-import type { UpdateObject } from '../utils/updateCheck.js';
 import { OpenTuiApp } from './opentui-app-shell.js';
 import { useFollowupSuggestionGeneration } from './followup-generation.js';
 import { useTerminalFocus } from './focus-tracking.js';
@@ -201,29 +199,6 @@ function OpenTuiEntryApp({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // --- update-notification wiring (ink AppContainer parity) -----------------
-  const [updateNotice, setUpdateNotice] = useState<string | null>(null);
-  const isIdleRef = useRef(true);
-  useEffect(() => {
-    isIdleRef.current = !live.streaming;
-  }, [live.streaming]);
-  const addUpdateItem = useCallback(
-    (item: HistoryItemWithoutId) => {
-      if (item.type === MessageType.INFO) {
-        applyEvent({ type: 'info', text: item.text });
-      } else if (item.type === MessageType.WARNING) {
-        applyEvent({ type: 'warning', text: item.text });
-      } else if (item.type === MessageType.ERROR) {
-        applyEvent({ type: 'error', text: item.text });
-      }
-    },
-    [applyEvent],
-  );
-  const setUpdateInfo = useCallback((info: UpdateObject | null) => {
-    setUpdateNotice(info?.message ?? null);
-  }, []);
-  useUpdateNoticeFlush(addUpdateItem, setUpdateInfo, isIdleRef, live.streaming);
-
   // --- two-press exit guard (ink useDoublePress parity) ---------------------
   const [exitHint, setExitHint] = useState<string | null>(null);
   const exitGuard = useMemo(
@@ -345,7 +320,6 @@ function OpenTuiEntryApp({
       onTranscriptReset={resetTranscript}
       onTranscriptEvent={applyEvent}
       onStartNewSession={handleStartNewSession}
-      updateNotice={updateNotice}
       exitHint={exitHint}
       availableTerminalHeight={height}
       streaming={live.streaming}

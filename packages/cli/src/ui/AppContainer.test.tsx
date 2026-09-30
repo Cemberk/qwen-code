@@ -263,7 +263,6 @@ vi.mock('../services/prompt-stash.js');
 
 // Mock external utilities
 vi.mock('../utils/events.js');
-vi.mock('./handleAutoUpdate.js');
 vi.mock('../utils/cleanup.js');
 
 const mockLoadHierarchicalMemory = vi.hoisted(() => vi.fn());

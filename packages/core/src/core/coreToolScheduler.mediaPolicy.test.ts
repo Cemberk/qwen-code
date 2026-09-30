@@ -77,7 +77,6 @@ function makeConfig(options: {
     getPermissionsAllow: () => [],
     getPermissionsDeny: () => undefined,
     getSessionId: () => 'test-session-id',
-    getUsageStatisticsEnabled: () => true,
     getDebugMode: () => false,
     getContentGeneratorConfig: () => ({
       model: 'test-model',

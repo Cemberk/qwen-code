@@ -347,14 +347,11 @@ function createExportSessionConfig(config: ExportConfig): Config {
 /**
  * Extract session metadata from ChatRecords.
  */
-export async function collectSessionMetadata(
-  conversation: {
-    sessionId: string;
-    startTime: string;
-    messages: ChatRecord[];
-  },
-  config: ExportConfig,
-): Promise<ExportMetadata> {
+export async function collectSessionMetadata(conversation: {
+  sessionId: string;
+  startTime: string;
+  messages: ChatRecord[];
+}): Promise<ExportMetadata> {
   const { sessionId, startTime, messages } = conversation;
 
   // Extract basic info from the first record
@@ -380,9 +377,6 @@ export async function collectSessionMetadata(
     }
   }
 
-  // Get channel from config
-  const channel = config.getChannel?.();
-
   // Count user prompts
   const promptCount = messages.filter((m) => m.type === 'user').length;
 
@@ -401,7 +395,6 @@ export async function collectSessionMetadata(
     gitRepo,
     gitBranch,
     model,
-    channel,
     promptCount,
     contextUsagePercent: tokenStats.contextUsagePercent,
     contextWindowSize: tokenStats.contextWindowSize,
@@ -812,7 +805,7 @@ export async function collectSessionData(
   const messages = exportContext.getMessages();
 
   // Extract metadata from conversation
-  const metadata = await collectSessionMetadata(conversation, config);
+  const metadata = await collectSessionMetadata(conversation);
 
   return {
     sessionId: conversation.sessionId,

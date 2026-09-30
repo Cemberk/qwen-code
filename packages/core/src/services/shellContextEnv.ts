@@ -39,11 +39,6 @@ import {
   getSessionModel,
   getSessionModelIdentity,
 } from '../utils/sessionIdContext.js';
-import {
-  isShellTracePropagationEnabled,
-  getTraceContext,
-  formatTraceparent,
-} from '../telemetry/trace-context.js';
 
 /**
  * An entry a POSIX shell cannot exec directly. The gate demands POSITIVE
@@ -229,12 +224,6 @@ export function getShellContextEnvVars(): Record<string, string> {
 
   const promptId = promptIdContext.getStore();
   env['QWEN_CODE_PROMPT_ID'] = promptId ?? '';
-
-  if (isShellTracePropagationEnabled()) {
-    const ctx = getTraceContext();
-    env['TRACEPARENT'] = ctx ? formatTraceparent(ctx) : '';
-    env['TRACESTATE'] = '';
-  }
 
   return env;
 }

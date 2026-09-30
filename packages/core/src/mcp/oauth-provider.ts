@@ -8,7 +8,6 @@ import * as http from 'node:http';
 import * as crypto from 'node:crypto';
 import { URL } from 'node:url';
 import type { EventEmitter } from 'node:events';
-import { openBrowserSecurely } from '../utils/secure-browser-launcher.js';
 import type { OAuthToken } from './token-storage/types.js';
 import { MCPOAuthTokenStorage } from './oauth-token-storage.js';
 import { getErrorMessage } from '../utils/errors.js';
@@ -869,15 +868,6 @@ export class MCPOAuthProvider {
 
     // Start callback server
     const callbackPromise = this.startCallbackServer(pkceParams.state);
-
-    // Open browser securely
-    try {
-      await openBrowserSecurely(authUrl);
-    } catch (error) {
-      debugLogger.warn(
-        `Failed to open browser automatically: ${getErrorMessage(error)}`,
-      );
-    }
 
     // Wait for callback
     const { code } = await callbackPromise;
