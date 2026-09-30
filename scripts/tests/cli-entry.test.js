@@ -5,7 +5,6 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const { spawnSyncMock, existsSyncMock, enableCompileCacheMock } = vi.hoisted(
@@ -76,68 +75,6 @@ describe('scripts/cli-entry.js production entry', () => {
     } finally {
       if (inherited === undefined) delete process.env.QWEN_CODE_CLI;
       else process.env.QWEN_CODE_CLI = inherited;
-    }
-  });
-
-  it('preserves the startup version in child review commands', async () => {
-    const inherited = process.env.QWEN_CODE_STARTUP_VERSION;
-    process.env.QWEN_CODE_STARTUP_VERSION = '0.21.3';
-    try {
-      await import('../cli-entry.js?stamps-version');
-      expect(process.env.QWEN_CODE_STARTUP_VERSION).toBe('0.21.3');
-      // And the value rides the spawned child's env — the hop that actually
-      // reaches the submit handler — not merely the parent's copy.
-      const spawnEnv = spawnSyncMock.mock.calls.at(-1)?.[2]?.env;
-      expect(spawnEnv.QWEN_CODE_STARTUP_VERSION).toBe('0.21.3');
-    } finally {
-      if (inherited === undefined) delete process.env.QWEN_CODE_STARTUP_VERSION;
-      else process.env.QWEN_CODE_STARTUP_VERSION = inherited;
-    }
-  });
-
-  it('initializes the version for a fresh CLI process', async () => {
-    const inherited = process.env.QWEN_CODE_STARTUP_VERSION;
-    delete process.env.QWEN_CODE_STARTUP_VERSION;
-    try {
-      await import('../cli-entry.js?initializes-version');
-      expect(process.env.QWEN_CODE_STARTUP_VERSION).toBe('0.0.0-test');
-    } finally {
-      if (inherited === undefined) delete process.env.QWEN_CODE_STARTUP_VERSION;
-      else process.env.QWEN_CODE_STARTUP_VERSION = inherited;
-    }
-  });
-
-  it('leaves the startup version unset when package metadata is unreadable', async () => {
-    const inherited = process.env.QWEN_CODE_STARTUP_VERSION;
-    delete process.env.QWEN_CODE_STARTUP_VERSION;
-    const readFileSyncMock = vi.mocked(readFileSync);
-    const impl = readFileSyncMock.getMockImplementation();
-    readFileSyncMock.mockImplementation(() => {
-      throw new Error('unreadable');
-    });
-    try {
-      await import('../cli-entry.js?unreadable-metadata');
-      expect(process.env.QWEN_CODE_STARTUP_VERSION).toBeUndefined();
-    } finally {
-      readFileSyncMock.mockImplementation(impl);
-      if (inherited === undefined) delete process.env.QWEN_CODE_STARTUP_VERSION;
-      else process.env.QWEN_CODE_STARTUP_VERSION = inherited;
-    }
-  });
-
-  it('stamps unknown when the package metadata has no version', async () => {
-    const inherited = process.env.QWEN_CODE_STARTUP_VERSION;
-    delete process.env.QWEN_CODE_STARTUP_VERSION;
-    const readFileSyncMock = vi.mocked(readFileSync);
-    const impl = readFileSyncMock.getMockImplementation();
-    readFileSyncMock.mockImplementation(() => '{}');
-    try {
-      await import('../cli-entry.js?versionless-metadata');
-      expect(process.env.QWEN_CODE_STARTUP_VERSION).toBe('unknown');
-    } finally {
-      readFileSyncMock.mockImplementation(impl);
-      if (inherited === undefined) delete process.env.QWEN_CODE_STARTUP_VERSION;
-      else process.env.QWEN_CODE_STARTUP_VERSION = inherited;
     }
   });
 

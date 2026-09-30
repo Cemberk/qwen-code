@@ -71,7 +71,6 @@ describe('workflow turn budget ledger', () => {
         throw new Error('not used');
       },
       countTokens: async () => ({ totalTokens: 0 }),
-      embedContent: async () => ({}),
     } as unknown as ContentGenerator;
     const generator = new LoggingContentGenerator(wrapped, config, {
       model: 'qwen-ledger',

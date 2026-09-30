@@ -258,7 +258,7 @@ describe('inspectConversationBranches', () => {
       system('title-2', 'title-1', 'custom_title'),
       system('compression', 'root', 'chat_compression'),
       system('slash', 'root', 'slash_command'),
-      system('attribution', 'root', 'attribution_snapshot'),
+      system('at-command', 'root', 'at_command'),
       system('file-history', 'root', 'file_history_snapshot'),
     ];
 
@@ -266,7 +266,7 @@ describe('inspectConversationBranches', () => {
       inspectConversationBranches(records).branches.map(
         (branch) => branch.leafUuid,
       ),
-    ).toEqual(['compression', 'slash', 'attribution', 'file-history']);
+    ).toEqual(['compression', 'slash', 'at-command', 'file-history']);
   });
 
   it('classifies rewind descendants and siblings without discarding either', () => {

@@ -103,11 +103,12 @@ export function loadProjectMcpServers(
       continue;
     }
     // `.mcp.json` is the Claude Code convention, so entries may carry Claude's
-    // `type` transport discriminator; normalize them to Qwen's shape.
-    servers[name] = {
-      ...normalizeClaudeMcpServer(value as MCPServerConfig),
-      scope: 'project',
-    };
+    // `type` transport discriminator; normalize them to Qwen's shape. A
+    // checked-in file must not skip tool confirmations, so `trust` is dropped.
+    const { trust: _trust, ...server } = normalizeClaudeMcpServer(
+      value as MCPServerConfig,
+    );
+    servers[name] = { ...server, scope: 'project' };
   }
 
   return { servers, path: filePath, errors };

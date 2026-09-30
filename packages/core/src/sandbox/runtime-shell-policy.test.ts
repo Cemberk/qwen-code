@@ -31,12 +31,7 @@ describe('runtime shell policy admission', () => {
   let params: ConfigParameters;
   beforeEach(() => {
     vi.clearAllMocks();
-    for (const name of [
-      'SANDBOX',
-      'QWEN_SANDBOX',
-      'QWEN_SANDBOX_NET',
-      'QWEN_SANDBOX_PROXY_COMMAND',
-    ])
+    for (const name of ['SANDBOX', 'QWEN_SANDBOX', 'QWEN_SANDBOX_NET'])
       vi.stubEnv(name, undefined);
     root = realpathSync(
       mkdtempSync(path.join(os.tmpdir(), 'qwen-policy-test-')),
@@ -149,17 +144,15 @@ describe('runtime shell policy admission', () => {
     ).toThrow('tools.executionSandbox');
   });
 
-  it.each([
-    'SANDBOX',
-    'QWEN_SANDBOX',
-    'QWEN_SANDBOX_NET',
-    'QWEN_SANDBOX_PROXY_COMMAND',
-  ])('rejects legacy %s environment', (name) => {
-    vi.stubEnv(name, 'bwrap');
-    expect(() => admit(params, root)).toThrow('legacy sandbox environment');
-  });
+  it.each(['SANDBOX', 'QWEN_SANDBOX', 'QWEN_SANDBOX_NET'])(
+    'rejects legacy %s environment',
+    (name) => {
+      vi.stubEnv(name, 'bwrap');
+      expect(() => admit(params, root)).toThrow('legacy sandbox environment');
+    },
+  );
 
-  it.each(['SANDBOX', 'QWEN_SANDBOX_NET', 'QWEN_SANDBOX_PROXY_COMMAND'])(
+  it.each(['SANDBOX', 'QWEN_SANDBOX_NET'])(
     'ignores empty legacy %s environment',
     (name) => {
       vi.stubEnv(name, '  ');

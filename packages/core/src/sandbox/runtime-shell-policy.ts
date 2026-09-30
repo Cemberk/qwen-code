@@ -45,11 +45,10 @@ export function admitShellSandbox(
   if (
     process.env['SANDBOX']?.trim() ||
     (legacySelection && !['false', '0'].includes(legacySelection)) ||
-    process.env['QWEN_SANDBOX_NET']?.trim() ||
-    process.env['QWEN_SANDBOX_PROXY_COMMAND']?.trim()
+    process.env['QWEN_SANDBOX_NET']?.trim()
   ) {
     throw new Error(
-      'Tool execution sandbox cannot be combined with legacy sandbox environment settings. Remove SANDBOX, QWEN_SANDBOX, QWEN_SANDBOX_NET and QWEN_SANDBOX_PROXY_COMMAND and restart.',
+      'Tool execution sandbox cannot be combined with legacy sandbox environment settings. Remove SANDBOX, QWEN_SANDBOX and QWEN_SANDBOX_NET and restart.',
     );
   }
   if (

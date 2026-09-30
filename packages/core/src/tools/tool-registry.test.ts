@@ -18,7 +18,7 @@ import {
 import { DiscoveredMCPTool } from './mcp-tool.js';
 import { ExitPlanModeTool } from './exitPlanMode.js';
 import type { FunctionDeclaration, CallableTool } from '@google/genai';
-import { mcpToTool } from '@google/genai';
+import { mcpToTool } from './mcp-callable-tool.js';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import { MockTool } from '../test-utils/mock-tool.js';
@@ -79,18 +79,12 @@ vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () => {
   return { StdioClientTransport: MockStdioClientTransport };
 });
 
-// Mock @google/genai mcpToTool
-vi.mock('@google/genai', async () => {
-  const actualGenai =
-    await vi.importActual<typeof import('@google/genai')>('@google/genai');
-  return {
-    ...actualGenai,
-    mcpToTool: vi.fn().mockImplementation(() => ({
-      tool: vi.fn().mockResolvedValue({ functionDeclarations: [] }),
-      callTool: vi.fn(),
-    })),
-  };
-});
+vi.mock('./mcp-callable-tool.js', () => ({
+  mcpToTool: vi.fn().mockImplementation(() => ({
+    tool: vi.fn().mockResolvedValue({ functionDeclarations: [] }),
+    callTool: vi.fn(),
+  })),
+}));
 
 // Helper to create a mock CallableTool for specific test needs
 const createMockCallableTool = (

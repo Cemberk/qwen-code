@@ -1438,7 +1438,6 @@ export async function loadCliConfig(
   hooksConfig?: {
     systemHooks?: Record<string, unknown>;
     userHooks?: Record<string, unknown>;
-    projectHooks?: Record<string, unknown>;
   },
   /**
    * Live-read provider for the set of disabled skill names. Forwarded to
@@ -1579,7 +1578,7 @@ export async function loadCliConfig(
       : undefined);
   const shellExecutionSandbox = requestedShellExecutionSandbox;
 
-  const folderTrust = settings.security?.folderTrust?.enabled ?? false;
+  const folderTrust = settings.security?.folderTrust?.enabled ?? true;
   const trustedFolder = isWorkspaceTrusted(settings).isTrusted === true;
 
   // Custom style files are prompts: a project's are read only from a trusted
@@ -1660,7 +1659,7 @@ export async function loadCliConfig(
   // Determine approval mode with backward compatibility
   let approvalMode: ApprovalMode;
   // Whether a privileged mode was actually asked for (flag or setting). The
-  // AUTO fall-through below is a built-in default, not a request, so an
+  // DEFAULT fall-through below is a built-in default, not a request, so an
   // untrusted folder must not claim it overrode something the caller never set.
   let approvalModeRequested = false;
   if (argv.approvalMode) {
@@ -1672,13 +1671,8 @@ export async function loadCliConfig(
   } else if (!bareMode && !safeMode && settings.tools?.approvalMode) {
     approvalMode = parseApprovalModeValue(settings.tools.approvalMode);
     approvalModeRequested = true;
-  } else if (bareMode || safeMode) {
-    // Restricted modes strip permissions/allowlists and are meant to be
-    // maximally restrictive, so they keep manual approval rather than the
-    // AUTO default that normal sessions now get.
-    approvalMode = ApprovalMode.DEFAULT;
   } else {
-    approvalMode = ApprovalMode.AUTO;
+    approvalMode = ApprovalMode.DEFAULT;
   }
 
   // Force approval mode to default if the folder is not trusted.
@@ -2417,7 +2411,6 @@ export async function loadCliConfig(
     truncateToolOutputLines: settings.tools?.truncateToolOutputLines,
     toolOutputBatchBudget: settings.tools?.toolOutputBatchBudget,
     eventEmitter: appEvents,
-    gitCoAuthor: settings.general?.gitCoAuthor,
     output: {
       format: outputSettingsFormat,
     },

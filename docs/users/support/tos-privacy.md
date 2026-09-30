@@ -1,93 +1,48 @@
-# Qwen Code: Terms of Service and Privacy Notice
+# Qwen Code: Privacy Notice
 
-Qwen Code is an open-source AI coding assistant tool maintained by the Qwen Code team. This document outlines the terms of service and privacy policies that apply when using Qwen Code's authentication methods and AI model services.
+This build of Qwen Code is a local-only fork of the open-source AI coding
+assistant. It talks to exactly one service: the OpenAI-compatible model server
+that you run and configure yourself on the loopback interface (`127.0.0.1`,
+`::1` or `localhost`), for example Ollama, LM Studio, vLLM or llama.cpp.
 
-## How to determine your authentication method
+## What leaves your machine
 
-Qwen Code supports four authentication methods to access AI models. Your authentication method determines which terms of service and privacy policies apply to your usage:
+Nothing. Qwen Code has no telemetry upload, no usage statistics, no crash or
+feedback reporting, no update checks and no cloud providers. A model base URL
+whose host is not a loopback address is rejected at startup.
 
-1. **Qwen OAuth** — Log in with your qwen.ai account (free tier discontinued 2026-04-15)
-2. **Alibaba Cloud Coding Plan** — Use an API key from Alibaba Cloud
-3. **API Key** — Bring your own API key
-4. **Vertex AI** — Use Google Cloud Vertex AI
+The terms and data practices of the model server you run are your own; no
+third party is involved.
 
-For each authentication method, different Terms of Service and Privacy Notices may apply depending on the underlying service provider.
+## What is sent to your local model server
 
-| Authentication Method     | Provider          | Terms of Service                                                   | Privacy Notice                                                     |
-| :------------------------ | :---------------- | :----------------------------------------------------------------- | :----------------------------------------------------------------- |
-| Qwen OAuth                | Qwen AI           | [Qwen Terms of Service](https://qwen.ai/termsservice)              | [Qwen Privacy Policy](https://qwen.ai/privacypolicy)               |
-| Alibaba Cloud Coding Plan | Alibaba Cloud     | See [details below](#2-if-you-are-using-alibaba-cloud-coding-plan) | See [details below](#2-if-you-are-using-alibaba-cloud-coding-plan) |
-| API Key                   | Various Providers | Depends on your chosen API provider (OpenAI, Anthropic, etc.)      | Depends on your chosen API provider                                |
-| Vertex AI                 | Google Cloud      | [Google Cloud Terms](https://cloud.google.com/terms)               | [Google Cloud Privacy](https://cloud.google.com/privacy)           |
+Each model request contains what the assistant needs to answer:
 
-## 1. If you are using Qwen OAuth Authentication
+- your prompts and the conversation so far;
+- workspace content that tools read or produce during the session, such as
+  file contents, directory listings and shell command output;
+- project context files (for example `QWEN.md`) and memory entries.
 
-When you authenticate using your qwen.ai account, these Terms of Service and Privacy Notice documents apply:
+Tools such as file reads, edits and shell commands run locally on your machine,
+subject to the approval mode and permission rules you configure.
 
-- **Terms of Service:** Your use is governed by the [Qwen Terms of Service](https://qwen.ai/termsservice).
-- **Privacy Notice:** The collection and use of your data is described in the [Qwen Privacy Policy](https://qwen.ai/privacypolicy).
+## What is stored on disk
 
-For details about authentication setup, quotas, and supported features, see [Authentication Setup](../configuration/settings).
-
-## 2. If you are using Alibaba Cloud Coding Plan
-
-When you authenticate using an API key from Alibaba Cloud, the applicable Terms of Service and Privacy Notice from Alibaba Cloud apply.
-
-Alibaba Cloud Coding Plan is available in two regions:
-
-- **阿里云百炼 (aliyun.com)** — [bailian.console.aliyun.com](https://bailian.console.aliyun.com)
-- **Alibaba Cloud (alibabacloud.com)** — [bailian.console.alibabacloud.com](https://bailian.console.alibabacloud.com)
-
-> [!important]
->
-> When using Alibaba Cloud Coding Plan, you are subject to Alibaba Cloud's terms and privacy policies. Please review their documentation for specific details about data usage, retention, and privacy practices.
-
-## 3. If you are using your own API Key
-
-When you authenticate using API keys from other providers, the applicable Terms of Service and Privacy Notice depend on your chosen provider.
-
-> [!important]
->
-> When using your own API key, you are subject to the terms and privacy policies of your chosen API provider, not Qwen Code's terms. Please review your provider's documentation for specific details about data usage, retention, and privacy practices.
-
-Qwen Code supports various OpenAI-compatible providers. Please refer to your specific provider's terms of service and privacy policy for detailed information.
-
-## 4. If you are using Vertex AI
-
-When you authenticate with Google Cloud Vertex AI, the applicable Terms of Service and Privacy Notice are Google Cloud's.
-
-> [!important]
->
-> When using Vertex AI, you are subject to [Google Cloud's Terms of Service](https://cloud.google.com/terms) and [Google Cloud Privacy Notice](https://cloud.google.com/privacy), not Qwen Code's terms. Please review Google Cloud's documentation for specific details about data usage, retention, and privacy practices.
-
-## Usage Statistics and Telemetry
-
-Qwen Code does not collect usage statistics and does not send telemetry anywhere. [Telemetry](../../developers/development/telemetry) is off by default; when you enable it, it is only written to the local file set by `telemetry.outfile`.
-
-This does not affect what data your chosen AI service provider may collect according to its own privacy policy.
+Qwen Code keeps its state under `~/.qwen`, including your settings, session
+transcripts (so you can resume a conversation), shell history and debug logs.
+[Telemetry](../../developers/development/telemetry) is off by default; when you
+enable it, it is only written to the local file set by `telemetry.outfile`.
 
 ## Frequently Asked Questions (FAQ)
 
-### 1. Is my code, including prompts and answers, used to train AI models?
+### Is my code, including prompts and answers, used to train AI models?
 
-Whether your code, including prompts and answers, is used to train AI models depends on your authentication method and the specific AI service provider you use:
+Not by Qwen Code. Your prompts, code and responses go only to the local model
+server you configured, and whatever that server does with them is under your
+control.
 
-- **Qwen OAuth**: Data usage is governed by [Qwen's Privacy Policy](https://qwen.ai/privacypolicy). Please refer to their policy for specific details about data collection and model training practices.
+### How do I change the model server?
 
-- **Alibaba Cloud Coding Plan**: Data usage is governed by Alibaba Cloud's privacy policy. Please refer to their policy for specific details about data collection and model training practices.
-
-- **API Key**: Data usage depends entirely on your chosen API provider. Each provider has their own data usage policies. Please review the privacy policy and terms of service of your specific provider.
-
-- **Vertex AI**: Data usage is governed by [Google Cloud's Terms of Service](https://cloud.google.com/terms) and [Privacy Notice](https://cloud.google.com/privacy). Please review Google Cloud's policies for specific details about data collection and model training practices.
-
-**Important**: Qwen Code itself does not use your prompts, code, or responses for model training. Any data usage for training purposes would be governed by the policies of the AI service provider you authenticate with.
-
-### 2. How do I switch between authentication methods?
-
-You can switch between Qwen OAuth, Alibaba Cloud Coding Plan, your own API key, and Vertex AI at any time:
-
-1. **During startup**: Choose your preferred authentication method when prompted
-2. **Within the CLI**: Use the `/auth` command to reconfigure your authentication method
-3. **Environment variables**: Set up `.env` files for automatic API key authentication
-
-For detailed instructions, see the [Authentication Setup](../configuration/auth.md) documentation.
+Use the `/auth` command, or edit the model settings described in
+[Authentication Setup](../configuration/auth.md). The base URL must point at a
+server on the loopback interface.

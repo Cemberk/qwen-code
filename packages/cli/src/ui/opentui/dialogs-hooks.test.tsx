@@ -365,7 +365,6 @@ function configWith(options: {
     isTrustedFolder: () => true,
     getSystemHooks: () => undefined,
     getUserHooks: () => undefined,
-    getProjectHooks: () => undefined,
     getExtensions: () => [],
   } as unknown as Config;
 }

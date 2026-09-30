@@ -28,7 +28,6 @@ import {
   stripUtf8Bom,
 } from './execution-sandbox-settings.js';
 import { isWorkspaceTrusted } from './trustedFolders.js';
-import { hasOwnModelProviders } from './modelProvidersScope.js';
 import {
   type Settings,
   type MemoryImportFormat,
@@ -57,6 +56,7 @@ import {
   loadEnvironment,
   preResolveHomeEnvOverrides,
 } from './environment.js';
+import { isOperatorOnlyEnvKey } from './shared-env-keys.js';
 import {
   DEFAULT_DARK_THEME_NAME,
   DEFAULT_LIGHT_THEME_NAME,
@@ -289,61 +289,6 @@ function getSettingsFileKeyWarnings(
   return warnings;
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function hasAnyProviderEntries(modelProviders: unknown): boolean {
-  if (!isPlainObject(modelProviders)) {
-    return false;
-  }
-
-  return Object.values(modelProviders).some(
-    (providerModels) =>
-      Array.isArray(providerModels) && providerModels.length > 0,
-  );
-}
-
-function getModelProvidersOverrideWarnings(
-  loadedSettings: LoadedSettings,
-): string[] {
-  // Untrusted workspaces are ignored in merge, so they cannot shadow user modelProviders.
-  if (!loadedSettings.isTrusted) {
-    return [];
-  }
-
-  const userOriginal = loadedSettings.user
-    .originalSettings as unknown as Record<string, unknown>;
-  const workspaceOriginal = loadedSettings.workspace
-    .originalSettings as unknown as Record<string, unknown>;
-
-  if (
-    !hasOwnModelProviders(userOriginal) ||
-    !hasOwnModelProviders(workspaceOriginal)
-  ) {
-    return [];
-  }
-
-  const userModelProviders = userOriginal['modelProviders'];
-  const workspaceModelProviders = workspaceOriginal['modelProviders'];
-  const workspaceIsEmptyModelProviders =
-    isPlainObject(workspaceModelProviders) &&
-    Object.keys(workspaceModelProviders).length === 0;
-
-  if (
-    !workspaceIsEmptyModelProviders ||
-    !hasAnyProviderEntries(userModelProviders)
-  ) {
-    return [];
-  }
-
-  return [
-    `Warning: '${loadedSettings.workspace.path}' defines an empty 'modelProviders' object. ` +
-      `This has no effect with current merge behavior, but may indicate a configuration error. ` +
-      `If REPLACE semantics are introduced for 'modelProviders' in the future, this would override user-level model providers in '${loadedSettings.user.path}'.`,
-  ];
-}
-
 /**
  * Collects warnings for ignored legacy and unknown settings keys,
  * as well as migration warnings.
@@ -378,16 +323,12 @@ export function getSettingsWarnings(loadedSettings: LoadedSettings): string[] {
     }
   }
 
-  for (const warning of getModelProvidersOverrideWarnings(loadedSettings)) {
-    warningSet.add(warning);
-  }
-
   // Settings restricted to trusted scopes are stripped from Workspace during
   // the merge; warn so the user knows their workspace setting has no effect.
   // Driven by WORKSPACE_RESTRICTED_SETTINGS so the warning cannot drift from
   // the strip that produces it.
   const workspaceFile = loadedSettings.forScope(SettingScope.Workspace);
-  if (workspaceFile.rawJson !== undefined) {
+  if (loadedSettings.isTrusted && workspaceFile.rawJson !== undefined) {
     for (const key of WORKSPACE_RESTRICTED_ROOT_SETTINGS) {
       if (workspaceFile.originalSettings[key] === undefined) continue;
       warningSet.add(
@@ -401,6 +342,20 @@ export function getSettingsWarnings(loadedSettings: LoadedSettings): string[] {
       if (sectionValue?.[key] === undefined) continue;
       warningSet.add(
         `Warning: ${section}.${key} in workspace settings (${workspaceFile.path}) is ignored. This setting is only honored from User, System, or SystemDefaults scope settings.`,
+      );
+    }
+    for (const key of Object.keys(workspaceFile.originalSettings.env ?? {})) {
+      if (!isOperatorOnlyEnvKey(key)) continue;
+      warningSet.add(
+        `Warning: env.${key} in workspace settings (${workspaceFile.path}) is ignored. This variable is only honored from User, System, or SystemDefaults scope settings.`,
+      );
+    }
+    for (const [name, server] of Object.entries(
+      workspaceFile.originalSettings.mcpServers ?? {},
+    )) {
+      if (server?.trust === undefined) continue;
+      warningSet.add(
+        `Warning: mcpServers.${name}.trust in workspace settings (${workspaceFile.path}) is ignored. Tool calls to workspace MCP servers always ask for confirmation.`,
       );
     }
     // Tighten-only keys: the same verdict the merge applied, so the
@@ -500,6 +455,28 @@ function stripWorkspaceRestrictedSettings(settings: Settings): Settings {
     if (stripped[key] === undefined) continue;
     const { [key]: _restricted, ...rest } = stripped;
     stripped = rest as Settings;
+  }
+  if (stripped.env) {
+    stripped = {
+      ...stripped,
+      env: Object.fromEntries(
+        Object.entries(stripped.env).filter(
+          ([key]) => !isOperatorOnlyEnvKey(key),
+        ),
+      ),
+    };
+  }
+  if (stripped.mcpServers) {
+    stripped = {
+      ...stripped,
+      mcpServers: Object.fromEntries(
+        Object.entries(stripped.mcpServers).map(([name, server]) => {
+          if (!server || typeof server !== 'object') return [name, server];
+          const { trust: _trust, ...rest } = server;
+          return [name, rest];
+        }),
+      ),
+    };
   }
   return stripSettingKeys(stripped, WORKSPACE_RESTRICTED_SETTINGS);
 }
@@ -877,18 +854,6 @@ export class LoadedSettings {
    */
   getUserHooks(): Record<string, unknown> | undefined {
     return this.user.settings.hooks;
-  }
-
-  /**
-   * Get project-level hooks from workspace settings (not merged).
-   * Returns undefined if workspace is not trusted (hooks filtered out).
-   */
-  getProjectHooks(): Record<string, unknown> | undefined {
-    // Only return project hooks if workspace is trusted
-    if (!this.isTrusted) {
-      return undefined;
-    }
-    return this.workspace.settings.hooks;
   }
 }
 
@@ -1510,7 +1475,7 @@ export function saveSettings(
     // Ensure the directory exists
     const dirPath = path.dirname(settingsFile.path);
     if (!fs.existsSync(dirPath)) {
-      fs.mkdirSync(dirPath, { recursive: true });
+      fs.mkdirSync(dirPath, { recursive: true, mode: 0o700 });
     }
 
     // Use the format-preserving update function

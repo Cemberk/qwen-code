@@ -2563,7 +2563,6 @@ export class ExtensionManager {
   async uninstallExtension(
     extensionIdentifier: string,
     isUpdate: boolean,
-    cwd?: string,
     onCommitted?: ExtensionCommitCallback,
   ): Promise<ExtensionStoreMutationResult> {
     const endMutation = this.beginMutation('uninstallExtension');
@@ -2595,7 +2594,6 @@ export class ExtensionManager {
   async uninstallExtensionById(
     extensionId: string,
     isUpdate: boolean,
-    cwd?: string,
     onCommitted?: ExtensionCommitCallback,
   ): Promise<ExtensionStoreMutationResult> {
     const endMutation = this.beginMutation('uninstallExtension');

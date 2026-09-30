@@ -84,7 +84,7 @@ import {
   type BackgroundNotificationKind,
   renderGoalContinuationTurn,
 } from '@qwen-code/qwen-code-core';
-import { type Part, type PartListUnion, FinishReason } from '@google/genai';
+import type { FinishReason, Part, PartListUnion } from '@google/genai';
 import type {
   HistoryItem,
   HistoryItemWithoutId,
@@ -2364,32 +2364,25 @@ export const useLlmStream = (
       }
 
       const finishReasonMessages: Record<FinishReason, string | undefined> = {
-        [FinishReason.FINISH_REASON_UNSPECIFIED]: undefined,
-        [FinishReason.STOP]: undefined,
-        [FinishReason.MAX_TOKENS]: 'Response truncated due to token limits.',
-        [FinishReason.SAFETY]: 'Response stopped due to safety reasons.',
-        [FinishReason.RECITATION]: 'Response stopped due to recitation policy.',
-        [FinishReason.LANGUAGE]:
-          'Response stopped due to unsupported language.',
-        [FinishReason.BLOCKLIST]: 'Response stopped due to forbidden terms.',
-        [FinishReason.PROHIBITED_CONTENT]:
-          'Response stopped due to prohibited content.',
-        [FinishReason.SPII]:
-          'Response stopped due to sensitive personally identifiable information.',
-        [FinishReason.OTHER]: 'Response stopped for other reasons.',
-        [FinishReason.MALFORMED_FUNCTION_CALL]:
+        FINISH_REASON_UNSPECIFIED: undefined,
+        STOP: undefined,
+        MAX_TOKENS: 'Response truncated due to token limits.',
+        SAFETY: 'Response stopped due to safety reasons.',
+        RECITATION: 'Response stopped due to recitation policy.',
+        LANGUAGE: 'Response stopped due to unsupported language.',
+        BLOCKLIST: 'Response stopped due to forbidden terms.',
+        PROHIBITED_CONTENT: 'Response stopped due to prohibited content.',
+        SPII: 'Response stopped due to sensitive personally identifiable information.',
+        OTHER: 'Response stopped for other reasons.',
+        MALFORMED_FUNCTION_CALL:
           'Response stopped due to malformed function call.',
-        [FinishReason.IMAGE_SAFETY]:
-          'Response stopped due to image safety violations.',
-        [FinishReason.IMAGE_PROHIBITED_CONTENT]:
+        IMAGE_SAFETY: 'Response stopped due to image safety violations.',
+        IMAGE_PROHIBITED_CONTENT:
           'Response stopped due to image prohibited content.',
-        [FinishReason.IMAGE_RECITATION]:
-          'Response stopped due to image recitation policy.',
-        [FinishReason.IMAGE_OTHER]:
-          'Response stopped due to other image-related reasons.',
-        [FinishReason.NO_IMAGE]: 'Response stopped due to no image.',
-        [FinishReason.UNEXPECTED_TOOL_CALL]:
-          'Response stopped due to unexpected tool call.',
+        IMAGE_RECITATION: 'Response stopped due to image recitation policy.',
+        IMAGE_OTHER: 'Response stopped due to other image-related reasons.',
+        NO_IMAGE: 'Response stopped due to no image.',
+        UNEXPECTED_TOOL_CALL: 'Response stopped due to unexpected tool call.',
       };
 
       const message = finishReasonMessages[finishReason];

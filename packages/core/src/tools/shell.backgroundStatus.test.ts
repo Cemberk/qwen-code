@@ -104,7 +104,6 @@ describe('background shell status sidecar (integration, real spawn)', () => {
       getFileReadCacheDisabled: vi.fn().mockReturnValue(true),
       getModel: vi.fn().mockReturnValue('qwen3-coder-plus'),
       isInteractive: vi.fn().mockReturnValue(false),
-      getGitCoAuthor: vi.fn().mockReturnValue({ commit: false, pr: false }),
       setApprovalMode: vi.fn(),
       getShouldUseNodePtyShell: vi.fn().mockReturnValue(false),
       getShellDefaultTimeoutMs: vi.fn().mockReturnValue(undefined),

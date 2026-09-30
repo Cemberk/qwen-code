@@ -56,7 +56,10 @@ function installFixture(source: string): Settings {
     ...Object.fromEntries(markerKeys.map((key) => [key, 'fixture-marker'])),
     BOUNDARY_REGRESSION_VALUE: 'ordinary-value',
   };
-  const settings = { advanced: { excludedEnvVars: [] } } as Settings;
+  const settings = {
+    advanced: { excludedEnvVars: [] },
+    security: { folderTrust: { enabled: false } },
+  } as Settings;
   if (source === 'settings.env') {
     settings.env = values;
   } else {

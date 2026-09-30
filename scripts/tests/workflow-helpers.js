@@ -19,17 +19,3 @@ export function getWorkflowJob(workflow, jobName) {
     nextJob ? start + marker.length + nextJob.index : undefined,
   );
 }
-
-export function getWorkflowStep(job, stepName) {
-  const marker = `      - name: '${stepName}'`;
-  const start = job.indexOf(marker);
-  expect(start).toBeGreaterThanOrEqual(0);
-
-  const afterMarker = job.slice(start + marker.length);
-  const nextStep = afterMarker.match(/\n {6}- /);
-
-  return job.slice(
-    start,
-    nextStep ? start + marker.length + nextStep.index : undefined,
-  );
-}

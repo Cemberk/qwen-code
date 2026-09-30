@@ -274,7 +274,7 @@ describe('createLoadedSettingsAdapter', () => {
     }
   });
 
-  it('rejects a User install shadowed by the Workspace bucket without changing either scope', async () => {
+  it('rejects a User install shadowed by the System bucket without changing either scope', async () => {
     const root = fs.mkdtempSync(
       path.join(os.tmpdir(), 'provider-shadow-placeholder-'),
     );
@@ -286,7 +286,8 @@ describe('createLoadedSettingsAdapter', () => {
     vi.stubEnv('QWEN_HOME', userHome);
     vi.stubEnv('SHADOW_SIBLING_HEADER', 'test-only-secret');
     const userFile = path.join(userHome, 'settings.json');
-    const workspaceFile = path.join(workspace, '.qwen', 'settings.json');
+    const systemFile = path.join(root, 'system-settings.json');
+    vi.stubEnv('QWEN_CODE_SYSTEM_SETTINGS_PATH', systemFile);
     const sibling = {
       id: 'keep',
       baseUrl: 'http://localhost:1234/v1',
@@ -304,13 +305,13 @@ describe('createLoadedSettingsAdapter', () => {
         },
       }),
     );
-    const workspaceBytes = JSON.stringify({
+    const systemBytes = JSON.stringify({
       $version: 4,
       modelProviders: {
-        openai: [{ id: 'workspace', baseUrl: LOCAL_BASE_URL }],
+        openai: [{ id: 'system', baseUrl: LOCAL_BASE_URL }],
       },
     });
-    fs.writeFileSync(workspaceFile, workspaceBytes);
+    fs.writeFileSync(systemFile, systemBytes);
     try {
       const loaded = loadSettings(workspace, {
         skipLoadEnvironment: true,
@@ -336,7 +337,7 @@ describe('createLoadedSettingsAdapter', () => {
       expect(fs.readFileSync(userFile, 'utf8')).not.toContain(
         'test-only-secret',
       );
-      expect(fs.readFileSync(workspaceFile, 'utf8')).toBe(workspaceBytes);
+      expect(fs.readFileSync(systemFile, 'utf8')).toBe(systemBytes);
     } finally {
       vi.unstubAllEnvs();
     }
@@ -352,17 +353,18 @@ describe('createLoadedSettingsAdapter', () => {
       fs.mkdirSync(userHome);
       vi.stubEnv('QWEN_HOME', userHome);
       const userFile = path.join(userHome, 'settings.json');
-      const workspaceFile = path.join(workspace, '.qwen', 'settings.json');
+      const systemFile = path.join(root, 'system-settings.json');
+      vi.stubEnv('QWEN_CODE_SYSTEM_SETTINGS_PATH', systemFile);
       const originalUser =
         '{"$version":4,"modelProviders":{"openai":[{"id":"old-user","baseUrl":"http://127.0.0.1:11434/v1"}]}}\n';
-      const originalWorkspace = JSON.stringify({
+      const originalSystem = JSON.stringify({
         $version: 4,
         modelProviders: {
-          openai: [{ id: 'workspace-chat', baseUrl: LOCAL_BASE_URL }],
+          openai: [{ id: 'system-chat', baseUrl: LOCAL_BASE_URL }],
         },
       });
       if (existingFile) fs.writeFileSync(userFile, originalUser);
-      fs.writeFileSync(workspaceFile, originalWorkspace);
+      fs.writeFileSync(systemFile, originalSystem);
       try {
         const loaded = loadSettings(workspace, {
           skipLoadEnvironment: true,
@@ -389,21 +391,10 @@ describe('createLoadedSettingsAdapter', () => {
         expect(fs.existsSync(userFile)).toBe(existingFile);
         if (existingFile)
           expect(fs.readFileSync(userFile, 'utf8')).toBe(originalUser);
-        expect(fs.readFileSync(workspaceFile, 'utf8')).toBe(originalWorkspace);
+        expect(fs.readFileSync(systemFile, 'utf8')).toBe(originalSystem);
         expect(loaded.merged).toEqual(before);
         expect(process.env[envKey]).toBe(originalEnv);
         expect(fs.existsSync(userFile + '.orig')).toBe(false);
-        await applyProviderInstallPlan(plan, {
-          settings: createLoadedSettingsAdapter(loaded, SettingScope.Workspace),
-          doRefreshAuth: false,
-        });
-        expect(loaded.merged.model?.name).toBe('new-model');
-        expect(loaded.merged.modelProviders?.['openai']?.[0]?.id).toBe(
-          'new-model',
-        );
-        expect(fs.existsSync(workspaceFile + '.orig')).toBe(false);
-        if (originalEnv === undefined) delete process.env[envKey];
-        else process.env[envKey] = originalEnv;
       } finally {
         vi.unstubAllEnvs();
         fs.rmSync(root, { recursive: true, force: true });
@@ -411,7 +402,7 @@ describe('createLoadedSettingsAdapter', () => {
     },
   );
 
-  it.each([SettingScope.User, SettingScope.Workspace])(
+  it.each([SettingScope.User])(
     'preserves placeholders on disk and resolved runtime values during reconnect (%s)',
     async (scope) => {
       const root = fs.mkdtempSync(path.join(os.tmpdir(), 'provider-raw-'));
@@ -606,30 +597,24 @@ describe('getRawModelProviders', () => {
     },
   };
 
-  it('returns each merged bucket from the scope that defines it, unresolved', () => {
-    const settings = scoped(files, {
-      modelProviders: { openai: [{ id: 'local-ws', envKey: 'ws-live' }] },
-    });
-    expect(getRawModelProviders(settings)).toEqual({
-      openai: [{ id: 'local-ws', envKey: '${WS_KEY}' }],
-    });
-  });
-
-  it('skips workspace buckets while the workspace is untrusted', () => {
-    const settings = scoped(
-      files,
-      {
-        modelProviders: {
-          openai: [
-            {
-              ...userModel,
-              generationConfig: { extra_body: { api_key: 'sk-live' } },
-            },
-          ],
+  it.each([true, false])(
+    'returns the unresolved operator bucket and never a workspace one (trusted: %s)',
+    (isTrusted) => {
+      const settings = scoped(
+        files,
+        {
+          modelProviders: {
+            openai: [
+              {
+                ...userModel,
+                generationConfig: { extra_body: { api_key: 'sk-live' } },
+              },
+            ],
+          },
         },
-      },
-      false,
-    );
-    expect(getRawModelProviders(settings)).toEqual({ openai: [userModel] });
-  });
+        isTrusted,
+      );
+      expect(getRawModelProviders(settings)).toEqual({ openai: [userModel] });
+    },
+  );
 });

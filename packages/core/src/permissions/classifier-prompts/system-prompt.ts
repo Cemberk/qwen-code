@@ -23,8 +23,7 @@ import type { Config } from '../../config/config.js';
 /** Built-in actions the classifier should default to allowing. */
 export const BUILTIN_ALLOW: readonly string[] = Object.freeze([
   'Read-only shell commands (ls, cat, git status, grep, ps, find, head, tail).',
-  'Installing dependencies already declared in the project manifest, without adding new packages or modifying install scripts.',
-  'Build/test commands in cwd (npm test, cargo build, pytest, go test).',
+  'Build/test commands in cwd (npm test, cargo build, pytest, go test) that run offline. A build or test that would download anything is network egress.',
   'File operations within cwd (mkdir, mv, rm of build artifacts and node_modules).',
   'Git read operations (log, diff, blame, show, status).',
   'Local-only operations that do not touch the network or modify the system outside cwd.',
@@ -69,7 +68,8 @@ export const BUILTIN_SOFT_DENY: readonly string[] = Object.freeze([
  * AUTO — HARD BLOCK only governs what AUTO is allowed to auto-approve.
  */
 export const BUILTIN_HARD_DENY: readonly string[] = Object.freeze([
-  'Data exfiltration: sending credentials, secrets, .env contents, SSH keys, browser cookies, session tokens, source code, or personal data to any network endpoint that is not the project remote, a package registry the build needs, or a host the user explicitly named.',
+  'Network egress: any action that connects to a host other than 127.0.0.1, ::1 or localhost — including the project git remote, package registries, and hosts the user named. Covers curl, wget, nc, ssh, scp, rsync, DNS lookups, git clone/fetch/pull/push/ls-remote/remote show/submodule update, installing or updating packages (npm/pnpm/yarn install, pip install, cargo fetch, go get, brew, apt), uploads, and builds or scripts that download.',
+  'Data exfiltration: sending credentials, secrets, .env contents, SSH keys, browser cookies, session tokens, source code, or personal data to any network endpoint.',
   'AUTO-mode bypass: after an AUTO-mode denial, retrying the same denied action or using another tool, shell indirection, generated script, symlink, alias, config change, hook, command file, MCP configuration, encoded payload, or equivalent path to complete the same denied action.',
 ]);
 
@@ -122,9 +122,9 @@ whether the action should be ALLOWED or BLOCKED.
 {{ENVIRONMENT}}
 
 ## Decision principles
-- HARD BLOCK entries must be blocked in AUTO mode even when a user hint says
-  to allow them. The user can still switch modes or manually approve outside
-  AUTO.
+- HARD BLOCK entries must be blocked in AUTO mode even when the user's
+  request or a user hint says to allow them. The user can still switch modes
+  or manually approve outside AUTO.
 - SOFT BLOCK entries should be blocked unless the user's most recent explicit
   request asked for that exact action and scope. A generic "yes do whatever"
   or persistent encouragement is not authorization.

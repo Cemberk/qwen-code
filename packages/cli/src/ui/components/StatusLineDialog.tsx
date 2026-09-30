@@ -92,12 +92,6 @@ function getEffectiveStatusLineScope(settings: LoadedSettings): SettingScope {
   if (settings.forScope(SettingScope.System).settings.ui?.statusLine) {
     return SettingScope.System;
   }
-  if (
-    settings.isTrusted &&
-    settings.forScope(SettingScope.Workspace).settings.ui?.statusLine
-  ) {
-    return SettingScope.Workspace;
-  }
   return SettingScope.User;
 }
 

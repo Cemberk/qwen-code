@@ -70,7 +70,7 @@ function ensureDebugDirExists(): Promise<void> {
   if (!ensureDebugDirPromise || ensuredDebugDirPath !== debugDirPath) {
     ensuredDebugDirPath = debugDirPath;
     ensureDebugDirPromise = fs
-      .mkdir(debugDirPath, { recursive: true })
+      .mkdir(debugDirPath, { recursive: true, mode: 0o700 })
       .then(() => undefined)
       .catch(() => {
         hasWriteFailure = true;
@@ -143,7 +143,9 @@ function writeLog(
     // degraded-mode UI. Kernel page-cache flush is sufficient here.
     // (JSONL session writes via writeLine/writeLineSync DO use
     // flush:true — those are the actual closure target.)
-    .then(() => fs.appendFile(logFilePath, line, 'utf8'))
+    .then(() =>
+      fs.appendFile(logFilePath, line, { encoding: 'utf8', mode: 0o600 }),
+    )
     .catch(() => {
       hasWriteFailure = true;
     });

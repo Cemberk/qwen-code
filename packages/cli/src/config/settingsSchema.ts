@@ -102,27 +102,6 @@ export interface SettingDefinition {
   /** Values rejected even when they fall within the declared range. */
   excludedValues?: ReadonlyArray<string | number>;
   /**
-   * Primitive shapes a field accepted before it was expanded to its current
-   * type. The exported JSON Schema wraps the field in `anyOf` so values from
-   * those older shapes don't trip the IDE validator while the runtime
-   * migration is still pending. Has no runtime effect — it's purely a
-   * compatibility hint for editors.
-   *
-   * Narrowed to the subset our generator can faithfully emit as a
-   * one-liner `{ type: <legacyType> }` schema fragment. `'enum'` is
-   * not a valid JSON Schema `type` value at all (enum constraints
-   * use the `enum` keyword, not `type: 'enum'`), so allowing it here
-   * would silently produce an invalid `settings.schema.json`.
-   * `'object'` IS a valid JSON Schema type, but a bare
-   * `{ type: 'object' }` legacy entry would accept ANY object value
-   * — most likely not what the field's pre-expansion shape actually
-   * permitted. Future legacy shapes that need `enum` / structured-
-   * object compatibility should land their own branch in
-   * `convertSettingToJsonSchema` (with proper `enum:` / `properties:`
-   * companions) instead of widening this set.
-   */
-  legacyTypes?: ReadonlyArray<'boolean' | 'string' | 'number' | 'array'>;
-  /**
    * Escape hatch for the JSON Schema generator: when set, this object is
    * emitted verbatim under the setting's properties entry instead of the
    * shape derived from `type`/`properties`/etc. The `description` is still
@@ -405,49 +384,6 @@ const SETTINGS_SCHEMA = {
         description:
           'Number of days to retain ~/.qwen/file-history/ session backups used by /rewind, background subagent transcripts under <projectDir>/subagents/, and session debug logs under the runtime debug/ directory. Data older than this is removed by a background housekeeping pass that runs at most once per day. Set to 0 for minimum retention (~1 hour) — protects sessions touched in the last hour, plus the currently active session.',
         showInDialog: true,
-      },
-      gitCoAuthor: {
-        type: 'object',
-        label: 'Attribution',
-        category: 'General',
-        requiresRestart: false,
-        // Match `normalizeGitCoAuthor`'s runtime defaults so the IDE
-        // schema publishes the same "enabled by default" hint users see
-        // at runtime. The empty-object form here would silently lose
-        // editor-surfaced defaults.
-        default: { commit: true, pr: true },
-        description:
-          'Attribution added to git commits and pull requests created through Qwen Code.',
-        showInDialog: false,
-        // Pre-V4 settings stored this as a single boolean. The V3→V4
-        // migration rewrites those on first launch, but the IDE schema
-        // validator runs before that — accept the boolean shape so users
-        // editing settings.json in VS Code don't see a spurious warning
-        // until they run qwen once. Config.normalizeGitCoAuthor handles
-        // the boolean at runtime.
-        legacyTypes: ['boolean'],
-        properties: {
-          commit: {
-            type: 'boolean',
-            label: 'Attribution: commit',
-            category: 'General',
-            requiresRestart: false,
-            default: true,
-            description:
-              'Add a Co-authored-by trailer to git commit messages AND attach a per-file AI-attribution git note (`refs/notes/ai-attribution`) for commits made through Qwen Code. Disabling skips both.',
-            showInDialog: true,
-          },
-          pr: {
-            type: 'boolean',
-            label: 'Attribution: PR',
-            category: 'General',
-            requiresRestart: false,
-            default: true,
-            description:
-              'Append a Qwen Code attribution line to PR descriptions when running `gh pr create`.',
-            showInDialog: true,
-          },
-        },
       },
       debugKeystrokeLogging: {
         type: 'boolean',
@@ -2531,7 +2467,7 @@ const SETTINGS_SCHEMA = {
         label: 'Tool Approval Mode',
         category: 'Tools',
         requiresRestart: false,
-        default: ApprovalMode.AUTO,
+        default: ApprovalMode.DEFAULT,
         description:
           'Approval mode for tool usage. Controls how tools are approved before execution.',
         showInDialog: true,
@@ -2751,7 +2687,7 @@ const SETTINGS_SCHEMA = {
             label: 'Folder Trust',
             category: 'Security',
             requiresRestart: true,
-            default: false,
+            default: true,
             description: 'Setting to track whether Folder trust is enabled.',
             showInDialog: false,
           },

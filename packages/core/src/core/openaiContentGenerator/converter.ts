@@ -17,7 +17,7 @@ import type {
   PartUnion,
   Candidate,
 } from '@google/genai';
-import { GenerateContentResponse, FinishReason } from '@google/genai';
+import { FinishReason, GenerateContentResponse } from '../genai-compat.js';
 import type OpenAI from 'openai';
 import { safeJsonParse } from '../../utils/safeJsonParse.js';
 import { createDebugLogger } from '../../utils/debugLogger.js';

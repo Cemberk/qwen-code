@@ -155,8 +155,7 @@ export function getAllSettingKeys(): string[] {
  * 2. Localization
  * 3. Editor/Shell experience
  * 4. Display preferences
- * 5. Git behavior
- * 6. File filtering
+ * 5. File filtering
  *
  * New settings with showInDialog: true that are not listed here
  * will appear at the end of the list.
@@ -184,10 +183,6 @@ const SETTINGS_DIALOG_ORDER: readonly string[] = [
   'ui.showToolCallDetails',
   'general.terminalBell',
   'ui.enableWelcomeBack',
-
-  // Git Behavior
-  'general.gitCoAuthor.commit',
-  'general.gitCoAuthor.pr',
 
   // File Filtering
   'context.fileFiltering.respectGitIgnore',
@@ -271,6 +266,27 @@ export const WORKSPACE_RESTRICTED_SETTINGS = [
   { section: 'tools', key: 'executionSandbox' },
   { section: 'tools', key: 'workflowsEnabled' },
   { section: 'goals', key: 'modelProposed' },
+  // Approval: a repository must not loosen how tool calls are approved.
+  { section: 'tools', key: 'approvalMode' },
+  { section: 'tools', key: 'autoAccept' },
+  { section: 'tools', key: 'allowed' },
+  { section: 'permissions', key: 'allow' },
+  { section: 'permissions', key: 'autoMode' },
+  // Commands run on the host without a tool approval.
+  { section: 'tools', key: 'discoveryCommand' },
+  { section: 'tools', key: 'callCommand' },
+  { section: 'tools', key: 'shell' },
+  { section: 'mcp', key: 'serverCommand' },
+  { section: 'ui', key: 'statusLine' },
+  // Sandbox, credentials, trust and storage locations.
+  { section: 'tools', key: 'sandbox' },
+  { section: 'tools', key: 'sandboxImage' },
+  { section: 'security', key: 'auth' },
+  { section: 'security', key: 'folderTrust' },
+  { section: 'advanced', key: 'runtimeOutputDir' },
+  { section: 'advanced', key: 'excludedEnvVars' },
+  { section: 'skills', key: 'directories' },
+  { section: 'memory', key: 'enableTeamMemory' },
 ] as const satisfies ReadonlyArray<{
   readonly section: keyof Settings;
   readonly key: string;
@@ -285,6 +301,16 @@ export const WORKSPACE_RESTRICTED_SETTINGS = [
 export const WORKSPACE_RESTRICTED_ROOT_SETTINGS = [
   'advisorModel',
   'advisorMaxUses',
+  'hooks',
+  'disableAllHooks',
+  'modelProviders',
+  'model',
+  'fastModel',
+  'compactionModel',
+  'visionModel',
+  'modelFallbacks',
+  'dualOutput',
+  'telemetry',
 ] as const;
 
 /**
@@ -322,9 +348,23 @@ export const WORKSPACE_TIGHTEN_ONLY_SETTINGS = [
   readonly strictness: (value: unknown) => number;
 }>;
 
-/** The restricted settings as flattened dotted keys, e.g. `tools.workflowsEnabled`. */
-export const WORKSPACE_RESTRICTED_SETTING_KEYS: readonly string[] =
-  WORKSPACE_RESTRICTED_SETTINGS.map(({ section, key }) => `${section}.${key}`);
+/**
+ * The restricted settings as flattened dotted keys, e.g. `tools.workflowsEnabled`,
+ * followed by the restricted root settings. A restricted key also covers every
+ * setting nested under it (see {@link isWorkspaceRestrictedSettingKey}).
+ */
+export const WORKSPACE_RESTRICTED_SETTING_KEYS: readonly string[] = [
+  ...WORKSPACE_RESTRICTED_SETTINGS.map(
+    ({ section, key }) => `${section}.${key}`,
+  ),
+  ...WORKSPACE_RESTRICTED_ROOT_SETTINGS,
+];
+
+export function isWorkspaceRestrictedSettingKey(key: string): boolean {
+  return WORKSPACE_RESTRICTED_SETTING_KEYS.some(
+    (restricted) => key === restricted || key.startsWith(`${restricted}.`),
+  );
+}
 
 /**
  * Get all setting keys that should be shown in the dialog, sorted by display order.
@@ -344,7 +384,7 @@ export function getDialogSettingKeys(options?: {
     .filter(
       (key) =>
         !options?.excludeWorkspaceRestricted ||
-        !WORKSPACE_RESTRICTED_SETTING_KEYS.includes(key),
+        !isWorkspaceRestrictedSettingKey(key),
     );
 
   // Sort by explicit order; settings not in the order array appear at the end

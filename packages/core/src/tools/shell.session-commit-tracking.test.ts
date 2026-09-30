@@ -44,7 +44,6 @@ import {
 } from '../services/shellExecutionService.js';
 import { makeFakeConfig } from '../test-utils/config.js';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
-import { CommitAttributionService } from '../services/commitAttribution.js';
 import { ShellTool } from './shell.js';
 import { ToolNames } from './tool-names.js';
 import { evaluateAutoMode } from '../permissions/autoMode.js';
@@ -163,7 +162,7 @@ describe.skipIf(process.platform === 'win32')(
       return dir;
     }
 
-    /** Subject + trailer assertions shared by the loose-spelling rows. */
+    /** Subject assertions shared by the loose-spelling rows. */
     function expectFeatureCommitLanded(preHead: string): void {
       expect(headSha()).not.toBe(preHead);
       expect(
@@ -172,26 +171,11 @@ describe.skipIf(process.platform === 'win32')(
           encoding: 'utf-8',
         }).trim(),
       ).toBe('feature');
-      // Trailer alignment (issue #12514 constraint): for the spellings
-      // this suite drives, a commit that earns the amend exemption also
-      // earns the Co-authored-by trailer. That is recognition alignment
-      // between the two walks, not a universal invariant — a commit
-      // hidden inside a `bash -c` wrapper registers while the rewriter
-      // is deliberately a no-op (see `findAttributableCommitSegment`),
-      // and a `cd` behind a noise keyword suppresses both (pinned by the
-      // never-executing-branch row below).
-      expect(
-        execSync('git log -1 --pretty=%B', {
-          cwd: repoDir,
-          encoding: 'utf-8',
-        }),
-      ).toContain('Co-authored-by: Qwen-Coder <qwen-coder@alibabacloud.com>');
     }
 
     beforeEach(() => {
       vi.clearAllMocks();
       clearSessionCommits();
-      CommitAttributionService.resetInstance();
       simulatePromote = false;
       deferPromoteSettle = false;
       firePromoteSettle = null;
@@ -303,12 +287,6 @@ describe.skipIf(process.platform === 'win32')(
         getLlmClient: vi.fn(),
         getModel: vi.fn().mockReturnValue('qwen3-coder-plus'),
         isInteractive: vi.fn().mockReturnValue(true),
-        getGitCoAuthor: vi.fn().mockReturnValue({
-          commit: true,
-          pr: true,
-          name: 'Qwen-Coder',
-          email: 'qwen-coder@alibabacloud.com',
-        }),
         getShouldUseNodePtyShell: vi.fn().mockReturnValue(false),
         getShellDefaultTimeoutMs: vi.fn().mockReturnValue(undefined),
         getShellHeartbeatIntervalMs: vi.fn().mockReturnValue(undefined),
@@ -329,7 +307,6 @@ describe.skipIf(process.platform === 'win32')(
     afterEach(() => {
       vi.unstubAllEnvs();
       clearSessionCommits();
-      CommitAttributionService.resetInstance();
       fs.rmSync(repoDir, { recursive: true, force: true });
       for (const otherDir of otherRepoDirs) {
         fs.rmSync(otherDir, { recursive: true, force: true });
@@ -462,9 +439,9 @@ describe.skipIf(process.platform === 'win32')(
 
     it('does not register a foreground commit that a `cd` segment lands in another repository', async () => {
       // Regression pin: the loose recogniser must keep the cwd-shift
-      // guard. `cd /elsewhere && git commit` is `hasCommit` but not
-      // attributable/registrable in our cwd — the commit lands in the
-      // other repo and our registry must stay empty.
+      // guard. `cd /elsewhere && git commit` does not land in our cwd —
+      // the commit lands in the other repo and our registry must stay
+      // empty.
       const otherDir = makeOtherRepo();
       fs.writeFileSync(path.join(otherDir, 'work.txt'), 'work\n');
       const repoHeadBefore = headSha();
@@ -484,9 +461,8 @@ describe.skipIf(process.platform === 'win32')(
       expect(amendVerdict()?.blocked).toBe(true);
     });
 
-    // R1-11: `COMMIT_RECOGNITION_LEADING_NOISE` is consumed by the one
-    // shared helper both recognisers call, so a row per token pins both
-    // consumers (registration and the trailer rewrite) at once. Each
+    // R1-11: `COMMIT_RECOGNITION_LEADING_NOISE` is consumed by the
+    // recogniser registration calls, so a row per token pins it. Each
     // spelling puts its token at the head of the segment that carries
     // the `git commit` — the only position where the token is
     // load-bearing. `for`, `fi`, `done` and `}` are deliberately absent:
@@ -537,13 +513,11 @@ describe.skipIf(process.platform === 'win32')(
       },
     );
 
-    it('gives the trailer to a later in-cwd commit after a redirected `git -C <other> commit`', async () => {
-      // R1-16(b): `gitCommitContext` latches its cwd-shift only on a
+    it('registers a later in-cwd commit after a redirected `git -C <other> commit`', async () => {
+      // R1-16(b): `commitLandsInCwd` latches its cwd-shift only on a
       // NON-commit `git -C …` (the `else if (changesCwd && !hasCommit)`
-      // arm), so for this chain it calls the second commit attributable
-      // and registers it. The trailer walk must not latch where the
-      // registration walk does not, or the commit earns the amend
-      // exemption while carrying no provenance marker at all.
+      // arm), so for this chain it calls the second commit in-cwd and
+      // registers it.
       const otherDir = makeOtherRepo();
       fs.writeFileSync(path.join(otherDir, 'work.txt'), 'other work\n');
       execSync('git add work.txt', { cwd: otherDir });
@@ -556,16 +530,6 @@ describe.skipIf(process.platform === 'win32')(
 
       expectFeatureCommitLanded(preHead);
       expect(amendVerdict()).toBeNull();
-      // The redirected commit landed in the OTHER repository and must
-      // not carry our trailer: that wrong-repo stamping is what the
-      // latch exists for, and why the fix is "don't latch on a commit
-      // segment" rather than "don't latch at all".
-      expect(
-        execSync('git log -1 --pretty=%B', {
-          cwd: otherDir,
-          encoding: 'utf-8',
-        }),
-      ).not.toContain('Co-authored-by: Qwen-Coder');
     });
 
     it('keeps recognition conservative when a `cd` hides behind a keyword in a branch that never runs', async () => {
@@ -573,17 +537,17 @@ describe.skipIf(process.platform === 'win32')(
       // `then cd <other>` reaches `cdTargetMayChangeRepo` and suppresses
       // recognition — even though that branch never executes and the
       // commit really lands here. Pre-#12514 the `tokens[0]`-only walk
-      // saw `then`, ignored the `cd`, and both registered and spliced
-      // the trailer, so this row is red at the merge base.
+      // saw `then`, ignored the `cd`, and registered, so this row is red
+      // at the merge base.
       //
       // The narrowing is the conservative half of a trade-off that
       // cannot be resolved statically: `splitCommands` evaluates
       // nothing, so a false-branch and a true-branch `cd` produce
       // identical segment sequences, and any loosening that recovers
-      // this row also re-admits stamping our trailer onto a commit in a
-      // DIFFERENT repository (`if true; then cd <other>; fi && git
-      // commit`). Pinned as-is so loosening has to be a deliberate,
-      // reviewed act instead of a silent regression.
+      // this row also re-admits registering a commit in a DIFFERENT
+      // repository (`if true; then cd <other>; fi && git commit`).
+      // Pinned as-is so loosening has to be a deliberate, reviewed act
+      // instead of a silent regression.
       const otherDir = makeOtherRepo();
       fs.writeFileSync(path.join(repoDir, 'feature.txt'), 'work\n');
       const preHead = headSha();
@@ -600,16 +564,10 @@ describe.skipIf(process.platform === 'win32')(
           encoding: 'utf-8',
         }).trim(),
       ).toBe('feature');
-      // …with no trailer, and recognition stays off, so the follow-up
-      // amend is blocked. That false block is accepted here because the
-      // alternative is wrong-repo stamping; the other repository must
-      // stay untouched either way.
-      expect(
-        execSync('git log -1 --pretty=%B', {
-          cwd: repoDir,
-          encoding: 'utf-8',
-        }),
-      ).not.toContain('Co-authored-by: Qwen-Coder');
+      // …but recognition stays off, so the follow-up amend is blocked.
+      // That false block is accepted here because the alternative is
+      // wrong-repo registration; the other repository must stay
+      // untouched either way.
       expect(amendVerdict()?.blocked).toBe(true);
       expect(
         execSync('git log -1 --pretty=%s', {
@@ -621,9 +579,8 @@ describe.skipIf(process.platform === 'win32')(
 
     it('registers a commit landed by a Ctrl+B-promoted foreground command once it settles (issue #12514)', async () => {
       // #12514-A.3: `handlePromotedForeground` returns before the
-      // attribution/registration block in `execute()`, so a commit landed
-      // by a promoted command used to earn no exemption — unlike
-      // `executeBackground`, which refuses `git commit` outright.
+      // registration block in `execute()`, so a commit landed by a
+      // promoted command used to earn no exemption.
       simulatePromote = true;
       fs.writeFileSync(path.join(repoDir, 'feature.txt'), 'work\n');
       const preHead = headSha();
@@ -842,10 +799,10 @@ describe.skipIf(process.platform === 'win32')(
       // non-deterministic classifier.
       //
       // The chain really does reach the registration call site:
-      // `gitCommitContext` only latches `cwdShifted` on cd/pushd/popd or a
-      // cwd-shifting git flag, and `git pull` is neither, so
-      // `attributableInCwd` stays true; and the call site is gated on
-      // sandbox/attributability only, with no exit-code condition.
+      // `commitLandsInCwd` only latches `cwdShifted` on cd/pushd/popd or a
+      // cwd-shifting git flag, and `git pull` is neither, so it stays
+      // true; and the call site is gated on sandbox/in-cwd only, with no
+      // exit-code condition.
       const upstreamDir = fs.mkdtempSync(
         path.join(os.tmpdir(), 'qwen-12460-upstream-'),
       );
@@ -1086,30 +1043,28 @@ describe.skipIf(process.platform === 'win32')(
       expect(amendVerdict()).toBeNull();
     });
 
-    it('registers the commit even when gitCoAuthor.commit attribution is disabled', async () => {
-      // Regression ④: session tracking is deliberately independent of the
-      // commit-attribution toggle. A user who turned attribution off must
-      // not lose the amend exemption.
-      (mockConfig.getGitCoAuthor as ReturnType<typeof vi.fn>).mockReturnValue({
-        commit: false,
-        pr: false,
-        name: 'Qwen-Coder',
-        email: 'qwen-coder@alibabacloud.com',
-      });
-
+    it('runs `git commit -m` unmodified: the message is kept verbatim and no git notes are written', async () => {
       fs.writeFileSync(path.join(repoDir, 'feature.txt'), 'work\n');
-      await runShellCommand('git add feature.txt && git commit -m "feature"');
+      const command = 'git add feature.txt && git commit -m "feature"';
+      await runShellCommand(command);
 
-      // Prove the toggle really took effect: no Co-authored-by trailer was
-      // injected into the commit.
-      const body = execSync('git log -1 --pretty=%B', {
-        cwd: repoDir,
-        encoding: 'utf-8',
-      });
-      expect(body).not.toContain('Co-authored-by');
-
-      // ...and the amend exemption still works, because session tracking
-      // does not consult the attribution toggle.
+      // The executor received exactly the command the model wrote.
+      expect(realExecute).toHaveBeenCalledTimes(1);
+      expect(realExecute.mock.calls[0]![0]).toBe(command);
+      // The commit message is exactly the `-m` value: nothing appended.
+      expect(
+        execSync('git log -1 --pretty=%B', {
+          cwd: repoDir,
+          encoding: 'utf-8',
+        }).trim(),
+      ).toBe('feature');
+      // No git notes ref of any kind was created.
+      expect(
+        execSync('git for-each-ref refs/notes', {
+          cwd: repoDir,
+          encoding: 'utf-8',
+        }).trim(),
+      ).toBe('');
       expect(amendVerdict()).toBeNull();
     });
 

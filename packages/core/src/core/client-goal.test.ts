@@ -174,7 +174,7 @@ function setupGoalClient() {
     recordGoalRuntimeMessage: vi.fn(),
     recordUserMessage: vi.fn(),
     recordNotification: vi.fn(),
-    recordAttributionSnapshot: vi.fn(),
+    refreshGitBranch: vi.fn(),
     recordFileHistorySnapshot: vi.fn(),
     flush: vi.fn(async () => {
       order.push('flush');
@@ -1453,7 +1453,7 @@ describe('LlmClient Goal admission', () => {
     expect(runtime.permitForTurn).toHaveBeenCalledWith(
       `goal-runtime:${permit.turnId}`,
     );
-    expect(recorder.recordAttributionSnapshot).toHaveBeenCalledOnce();
+    expect(recorder.refreshGitBranch).toHaveBeenCalledOnce();
     expect(client['sessionTurnCount']).toBe(1);
   });
 

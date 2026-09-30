@@ -1236,14 +1236,14 @@ describe('SessionTranscriptReader', () => {
       message: undefined,
       systemPayload: { uiEvent } as ChatRecord['systemPayload'],
     };
-    const attributionSnapshot = { v: 1, commits: [] };
+    // Legacy record type no longer written; old transcripts must still load.
     const attribution: ChatRecord = {
       ...record('attribution', 'telemetry', ''),
       type: 'system',
-      subtype: 'attribution_snapshot',
+      subtype: 'attribution_snapshot' as string as ChatRecord['subtype'],
       message: undefined,
       systemPayload: {
-        snapshot: attributionSnapshot,
+        snapshot: { v: 1, commits: [] },
       } as unknown as ChatRecord['systemPayload'],
     };
     const fileHistory: ChatRecord = {
@@ -1394,9 +1394,6 @@ describe('SessionTranscriptReader', () => {
       expectedTurnState.backgroundNotificationTaskIds,
     );
     expect(projection?.runtime.uiTelemetryEvents).toEqual([uiEvent]);
-    expect(projection?.runtime.attributionSnapshot).toEqual(
-      attributionSnapshot,
-    );
     expect(projection?.runtime.recording).toMatchObject({
       customTitle: 'Restored',
       titleSource: 'manual',
@@ -1896,45 +1893,6 @@ describe('SessionTranscriptReader', () => {
     expect(projection?.runtime.resumeTokenCounts).toMatchObject({
       promptTokenCount: 20,
     });
-  });
-
-  it('ignores a later non-snapshot attribution record like the full loader', async () => {
-    const snapshot = {
-      type: 'attribution-snapshot' as const,
-      version: 1,
-      surface: 'cli',
-      fileStates: {},
-      promptCount: 2,
-      promptCountAtLastCommit: 1,
-    };
-    const valid: ChatRecord = {
-      ...record('attribution', 'u1', ''),
-      type: 'system',
-      subtype: 'attribution_snapshot',
-      message: undefined,
-      systemPayload: { snapshot },
-    };
-    const malformed: ChatRecord = {
-      ...record('malformed-attribution', 'attribution', ''),
-      type: 'system',
-      subtype: 'attribution_snapshot',
-      message: undefined,
-      systemPayload: {
-        ignored: true,
-      } as unknown as ChatRecord['systemPayload'],
-    };
-    await writeRecords([
-      record('u1', null, 'prompt'),
-      valid,
-      malformed,
-      record('a1', 'malformed-attribution', 'answer'),
-    ]);
-
-    const projection = await new SessionTranscriptReader(
-      workspaceDir,
-    ).readRestoreProjection(sessionId, { replay: { kind: 'none' } });
-
-    expect(projection?.runtime.attributionSnapshot).toEqual(snapshot);
   });
 
   it('rejects a cold projection when the frozen transcript changes', async () => {

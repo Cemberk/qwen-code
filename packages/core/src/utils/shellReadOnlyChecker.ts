@@ -38,7 +38,6 @@ const READ_ONLY_ROOT_COMMANDS = new Set([
   'grep',
   'head',
   'ls',
-  'printenv',
   'ps',
   'pwd',
   'sed',
@@ -203,7 +202,7 @@ function evaluateAwkCommand(tokens: string[]): boolean {
 
 function evaluateGitRemoteArgs(args: string[]): boolean {
   const action = args.find((arg) => !arg.startsWith('-'))?.toLowerCase();
-  if (action && !['show', 'get-url'].includes(action)) return false;
+  if (action && action !== 'get-url') return false;
   for (const arg of args) {
     if (BLOCKED_GIT_REMOTE_ACTIONS.has(arg.toLowerCase())) return false;
   }
@@ -310,6 +309,15 @@ function evaluateShellSegment(segment: string): boolean {
   if (!READ_ONLY_ROOT_COMMANDS.has(normalizedRoot)) {
     return false;
   }
+  if (normalizedRoot === 'echo' && args.some((arg) => arg.includes('\0')))
+    return false;
+  if (
+    normalizedRoot === 'ps' &&
+    args.some(
+      (arg) => /^-[^-]*E/.test(arg) || /^[a-zA-Z]*e[a-zA-Z]*$/.test(arg),
+    )
+  )
+    return false;
 
   if (normalizedRoot === 'find') {
     return evaluateFindCommand([normalizedRoot, ...args]);
@@ -340,6 +348,7 @@ export function isShellCommandReadOnly(command: string): boolean {
     return false;
   }
   if (MALFORMED_CONTROL_OPERATOR.test(command)) return false;
+  if (/\/dev\/(?:tcp|udp)\/|\benviron\b/.test(command)) return false;
   if (
     /[({;&|]\s*[A-Za-z_][A-Za-z0-9_]*=/.test(command) ||
     /^[A-Za-z_][A-Za-z0-9_]*=.*[;&|]/s.test(command)

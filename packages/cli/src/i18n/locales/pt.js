@@ -411,7 +411,6 @@ export default {
   // Settings Labels
   // ============================================================================
   'Vim Mode': 'Modo Vim',
-  'Attribution: commit': 'Atribuição: commit',
   'Terminal Bell Notification': 'Notificação Sonora do Terminal',
   Theme: 'Tema',
   'Preferred Editor': 'Editor Preferido',

@@ -61,12 +61,10 @@ vi.mock('../models/content-generator-config.js', () => ({
 
 const mockGenerateContent = vi.fn();
 const mockGenerateContentStream = vi.fn();
-const mockEmbedContent = vi.fn();
 
 const mockContentGenerator = {
   generateContent: mockGenerateContent,
   generateContentStream: mockGenerateContentStream,
-  embedContent: mockEmbedContent,
 } as unknown as Mocked<ContentGenerator>;
 
 const mockConfig = {
@@ -819,7 +817,6 @@ describe('BaseLlmClient', () => {
     const fastContentGenerator = {
       generateContent: fastGenerateContent,
       generateContentStream: fastGenerateContentStream,
-      embedContent: vi.fn(),
     } as unknown as Mocked<ContentGenerator>;
 
     const MAIN_BASE_URL = 'http://127.0.0.1:11434/v1';
@@ -875,7 +872,6 @@ describe('BaseLlmClient', () => {
     it('returns the active runtime generator when model matches the runtime view', async () => {
       const runtimeContentGenerator = {
         generateContent: vi.fn(),
-        embedContent: vi.fn(),
       } as unknown as Mocked<ContentGenerator>;
       crossProviderConfig.getContentGenerator = vi
         .fn()
@@ -1248,11 +1244,9 @@ describe('BaseLlmClient', () => {
 
       const firstRuntimeGenerator = {
         generateContent: vi.fn(),
-        embedContent: vi.fn(),
       } as unknown as Mocked<ContentGenerator>;
       const secondRuntimeGenerator = {
         generateContent: vi.fn(),
-        embedContent: vi.fn(),
       } as unknown as Mocked<ContentGenerator>;
       const getContentGenerator = vi
         .fn()

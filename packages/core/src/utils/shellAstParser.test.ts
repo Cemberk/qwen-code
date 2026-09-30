@@ -62,10 +62,10 @@ describe('isShellCommandReadOnlyAST', () => {
   it('keeps literal twins of issue #8582 read-only', async () => {
     for (const command of [
       'echo "\\$\\\n(touch /tmp/pwned)"',
-      'echo "$$\\\n(touch /tmp/pwned)"',
+      'cat "$$\\\n(touch /tmp/pwned)"',
       "echo '$\\\n(touch /tmp/pwned)'",
       "echo '${two@P}'",
-      'echo "${two@Q}"',
+      'cat "${two@Q}"',
     ]) {
       expect(await isShellCommandReadOnlyAST(command)).toBe(true);
     }
@@ -501,6 +501,62 @@ describe('isShellCommandReadOnlyAST', () => {
       expect(await isShellCommandReadOnlyAST('git remote add origin url')).toBe(
         false,
       );
+    });
+  });
+
+  describe('network access and environment disclosure', () => {
+    it.each([
+      'git remote show origin',
+      'git remote -v show origin',
+      'git remote show -n origin',
+      'git ls-remote origin',
+      'git ls-remote https://example.com/repo.git',
+      'git fetch origin',
+      'cat < /dev/tcp/example.com/80',
+      'cat </dev/udp/127.0.0.1/53',
+      "grep token < '/dev/tcp/example.com/80'",
+      'printenv',
+      'printenv OPENAI_API_KEY',
+      'env',
+      'env | grep KEY',
+      'set',
+      'export -p',
+      'declare -p',
+      'echo $OPENAI_API_KEY',
+      'echo "${OPENAI_API_KEY}"',
+      'cat /proc/self/environ',
+      'cat /proc/*/environ',
+      "tr '\\0' '\\n' < /proc/self/environ",
+      'ps eww',
+      'ps auxe',
+      'ps -E',
+      'curl https://example.com',
+      'wget https://example.com',
+      'nc example.com 80',
+      'ssh example.com',
+      'dig example.com',
+      'ping -c 1 example.com',
+    ])('does not auto-allow %j', async (command) => {
+      expect(await classifyShellCommandSafety(command)).not.toBe('read-only');
+      expect(await isShellCommandReadOnlyAST(command)).toBe(false);
+      expect(isShellCommandReadOnly(command)).toBe(false);
+    });
+
+    it('does not auto-allow an input redirect from an expansion', async () => {
+      expect(await isShellCommandReadOnlyAST('cat < "$TARGET"')).toBe(false);
+    });
+
+    it.each([
+      'git remote',
+      'git remote -v',
+      'git remote get-url origin',
+      'ps aux',
+      'ps -ef',
+      'echo hello',
+      'cat < input.txt',
+    ])('still treats %j as read-only', async (command) => {
+      expect(await isShellCommandReadOnlyAST(command)).toBe(true);
+      expect(isShellCommandReadOnly(command)).toBe(true);
     });
   });
 });

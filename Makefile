@@ -1,6 +1,6 @@
 # Makefile for qwen-code
 
-.PHONY: help install build build-sandbox build-all test lint format preflight clean start debug release run-npx create-alias
+.PHONY: help install build build-sandbox build-all test lint format preflight clean start debug create-alias
 
 help:
 	@echo "Makefile for qwen-code"
@@ -17,7 +17,6 @@ help:
 	@echo "  make start            - Start the Qwen Code CLI"
 	@echo "  make debug            - Start the Qwen Code CLI in debug mode"
 	@echo ""
-	@echo "  make run-npx          - Run the CLI using npx (for testing the published package)"
 	@echo "  make create-alias     - Create a 'qwen' alias for your shell"
 
 install:
@@ -51,9 +50,6 @@ start:
 debug:
 	npm run debug
 
-
-run-npx:
-	npx https://github.com/QwenLM/qwen-code
 
 create-alias:
 	scripts/create_alias.sh

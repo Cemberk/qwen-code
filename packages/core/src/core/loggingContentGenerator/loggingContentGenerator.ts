@@ -4,18 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  GenerateContentResponse,
-  type Content,
-  type EmbedContentParameters,
-  type EmbedContentResponse,
-  type GenerateContentParameters,
-  type GenerateContentResponseUsageMetadata,
-  type ContentListUnion,
-  type ContentUnion,
-  type Part,
-  type PartUnion,
-  type FinishReason,
+import type {
+  Content,
+  GenerateContentParameters,
+  GenerateContentResponseUsageMetadata,
+  ContentListUnion,
+  ContentUnion,
+  Part,
+  PartUnion,
+  FinishReason,
 } from '@google/genai';
 import type OpenAI from 'openai';
 import { context, type Context, type Span } from '@opentelemetry/api';
@@ -40,6 +37,7 @@ import type {
   ContentGeneratorConfig,
   InputModalities,
 } from '../contentGenerator.js';
+import { GenerateContentResponse } from '../genai-compat.js';
 import { OpenAIContentConverter } from '../openaiContentGenerator/converter.js';
 import { openaiRequestCaptureContext } from '../openaiContentGenerator/requestCaptureContext.js';
 import type { RequestContext } from '../openaiContentGenerator/types.js';
@@ -1273,12 +1271,6 @@ export class LoggingContentGenerator implements ContentGenerator {
 
   private shouldCollectSensitiveSpanAttributes(): boolean {
     return areSensitiveSpanAttributesEnabled(this.config);
-  }
-
-  async embedContent(
-    req: EmbedContentParameters,
-  ): Promise<EmbedContentResponse> {
-    return this.wrapped.embedContent(req);
   }
 
   private toContents(contents: ContentListUnion): Content[] {

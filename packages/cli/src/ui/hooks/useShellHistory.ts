@@ -89,8 +89,8 @@ async function writeHistoryFile(
   history: string[],
 ): Promise<void> {
   try {
-    await fs.mkdir(path.dirname(filePath), { recursive: true });
-    await fs.writeFile(filePath, JSON.stringify(history));
+    await fs.mkdir(path.dirname(filePath), { recursive: true, mode: 0o700 });
+    await fs.writeFile(filePath, JSON.stringify(history), { mode: 0o600 });
   } catch (error) {
     debugLogger.error('Error writing shell history:', error);
   }

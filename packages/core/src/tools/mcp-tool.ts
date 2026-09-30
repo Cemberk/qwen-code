@@ -583,7 +583,7 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
     updateOutput?: (output: ToolResultDisplay) => void,
   ): Promise<ToolResult> {
     // Use direct MCP client if available (supports progress notifications),
-    // otherwise fall back to the @google/genai mcpToTool wrapper.
+    // otherwise fall back to the mcpToTool wrapper.
     if (this.mcpClient) {
       return this.executeWithDirectClient(signal, updateOutput);
     }
@@ -944,7 +944,7 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
   }
 
   /**
-   * Fallback: execute using the @google/genai CallableTool wrapper.
+   * Fallback: execute using the mcpToTool CallableTool wrapper.
    * This path does NOT support progress notifications.
    */
   private async executeWithCallableTool(

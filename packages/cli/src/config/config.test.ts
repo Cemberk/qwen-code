@@ -4098,12 +4098,12 @@ describe('loadCliConfig folderTrust', () => {
     expect(config.getFolderTrust()).toBe(true);
   });
 
-  it('should be false by default', async () => {
+  it('should be true by default', async () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments();
     const settings: Settings = {};
     const config = await loadCliConfig(settings, argv, undefined, []);
-    expect(config.getFolderTrust()).toBe(false);
+    expect(config.getFolderTrust()).toBe(true);
   });
 });
 
@@ -5226,11 +5226,11 @@ describe('loadCliConfig approval mode', () => {
     vi.restoreAllMocks();
   });
 
-  it('should default to AUTO approval mode when no flags are set', async () => {
+  it('should default to DEFAULT approval mode when no flags are set', async () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments();
     const config = await loadCliConfig({}, argv, undefined, []);
-    expect(config.getApprovalMode()).toBe(ServerConfig.ApprovalMode.AUTO);
+    expect(config.getApprovalMode()).toBe(ServerConfig.ApprovalMode.DEFAULT);
   });
 
   it('should set PLAN approval mode when --approval-mode=plan', async () => {

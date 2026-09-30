@@ -15,7 +15,6 @@ describe('contextLengthError', () => {
     "This model's maximum context length is 128000 tokens. However, your messages resulted in 135000 tokens.",
     'context_length_exceeded',
     'prompt is too long: 137500 tokens > 135000 maximum',
-    'Range of input length should be [1, 30000]',
     'Input token length is too long',
     'The input token count (127234) exceeds the maximum number of tokens allowed (100000).',
     '{"error":{"code":"context_length_exceeded","message":"too many tokens in prompt"}}',
@@ -37,17 +36,6 @@ describe('contextLengthError', () => {
     'connection timed out while waiting for response',
   ])('does not match unrelated errors: %s', (message) => {
     expect(isContextLengthExceededError(new Error(message))).toBe(false);
-  });
-
-  it('parses the DashScope input-range upper bound as the limit', () => {
-    const info = getContextLengthExceededInfo(
-      new Error(
-        '<400> InternalError.Algo.InvalidParameter: Range of input length should be [1, 196608]',
-      ),
-    );
-    expect(info.isExceeded).toBe(true);
-    expect(info.limitTokens).toBe(196608);
-    expect(info.actualTokens).toBeUndefined();
   });
 
   it('parses prompt-too-long actual and limit token counts', () => {

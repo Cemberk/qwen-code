@@ -84,7 +84,6 @@ vi.mock('../../core/contentGenerator.js', async (importOriginal) => {
     createContentGenerator: vi.fn().mockResolvedValue({
       generateContent: vi.fn(),
       generateContentStream: vi.fn(),
-      embedContent: vi.fn(),
     }),
     createContentGeneratorConfig: vi.fn().mockReturnValue({
       model: 'test-model',

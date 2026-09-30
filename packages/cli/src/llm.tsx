@@ -459,6 +459,13 @@ export async function main() {
   // Run before yargs parses subcommands — handlers like `channel status`/`stop`
   // call `process.exit` before `loadSettings()` would otherwise bootstrap.
   preResolveHomeEnvOverrides();
+  // Created before anything writes into it so settings, credentials and
+  // transcripts are private to the user. An existing directory is left as is.
+  try {
+    fs.mkdirSync(Storage.getGlobalQwenDir(), { recursive: true, mode: 0o700 });
+  } catch {
+    // An unwritable home directory is reported by the first write that needs it.
+  }
 
   markAcpStartup('argsParseStart');
   let argv = await parseArguments();
@@ -650,7 +657,6 @@ export async function main() {
         {
           systemHooks: settings.getSystemHooks(),
           userHooks: settings.getUserHooks(),
-          projectHooks: settings.getProjectHooks(),
         },
         buildDisabledSkillNamesProvider(settings),
         undefined,
@@ -956,7 +962,6 @@ export async function main() {
       {
         systemHooks: settings.getSystemHooks(),
         userHooks: settings.getUserHooks(),
-        projectHooks: settings.getProjectHooks(),
       },
       buildDisabledSkillNamesProvider(settings),
       undefined,

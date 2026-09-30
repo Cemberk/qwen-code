@@ -55,7 +55,6 @@ import type {
   ModifiableDeclarativeTool,
   ModifyContext,
 } from './modifiable-tool.js';
-import { CommitAttributionService } from '../services/commitAttribution.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
 import { checkTeamMemorySecrets } from '../memory/team-memory-secret-guard.js';
 
@@ -638,14 +637,6 @@ class NotebookEditInvocation extends BaseToolInvocation<
           lineEnding: prepared.lineEnding,
         },
       });
-
-      if (!this.modifyMetadata?.modifiedByUser) {
-        CommitAttributionService.getInstance().recordEdit(
-          this.params.notebook_path,
-          prepared.originalContent,
-          prepared.updatedContent,
-        );
-      }
 
       try {
         const postWriteStats = fs.statSync(this.params.notebook_path);

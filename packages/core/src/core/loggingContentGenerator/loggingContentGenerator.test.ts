@@ -349,7 +349,6 @@ const createWrappedGenerator = (
   ({
     generateContent,
     generateContentStream,
-    embedContent: vi.fn(),
   }) as ContentGenerator;
 
 const createResponse = (

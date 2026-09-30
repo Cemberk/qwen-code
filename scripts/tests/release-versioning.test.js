@@ -101,7 +101,7 @@ it.each(['patch', '99.0.0-preview.1'])(
       }
       for (const path of ['package.json', 'packages/cli/package.json']) {
         expect(read(path).config.sandboxImageUri).toBe(
-          `ghcr.io/qwenlm/qwen-code:${expected}`,
+          `qwen-code-sandbox:${expected}`,
         );
       }
       expect(readFileSync(join(directory, 'pnpm-lock.yaml'), 'utf8')).toBe(

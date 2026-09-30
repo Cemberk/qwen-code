@@ -5,8 +5,6 @@
  */
 
 import type {
-  EmbedContentParameters,
-  EmbedContentResponse,
   GenerateContentParameters,
   GenerateContentResponse,
 } from '@google/genai';
@@ -43,8 +41,6 @@ export interface ContentGenerator {
     request: GenerateContentParameters,
     userPromptId: string,
   ): Promise<AsyncGenerator<GenerateContentResponse>>;
-
-  embedContent(request: EmbedContentParameters): Promise<EmbedContentResponse>;
 }
 
 import { AuthType } from '../utils/auth-type.js';
@@ -418,12 +414,6 @@ class LazyContentGenerator implements ContentGenerator {
       request,
       userPromptId,
     );
-  }
-
-  async embedContent(
-    request: EmbedContentParameters,
-  ): Promise<EmbedContentResponse> {
-    return (await this.getGeneratorForUse()).embedContent(request);
   }
 }
 

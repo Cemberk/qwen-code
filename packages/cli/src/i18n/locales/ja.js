@@ -1763,7 +1763,6 @@ export default {
 
   // === Same-as-English optimization ===
   ' (not in model registry)': '（モデルレジストリにありません）',
-  'Attribution: commit': 'コミットの帰属表示',
   '中国 (China)': '中国',
 
   // Stats Dashboard — Category 2 (missing from ja)

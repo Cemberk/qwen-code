@@ -284,12 +284,6 @@ describe('isHardcodedProjectEnvExclusion', () => {
     expect(isHardcodedProjectEnvExclusion('pythonstartup')).toBe(true);
     expect(isHardcodedProjectEnvExclusion('BROWSER')).toBe(true);
     expect(isHardcodedProjectEnvExclusion('browser')).toBe(true);
-    expect(isHardcodedProjectEnvExclusion('QWEN_SANDBOX_PROXY_COMMAND')).toBe(
-      true,
-    );
-    expect(isHardcodedProjectEnvExclusion('qwen_sandbox_proxy_command')).toBe(
-      true,
-    );
     expect(isHardcodedProjectEnvExclusion('QWEN_SANDBOX_NET')).toBe(true);
     expect(isHardcodedProjectEnvExclusion('qwen_sandbox_net')).toBe(true);
     expect(isHardcodedProjectEnvExclusion('QWEN_SANDBOX')).toBe(true);

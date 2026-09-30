@@ -103,7 +103,10 @@ export async function saveExtensionSettings(
 ): Promise<void> {
   const envPath = path.join(extensionPath, '.env');
   const content = generateEnvFile(settings);
-  await fs.promises.writeFile(envPath, content, 'utf-8');
+  await fs.promises.writeFile(envPath, content, {
+    encoding: 'utf-8',
+    mode: 0o600,
+  });
 }
 
 /**

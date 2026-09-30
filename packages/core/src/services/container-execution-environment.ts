@@ -91,7 +91,7 @@ function runtimeCommand(
       {
         env: options.runtimeEnv,
         cwd: tmpdir(),
-        // Creating a cold image can pull it first; the caller controls cancellation.
+        // Creating a container can be slow; the caller controls cancellation.
         timeout: args[0] === 'create' ? 0 : 30_000,
         signal,
         maxBuffer: 1024 * 1024,
@@ -103,7 +103,7 @@ function runtimeCommand(
             new Error(
               `${options.runtime} ${args[0]} failed: ${stderr || error.message}` +
                 (args[0] === 'create' && !signal?.aborted
-                  ? ` Check image ${options.image}; try ${options.runtime} pull ${options.image}.`
+                  ? ` Check that image ${options.image} is built locally (npm run build:sandbox); images are never pulled.`
                   : ''),
             ),
           );
@@ -123,6 +123,7 @@ export function workerContainerArguments(
 ): string[] {
   const args = [
     'create',
+    '--pull=never',
     '--init',
     '--interactive',
     '--name',
@@ -298,7 +299,7 @@ class ContainerWorker {
     if (this.disposal)
       throw new Error('Container executor was disposed during startup.');
     debugLogger.debug(
-      `Creating ${this.options.runtime} container ${this.name} with image ${this.options.image} (may pull the image; cancellation is available).`,
+      `Creating ${this.options.runtime} container ${this.name} with image ${this.options.image} (cancellation is available).`,
     );
     await runtimeCommand(
       this.options,

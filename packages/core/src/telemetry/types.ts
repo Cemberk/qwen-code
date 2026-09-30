@@ -1073,13 +1073,13 @@ export class AuthEvent implements BaseTelemetryEvent {
   'event.timestamp': string;
   auth_type: AuthType;
   action_type: 'auto' | 'manual';
-  status: 'success' | 'error' | 'cancelled';
+  status: 'success' | 'error';
   error_message?: string;
 
   constructor(
     auth_type: AuthType,
     action_type: 'auto' | 'manual',
-    status: 'success' | 'error' | 'cancelled',
+    status: 'success' | 'error',
     error_message?: string,
   ) {
     this['event.name'] = 'auth';

@@ -171,6 +171,22 @@ describe('buildClassifierSystemPrompt', () => {
     expect(prompt).toContain('Data exfiltration');
   });
 
+  it('hard-blocks all non-loopback network egress with no allowance for remotes, registries or named hosts', () => {
+    const egress = BUILTIN_HARD_DENY.find((entry) =>
+      entry.startsWith('Network egress:'),
+    );
+    expect(egress).toContain('127.0.0.1, ::1 or localhost');
+    expect(egress).toContain('project git remote');
+    expect(egress).toContain('package registries');
+    expect(egress).toContain('npm/pnpm/yarn install');
+
+    for (const entry of [...BUILTIN_ALLOW, ...BUILTIN_HARD_DENY]) {
+      expect(entry).not.toMatch(/installing dependencies/i);
+      expect(entry).not.toMatch(/that is not the project remote/);
+      expect(entry).not.toMatch(/a host the user explicitly named/);
+    }
+  });
+
   it('keeps out-of-band callback guidance free of specific IOC domains', () => {
     const prompt = buildClassifierSystemPrompt(makeConfig({}));
 

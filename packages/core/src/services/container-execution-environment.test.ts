@@ -442,11 +442,11 @@ describe('container execution boundary', () => {
       );
       expect(args.slice(0, 6)).toEqual([
         'create',
+        '--pull=never',
         '--init',
         '--interactive',
         '--name',
         'agent-name',
-        '--cap-drop',
       ]);
       expect(args).toContain('/workspace/project:/workspace/project');
       expect(args).toContain('/tmp/executor/output:/tmp/executor/output');

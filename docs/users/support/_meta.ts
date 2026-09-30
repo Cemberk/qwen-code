@@ -1,6 +1,6 @@
 export default {
   troubleshooting: 'Troubleshooting',
-  'tos-privacy': 'Terms of Service',
+  'tos-privacy': 'Privacy Notice',
 
   Uninstall: 'Uninstall',
 };

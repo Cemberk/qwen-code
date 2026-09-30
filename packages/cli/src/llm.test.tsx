@@ -489,7 +489,6 @@ describe('llm.tsx main function', () => {
       migrationWarnings: [],
       getSystemHooks: () => undefined,
       getUserHooks: () => undefined,
-      getProjectHooks: () => undefined,
     } as never);
     try {
       try {
@@ -599,7 +598,6 @@ describe('llm.tsx main function', () => {
       migrationWarnings: [],
       getSystemHooks: () => undefined,
       getUserHooks: () => undefined,
-      getProjectHooks: () => undefined,
     } as never);
     try {
       try {
@@ -688,7 +686,6 @@ describe('llm.tsx main function', () => {
       migrationWarnings: [],
       getSystemHooks: () => undefined,
       getUserHooks: () => undefined,
-      getProjectHooks: () => undefined,
     } as never);
     try {
       try {
@@ -769,7 +766,6 @@ describe('llm.tsx main function', () => {
       migrationWarnings: [],
       getSystemHooks: () => undefined,
       getUserHooks: () => undefined,
-      getProjectHooks: () => undefined,
     } as never);
     try {
       try {
@@ -822,7 +818,6 @@ describe('llm.tsx main function', () => {
         migrationWarnings: [],
         getSystemHooks: () => undefined,
         getUserHooks: () => undefined,
-        getProjectHooks: () => undefined,
       } as never;
     });
     vi.mocked(relaunchAppInChildProcess).mockImplementation(
@@ -906,7 +901,6 @@ describe('llm.tsx main function', () => {
       migrationWarnings: [],
       getSystemHooks: () => undefined,
       getUserHooks: () => undefined,
-      getProjectHooks: () => undefined,
     } as never);
     vi.mocked(loadSandboxConfig).mockResolvedValue({
       command: 'sandbox-exec',
@@ -983,7 +977,6 @@ describe('llm.tsx main function', () => {
       migrationWarnings: [],
       getSystemHooks: () => undefined,
       getUserHooks: () => undefined,
-      getProjectHooks: () => undefined,
     } as never);
     vi.mocked(loadSandboxConfig).mockResolvedValue({
       command: 'sandbox-exec',
@@ -1049,7 +1042,6 @@ describe('llm.tsx main function', () => {
       migrationWarnings: [],
       getSystemHooks: () => undefined,
       getUserHooks: () => undefined,
-      getProjectHooks: () => undefined,
     } as never);
     mockHandleListExtensions.mockResolvedValue(undefined);
 
@@ -1250,7 +1242,6 @@ describe('llm.tsx main function', () => {
           migrationWarnings: [],
           getSystemHooks: () => undefined,
           getUserHooks: () => undefined,
-          getProjectHooks: () => undefined,
         } as never);
 
         let route: 'in-process' | boolean | undefined;
@@ -1334,7 +1325,6 @@ describe('llm.tsx main function', () => {
         migrationWarnings: [],
         getSystemHooks: () => undefined,
         getUserHooks: () => undefined,
-        getProjectHooks: () => undefined,
       } as never);
       vi.mocked(relaunchAppInChildProcess).mockImplementation(async () => {
         throw new Error('stop after theme baseline');
@@ -1410,7 +1400,6 @@ describe('llm.tsx main function', () => {
       migrationWarnings: [],
       getSystemHooks: () => undefined,
       getUserHooks: () => undefined,
-      getProjectHooks: () => undefined,
     };
     const configStub = {
       isInteractive: () => false,
@@ -1464,7 +1453,6 @@ describe('llm.tsx main function', () => {
       undefined,
       {
         userHooks: undefined,
-        projectHooks: undefined,
       },
       expect.any(Function),
       undefined,
@@ -1751,7 +1739,6 @@ describe('llm.tsx main function', () => {
       migrationWarnings: [],
       getSystemHooks: () => undefined,
       getUserHooks: () => undefined,
-      getProjectHooks: () => undefined,
     } as never);
     vi.mocked(loadCliConfig).mockResolvedValue(configStub);
     vi.spyOn(validatorModule, 'validateNonInteractiveAuth').mockResolvedValue(
@@ -2012,7 +1999,6 @@ describe('llm.tsx main function', () => {
       migrationWarnings: [],
       getSystemHooks: () => undefined,
       getUserHooks: () => undefined,
-      getProjectHooks: () => undefined,
     } as never);
     vi.mocked(loadCliConfig).mockResolvedValue(configStub);
     vi.spyOn(validatorModule, 'validateNonInteractiveAuth').mockResolvedValue(
@@ -2084,7 +2070,6 @@ describe('llm.tsx main function', () => {
       migrationWarnings: [],
       getSystemHooks: () => undefined,
       getUserHooks: () => undefined,
-      getProjectHooks: () => undefined,
     } as never);
     vi.mocked(loadSandboxConfig).mockResolvedValue({
       command: 'sandbox-exec',
@@ -2294,7 +2279,6 @@ describe('llm.tsx main function', () => {
       migrationWarnings: [],
       getSystemHooks: () => undefined,
       getUserHooks: () => undefined,
-      getProjectHooks: () => undefined,
     } as never);
 
     vi.mocked(parseArguments).mockResolvedValue({
@@ -2523,7 +2507,6 @@ describe('llm.tsx OpenTUI renderer dispatch', () => {
       migrationWarnings: [],
       getSystemHooks: () => undefined,
       getUserHooks: () => undefined,
-      getProjectHooks: () => undefined,
     } as never);
     vi.mocked(parseArguments).mockResolvedValue({
       model: undefined,
@@ -2746,7 +2729,6 @@ describe('llm.tsx main function kitty protocol', () => {
       migrationWarnings: [],
       getSystemHooks: () => undefined,
       getUserHooks: () => undefined,
-      getProjectHooks: () => undefined,
     } as never);
     vi.mocked(parseArguments).mockResolvedValue({
       model: undefined,
@@ -2863,7 +2845,6 @@ describe('llm.tsx main function kitty protocol', () => {
       migrationWarnings: [],
       getSystemHooks: () => undefined,
       getUserHooks: () => undefined,
-      getProjectHooks: () => undefined,
     } as never);
     vi.mocked(parseArguments).mockResolvedValue({
       model: undefined,
@@ -2979,7 +2960,6 @@ describe('llm.tsx main function kitty protocol', () => {
       migrationWarnings: [],
       getSystemHooks: () => undefined,
       getUserHooks: () => undefined,
-      getProjectHooks: () => undefined,
     } as never);
     vi.mocked(parseArguments).mockResolvedValue({
       model: undefined,
@@ -3094,7 +3074,6 @@ describe('llm.tsx main function kitty protocol', () => {
       migrationWarnings: [],
       getSystemHooks: () => undefined,
       getUserHooks: () => undefined,
-      getProjectHooks: () => undefined,
     } as never);
     vi.mocked(parseArguments).mockResolvedValue({
       model: undefined,
@@ -3241,7 +3220,6 @@ describe('llm.tsx main function kitty protocol', () => {
       migrationWarnings: [],
       getSystemHooks: () => undefined,
       getUserHooks: () => undefined,
-      getProjectHooks: () => undefined,
     } as never);
   }
 
@@ -3555,7 +3533,6 @@ describe('llm.tsx main function kitty protocol', () => {
       migrationWarnings: [],
       getSystemHooks: () => undefined,
       getUserHooks: () => undefined,
-      getProjectHooks: () => undefined,
     } as never);
     vi.mocked(parseArguments).mockResolvedValue({} as never);
 
@@ -3727,7 +3704,6 @@ describe('startInteractiveUI', () => {
     },
     getSystemHooks: () => undefined,
     getUserHooks: () => undefined,
-    getProjectHooks: () => undefined,
   } as LoadedSettings;
   const mockStartupWarnings = ['warning1'];
   const mockWorkspaceRoot = '/root';

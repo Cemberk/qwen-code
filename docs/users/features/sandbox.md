@@ -45,16 +45,17 @@ The report names the tool boundary, requested/effective backend, enforcement lev
 
 ### Migrating from whole-CLI bwrap
 
-Replace `--sandbox bwrap` and remove `tools.sandbox: "bwrap"`, `QWEN_SANDBOX=bwrap`, `QWEN_SANDBOX_NET` and `QWEN_SANDBOX_PROXY_COMMAND`, then configure `tools.executionSandbox` as above. Restart from a shell outside the old sandbox; inherited `SANDBOX=bwrap` is rejected. `proxied` is not a supported network policy. Do not combine this mode with Docker, Podman, Seatbelt or an inherited whole-CLI sandbox marker. Old bwrap settings produce an explicit migration error.
+Replace `--sandbox bwrap` and remove `tools.sandbox: "bwrap"`, `QWEN_SANDBOX=bwrap` and `QWEN_SANDBOX_NET`, then configure `tools.executionSandbox` as above. Restart from a shell outside the old sandbox; inherited `SANDBOX=bwrap` is rejected. `proxied` is not a supported network policy. Do not combine this mode with Docker, Podman, Seatbelt or an inherited whole-CLI sandbox marker. Old bwrap settings produce an explicit migration error.
 
 The Docker, Podman and macOS Seatbelt methods below still run the whole CLI in their existing environment.
 
 ## Prerequisites
 
-Before using sandboxing, you need to install and set up Qwen Code:
+Before using sandboxing, build Qwen Code from source as described in the [Quickstart](../quickstart.md):
 
 ```bash
-npm install -g @qwen-code/qwen-code
+corepack pnpm install --frozen-lockfile
+npm run build && npm run bundle
 ```
 
 To verify the installation
@@ -94,7 +95,7 @@ Lightweight, built-in sandboxing using `sandbox-exec`.
 
 Cross-platform sandboxing with complete process isolation.
 
-By default, Qwen Code uses a published sandbox image (configured in the CLI package) and will pull it as needed.
+Qwen Code only runs a sandbox image that is already present locally; images are never pulled. Build the default image (`qwen-code-sandbox:<version>`) with `npm run build:sandbox` in the qwen-code repository. If the image is missing, startup fails with a hint to build it.
 
 The container sandbox mounts your workspace and your `~/.qwen` directory into the container so auth and settings persist between runs.
 
@@ -150,18 +151,18 @@ qwen -p "run the test suite"
 
 - **CLI flag**: `--sandbox-image <image>`
 - **Environment variable**: `QWEN_SANDBOX_IMAGE=<image>`
-- **Settings file**: `tools.sandboxImage` in your `settings.json` (e.g., `{"tools": {"sandboxImage": "ghcr.io/qwenlm/qwen-code:0.14.1"}}`)
+- **Settings file**: `tools.sandboxImage` in your `settings.json` (e.g., `{"tools": {"sandboxImage": "my-qwen-sandbox:latest"}}`)
 
 Priority order (highest to lowest):
 
 1. `--sandbox-image`
 2. `QWEN_SANDBOX_IMAGE`
 3. `tools.sandboxImage`
-4. Built-in default image from the CLI package (for example `ghcr.io/qwenlm/qwen-code:<version>`)
+4. Built-in default image name from the CLI package (`qwen-code-sandbox:<version>`, built locally)
 
 `settings.env.QWEN_SANDBOX_IMAGE` also works as a generic env injection mechanism, but `tools.sandboxImage` is the preferred persistent setting.
 
-Custom images are user-managed. Rebuild them with an up-to-date Qwen Code installation to receive the safe update handoff; older images may still use their original in-process updater.
+Custom images are user-managed and must already exist locally.
 
 ### macOS Seatbelt profiles
 
@@ -169,10 +170,8 @@ Built-in profiles (set via `SEATBELT_PROFILE` env var):
 
 - `permissive-open` (default): Write restrictions, network allowed
 - `permissive-closed`: Write restrictions, no network
-- `permissive-proxied`: Write restrictions, network via proxy
 - `restrictive-open`: Strict restrictions, network allowed
 - `restrictive-closed`: Maximum restrictions
-- `restrictive-proxied`: Strict restrictions, network via proxy
 
 > [!tip]
 >
@@ -203,17 +202,6 @@ Multiple flags can be provided as a space-separated string:
 export SANDBOX_FLAGS="--flag1 --flag2=value"
 ```
 
-### Network proxying (all sandbox methods)
-
-If you want to restrict outbound network access to an allowlist, you can run a local proxy alongside the sandbox:
-
-- Set `QWEN_SANDBOX_PROXY_COMMAND=<command>`
-- The command must start a proxy server that listens on `:::8877`
-
-This is especially useful with `*-proxied` Seatbelt profiles.
-
-For a working allowlist-style proxy example, see: [Example Proxy Script](../../developers/examples/proxy-script.md).
-
 ## Linux UID/GID handling
 
 On Linux, Qwen Code defaults to enabling UID/GID mapping so the sandbox runs as your user (and reuses the mounted `~/.qwen`). Override with:
@@ -240,12 +228,12 @@ export SANDBOX_SET_UID_GID=false  # Disable UID/GID mapping
 
 **Java not available in Docker sandbox**
 
-The official Qwen Code Docker image is intentionally minimal to keep the image small, secure, and fast to pull. Different users require different language runtimes (Java, Python, Node.js, etc.), and bundling all environments into a single image is not practical. Therefore, Java is **not included by default** in the Docker sandbox.
+The Qwen Code sandbox image is intentionally minimal to keep the image small and secure. Different users require different language runtimes (Java, Python, Node.js, etc.), and bundling all environments into a single image is not practical. Therefore, Java is **not included by default** in the Docker sandbox.
 
 If your workflow requires Java, you can extend the base image by creating a `.qwen/sandbox.Dockerfile` in your project:
 
 ```dockerfile
-FROM ghcr.io/qwenlm/qwen-code:latest
+FROM qwen-code-sandbox:<version>
 
 RUN apt-get update && \
     apt-get install -y openjdk-17-jre && \
@@ -264,7 +252,6 @@ For more details on customizing the sandbox, see [Customizing the sandbox enviro
 **Network issues**
 
 - Check sandbox profile allows network.
-- Verify proxy configuration.
 
 ### Debug mode
 
@@ -288,7 +275,7 @@ qwen -s -p "run shell command: mount | grep workspace"
 
 - Sandboxing reduces but doesn't eliminate all risks.
 - Use the most restrictive profile that allows your work.
-- Container overhead is minimal after the first pull/build.
+- Container overhead is minimal after the first build.
 - GUI applications may not work in sandboxes.
 
 ## Related documentation

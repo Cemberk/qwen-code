@@ -137,10 +137,12 @@ describe('useShellHistory', () => {
     await waitFor(() => {
       expect(mockedFs.mkdir).toHaveBeenCalledWith(MOCKED_HISTORY_DIR, {
         recursive: true,
+        mode: 0o700,
       });
       expect(mockedFs.writeFile).toHaveBeenCalledWith(
         MOCKED_HISTORY_FILE,
         JSON.stringify(['new_command']), // Written to file oldest-first.
+        { mode: 0o600 },
       );
     });
 

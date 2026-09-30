@@ -347,7 +347,7 @@ export async function writeLine(
     const line = `${JSON.stringify(data)}\n`;
     const dir = path.dirname(filePath);
     if (!ensuredDirs.has(dir)) {
-      await fs.promises.mkdir(dir, { recursive: true });
+      await fs.promises.mkdir(dir, { recursive: true, mode: 0o700 });
       ensuredDirs.add(dir);
     }
     // flush:true fsyncs after each line so a process killed mid-write
@@ -358,6 +358,7 @@ export async function writeLine(
     // for the string case, with no behavior delta on tested versions.
     await fs.promises.appendFile(filePath, Buffer.from(line, 'utf8'), {
       flush: true,
+      mode: 0o600,
     });
   });
 }
@@ -385,9 +386,12 @@ export function writeLineSync(filePath: string, data: unknown): void {
   // Ensure directory exists before writing
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
-  fs.appendFileSync(filePath, Buffer.from(line, 'utf8'), { flush: true });
+  fs.appendFileSync(filePath, Buffer.from(line, 'utf8'), {
+    flush: true,
+    mode: 0o600,
+  });
 }
 
 /**
@@ -402,9 +406,9 @@ export function write(filePath: string, data: unknown[]): void {
   // Ensure directory exists before writing
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
-  atomicWriteFileSync(filePath, lines, { encoding: 'utf8' });
+  atomicWriteFileSync(filePath, lines, { encoding: 'utf8', mode: 0o600 });
 }
 
 /**

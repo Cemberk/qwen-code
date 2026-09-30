@@ -59,7 +59,6 @@ describe('checkNextSpeaker', () => {
       {
         generateContent: vi.fn(),
         generateContentStream: vi.fn(),
-        embedContent: vi.fn(),
       } as ContentGenerator,
       {} as Config,
     );

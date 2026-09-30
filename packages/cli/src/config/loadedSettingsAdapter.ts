@@ -31,17 +31,13 @@ import { getNestedProperty } from './settingsUtils.js';
  * The raw (unresolved) entries behind `settings.merged.modelProviders[id]`:
  * the first scope in merge precedence that defines the bucket, index-aligned
  * with the merged bucket so placeholder recovery can pair entries by position.
+ * Workspace never contributes: `modelProviders` is workspace-restricted.
  */
 export function findRawModelProviderEntries(
   settings: LoadedSettings,
   providerId: string,
 ): ModelProvidersConfig[string] | undefined {
-  return [
-    SettingScope.System,
-    ...(settings.isTrusted ? [SettingScope.Workspace] : []),
-    SettingScope.User,
-    SettingScope.SystemDefaults,
-  ]
+  return [SettingScope.System, SettingScope.User, SettingScope.SystemDefaults]
     .map((source) => settings.forScope(source).originalSettings.modelProviders)
     .find((providers) => providers && Object.hasOwn(providers, providerId))?.[
     providerId

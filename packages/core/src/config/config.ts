@@ -326,10 +326,8 @@ import {
   type MemoryMetadataCorpusStatus,
 } from '../memory/metadata-migration.js';
 import { buildStructuredAutoMemoryPrompt } from '../memory/prompt.js';
-import { CommitAttributionService } from '../services/commitAttribution.js';
 import { isSafeModeEnv } from '../utils/safe-mode.js';
 
-const gitCoAuthorLogger = createDebugLogger('GIT_CO_AUTHOR');
 const memoryPressureConfigLogger = createDebugLogger('MEMORY_PRESSURE');
 
 const MEMORY_CONTEXT_WARNING_RATIO = 0.15;
@@ -677,73 +675,6 @@ export interface OutputSettings {
   format?: OutputFormat;
 }
 
-export interface GitCoAuthorSettings {
-  commit: boolean;
-  pr: boolean;
-  name?: string;
-  email?: string;
-}
-
-/**
- * Shape accepted by the Config constructor for the `gitCoAuthor` param.
- *
- * A plain `boolean` is accepted for backward compatibility: older settings
- * (shipped before commit and PR attribution were split) stored this field as
- * a single boolean, and we treat that as applying to both sub-toggles so
- * nobody's stored preference silently flips.
- */
-export type GitCoAuthorParam = boolean | { commit?: boolean; pr?: boolean };
-
-function normalizeGitCoAuthor(value: GitCoAuthorParam | undefined): {
-  commit: boolean;
-  pr: boolean;
-} {
-  if (typeof value === 'boolean') {
-    return { commit: value, pr: value };
-  }
-  // Default to `true` (the schema default) ONLY when the sub-field
-  // is genuinely absent. For PRESENT-but-non-boolean values, honor
-  // common string forms (`"true"`/`"yes"`/`"on"`/`"1"` → true,
-  // `"false"`/`"no"`/`"off"`/`"0"`/`""` → false) and treat anything
-  // else as opt-out. settings.json is user-editable, and the previous
-  // "default-to-true on mismatch" policy meant a hand-edited
-  // `{ "commit": "false" }` silently activated attribution against
-  // the user's clear intent. Safer-by-default: ambiguous values
-  // disable rather than enable.
-  const pickBool = (v: unknown, fieldName: string): boolean => {
-    if (v === undefined) return true;
-    if (typeof v === 'boolean') return v;
-    if (typeof v === 'string') {
-      const lowered = v.trim().toLowerCase();
-      if (
-        lowered === 'true' ||
-        lowered === 'yes' ||
-        lowered === 'on' ||
-        lowered === '1'
-      ) {
-        return true;
-      }
-      // Known disable-intent forms — silent (matches user intent).
-      const knownDisable = ['false', 'no', 'off', '0', 'disabled', ''];
-      if (!knownDisable.includes(lowered)) {
-        // Unrecognised string — disable (safer-by-default) but log
-        // so a user wondering "why is my setting being ignored?"
-        // can see the actual coercion in QWEN_DEBUG_LOG_FILE.
-        gitCoAuthorLogger.warn(
-          `Unrecognized string value for general.gitCoAuthor.${fieldName}: ${JSON.stringify(v)}; treating as false. Accepted forms: true/yes/on/1, false/no/off/0/empty.`,
-        );
-      }
-      return false;
-    }
-    if (typeof v === 'number') return v === 1;
-    return false;
-  };
-  return {
-    commit: pickBool(value?.commit, 'commit'),
-    pr: pickBool(value?.pr, 'pr'),
-  };
-}
-
 export type ExtensionOriginSource =
   | 'QwenCode'
   | 'Claude'
@@ -1037,7 +968,6 @@ export interface ConfigParameters {
    * remain readable from Config; only the global SDK side effect is deferred.
    */
   deferTelemetryInitialization?: boolean;
-  gitCoAuthor?: GitCoAuthorParam;
   /**
    * If true, disables the per-session FileReadCache short-circuit
    * (file_unchanged placeholder). Useful for sessions that may undergo
@@ -2639,7 +2569,6 @@ export class Config {
   private readonly showResponseTokensPerSecond: boolean;
   private readonly telemetrySettings: ResolvedTelemetrySettings;
   private readonly telemetryInitializationDeferred: boolean;
-  private readonly gitCoAuthor: GitCoAuthorSettings;
   private readonly fileReadCacheDisabled: boolean;
   private activeTodoReminders = new Map<string, string>();
   private activeTodoWorkChainOwners = new Map<string, string>();
@@ -2994,7 +2923,7 @@ export class Config {
     this.memoryFileCount =
       params.memoryFileCount ?? params.geminiMdFileCount ?? 0;
     this.contextRuleExcludes = params.contextRuleExcludes ?? [];
-    this.approvalMode = params.approvalMode ?? ApprovalMode.AUTO;
+    this.approvalMode = params.approvalMode ?? ApprovalMode.DEFAULT;
     this.accessibility = params.accessibility ?? {};
     this.showResponseTokensPerSecond =
       params.showResponseTokensPerSecond ?? false;
@@ -3014,11 +2943,6 @@ export class Config {
     };
     this.telemetryInitializationDeferred =
       params.deferTelemetryInitialization ?? false;
-    this.gitCoAuthor = {
-      ...normalizeGitCoAuthor(params.gitCoAuthor),
-      name: 'Qwen-Coder',
-      email: 'qwen-coder@alibabacloud.com',
-    };
     this.fileReadCacheDisabled = params.fileReadCacheDisabled ?? false;
     this.outputLanguageFilePath = params.outputLanguageFilePath;
 
@@ -5021,18 +4945,6 @@ export class Config {
     if (!runtime) return;
     this.sessionRestoreRuntime = undefined;
 
-    if (runtime.attributionSnapshot) {
-      try {
-        CommitAttributionService.getInstance().restoreFromSnapshot(
-          runtime.attributionSnapshot,
-        );
-      } catch (error) {
-        this.debugLogger.error(
-          `Session restore attribution activation failed: ${error}`,
-        );
-      }
-    }
-
     const activateGoal = this.goalRestoreActivation;
     this.goalRestoreActivation = undefined;
     this.rejectGoalRestoreActivation = undefined;
@@ -5207,12 +5119,6 @@ export class Config {
     this.getMemoryPressureMonitor()?.resetForNewSession();
     this.fileHistoryService = undefined;
     refreshSessionContext(this.sessionId);
-    // The commit-attribution singleton accumulates per-file AI edits
-    // and a session-scoped prompt counter — both stop being meaningful
-    // when the session resets. Without this, pending attributions
-    // from the previous session could attach to a commit in the new
-    // one, and the "N-shotted" PR label would span sessions.
-    CommitAttributionService.resetInstance();
     if (this.initialized) {
       logStartSession(
         this,
@@ -6338,17 +6244,7 @@ export class Config {
     await this.refreshCurrentRuntimeStatus(expected);
     this.workspaceContext.applyRootDirectories(workspaceDirectories);
     this.fileDiscoveryService = null;
-    // The pr-bound callback is registered once at session init; relocation
-    // resets the service, so carry it onto the replacement instance — a
-    // later `gh pr create` in this session must still reach the bridge.
-    const sessionPrBoundCallback =
-      this.sessionService?.getSessionPrBoundCallback();
     this.sessionService = undefined;
-    if (sessionPrBoundCallback) {
-      this.getSessionService().setSessionPrBoundCallback(
-        sessionPrBoundCallback,
-      );
-    }
     this.fileHistoryService = undefined;
     this.getFileReadCache().clear();
     this.memoryRecallMode = 'legacy';
@@ -8268,10 +8164,6 @@ export class Config {
 
   getTelemetryOutfile(): string | undefined {
     return this.telemetrySettings.outfile;
-  }
-
-  getGitCoAuthor(): GitCoAuthorSettings {
-    return this.gitCoAuthor;
   }
 
   getLlmClient(): LlmClient {

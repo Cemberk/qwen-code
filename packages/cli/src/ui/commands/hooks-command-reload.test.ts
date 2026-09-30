@@ -91,7 +91,6 @@ describe('/hooks reload with real settings files', () => {
         {
           systemHooks: settings.getSystemHooks(),
           userHooks: settings.getUserHooks(),
-          projectHooks: settings.getProjectHooks(),
         },
         false,
       ),
@@ -107,7 +106,7 @@ describe('/hooks reload with real settings files', () => {
     return { config, settings, system, setHooks, context, entries };
   }
 
-  it('reloads the startup workspace even when the session cwd is a worktree', async () => {
+  it('reloads the startup workspace file, even from a worktree, without registering its hooks', async () => {
     const { config, settings, context, entries } = await setup(true);
     expect(path.dirname(path.dirname(settings.workspace.path))).not.toBe(
       config.getWorkingDir(),
@@ -123,12 +122,10 @@ describe('/hooks reload with real settings files', () => {
 
     await hooksCommand.action!(context, '');
 
+    expect(settings.workspace.settings.hooks).toHaveProperty('PostToolUse');
     expect(
       entries().map(({ eventName, source }) => ({ eventName, source })),
-    ).toEqual([
-      { eventName: 'Stop', source: 'user' },
-      { eventName: 'PostToolUse', source: 'project' },
-    ]);
+    ).toEqual([{ eventName: 'Stop', source: 'user' }]);
     expect(context.ui.addItem).not.toHaveBeenCalled();
   });
 
@@ -218,7 +215,7 @@ describe('/hooks reload with real settings files', () => {
     entries: () => Array<{ eventName: string; source: string }>,
   ) => entries().map(({ eventName, source }) => ({ eventName, source }));
 
-  it('loads system hooks under their own source alongside user and workspace hooks', async () => {
+  it('loads system hooks under their own source alongside user hooks, never workspace hooks', async () => {
     // Before system hooks had their own channel, this configuration dropped
     // the system hook: user and workspace both had hooks, so the merged
     // settings that carried it were never read.
@@ -229,7 +226,6 @@ describe('/hooks reload with real settings files', () => {
     expect(sources(entries)).toEqual([
       { eventName: 'SessionStart', source: 'system' },
       { eventName: 'Stop', source: 'user' },
-      { eventName: 'PreToolUse', source: 'project' },
     ]);
   });
 
@@ -261,9 +257,15 @@ describe('/hooks reload with real settings files', () => {
     ]);
   });
 
-  it('removes deleted project hooks from the live registry', async () => {
+  it('never registers workspace hooks in a trusted folder', async () => {
     const { settings, context, entries } = await setup();
-    fs.writeFileSync(settings.workspace.path, '{}');
+    expect(entries().some(({ eventName }) => eventName === 'PreToolUse')).toBe(
+      false,
+    );
+    fs.writeFileSync(
+      settings.workspace.path,
+      JSON.stringify({ hooks: { PreToolUse: hook('echo edited') } }),
+    );
 
     await hooksCommand.action!(context, '');
 

@@ -8,12 +8,9 @@ import { getErrorStatus } from './errors.js';
 import { isApiError, isStructuredError } from './quotaErrorDetection.js';
 import { getRetryDelayMs } from './retryPolicy.js';
 
-// Known rate-limit error codes across providers.
-// 429  - Standard HTTP "Too Many Requests" (DashScope TPM, OpenAI, etc.)
-// 503  - Provider throttling/overload (treated as rate-limit for retry UI)
-// 1302 - Z.AI GLM rate limit (https://docs.z.ai/api-reference/api-code)
-// 1305 - DashScope/IdealTalk internal rate limit (issue #1918)
-const RATE_LIMIT_ERROR_CODES = new Set([429, 503, 1302, 1305]);
+// 429 - Standard HTTP "Too Many Requests"
+// 503 - Server throttling/overload (treated as rate-limit for retry UI)
+const RATE_LIMIT_ERROR_CODES = new Set([429, 503]);
 
 export interface RetryInfo {
   /** Formatted error message for display, produced by parseAndFormatApiError. */
@@ -33,8 +30,7 @@ export interface RateLimitErrorDetails {
   providerCode?: string;
   /**
    * The provider body's `type`, kept separate from `providerCode` rather than
-   * folded into it. `providerCode` is compared by exact equality elsewhere
-   * (`isAllocatedQuotaExceeded`) and is what the collapsed `code ?? type`
+   * folded into it. `providerCode` is what the collapsed `code ?? type`
    * spelling has always produced, so it cannot carry both; a body with a
    * specific `code` beside a class-naming `type` needs the second value on its
    * own field to be readable at all.
@@ -130,12 +126,11 @@ export function getRateLimitErrorDetails(
   const statusCode = getErrorStatus(error);
   const payload = getProviderErrorPayload(error);
   const message = getRawErrorMessage(error);
-  const transport =
-    message?.includes('event:error') || message?.includes('HTTP_STATUS/')
-      ? 'sse'
-      : statusCode !== undefined
-        ? 'http'
-        : 'unknown';
+  const transport = message?.includes('event:error')
+    ? 'sse'
+    : statusCode !== undefined
+      ? 'http'
+      : 'unknown';
 
   return {
     ...(statusCode !== undefined ? { statusCode } : {}),
@@ -180,8 +175,7 @@ export function getRateLimitRetryDelayMs(
  */
 function getErrorCode(error: unknown): number | null {
   // ApiError (.error.code) — fall through when the code is not a finite number
-  // (e.g. DashScope `"code":"Throttling.AllocationQuota"`) so later handlers
-  // can still recover a status from `.status` or the message.
+  // so later handlers can still recover a status from `.status`.
   if (isApiError(error)) {
     const n = Number(error.error.code);
     if (Number.isFinite(n) && n > 0) return n;
@@ -223,10 +217,6 @@ function getErrorCode(error: unknown): number | null {
     if (typeof s === 'number') return s;
   }
 
-  // Final fallback: delegate to getErrorStatus which also parses
-  // `HTTP_STATUS/NNN` out of streamed SSE error frames (e.g. DashScope
-  // `Throttling.AllocationQuota` where the SDK never surfaces a real HTTP
-  // status because the stream opened with 200 OK).
   return getErrorStatus(error) ?? null;
 }
 

@@ -370,7 +370,7 @@ describe('OpenAILogger', () => {
       await logger.initialize();
 
       const error = new Error(
-        'event:error\n:HTTP_STATUS/429\ndata:{"request_id":"req-provider-456","code":"Throttling.AllocationQuota","message":"Allocated quota exceeded"}',
+        'event:error\ndata:{"request_id":"req-provider-456","code":"rate_limit_exceeded","message":"Rate limit exceeded"}',
       );
 
       const logPath = await logger.logInteraction(

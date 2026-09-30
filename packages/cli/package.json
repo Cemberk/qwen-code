@@ -34,7 +34,7 @@
     "dist"
   ],
   "config": {
-    "sandboxImageUri": "ghcr.io/qwenlm/qwen-code:0.24.6"
+    "sandboxImageUri": "qwen-code-sandbox:0.24.6"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.14.1",

@@ -389,7 +389,6 @@ export default {
   // Settings Labels
   // ============================================================================
   'Vim Mode': 'Vim-Modus',
-  'Attribution: commit': 'Attribution: Commit',
   'Terminal Bell Notification': 'Terminal-Signalton',
   Theme: 'Farbschema',
   'Preferred Editor': 'Bevorzugter Editor',

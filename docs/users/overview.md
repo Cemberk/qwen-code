@@ -1,37 +1,22 @@
 # Qwen Code overview
 
-[![@qwen-code/qwen-code downloads](https://img.shields.io/npm/dw/@qwen-code/qwen-code.svg)](https://npm-compare.com/@qwen-code/qwen-code)
-[![@qwen-code/qwen-code version](https://img.shields.io/npm/v/@qwen-code/qwen-code.svg)](https://www.npmjs.com/package/@qwen-code/qwen-code)
-
 > Learn about Qwen Code, Qwen's agentic coding tool that lives in your terminal and helps you turn ideas into code faster than ever before.
 
 ## Get started in 30 seconds
 
-### Install Qwen Code:
+### Build Qwen Code:
 
-The recommended installer uses a standalone archive when one is available for
-your platform. If it falls back to npm, Node.js 22 or later with npm must be
-available on PATH.
+This fork is built from source and needs Node.js 22 or later:
 
-**Linux / macOS**
-
-```sh
-curl -fsSL https://qwen-code-assets.oss-cn-hangzhou.aliyuncs.com/installation/install-qwen-standalone.sh | bash
+```bash
+git clone <your fork of this repository> qwen-code
+cd qwen-code
+corepack pnpm install --frozen-lockfile
+npm run build && npm run bundle
+alias qwen="node $PWD/dist/cli.js"
 ```
 
-**Windows**
-
-```powershell
-irm https://qwen-code-assets.oss-cn-hangzhou.aliyuncs.com/installation/install-qwen-standalone.ps1 | iex
-```
-
-> [!note]
->
-> It's recommended to restart your terminal after installation if `qwen` is not
-> immediately available on PATH. If the installation fails, please refer to
-> [Manual Installation](./quickstart#manual-installation) in the Quickstart
-> guide. For offline installation, download a release archive and run the
-> installer with `--archive PATH`; keep `SHA256SUMS` next to the archive.
+See [Quickstart](./quickstart#build-from-source) for details.
 
 ### Start using Qwen Code:
 
@@ -46,8 +31,6 @@ Qwen Code runs against a local OpenAI-compatible model server on this machine, s
 what does this project do?
 ```
 
-![](https://cloud.video.taobao.com/vod/j7-QtQScn8UEAaEdiv619fSkk5p-t17orpDbSqKVL5A.mp4)
-
 That's it! [Continue with Quickstart (5 mins) →](./quickstart)
 
 > [!tip]
@@ -58,12 +41,12 @@ That's it! [Continue with Quickstart (5 mins) →](./quickstart)
 
 - **Build features from descriptions**: Tell Qwen Code what you want to build in plain language. It will make a plan, write the code, and ensure it works.
 - **Debug and fix issues**: Describe a bug or paste an error message. Qwen Code will analyze your codebase, identify the problem, and implement a fix.
-- **Navigate any codebase**: Ask anything about your team's codebase, and get a thoughtful answer back. Qwen Code maintains awareness of your entire project structure, can find up-to-date information from the web, and with [MCP](./features/mcp) can pull from external datasources like Google Drive, Figma, and Slack.
-- **Automate tedious tasks**: Fix fiddly lint issues, resolve merge conflicts, and write release notes. Do all this in a single command from your developer machines, or automatically in CI.
+- **Navigate any codebase**: Ask anything about your team's codebase, and get a thoughtful answer back. Qwen Code maintains awareness of your entire project structure, and with [MCP](./features/mcp) can use local tools you run as stdio servers.
+- **Automate tedious tasks**: Fix fiddly lint issues, resolve merge conflicts, and write release notes. Do all this in a single command from your developer machine.
 - **[Followup suggestions](./features/followup-suggestions)**: Qwen Code predicts what you want to type next and shows it as ghost text. Press Tab to accept, or just keep typing to dismiss.
 
 ## Why developers love Qwen Code
 
 - **Works in your terminal**: Not another chat window. Not another IDE. Qwen Code meets you where you already work, with the tools you already love.
-- **Takes action**: Qwen Code can directly edit files, run commands, and create commits. Need more? [MCP](./features/mcp) lets Qwen Code read your design docs in Google Drive, update your tickets in Jira, or use _your_ custom developer tooling.
-- **Unix philosophy**: Qwen Code is composable and scriptable. `tail -f app.log | qwen -p "Slack me if you see any anomalies appear in this log stream"` _works_. Your CI can run `qwen -p "If there are new text strings, translate them into French and raise a PR for @lang-fr-team to review"`.
+- **Takes action**: Qwen Code can directly edit files, run commands, and create commits. Need more? [MCP](./features/mcp) lets Qwen Code use _your_ custom developer tooling through local stdio servers.
+- **Unix philosophy**: Qwen Code is composable and scriptable. `tail -f app.log | qwen -p "Tell me if you see any anomalies appear in this log stream"` _works_, and so does `qwen -p "If there are new text strings, translate them into French"` in a script.

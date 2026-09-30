@@ -42,7 +42,6 @@ describe('hooksCommand', () => {
           reloadScopesFromDiskAtomically: vi.fn().mockReturnValue(true),
           getSystemHooks: vi.fn().mockReturnValue(undefined),
           getUserHooks: vi.fn(),
-          getProjectHooks: vi.fn(),
         },
       },
     });
@@ -105,7 +104,6 @@ describe('hooksCommand', () => {
     const mergedHooks = { Stop: [] as [] };
     const systemHooks = { SessionStart: [] };
     const userHooks = { PreToolUse: [] };
-    const projectHooks = { PostToolUse: [] };
 
     function makeReloadContext(
       opts: {
@@ -143,7 +141,6 @@ describe('hooksCommand', () => {
             reloadScopesFromDiskAtomically: vi.fn().mockReturnValue(true),
             getSystemHooks: () => systemHooks,
             getUserHooks: () => userHooks,
-            getProjectHooks: () => projectHooks,
           },
         },
       });
@@ -168,7 +165,6 @@ describe('hooksCommand', () => {
       expect(config.setHooksFromSettings).toHaveBeenCalledWith({
         systemHooks,
         userHooks,
-        projectHooks,
         hooks: undefined,
       });
       expect(hookSystem.reload).toHaveBeenCalledTimes(1);
@@ -188,7 +184,6 @@ describe('hooksCommand', () => {
       expect(config.setHooksFromSettings).toHaveBeenCalledWith({
         systemHooks: undefined,
         userHooks: undefined,
-        projectHooks: undefined,
         hooks: undefined,
       });
     });

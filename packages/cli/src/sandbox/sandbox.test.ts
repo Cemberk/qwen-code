@@ -268,20 +268,44 @@ describe('start_sandbox', () => {
 
     await vi.waitFor(() => expect(spawnMock).toHaveBeenCalledTimes(2));
     // Digest references never appear in a `docker images -q <image>` listing
-    // even when the content is local, which forced a needless network pull
-    // (and a FatalSandboxError whenever the registry was unreachable) at
-    // every consumer startup; the presence check must be the offline
-    // `image inspect` (#9527 review).
+    // even when the content is local; the presence check must be `image
+    // inspect` (#9527 review).
     expect(spawnMock.mock.calls[0]).toEqual([
       'docker',
       ['image', 'inspect', '--format', '{{.Id}}', digestImage],
     ]);
-    // Content found locally: no pull is attempted — the next spawn is the
-    // sandbox run itself.
-    expect((spawnMock.mock.calls[1]?.[1] as string[])[0]).toBe('run');
+    const runArgs = spawnMock.mock.calls[1]?.[1] as string[];
+    expect(runArgs.slice(0, 2)).toEqual(['run', '--pull=never']);
 
     child.emit('close', 0);
     await expect(result).resolves.toBe(0);
+  });
+
+  it('fails with a build hint instead of pulling a missing image', async () => {
+    vi.stubEnv('SANDBOX_SET_UID_GID', 'false');
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    vi.spyOn(fs, 'realpathSync').mockImplementation((filePath) =>
+      String(filePath),
+    );
+    execSyncMock.mockReturnValue(Buffer.from(''));
+
+    const imageCheck = Object.assign(new EventEmitter(), {
+      stdout: new EventEmitter(),
+    });
+    spawnMock.mockImplementationOnce(() => {
+      queueMicrotask(() => imageCheck.emit('close', 1));
+      return imageCheck;
+    });
+
+    await expect(
+      start_sandbox(
+        { command: 'docker', image: 'qwen-code-sandbox:1.0.0' },
+        [],
+      ),
+    ).rejects.toThrow(
+      "Sandbox image 'qwen-code-sandbox:1.0.0' was not found locally. Build it with `npm run build:sandbox`",
+    );
+    expect(spawnMock).toHaveBeenCalledTimes(1);
   });
 });
 

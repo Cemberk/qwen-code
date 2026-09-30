@@ -4,15 +4,13 @@ The Trusted Folders feature is a security setting that gives you control over wh
 
 ## Enabling the Feature
 
-The Trusted Folders feature is **disabled by default**. To use it, you must first enable it in your settings.
-
-Add the following to your user `settings.json` file:
+The Trusted Folders feature is **enabled by default**. To turn it off (every folder is then treated as trusted), add the following to your user `settings.json` file:
 
 ```json
 {
   "security": {
     "folderTrust": {
-      "enabled": true
+      "enabled": false
     }
   }
 }
@@ -20,13 +18,15 @@ Add the following to your user `settings.json` file:
 
 ## How It Works: The Trust Dialog
 
-Once the feature is enabled, the first time you run the Qwen Code from a folder, a dialog will automatically appear, prompting you to make a choice:
+The first time you run Qwen Code interactively from a folder, a dialog will automatically appear, prompting you to make a choice:
 
 - **Trust folder**: Grants full trust to the current folder (e.g. `my-project`).
 - **Trust parent folder**: Grants trust to the parent directory (e.g. `safe-projects`), which automatically trusts all of its subdirectories as well. This is useful if you keep all your safe projects in one place.
 - **Don't trust**: Marks the folder as untrusted. The CLI will operate in a restricted "safe mode."
 
 Your choice is saved in a central file (`~/.qwen/trustedFolders.json`), so you will only be asked once per folder.
+
+Headless runs (`qwen -p`) cannot show the dialog: a folder without a recorded decision is treated as untrusted. Trust it once from an interactive session (or with `/trust`) to use its project configuration in headless runs.
 
 ## Why Trust Matters: The Impact of an Untrusted Workspace
 

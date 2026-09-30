@@ -116,11 +116,12 @@ describe('debugLogger', () => {
 
       expect(fs.mkdir).toHaveBeenCalledWith(Storage.getGlobalDebugDir(), {
         recursive: true,
+        mode: 0o700,
       });
       expect(fs.appendFile).toHaveBeenCalledWith(
         Storage.getDebugLogPath('test-session-123'),
         '2026-01-24T10:30:00.000Z [DEBUG] Hello world\n',
-        'utf8',
+        { encoding: 'utf8', mode: 0o600 },
       );
     });
 
@@ -158,7 +159,7 @@ describe('debugLogger', () => {
       expect(fs.appendFile).toHaveBeenCalledWith(
         Storage.getDebugLogPath('test-session-123'),
         '2026-01-24T10:30:00.000Z [INFO] [STARTUP] Server started\n',
-        'utf8',
+        { encoding: 'utf8', mode: 0o600 },
       );
     });
 
@@ -196,7 +197,7 @@ describe('debugLogger', () => {
         expect.stringContaining(
           '[trace_id=realtraceidddddddddddddddddddddd span_id=realspanid111111]',
         ),
-        'utf8',
+        { encoding: 'utf8', mode: 0o600 },
       );
     });
 
@@ -211,7 +212,7 @@ describe('debugLogger', () => {
       expect(fs.appendFile).toHaveBeenCalledWith(
         expect.any(String),
         expect.not.stringContaining('trace_id='),
-        'utf8',
+        { encoding: 'utf8', mode: 0o600 },
       );
     });
 
@@ -246,7 +247,7 @@ describe('debugLogger', () => {
         expect.stringContaining(
           '[trace_id=cccccccccccccccccccccccccccccccc span_id=dddddddddddddddd]',
         ),
-        'utf8',
+        { encoding: 'utf8', mode: 0o600 },
       );
     });
 
@@ -263,11 +264,11 @@ describe('debugLogger', () => {
       const mkdirCalls = vi.mocked(fs.mkdir).mock.calls;
       expect(mkdirCalls).toContainEqual([
         path.join(path.resolve('runtime-a'), 'debug'),
-        { recursive: true },
+        { recursive: true, mode: 0o700 },
       ]);
       expect(mkdirCalls).toContainEqual([
         path.join(path.resolve('runtime-b'), 'debug'),
-        { recursive: true },
+        { recursive: true, mode: 0o700 },
       ]);
     });
 
@@ -280,7 +281,7 @@ describe('debugLogger', () => {
       expect(fs.appendFile).toHaveBeenCalledWith(
         expect.any(String),
         expect.stringContaining('Count: 42 items'),
-        'utf8',
+        { encoding: 'utf8', mode: 0o600 },
       );
     });
 
@@ -323,12 +324,12 @@ describe('debugLogger', () => {
       expect(fs.appendFile).toHaveBeenCalledWith(
         Storage.getDebugLogPath('session-A'),
         expect.stringContaining('[DAEMON] message from A'),
-        'utf8',
+        { encoding: 'utf8', mode: 0o600 },
       );
       expect(fs.appendFile).not.toHaveBeenCalledWith(
         Storage.getDebugLogPath('session-B'),
         expect.stringContaining('message from A'),
-        'utf8',
+        { encoding: 'utf8', mode: 0o600 },
       );
     });
 
@@ -347,7 +348,7 @@ describe('debugLogger', () => {
       expect(fs.appendFile).toHaveBeenCalledExactlyOnceWith(
         Storage.getDebugLogPath('session-C'),
         expect.stringContaining('[OVERRIDE] message from C'),
-        'utf8',
+        { encoding: 'utf8', mode: 0o600 },
       );
     });
 

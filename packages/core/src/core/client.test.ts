@@ -575,7 +575,6 @@ describe('Gemini Client (client.ts)', () => {
     mockContentGenerator = {
       generateContent: mockGenerateContentFn,
       generateContentStream: vi.fn(),
-      batchEmbedContents: vi.fn(),
     } as unknown as ContentGenerator;
 
     // Because the LlmClient constructor kicks off an async process (startChat)
@@ -14033,7 +14032,7 @@ describe('Gemini Client (client.ts)', () => {
         );
         vi.mocked(mockConfig.getChatRecordingService).mockReturnValue({
           recordUserMessage,
-          recordAttributionSnapshot: vi.fn(),
+          refreshGitBranch: vi.fn(),
           recordFileHistorySnapshot: vi.fn(),
         } as unknown as ReturnType<Config['getChatRecordingService']>);
         vi.mocked(
@@ -14143,7 +14142,7 @@ describe('Gemini Client (client.ts)', () => {
         vi.mocked(mockConfig.getChatRecordingService).mockReturnValue({
           recordUserMessage,
           recordCronPrompt: vi.fn(),
-          recordAttributionSnapshot: vi.fn(),
+          refreshGitBranch: vi.fn(),
         } as unknown as ReturnType<Config['getChatRecordingService']>);
         mockTurnRunFn.mockReturnValue(
           (async function* () {
@@ -15271,13 +15270,13 @@ describe('Gemini Client (client.ts)', () => {
       });
     });
 
-    describe('attribution snapshot persistence', () => {
-      let recordAttributionSnapshot: ReturnType<typeof vi.fn>;
+    describe('git branch refresh at turn boundaries', () => {
+      let refreshGitBranch: ReturnType<typeof vi.fn>;
 
       beforeEach(() => {
-        recordAttributionSnapshot = vi.fn();
+        refreshGitBranch = vi.fn();
         vi.mocked(mockConfig.getChatRecordingService).mockReturnValue({
-          recordAttributionSnapshot,
+          refreshGitBranch,
           recordUserMessage: vi.fn(),
           recordCronPrompt: vi.fn(),
         } as unknown as ReturnType<Config['getChatRecordingService']>);
@@ -15289,7 +15288,7 @@ describe('Gemini Client (client.ts)', () => {
         );
       });
 
-      it('records a snapshot on ToolResult turns so post-tool state is captured', async () => {
+      it('refreshes on ToolResult turns so post-tool branch switches are captured', async () => {
         const stream = client.sendMessageStream(
           [{ text: 'tool-result' }],
           new AbortController().signal,
@@ -15299,10 +15298,10 @@ describe('Gemini Client (client.ts)', () => {
         for await (const _ of stream) {
           /* consume */
         }
-        expect(recordAttributionSnapshot).toHaveBeenCalled();
+        expect(refreshGitBranch).toHaveBeenCalled();
       });
 
-      it('records a snapshot on UserQuery turns', async () => {
+      it('refreshes on UserQuery turns', async () => {
         const stream = client.sendMessageStream(
           [{ text: 'user' }],
           new AbortController().signal,
@@ -15312,10 +15311,10 @@ describe('Gemini Client (client.ts)', () => {
         for await (const _ of stream) {
           /* consume */
         }
-        expect(recordAttributionSnapshot).toHaveBeenCalled();
+        expect(refreshGitBranch).toHaveBeenCalled();
       });
 
-      it('does not record a snapshot on Retry turns', async () => {
+      it('does not refresh on Retry turns', async () => {
         const stream = client.sendMessageStream(
           [{ text: 'retry' }],
           new AbortController().signal,
@@ -15325,7 +15324,7 @@ describe('Gemini Client (client.ts)', () => {
         for await (const _ of stream) {
           /* consume */
         }
-        expect(recordAttributionSnapshot).not.toHaveBeenCalled();
+        expect(refreshGitBranch).not.toHaveBeenCalled();
       });
     });
 
@@ -15348,7 +15347,7 @@ describe('Gemini Client (client.ts)', () => {
         mockFileHistoryService.makeSnapshot.mockResolvedValue(undefined);
         mockFileHistoryService.getSnapshots.mockReturnValue([latestSnapshot]);
         vi.mocked(mockConfig.getChatRecordingService).mockReturnValue({
-          recordAttributionSnapshot: vi.fn(),
+          refreshGitBranch: vi.fn(),
           recordFileHistorySnapshot,
           recordUserMessage: vi.fn(),
           recordCronPrompt: vi.fn(),

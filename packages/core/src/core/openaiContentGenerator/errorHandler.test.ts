@@ -75,9 +75,9 @@ describe('EnhancedErrorHandler', () => {
     it('logs structured API diagnostics without request contents', () => {
       const apiError = Object.assign(
         new Error(
-          'event:error\n:HTTP_STATUS/429\ndata:{"request_id":"req-123","code":"Throttling.AllocationQuota","message":"Allocated quota exceeded"}',
+          'event:error\ndata:{"request_id":"req-123","code":"rate_limit_exceeded","message":"Rate limit exceeded"}',
         ),
-        { type: 'rate_limit_error' },
+        { type: 'rate_limit_error', status: 429 },
       );
 
       expect(() => {
@@ -91,8 +91,8 @@ describe('EnhancedErrorHandler', () => {
           durationMs: 5000,
           errorType: 'rate_limit_error',
           model: 'test-model',
-          providerCode: 'Throttling.AllocationQuota',
-          providerMessage: 'Allocated quota exceeded',
+          providerCode: 'rate_limit_exceeded',
+          providerMessage: 'Rate limit exceeded',
           requestId: 'req-123',
           statusCode: 429,
           transport: 'sse',

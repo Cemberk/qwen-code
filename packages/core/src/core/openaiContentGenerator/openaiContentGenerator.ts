@@ -2,8 +2,6 @@ import type { ContentGenerator } from '../contentGenerator.js';
 import type { Config } from '../../config/config.js';
 import { type OpenAICompatibleProvider } from './provider/index.js';
 import type {
-  EmbedContentParameters,
-  EmbedContentResponse,
   GenerateContentParameters,
   GenerateContentResponse,
 } from '@google/genai';
@@ -12,10 +10,6 @@ import { ContentGenerationPipeline } from './pipeline.js';
 import { EnhancedErrorHandler } from './errorHandler.js';
 import type { ContentGeneratorConfig } from '../contentGenerator.js';
 import { isAbortError } from '../../utils/errors.js';
-import { createDebugLogger } from '../../utils/debugLogger.js';
-import { extractTextFromContents } from '../../utils/extract-text-from-contents.js';
-
-const debugLogger = createDebugLogger('OPENAI');
 
 export class OpenAIContentGenerator implements ContentGenerator {
   protected pipeline: ContentGenerationPipeline;
@@ -75,31 +69,5 @@ export class OpenAIContentGenerator implements ContentGenerator {
     userPromptId: string,
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
     return this.pipeline.executeStream(request, userPromptId);
-  }
-
-  async embedContent(
-    request: EmbedContentParameters,
-  ): Promise<EmbedContentResponse> {
-    const text = extractTextFromContents(request.contents);
-
-    try {
-      const embedding = await this.pipeline.client.embeddings.create({
-        model: 'text-embedding-ada-002', // Default embedding model
-        input: text,
-      });
-
-      return {
-        embeddings: [
-          {
-            values: embedding.data[0].embedding,
-          },
-        ],
-      };
-    } catch (error) {
-      debugLogger.error('OpenAI API Embedding Error:', error);
-      throw new Error(
-        `OpenAI API error: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
   }
 }

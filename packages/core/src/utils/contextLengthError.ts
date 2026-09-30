@@ -26,7 +26,6 @@ const CONTEXT_LENGTH_PATTERNS = [
   /\bmaximum context length\b/i,
   /\bprompt\s+(?:is\s+)?too long\b/i,
   /\binput\s+(?:token\s+)?(?:count\s+|length\s+)?(?:is\s+)?too long\b/i,
-  /\brange of input length should be\b/i,
   /\btoo many tokens\b/i,
   /\btokens?\s*>\s*[\d,]+\s*(?:maximum|max|limit)\b/i,
   /\b(?:input|prompt|messages?|context)\b[^\n]{0,120}\btokens?\b[^\n]{0,120}\bexceed(?:s|ed|ing)?\b/i,
@@ -74,18 +73,6 @@ function parseTokenCounts(text: string): {
     return {
       actualTokens: parseInteger(inputExceedsMatch[1]!),
       limitTokens: parseInteger(inputExceedsMatch[2]!),
-    };
-  }
-
-  // DashScope: "Range of input length should be [1, 196608]" — the upper
-  // bound is the server's REAL input ceiling (observed to differ from the
-  // configured context window), so parse it out for the retry paths.
-  const rangeMatch = text.match(
-    /range of input length should be\s*\[\s*\d[\d,]*\s*,\s*(\d[\d,]*)\s*\]/i,
-  );
-  if (rangeMatch) {
-    return {
-      limitTokens: parseInteger(rangeMatch[1]!),
     };
   }
 

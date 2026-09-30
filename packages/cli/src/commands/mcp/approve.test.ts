@@ -23,6 +23,7 @@ import {
   MCP_APPROVALS_FILENAME,
 } from '../../config/mcpApprovals.js';
 import { loadProjectMcpServers } from '../../config/mcpJson.js';
+import { resetTrustedFoldersForTesting } from '../../config/trustedFolders.js';
 
 describe('qwen mcp approve / reject', () => {
   let dir: string;
@@ -55,7 +56,9 @@ describe('qwen mcp approve / reject', () => {
 
   afterEach(() => {
     delete process.env['QWEN_CODE_MCP_APPROVALS_PATH'];
+    delete process.env['QWEN_CODE_TRUSTED_FOLDERS_PATH'];
     resetMcpApprovalsForTesting();
+    resetTrustedFoldersForTesting();
     cwdSpy.mockRestore();
     fs.rmSync(dir, { recursive: true, force: true });
   });
@@ -109,7 +112,11 @@ describe('qwen mcp approve / reject', () => {
     expect(output()).toContain('Approved MCP server "slack"');
   });
 
-  it('approves a workspace .qwen/settings.json server', async () => {
+  it('approves a workspace .qwen/settings.json server in a trusted folder', async () => {
+    const trustedFolders = path.join(dir, 'trustedFolders.json');
+    fs.writeFileSync(trustedFolders, JSON.stringify({ [dir]: 'TRUST_FOLDER' }));
+    process.env['QWEN_CODE_TRUSTED_FOLDERS_PATH'] = trustedFolders;
+    resetTrustedFoldersForTesting();
     writeWorkspaceSettings({ ws: { command: 'node', args: ['ws.js'] } });
 
     await run(approveCommand, { name: 'ws', all: false });

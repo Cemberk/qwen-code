@@ -7,7 +7,6 @@
 export interface HookSettingsForConfig {
   systemHooks?: Record<string, unknown>;
   userHooks?: Record<string, unknown>;
-  projectHooks?: Record<string, unknown>;
   hooks?: Record<string, unknown>;
 }
 
@@ -19,8 +18,8 @@ export interface HookSettingsForConfig {
  * hooks were supplied at all.
  *
  * @param mergedHooks The merged `hooks` setting.
- * @param separated System, user and project hooks read per scope. Project
- *   hooks are expected to be withheld already when the folder is untrusted.
+ * @param separated System and user hooks read per scope. Workspace hooks are
+ *   never loaded: `hooks` is a workspace-restricted setting.
  * @param hooksDisabled True in bare or safe mode.
  */
 export function resolveHookSettingsForConfig(
@@ -29,7 +28,6 @@ export function resolveHookSettingsForConfig(
     | {
         systemHooks?: Record<string, unknown>;
         userHooks?: Record<string, unknown>;
-        projectHooks?: Record<string, unknown>;
       }
     | undefined,
   hooksDisabled: boolean,
@@ -38,7 +36,6 @@ export function resolveHookSettingsForConfig(
     return {
       systemHooks: undefined,
       userHooks: undefined,
-      projectHooks: undefined,
       hooks: undefined,
     };
   }
@@ -52,7 +49,6 @@ export function resolveHookSettingsForConfig(
   return {
     systemHooks: separated.systemHooks,
     userHooks: separated.userHooks,
-    projectHooks: separated.projectHooks,
     hooks: undefined,
   };
 }

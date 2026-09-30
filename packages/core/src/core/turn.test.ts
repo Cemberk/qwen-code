@@ -777,7 +777,6 @@ describe('Turn', () => {
     it.each([
       [{ statusCode: 429 }, 429],
       [{ response: { status: 503, data: {} } }, 503],
-      [new Error('upstream :HTTP_STATUS/429'), 429],
     ])('normalizes supported provider status shapes', async (error, status) => {
       mockSendMessageStream.mockRejectedValue(error);
       mockMaybeIncludeSchemaDepthContext.mockResolvedValue(undefined);

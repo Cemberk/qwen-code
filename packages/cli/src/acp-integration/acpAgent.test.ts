@@ -4922,7 +4922,6 @@ describe('QwenAgent MCP support', () => {
       forScope: vi.fn().mockReturnValue({ settings: { mcpServers: {} } }),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
   }
 
@@ -4940,7 +4939,6 @@ describe('QwenAgent MCP support', () => {
       user,
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
       setValue: vi.fn((_scope: string, key: string, value: unknown) => {
         const [, memoryKey] = key.split('.');
         if (memoryKey) {
@@ -5034,7 +5032,6 @@ describe('QwenAgent MCP support', () => {
       isTrusted: true,
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
       forScope: vi.fn((scope: string) =>
         scope === 'Workspace'
           ? { settings: workspaceSettings }
@@ -5330,7 +5327,6 @@ describe('QwenAgent MCP support', () => {
       forScope: vi.fn().mockReturnValue({ settings: { mcpServers: {} } }),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
     vi.mocked(loadSettings).mockReturnValue(settings);
     const { agent, agentPromise } = await bootAcpAgent();
@@ -23230,7 +23226,6 @@ describe('QwenAgent session-management routing (rename / delete / list / branch 
       merged: { mcpServers: {} },
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
   }
 
@@ -25238,7 +25233,6 @@ describe('QwenAgent loadSession / unstable_resumeSession', () => {
       merged: { mcpServers: {} },
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
   }
 
@@ -25809,7 +25803,6 @@ describe('QwenAgent loadSession / unstable_resumeSession', () => {
         reloadScopesFromDiskAtomically,
         getSystemHooks: vi.fn().mockReturnValue(undefined),
         getUserHooks: vi.fn().mockReturnValue({}),
-        getProjectHooks: vi.fn().mockReturnValue({}),
       } as unknown as LoadedSettings;
       const innerConfig = bindRestoreMocks({
         sessionExists: true,
@@ -25910,7 +25903,6 @@ describe('QwenAgent loadSession / unstable_resumeSession', () => {
         .mockReturnValueOnce(false),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
     bindRestoreMocks({ sessionExists: true });
     vi.mocked(loadSettings).mockReturnValue(settings);
@@ -28997,7 +28989,6 @@ describe('QwenAgent extMethod runtime MCP add/remove (T2.8)', () => {
       forScope: vi.fn().mockReturnValue({ settings: {} }),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings);
     let discoveryConfigSessionContext: string | undefined;
     vi.mocked(loadCliConfig).mockImplementation(async () => {
@@ -29067,7 +29058,6 @@ describe('QwenAgent extMethod runtime MCP add/remove (T2.8)', () => {
       forScope: vi.fn().mockReturnValue({ settings: {} }),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings);
     await expect(
       agent.extMethod(SERVE_CONTROL_EXT_METHODS.workspaceMcpReload, {}),
@@ -29191,7 +29181,6 @@ describe('QwenAgent extMethod runtime MCP add/remove (T2.8)', () => {
       forScope: vi.fn().mockReturnValue({ settings: {} }),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings);
     vi.mocked(loadCliConfig).mockResolvedValue(discoveryConfig);
     mockArgv.experimentalLsp = true;
@@ -29217,7 +29206,6 @@ describe('QwenAgent extMethod runtime MCP add/remove (T2.8)', () => {
       forScope: vi.fn().mockReturnValue({ settings: {} }),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings);
     await expect(
       agent.extMethod(SERVE_CONTROL_EXT_METHODS.workspaceMcpReload, {}),
@@ -29280,7 +29268,6 @@ describe('QwenAgent extMethod runtime MCP add/remove (T2.8)', () => {
       forScope: vi.fn().mockReturnValue({ settings: {} }),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings);
     vi.mocked(loadCliConfig).mockResolvedValue(discoveryConfig);
 
@@ -29305,7 +29292,6 @@ describe('QwenAgent extMethod runtime MCP add/remove (T2.8)', () => {
       forScope: vi.fn().mockReturnValue({ settings: {} }),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings);
     await expect(
       agent.extMethod(SERVE_CONTROL_EXT_METHODS.workspaceMcpReload, {}),
@@ -29346,7 +29332,6 @@ describe('QwenAgent extMethod runtime MCP add/remove (T2.8)', () => {
       merged: { mcpServers: {} },
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings);
     vi.mocked(loadCliConfig)
       .mockResolvedValueOnce(failedConfig)
@@ -29489,7 +29474,6 @@ describe('QwenAgent extMethod runtime MCP add/remove (T2.8)', () => {
       setValue,
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings);
     vi.mocked(loadCliConfig).mockResolvedValue(discoveryConfig);
 
@@ -29892,7 +29876,6 @@ describe('sessionLanguage multi-session propagation', () => {
       merged: { mcpServers: {} },
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings);
 
     vi.mocked(loadCliConfig).mockImplementation(
@@ -29998,7 +29981,6 @@ describe('sessionLanguage multi-session propagation', () => {
       merged: { mcpServers: {} },
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings);
 
     vi.mocked(loadCliConfig).mockImplementation(async () => {
@@ -30088,7 +30070,6 @@ describe('sessionLanguage multi-session propagation', () => {
       merged: { mcpServers: {} },
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings);
     vi.mocked(loadCliConfig).mockImplementation(
       async () => sessionConfigs[sessionIdx]! as unknown as Config,
@@ -30176,7 +30157,6 @@ describe('sessionLanguage multi-session propagation', () => {
       }),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
     const cfg1 = makeConfig({
       getSessionId: vi.fn().mockReturnValue('provider-1'),
@@ -30321,7 +30301,6 @@ describe('sessionLanguage multi-session propagation', () => {
       }),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
     const cfg = makeConfig({
       getSessionId: vi.fn().mockReturnValue('s-reload'),
@@ -30399,7 +30378,6 @@ describe('sessionLanguage multi-session propagation', () => {
       }),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
     let approvalMode = 'default';
     const cfg = makeConfig({
@@ -30506,7 +30484,6 @@ describe('sessionLanguage multi-session propagation', () => {
       }),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
     let installedProvider: (() => boolean) | undefined;
     const setSessionWorkflowEnabledProvider = vi.fn(
@@ -30621,7 +30598,6 @@ describe('sessionLanguage multi-session propagation', () => {
       }),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
 
     let installedProvider: (() => boolean) | undefined;
@@ -30727,7 +30703,6 @@ describe('sessionLanguage multi-session propagation', () => {
       reloadScopeFromDisk: vi.fn(),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
 
     let installedProvider: (() => boolean) | undefined;
@@ -30794,7 +30769,6 @@ describe('sessionLanguage multi-session propagation', () => {
       reloadScopeFromDisk: vi.fn(),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
     vi.mocked(loadSettings).mockReturnValue(freshSettings);
     await agent.extMethod('qwen/settings/getCore', {});
@@ -30827,7 +30801,6 @@ describe('sessionLanguage multi-session propagation', () => {
       reloadScopeFromDisk: vi.fn(),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
 
     let approvalMode = 'default';
@@ -30894,7 +30867,6 @@ describe('sessionLanguage multi-session propagation', () => {
       reloadScopeFromDisk: vi.fn(),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
     vi.mocked(loadSettings).mockReturnValue(freshSettings);
     await agent.extMethod('qwen/settings/getCore', {});
@@ -30946,7 +30918,6 @@ describe('sessionLanguage multi-session propagation', () => {
       reloadScopeFromDisk: vi.fn(),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
 
     let approvalMode = 'plan';
@@ -31059,7 +31030,6 @@ describe('sessionLanguage multi-session propagation', () => {
       reloadScopeFromDisk: vi.fn(),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
 
     let approvalMode = 'default';
@@ -31168,9 +31138,9 @@ describe('sessionLanguage multi-session propagation', () => {
     await agentPromise;
   });
 
-  it('folds a removed or falsy approvalMode key to AUTO for live sessions on reload', async () => {
+  it('folds a removed or falsy approvalMode key to DEFAULT for live sessions on reload', async () => {
     // Deleting tools.approvalMode from the settings file must reach live
-    // sessions: the reload folds a missing/falsy value to AUTO — the same
+    // sessions: the reload folds a missing/falsy value to DEFAULT — the same
     // default a fresh session derives — instead of skipping it and pinning a
     // stale privileged mode until daemon restart.
     let mergedSettings: Record<string, unknown> = {
@@ -31183,7 +31153,6 @@ describe('sessionLanguage multi-session propagation', () => {
       reloadScopeFromDisk: vi.fn(),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
 
     let approvalMode = 'plan';
@@ -31240,11 +31209,11 @@ describe('sessionLanguage multi-session propagation', () => {
     approvalModes.splice(0, approvalModes.length, 'default', 'plan', 'auto');
     try {
       // The operator deletes the key (hand edit / dotfile sync): the live
-      // session leaves plan for AUTO on the next reload.
+      // session leaves plan for DEFAULT on the next reload.
       mergedSettings = {};
       await agent.extMethod(SERVE_CONTROL_EXT_METHODS.workspaceReload, {});
-      expect(setApprovalMode).toHaveBeenCalledWith('auto');
-      expect(approvalMode).toBe('auto');
+      expect(setApprovalMode).toHaveBeenCalledWith('default');
+      expect(approvalMode).toBe('default');
       expect(clearActiveTodoPlanRevision).toHaveBeenCalledTimes(1);
       expect(clearTodoStopGuardTrust).not.toHaveBeenCalled();
 
@@ -31262,8 +31231,8 @@ describe('sessionLanguage multi-session propagation', () => {
 
       mergedSettings = { tools: { approvalMode: null } };
       await agent.extMethod(SERVE_CONTROL_EXT_METHODS.workspaceReload, {});
-      expect(setApprovalMode).toHaveBeenCalledWith('auto');
-      expect(approvalMode).toBe('auto');
+      expect(setApprovalMode).toHaveBeenCalledWith('default');
+      expect(approvalMode).toBe('default');
       setApprovalMode.mockClear();
 
       // ...and an invalid value is never converged at all: boot rejects an
@@ -31298,7 +31267,6 @@ describe('sessionLanguage multi-session propagation', () => {
       reloadScopeFromDisk: vi.fn(),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
 
     let approvalMode = 'default';
@@ -31391,7 +31359,6 @@ describe('sessionLanguage multi-session propagation', () => {
       reloadScopeFromDisk: vi.fn(),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
 
     let approvalMode = 'plan';
@@ -31485,7 +31452,6 @@ describe('sessionLanguage multi-session propagation', () => {
       reloadScopeFromDisk: vi.fn(),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
 
     const approvalModes = new Map<string, string>([
@@ -31621,7 +31587,6 @@ describe('sessionLanguage multi-session propagation', () => {
       reloadScopeFromDisk: vi.fn(),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
 
     let approvalMode = 'auto-edit';
@@ -31706,7 +31671,6 @@ describe('sessionLanguage multi-session propagation', () => {
       reloadScopeFromDisk: vi.fn(),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
 
     let approvalMode = 'plan';
@@ -31786,7 +31750,6 @@ describe('sessionLanguage multi-session propagation', () => {
       reloadScopeFromDisk: vi.fn(),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
 
     let approvalMode = 'default';
@@ -31875,7 +31838,6 @@ describe('sessionLanguage multi-session propagation', () => {
       reloadScopeFromDisk: vi.fn(),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
 
     let approvalMode = 'default';
@@ -31968,7 +31930,6 @@ describe('sessionLanguage multi-session propagation', () => {
       }),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
     let workflowsEnabled: boolean | undefined = true;
     const registryCancel = vi.fn();
@@ -32072,7 +32033,6 @@ describe('sessionLanguage multi-session propagation', () => {
       reloadScopeFromDisk: vi.fn(),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
     const cfg1 = makeConfig({
       getSessionId: vi.fn().mockReturnValue('skill-1'),
@@ -32154,7 +32114,6 @@ describe('sessionLanguage multi-session propagation', () => {
       reloadScopeFromDisk: vi.fn(),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
     const bootstrapRefresh = vi.fn().mockResolvedValue(undefined);
     const sessionRefresh = vi.fn().mockResolvedValue(undefined);
@@ -32297,7 +32256,6 @@ describe('sessionLanguage multi-session propagation', () => {
       reloadScopeFromDisk: vi.fn(),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
     vi.mocked(loadSettings).mockReturnValue(bootstrapSettings);
     vi.mocked(loadCliConfig).mockResolvedValue(cfg as unknown as Config);
@@ -32414,7 +32372,6 @@ describe('sessionLanguage multi-session propagation', () => {
       merged: { mcpServers: {} },
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings);
     vi.mocked(loadCliConfig).mockResolvedValue(cfg as unknown as Config);
     vi.mocked(Session).mockImplementation(
@@ -32520,7 +32477,6 @@ describe('sessionLanguage multi-session propagation', () => {
       merged: { mcpServers: {} },
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings);
     vi.mocked(loadCliConfig).mockResolvedValue(cfg as unknown as Config);
     vi.mocked(Session).mockImplementation(
@@ -32599,7 +32555,6 @@ describe('sessionLanguage multi-session propagation', () => {
       merged: { mcpServers: {} },
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings);
     vi.mocked(loadCliConfig).mockResolvedValue(cfg as unknown as Config);
     vi.mocked(Session).mockImplementation(
@@ -32652,7 +32607,6 @@ describe('sessionLanguage multi-session propagation', () => {
       reloadScopeFromDisk: vi.fn(),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
 
     const agentPromise = runAcpAgent(
@@ -32697,7 +32651,6 @@ describe('sessionLanguage multi-session propagation', () => {
       reloadScopeFromDisk: vi.fn(),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
     vi.mocked(setLanguageAsync).mockRejectedValueOnce(new Error('i18n down'));
 
@@ -32745,7 +32698,6 @@ describe('sessionLanguage multi-session propagation', () => {
       reloadScopeFromDisk: vi.fn(),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
     vi.mocked(loadSettings).mockReturnValue(settings);
     vi.mocked(loadCliConfig).mockImplementation(
@@ -32820,7 +32772,6 @@ describe('sessionLanguage multi-session propagation', () => {
       reloadScopeFromDisk: vi.fn(),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
     vi.mocked(loadSettings).mockReturnValue(settings);
     vi.mocked(loadCliConfig).mockResolvedValue(cfgA as unknown as Config);
@@ -32878,7 +32829,6 @@ describe('sessionLanguage multi-session propagation', () => {
       reloadScopeFromDisk: vi.fn(),
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
 
     const agentPromise = runAcpAgent(

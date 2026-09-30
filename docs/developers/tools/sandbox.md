@@ -45,11 +45,11 @@ qwen -v
 
 - Path: `.qwen/sandbox.Dockerfile`
 
-- Official mirror image address:https://github.com/QwenLM/qwen-code/pkgs/container/qwen-code
+- Base it on the default sandbox image, built locally with `npm run build:sandbox` in the qwen-code repository (images are never pulled).
 
 ```bash
-# Based on the official Qwen sandbox image (It is recommended to explicitly specify the version)
-FROM ghcr.io/qwenlm/qwen-code:sha-570ec43
+# Based on the locally built Qwen sandbox image
+FROM qwen-code-sandbox:<version>
 # Add your extra tools here
 RUN apt-get update && apt-get install -y \
     git \
@@ -82,10 +82,4 @@ npm unlink
 which qwen
 # It should display "qwen not found"
 
-# Reinstall the global version if necessary
-npm install -g @qwen-code/qwen-code
-
-# Verification Recovery
-which qwen
-qwen --version
 ```

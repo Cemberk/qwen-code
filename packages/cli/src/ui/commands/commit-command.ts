@@ -39,7 +39,8 @@ export const COMMIT_PROMPT = `You are executing the /commit slash command: creat
 ## 3. Draft the message
 - Draft a commit message that matches the style of the repository's existing commits (subject format, scope prefixes, tense).
 - Write a concise subject line. When the change deserves explanation, add a body separated from the subject by a blank line — multi-line messages are fully supported.
-- For a multi-line message, prefer repeated inline \`-m\` flags (\`git commit -m "subject" -m "body"\`; git joins the values with blank lines) over ANSI-C $'...' quoting or \`-m "$(cat <<EOF ...)"\` wrappers — see Attribution for why the message form matters.
+- For a multi-line message, prefer repeated inline \`-m\` flags (\`git commit -m "subject" -m "body"\`; git joins the values with blank lines) over ANSI-C $'...' quoting or \`-m "$(cat <<EOF ...)"\` wrappers.
+- Do not add AI-assistance or co-author trailers unless the user explicitly asks for them.
 
 ## 4. Commit
 - Before committing, run \`git diff --cached --name-status\` and confirm every listed path is one you chose and have read: \`git commit\` commits the entire index, including anything the user had already staged before this command ran. Unstage whatever does not belong with \`git restore --staged <path>\` — a secret file the user had already staged gets unstaged and reported, never committed.
@@ -52,12 +53,6 @@ export const COMMIT_PROMPT = `You are executing the /commit slash command: creat
 - Never stage or commit files that look like they contain secrets (.env files, private keys, credentials or token files). If such a file appears in the change set, warn the user and leave it out.
 - If \`git status\` shows a detached HEAD or an in-progress merge, rebase, or cherry-pick, stop and report the state instead of committing; proceed only after the user confirms.
 - If the user's instructions conflict with these rules, follow the rules and explain why.
-
-## Attribution
-- Qwen Code auto-appends the configured \`Co-authored-by\` trailer only when all of these hold: \`general.gitCoAuthor.commit\` is enabled (it is by default), the active shell is bash, the commit carries a plain inline \`-m\`/\`--message\` value (quoted, without \`$()\` command substitution), and the \`git commit\` runs as a single-line command in the current directory — a backslash-continued multi-line command, one wrapped in \`bash -c\`, or one redirected with \`git -C\` or an absolute \`cd\` is not rewritten. On any other setup — PowerShell or cmd, a heredoc or \`git commit -F\` message, an editor session — no trailer is added. This list is not exhaustive: \`git log -1 --format=%B\` is the authority on what actually landed.
-- When the auto-append fires, the trailer is inserted as a new final paragraph of the message. Do not add your own AI-assistance trailer on top of it, or the commit ends up with two; and since git only recognizes the final trailer block, any trailer lines you wrote earlier in the message would be pushed out of it and degrade to body text.
-- When the user explicitly names additional co-authors: on bash, commit with a non-inline message (a heredoc or \`git commit -F -\`) so the auto-append stays out of the way, and write the \`Co-authored-by: Name <email>\` lines yourself as the final paragraph (the configured trailer is not auto-added in that form). On other shells nothing is appended, so an inline \`-m\` message with your own trailer lines is fine.
-- After committing, run \`git log -1 --format=%B\` and check which trailers actually landed. If the user asked for credit and a trailer is missing, say so — never claim attribution the commit does not contain.
 
 When done, report what was staged and committed — or why nothing was committed.`;
 

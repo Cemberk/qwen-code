@@ -108,10 +108,19 @@ const TRACKED_ENV = [
   'TEMP',
   'QWEN_SANDBOX',
   'QWEN_SANDBOX_IMAGE',
-  'QWEN_SANDBOX_PROXY_COMMAND',
   'QWEN_SANDBOX_NET',
   'OPENAI_API_KEY',
   'OPENAI_BASE_URL',
+  'OPENAI_MODEL',
+  'openai_base_url',
+  'QWEN_MODEL',
+  'QWEN_CUSTOM_API_KEY_OPENAI_TEST',
+  'QWEN_TELEMETRY_OUTFILE',
+  'QWEN_SYSTEM_MD',
+  'QWEN_CODE_MERMAID_MMD_CLI',
+  'SANDBOX_FLAGS',
+  'SANDBOX_MOUNTS',
+  'SEATBELT_PROFILE',
   'ANTHROPIC_API_KEY',
   'QWEN_TEST_PROVIDER_KEY',
   'DEMO_VAR',
@@ -128,8 +137,13 @@ function makeWorkspace(): string {
   return dir;
 }
 
+// Most cases exercise key filtering in an unrestricted workspace, so folder
+// trust (on by default) is turned off unless a case sets `security` itself.
 function testSettings(partial: Partial<Settings>): Settings {
-  return partial as Settings;
+  return {
+    security: { folderTrust: { enabled: false } },
+    ...partial,
+  } as Settings;
 }
 
 beforeEach(() => {
@@ -1490,7 +1504,6 @@ describe('loadEnvironment', () => {
         'TEMP=/workspace-a/tmp',
         'QWEN_SANDBOX=false',
         'QWEN_SANDBOX_IMAGE=registry.example/attacker:latest',
-        'QWEN_SANDBOX_PROXY_COMMAND=/workspace-a/proxy.sh',
         'RUNTIME_DOTENV=allowed',
         '',
       ].join('\n'),
@@ -1511,9 +1524,6 @@ describe('loadEnvironment', () => {
       expect(env['QWEN_SANDBOX_IMAGE']).not.toBe(
         'registry.example/attacker:latest',
       );
-      expect(env['QWEN_SANDBOX_PROXY_COMMAND']).not.toBe(
-        '/workspace-a/proxy.sh',
-      );
       expect(env['QWEN_SANDBOX_NET']).not.toBe('closed');
     };
 
@@ -1529,6 +1539,73 @@ describe('loadEnvironment', () => {
     expectSandboxKeysRejected(snapshot.effectiveEnv);
     expect(snapshot.effectiveEnv['RUNTIME_SETTINGS_ONLY']).toBe(
       'from-settings',
+    );
+  });
+
+  // A repository must not point the session at another model server, swap
+  // its credentials or model, or route session data and sandbox setup; the
+  // operator's home `.env` and settings `env` still may.
+  it('never applies model, telemetry, prompt or sandbox keys from a project .env, including reload', () => {
+    resetEnvironmentTrackingForTesting();
+    const workspace = makeWorkspace();
+    for (const envPath of [
+      path.join(workspace, '.env'),
+      path.join(workspace, '.qwen', '.env'),
+    ]) {
+      fs.mkdirSync(path.dirname(envPath), { recursive: true });
+      fs.writeFileSync(
+        envPath,
+        [
+          'OPENAI_BASE_URL=https://api.openai.com/v1',
+          'openai_base_url=https://api.openai.com/v1',
+          'OPENAI_API_KEY=sk-repo',
+          'OPENAI_MODEL=repo-model',
+          'QWEN_MODEL=repo-model',
+          'QWEN_CUSTOM_API_KEY_OPENAI_TEST=sk-repo',
+          'QWEN_TELEMETRY_OUTFILE=/workspace-a/telemetry.log',
+          'QWEN_SYSTEM_MD=/workspace-a/system.md',
+          'QWEN_CODE_MERMAID_MMD_CLI=/workspace-a/mmdc',
+          'SANDBOX_FLAGS=--network=host',
+          'SANDBOX_MOUNTS=/:/host',
+          'SEATBELT_PROFILE=permissive-open',
+          'RUNTIME_DOTENV=allowed',
+          '',
+        ].join('\n'),
+      );
+    }
+    const homeEnv = path.join(os.homedir(), '.qwen', '.env');
+    fs.mkdirSync(path.dirname(homeEnv), { recursive: true });
+    fs.writeFileSync(homeEnv, 'OPENAI_BASE_URL=http://127.0.0.1:11434/v1\n');
+    const settings = testSettings({ env: { OPENAI_API_KEY: 'sk-operator' } });
+
+    const expectOperatorValues = (env: Readonly<NodeJS.ProcessEnv>) => {
+      expect(env['OPENAI_BASE_URL']).toBe('http://127.0.0.1:11434/v1');
+      expect(env['openai_base_url']).toBeUndefined();
+      expect(env['OPENAI_API_KEY']).toBe('sk-operator');
+      for (const key of [
+        'OPENAI_MODEL',
+        'QWEN_MODEL',
+        'QWEN_CUSTOM_API_KEY_OPENAI_TEST',
+        'QWEN_TELEMETRY_OUTFILE',
+        'QWEN_SYSTEM_MD',
+        'QWEN_CODE_MERMAID_MMD_CLI',
+        'SANDBOX_FLAGS',
+        'SANDBOX_MOUNTS',
+        'SEATBELT_PROFILE',
+      ]) {
+        expect.soft(env[key], key).toBeUndefined();
+      }
+      expect(env['RUNTIME_DOTENV']).toBe('allowed');
+    };
+
+    loadEnvironment(settings, workspace);
+    expectOperatorValues(process.env);
+
+    reloadEnvironment(settings, workspace);
+    expectOperatorValues(process.env);
+
+    expectOperatorValues(
+      buildRuntimeEnvironment(settings, workspace, {}).effectiveEnv,
     );
   });
 

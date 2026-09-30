@@ -17,29 +17,21 @@ export function hasOwnModelProviders(settingsObj: unknown): boolean {
 }
 
 /**
- * Returns which writable scope (Workspace/User) owns the effective modelProviders
- * configuration.
- *
- * Note: Workspace scope is only considered when the workspace is trusted.
+ * Returns which writable scope owns the effective modelProviders
+ * configuration. Workspace settings never do: `modelProviders` and `model` are
+ * workspace-restricted (see WORKSPACE_RESTRICTED_ROOT_SETTINGS).
  */
 export function getModelProvidersOwnerScope(
   settings: LoadedSettings,
 ): SettingScope | undefined {
-  if (settings.isTrusted && hasOwnModelProviders(settings.workspace.settings)) {
-    return SettingScope.Workspace;
-  }
-
-  if (hasOwnModelProviders(settings.user.settings)) {
-    return SettingScope.User;
-  }
-
-  return undefined;
+  return hasOwnModelProviders(settings.user.settings)
+    ? SettingScope.User
+    : undefined;
 }
 
 /**
- * Choose the settings scope to persist a model selection.
- * Prefer persisting back to the scope that contains the effective modelProviders
- * config, otherwise fall back to the legacy trust-based heuristic.
+ * Choose the settings scope to persist a model selection: the scope that
+ * contains the effective modelProviders config, otherwise User.
  */
 export function getPersistScopeForModelSelection(
   settings: LoadedSettings,
@@ -55,22 +47,4 @@ export function getWritableScopes(settings: LoadedSettings): SettingScope[] {
   return settings.isTrusted
     ? [SettingScope.Workspace, SettingScope.User]
     : [SettingScope.User];
-}
-
-/**
- * Returns the highest-precedence writable scope that explicitly owns `key`
- * (top-level settings key), or `undefined` when no writable scope sets it.
- * Used to persist an edit to a key back to the same scope it lives in, since
- * keys like `modelFallbacks` / `model` are independently scoped from
- * `modelProviders`.
- */
-export function getOwnKeyScope(
-  settings: LoadedSettings,
-  key: string,
-): SettingScope | undefined {
-  for (const scope of getWritableScopes(settings)) {
-    const obj = settings.forScope(scope).settings as Record<string, unknown>;
-    if (Object.prototype.hasOwnProperty.call(obj, key)) return scope;
-  }
-  return undefined;
 }

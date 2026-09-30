@@ -11,6 +11,4 @@ export default {
     type: 'separator',
   },
   tools: 'Tools',
-
-  examples: 'Examples',
 };

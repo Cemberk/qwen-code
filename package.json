@@ -15,7 +15,7 @@
     "url": "git+https://github.com/QwenLM/qwen-code.git"
   },
   "config": {
-    "sandboxImageUri": "ghcr.io/qwenlm/qwen-code:0.24.6"
+    "sandboxImageUri": "qwen-code-sandbox:0.24.6"
   },
   "scripts": {
     "start": "node scripts/start.js",
@@ -52,7 +52,6 @@
     "lint:fix": "eslint . --fix && eslint integration-tests --fix",
     "lint:ci": "eslint . --ext .ts,.tsx --max-warnings 0 && eslint integration-tests --max-warnings 0",
     "lint:all": "node scripts/lint.js",
-    "audit:runtime:critical": "node scripts/audit-runtime-critical.js",
     "format": "prettier --experimental-cli --write .",
     "typecheck": "npm run typecheck --workspaces --if-present && npm run typecheck:integration",
     "typecheck:integration": "tsc -p integration-tests/tsconfig.json --pretty false",
@@ -61,12 +60,7 @@
     "postinstall": "patch-package",
     "prepare": "node scripts/prepare.js",
     "prepare:package": "node scripts/prepare-package.js",
-    "package:hosted-installation": "node scripts/build-hosted-installation-assets.js",
-    "package:standalone": "node scripts/create-standalone-package.js",
-    "package:standalone:release": "node scripts/build-standalone-release.js",
-    "verify:installation-release": "node scripts/verify-installation-release.js",
     "release:version": "node scripts/version.js",
-    "changelog": "node scripts/generate-changelog.js",
     "check:lockfile": "node scripts/check-lockfile.js",
     "check:tui-dep-direction": "node scripts/check-tui-dep-direction.mjs",
     "check:core-subpath-exports": "node scripts/check-core-subpath-exports.mjs",

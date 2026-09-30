@@ -42,7 +42,6 @@ import {
 } from '../tools/tool-result-boundary-diagnostics.js';
 import { compactToolResultDisplayForRecording } from '../utils/toolResultDisplayCompaction.js';
 import { stripRuntimeSnapshotPrefix } from '../utils/runtimeModelPrefix.js';
-import type { AttributionSnapshot } from './commitAttribution.js';
 import { tryGenerateSessionTitle } from './sessionTitle.js';
 import type {
   ChatCompressionInfo,
@@ -313,7 +312,6 @@ export interface ChatRecord {
     | 'slash_command'
     | 'ui_telemetry'
     | 'at_command'
-    | 'attribution_snapshot'
     | 'notification'
     | 'background_task_completed'
     | 'cron'
@@ -389,7 +387,6 @@ export interface ChatRecord {
     | SlashCommandRecordPayload
     | UiTelemetryRecordPayload
     | AtCommandRecordPayload
-    | AttributionSnapshotPayload
     | CustomTitleRecordPayload
     | ParentSessionRecordPayload
     | SessionSourceRecordPayload
@@ -743,14 +740,6 @@ export function sessionModelPayloadsEqual(
  */
 export interface UiTelemetryRecordPayload {
   uiEvent: UiEvent;
-}
-
-/**
- * Stored payload for attribution state snapshots.
- * Enables session persistence of AI contribution tracking.
- */
-export interface AttributionSnapshotPayload {
-  snapshot: AttributionSnapshot;
 }
 
 /**
@@ -1118,15 +1107,6 @@ export class ChatRecordingService {
   /** Source writes whose durable result and cached value are unresolved. */
   private pendingSourceWrites = 0;
 
-  /**
-   * JSON-serialized form of the most recent attribution snapshot accepted for
-   * recording, used to deduplicate identical writes on every non-retry
-   * turn. Without this, sessions that touch many files would write a
-   * full duplicate of the entire snapshot to the JSONL on every turn,
-   * inflating the on-disk session and making `/resume` slower to
-   * hydrate.
-   */
-  private lastAttributionSnapshotJson: string | undefined;
   private cachedGitBranch:
     | { cwd: string; branch: string | undefined }
     | undefined;
@@ -1227,7 +1207,7 @@ export class ChatRecordingService {
     const chatsDir = path.join(this.config.storage.getProjectDir(), 'chats');
     if (this.chatsDirEnsured) return chatsDir;
     try {
-      fs.mkdirSync(chatsDir, { recursive: true });
+      fs.mkdirSync(chatsDir, { recursive: true, mode: 0o700 });
       this.chatsDirEnsured = true;
     } catch {
       // The file creation below reports the actionable error.
@@ -1242,7 +1222,11 @@ export class ChatRecordingService {
       `${this.getSessionId()}.jsonl`,
     );
     try {
-      fs.writeFileSync(conversationFile, '', { flag: 'wx', encoding: 'utf8' });
+      fs.writeFileSync(conversationFile, '', {
+        flag: 'wx',
+        encoding: 'utf8',
+        mode: 0o600,
+      });
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
         const message = error instanceof Error ? error.message : String(error);
@@ -2670,12 +2654,6 @@ export class ChatRecordingService {
       );
       // Trim future boundaries — they no longer exist in the active branch.
       this.turnParentUuids = this.turnParentUuids.slice(0, targetTurnIndex);
-      // The previous attribution snapshot now sits on the abandoned
-      // branch — clear the dedup key so the next snapshot lands on the
-      // active branch and `/resume` can find it. Without this, a
-      // post-rewind identical snapshot would be skipped and the rewound
-      // session would lose all attribution state on restore.
-      this.lastAttributionSnapshotJson = undefined;
       const record: ChatRecord = {
         ...this.createBaseRecord('system'),
         type: 'system',
@@ -3108,47 +3086,11 @@ export class ChatRecordingService {
   }
 
   /**
-   * Records an attribution state snapshot for session persistence.
-   * Called at the start of every non-retry turn so that a resumed session
-   * sees the most recent state including edits made during the prior turn.
-   *
-   * Deduplicates identical successive writes: if the snapshot's JSON
-   * form is byte-identical to the last one we wrote, skip the append.
-   * Without this, sessions that touch many files would write a full
-   * duplicate of the entire snapshot to the JSONL on every turn, even
-   * when nothing changed — inflating session size and slowing /resume.
-   *
-   * Set the dedup key optimistically so synchronous identical calls (common
-   * during a tool-driven turn) dedup correctly. A synchronous setup failure
-   * rolls the key back; an async write failure permanently degrades this
-   * recorder, so the current instance never retries it.
+   * Drops the cached git branch so records written after a turn boundary
+   * pick up a branch switched during the previous turn.
    */
-  recordAttributionSnapshot(snapshot: AttributionSnapshot): void {
-    let json: string | undefined;
-    try {
-      this.cachedGitBranch = undefined;
-      json = JSON.stringify(snapshot);
-      if (json === this.lastAttributionSnapshotJson) {
-        return;
-      }
-      const record: ChatRecord = {
-        ...this.createBaseRecord('system'),
-        type: 'system',
-        subtype: 'attribution_snapshot',
-        systemPayload: { snapshot },
-      };
-
-      this.lastAttributionSnapshotJson = json;
-      this.appendRecord(record);
-    } catch (error) {
-      // Synchronous setup failures happen before an async write is queued and
-      // do not degrade the recorder, so roll back the optimistic dedup key to
-      // let the next identical snapshot retry.
-      if (json !== undefined && this.lastAttributionSnapshotJson === json) {
-        this.lastAttributionSnapshotJson = undefined;
-      }
-      debugLogger.error('Error saving attribution snapshot:', error);
-    }
+  refreshGitBranch(): void {
+    this.cachedGitBranch = undefined;
   }
 
   recordFileHistorySnapshot(snapshot: FileHistorySnapshot): void {

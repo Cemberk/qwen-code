@@ -250,7 +250,7 @@ export async function loadSandboxConfig(
     return undefined;
   }
   // A container backend cannot start without an image, so a missing one still
-  // means "no sandbox" for it. The in-place backends never pull an image, and
+  // means "no sandbox" for it. The in-place backends never use an image, and
   // gating them on one would drop confinement the user explicitly asked for
   // whenever the packaged image URI is unreadable — a silent fail-open.
   if (isContainerSandboxCommand(command)) {

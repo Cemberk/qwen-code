@@ -4,10 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import * as GenAiLib from '@google/genai';
+import type { CallableTool } from '@google/genai';
 import * as ClientLib from '@modelcontextprotocol/client';
 import * as SdkClientStdioLib from '@modelcontextprotocol/client/stdio';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as McpCallableToolLib from './mcp-callable-tool.js';
 import { MCPServerConfig, type Config } from '../config/config.js';
 import type { PromptRegistry } from '../prompts/prompt-registry.js';
 import type { ResourceRegistry } from '../resources/resource-registry.js';
@@ -58,7 +59,7 @@ vi.mock('@modelcontextprotocol/client', async (importOriginal) => {
     await importOriginal<typeof import('@modelcontextprotocol/client')>();
   return { ...actual, Client: vi.fn() };
 });
-vi.mock('@google/genai');
+vi.mock('./mcp-callable-tool.js');
 vi.mock('../utils/debugLogger.js', () => ({
   createDebugLogger: vi.fn(() => mockDebugLogger),
 }));
@@ -104,12 +105,12 @@ function mockAppOnlyMcpServer(): void {
   vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
     {} as SdkClientStdioLib.StdioClientTransport,
   );
-  vi.mocked(GenAiLib.mcpToTool).mockReturnValue({
+  vi.mocked(McpCallableToolLib.mcpToTool).mockReturnValue({
     tool: () =>
       Promise.resolve({
         functionDeclarations: [{ name: 'internal_refresh' }],
       }),
-  } as unknown as GenAiLib.CallableTool);
+  } as unknown as CallableTool);
 }
 
 describe('mcp-client', () => {
@@ -184,15 +185,17 @@ describe('mcp-client', () => {
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
-      const mockedMcpToTool = vi.mocked(GenAiLib.mcpToTool).mockReturnValue({
-        tool: () => ({
-          functionDeclarations: [
-            {
-              name: 'testFunction',
-            },
-          ],
-        }),
-      } as unknown as GenAiLib.CallableTool);
+      const mockedMcpToTool = vi
+        .mocked(McpCallableToolLib.mcpToTool)
+        .mockReturnValue({
+          tool: () => ({
+            functionDeclarations: [
+              {
+                name: 'testFunction',
+              },
+            ],
+          }),
+        } as unknown as CallableTool);
       const mockedToolRegistry = {
         registerTool: vi.fn(),
       } as unknown as ToolRegistry;
@@ -376,7 +379,7 @@ describe('mcp-client', () => {
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
-      vi.mocked(GenAiLib.mcpToTool).mockReturnValue({
+      vi.mocked(McpCallableToolLib.mcpToTool).mockReturnValue({
         tool: () =>
           Promise.resolve({
             functionDeclarations: [
@@ -400,7 +403,7 @@ describe('mcp-client', () => {
               },
             ],
           }),
-      } as unknown as GenAiLib.CallableTool);
+      } as unknown as CallableTool);
       const mockedToolRegistry = {
         registerTool: vi.fn(),
       } as unknown as ToolRegistry;
@@ -437,9 +440,9 @@ describe('mcp-client', () => {
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
-      vi.mocked(GenAiLib.mcpToTool).mockReturnValue({
+      vi.mocked(McpCallableToolLib.mcpToTool).mockReturnValue({
         tool: () => Promise.resolve({ functionDeclarations: [] }),
-      } as unknown as GenAiLib.CallableTool);
+      } as unknown as CallableTool);
       const client = new McpClient(
         'test-server',
         {
@@ -483,9 +486,9 @@ describe('mcp-client', () => {
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
-      vi.mocked(GenAiLib.mcpToTool).mockReturnValue({
+      vi.mocked(McpCallableToolLib.mcpToTool).mockReturnValue({
         tool: () => Promise.resolve({ functionDeclarations: [] }),
-      } as unknown as GenAiLib.CallableTool);
+      } as unknown as CallableTool);
       const serverName = `discover-error-${Date.now()}`;
       const client = new McpClient(
         serverName,
@@ -531,12 +534,12 @@ describe('mcp-client', () => {
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
-      vi.mocked(GenAiLib.mcpToTool).mockReturnValue({
+      vi.mocked(McpCallableToolLib.mcpToTool).mockReturnValue({
         tool: () =>
           Promise.resolve({
             functionDeclarations: [{ name: 'pure-tool' }],
           }),
-      } as unknown as GenAiLib.CallableTool);
+      } as unknown as CallableTool);
       const toolRegistry = {
         registerTool: vi.fn(),
       } as unknown as ToolRegistry;
@@ -570,12 +573,12 @@ describe('mcp-client', () => {
       const mockedClient = {
         listTools: vi.fn().mockResolvedValue({ tools: [] }),
       } as unknown as ClientLib.Client;
-      vi.mocked(GenAiLib.mcpToTool).mockReturnValue({
+      vi.mocked(McpCallableToolLib.mcpToTool).mockReturnValue({
         tool: () =>
           Promise.resolve({
             functionDeclarations: [{ name: 'chrome_tool' }],
           }),
-      } as unknown as GenAiLib.CallableTool);
+      } as unknown as CallableTool);
 
       const tools = await discoverTools(
         'chrome-devtools',
@@ -616,7 +619,7 @@ describe('mcp-client', () => {
           ],
         }),
       } as unknown as ClientLib.Client;
-      vi.mocked(GenAiLib.mcpToTool).mockReturnValue({
+      vi.mocked(McpCallableToolLib.mcpToTool).mockReturnValue({
         tool: () =>
           Promise.resolve({
             functionDeclarations: [
@@ -624,7 +627,7 @@ describe('mcp-client', () => {
               { name: 'internal_refresh' },
             ],
           }),
-      } as unknown as GenAiLib.CallableTool);
+      } as unknown as CallableTool);
 
       const tools = await discoverTools(
         'apps',
@@ -653,9 +656,9 @@ describe('mcp-client', () => {
           tools: [{ name: 'private', _meta: { ui: { visibility } } }],
         }),
       } as unknown as ClientLib.Client;
-      vi.mocked(GenAiLib.mcpToTool).mockReturnValue({
+      vi.mocked(McpCallableToolLib.mcpToTool).mockReturnValue({
         tool: async () => ({ functionDeclarations: [{ name: 'private' }] }),
-      } as unknown as GenAiLib.CallableTool);
+      } as unknown as CallableTool);
       expect(
         await discoverTools(
           'apps',
@@ -708,12 +711,12 @@ describe('mcp-client', () => {
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
-      vi.mocked(GenAiLib.mcpToTool).mockReturnValue({
+      vi.mocked(McpCallableToolLib.mcpToTool).mockReturnValue({
         tool: () =>
           Promise.resolve({
             functionDeclarations: [{ name: 'show_dashboard' }],
           }),
-      } as unknown as GenAiLib.CallableTool);
+      } as unknown as CallableTool);
 
       const client = new McpClient(
         'apps',
@@ -752,12 +755,12 @@ describe('mcp-client', () => {
           tools: [{ name: 'echo' }],
         }),
       } as unknown as ClientLib.Client;
-      vi.mocked(GenAiLib.mcpToTool).mockReturnValue({
+      vi.mocked(McpCallableToolLib.mcpToTool).mockReturnValue({
         tool: () =>
           Promise.resolve({
             functionDeclarations: [{ name: 'echo' }],
           }),
-      } as unknown as GenAiLib.CallableTool);
+      } as unknown as CallableTool);
 
       const tools = await discoverTools(
         'under-declared',
@@ -794,12 +797,12 @@ describe('mcp-client', () => {
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
-      vi.mocked(GenAiLib.mcpToTool).mockReturnValue({
+      vi.mocked(McpCallableToolLib.mcpToTool).mockReturnValue({
         tool: () =>
           Promise.resolve({
             functionDeclarations: [{ name: 'local-tool' }],
           }),
-      } as unknown as GenAiLib.CallableTool);
+      } as unknown as CallableTool);
       const client = new McpClient(
         'local-server',
         { command: 'test-command' },
@@ -833,12 +836,12 @@ describe('mcp-client', () => {
         listTools: vi.fn().mockResolvedValue({ tools: [] }),
         callTool,
       } as unknown as ClientLib.Client;
-      vi.mocked(GenAiLib.mcpToTool).mockReturnValue({
+      vi.mocked(McpCallableToolLib.mcpToTool).mockReturnValue({
         tool: () =>
           Promise.resolve({
             functionDeclarations: [{ name: 'unbound-tool' }],
           }),
-      } as unknown as GenAiLib.CallableTool);
+      } as unknown as CallableTool);
       const [unboundTool] = await discoverTools(
         'unbound-server',
         { command: 'looks-like-stdio' },
@@ -875,7 +878,7 @@ describe('mcp-client', () => {
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
-      vi.mocked(GenAiLib.mcpToTool).mockReturnValue({
+      vi.mocked(McpCallableToolLib.mcpToTool).mockReturnValue({
         tool: () =>
           Promise.resolve({
             functionDeclarations: [
@@ -883,7 +886,7 @@ describe('mcp-client', () => {
               { name: 'filtered_out' },
             ],
           }),
-      } as unknown as GenAiLib.CallableTool);
+      } as unknown as CallableTool);
       const toolRegistry = {
         registerTool: vi.fn(),
       } as unknown as ToolRegistry;
@@ -946,7 +949,7 @@ describe('mcp-client', () => {
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
-      vi.mocked(GenAiLib.mcpToTool).mockReturnValue({
+      vi.mocked(McpCallableToolLib.mcpToTool).mockReturnValue({
         tool: () =>
           Promise.resolve({
             functionDeclarations: [
@@ -954,7 +957,7 @@ describe('mcp-client', () => {
               { name: 'filtered_out' },
             ],
           }),
-      } as unknown as GenAiLib.CallableTool);
+      } as unknown as CallableTool);
       const toolRegistry = {
         registerTool: vi.fn(),
       } as unknown as ToolRegistry;
@@ -1011,9 +1014,9 @@ describe('mcp-client', () => {
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
-      vi.mocked(GenAiLib.mcpToTool).mockReturnValue({
+      vi.mocked(McpCallableToolLib.mcpToTool).mockReturnValue({
         tool: () => Promise.resolve({ functionDeclarations: [] }),
-      } as unknown as GenAiLib.CallableTool);
+      } as unknown as CallableTool);
       // Forward defense (per code-reviewer P2.4): also assert registries
       // were NOT touched even on the throw path. Catches a future
       // refactor in commits 2-6 that accidentally registers a partial
@@ -1065,9 +1068,9 @@ describe('mcp-client', () => {
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
-      vi.mocked(GenAiLib.mcpToTool).mockReturnValue({
+      vi.mocked(McpCallableToolLib.mcpToTool).mockReturnValue({
         tool: () => Promise.resolve({ functionDeclarations: [] }),
-      } as unknown as GenAiLib.CallableTool);
+      } as unknown as CallableTool);
 
       const client = new McpClient(
         'discovery-cause-server',
@@ -1180,12 +1183,12 @@ describe('mcp-client', () => {
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
-      vi.mocked(GenAiLib.mcpToTool).mockReturnValue({
+      vi.mocked(McpCallableToolLib.mcpToTool).mockReturnValue({
         tool: () =>
           Promise.resolve({
             functionDeclarations: [{ name: 't1' }],
           }),
-      } as unknown as GenAiLib.CallableTool);
+      } as unknown as CallableTool);
       const toolRegistry = {
         registerTool: vi.fn(),
       } as unknown as ToolRegistry;
@@ -1236,9 +1239,9 @@ describe('mcp-client', () => {
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
-      vi.mocked(GenAiLib.mcpToTool).mockReturnValue({
+      vi.mocked(McpCallableToolLib.mcpToTool).mockReturnValue({
         tool: () => Promise.resolve({ functionDeclarations: [] }),
-      } as unknown as GenAiLib.CallableTool);
+      } as unknown as CallableTool);
       const client = new McpClient(
         'srv',
         { command: 'test-command' },
@@ -1285,9 +1288,9 @@ describe('mcp-client', () => {
         {} as SdkClientStdioLib.StdioClientTransport,
       );
       // A tool exists so discovery does not fail with "no prompts/tools/resources".
-      vi.mocked(GenAiLib.mcpToTool).mockReturnValue({
+      vi.mocked(McpCallableToolLib.mcpToTool).mockReturnValue({
         tool: () => Promise.resolve({ functionDeclarations: [{ name: 't1' }] }),
-      } as unknown as GenAiLib.CallableTool);
+      } as unknown as CallableTool);
       const client = new McpClient(
         'srv',
         { command: 'test-command' },
@@ -1326,9 +1329,9 @@ describe('mcp-client', () => {
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
-      vi.mocked(GenAiLib.mcpToTool).mockReturnValue({
+      vi.mocked(McpCallableToolLib.mcpToTool).mockReturnValue({
         tool: () => Promise.resolve({ functionDeclarations: [] }),
-      } as unknown as GenAiLib.CallableTool);
+      } as unknown as CallableTool);
       const client = new McpClient(
         'srv',
         { command: 'test-command' },

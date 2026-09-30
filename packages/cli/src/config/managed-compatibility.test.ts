@@ -231,8 +231,7 @@ describe('evaluateManagedCompatibility', () => {
     ],
     [
       'a tool discovery command',
-      () =>
-        writeJson(workspaceSettings(), { tools: { discoveryCommand: 'demo' } }),
+      () => writeJson(userSettings(), { tools: { discoveryCommand: 'demo' } }),
       'a tool discovery or call command is configured',
     ],
     [
@@ -245,14 +244,6 @@ describe('evaluateManagedCompatibility', () => {
       () =>
         writeJson(userSettings(), {
           hooks: { PreToolUse: [{ hooks: [{ type: 'command' }] }] },
-        }),
-      'hooks are configured in settings',
-    ],
-    [
-      'project hooks',
-      () =>
-        writeJson(workspaceSettings(), {
-          hooks: { Stop: [{ hooks: [{ type: 'command' }] }] },
         }),
       'hooks are configured in settings',
     ],
@@ -276,8 +267,7 @@ describe('evaluateManagedCompatibility', () => {
     ],
     [
       'plan mode spelled another way in settings',
-      () =>
-        writeJson(workspaceSettings(), { tools: { approvalMode: ' Plan ' } }),
+      () => writeJson(userSettings(), { tools: { approvalMode: ' Plan ' } }),
       'plan mode needs tools the engine does not provide',
     ],
     [

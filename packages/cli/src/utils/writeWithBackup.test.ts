@@ -37,6 +37,19 @@ describe('writeWithBackup', () => {
       expect(fs.readFileSync(targetPath, 'utf-8')).toBe(content);
     });
 
+    it.skipIf(process.platform === 'win32')(
+      'should leave the written file readable only by the owner',
+      () => {
+        const targetPath = path.join(tempDir, 'settings.json');
+        fs.writeFileSync(targetPath, '{}', { mode: 0o644 });
+        fs.chmodSync(targetPath, 0o644);
+
+        writeWithBackupSync(targetPath, '{"a":1}');
+
+        expect(fs.statSync(targetPath).mode & 0o777).toBe(0o600);
+      },
+    );
+
     it('should not leave a backup file behind after a successful overwrite', () => {
       const targetPath = path.join(tempDir, 'test-file.txt');
       const originalContent = 'Original content';

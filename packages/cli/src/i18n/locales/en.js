@@ -643,7 +643,6 @@ export default {
   // ============================================================================
   'Code Mode Only (Experimental)': 'Code Mode Only (Experimental)',
   'Vim Mode': 'Vim Mode',
-  'Attribution: commit': 'Attribution: commit',
   'Terminal Bell Notification': 'Terminal Bell Notification',
   Theme: 'Theme',
   'Preferred Editor': 'Preferred Editor',

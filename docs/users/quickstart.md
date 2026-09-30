@@ -12,45 +12,28 @@ Make sure you have:
 - A code project to work with
 - A local OpenAI-compatible model server running on this machine, such as [Ollama](https://ollama.com), [LM Studio](https://lmstudio.ai), [vLLM](https://docs.vllm.ai) or llama.cpp (`llama-server`), with at least one model available
 
-## Step 1: Install Qwen Code
+## Step 1: Build Qwen Code
 
-To install Qwen Code, use one of the following methods:
+This fork is built from source. It is not published to a package registry, and
+there is no installer or update channel.
 
-### Quick Install (Recommended)
-
-**Linux / macOS**
-
-```sh
-curl -fsSL https://qwen-code-assets.oss-cn-hangzhou.aliyuncs.com/installation/install-qwen-standalone.sh | bash
-```
-
-**Windows**
-
-```powershell
-irm https://qwen-code-assets.oss-cn-hangzhou.aliyuncs.com/installation/install-qwen-standalone.ps1 | iex
-```
-
-> [!note]
->
-> It's recommended to restart your terminal after installation to ensure environment variables take effect.
-
-### Manual Installation
+### Build from source
 
 **Prerequisites**
 
-Make sure you have Node.js 22 or later installed. Download it from [nodejs.org](https://nodejs.org/en/download).
-
-**NPM**
+Make sure you have Node.js 22 or later installed.
 
 ```bash
-npm install -g @qwen-code/qwen-code@latest
+git clone <your fork of this repository> qwen-code
+cd qwen-code
+corepack pnpm install --frozen-lockfile
+npm run build && npm run bundle
+
+# Define a `qwen` command, e.g. in ~/.zshrc or ~/.bashrc
+alias qwen="node $PWD/dist/cli.js"
 ```
 
-**Homebrew (macOS, Linux)**
-
-```bash
-brew install qwen-code
-```
+You can also run the bundle directly with `node dist/cli.js`.
 
 ## Step 2: Connect your local model server
 

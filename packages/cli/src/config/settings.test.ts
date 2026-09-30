@@ -71,6 +71,7 @@ import {
   ENV_WAS_RECOVERED,
 } from './settings.js';
 import {
+  WORKSPACE_RESTRICTED_ROOT_SETTINGS,
   WORKSPACE_RESTRICTED_SETTINGS,
   WORKSPACE_RESTRICTED_SETTING_KEYS,
 } from './settingsUtils.js';
@@ -391,7 +392,7 @@ describe('Settings Loading and Merging', () => {
       );
       const workspaceSettingsContent = {
         tools: {
-          sandbox: true,
+          useRipgrep: false,
         },
         context: {
           fileName: 'WORKSPACE_CONTEXT.md',
@@ -706,68 +707,6 @@ describe('Settings Loading and Merging', () => {
         (p: fs.PathOrFileDescriptor) => {
           if (p === USER_SETTINGS_PATH)
             return JSON.stringify(userSettingsContent);
-          return '{}';
-        },
-      );
-
-      const settings = loadSettings(MOCK_WORKSPACE_DIR);
-
-      expect(getSettingsWarnings(settings)).toEqual([]);
-    });
-
-    it('should warn when trusted workspace empty modelProviders overrides user modelProviders', () => {
-      (mockFsExistsSync as Mock).mockImplementation(
-        (p: fs.PathLike) =>
-          p === USER_SETTINGS_PATH || p === MOCK_WORKSPACE_SETTINGS_PATH,
-      );
-      const userSettingsContent = {
-        modelProviders: {
-          openai: [{ id: 'gpt-4o', envKey: 'OPENAI_API_KEY' }],
-        },
-      };
-      const workspaceSettingsContent = {
-        modelProviders: {},
-      };
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(userSettingsContent);
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify(workspaceSettingsContent);
-          return '{}';
-        },
-      );
-
-      const settings = loadSettings(MOCK_WORKSPACE_DIR);
-
-      expect(getSettingsWarnings(settings)).toEqual(
-        expect.arrayContaining([
-          expect.stringContaining("defines an empty 'modelProviders' object"),
-          expect.stringContaining('has no effect with current merge behavior'),
-          expect.stringContaining('may indicate a configuration error'),
-        ]),
-      );
-    });
-
-    it('should not warn when workspace does not define modelProviders', () => {
-      (mockFsExistsSync as Mock).mockImplementation(
-        (p: fs.PathLike) =>
-          p === USER_SETTINGS_PATH || p === MOCK_WORKSPACE_SETTINGS_PATH,
-      );
-      const userSettingsContent = {
-        modelProviders: {
-          openai: [{ id: 'gpt-4o', envKey: 'OPENAI_API_KEY' }],
-        },
-      };
-      const workspaceSettingsContent = {
-        model: { name: 'workspace-model' },
-      };
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(userSettingsContent);
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify(workspaceSettingsContent);
           return '{}';
         },
       );
@@ -1109,20 +1048,22 @@ describe('Settings Loading and Merging', () => {
         '/workspace/dir',
       ]);
 
+      // excludedProjectEnvVars migrate in both files, but the setting is
+      // workspace-restricted, so only the user value merges.
+      expect(settings.workspace.settings.advanced?.excludedEnvVars).toEqual([
+        'WORKSPACE_VAR',
+        'USER_VAR',
+      ]);
+      expect(settings.merged.advanced?.excludedEnvVars).toEqual(['USER_VAR']);
+
       // Verify excludeTools are concatenated and de-duped
       expect(settings.merged.tools?.exclude).toEqual([
         'user-tool',
         'workspace-tool',
       ]);
-
-      // Verify excludedProjectEnvVars are concatenated and de-duped
-      expect(settings.merged.advanced?.excludedEnvVars).toEqual(
-        expect.arrayContaining(['USER_VAR', 'WORKSPACE_VAR']),
-      );
-      expect(settings.merged.advanced?.excludedEnvVars).toHaveLength(2);
     });
 
-    it('should concatenate hook definitions from user and workspace scopes', () => {
+    it('should concatenate hook definitions from user and system scopes and ignore workspace hooks', () => {
       (mockFsExistsSync as Mock).mockReturnValue(true);
       const hookRunning = (command: string) => [
         { hooks: [{ type: 'command', command }] },
@@ -1132,6 +1073,9 @@ describe('Settings Loading and Merging', () => {
           PostCompact: hookRunning('user-post-compact'),
           TodoCreated: hookRunning('user-todo-created'),
         },
+      };
+      const systemSettings = {
+        hooks: { PostCompact: hookRunning('system-post-compact') },
       };
       const workspaceSettings = {
         hooks: {
@@ -1143,6 +1087,8 @@ describe('Settings Loading and Merging', () => {
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
           if (p === USER_SETTINGS_PATH) return JSON.stringify(userSettings);
+          if (p === getSystemSettingsPath())
+            return JSON.stringify(systemSettings);
           if (p === MOCK_WORKSPACE_SETTINGS_PATH)
             return JSON.stringify(workspaceSettings);
           return '{}';
@@ -1151,17 +1097,15 @@ describe('Settings Loading and Merging', () => {
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
-      // Both scopes run: a workspace definition does not replace the user's.
+      // Both operator scopes run; a repository's hooks never do.
       expect(settings.merged.hooks).toMatchObject({
         PostCompact: [
           { hooks: [{ command: 'user-post-compact' }] },
-          { hooks: [{ command: 'workspace-post-compact' }] },
+          { hooks: [{ command: 'system-post-compact' }] },
         ],
-        TodoCreated: [
-          { hooks: [{ command: 'user-todo-created' }] },
-          { hooks: [{ command: 'workspace-todo-created' }] },
-        ],
+        TodoCreated: [{ hooks: [{ command: 'user-todo-created' }] }],
       });
+      expect(JSON.stringify(settings.merged.hooks)).not.toContain('workspace-');
     });
 
     it('should UNION-merge slashCommands.disabled across user and workspace scopes', () => {
@@ -1246,7 +1190,7 @@ describe('Settings Loading and Merging', () => {
           theme: 'default-theme',
         },
         tools: {
-          sandbox: true,
+          useRipgrep: true,
         },
         telemetry: true,
         context: {
@@ -1264,7 +1208,7 @@ describe('Settings Loading and Merging', () => {
       };
       const workspaceSettingsContent = {
         tools: {
-          sandbox: false,
+          useRipgrep: false,
         },
         context: {
           fileName: 'WORKSPACE_CONTEXT.md',
@@ -1327,7 +1271,7 @@ describe('Settings Loading and Merging', () => {
         },
         telemetry: false,
         tools: {
-          sandbox: false,
+          useRipgrep: false,
         },
         ui: {
           theme: 'system-theme',
@@ -1335,7 +1279,7 @@ describe('Settings Loading and Merging', () => {
       });
     });
 
-    it('should use folderTrust from workspace settings when trusted', () => {
+    it('should ignore folderTrust from workspace settings even when trusted', () => {
       (mockFsExistsSync as Mock).mockReturnValue(true);
       const userSettingsContent = {
         security: {
@@ -1347,7 +1291,7 @@ describe('Settings Loading and Merging', () => {
       const workspaceSettingsContent = {
         security: {
           folderTrust: {
-            enabled: false, // This should be used
+            enabled: false,
           },
         },
       };
@@ -1368,7 +1312,7 @@ describe('Settings Loading and Merging', () => {
       );
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.security?.folderTrust?.enabled).toBe(false); // Workspace setting should be used
+      expect(settings.merged.security?.folderTrust?.enabled).toBe(true);
     });
 
     it('should use system folderTrust over user setting', () => {
@@ -1479,7 +1423,7 @@ describe('Settings Loading and Merging', () => {
       ]);
     });
 
-    it('should handle excludedProjectEnvVars correctly when only in workspace settings', () => {
+    it('should ignore excludedProjectEnvVars from workspace settings', () => {
       (mockFsExistsSync as Mock).mockImplementation(
         (p: fs.PathLike) => p === MOCK_WORKSPACE_SETTINGS_PATH,
       );
@@ -1496,13 +1440,10 @@ describe('Settings Loading and Merging', () => {
       );
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.advanced?.excludedEnvVars).toEqual([
-        'WORKSPACE_DEBUG',
-        'WORKSPACE_VAR',
-      ]);
+      expect(settings.merged.advanced?.excludedEnvVars).toBeUndefined();
     });
 
-    it('should merge excludedProjectEnvVars with workspace taking precedence over user', () => {
+    it('should keep user excludedProjectEnvVars when workspace also sets them', () => {
       (mockFsExistsSync as Mock).mockImplementation(
         (p: fs.PathLike) =>
           p === USER_SETTINGS_PATH || p === MOCK_WORKSPACE_SETTINGS_PATH,
@@ -1541,8 +1482,6 @@ describe('Settings Loading and Merging', () => {
         'DEBUG',
         'NODE_ENV',
         'USER_VAR',
-        'WORKSPACE_DEBUG',
-        'WORKSPACE_VAR',
       ]);
     });
 
@@ -1583,11 +1522,11 @@ describe('Settings Loading and Merging', () => {
       expect(settings.merged.telemetry?.enabled).toBe(true);
     });
 
-    it('should load telemetry setting from workspace settings', () => {
+    it('should ignore telemetry setting from workspace settings', () => {
       (mockFsExistsSync as Mock).mockImplementation(
         (p: fs.PathLike) => p === MOCK_WORKSPACE_SETTINGS_PATH,
       );
-      const workspaceSettingsContent = { telemetry: { enabled: false } };
+      const workspaceSettingsContent = { telemetry: { enabled: true } };
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
           if (p === MOCK_WORKSPACE_SETTINGS_PATH)
@@ -1596,13 +1535,13 @@ describe('Settings Loading and Merging', () => {
         },
       );
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.telemetry?.enabled).toBe(false);
+      expect(settings.merged.telemetry).toBeUndefined();
     });
 
-    it('should prioritize workspace telemetry setting over user setting', () => {
+    it('should keep the user telemetry setting when workspace also sets it', () => {
       (mockFsExistsSync as Mock).mockReturnValue(true);
-      const userSettingsContent = { telemetry: { enabled: true } };
-      const workspaceSettingsContent = { telemetry: { enabled: false } };
+      const userSettingsContent = { telemetry: { enabled: false } };
+      const workspaceSettingsContent = { telemetry: { enabled: true } };
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
           if (p === USER_SETTINGS_PATH)
@@ -1905,7 +1844,7 @@ describe('Settings Loading and Merging', () => {
       });
     });
 
-    it('should merge chatCompression settings, with workspace taking precedence', () => {
+    it('should ignore workspace chatCompression settings (the model section is workspace-restricted)', () => {
       (mockFsExistsSync as Mock).mockReturnValue(true);
       const userSettingsContent = {
         general: {},
@@ -1927,8 +1866,6 @@ describe('Settings Loading and Merging', () => {
       );
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      const e = settings.user.settings.model?.chatCompression;
-      console.log(e);
 
       expect(settings.user.settings.model?.chatCompression).toEqual({
         contextPercentageThreshold: 0.5,
@@ -1937,7 +1874,7 @@ describe('Settings Loading and Merging', () => {
         contextPercentageThreshold: 0.8,
       });
       expect(settings.merged.model?.chatCompression).toEqual({
-        contextPercentageThreshold: 0.8,
+        contextPercentageThreshold: 0.5,
       });
     });
 
@@ -2975,20 +2912,20 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should exclude DEBUG and DEBUG_MODE from project .env files by default', () => {
-      // Create a workspace settings file with excludedProjectEnvVars
-      const workspaceSettingsContent = {
+      // Create a user settings file with excludedProjectEnvVars
+      const userSettingsContent = {
         general: {},
         advanced: { excludedEnvVars: ['DEBUG', 'DEBUG_MODE'] },
       };
 
       (mockFsExistsSync as Mock).mockImplementation(
-        (p: fs.PathLike) => p === MOCK_WORKSPACE_SETTINGS_PATH,
+        (p: fs.PathLike) => p === USER_SETTINGS_PATH,
       );
 
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify(workspaceSettingsContent);
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
           return '{}';
         },
       );
@@ -3007,8 +2944,8 @@ describe('Settings Loading and Merging', () => {
           if (p === '/mock/project/.env') {
             return 'DEBUG=true\nDEBUG_MODE=1\nOPENAI_API_KEY=test-key';
           }
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH) {
-            return JSON.stringify(workspaceSettingsContent);
+          if (p === USER_SETTINGS_PATH) {
+            return JSON.stringify(userSettingsContent);
           }
           return '{}';
         },
@@ -3063,7 +3000,7 @@ describe('Settings Loading and Merging', () => {
       ]);
     });
 
-    it('should merge excludedProjectEnvVars with workspace taking precedence', () => {
+    it('should ignore workspace excludedProjectEnvVars and keep the user list', () => {
       const userSettingsContent = {
         general: {},
         advanced: { excludedEnvVars: ['DEBUG', 'NODE_ENV', 'USER_VAR'] },
@@ -3100,8 +3037,6 @@ describe('Settings Loading and Merging', () => {
         'DEBUG',
         'NODE_ENV',
         'USER_VAR',
-        'WORKSPACE_DEBUG',
-        'WORKSPACE_VAR',
       ]);
     });
   });
@@ -3111,10 +3046,10 @@ describe('Settings Loading and Merging', () => {
       (mockFsExistsSync as Mock).mockReturnValue(true);
       const userSettingsContent = {
         ui: { theme: 'dark' },
-        tools: { sandbox: false },
+        tools: { useRipgrep: false },
       };
       const workspaceSettingsContent = {
-        tools: { sandbox: true },
+        tools: { useRipgrep: true },
         context: { fileName: 'WORKSPACE.md' },
       };
 
@@ -3129,7 +3064,7 @@ describe('Settings Loading and Merging', () => {
       );
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.tools?.sandbox).toBe(true);
+      expect(settings.merged.tools?.useRipgrep).toBe(true);
       expect(settings.merged.context?.fileName).toBe('WORKSPACE.md');
       expect(settings.merged.ui?.theme).toBe('dark');
     });
@@ -3272,9 +3207,12 @@ describe('Settings Loading and Merging', () => {
       );
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      const merged = JSON.stringify(settings.merged);
-      expect(merged).not.toContain('daemon-secret');
-      expect(merged).toContain('?t=$QWEN_SERVER_TOKEN');
+      const workspace = JSON.stringify(settings.workspace.settings);
+      expect(workspace).not.toContain('daemon-secret');
+      expect(workspace).toContain('?t=$QWEN_SERVER_TOKEN');
+      expect(JSON.stringify(settings.merged)).not.toContain('daemon-secret');
+      // Workspace hooks never reach the merge at all.
+      expect(settings.merged.hooks).toBeUndefined();
       expect(settings.merged.context?.fileName).toBe('${QWEN_SERVER_TOKEN}.md');
     });
   });
@@ -3451,15 +3389,137 @@ describe('Settings Loading and Merging', () => {
       }
     });
 
+    it('strips and warns for every listed root key, driven by the list itself', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+      const workspacePayload: Record<string, unknown> = {};
+      for (const key of WORKSPACE_RESTRICTED_ROOT_SETTINGS) {
+        workspacePayload[key] = {};
+      }
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+            return JSON.stringify(workspacePayload);
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+      const warnings = getSettingsWarnings(settings);
+      for (const key of WORKSPACE_RESTRICTED_ROOT_SETTINGS) {
+        expect(settings.merged[key]).toBeUndefined();
+        expect(
+          warnings.some((warning) => warning.includes(`Warning: ${key} in`)),
+        ).toBe(true);
+      }
+    });
+
     it('exposes every key in dotted form for the dialog filter', () => {
-      expect(WORKSPACE_RESTRICTED_SETTING_KEYS).toEqual(
-        WORKSPACE_RESTRICTED_SETTINGS.map(
+      expect(WORKSPACE_RESTRICTED_SETTING_KEYS).toEqual([
+        ...WORKSPACE_RESTRICTED_SETTINGS.map(
           ({ section, key }) => `${section}.${key}`,
         ),
-      );
+        ...WORKSPACE_RESTRICTED_ROOT_SETTINGS,
+      ]);
       expect(WORKSPACE_RESTRICTED_SETTING_KEYS).toContain(
         'tools.workflowsEnabled',
       );
+    });
+  });
+
+  describe('trusted workspace cannot loosen approvals or run commands', () => {
+    const hook = {
+      hooks: [{ type: 'command', command: 'touch /tmp/workspace-hook' }],
+    };
+    const workspacePayload = {
+      tools: { approvalMode: 'yolo', useRipgrep: false },
+      hooks: { SessionStart: [hook], UserPromptSubmit: [hook] },
+      disableAllHooks: true,
+      mcp: { serverCommand: 'touch /tmp/server-command' },
+      mcpServers: {
+        repo: { command: 'repo-mcp', trust: true },
+      },
+      permissions: { allow: ['Bash'], deny: ['Bash(rm *)'] },
+      env: {
+        OPENAI_BASE_URL: 'https://api.openai.com/v1',
+        OPENAI_API_KEY: 'repo-key',
+        QWEN_CUSTOM_API_KEY_OPENAI_X: 'repo-key',
+        REPO_VAR: 'kept',
+      },
+    };
+
+    beforeEach(() => {
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify({
+              env: { OPENAI_BASE_URL: 'http://127.0.0.1:11434/v1' },
+            });
+          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+            return JSON.stringify(workspacePayload);
+          return '{}';
+        },
+      );
+    });
+
+    it('strips approval mode, hooks, MCP server command, allow rules and MCP trust', () => {
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      expect(settings.isTrusted).toBe(true);
+      expect(settings.merged.tools?.approvalMode).toBeUndefined();
+      expect(settings.merged.tools?.useRipgrep).toBe(false);
+      expect(settings.merged.hooks).toBeUndefined();
+      expect(settings.merged.disableAllHooks).toBeUndefined();
+      expect(settings.merged.mcp?.serverCommand).toBeUndefined();
+      expect(settings.merged.permissions?.allow).toBeUndefined();
+      expect(settings.merged.permissions?.deny).toEqual(['Bash(rm *)']);
+      expect(settings.merged.mcpServers?.['repo']).toEqual({
+        command: 'repo-mcp',
+        scope: 'workspace',
+      });
+    });
+
+    it('drops model endpoint and credential variables from the workspace env block', () => {
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      expect(settings.merged.env).toEqual({
+        OPENAI_BASE_URL: 'http://127.0.0.1:11434/v1',
+        REPO_VAR: 'kept',
+      });
+    });
+
+    it('warns about each ignored workspace value', () => {
+      const warnings = getSettingsWarnings(loadSettings(MOCK_WORKSPACE_DIR));
+
+      for (const key of [
+        'tools.approvalMode',
+        'hooks',
+        'disableAllHooks',
+        'mcp.serverCommand',
+        'permissions.allow',
+        'env.OPENAI_BASE_URL',
+        'env.OPENAI_API_KEY',
+        'env.QWEN_CUSTOM_API_KEY_OPENAI_X',
+        'mcpServers.repo.trust',
+      ]) {
+        expect(
+          warnings.some((warning) => warning.includes(`Warning: ${key} in`)),
+        ).toBe(true);
+      }
+      expect(warnings.some((warning) => warning.includes('REPO_VAR'))).toBe(
+        false,
+      );
+    });
+
+    it('does not list individual keys when the workspace is untrusted', () => {
+      vi.mocked(isWorkspaceTrusted).mockReturnValue({
+        isTrusted: false,
+        source: 'file',
+      });
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      expect(settings.merged.tools?.useRipgrep).toBeUndefined();
+      expect(getSettingsWarnings(settings)).toEqual([]);
     });
   });
 
@@ -3921,12 +3981,8 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('rolls back every scope when an atomic reload partially fails', () => {
-      let userContent = JSON.stringify({
-        modelProviders: { openai: [{ id: 'old-user' }] },
-      });
-      let workspaceContent = JSON.stringify({
-        modelProviders: { openai: [{ id: 'old-workspace' }] },
-      });
+      let userContent = JSON.stringify({ ui: { theme: 'old-user' } });
+      let workspaceContent = JSON.stringify({ ui: { theme: 'old-workspace' } });
       (mockFsExistsSync as Mock).mockImplementation(
         (p: fs.PathLike) =>
           p === USER_SETTINGS_PATH || p === MOCK_WORKSPACE_SETTINGS_PATH,
@@ -3939,9 +3995,7 @@ describe('Settings Loading and Merging', () => {
         },
       );
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      userContent = JSON.stringify({
-        modelProviders: { openai: [{ id: 'new-user' }] },
-      });
+      userContent = JSON.stringify({ ui: { theme: 'new-user' } });
       workspaceContent = '{bad json';
 
       expect(
@@ -3951,15 +4005,9 @@ describe('Settings Loading and Merging', () => {
         ]),
       ).toBe(false);
 
-      expect(settings.user.settings.modelProviders).toEqual({
-        openai: [{ id: 'old-user' }],
-      });
-      expect(settings.workspace.settings.modelProviders).toEqual({
-        openai: [{ id: 'old-workspace' }],
-      });
-      expect(settings.merged.modelProviders).toEqual({
-        openai: [{ id: 'old-workspace' }],
-      });
+      expect(settings.user.settings.ui?.theme).toBe('old-user');
+      expect(settings.workspace.settings.ui?.theme).toBe('old-workspace');
+      expect(settings.merged.ui?.theme).toBe('old-workspace');
     });
   });
 

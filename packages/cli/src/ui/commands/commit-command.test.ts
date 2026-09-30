@@ -59,7 +59,6 @@ describe('commitCommand', () => {
     expect(text.toLowerCase()).toContain('subject');
     expect(text.toLowerCase()).toContain('body');
     expect(text.toLowerCase()).toContain('multi-line');
-    // Names a concrete multi-line form the co-author injector can rewrite.
     expect(text).toContain('-m "subject" -m "body"');
   });
 
@@ -106,39 +105,13 @@ describe('commitCommand', () => {
     expect(text).toContain('git status -uall');
   });
 
-  it('describes co-author attribution the way the platform applies it', async () => {
+  it('does not add attribution trailers on its own', async () => {
     const ctx = createMockCommandContext();
     const result = await commitCommand.action!(ctx, '');
     const text = promptText(result);
-    expect(text).toContain('Co-authored-by');
-    expect(text).toMatch(/general\.gitCoAuthor\.commit/);
-    // The auto-append is gated on the active shell being bash — the prompt
-    // must name that gate so non-bash users are not promised a trailer.
-    expect(text).toMatch(/active shell is bash/i);
-    // The rewrite additionally requires the commit segment to be
-    // attributable back to the raw command in the tool's cwd
-    // (`findAttributableCommitSegment` in packages/core/src/tools/shell.ts):
-    // a backslash-continued command, a `bash -c` wrapper, `git -C` or an
-    // absolute `cd` reaches the executor unrewritten.
-    expect(text).toMatch(/single-line command in the current directory/i);
-    expect(text).toMatch(/backslash-continued/i);
-    expect(text).toContain('git -C');
-    expect(text).toMatch(/bash -c/);
-    // The list must not read as exhaustive-and-sufficient.
-    expect(text).not.toMatch(/ALL of these hold/);
-    expect(text).toMatch(/not exhaustive/i);
-    expect(text).toMatch(/do not add your own ai-assistance trailer/i);
-    // The platform trailer lands as a new final paragraph, so model-written
-    // trailer lines would leave git's trailer block; user-named co-authors
-    // must go through a non-inline message the injector ignores.
-    expect(text).toMatch(/final trailer block/i);
-    expect(text).toContain('git commit -F -');
-    // The model must verify what landed instead of claiming attribution.
-    expect(text).toContain('git log -1 --format=%B');
-    // The overclaims this wording replaced must never come back.
-    expect(text).not.toMatch(/already appends the configured/i);
-    // The #3935 misconception this replaces must never come back.
-    expect(text).not.toMatch(/nothing injects it automatically/i);
+    expect(text).toMatch(
+      /do not add ai-assistance or co-author trailers unless the user explicitly asks/i,
+    );
   });
 
   it('requires reading untracked file contents before staging them', async () => {

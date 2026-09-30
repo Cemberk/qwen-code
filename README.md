@@ -1,162 +1,89 @@
-<div align="center">
+# Qwen Code (local-only fork)
 
-[![npm version](https://img.shields.io/npm/v/@qwen-code/qwen-code.svg)](https://www.npmjs.com/package/@qwen-code/qwen-code)
-[![License](https://img.shields.io/github/license/QwenLM/qwen-code.svg)](./LICENSE)
-[![Node.js Version](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen.svg)](https://nodejs.org/)
-[![Downloads](https://img.shields.io/npm/dm/@qwen-code/qwen-code.svg)](https://www.npmjs.com/package/@qwen-code/qwen-code)
+**An open-source AI coding agent for your terminal that talks only to a model
+server on your own machine.**
 
-<a href="https://trendshift.io/repositories/15287" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15287" alt="QwenLM%2Fqwen-code | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+This fork of Qwen Code runs the interactive terminal CLI (`qwen`) and headless
+mode (`qwen -p`) against a local OpenAI-compatible model server such as
+Ollama, LM Studio, vLLM or llama.cpp. It makes no other network connections:
 
-**The open-source AI coding agent for your terminal.**
+- The model base URL is required and its host must be `127.0.0.1`, `::1` or
+  `localhost`; anything else is rejected at startup. Model requests never
+  follow HTTP redirects.
+- No cloud providers, no sign-in, no telemetry uploads, no usage statistics,
+  no update checks, no web tools and no remote MCP servers or extension
+  installs.
+- It is built from source. There is no installer, package-registry release or
+  update channel.
 
-<a href="https://qwenlm.github.io/qwen-code-docs/zh/users/overview">中文</a> |
-<a href="https://qwenlm.github.io/qwen-code-docs/de/users/overview">Deutsch</a> |
-<a href="https://qwenlm.github.io/qwen-code-docs/fr/users/overview">français</a> |
-<a href="https://qwenlm.github.io/qwen-code-docs/ja/users/overview">日本語</a> |
-<a href="https://qwenlm.github.io/qwen-code-docs/ru/users/overview">Русский</a> |
-<a href="https://qwenlm.github.io/qwen-code-docs/pt-BR/users/overview">Português (Brasil)</a> |
-<a href="https://qwenlm.github.io/qwen-code-docs/ko/users/overview">한국어</a>
+## Build from source
 
-</div>
-
-## Why Qwen Code?
-
-- **Agentic out of the box** — Auto-Memory, Auto-Skills, SubAgents, Agent Teams, and MCP. Dynamic workflows, zero setup.
-- **Open-source, inside and out** — The framework and the Qwen models are open-source. They evolve together. No vendor lock-in.
-- **Local models only** — Talks only to a local OpenAI-compatible model server on this machine (Ollama, LM Studio, vLLM, llama.cpp). No cloud providers and no sign-in: the base URL must be `127.0.0.1`, `::1` or `localhost`. Switch between local models at runtime.
-
-> [!TIP]
-> Qwen Code is actively iterating on itself — using its own agent and models to file issues, submit PRs, review code, and run tests. Powered by the community, driven by AI.
-
-## Installation
-
-**Linux / macOS:**
+Requires Node.js 22 or later.
 
 ```bash
-curl -fsSL https://qwen-code-assets.oss-cn-hangzhou.aliyuncs.com/installation/install-qwen-standalone.sh | bash
+git clone <your fork of this repository> qwen-code
+cd qwen-code
+corepack pnpm install --frozen-lockfile
+npm run build
+npm run bundle
+
+# Run the bundle directly...
+node dist/cli.js --help
+# ...or define a `qwen` command, e.g. in ~/.zshrc or ~/.bashrc
+alias qwen="node $PWD/dist/cli.js"
 ```
 
-**Windows:**
+## Run a local model server
 
-```powershell
-irm https://qwen-code-assets.oss-cn-hangzhou.aliyuncs.com/installation/install-qwen-standalone.ps1 | iex
-```
+Start any OpenAI-compatible server on the loopback interface and make sure it
+serves at least one model. Common base URLs:
 
-> Restart your terminal after installation to ensure environment variables take effect.
+| Server                     | Base URL                    |
+| -------------------------- | --------------------------- |
+| Ollama                     | `http://127.0.0.1:11434/v1` |
+| LM Studio                  | `http://localhost:1234/v1`  |
+| vLLM                       | `http://127.0.0.1:8000/v1`  |
+| llama.cpp (`llama-server`) | `http://127.0.0.1:8080/v1`  |
 
-<details>
-<summary>NPM / Homebrew</summary>
+## Connect Qwen Code to the server
 
-**NPM** (requires [Node.js 22+](https://nodejs.org/)):
-
-```bash
-npm install -g @qwen-code/qwen-code@latest
-```
-
-**Homebrew** (macOS / Linux):
-
-```bash
-brew install qwen-code
-```
-
-</details>
-
-## Quick Start
-
-Start a local OpenAI-compatible model server first (for example Ollama, which serves `http://127.0.0.1:11434/v1`). Then open a terminal in your project and start Qwen Code:
+Open a terminal in your project and start Qwen Code:
 
 ```bash
 cd /path/to/your-project
 qwen
 ```
 
-Inside the session, run `/auth` to enter the server's base URL, an API key value (any non-empty value if the server doesn't check keys) and the model IDs to use. Then try:
+On first launch (or any time with `/auth`) the setup wizard asks for the
+server's base URL, an API key value (any non-empty value if the server doesn't
+check keys) and the model IDs to use, and saves them to
+`~/.qwen/settings.json`.
 
-```text
-Explain this repository and show me where to start.
+For scripts, configure the server with environment variables or flags instead:
+
+```bash
+export OPENAI_BASE_URL="http://127.0.0.1:11434/v1"
+export OPENAI_API_KEY="ollama"
+export OPENAI_MODEL="qwen3-coder:30b"
+
+qwen -p "Explain this repository and show me where to start."
 ```
 
-See the [Authentication Guide](https://qwenlm.github.io/qwen-code-docs/en/users/configuration/auth/) and [Settings Reference](https://qwenlm.github.io/qwen-code-docs/en/users/configuration/settings/) for detailed setup.
-
-<details>
-<summary>See the terminal interface</summary>
-
-![Qwen Code terminal interface](https://img.alicdn.com/imgextra/i2/O1CN01K0nwj41RM1Il8kB0t_!!6000000002096-2-tps-1544-1060.png)
-
-</details>
-
-## How to Use Qwen Code
-
-- **Terminal** — Run `qwen` in your project — see [Quick Start](#quick-start).
-- **Headless** — Run `qwen -p "..."` in scripts, CI/CD, or batch jobs.
-
-## Capabilities
-
-If you know Claude Code, you already know Qwen Code — and then some. We've put significant effort into [bringing Qwen Code to feature parity with Claude Code](https://github.com/wenshao/codeagents/blob/main/docs/comparison/qwen-code-improvement-report.md), improving both breadth and reliability across the board.
-
-| Feature                                                          | Qwen Code | Claude Code |
-| ---------------------------------------------------------------- | :-------: | :---------: |
-| SubAgents, Agent Teams, Dynamic Workflows                        |     ✓     |      ✓      |
-| Auto-Memory, Auto-Skills, Hooks                                  |     ✓     |      ✓      |
-| Built-in Skills (/batch, /loop, /bugfix…)                        |     ✓     |      ✓      |
-| MCP, Plan Mode, LSP Integration                                  |     ✓     |      ✓      |
-| Auto Mode, Sandbox, Git Worktrees                                |     ✓     |      ✓      |
-| Headless Mode, Session Management                                |     ✓     |      ✓      |
-| Open-source — model and framework                                |     ✓     |      —      |
-| Runs on local models only (OpenAI-compatible server on loopback) |     ✓     |      —      |
-| Agent Arena (multi-model head-to-head on same task)              |     ✓     |      —      |
-
-## Qwen Code Evaluation
-
-### Evaluation Configuration
-
-| Configuration           | Value                                                                                               |
-| ----------------------- | --------------------------------------------------------------------------------------------------- |
-| Dataset                 | `princeton-nlp/SWE-bench_Verified`, 500 cases                                                       |
-| Runs                    | 3 trials per version, 1,500 jobs per version; 7 Qwen Code versions                                  |
-| Model                   | `Qwen 3.7 Max`                                                                                      |
-| Sampling                | `temperature=1`, `top_p=0.95`                                                                       |
-| Thinking / Reasoning    | `interleaved_thinking=true`, `thinking_type=adaptive`, `reasoning_effort=high`                      |
-| Context / Output Limits | `context_1m=true`, `model_context_length=1,000,000`, `max_tokens=64,000`, `model_max_tokens=65,535` |
-| Harness Limits          | `max_iterations=500`, `runtime_timeout_sec=7,200`, `agent_timeout_multiplier=3.0`                   |
-
-### Scores by Qwen Code Version
-
-| Version |  Avg Score | Pass Rate | pass@3 | pass^3 |
-| ------- | ---------: | --------: | -----: | -----: |
-| 0.0.14  | **77.80%** |     84.6% |  84.6% |  69.2% |
-| 0.1.0   | **76.73%** |     84.6% |  84.6% |  68.0% |
-| 0.5.0   | **76.60%** |     83.0% |  83.0% |  68.4% |
-| 0.10.0  | **76.47%** |     84.4% |  84.4% |  67.4% |
-| 0.15.0  | **77.67%** |     84.6% |  84.6% |  68.6% |
-| 0.19.0  | **76.40%** |     85.0% |  85.0% |  65.8% |
-| 0.22.0  | **77.33%** |     84.4% |  84.4% |  68.0% |
-
-### Avg Score Trend
-
-![Qwen Code version Avg Score trend](./.github/assets/qwen-code-avg-score-trend.svg)
-
-## Ecosystem
-
-- [**AionUi**](https://github.com/iOfficeAI/AionUi) — A modern GUI for command-line AI tools including Qwen Code
-- [**Gemini CLI Desktop**](https://github.com/Piebald-AI/gemini-cli-desktop) — A cross-platform desktop/web/mobile UI for Qwen Code
-
-- [**🦞 Qwen Code Claw**](https://github.com/openclaw/acpx) — Let other agents (Claude, Codex, etc.) delegate coding tasks to Qwen Code via ACP. Paste this prompt into your agent:
-
-```text
-Use Qwen Code as a coding agent. First, fetch and read this skill reference:
-https://raw.githubusercontent.com/QwenLM/qwen-code/refs/heads/main/.qwen/skills/qwen-code-claw/SKILL.md
-Then follow the instructions inside to install, authenticate, and use Qwen Code via acpx for all coding tasks.
-```
+See [Authentication](./docs/users/configuration/auth.md) for the
+`settings.json` format and [Settings](./docs/users/configuration/settings.md)
+for everything else.
 
 ## Privacy
 
-See the [Terms of Service and Privacy Notice](./docs/users/support/tos-privacy.md).
+See the [Privacy Notice](./docs/users/support/tos-privacy.md).
 
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for build, test and code-style
+guidelines.
 
 ## Acknowledgments
 
-This project was originally based on [Google Gemini CLI](https://github.com/google-gemini/gemini-cli) v0.8.2. We gratefully acknowledge the Gemini CLI team's excellent work. Starting from Qwen Code v0.1, we stopped syncing with upstream and began independent development as a multi-platform agent framework with deep integrations for Qwen models and beyond.
+Qwen Code was originally based on
+[Google Gemini CLI](https://github.com/google-gemini/gemini-cli) v0.8.2. This
+fork removes every network path except the local model server.

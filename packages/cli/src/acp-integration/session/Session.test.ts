@@ -1008,9 +1008,6 @@ describe('Session', () => {
       getChatRecordingService: vi
         .fn()
         .mockReturnValue(mockChatRecordingService),
-      getSessionService: vi.fn().mockReturnValue({
-        setSessionPrBoundCallback: vi.fn(),
-      }),
       getToolRegistry: vi.fn().mockReturnValue(mockToolRegistry),
       getDisabledTools: vi.fn().mockReturnValue(new Set<string>()),
       getPermissionManager: vi.fn().mockReturnValue(null),
@@ -9029,10 +9026,6 @@ describe('Session', () => {
           { trusted: true },
         );
         if (selection === 'medium') {
-          Object.assign(state.workspace.settings, { modelProviders: {} });
-          Object.assign(state.workspace.originalSettings, {
-            modelProviders: {},
-          });
           delete state.workspace.settings.model.reasoningEffort;
           delete state.workspace.originalSettings.model.reasoningEffort;
           mockSettings.recomputeMerged();
@@ -9044,10 +9037,7 @@ describe('Session', () => {
         setValue.mockImplementation((scope, key, value, ...rest) => {
           if (
             key === 'model.reasoningEffort' &&
-            scope ===
-              (selection === 'medium'
-                ? SettingScope.Workspace
-                : SettingScope.User) &&
+            scope === SettingScope.User &&
             value === (selection === 'medium' ? selection : undefined)
           ) {
             throw new Error('settings are read-only');

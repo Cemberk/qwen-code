@@ -44,7 +44,6 @@ describe('PromptHookRunner', () => {
       getContentGenerator: vi.fn().mockReturnValue({
         generateContent: mockGenerateContent,
         generateContentStream: vi.fn(),
-        embedContent: vi.fn(),
       }),
       getBaseLlmClient: vi.fn().mockReturnValue({
         resolveForModel: mockResolveForModel,

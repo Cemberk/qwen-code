@@ -423,7 +423,6 @@ describe('QwenAgent loadSession — Phase C worktree context restore', () => {
       merged: { mcpServers: {} },
       getSystemHooks: vi.fn().mockReturnValue(undefined),
       getUserHooks: vi.fn().mockReturnValue({}),
-      getProjectHooks: vi.fn().mockReturnValue({}),
     } as unknown as LoadedSettings;
   }
 

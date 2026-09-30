@@ -13,7 +13,7 @@ import {
   useState,
   type MutableRefObject,
 } from 'react';
-import { type PartListUnion } from '@google/genai';
+import type { PartListUnion } from '@google/genai';
 import process from 'node:process';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { ArenaDialogType } from './useArenaCommand.js';

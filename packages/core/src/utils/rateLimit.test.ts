@@ -30,20 +30,6 @@ describe('isRateLimitError — detection paths', () => {
     expect(info).toBe(true);
   });
 
-  it('should detect GLM 1302 code from ApiError', () => {
-    const info = isRateLimitError({
-      error: { code: 1302, message: '您的账户已达到速率限制' },
-    });
-    expect(info).toBe(true);
-  });
-
-  it('should detect 1305 code from ApiError (issue #1918)', () => {
-    const info = isRateLimitError({
-      error: { code: 1305, message: 'IdealTalk rate limit' },
-    });
-    expect(info).toBe(true);
-  });
-
   it('should detect rate-limit from StructuredError.status', () => {
     const error: StructuredError = { message: 'Rate limited', status: 429 };
     const info = isRateLimitError(error);
@@ -158,13 +144,6 @@ describe('isRateLimitError — statusless provider errors', () => {
 });
 
 describe('isRateLimitError — return shape', () => {
-  it('should detect GLM rate limit JSON string', () => {
-    const info = isRateLimitError(
-      '{"error":{"code":"1302","message":"您的账户已达到速率限制，请您控制请求频率"}}',
-    );
-    expect(info).toBe(true);
-  });
-
   it('should treat HTTP 503 as rate-limit', () => {
     const error: HttpError = new Error('Service Unavailable');
     error.status = 503;
@@ -182,58 +161,45 @@ describe('isRateLimitError — return shape', () => {
     // JSON-in-message parse must not short-circuit with null when the
     // embedded code is non-numeric — the .status on the Error should win.
     const error: HttpError = new Error(
-      '{"error":{"code":"Throttling.AllocationQuota","message":"Allocated quota exceeded"}}',
+      '{"error":{"code":"rate_limit_exceeded","message":"Rate limit exceeded"}}',
     );
     error.status = 429;
     expect(isRateLimitError(error)).toBe(true);
   });
 
   it('should fall through ApiError with non-numeric code when .status is set', () => {
-    // DashScope/OpenAI-SDK shape: RateLimitError with .status=429 but
-    // .error.code is a non-numeric string. Must still be recognised as a
-    // rate limit via the .status fallback.
-    const error = Object.assign(new Error('429 Allocated quota exceeded'), {
+    // OpenAI-SDK shape: RateLimitError with .status=429 but .error.code is a
+    // non-numeric string. Must still be recognised as a rate limit via the
+    // .status fallback.
+    const error = Object.assign(new Error('429 Rate limit exceeded'), {
       status: 429,
       error: {
-        code: 'Throttling.AllocationQuota',
-        message: 'Allocated quota exceeded',
+        code: 'rate_limit_exceeded',
+        message: 'Rate limit exceeded',
       },
     });
-    expect(isRateLimitError(error)).toBe(true);
-  });
-
-  it('should detect DashScope SSE-embedded 429 (Throttling.AllocationQuota)', () => {
-    // Reproduces the production error seen from DashScope when the stream
-    // opens with HTTP 200 and the throttling is surfaced mid-stream as an
-    // SSE `event:error` frame. The OpenAI SDK preserves the raw SSE payload
-    // in error.message, with no numeric `.status` on the error object.
-    const error = new Error(
-      'id:1\nevent:error\n:HTTP_STATUS/429\ndata:{"request_id":"70acdc21-a546-489a-b5d6-650df970a4ef","code":"Throttling.AllocationQuota","message":"Allocated quota exceeded, please increase your quota limit."}',
-    );
     expect(isRateLimitError(error)).toBe(true);
   });
 });
 
 describe('rate-limit retry diagnostics', () => {
-  it('should extract structured details from SSE-embedded rate-limit errors', () => {
+  it('should extract structured details from SSE-embedded errors', () => {
     const error = new Error(
-      'id:1\nevent:error\n:HTTP_STATUS/429\ndata:{"request_id":"70acdc21-a546-489a-b5d6-650df970a4ef","code":"Throttling.AllocationQuota","message":"Allocated quota exceeded"}',
+      'id:1\nevent:error\ndata:{"request_id":"req-sse-1","code":"rate_limit_exceeded","message":"Rate limit exceeded"}',
     );
 
     expect(getRateLimitErrorDetails(error)).toEqual({
-      statusCode: 429,
-      providerCode: 'Throttling.AllocationQuota',
-      providerMessage: 'Allocated quota exceeded',
-      requestId: '70acdc21-a546-489a-b5d6-650df970a4ef',
+      providerCode: 'rate_limit_exceeded',
+      providerMessage: 'Rate limit exceeded',
+      requestId: 'req-sse-1',
       transport: 'sse',
     });
   });
 
   it('should ignore non-object SSE JSON payloads in diagnostics', () => {
-    const error = new Error('id:1\nevent:error\n:HTTP_STATUS/429\ndata:null');
+    const error = new Error('id:1\nevent:error\ndata:null');
 
     expect(getRateLimitErrorDetails(error)).toEqual({
-      statusCode: 429,
       transport: 'sse',
     });
   });

@@ -6,8 +6,9 @@
 
 import * as ClientLib from '@modelcontextprotocol/client';
 import * as SdkClientStdioLib from '@modelcontextprotocol/client/stdio';
-import * as GenAiLib from '@google/genai';
+import type { CallableTool } from '@google/genai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as McpCallableToolLib from './mcp-callable-tool.js';
 import { MCPServerConfig, type Config } from '../config/config.js';
 import type { PoolEntry } from './mcp-pool-entry.js';
 import { connectionIdOf } from './mcp-pool-key.js';
@@ -27,7 +28,7 @@ vi.mock('@modelcontextprotocol/client', async (importOriginal) => {
   return { ...actual, Client: vi.fn() };
 });
 vi.mock('@modelcontextprotocol/client/stdio');
-vi.mock('@google/genai');
+vi.mock('./mcp-callable-tool.js');
 
 // F2 (#4175 follow-up — W134): mocked so per-test overrides can make
 // `listDescendantPids` throw or return partial signaling. Defaults to
@@ -140,7 +141,7 @@ function mockMcpSuccess(
       close: vi.fn().mockResolvedValue(undefined),
     } as unknown as SdkClientStdioLib.StdioClientTransport,
   );
-  vi.mocked(GenAiLib.mcpToTool).mockReturnValue({
+  vi.mocked(McpCallableToolLib.mcpToTool).mockReturnValue({
     tool: () =>
       Promise.resolve({
         functionDeclarations: tools.map((name) => ({
@@ -148,7 +149,7 @@ function mockMcpSuccess(
           parametersJsonSchema: { type: 'object' },
         })),
       }),
-  } as unknown as GenAiLib.CallableTool);
+  } as unknown as CallableTool);
   return mockedClient;
 }
 

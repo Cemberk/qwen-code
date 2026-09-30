@@ -141,6 +141,17 @@ describe('DualOutputBridge', () => {
       });
     });
 
+    it.skipIf(process.platform === 'win32')(
+      'creates a missing JSON event file readable only by the owner',
+      async () => {
+        const newFile = path.join(tmpDir, 'private.jsonl');
+        bridge = new DualOutputBridge(config, { filePath: newFile });
+        await bridge.shutdown();
+
+        expect(fs.statSync(newFile).mode & 0o777).toBe(0o600);
+      },
+    );
+
     it('emits a session_start event immediately on construction', async () => {
       bridge = new DualOutputBridge(config, { filePath: target });
       await bridge.shutdown();

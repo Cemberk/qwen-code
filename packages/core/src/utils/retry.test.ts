@@ -22,7 +22,6 @@ import {
 } from './retry.js';
 import { retryContext } from './retryContext.js';
 import { getErrorStatus } from './errors.js';
-import { isRateLimitError } from './rateLimit.js';
 import { setSimulate429 } from './testUtils.js';
 
 const { debugLoggerMock } = vi.hoisted(() => ({
@@ -498,7 +497,7 @@ describe('retryWithBackoff', () => {
     // about eighty seconds.
     const mockFn = vi.fn(async () => {
       throw Object.assign(new Error('Content filtered'), {
-        code: 'data_inspection_failed',
+        code: 'content_filter',
         requestID: 'req-1',
       });
     });
@@ -594,63 +593,8 @@ describe('retryWithBackoff', () => {
     });
   });
 
-  describe('permanent quota-exhaustion fast-fail (any auth)', () => {
-    it('should throw immediately for a permanent quota-exhaustion error', async () => {
-      // Bailian token-plan "1-week quota has been exhausted" surfaces as a 429
-      // from the OpenAI SDK but is permanent — it must fast-fail, not retry.
-      const quotaError = Object.assign(
-        new Error(
-          '429 Your token-plan 1-week quota has been exhausted. The quota will reset at 07-27 09:25:00 UTC.',
-        ),
-        { status: 429 },
-      );
-      const fn = vi.fn().mockRejectedValue(quotaError);
-
-      const promise = retryWithBackoff(fn, {
-        maxAttempts: 5,
-        initialDelayMs: 1000,
-        maxDelayMs: 5000,
-      });
-
-      await expect(promise).rejects.toMatchObject({
-        message: expect.stringContaining('Quota exhausted'),
-      });
-
-      // Should be called only once (no retries)
-      expect(fn).toHaveBeenCalledTimes(1);
-    });
-
-    it('thrown error must not be a rate-limit error (pins no-status intent)', async () => {
-      // The thrown error deliberately carries no .status so that
-      // isRateLimitError() returns false — preventing the stream-side
-      // rate-limit retry loop in llm-chat.ts from re-driving it.
-      const quotaError = Object.assign(
-        new Error(
-          '429 Your token-plan 1-week quota has been exhausted. The quota will reset at 07-27 09:25:00 UTC.',
-        ),
-        { status: 429 },
-      );
-      const fn = vi.fn().mockRejectedValue(quotaError);
-
-      const promise = retryWithBackoff(fn, {
-        maxAttempts: 5,
-        initialDelayMs: 1000,
-        maxDelayMs: 5000,
-      });
-
-      let thrown: unknown;
-      const assertionPromise = promise.catch((e: unknown) => {
-        thrown = e;
-      });
-      await vi.runAllTimersAsync();
-      await assertionPromise;
-
-      expect(isRateLimitError(thrown)).toBe(false);
-    });
-
-    it('should retry a transient 429 that does not carry a reset time', async () => {
-      // A plain TPM/RPM 429 (no "will reset at") stays retryable — the
-      // quota-exhaustion fast-fail must not swallow transient throttling.
+  describe('transient 429 throttling', () => {
+    it('should retry a transient 429', async () => {
       const transient429 = Object.assign(
         new Error('Rate limit exceeded. Please retry later.'),
         { status: 429 },
@@ -835,34 +779,6 @@ describe('retryWithBackoff - persistent mode', () => {
     await assertionPromise;
 
     // Should stop at maxAttempts for non-transient errors
-    expect(fn).toHaveBeenCalledTimes(3);
-  });
-
-  it('should NOT retry indefinitely for fail-fast quota 429s in persistent mode', async () => {
-    // DashScope allocated-quota exhaustion surfaces as HTTP 429 but is a
-    // permanent business error (classified fail-fast). Persistent mode must
-    // fall back to the bounded maxAttempts path rather than looping forever.
-    const fn = vi.fn(async () => {
-      const error = Object.assign(new Error('Allocated quota exceeded'), {
-        status: 429,
-        code: 'Throttling.AllocationQuota',
-      });
-      throw error;
-    });
-
-    const promise = retryWithBackoff(fn, {
-      maxAttempts: 3,
-      initialDelayMs: 10,
-      persistentMode: true,
-    });
-
-    // eslint-disable-next-line vitest/valid-expect
-    const assertionPromise = expect(promise).rejects.toThrow(
-      'Allocated quota exceeded',
-    );
-    await vi.runAllTimersAsync();
-    await assertionPromise;
-
     expect(fn).toHaveBeenCalledTimes(3);
   });
 
@@ -1436,31 +1352,6 @@ describe('getErrorStatus', () => {
     expect(getErrorStatus({})).toBeUndefined();
     expect(getErrorStatus({ response: {} })).toBeUndefined();
     expect(getErrorStatus({ error: {} })).toBeUndefined();
-  });
-
-  it('should parse HTTP_STATUS/NNN from streamed SSE error messages', () => {
-    // DashScope throttling: error opens with 200 OK, then surfaces as an SSE
-    // error frame. The SDK preserves the raw SSE text in error.message.
-    const dashscopeThrottle = new Error(
-      'id:1\nevent:error\n:HTTP_STATUS/429\ndata:{"request_id":"x","code":"Throttling.AllocationQuota","message":"Allocated quota exceeded"}',
-    );
-    expect(getErrorStatus(dashscopeThrottle)).toBe(429);
-
-    expect(getErrorStatus(new Error('upstream :HTTP_STATUS/503'))).toBe(503);
-  });
-
-  it('should prefer numeric status fields over HTTP_STATUS/NNN in message', () => {
-    const error: HttpError = new Error(':HTTP_STATUS/500');
-    error.status = 429;
-    expect(getErrorStatus(error)).toBe(429);
-  });
-
-  it('should ignore HTTP_STATUS/NNN outside the valid range', () => {
-    expect(getErrorStatus(new Error('HTTP_STATUS/999'))).toBeUndefined();
-  });
-
-  it('should not match HTTP_STATUS/NNN when adjacent to more digits', () => {
-    expect(getErrorStatus(new Error('HTTP_STATUS/4291'))).toBeUndefined();
   });
 });
 

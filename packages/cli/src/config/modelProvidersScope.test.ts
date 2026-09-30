@@ -7,7 +7,6 @@
 import { describe, expect, it } from 'vitest';
 import { SettingScope, type LoadedSettings } from './settings.js';
 import {
-  getOwnKeyScope,
   getPersistScopeForModelSelection,
   getWritableScopes,
 } from './modelProvidersScope.js';
@@ -63,16 +62,14 @@ function makeSettings({
 }
 
 describe('getPersistScopeForModelSelection', () => {
-  it('prefers workspace when trusted and workspace defines modelProviders', () => {
+  it('never persists to a trusted workspace that defines modelProviders', () => {
     const settings = makeSettings({
       isTrusted: true,
       workspaceModelProviders: {},
       userModelProviders: { anything: true },
     });
 
-    expect(getPersistScopeForModelSelection(settings)).toBe(
-      SettingScope.Workspace,
-    );
+    expect(getPersistScopeForModelSelection(settings)).toBe(SettingScope.User);
   });
 
   it('falls back to user when workspace does not define modelProviders', () => {
@@ -124,52 +121,5 @@ describe('getWritableScopes', () => {
     expect(getWritableScopes(makeLoaded({ isTrusted: false }))).toEqual([
       SettingScope.User,
     ]);
-  });
-});
-
-describe('getOwnKeyScope', () => {
-  it('prefers workspace when trusted and workspace owns the key', () => {
-    const loaded = makeLoaded({
-      isTrusted: true,
-      workspace: { modelFallbacks: 'a,b' },
-      user: { modelFallbacks: 'c' },
-    });
-    expect(getOwnKeyScope(loaded, 'modelFallbacks')).toBe(
-      SettingScope.Workspace,
-    );
-  });
-
-  it('falls back to user when only user owns the key', () => {
-    const loaded = makeLoaded({
-      isTrusted: true,
-      workspace: {},
-      user: { modelFallbacks: 'c' },
-    });
-    expect(getOwnKeyScope(loaded, 'modelFallbacks')).toBe(SettingScope.User);
-  });
-
-  it('ignores a workspace-owned key when untrusted', () => {
-    const loaded = makeLoaded({
-      isTrusted: false,
-      workspace: { modelFallbacks: 'a,b' },
-      user: {},
-    });
-    expect(getOwnKeyScope(loaded, 'modelFallbacks')).toBeUndefined();
-  });
-
-  it('returns undefined when no writable scope owns the key', () => {
-    const loaded = makeLoaded({ isTrusted: true, workspace: {}, user: {} });
-    expect(getOwnKeyScope(loaded, 'modelFallbacks')).toBeUndefined();
-  });
-
-  it('treats an explicitly-set falsy value as owned (hasOwnProperty, not truthiness)', () => {
-    const loaded = makeLoaded({
-      isTrusted: true,
-      workspace: { modelFallbacks: '' },
-      user: {},
-    });
-    expect(getOwnKeyScope(loaded, 'modelFallbacks')).toBe(
-      SettingScope.Workspace,
-    );
   });
 });

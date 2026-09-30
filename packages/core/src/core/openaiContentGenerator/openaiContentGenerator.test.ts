@@ -60,9 +60,6 @@ describe('OpenAIContentGenerator (Refactored)', () => {
             create: vi.fn(),
           },
         },
-        embeddings: {
-          create: vi.fn(),
-        },
       } as unknown as OpenAI),
       buildRequest: vi.fn().mockImplementation((req) => req),
       getDefaultGenerationConfig: vi.fn().mockReturnValue({}),
@@ -96,37 +93,6 @@ describe('OpenAIContentGenerator (Refactored)', () => {
     it('should delegate to pipeline.executeStream', async () => {
       // This test verifies the method exists and can be called
       expect(typeof generator.generateContentStream).toBe('function');
-    });
-  });
-
-  describe('embedContent', () => {
-    it('should delegate to pipeline.client.embeddings.create', async () => {
-      // This test verifies the method exists and can be called
-      expect(typeof generator.embedContent).toBe('function');
-    });
-
-    it('prefixes embedding request errors', async () => {
-      const generatorWithClient = generator as unknown as {
-        pipeline: {
-          client: {
-            embeddings: {
-              create: ReturnType<typeof vi.fn>;
-            };
-          };
-        };
-      };
-      generatorWithClient.pipeline.client.embeddings.create.mockRejectedValue(
-        new Error('connect ECONNREFUSED 127.0.0.1:11434'),
-      );
-
-      await expect(
-        generator.embedContent({
-          model: 'text-embedding-ada-002',
-          contents: 'hello',
-        }),
-      ).rejects.toThrow(
-        'OpenAI API error: connect ECONNREFUSED 127.0.0.1:11434',
-      );
     });
   });
 
@@ -166,9 +132,6 @@ describe('OpenAIContentGenerator (Refactored)', () => {
             completions: {
               create: vi.fn(),
             },
-          },
-          embeddings: {
-            create: vi.fn(),
           },
         } as unknown as OpenAI),
         buildRequest: vi.fn().mockImplementation((req) => req),
@@ -341,9 +304,6 @@ describe('OpenAIContentGenerator (Refactored)', () => {
             completions: {
               create: vi.fn(),
             },
-          },
-          embeddings: {
-            create: vi.fn(),
           },
         } as unknown as OpenAI),
         buildRequest: vi.fn().mockImplementation((req) => req),

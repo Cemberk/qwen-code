@@ -5,10 +5,6 @@
  */
 
 import type { GenerateContentResponse } from '@google/genai';
-import {
-  isQuotaExhaustedError,
-  formatQuotaExhaustedMessage,
-} from './quotaErrorDetection.js';
 import { createDebugLogger } from './debugLogger.js';
 import { getErrorStatus } from './errors.js';
 import { getRetryAfterDelayMs, getRetryDelayMs } from './retryPolicy.js';
@@ -349,29 +345,6 @@ export async function retryWithBackoff<T>(
         throw error;
       }
 
-      // Permanent quota exhaustion (e.g. Bailian token-plan "1-week quota has
-      // been exhausted, will reset at …"). Unlike transient 429 throttling,
-      // retrying cannot succeed until the reset time — fast-fail and surface a
-      // friendly message so the session does not hang through the full retry
-      // budget with no output. Applies to any auth type since a reset time is
-      // the universal signal of a permanently exhausted quota.
-      if (isQuotaExhaustedError(error)) {
-        debugLogger.error(
-          'Quota exhausted, fast-failing',
-          retryDiagnostics,
-          error,
-        );
-        // Intentionally throws a plain Error with no `.status`: a 429 status
-        // would make isRateLimitError() return true and re-trigger the
-        // stream-side rate-limit retry loop in llm-chat.ts (up to 10 retries
-        // at 1-5 min delays), reintroducing the silent hang this fast-fail
-        // eliminates. This also skips model fallback — quota exhaustion is
-        // provider-scoped and temporary, so the user should retry after the
-        // reset time rather than burning fallback provider quota. `cause`
-        // preserves the original error for diagnostics.
-        throw new Error(formatQuotaExhaustedMessage(error), { cause: error });
-      }
-
       // Determine if this error qualifies for persistent retry.
       // Persistent mode still respects shouldRetryOnError — callers can force
       // fast-fail even for transient errors if they explicitly return false.
@@ -379,10 +352,9 @@ export async function retryWithBackoff<T>(
       const callerAllowsRetry = hasCustomShouldRetryOnError
         ? shouldRetryOnError(error as Error)
         : defaultShouldRetry(error, extraRetryErrorCodes);
-      // A permanent business failure can surface with a transient-looking status
-      // (e.g. DashScope `Throttling.AllocationQuota` arrives as HTTP 429). Such
-      // errors are classified as 'fail-fast'; they must not enter the unbounded
-      // persistent loop, where they would retry for hours and never recover.
+      // A permanent failure classified as 'fail-fast' must not enter the
+      // unbounded persistent loop, where it would retry for hours and never
+      // recover.
       // Excluding them here falls back to the normal, maxAttempts-bounded retry
       // path so the request still gets a few attempts but is guaranteed to
       // terminate.

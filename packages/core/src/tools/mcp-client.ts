@@ -14,7 +14,6 @@ import {
   type Transport,
 } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
-import type { Client as GenAiMcpClient } from '@modelcontextprotocol/sdk/client/index.js';
 import {
   GetPromptResultSchema,
   ListPromptsResultSchema,
@@ -26,6 +25,7 @@ import { parse } from 'shell-quote';
 import type { Config, MCPServerConfig } from '../config/config.js';
 import { isSdkMcpServerConfig } from '../config/config.js';
 import { validateAgentPluginStdioRuntimePaths } from '../extension/agent-plugins-v1/mcp.js';
+import { mcpToTool } from './mcp-callable-tool.js';
 import { DiscoveredMCPTool } from './mcp-tool.js';
 import type { McpToolAnnotations } from './mcp-tool.js';
 import { SdkControlClientTransport } from './sdk-control-client-transport.js';
@@ -847,7 +847,6 @@ async function discoverToolsWithMetadata(
   opts?: { applyConfigFilters?: boolean },
 ): Promise<ToolDiscoveryResult> {
   try {
-    const { mcpToTool } = await import('@google/genai');
     const listedTools: Array<
       Awaited<ReturnType<Client['listTools']>>['tools'][number]
     > = [];
@@ -868,11 +867,10 @@ async function discoverToolsWithMetadata(
       listedTools.push(...result.tools);
       return result;
     };
-    // @google/genai still types this structural adapter against SDK v1. Its
-    // discovery path only calls listTools(); execution stays on the v2 client.
+    // Discovery only calls listTools(); execution stays on the v2 client.
     // Legacy listTools must remain lenient because some servers implement
     // tools/list without declaring the tools capability during initialization.
-    const discoveryClient = { listTools } as unknown as GenAiMcpClient;
+    const discoveryClient = { listTools } as unknown as Client;
     const mcpCallableTool = mcpToTool(discoveryClient, {
       timeout: mcpServerConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
     });

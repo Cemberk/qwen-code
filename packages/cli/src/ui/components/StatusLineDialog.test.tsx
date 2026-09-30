@@ -223,10 +223,10 @@ describe('StatusLineDialog', () => {
   });
 
   it.each([false, true])(
-    'saves hideContextIndicator=%s back to the effective workspace scope',
+    'saves hideContextIndicator=%s back to user settings, never a workspace status line',
     async (hideContextIndicator) => {
       const settings = createSettings();
-      settings.workspace.settings.ui = {
+      settings.user.settings.ui = {
         statusLine: {
           type: 'preset',
           useThemeColors: false,
@@ -234,7 +234,10 @@ describe('StatusLineDialog', () => {
           hideContextIndicator,
         },
       };
-      settings.workspace.originalSettings.ui = settings.workspace.settings.ui;
+      settings.user.originalSettings.ui = settings.user.settings.ui;
+      settings.workspace.settings.ui = {
+        statusLine: { type: 'command', command: 'echo workspace' },
+      };
       settings.recomputeMerged();
       const addItem = vi.fn();
       const { stdin } = renderDialog({ settings, addItem });
@@ -244,8 +247,10 @@ describe('StatusLineDialog', () => {
       });
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      expect(settings.forScope(SettingScope.User).settings.ui).toBeUndefined();
       expect(settings.forScope(SettingScope.Workspace).settings.ui).toEqual({
+        statusLine: { type: 'command', command: 'echo workspace' },
+      });
+      expect(settings.forScope(SettingScope.User).settings.ui).toEqual({
         statusLine: {
           type: 'preset',
           useThemeColors: false,
@@ -256,7 +261,7 @@ describe('StatusLineDialog', () => {
       expect(addItem).toHaveBeenCalledWith(
         {
           type: MessageType.INFO,
-          text: 'Status line preset saved to workspace settings.',
+          text: 'Status line preset saved to user settings.',
         },
         expect.any(Number),
       );
@@ -265,14 +270,14 @@ describe('StatusLineDialog', () => {
 
   it('preserves an explicit command indicator setting when saving a preset', async () => {
     const settings = createSettings();
-    settings.workspace.settings.ui = {
+    settings.user.settings.ui = {
       statusLine: {
         type: 'command',
         command: 'echo status',
         hideContextIndicator: false,
       },
     };
-    settings.workspace.originalSettings.ui = settings.workspace.settings.ui;
+    settings.user.originalSettings.ui = settings.user.settings.ui;
     settings.recomputeMerged();
     const { stdin } = renderDialog({ settings });
 
@@ -282,7 +287,7 @@ describe('StatusLineDialog', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(
-      settings.forScope(SettingScope.Workspace).settings.ui?.statusLine,
+      settings.forScope(SettingScope.User).settings.ui?.statusLine,
     ).toHaveProperty('hideContextIndicator', false);
   });
 

@@ -15,6 +15,7 @@ import {
   HOME_ENV_BOOTSTRAP_KEYS,
   isHardcodedProjectEnvExclusion,
   isLoaderEnvKey,
+  isOperatorOnlyEnvKey,
   isPrivateProvenanceEnvKey,
   PRIVATE_RELAUNCH_ENV_PROVENANCE,
   PROJECT_ENV_HARDCODED_EXCLUSIONS,
@@ -276,11 +277,10 @@ export function resetEnvironmentTrackingForTesting(): void {
  *
  * The distinction matters wherever a value decides something the file's author
  * must not decide. `<repo>/.qwen/.env` is repository content: it is read from
- * the checkout under review, and folder trust defaults off, so a fresh runner
- * admits it. A setting that a repository is deliberately barred from making
- * through `settings.json` (see `operatorReviewSettings`, which skips the
- * workspace scope) is barred for nothing if the same value can arrive through
- * the env layer that outranks it.
+ * the checkout once the workspace is trusted, or whenever folder trust is
+ * turned off. A setting that a repository is deliberately barred from making
+ * through `settings.json` is barred for nothing if the same value can arrive
+ * through the env layer that outranks it.
  *
  * Callers that consult this are saying: an operator may set this, a repository
  * may not. The operator's routes remain their settings file and their real
@@ -553,7 +553,10 @@ function canApplyParsedEnvKey(
   // must not be able to forge sandbox or Conversations runtime state either.
   if (isPrivateProvenanceEnvKey(key)) return false;
   if (options.reload && isReloadExcludedKey(key)) return false;
-  if (!envFile.isHomeScopedEnvFile && isHardcodedProjectEnvExclusion(key)) {
+  if (
+    !envFile.isHomeScopedEnvFile &&
+    (isHardcodedProjectEnvExclusion(key) || isOperatorOnlyEnvKey(key))
+  ) {
     return false;
   }
   return envFile.isQwenScopedEnvFile || !excludedVars.includes(key);

@@ -145,13 +145,7 @@ export async function evaluateManagedCompatibility(
   if (merged.tools?.discoveryCommand || merged.tools?.callCommand) {
     return deferredResult('a tool discovery or call command is configured');
   }
-  if (
-    [
-      settings.getSystemHooks(),
-      settings.getUserHooks(),
-      settings.getProjectHooks(),
-    ].some(hasHooks)
-  ) {
+  if ([settings.getSystemHooks(), settings.getUserHooks()].some(hasHooks)) {
     return deferredResult('hooks are configured in settings');
   }
   // Session creation parses the settings value, as boot does, before a

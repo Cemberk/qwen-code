@@ -37,7 +37,6 @@ import {
   isValidSessionModelPayload,
   isTurnResultRecordPayload,
   normalizeSessionApprovalModePayload,
-  type AttributionSnapshotPayload,
   type ChatRecord,
   type ParentSessionRecordPayload,
   type SessionModelRecordPayload,
@@ -68,7 +67,6 @@ import {
   type GoalRecoverySelection,
 } from '../goals/goal-persistence.js';
 import type { UiEvent } from '../telemetry/uiTelemetry.js';
-import type { AttributionSnapshot } from './commitAttribution.js';
 import type { FileHistorySnapshot } from './fileHistoryService.js';
 import { SessionFileHistoryAccumulator } from './session-file-history-state.js';
 import {
@@ -277,7 +275,6 @@ export interface SessionRuntimeResumeState extends SessionSourcesRestoreState {
   completedToolCallIds?: string[];
   resumeTokenCounts?: ResumeTokenCounts;
   uiTelemetryEvents: UiEvent[];
-  attributionSnapshot?: AttributionSnapshot;
   historyGaps?: HistoryGap[];
   recording: {
     lastCompletedUuid: string;
@@ -335,7 +332,6 @@ export function buildManagedSessionRestoreProjection(
   const fileHistory = new SessionFileHistoryAccumulator();
   const uiTelemetryEvents: UiEvent[] = [];
   const goalRecords: GoalRecoveryRecord[] = [];
-  let attributionSnapshot: AttributionSnapshot | undefined;
   let lastAssistantModel: string | undefined;
   let lastTokenCountsRecord: ChatRecord | undefined;
   for (const record of records) {
@@ -358,14 +354,6 @@ export function buildManagedSessionRestoreProjection(
       )?.uiEvent;
       if (uiEvent) uiTelemetryEvents.push(uiEvent);
     }
-    if (record.subtype === 'attribution_snapshot') {
-      const snapshot = (
-        record.systemPayload as AttributionSnapshotPayload | undefined
-      )?.snapshot;
-      if (snapshot && typeof snapshot === 'object') {
-        attributionSnapshot = snapshot;
-      }
-    }
     if (
       record.type === 'assistant' &&
       typeof record.model === 'string' &&
@@ -383,7 +371,6 @@ export function buildManagedSessionRestoreProjection(
     apiHistory: apiHistory.finish(),
     ...(restoredTokenCounts ? { resumeTokenCounts: restoredTokenCounts } : {}),
     uiTelemetryEvents,
-    ...(attributionSnapshot ? { attributionSnapshot } : {}),
     recording: {
       lastCompletedUuid:
         records[records.length - 1]?.uuid ?? input.fallbackLastCompletedUuid,
@@ -478,7 +465,6 @@ interface UuidIndexEntry {
   sideTaskSource: boolean;
   apiHistoryCompressionCandidate: boolean;
   resumeTokenCountsCandidate: boolean;
-  attributionSnapshotCandidate: boolean;
   goalRecoveryCandidate: boolean;
   turnHint: SessionTurnRecordHint;
   navigationKind?: SessionTranscriptNavigationTurnKind;
@@ -765,14 +751,6 @@ function isFileMissingError(error: unknown): boolean {
     error !== null &&
     'code' in error &&
     error.code === 'ENOENT'
-  );
-}
-
-function isAttributionSnapshotCandidate(record: ChatRecord): boolean {
-  return (
-    record.subtype === 'attribution_snapshot' &&
-    isObjectRecord(record.systemPayload) &&
-    'snapshot' in record.systemPayload
   );
 }
 
@@ -2100,7 +2078,6 @@ function newIndexEntry(
       record.systemPayload['sourceType'] === 'side_task',
     apiHistoryCompressionCandidate: isApiHistoryCompressionCandidate(record),
     resumeTokenCountsCandidate: isResumeTokenCountsCandidate(record),
-    attributionSnapshotCandidate: isAttributionSnapshotCandidate(record),
     goalRecoveryCandidate: isGoalRecoveryCandidate(record),
     turnHint: getSessionTurnRecordHint(record, sessionId),
     ...(navigationKind ? { navigationKind } : {}),
@@ -3127,10 +3104,6 @@ export class SessionTranscriptReader {
       index,
       (entry) => entry.resumeTokenCountsCandidate,
     );
-    const attributionUuid = lastUuidMatching(
-      index,
-      (entry) => entry.attributionSnapshotCandidate,
-    );
     const parentSessionUuid = lastUuidMatching(
       index,
       (entry) => entry.type === 'system' && entry.subtype === 'parent_session',
@@ -3219,7 +3192,6 @@ export class SessionTranscriptReader {
       GoalStateRecordPayloadV2 | undefined
     >();
     const replayRecordsByUuid = new Map<string, ChatRecord>();
-    let attributionSnapshot: AttributionSnapshot | undefined;
     let parentSessionId: string | undefined;
     let sourceType: string | undefined;
     let sourceId: string | undefined;
@@ -3236,14 +3208,6 @@ export class SessionTranscriptReader {
           record.systemPayload as UiTelemetryRecordPayload | undefined
         )?.uiEvent;
         if (uiEvent) uiTelemetryEvents.push(uiEvent);
-      }
-      if (record.uuid === attributionUuid) {
-        const snapshot = (
-          record.systemPayload as AttributionSnapshotPayload | undefined
-        )?.snapshot;
-        if (snapshot && typeof snapshot === 'object') {
-          attributionSnapshot = snapshot;
-        }
       }
       if (record.uuid === parentSessionUuid) {
         parentSessionId = (
@@ -3334,7 +3298,6 @@ export class SessionTranscriptReader {
               const needsDeferredDispatch =
                 modelSet.has(record.uuid) ||
                 record.uuid === tokenUuid ||
-                record.uuid === attributionUuid ||
                 metadataSet.has(record.uuid) ||
                 uiTelemetrySet.has(record.uuid) ||
                 fileHistorySet.has(record.uuid) ||
@@ -3363,7 +3326,6 @@ export class SessionTranscriptReader {
             (uuid) =>
               modelSet.has(uuid) ||
               uuid === tokenUuid ||
-              uuid === attributionUuid ||
               metadataSet.has(uuid) ||
               uiTelemetrySet.has(uuid) ||
               fileHistorySet.has(uuid) ||
@@ -3469,7 +3431,6 @@ export class SessionTranscriptReader {
         ? { resumeTokenCounts: restoredTokenCounts }
         : {}),
       uiTelemetryEvents,
-      ...(attributionSnapshot ? { attributionSnapshot } : {}),
       ...(index.gaps.length > 0 ? { historyGaps: index.gaps } : {}),
       recording: {
         lastCompletedUuid: index.leafUuid,

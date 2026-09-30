@@ -19,8 +19,8 @@ Qwen Code offers five distinct permission modes that allow you to flexibly contr
 ### Quick Reference Guide
 
 - **Start in Plan Mode**: Great for understanding before making changes
-- **Auto Mode (default)**: The default out-of-the-box experience — an LLM classifier auto-approves safe actions and blocks risky ones, minimizing interruptions while keeping a safety net
-- **Switch to Ask Permissions**: When you want manual approval for every file edit and shell command
+- **Ask Permissions (default)**: The out-of-the-box experience — you approve every file edit and shell command
+- **Switch to Auto Mode**: An LLM classifier auto-approves safe actions and blocks risky ones, minimizing interruptions while keeping a safety net
 - **Switch to Auto-Edit**: When you're making lots of safe code changes
 - **Use YOLO sparingly**: Only for trusted automation in controlled environments
 
@@ -94,7 +94,7 @@ How should we handle database migration?
 ### Configure Plan Mode as default
 
 ```json
-// .qwen/settings.json
+// ~/.qwen/settings.json
 {
   "tools": {
     "approvalMode": "plan"
@@ -157,7 +157,7 @@ You can review each proposed change and approve or reject it individually.
 ### Configure Ask Permissions Mode as default
 
 ```bash
-// .qwen/settings.json
+// ~/.qwen/settings.json
 {
   "tools": {
     "approvalMode": "default"
@@ -234,7 +234,7 @@ works. The notice does not appear again.
 **Start a new session in Auto Mode**
 
 ```jsonc
-// .qwen/settings.json
+// ~/.qwen/settings.json
 {
   "tools": {
     "approvalMode": "auto",
@@ -288,7 +288,7 @@ reason inline and decide whether to switch to Ask Permissions Mode for that step
 ### Configure Auto Mode as default
 
 ```jsonc
-// .qwen/settings.json
+// ~/.qwen/settings.json
 {
   "tools": {
     "approvalMode": "auto",
@@ -336,9 +336,6 @@ YOLO Mode grants Qwen Code the highest permissions, automatically approving all 
 # Temporarily enable (current session only)
 /approval-mode yolo
 
-# Set as project default
-/approval-mode yolo --project
-
 # Set as user global default
 /approval-mode yolo --user
 ```
@@ -346,7 +343,7 @@ YOLO Mode grants Qwen Code the highest permissions, automatically approving all 
 ### Configuration Example
 
 ```bash
-// .qwen/settings.json
+// ~/.qwen/settings.json
 {
   "tools": {
     "approvalMode": "yolo"
@@ -379,8 +376,7 @@ Plan Mode → Ask Permissions Mode → Auto-Edit Mode → Auto Mode → YOLO Mod
 ### Persistent Configuration
 
 ```
-// Project-level: ./.qwen/settings.json
-// User-level: ~/.qwen/settings.json
+// User-level: ~/.qwen/settings.json (a project .qwen/settings.json cannot set it)
 {
   "tools": {
     "approvalMode": "auto-edit"  // or "plan", "default", "auto", "yolo"
@@ -391,6 +387,6 @@ Plan Mode → Ask Permissions Mode → Auto-Edit Mode → Auto Mode → YOLO Mod
 ### Mode Usage Recommendations
 
 1. **New to codebase**: Start with **Plan Mode**​ for safe exploration
-2. **Daily development tasks**: Use **Auto-Accept Edits**​ (default mode), efficient and safe
+2. **Daily development tasks**: Use **Auto-Accept Edits**​, efficient and safe
 3. **Automated scripts**: Use **YOLO Mode**​ in controlled environments for full automation
 4. **Complex refactoring**: Use **Plan Mode**​ first for detailed planning, then switch to appropriate mode for execution

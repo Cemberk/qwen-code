@@ -494,4 +494,24 @@ describe('writeLine / writeLineSync / write', () => {
     write(nested, [{ x: 1 }]);
     expect(fs.readFileSync(nested, 'utf-8')).toBe('{"x":1}\n');
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'creates files 0600 and missing parent dirs 0700',
+    async () => {
+      const root = path.join(tmpRoot, `modes-${Date.now()}`);
+      const asyncFile = path.join(root, 'async', 'chat.jsonl');
+      const syncFile = path.join(root, 'sync', 'chat.jsonl');
+      const fullFile = path.join(root, 'full', 'chat.jsonl');
+
+      await writeLine(asyncFile, { a: 1 });
+      writeLineSync(syncFile, { b: 1 });
+      write(fullFile, [{ c: 1 }]);
+
+      for (const file of [asyncFile, syncFile, fullFile]) {
+        expect(fs.statSync(file).mode & 0o777).toBe(0o600);
+        expect(fs.statSync(path.dirname(file)).mode & 0o777).toBe(0o700);
+      }
+      expect(fs.statSync(root).mode & 0o777).toBe(0o700);
+    },
+  );
 });

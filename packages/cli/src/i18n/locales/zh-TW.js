@@ -607,7 +607,6 @@ export default {
     '要查看更改，必須重啟 Qwen Code。按 r 退出並立即應用更改。',
   'Code Mode Only (Experimental)': '僅程式碼模式（實驗性）',
   'Vim Mode': 'Vim 模式',
-  'Attribution: commit': '署名：提交',
   'Terminal Bell Notification': '終端響鈴通知',
   Theme: '主題',
   'Preferred Editor': '首選編輯器',

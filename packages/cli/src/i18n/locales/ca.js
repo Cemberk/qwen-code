@@ -462,7 +462,6 @@ export default {
   // Etiquetes de configuració
   // ============================================================================
   'Vim Mode': 'Mode Vim',
-  'Attribution: commit': 'Atribució: commit',
   'Terminal Bell Notification': 'Notificació de campana del terminal',
   Theme: 'Tema',
   'Preferred Editor': 'Editor preferit',

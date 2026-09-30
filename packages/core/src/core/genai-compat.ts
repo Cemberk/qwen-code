@@ -5,18 +5,23 @@
  */
 
 import type {
+  Candidate,
   Content,
   FinishReason as GenAiFinishReason,
+  FunctionCall,
   FunctionCallingConfigMode as GenAiFunctionCallingConfigMode,
+  GenerateContentResponse as GenAiGenerateContentResponse,
   Part,
   PartListUnion,
 } from '@google/genai';
 
 export type FinishReason = GenAiFinishReason;
-// Keep runtime values limited to the subset used outside provider adapters.
+// Local runtime values keep the @google/genai SDK type-only.
 export const FinishReason = {
+  FINISH_REASON_UNSPECIFIED: 'FINISH_REASON_UNSPECIFIED' as GenAiFinishReason,
   STOP: 'STOP' as GenAiFinishReason,
   MAX_TOKENS: 'MAX_TOKENS' as GenAiFinishReason,
+  NO_IMAGE: 'NO_IMAGE' as GenAiFinishReason,
   // Content-filter family (mirrors mapLlmFinishReasonToOpenAI's
   // 'content_filter' grouping) — the quiet-completion gate in llmChat
   // must keep all of these fatal.
@@ -35,6 +40,59 @@ export type FunctionCallingConfigMode = GenAiFunctionCallingConfigMode;
 export const FunctionCallingConfigMode = {
   ANY: 'ANY' as GenAiFunctionCallingConfigMode,
 } as const;
+
+// Stands in for the SDK's response class so the SDK stays type-only. The
+// getters follow @google/genai 2.6.0 without its console warnings.
+export class GenerateContentResponse implements GenAiGenerateContentResponse {
+  declare sdkHttpResponse?: GenAiGenerateContentResponse['sdkHttpResponse'];
+  declare candidates?: Candidate[];
+  declare createTime?: string;
+  declare automaticFunctionCallingHistory?: Content[];
+  declare modelVersion?: string;
+  declare promptFeedback?: GenAiGenerateContentResponse['promptFeedback'];
+  declare responseId?: string;
+  declare usageMetadata?: GenAiGenerateContentResponse['usageMetadata'];
+  declare modelStatus?: GenAiGenerateContentResponse['modelStatus'];
+
+  get text(): string | undefined {
+    let text: string | undefined;
+    for (const part of this.candidates?.[0]?.content?.parts ?? []) {
+      if (typeof part.text === 'string' && part.thought !== true) {
+        text = (text ?? '') + part.text;
+      }
+    }
+    return text;
+  }
+
+  get data(): string | undefined {
+    let data = '';
+    for (const part of this.candidates?.[0]?.content?.parts ?? []) {
+      if (typeof part.inlineData?.data === 'string') {
+        data += atob(part.inlineData.data);
+      }
+    }
+    return data.length > 0 ? btoa(data) : undefined;
+  }
+
+  get functionCalls(): FunctionCall[] | undefined {
+    const functionCalls = (this.candidates?.[0]?.content?.parts ?? []).flatMap(
+      (part) => (part.functionCall ? [part.functionCall] : []),
+    );
+    return functionCalls.length > 0 ? functionCalls : undefined;
+  }
+
+  get executableCode(): string | undefined {
+    return this.candidates?.[0]?.content?.parts?.find(
+      (part) => part.executableCode,
+    )?.executableCode?.code;
+  }
+
+  get codeExecutionResult(): string | undefined {
+    return this.candidates?.[0]?.content?.parts?.find(
+      (part) => part.codeExecutionResult,
+    )?.codeExecutionResult?.output;
+  }
+}
 
 // Content conversion is adapted from @google/genai 2.6.0's `_isPart` and
 // `_toParts` helpers (Copyright 2025 Google LLC, Apache-2.0); re-check parity

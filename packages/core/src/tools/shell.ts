@@ -37,24 +37,6 @@ import {
 import { getErrorMessage, isNodeError } from '../utils/errors.js';
 import { truncateToolOutput } from './truncation.js';
 import { getCurrentToolCallSource } from '../code-mode/tool-call-runtime.js';
-import {
-  CommitAttributionService,
-  type StagedFileInfo,
-} from '../services/commitAttribution.js';
-import { buildGitNotesCommand } from '../services/attributionTrailer.js';
-import {
-  commandRunsGhPrCreate,
-  ghPrCreateInlineEnv,
-  upsertSessionPrs,
-} from '../services/session-pr-service.js';
-import {
-  fetchAttributionRepoKeys,
-  fetchCurrentBranchName,
-  fetchCurrentBranchPullRequest,
-  repoKeyFromWebUrl,
-  type AttributionRepoKeys,
-  type BranchPullRequestSnapshot,
-} from '../utils/github-prs.js';
 import type {
   ShellExecutionConfig,
   ShellExecutionResult,
@@ -66,7 +48,6 @@ import type {
 import {
   getShellAbortReasonKind,
   isSignalTermination,
-  ShellExecutionService,
 } from '../services/shellExecutionService.js';
 import {
   statusFilePathFor,
@@ -110,8 +91,8 @@ import { createPatchSmart, getDiffStat } from './diffOptions.js';
 const debugLogger = createDebugLogger('SHELL');
 const DEFAULT_SHELL_OUTPUT_THRESHOLD = 30_000;
 // Separator between the formatted body and each appended metadata string
-// (long-run advisory, attribution warning). The reservation math and the
-// append loop share it so the two cannot drift.
+// (long-run advisory). The reservation math and the append loop share it so
+// the two cannot drift.
 const APPENDED_METADATA_SEPARATOR = '\n\n';
 
 function getShellOutputThreshold(config: Config): number {
@@ -148,134 +129,6 @@ function stripTrailingBackgroundAmp(command: string): string {
 }
 
 /**
- * Escape `s` so it is safe to interpolate inside a bash double-quoted
- * string. Inside `"..."`, bash still interprets `$`, backtick, `\`, and
- * `"`; escape those four. Newlines and other characters are literal.
- */
-function escapeForBashDoubleQuote(s: string): string {
-  return s.replace(/[\\"$`]/g, '\\$&');
-}
-
-/**
- * Escape `s` so it is safe to interpolate inside a bash single-quoted
- * string. Bash single quotes have no escape mechanism — the standard
- * trick is to close the quote, emit a backslash-escaped `'`, and reopen.
- */
-function escapeForBashSingleQuote(s: string): string {
-  return s.replace(/'/g, "'\\''");
-}
-
-/**
- * Return the LAST match from a RegExp.matchAll iterator, or `null` if
- * the iterator is empty. Used to find the final `-m` / `--body` flag
- * in a command segment: git/gh both honour the LAST occurrence when
- * multiple are passed, so the trailer has to land in that match to be
- * picked up by the actual commit / PR body.
- */
-function lastMatchOf<T extends RegExpMatchArray>(
-  matches: IterableIterator<T>,
-): T | null {
-  let result: T | null = null;
-  for (const m of matches) result = m;
-  return result;
-}
-
-/**
- * Return the position of the first unquoted `#` (start-of-comment) in
- * `s`, or -1 if none. Bash treats `#` as a comment marker only when it
- * begins a word — at start of input or preceded by whitespace — and
- * not when it appears inside a single- or double-quoted region. This
- * mirrors that semantics so the `-m` / `--body` rewriters can scope
- * their regex to the pre-comment part of a segment and avoid splicing
- * the trailer into a comment-out flag like
- * `git commit -m "real" # -m "fake"`, where the actual commit gets
- * "real" but `lastMatchOf` would otherwise pick the comment's `-m
- * "fake"` and put the trailer there.
- */
-function findUnquotedCommentStart(s: string): number {
-  let inSingle = false;
-  let inDouble = false;
-  let i = 0;
-  while (i < s.length) {
-    const c = s[i]!;
-    if (c === '\\' && !inSingle && i + 1 < s.length) {
-      i += 2;
-      continue;
-    }
-    if (c === "'" && !inDouble) {
-      inSingle = !inSingle;
-      i++;
-      continue;
-    }
-    if (c === '"' && !inSingle) {
-      inDouble = !inDouble;
-      i++;
-      continue;
-    }
-    if (c === '#' && !inSingle && !inDouble) {
-      const prev = i === 0 ? '' : s[i - 1]!;
-      if (prev === '' || /\s/.test(prev)) return i;
-    }
-    i++;
-  }
-  return -1;
-}
-
-/**
- * Helpers for the nested-match-rejection logic shared between
- * addCoAuthorToGitCommit and addAttributionToPR. Both functions pick
- * the LAST `-m` / `--body` occurrence across two quote styles, but
- * have to reject a candidate that's nested INSIDE the other's range
- * — e.g. `git commit -m "docs mention -m 'flag'"` where the inner
- * `-m 'flag'` lives entirely inside the outer `-m "..."`. Without
- * the nesting check the inner (later) match would win and the
- * trailer would land in the body text.
- *
- * Extracted to module scope so future bug fixes can't apply to only
- * one of the two call sites.
- */
-function matchSpan(
-  m: RegExpMatchArray | null,
-): { start: number; end: number } | null {
-  return m ? { start: m.index ?? 0, end: (m.index ?? 0) + m[0].length } : null;
-}
-
-function isMatchInside(
-  inner: RegExpMatchArray | null,
-  outer: RegExpMatchArray | null,
-): boolean {
-  const i = matchSpan(inner);
-  const o = matchSpan(outer);
-  return !!(i && o && i.start >= o.start && i.end <= o.end);
-}
-
-/**
- * Pick the LAST non-nested match across two quote styles. Mirrors the
- * algorithm both rewriters use: prefer whichever appears later in the
- * segment, but if either match lives inside the other's range, take
- * the OUTER one. Returns the chosen match plus a marker telling the
- * caller which style won (so they can pick the right escape function).
- */
-function pickOuterLastMatch<T extends RegExpMatchArray | null>(
-  doubleMatch: T,
-  singleMatch: T,
-): { match: T; isDouble: boolean } {
-  if (doubleMatch && singleMatch) {
-    if (isMatchInside(singleMatch, doubleMatch)) {
-      return { match: doubleMatch, isDouble: true };
-    }
-    if (isMatchInside(doubleMatch, singleMatch)) {
-      return { match: singleMatch, isDouble: false };
-    }
-    return (doubleMatch.index ?? 0) > (singleMatch.index ?? 0)
-      ? { match: doubleMatch, isDouble: true }
-      : { match: singleMatch, isDouble: false };
-  }
-  if (doubleMatch) return { match: doubleMatch, isDouble: true };
-  return { match: singleMatch, isDouble: false };
-}
-
-/**
  * Tokenise a single shell-command segment via `shell-quote`. Returns
  * the parsed string tokens with leading env-var assignments and a
  * small allowlist of safe wrappers (`sudo`, `command`, with their
@@ -295,9 +148,9 @@ function tokeniseSegment(segment: string): string[] | null {
     // Without this, `cd $HOME` parses as `['cd', '']` and the downstream
     // `target.includes('$')` repo-shift detection silently fails: an
     // env-var that points to another repo would get treated as a
-    // same-repo no-op and our Co-authored-by trailer would land on a
-    // commit in whatever repo `$HOME`/`$REPO_ROOT` resolves to at
-    // runtime. Same problem in `parseGitInvocation` for `git -C $HOME`.
+    // same-repo no-op and a commit in whatever repo `$HOME`/`$REPO_ROOT`
+    // resolves to at runtime would be treated as landing in our cwd.
+    // Same problem in `parseGitInvocation` for `git -C $HOME`.
     // Single-quoted forms (`cd '$HOME'`) end up looking like a variable
     // reference too, but in practice nobody creates a directory named
     // literally `$HOME`, so over-flagging is the conservative-correct
@@ -317,9 +170,7 @@ function tokeniseSegment(segment: string): string[] | null {
   // Skip env-var assignments (KEY=value). If the key is one of the
   // git-repo-redirecting variables, refuse to tokenise the segment at
   // all: `GIT_DIR=elsewhere/.git git commit ...` runs against another
-  // repository, so treating it as an in-cwd commit and stamping our
-  // attribution onto it would be wrong (and a `Co-authored-by` trailer
-  // would land on a commit in a repo the user didn't expect us to touch).
+  // repository, so treating it as an in-cwd commit would be wrong.
   while (i < tokens.length) {
     const key = leadingEnvAssignmentKey(tokens[i]!);
     if (key === null) break;
@@ -346,16 +197,15 @@ function tokeniseSegment(segment: string): string[] | null {
       // `sudo -D DIR` / `sudo --chdir DIR` (Linux sudo with --chdir)
       // both relocate the working directory before exec. Treat the
       // segment as repo-shifting (same contract as a leading
-      // `GIT_DIR=...` assignment) so we don't stamp our trailer onto
-      // a commit that landed in a different repository.
+      // `GIT_DIR=...` assignment) so a commit that landed in a
+      // different repository is not treated as an in-cwd commit.
       //
       // Also catch the attached-value forms `--chdir=DIR` and the
       // short-form `-CDIR` / `-DDIR` that shell-quote tokenises as a
       // single argv entry. Without this, `sudo --chdir=/tmp git
       // commit` and `env -C/tmp git commit` would both pass through
       // the bare-flag check (which is set-membership, not prefix-
-      // match) and silently land our trailer on a commit in the
-      // wrong repo.
+      // match) and be treated as in-cwd commits.
       const shiftSet =
         wrapper === 'env'
           ? ENV_FLAGS_SHIFT_CWD
@@ -381,7 +231,7 @@ function tokeniseSegment(segment: string): string[] | null {
     // `env` puts KEY=VALUE pairs between its flags and the real
     // program, so skip those too. Same git-repo-redirect bail as
     // above applies — a `env GIT_DIR=elsewhere git commit` segment
-    // is non-attributable.
+    // does not land in our cwd.
     if (wrapper === 'env') {
       while (i < tokens.length) {
         const key = leadingEnvAssignmentKey(tokens[i]!);
@@ -480,9 +330,8 @@ const ENV_FLAGS_WITH_VALUE = new Set(['-u', '--unset', '-S', '--split-string']);
 // `-C DIR` / `--chdir DIR`. A `git commit` inside such an env wrapper
 // runs against whatever repo lives at DIR, NOT our cwd, so we must
 // refuse the segment outright the same way `cd /elsewhere && git
-// commit` is refused. Returning null from tokeniseSegment makes the
-// segment non-attributable, which suppresses both trailer injection
-// and the per-file note.
+// commit` is refused. Returning null from tokeniseSegment keeps the
+// segment's commit from being treated as landing in our cwd.
 const ENV_FLAGS_SHIFT_CWD = new Set(['-C', '--chdir']);
 
 // `sudo`'s flags that relocate the working directory before exec.
@@ -519,15 +368,13 @@ function isShiftCwdFlag(flag: string, set: ReadonlySet<string>): boolean {
  * Environment variables that redirect git's repository selection. A
  * leading `GIT_DIR=...`, `GIT_WORK_TREE=...`, etc. on a command makes
  * the inner `git commit` operate on a different repo than our cwd
- * suggests; treating it as an in-cwd commit would attach our
- * `Co-authored-by` trailer (and per-file note) to the wrong
- * repository. tokeniseSegment refuses to parse such segments so the
- * caller skips them.
+ * suggests, so it must not be treated as an in-cwd commit.
+ * tokeniseSegment refuses to parse such segments so the caller skips
+ * them.
  *
  * Identity / date variables (`GIT_AUTHOR_*`, `GIT_COMMITTER_*`) are
  * deliberately NOT in this set — they tweak the commit's metadata
- * but don't move it to another repo, so attribution is still
- * meaningful.
+ * but don't move it to another repo.
  */
 // `GIT_NAMESPACE` is intentionally NOT here: it prefixes ref names
 // within the same repository, but the working tree and object store
@@ -578,8 +425,8 @@ const GIT_GLOBAL_FLAGS_TAKES_VALUE = new Set([
 const GIT_GLOBAL_FLAGS_SHIFTS_CWD = new Set(['-C', '--git-dir', '--work-tree']);
 
 // `-C .` (and `./`, attached `-C.`) are no-op cwd shifts; treating
-// them as cwd-changing would suppress attribution for `git -C . commit`
-// (a common alias for "explicit current dir").
+// them as cwd-changing would miss `git -C . commit` (a common alias for
+// "explicit current dir").
 //
 // Empty string is intentionally NOT treated as no-op even though
 // `-C "" commit` is technically a no-op — `shell-quote` returns ''
@@ -587,11 +434,11 @@ const GIT_GLOBAL_FLAGS_SHIFTS_CWD = new Set(['-C', '--git-dir', '--work-tree']);
 // parse time (e.g. `-C $HOME`, `-C $REPO_ROOT`, `-C $UNSET`), so
 // the literal-empty and the unknown-env-var cases are
 // indistinguishable from our static view. Treating them as no-op
-// would silently stamp our Co-authored-by trailer onto a commit
-// that lands in whatever repo `$HOME`/`$REPO_ROOT` resolves to at
-// runtime. Conservative skip is the safer call; the only missed
-// attribution is for `-C $PWD commit` (rare) and literal `-C ""
-// commit` (malformed and won't actually commit).
+// would treat a commit that lands in whatever repo
+// `$HOME`/`$REPO_ROOT` resolves to at runtime as an in-cwd commit.
+// Conservative skip is the safer call; the only misses are
+// `-C $PWD commit` (rare) and literal `-C "" commit` (malformed and
+// won't actually commit).
 //
 // Same conservatism applies to literal absolute paths that happen
 // to resolve to cwd at runtime — we only have the argv at parse
@@ -680,8 +527,7 @@ const COMMIT_RECOGNITION_LEADING_NOISE: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * The program recogniser shared by `gitCommitContext` and
- * `findAttributableCommitSegment` (#12514): skip leading
+ * The program recogniser used by `commitLandsInCwd` (#12514): skip leading
  * control-flow/noise keywords and match the program on its
  * basename (see `programBasename`), so `then git commit`,
  * `time git commit`, `! git commit` and `/usr/bin/git commit` all
@@ -723,16 +569,9 @@ function programBasename(program: string): string {
 
 /**
  * Classify whether a command chain (potentially compound) contains a
- * `git commit` invocation, and whether that invocation lands in the
- * tool's initial cwd.
- *
- * Two flags are returned because the answers feed different decisions:
- * - `hasCommit` is the broader "did the user try to commit anywhere
- *   in this chain?" — used to refuse background mode.
- * - `attributableInCwd` is the stricter "is it safe to capture HEAD
- *   in our cwd and write a note to that repo?" — used by the actual
- *   trailer rewrite, the git-notes write, and session-commit
- *   registration (`trackSessionCommit`).
+ * `git commit` invocation that lands in the tool's initial cwd — i.e.
+ * whether it is safe to capture HEAD in our cwd for session-commit
+ * registration (`trackSessionCommit`).
  *
  * Program recognition is loose (#12514): leading control-flow/noise
  * keywords are skipped and the program is matched on its basename (see
@@ -743,7 +582,7 @@ function programBasename(program: string): string {
  * — a commit the guard would block must be a commit that can register.
  *
  * Walks segments in order so a `cd` AFTER an in-cwd commit doesn't
- * invalidate that commit's attribution; only a `cd` (or `git -C` /
+ * invalidate that commit; only a `cd` (or `git -C` /
  * `--git-dir` / `--work-tree`) BEFORE the commit shifts safety. The
  * loose recognition also covers a `cd` hidden behind a noise keyword
  * (`if …; then cd /elsewhere; fi; git commit`), which a
@@ -752,15 +591,12 @@ function programBasename(program: string): string {
  * `cwdShifted` is intentionally a one-way latch — it isn't reset on
  * a subsequent `cd .` or `cd ..`, so harmless cd cycles like
  * `cd src && cd .. && git commit -m x` will conservatively skip
- * attribution. The trade-off matches the wrong-repo guard's intent
- * (better miss than corrupt unrelated repos).
+ * registration. The trade-off matches the wrong-repo guard's intent
+ * (better miss than register a commit from an unrelated repo).
  */
-function gitCommitContext(command: string): {
-  hasCommit: boolean;
-  attributableInCwd: boolean;
-} {
+function commitLandsInCwd(command: string): boolean {
   let hasCommit = false;
-  let attributable = false;
+  let inCwd = false;
   let cwdShifted = false;
 
   for (const sub of splitCommands(command)) {
@@ -780,7 +616,7 @@ function gitCommitContext(command: string): {
       // upward (no `..`, no absolute path, no env-var/$home expansion)
       // almost always stay within the same repo. The very common
       // `cd subdir && git commit -m "..."` flow is the motivating case
-      // — same repo, same toplevel, attribution is still safe. Only
+      // — same repo, same toplevel, registration is still safe. Only
       // mark as shifted when the target *could* land us in a different
       // repo. We can't be 100% certain without running `git rev-parse
       // --show-toplevel` after the cd, which would require a synchronous
@@ -804,7 +640,7 @@ function gitCommitContext(command: string): {
         hasCommit = true;
         // The commit lands in our cwd only if no preceding cd shifted
         // us and this very invocation didn't redirect via -C/--git-dir.
-        if (!cwdShifted && !changesCwd) attributable = true;
+        if (!cwdShifted && !changesCwd) inCwd = true;
       } else if (changesCwd && !hasCommit) {
         // `git -C /path status` and friends signal cwd-elsewhere
         // intent; subsequent in-cwd commits in this chain are unusual
@@ -814,48 +650,14 @@ function gitCommitContext(command: string): {
     }
   }
 
-  return { hasCommit, attributableInCwd: attributable };
-}
-
-/**
- * Walk a `gh ...` token sequence past gh's global flags
- * (`--repo owner/repo`, `--hostname host`, `--help`, `--version`) and
- * return the resulting subcommand chain. Same purpose as
- * `parseGitInvocation`: a fixed-position check at index 1 misses
- * `gh --repo owner/repo pr create ...`, which is a common form.
- */
-const GH_GLOBAL_FLAGS_TAKES_VALUE = new Set(['--repo', '-R', '--hostname']);
-
-function parseGhInvocation(tokens: string[]): string[] {
-  let i = 1; // skip 'gh'
-  while (i < tokens.length) {
-    const t = tokens[i]!;
-    if (GH_GLOBAL_FLAGS_TAKES_VALUE.has(t)) {
-      i += 2;
-      continue;
-    }
-    if (
-      t.startsWith('--repo=') ||
-      t.startsWith('--hostname=') ||
-      t.startsWith('-R=')
-    ) {
-      i++;
-      continue;
-    }
-    if (t.startsWith('-')) {
-      i++;
-      continue;
-    }
-    return tokens.slice(i);
-  }
-  return [];
+  return inCwd;
 }
 
 /**
  * Heuristic: does this `cd` invocation potentially redirect us into
- * a different repository? Used by `gitCommitContext` to decide
- * whether a subsequent `git commit` in the same chain is still
- * attributable in our cwd.
+ * a different repository? Used by `commitLandsInCwd` to decide
+ * whether a subsequent `git commit` in the same chain still lands in
+ * our cwd.
  *
  * Returns true (conservative — assume shift) when the target is
  * absolute, escapes upward (`..`), goes to `$HOME` / `~`, contains an
@@ -886,274 +688,6 @@ function cdTargetMayChangeRepo(tokens: string[]): boolean {
   // `-` is bash's "previous directory" — could be anywhere.
   if (target === '-') return true;
   return false;
-}
-
-/**
- * Detect whether the attributable `git commit` invocation in
- * `command` carries the `--amend` flag. Used so attachCommitAttribution
- * can switch the diff range from `${postHead}~1..${postHead}` (the
- * amended commit vs its parent — too broad for amend, since the
- * amended commit's parent is the original commit's parent, so this
- * diff lumps both commits' worth of changes) to
- * `${preHead}..${postHead}` (the actual amend delta — `preHead` was
- * captured synchronously before spawn and is the pre-amend SHA).
- *
- * Only the *first* commit segment that runs in the same cwd as the
- * shell tool counts. `git -C ../other commit --amend && git commit -m x`
- * must not flip the diff range for the second (fresh) commit, since
- * `preHead` would be the inner repo's SHA there, not ours.
- */
-function isAmendCommit(command: string): boolean {
-  let cwdShifted = false;
-  for (const sub of splitCommands(command)) {
-    const tokens = tokeniseSegment(sub);
-    if (!tokens || tokens.length === 0) continue;
-    const program = tokens[0]!;
-    if (program === 'cd' || program === 'pushd') {
-      if (!cwdShifted && cdTargetMayChangeRepo(tokens)) cwdShifted = true;
-      continue;
-    }
-    if (program === 'popd') {
-      cwdShifted = true;
-      continue;
-    }
-    if (program !== 'git') continue;
-    const { subcommand, changesCwd } = parseGitInvocation(tokens);
-    if (subcommand === 'commit' && !cwdShifted && !changesCwd) {
-      return (
-        tokens.includes('--amend') ||
-        tokens.some((t) => t.startsWith('--amend='))
-      );
-    }
-    if (changesCwd && !cwdShifted) cwdShifted = true;
-  }
-  return false;
-}
-
-/**
- * Locate the character range of the *first* attributable
- * `git commit` invocation in the (potentially compound) command, or
- * `null` if none is attributable in the current cwd. The range
- * covers the segment as `splitCommands` tokenised it — i.e. just
- * the `git commit ...` part, NOT later `&& git tag -m ...` or
- * earlier `git status &&` segments.
- *
- * Recognition is the loose one shared with `gitCommitContext`
- * (`skipCommitRecognitionNoise`, #12514): leading
- * control-flow/noise keywords are skipped and the program is matched
- * on its basename, so the spellings that walk accepts (`then git
- * commit`, `time git commit`, `! git commit`, `/usr/bin/git commit`)
- * earn their `Co-authored-by` trailer here too. The returned range
- * covers the whole segment including any skipped keyword; the caller's
- * `-m` rewrite is scoped by regex and unaffected by the prefix.
- *
- * That is recognition alignment, NOT a universal "amend-exempt implies
- * trailer" invariant, and no edit to this function can make it one:
- * this walk reads the RAW command while registration reads
- * `stripShellWrapper(this.params.command)`, so a commit hidden inside a
- * `bash -c '…'` wrapper registers (and earns the exemption) while the
- * rewriter is deliberately a no-op — see the wrapper note in
- * `addCoAuthorToGitCommit`.
- *
- * Skipping the noise keywords also NARROWS one case, deliberately: a
- * `cd` spelled behind a keyword (`if …; then cd "$CI_DIR"; fi && git
- * commit`) now reaches the `cdTargetMayChangeRepo` latch and suppresses
- * recognition — the trailer here and, through the same shared helper,
- * `gitCommitContext`'s `attributableInCwd` (registration + git-notes) —
- * where the pre-#12514 `tokens[0]`-only walk saw `then` and ignored the
- * `cd` entirely. That includes a branch that never executes.
- * `splitCommands` evaluates nothing, so a false
- * branch and a true branch produce identical segment sequences: any
- * loosening that recovers the never-executed `cd` also recovers
- * stamping our trailer onto a commit in a DIFFERENT repository
- * (`if true; then cd <other>; fi && git commit`). Missing a trailer is
- * the conservative half of that trade-off, matching `cwdShifted`'s
- * stated intent ("better miss than corrupt unrelated repos"). Pinned by
- * the `if false; then cd …` row in
- * `shell.session-commit-tracking.test.ts`.
- *
- * Used by `addCoAuthorToGitCommit` to scope the `-m` regex rewrite
- * so a later `git tag -m "..."` (different sub-command in the same
- * compound) can't be mistaken for the commit message.
- */
-function findAttributableCommitSegment(
-  command: string,
-): { start: number; end: number } | null {
-  let cursor = 0;
-  let cwdShifted = false;
-  for (const sub of splitCommands(command)) {
-    const start = command.indexOf(sub, cursor);
-    if (start < 0) {
-      // splitCommands strips line continuations (`\<newline>`) and
-      // some whitespace, so the trimmed segment text may not appear
-      // verbatim in the original command. Log so a multi-line
-      // command silently dropping its trailer is at least visible
-      // when QWEN_DEBUG_LOG_FILE is set.
-      debugLogger.warn(
-        `findAttributableCommitSegment: cannot map segment "${sub.slice(0, 60)}" ` +
-          `back to the original command (likely line-continuation / whitespace mismatch).`,
-      );
-      continue;
-    }
-    const end = start + sub.length;
-    cursor = end;
-    const tokens = tokeniseSegment(sub);
-    if (!tokens || tokens.length === 0) continue;
-    const looseTokens = skipCommitRecognitionNoise(tokens);
-    if (!looseTokens) continue;
-    const program = programBasename(looseTokens[0]!);
-    if (program === 'cd' || program === 'pushd') {
-      // Mirror gitCommitContext's cd/pushd heuristic: relative paths
-      // that don't escape upward are treated as in-repo, so
-      // `cd subdir && git commit ...` still finds the segment.
-      if (!cwdShifted && cdTargetMayChangeRepo(looseTokens)) {
-        cwdShifted = true;
-      }
-      continue;
-    }
-    if (program === 'popd') {
-      cwdShifted = true;
-      continue;
-    }
-    if (program === 'git') {
-      const { subcommand, changesCwd } = parseGitInvocation(looseTokens);
-      if (subcommand === 'commit' && !cwdShifted && !changesCwd) {
-        return { start, end };
-      }
-      // Mirror `gitCommitContext`'s latch, which only trips on a
-      // NON-commit `git -C …`: a redirected `git -C ../other commit` is
-      // a commit this walk has already decided about (not attributable
-      // in our cwd, so not returned above), and latching on it would
-      // cost a *later* in-cwd commit its trailer — the exact chain
-      // `gitCommitContext` still calls attributable, so the two sides
-      // would disagree. `git -C ../other status` keeps latching: that
-      // is the cwd-elsewhere intent signal the latch exists for.
-      if (subcommand !== 'commit' && changesCwd && !cwdShifted) {
-        cwdShifted = true;
-      }
-    }
-  }
-  return null;
-}
-
-/**
- * Locate the character range of the `gh pr create` (or alias
- * `gh pr new`) segment in a potentially compound command. Used by
- * `addAttributionToPR` so the `--body`/`-b` rewrite is scoped to
- * just that segment — without scoping, a command like
- * `curl -b "session=abc" && gh pr create --body "summary"` would
- * have the regex match `curl`'s `-b` cookie flag and inject
- * attribution there.
- */
-function findGhPrCreateSegment(
-  command: string,
-): { start: number; end: number } | null {
-  let cursor = 0;
-  for (const sub of splitCommands(command)) {
-    const start = command.indexOf(sub, cursor);
-    if (start < 0) {
-      debugLogger.warn(
-        `findGhPrCreateSegment: cannot map segment "${sub.slice(0, 60)}" ` +
-          `back to the original command (likely line-continuation / whitespace mismatch).`,
-      );
-      continue;
-    }
-    const end = start + sub.length;
-    cursor = end;
-    const tokens = tokeniseSegment(sub);
-    if (!tokens || tokens[0] !== 'gh') continue;
-    const rest = parseGhInvocation(tokens);
-    if (rest[0] === 'pr' && (rest[1] === 'create' || rest[1] === 'new')) {
-      return { start, end };
-    }
-  }
-  return null;
-}
-
-/**
- * Approximate characters per text line for the diff-size proxy.
- * `numstat` reports added+deleted line counts; we multiply by this
- * constant to get a coarse "change magnitude" the per-file AI
- * accumulator can be clamped against. The downstream `aiChars` /
- * `humanChars` fields in the git-notes payload are literally
- * (lines × this constant) — they are NOT real character counts.
- * See the `FileAttributionDetail` interface doc for the consequences
- * for consumers that aggregate the raw values.
- */
-const APPROX_CHARS_PER_LINE = 40;
-/**
- * Fallback diff-size proxy for binary files. `numstat` reports `-`
- * (instead of integer counts) for any non-text blob, so we can't
- * compute a per-line estimate; this flat value lets the entry
- * survive into the payload at a consistent (if coarse) size.
- * Same heuristic-not-literal caveat as `APPROX_CHARS_PER_LINE` —
- * a 5 MB image change and a 1-byte binary tweak both report this
- * value.
- */
-const BINARY_DIFF_SIZE_FALLBACK = 1024;
-
-/**
- * Parse `git diff --numstat` output into a `path → approximate change
- * size` map for attribution accounting. The result feeds in as the
- * denominator clamp for `aiChars`, so missing entries would silently
- * drop a file from attribution — every changed file must land in the
- * map.
- *
- * `--numstat` is preferred over `--stat` because the columns are exact
- * integers (no graphical bars to parse). Each line is:
- *   `<additions>\t<deletions>\t<path>`
- * For binary files, both counts are `-`; we fall back to a fixed
- * estimate so binary-only changes still get a non-zero entry.
- *
- * The `(adds + dels) * 40` figure remains a heuristic — git diff has no
- * cheap way to surface exact character counts. The clamp in
- * `generateNotePayload` keeps the math consistent (aiChars never
- * exceeds diffSize), so the heuristic drives the precision of the
- * percentage but cannot make `aiChars + humanChars` diverge from
- * `diffSize`.
- *
- * Rename notations (`{old => new}` and bare `old => new`) are
- * normalized to the new path so lookups match `--name-only` output.
- *
- * Exported for unit testing — the function is otherwise an
- * implementation detail of `attachCommitAttribution`.
- */
-export function parseNumstat(numstatOutput: string): Map<string, number> {
-  const sizes = new Map<string, number>();
-  const lines = numstatOutput.split('\n').filter(Boolean);
-
-  const normalizeFilePath = (filePath: string): string => {
-    let p = filePath.trim();
-    // Brace rename: `{old => new}` or `dir/{old => new}/file`
-    p = p.replace(/\{[^}]*?=>\s*([^}]*)\}/g, '$1');
-    // Bare rename across directories: `old/path/file => new/path/file`
-    if (p.includes('=>')) {
-      const m = p.match(/^(.*?)\s=>\s(.*)$/);
-      if (m) p = m[2]!.trim();
-    }
-    return p;
-  };
-
-  for (const line of lines) {
-    // Format: "<additions>\t<deletions>\t<path>" — a literal "-" stands
-    // in for both counts on binary entries.
-    const m = line.match(/^([\d-]+)\t([\d-]+)\t(.+)$/);
-    if (!m) continue;
-    const filePath = normalizeFilePath(m[3]!);
-    if (m[1] === '-' && m[2] === '-') {
-      // Binary file: numstat omits exact counts. Fall back to a fixed
-      // estimate so the entry isn't missing entirely (which would zero
-      // out attribution for the file).
-      sizes.set(filePath, BINARY_DIFF_SIZE_FALLBACK);
-      continue;
-    }
-    const adds = parseInt(m[1]!, 10);
-    const dels = parseInt(m[2]!, 10);
-    if (Number.isNaN(adds) || Number.isNaN(dels)) continue;
-    sizes.set(filePath, (adds + dels) * APPROX_CHARS_PER_LINE);
-  }
-
-  return sizes;
 }
 
 export const OUTPUT_UPDATE_INTERVAL_MS = 1000;
@@ -2068,7 +1602,6 @@ export class ShellToolInvocation extends BaseToolInvocation<
 
     const display = this.makeSedEditDisplay(edit);
     let fileHistoryBackupRecorded = false;
-    const userModifiedSedContent = this.confirmedSedNewContent !== undefined;
 
     try {
       if (signal.aborted) {
@@ -2101,21 +1634,6 @@ export class ShellToolInvocation extends BaseToolInvocation<
         toolWriteOrigin: 'shell_sed_edit',
         _meta: edit.meta,
       });
-
-      if (!userModifiedSedContent) {
-        try {
-          CommitAttributionService.getInstance().recordEdit(
-            edit.filePath,
-            edit.originalContent,
-            edit.newContent,
-          );
-        } catch (err) {
-          debugLogger.warn(
-            `commit attribution recordEdit failed for sed edit ${edit.filePath}: ${getErrorMessage(err)}`,
-          );
-          // Attribution is diagnostic metadata; the sed edit already succeeded.
-        }
-      }
 
       try {
         const postWriteStats = fs.statSync(edit.filePath);
@@ -2449,22 +1967,13 @@ export class ShellToolInvocation extends BaseToolInvocation<
       );
     }
 
-    // Add co-author to git commit commands and Qwen Code attribution to
-    // `gh pr create` bodies. Both wrappers are no-ops on commands they
-    // don't recognise. Apply to the *trimmed original* (not strippedCommand)
-    // so leading env assignments and shell wrappers (`FOO=bar bash -c '...'`)
-    // are preserved through to execution; the rewriters operate at the
-    // top-level shell layer and become no-ops when the commit hides
-    // inside a wrapper.
-    const processedCommand = this.config.getShellExecutionSandbox?.()
-      ? this.params.command.trim()
-      : this.addAttributionToPR(
-          this.addCoAuthorToGitCommit(this.params.command.trim()),
-        );
-    const commandToExecute = processedCommand;
+    // Run the *trimmed original* (not strippedCommand) so leading env
+    // assignments and shell wrappers (`FOO=bar bash -c '...'`) are preserved
+    // through to execution.
+    const commandToExecute = this.params.command.trim();
     const cwd = this.params.directory || this.config.getTargetDir();
 
-    // Snapshot HEAD before running so attachCommitAttribution can detect
+    // Snapshot HEAD before running so trackSessionCommit can detect
     // commit creation by HEAD movement instead of trusting the shell
     // exit code (which is unreliable for compound commands).
     //
@@ -2472,63 +1981,27 @@ export class ShellToolInvocation extends BaseToolInvocation<
     // rev-parse can resolve AFTER a fast-cached `git commit` moves
     // HEAD (real race seen on slow filesystems / heavy contention),
     // leaving preHead === postHead and silently skipping the
-    // attribution note. ~10–50ms event-loop block per commit-shaped
-    // command, only when `commitCtx.hasCommit` is true.
+    // registration. ~10–50ms event-loop block per commit-shaped
+    // command.
     //
-    // We act on `gitCommitContext` rather than a raw regex so quoted
-    // text like `echo "git commit"` doesn't trigger snapshot/notes,
-    // and so attribution still runs after a `git commit && cd ..`
-    // chain (which would have failed an "any cd anywhere" gate).
-    const commitCtx = gitCommitContext(strippedCommand);
-    // Capture preHead only when the commit will actually be
-    // attributed in our cwd: that's the only consumer (the
-    // `attributableInCwd` branch below feeds preHead into
-    // `attachCommitAttribution` and `trackSessionCommit`). For
-    // non-attributable hasCommit cases (`cd /elsewhere && git
-    // commit`, `git -C /other commit`), no consumer reads preHead and
-    // the ~10–50 ms execFileSync is dead work that just blocks the
-    // event loop before the user's real command spawns.
-    // Registration must never run against a null preHead —
+    // We act on `commitLandsInCwd` rather than a raw regex so quoted
+    // text like `echo "git commit"` doesn't trigger the snapshot, and
+    // so registration still runs after a `git commit && cd ..` chain
+    // (which would have failed an "any cd anywhere" gate).
+    const commitInCwd = commitLandsInCwd(strippedCommand);
+    // Capture preHead only when the commit lands in our cwd: that's the
+    // only consumer (`trackSessionCommit`). For other commit shapes
+    // (`cd /elsewhere && git commit`, `git -C /other commit`), no
+    // consumer reads preHead and the ~10–50 ms execFileSync is dead work
+    // that just blocks the event loop before the user's real command
+    // spawns. Registration must never run against a null preHead —
     // `head.sha !== preHead` would be trivially true and exempt
     // whatever HEAD happens to be there (the fail-open #12463's
     // regression row ② pins).
     const preHead: string | null =
-      !this.config.getShellExecutionSandbox?.() && commitCtx.attributableInCwd
+      !this.config.getShellExecutionSandbox?.() && commitInCwd
         ? this.getGitHeadSync(cwd)
         : null;
-
-    // Snapshot the attribution inputs BEFORE spawn so bindGhPrCreate can
-    // tell a run that CREATED a PR from one that merely RESOLVED the
-    // branch's existing PR: the retry shape `gh pr create --fill || gh pr
-    // view` exits 0 through the view segment and prints the existing URL,
-    // and post-run gh resolution alone cannot distinguish the two. The
-    // branch name and repo identity pin what may legitimately differ
-    // post-run — a mid-command branch switch or origin retarget resolves a
-    // PR this run did not create. Awaited before spawn so every snapshot
-    // strictly precedes the command.
-    let preRunPrSnapshot: BranchPullRequestSnapshot | undefined;
-    let preRunBranch: string | undefined;
-    let preRunRepoKeys: AttributionRepoKeys | undefined;
-    let preRunGhEnv: Readonly<Record<string, string | undefined>> | undefined;
-    if (
-      !this.config.getShellExecutionSandbox?.() &&
-      commandRunsGhPrCreate(commandToExecute)
-    ) {
-      // The verification legs must authenticate the way the create itself
-      // does (inline GH_TOKEN with no ambient gh auth), or the gate's
-      // advertised token shape binds nothing. The inline record is an
-      // OVERLAY onto the full process env — the gh legs receive it as the
-      // child's ENTIRE environment, so passed alone it would drop PATH and
-      // HOME and fail every leg — and EVERY leg needs it, not just the
-      // snapshot fetch.
-      const inlineEnv = ghPrCreateInlineEnv(commandToExecute);
-      preRunGhEnv = inlineEnv ? { ...process.env, ...inlineEnv } : undefined;
-      [preRunPrSnapshot, preRunBranch, preRunRepoKeys] = await Promise.all([
-        fetchCurrentBranchPullRequest(cwd, preRunGhEnv),
-        fetchCurrentBranchName(cwd),
-        fetchAttributionRepoKeys(cwd, preRunGhEnv),
-      ]);
-    }
 
     let cumulativeOutput: string | AnsiOutput = '';
     let lastUpdateTime = Number.NEGATIVE_INFINITY;
@@ -2933,22 +2406,11 @@ export class ShellToolInvocation extends BaseToolInvocation<
     }
 
     // A promote refused because the command already settled still carries
-    // its full output and exit code — it runs the same binding gate as an
-    // uninterrupted foreground run.
+    // its full output and exit code — it is reported like an uninterrupted
+    // foreground run.
     const wasPromoteRefused =
       result.aborted &&
       getShellAbortReasonKind(combinedSignal.reason) === 'background';
-    if ((!result.aborted || wasPromoteRefused) && result.exitCode === 0) {
-      this.bindGhPrCreate(
-        commandToExecute,
-        result.output,
-        cwd,
-        preRunPrSnapshot,
-        preRunBranch,
-        preRunRepoKeys,
-        preRunGhEnv,
-      );
-    }
 
     const abortReasonName = getAbortReasonName(combinedSignal);
     const wasTimeout =
@@ -3010,55 +2472,13 @@ export class ShellToolInvocation extends BaseToolInvocation<
       // below — see the explanation there for why post-truncation.)
     }
 
-    // Run attribution outside the aborted/non-aborted branch: a
-    // `git commit -m "x" && sleep 999` chain can move HEAD and then
-    // time out, leaving the new commit without its attribution note
-    // while the stale per-file attribution stays around for a later
-    // unrelated commit. attachCommitAttribution already gates on HEAD
-    // movement, so it's a no-op when no commit was actually created.
-    // A non-null attributionWarning is surfaced on the tool result below
-    // (both llmContent and the TUI display) so the user knows their commit
-    // succeeded but the per-file git note didn't land — without it, the only
-    // signal is a QWEN_DEBUG_LOG_FILE entry the user has likely never set up.
-    let attributionWarning: string | null = null;
-    if (
-      !this.config.getShellExecutionSandbox?.() &&
-      commitCtx.attributableInCwd
-    ) {
-      // Registration runs ahead of attribution:
-      // `attachCommitAttribution` returns early on the
-      // `gitCoAuthor.commit` toggle, but the amend exemption must not
-      // depend on it, and an attribution failure must not cost the
-      // registration. Registration stays fail-closed: it still
-      // requires a `commit:` reflog verb plus HEAD movement against
-      // the captured preHead.
+    // Register outside the aborted/non-aborted branch: a
+    // `git commit -m "x" && sleep 999` chain can move HEAD and then time
+    // out. Registration stays fail-closed: it requires a `commit:` reflog
+    // verb plus HEAD movement against the captured preHead.
+    if (!this.config.getShellExecutionSandbox?.() && commitInCwd) {
       await this.trackSessionCommit(cwd, preHead);
-      // `git commit --amend` rewrites HEAD in place, so the standard
-      // parent-vs-postHead diff (`${postHead}~1..${postHead}`) would
-      // span the entire amended commit (the amended commit's parent
-      // is the original's parent, so diffing against it lumps both
-      // commits' worth of changes). Detect the flag so
-      // `getCommittedFileInfo` can switch to `${preHead}..${postHead}`
-      // — `preHead` was captured synchronously before spawn and is
-      // the pre-amend SHA, so this range captures only the amend
-      // delta.
-      const isAmend = isAmendCommit(strippedCommand);
-      attributionWarning = await this.attachCommitAttribution(
-        cwd,
-        preHead,
-        isAmend,
-      );
     }
-    // Intentionally NO `else if (commitCtx.hasCommit)` cleanup branch:
-    // commands that match `hasCommit` but not `attributableInCwd`
-    // (e.g. `cd /abs/path/to/this/repo && git commit`, `git -C . commit`)
-    // can land a commit in our cwd, but we don't know which files were
-    // staged — the user may have done a partial `git add A` and left
-    // unstaged AI edits to B and C pending. A wholesale
-    // `clearAttributions(true)` here would silently lose B and C even
-    // though they weren't committed. Leave the singleton alone; the
-    // next attributable commit's `attachCommitAttribution` will do a
-    // proper partial clear via `clearAttributedFiles`.
 
     // Decide whether to emit the long-run advisory. Conditions:
     //   - Process completed under its own steam (no AbortSignal
@@ -3155,18 +2575,16 @@ export class ShellToolInvocation extends BaseToolInvocation<
     let persistedOutputFiles: string[] | undefined;
     let outputBudgetApplied = false;
 
-    // The advisory and attribution warning are appended after the truncation
-    // below (deliberately outside the truncation envelope — see the append
-    // loop), so their size comes out of the body budget here: the marker
-    // asserts the ASSEMBLED string fits the declared budget, and a body that
-    // fits whole must still fit once they land. The reservation and the
-    // append loop both iterate this one list, so the two cannot disagree.
+    // The advisory is appended after the truncation below (deliberately
+    // outside the truncation envelope — see the append loop), so its size
+    // comes out of the body budget here: the marker asserts the ASSEMBLED
+    // string fits the declared budget, and a body that fits whole must still
+    // fit once it lands. The reservation and the append loop both iterate
+    // this one list, so the two cannot disagree.
     const longRunHint = shouldAppendLongRunHint
       ? buildLongRunningForegroundHint(elapsedMs)
       : null;
-    const appendedMetadata = [longRunHint, attributionWarning].filter(
-      (s): s is string => s !== null,
-    );
+    const appendedMetadata = longRunHint === null ? [] : [longRunHint];
     const appendedMetadataChars = appendedMetadata.reduce(
       (total, s) => total + APPENDED_METADATA_SEPARATOR.length + s.length,
       0,
@@ -3234,9 +2652,8 @@ export class ShellToolInvocation extends BaseToolInvocation<
     // Append the metadata AFTER truncation so it isn't wrapped in
     // `truncateToolOutput`'s "Truncated part of the output" header (which the
     // LLM might misread as part of the command's own output). These are
-    // process metadata about the command — how long it blocked the agent, or
-    // that its commit landed but the per-file attribution note didn't — not
-    // command output, so they belong outside the truncation envelope. Both
+    // process metadata about the command — how long it blocked the agent —
+    // not command output, so they belong outside the truncation envelope. Both
     // llmContent (so the agent can react) and returnDisplayMessage (so the
     // human waiting in the TUI sees the same cue) get them, append-style,
     // preserving any pre-existing display content (debug snapshot, truncation
@@ -3345,141 +2762,6 @@ export class ShellToolInvocation extends BaseToolInvocation<
       ...(outputBudgetApplied ? { outputBudgetApplied } : {}),
       ...executionError,
     };
-  }
-
-  /**
-   * Best-effort PR binding for agents that create PRs via `gh pr create` in
-   * the shell (the GitDialog binds at creation; this covers the shell path).
-   * Writes the session's PR sidecar directly, mirroring the worktree sidecar
-   * pattern; a failure must never shadow the tool result. gh itself is the
-   * attribution authority: the binding is the PR gh resolves for the working
-   * branch, accepted only when it is OPEN, this command's output carries
-   * gh's URL, the pre-run fetch proved the branch's prior state, and the
-   * number differs from the pre-run snapshot — command/output text alone
-   * cannot attribute a printed URL to gh's own execution, and a retry that
-   * passes the execution gate (`gh pr create || gh pr view`) resolves the
-   * branch's EXISTING PR, which the pre-run snapshot declines. The
-   * pre-state proof is per-session: two sessions sharing one checkout can
-   * still race inside the snapshot→bind window, which this gate does not
-   * serialize.
-   *
-   * Scope (by design): only a FOREGROUND run that settled in this call —
-   * an uninterrupted one, or one whose promote was refused because the
-   * child had already exited — reaches this gate. A run promoted to the
-   * background mid-flight and an `is_background: true` run settle through
-   * the background registry, whose output streams to a file and whose
-   * pre-run snapshot was never taken; they are not bound live, and the
-   * transcript is deliberately not a recovery source (no gh-side
-   * attribution). Such a PR binds through `/review <N>` or the worktree
-   * `pr-<N>` convention.
-   */
-  private bindGhPrCreate(
-    command: string,
-    output: string,
-    cwd: string,
-    preRunPrSnapshot: BranchPullRequestSnapshot | undefined,
-    preRunBranch: string | undefined,
-    preRunRepoKeys: AttributionRepoKeys | undefined,
-    ghCreateEnv?: Readonly<Record<string, string | undefined>>,
-  ): void {
-    if (this.config.getShellExecutionSandbox?.()) return;
-    void (async () => {
-      try {
-        if (!commandRunsGhPrCreate(command)) return;
-        // An ERRORED pre-run fetch proved nothing about the branch's prior
-        // PRs — decline instead of failing open, or a branch whose snapshot
-        // flaked would bind its existing PR as this session's creation.
-        if (preRunPrSnapshot?.status === 'error') return;
-        // The launch directory (`directory` param, else target dir), not a
-        // repo the command may have `cd`'d into: gh resolves THIS repo's
-        // branch, so an internal-`cd` create binds only when this branch's
-        // PR URL is what the output carries — backfill recovers the rest.
-        const created = await fetchCurrentBranchPullRequest(cwd, ghCreateEnv);
-        if (created.status !== 'pr' || created.state !== 'open') return;
-        // The run resolved the branch's EXISTING PR — nothing was created
-        // (a retry's view segment exits 0 and prints the existing URL).
-        // Binding would stamp this session as creator of a PR it did not
-        // create, at a fresh createdAt that falsifies the badge's
-        // binding-time order.
-        if (
-          preRunPrSnapshot?.status === 'pr' &&
-          created.number === preRunPrSnapshot.number
-        ) {
-          return;
-        }
-        // Repo identity lives in on-disk state an in-command
-        // `git remote set-url origin` / `gh repo set-default` retargets, so
-        // the resolved PR must belong to a repo gh already attributed to
-        // this checkout BEFORE the run (itself, or its fork parent — from
-        // a fork checkout gh resolves the parent for PR operations). An
-        // unresolvable pre-run identity fails closed like the errored
-        // snapshot arm.
-        const createdRepoKey = repoKeyFromWebUrl(created.url);
-        if (
-          createdRepoKey === undefined ||
-          preRunRepoKeys === undefined ||
-          (createdRepoKey !== preRunRepoKeys.resolved &&
-            createdRepoKey !== preRunRepoKeys.parent)
-        ) {
-          return;
-        }
-        // Branch identity: a command that switched branches mid-run
-        // resolves the NEW branch's existing PR post-run (its `|| gh pr
-        // view` segment prints the URL and exits 0); only a PR whose head
-        // branch is the pre-run branch was created by this run. An
-        // uncaptured pre-run branch (detached HEAD, git failure) cannot
-        // prove stability — decline.
-        if (
-          preRunBranch === undefined ||
-          created.headRefName !== preRunBranch
-        ) {
-          return;
-        }
-        if (!output.includes(created.url)) return;
-        const sessionService = this.config.getSessionService();
-        // Re-resolve the session's archive location immediately before the
-        // locked mutation: an archive transition landing during the gh
-        // round-trip above must not strand the binding on a resurrected
-        // active sidecar.
-        let archiveState: 'active' | 'archived' = 'active';
-        try {
-          if (
-            (await sessionService.getSessionLocation(
-              this.config.getSessionId(),
-            )) === 'archived'
-          ) {
-            archiveState = 'archived';
-          }
-        } catch {
-          // Best-effort binding — keep the default active location.
-        }
-        const prPath = sessionService.getPrSessionPathForArchiveState(
-          this.config.getSessionId(),
-          archiveState,
-        );
-        // The same PR already bound stays untouched (position and
-        // createdAt): only a genuinely new binding persists and notifies.
-        // A same-number entry pointing at ANOTHER repo is another PR and
-        // is re-bound here (the created one must win that slot).
-        const createdPr = {
-          number: created.number,
-          url: created.url,
-          state: created.state,
-        };
-        const applied = await upsertSessionPrs(prPath, [
-          { ...createdPr, source: 'create' },
-        ]);
-        if (!applied.added.includes(created.number)) return;
-        // The daemon never sees this write; the notification carries the
-        // catalog mark so live-state clients refetch it (~2s) instead of
-        // waiting for unrelated catalog churn.
-        this.config
-          .getSessionService()
-          .emitSessionPrBound(this.config.getSessionId(), createdPr);
-      } catch {
-        /* best-effort binding */
-      }
-    })();
   }
 
   /**
@@ -3753,10 +3035,6 @@ export class ShellToolInvocation extends BaseToolInvocation<
     });
     const entry: ShellTaskRegistration = {
       shellId,
-      // Use `commandToExecute` (post-co-author transform) so the registry
-      // shows what actually ran. `this.params.command` is the pre-transform
-      // form and would diverge for git-commit invocations that
-      // `addCoAuthorToGitCommit()` rewrote (#3894 review).
       command: commandToExecute,
       cwd,
       pid: result.pid,
@@ -3901,7 +3179,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
     // foreground registration block, so a commit landed by a promoted
     // command would never earn the amend exemption. `preHead` arrives
     // from the caller's pre-spawn capture, gated there on
-    // `attributableInCwd` (and non-sandboxed), so a
+    // `commitLandsInCwd` (and non-sandboxed), so a
     // null here means the command carried no commit recognisable as
     // landing in our cwd — `cd /elsewhere && git commit` stays
     // unregistered exactly as the foreground path leaves it, and
@@ -4081,30 +3359,6 @@ export class ShellToolInvocation extends BaseToolInvocation<
     signal: AbortSignal,
     shellExecutionConfig?: ShellExecutionConfig,
   ): Promise<ToolResult> {
-    const strippedCommand = stripShellWrapper(this.params.command);
-
-    // The background lifecycle (BackgroundShellRegistry) doesn't run
-    // the post-command attribution path — there's no clean place to
-    // hook pre/post-HEAD comparison and `git notes` writes between
-    // the early `Background shell started` return and the eventual
-    // process exit. Allowing `git commit` to slip through would leave
-    // the new commit without notes and let stale per-file attribution
-    // leak into the next foreground commit. Refuse the request and
-    // tell the user to run it foreground.
-    //
-    // Use the broader `hasCommit` flag rather than `attributableInCwd`:
-    // `cd /elsewhere && git commit` should still be refused even
-    // though we wouldn't attribute it.
-    if (gitCommitContext(strippedCommand).hasCommit) {
-      return {
-        llmContent:
-          'Refusing to run `git commit` in background mode: AI-attribution notes ' +
-          'are written by the foreground completion path. Re-run the commit ' +
-          'with is_background=false (or split it out of the compound command).',
-        returnDisplay:
-          'Refused: `git commit` is not supported in background shell mode.',
-      };
-    }
     // Strip a single bare trailing `&` (the bash background operator) before
     // spawn: bash treats it as background-detach, exits the wrapper
     // immediately, and the real child outlives the wrapper — the registry
@@ -4122,15 +3376,12 @@ export class ShellToolInvocation extends BaseToolInvocation<
     // / shell wrappers survive through to execution; ShellExecutionService
     // re-runs the user-approved invocation verbatim.
     const trimmedOriginal = this.params.command.trim();
-    const noTrailingAmp = stripTrailingBackgroundAmp(trimmedOriginal);
-    if (noTrailingAmp !== trimmedOriginal) {
+    const processedCommand = stripTrailingBackgroundAmp(trimmedOriginal);
+    if (processedCommand !== trimmedOriginal) {
       debugLogger.warn(
         'Stripped trailing & from background shell command — managed path handles backgrounding',
       );
     }
-    const processedCommand = this.config.getShellExecutionSandbox?.()
-      ? noTrailingAmp
-      : this.addAttributionToPR(this.addCoAuthorToGitCommit(noTrailingAmp));
     const cwd = this.params.directory || this.config.getTargetDir();
 
     // Output goes under the project temp dir (which `ReadFileTool`
@@ -4309,99 +3560,12 @@ export class ShellToolInvocation extends BaseToolInvocation<
   }
 
   /**
-   * Count the commits between `preHead` (exclusive) and `postHead`
-   * (inclusive). SHA-pinned on both ends so a post-commit hook moving
-   * HEAD between this check and the note write can't change the
-   * answer (`HEAD~1..HEAD` here would race the same TOCTOU window
-   * the diff calls were just pinned against). Returns 0 if either
-   * side is unreadable. Goes through `child_process.execFile` with
-   * argv to stay independent of the mockable `ShellExecutionService`.
-   */
-  private async countCommitsAfter(
-    cwd: string,
-    preHead: string,
-    postHead: string,
-  ): Promise<number> {
-    return this.runGitCount(cwd, [
-      'rev-list',
-      '--count',
-      `${preHead}..${postHead}`,
-    ]);
-  }
-
-  /**
-   * Count commits reachable from `postHead` when the repo had no prior
-   * HEAD before the user's command — i.e. the very first commit (or
-   * compound `init && commit && commit ...`). Without this fallback
-   * the multi-commit guard would be skipped on a brand-new repo and
-   * mis-attribute combined data to the final commit. SHA-pinned for
-   * the same reason as `countCommitsAfter`.
-   */
-  private async countCommitsFromRoot(
-    cwd: string,
-    postHead: string,
-  ): Promise<number> {
-    return this.runGitCount(cwd, ['rev-list', '--count', postHead]);
-  }
-
-  /** Shared helper for the two `rev-list --count` invocations. */
-  private async runGitCount(cwd: string, args: string[]): Promise<number> {
-    return new Promise((resolve) => {
-      const child = childProcess.execFile(
-        'git',
-        args,
-        { cwd, timeout: 2000, windowsHide: true },
-        (error, stdout) => {
-          if (error) {
-            resolve(0);
-            return;
-          }
-          const n = parseInt(String(stdout).trim(), 10);
-          resolve(Number.isFinite(n) && n > 0 ? n : 0);
-        },
-      );
-      child.on('error', () => {});
-    });
-  }
-
-  /**
-   * Read the current HEAD SHA, or null if unavailable (no commits
-   * yet, not a git repo, or git failed). Used to detect whether a
-   * `git commit` actually created a new commit, independent of the
-   * shell's exit code. Goes through `child_process.execFile` rather
-   * than {@link ShellExecutionService} so the lookup is unaffected
-   * by test mocks of the shell service and stays well clear of any
-   * user-supplied shell wrapper.
-   */
-  private async getGitHead(cwd: string): Promise<string | null> {
-    return new Promise((resolve) => {
-      const child = childProcess.execFile(
-        'git',
-        ['rev-parse', 'HEAD'],
-        { cwd, timeout: 2000, windowsHide: true },
-        (error, stdout) => {
-          if (error) {
-            resolve(null);
-            return;
-          }
-          const sha = String(stdout).trim();
-          resolve(sha.length > 0 ? sha : null);
-        },
-      );
-      // Suppress unhandled-error events from the child stream (e.g. ENOENT
-      // when git is missing); the callback still receives the error.
-      child.on('error', () => {});
-    });
-  }
-
-  /**
-   * Synchronous companion to {@link getGitHead}. Captured BEFORE the
-   * user's shell command spawns so a fast `git commit` (hot-cached,
-   * no hooks) cannot move HEAD before our async rev-parse has a chance
-   * to read it — a real race seen on slow filesystems / heavy contention
-   * where preHead would otherwise resolve to the new SHA, postHead would
-   * match, and `attachCommitAttribution` would silently skip writing the
-   * attribution note even though the commit succeeded.
+   * Read the current HEAD SHA, or null if unavailable (no commits yet,
+   * not a git repo, or git failed). Captured synchronously BEFORE the
+   * user's shell command spawns so a fast `git commit` (hot-cached, no
+   * hooks) cannot move HEAD before the read — a real race seen on slow
+   * filesystems / heavy contention where preHead would otherwise resolve
+   * to the new SHA and the commit would go unregistered.
    *
    * Worst case is ~10–50 ms of event-loop block per commit-shaped shell
    * command; acceptable trade for correctness of the post-command HEAD
@@ -4434,7 +3598,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
    * land the commit and then fail). HEAD movement alone is too loose, and
    * fail-open: in `git pull && git commit -m x` with nothing staged, the pull
    * fast-forwards onto somebody else's commit and the commit then exits
-   * non-zero — and because `gitCommitContext` does not treat
+   * non-zero — and because `commitLandsInCwd` does not treat
    * `pull`/`checkout`/`merge` as cwd-shifting and the call site has no
    * exit-code gate, that chain really does reach here. A movement-only test
    * would register a human's SHA, trading the deterministic Layer-0 block for
@@ -4457,10 +3621,8 @@ export class ShellToolInvocation extends BaseToolInvocation<
    * trailing `checkout` would write a `commit:` verb too. Per-invocation
    * stamping means changing how the executor spawns. Tracked in #12523.
    *
-   * No multi-commit guard, unlike {@link attachCommitAttribution}, which has
-   * to *partition* per-file contribution and so bails. In `commit a &&
-   * commit b` HEAD is `b`, created by this command, so registering it is
-   * sound and `a` stays blocked.
+   * No multi-commit guard: in `commit a && commit b` HEAD is `b`, created
+   * by this command, so registering it is sound and `a` stays blocked.
    *
    * `requirePredecessor` is the promoted path's lineage guard and is
    * deliberately not applied to the foreground one. There, the window
@@ -4511,8 +3673,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
       // only other output of this path is a block reason asserting the
       // commit was not the agent's, and nothing else separates "the reflog
       // could not answer" (reflogs off, expired, probe timed out) from a
-      // genuine attribution failure. Same shape as the attribution refusal
-      // in `attachCommitAttribution`.
+      // commit that is genuinely not the agent's.
       debugLogger.warn(
         `Session commit not registered in ${cwd}: the HEAD reflog could not answer, so a later amend stays blocked.`,
       );
@@ -4574,964 +3735,6 @@ export class ShellToolInvocation extends BaseToolInvocation<
       // when git is missing); the callback still receives the error.
       child.on('error', () => {});
     });
-  }
-
-  /**
-   * After a successful git commit, attach per-file AI attribution metadata
-   * as git notes. Analyzes staged files via `git diff` to calculate real
-   * AI vs human contribution percentages.
-   *
-   * Detects commit creation by HEAD movement, not by shell exit code:
-   * for compound commands like `git commit -m "x" && npm test`, the
-   * commit can succeed and a later step can fail. Gating on `exitCode
-   * !== 0` would skip attribution for the successful commit, so we
-   * compare pre- and post-command HEAD instead.
-   *
-   * Respects the gitCoAuthor.commit setting: if the user disables commit
-   * attribution, the per-file note is skipped too (same toggle governs
-   * the Co-authored-by trailer and the git-notes payload).
-   */
-  private async attachCommitAttribution(
-    cwd: string,
-    preHead: string | null,
-    isAmend: boolean,
-  ): Promise<string | null> {
-    // Returns a one-line warning suitable for appending to the tool's
-    // returnDisplay when a write that the user could plausibly fix
-    // (note exec failure, payload too large, exception during diff
-    // analysis) drops the AI-attribution note. Returns null when the
-    // skip is intentional / inherent to the situation (no commit
-    // landed, multi-commit chain, attribution toggle off, no tracked
-    // edits) — those don't need user-visible feedback.
-    // Caller (`execute`) gates this with `commitCtx.attributableInCwd`,
-    // so we don't re-parse the command here. Re-parsing would be dead
-    // work and a maintenance trap — if the two checks ever drifted,
-    // trailer injection and git-notes writes could diverge silently.
-
-    const postHead = await this.getGitHead(cwd);
-    const commitCreated = postHead !== null && postHead !== preHead;
-    const attributionService = CommitAttributionService.getInstance();
-
-    if (!commitCreated) {
-      // HEAD didn't move in this cwd. Possible causes:
-      //   1. Commit failed (hook rejected, nothing staged, etc.)
-      //   2. User did `git commit && git reset HEAD~1` — HEAD reverted
-      //   3. Submodule case (`cd submodule && git commit`) — the inner
-      //      repo's HEAD moved, ours didn't
-      // We can't tell these apart reliably from here. Dropping the
-      // per-file attributions on (1)/(2) is fine in isolation, but on
-      // (3) we'd silently lose the user's outer-repo edits even though
-      // none of them were committed. Leave attributions intact instead:
-      // a later successful commit will overwrite the counters and the
-      // accumulated aiContribution still represents real AI work.
-      return null;
-    }
-
-    // Refuse to attribute when a single shell command produced more
-    // than one commit (e.g. `git commit -m a && git commit -m b`).
-    // Our singleton has no way to partition the per-file AI
-    // contribution across the individual commits, so attaching the
-    // combined note to HEAD would mis-attribute earlier commits'
-    // changes to the last one. Snapshot prompt counters and bail.
-    //
-    // For a brand-new repo (preHead === null), use `git rev-list
-    // --count HEAD` so the very first compound `init && commit a &&
-    // commit b` chain still gets caught.
-    const commitCount =
-      preHead !== null
-        ? await this.countCommitsAfter(cwd, preHead, postHead)
-        : await this.countCommitsFromRoot(cwd, postHead);
-    // commitCreated has already established that HEAD moved, so we
-    // expect exactly 1 commit. Anything else is suspicious:
-    // - >1: actual multi-commit chain we can't partition
-    // - 0:  rev-list errored / timed out — could not verify, so
-    //   we'd otherwise silently attribute as a single commit even
-    //   though the count is unknown
-    // Bail in either case.
-    if (commitCount !== 1) {
-      const reason =
-        commitCount === 0
-          ? 'commit count unavailable (rev-list failed) ' +
-            'after HEAD moved — refusing to assume single commit'
-          : `multi-commit shell command (${commitCount} commits since ` +
-            `${preHead ? preHead.slice(0, 12) : 'repo root'})`;
-      debugLogger.warn(`Refusing AI attribution: ${reason}.`);
-      // Snapshot the prompt counter but do NOT clear per-file
-      // attributions: in a `commit a && commit b` chain, the user
-      // may have unstaged AI edits to files that appeared in NEITHER
-      // commit. Wholesale-clearing here would erase those even
-      // though the rest of the flow is built to preserve unstaged
-      // entries across partial commits.
-      attributionService.noteCommitWithoutClearing();
-      return null;
-    }
-
-    // A new commit landed. Even when no per-file attribution was
-    // tracked (rare but possible — e.g. user committed external
-    // changes), we still need to snapshot the prompt counters as
-    // "at last commit" so a later `gh pr create` doesn't report an
-    // inflated N-shotted count spanning multiple commits.
-    if (!attributionService.hasAttributions()) {
-      attributionService.noteCommitWithoutClearing();
-      return null;
-    }
-
-    let committedAbsolutePaths: Set<string> | null = null;
-    // Separate from `committedAbsolutePaths` so a failed note write
-    // (oversized payload, `git notes` non-zero exit, exception) does
-    // NOT also delete the per-file attribution data the user might
-    // need to amend & retry. `shouldClear` flips to the partial-clear
-    // set only on (a) note-write success, or (b) attribution toggle
-    // OFF — both cases where the file is genuinely "done" from the
-    // attribution path's POV.
-    let shouldClear: Set<string> | null = null;
-    let warning: string | null = null;
-    try {
-      // Analyze the just-committed files by diffing the captured
-      // `postHead` against its parent (or `preHead` for amend). All
-      // diff calls are SHA-pinned so a post-commit hook / chained
-      // `git tag` / parallel git process moving HEAD between the
-      // analysis phase and the note write can't leave the note
-      // attached to commit A but describing commit B.
-      const stagedInfo = await this.getCommittedFileInfo(
-        cwd,
-        isAmend,
-        postHead,
-        preHead,
-      );
-
-      // null = analysis failed (shallow clone, --amend without reflog,
-      // partial diff failure, etc.). Leave `committedAbsolutePaths`
-      // null so the finally block calls `noteCommitWithoutClearing()`
-      // — snapshotting the prompt counter while leaving per-file
-      // attributions intact. (Earlier revisions of this code did a
-      // wholesale clear here, but that erased pending unstaged AI
-      // edits for files outside the just-failed commit; the
-      // smaller-evil trade-off is documented in the finally block.)
-      // Skip the note write entirely — emitting a structurally valid
-      // but factually wrong all-zero note is worse than no note.
-      if (stagedInfo === null) {
-        warning =
-          'AI attribution note skipped: could not analyze the commit ' +
-          'diff (shallow clone, missing reflog for --amend, or partial ' +
-          '`git diff` failure). Co-authored-by trailer is unaffected.';
-        return warning; // finally still runs for cleanup
-      }
-
-      // Pass the actual model name (e.g. `qwen3-coder-plus`) rather than the
-      // co-author display label so the note's `generator` field reflects
-      // which model produced the changes — and so generateNotePayload's
-      // sanitizeModelName() actually has the codename it's meant to scrub.
-      // The base directory must be the git repo root: getCommittedFileInfo
-      // returns paths relative to `git rev-parse --show-toplevel`, and any
-      // mismatch here would cause path.relative to produce `../...` keys
-      // that never match in the AI-attribution lookup.
-      const baseDir = stagedInfo.repoRoot ?? this.config.getTargetDir();
-
-      // Capture the absolute paths actually included in this commit so
-      // the finally block can do a partial clear: files the AI edited
-      // but the user didn't `git add` should still be tracked for a
-      // later commit.
-      //
-      // Match against the canonical keys already stored in
-      // `fileAttributions` (recordEdit canonicalises every component
-      // via realpathSync) rather than re-resolving each diff path on
-      // the fly. Re-resolving fails for deleted files (realpathSync
-      // throws on a missing leaf) and for files behind intermediate
-      // symlinked directories (path.resolve only canonicalises the
-      // base) — both cases produced cleanup keys that didn't match
-      // the stored canonical keys, leaking stale per-file attribution
-      // into subsequent commits.
-      let canonicalBase: string;
-      try {
-        canonicalBase = fs.realpathSync(baseDir);
-      } catch {
-        canonicalBase = baseDir;
-      }
-
-      attributionService.applyCommittedRenames(
-        stagedInfo.renamedFiles,
-        canonicalBase,
-      );
-
-      // First-pass match: which tracked entries are part of THIS
-      // commit? Validation must run against this subset only — a
-      // tracked file the user didn't stage isn't in HEAD's new tree
-      // post-commit (HEAD still has the pre-AI-edit version), so
-      // `git show HEAD:<rel>` would return the OLD content and the
-      // hash divergence check would drop the AI's pending unstaged
-      // work. Scope the reader to the committed set only.
-      const committedScope = attributionService.matchCommittedFiles(
-        stagedInfo.files,
-        canonicalBase,
-      );
-
-      // Drop tracked entries whose COMMITTED content has diverged
-      // from what AI's last write recorded — catches the case where
-      // the user paste-replaced via an external editor, ran
-      // `git checkout`, or otherwise modified the file outside the
-      // Edit/Write tools. Validate against the COMMITTED blob rather
-      // than the live working tree: the user can `git add` AI's
-      // content, then make additional unstaged edits, then
-      // `git commit` — the commit's blob still matches AI's recorded
-      // hash, but the working-tree file does not. A working-tree
-      // comparison would drop the entry on a commit that legitimately
-      // came from AI.
-      //
-      // Pin the read to the captured `postHead` SHA, NOT the symbolic
-      // `HEAD`, for the same TOCTOU reason `buildGitNotesCommand`
-      // does: a post-commit hook or chained command can advance HEAD
-      // between our postHead capture and these reads, and a symbolic
-      // `git show HEAD:<rel>` would then compare against the WRONG
-      // commit's content and spuriously drop entries.
-      attributionService.validateAgainst((absPath) => {
-        // ONLY check files that landed in this commit. Anything else
-        // (unstaged AI work, files in other directories) returns null
-        // so validateAgainst leaves them alone.
-        if (!committedScope.has(absPath)) return null;
-        const rel = path
-          .relative(canonicalBase, absPath)
-          .split(path.sep)
-          .join('/');
-        if (!rel || rel.startsWith('..')) return null;
-        try {
-          return childProcess
-            .execFileSync('git', ['show', `${postHead}:${rel}`], {
-              cwd,
-              timeout: 2000,
-              windowsHide: true,
-              stdio: ['ignore', 'pipe', 'ignore'],
-              maxBuffer: 16 * 1024 * 1024,
-            })
-            .toString('utf-8');
-        } catch {
-          // No committed content (deleted file, file not in the
-          // commit, or git error) — leave the entry alone.
-          return null;
-        }
-      });
-
-      // Recompute the committed set after validation: dropped entries
-      // shouldn't appear in the per-file payload OR in the partial
-      // clear set (they were already deleted from fileAttributions).
-      committedAbsolutePaths = attributionService.matchCommittedFiles(
-        stagedInfo.files,
-        canonicalBase,
-      );
-
-      // No file in this commit was AI-touched in the current session.
-      // Writing a note anyway would emit an all-zero "0% AI" payload
-      // attached to a commit that legitimately had no AI involvement
-      // — actively misleading. Skip the note; the partial clear in
-      // the finally block is a no-op (empty set) so unrelated pending
-      // attributions stay tracked for a later commit.
-      if (committedAbsolutePaths.size === 0) {
-        return null;
-      }
-
-      // Toggle gate AFTER computing committedAbsolutePaths so the
-      // finally block still does a proper partial clear of files
-      // that just landed. Without this, a user who turned off
-      // attribution would have those just-committed files' tracked
-      // AI work sit in the singleton; flipping the toggle back on
-      // and committing the same file again would re-attribute the
-      // earlier (already-committed) AI edits to the new commit.
-      const gitCoAuthorSettings = this.config.getGitCoAuthor();
-      if (!gitCoAuthorSettings.commit) {
-        // Toggle-off but the commit landed — partial-clear the files
-        // that just landed so re-enabling later doesn't re-attribute
-        // earlier (already-committed) AI edits to a future commit.
-        shouldClear = committedAbsolutePaths;
-        return null;
-      }
-
-      const note = attributionService.generateNotePayload(
-        stagedInfo,
-        baseDir,
-        this.config.getModel(),
-      );
-      // Pin the note to the SHA we captured at commit-detection time
-      // (`postHead`) rather than the symbolic `HEAD`. A post-commit
-      // hook, chained `git commit && git tag -m ...`, or parallel
-      // process can advance HEAD between that capture and this
-      // execFile — without the SHA pin, `-f` would silently land the
-      // note on the wrong commit.
-      const notesCommand = buildGitNotesCommand(note, postHead);
-
-      if (!notesCommand) {
-        debugLogger.warn(
-          'AI attribution note too large, skipping git notes attachment',
-        );
-        warning =
-          'AI attribution note skipped: payload exceeded the 30 KB ' +
-          'size cap (large generated-file exclusion list?). ' +
-          'Co-authored-by trailer is unaffected.';
-        // Leave per-file state intact: the user might `git commit
-        // --amend` after pruning excluded paths, and partial-clearing
-        // here would erase the data they'd need to retry.
-        return warning;
-      }
-
-      // Use execFile with argv (rather than ShellExecutionService) so the
-      // JSON note isn't subjected to shell quoting at all — important on
-      // Windows where the bash-style escape used previously is invalid
-      // for cmd.exe / PowerShell. 5s timeout keeps a wedged repo from
-      // stalling the user-visible turn.
-      const { exitCode, output, timedOut } = await new Promise<{
-        exitCode: number | null;
-        output: string;
-        timedOut: boolean;
-      }>((resolve) => {
-        const child = childProcess.execFile(
-          notesCommand.command,
-          notesCommand.args,
-          { cwd, timeout: 5000, windowsHide: true },
-          (error, stdout, stderr) => {
-            const merged = (stdout || '') + (stderr || '');
-            if (error) {
-              // execFile signals timeout via either `error.killed === true`
-              // + `error.signal === 'SIGTERM'` (default kill), or
-              // `error.code === 'ETIMEDOUT'` on some platforms. Detect
-              // both so the caller's warning can name the actual cause
-              // ("timed out") instead of mislabeling it as exit-code 1.
-              const errno = error as NodeJS.ErrnoException & {
-                killed?: boolean;
-                signal?: string | null;
-              };
-              const isTimeout =
-                errno.code === 'ETIMEDOUT' ||
-                (errno.killed === true && errno.signal === 'SIGTERM');
-              const code =
-                typeof errno.code === 'number'
-                  ? (errno.code as unknown as number)
-                  : null;
-              resolve({
-                exitCode: code ?? 1,
-                output: merged,
-                timedOut: isTimeout,
-              });
-            } else {
-              resolve({ exitCode: 0, output: merged, timedOut: false });
-            }
-          },
-        );
-        child.on('error', () => {});
-      });
-
-      if (exitCode !== 0) {
-        if (timedOut) {
-          debugLogger.warn(`git notes timed out after 5s: ${output}`);
-          warning =
-            'AI attribution note skipped: `git notes add` timed out ' +
-            'after 5s' +
-            (output ? ` (${output.trim().slice(0, 120)})` : '') +
-            '. Co-authored-by trailer is unaffected.';
-        } else {
-          debugLogger.warn(`git notes exited with code ${exitCode}: ${output}`);
-          warning =
-            `AI attribution note skipped: \`git notes add\` exited ${exitCode}` +
-            (output ? ` (${output.trim().slice(0, 120)})` : '') +
-            '. Co-authored-by trailer is unaffected.';
-        }
-        // Note didn't land — leave per-file state intact so the user
-        // can amend the commit (or manually run `git notes add`)
-        // without losing attribution data they'd need to reproduce.
-      } else {
-        debugLogger.debug(
-          `Attached AI attribution note: ${note.summary.aiPercent}% AI, ${note.summary.totalFilesTouched} file(s)`,
-        );
-        // Successful note write — partial-clear the just-committed
-        // files so a later commit doesn't re-attribute them.
-        shouldClear = committedAbsolutePaths;
-      }
-    } catch (err) {
-      debugLogger.warn(
-        `Failed to attach AI attribution note: ${getErrorMessage(err)}`,
-      );
-      warning =
-        `AI attribution note skipped: ${getErrorMessage(err).slice(0, 120)}. ` +
-        'Co-authored-by trailer is unaffected.';
-    } finally {
-      // Partial clear: only drop tracking for files that landed in
-      // this commit AND the note write actually succeeded (or the
-      // user disabled the toggle). `shouldClear` stays null when the
-      // note was skipped (oversized payload, non-zero exit, exception)
-      // so the user can amend & retry without their per-file
-      // attribution being silently destroyed first. When `shouldClear`
-      // is null, just snapshot the prompt counter — DON'T
-      // wholesale-clear, since that would erase pending AI edits for
-      // files the user never staged in this commit.
-      if (shouldClear) {
-        attributionService.clearAttributedFiles(shouldClear);
-      } else {
-        attributionService.noteCommitWithoutClearing();
-      }
-    }
-    return warning;
-  }
-
-  /**
-   * Get information about files in the just-landed commit by diffing
-   * the captured `postHead` against its parent (`${postHead}~1`), or
-   * for amend against `preHead` (the captured pre-amend SHA). All
-   * probes/diffs are SHA-pinned so a post-commit hook moving HEAD
-   * between this call and the eventual `git notes` write can't make
-   * the note describe a different commit than it attaches to.
-   *
-   * Returns:
-   * - A populated `StagedFileInfo` when analysis succeeded.
-   * - An empty `StagedFileInfo` when the commit truly has no files
-   *   (e.g. `--allow-empty`). The caller does a no-op partial clear so
-   *   pending AI attributions stay tracked for the next real commit.
-   * - `null` when analysis itself failed (shallow clone with no parent
-   *   object, --amend with `preHead === null` or unresolvable `preHead`,
-   *   partial diff failure, exception).
-   *   The caller treats this as "could not determine the committed
-   *   set" and falls back to `noteCommitWithoutClearing()` — snapshots
-   *   the prompt counter but leaves per-file attribution intact, so
-   *   pending AI edits for files NOT in the just-committed set don't
-   *   get wiped along with the analysis failure. (The just-committed
-   *   file's stale entry may re-attribute on a later commit; that's
-   *   the smaller evil compared to wholesale loss.)
-   */
-  private async getCommittedFileInfo(
-    cwd: string,
-    isAmend: boolean,
-    postHead: string,
-    preHead: string | null,
-  ): Promise<StagedFileInfo | null> {
-    const empty: StagedFileInfo = {
-      files: [],
-      diffSizes: new Map(),
-      deletedFiles: new Set(),
-      renamedFiles: new Map(),
-    };
-
-    // Distinguish a successful git command with no output (e.g.
-    // `--allow-empty` -> empty `--name-only` listing) from a failed
-    // git command (silenced by ShellExecutionService) so the caller
-    // can choose between the empty-commit sentinel and the analysis-
-    // failure sentinel. Returning the same `''` for both used to
-    // alias `--allow-empty` to a `--name-only` failure, which left
-    // pending attributions tracked across the just-committed file
-    // and re-attributed it on the next commit.
-    const runGit = async (args: string): Promise<string | null> => {
-      const handle = await ShellExecutionService.execute(
-        `git ${args}`,
-        cwd,
-        () => {},
-        AbortSignal.timeout(5000),
-        false,
-        {},
-      );
-      const r = await handle.result;
-      return r.exitCode === 0 ? r.output : null;
-    };
-
-    try {
-      // SHA-pin every probe and diff to the captured `postHead` (and
-      // `preHead` for amend). Using symbolic `HEAD` here would re-open
-      // the same TOCTOU class that the `git notes` write was already
-      // pinned against: between this analysis phase and the note write,
-      // a post-commit hook (husky/lefthook auto-amend, sign-off, signed
-      // commits adjustment), a chained `git tag -m ...`, or a parallel
-      // git process can advance HEAD — and then `HEAD~1..HEAD` /
-      // `diff-tree HEAD` would describe whatever commit HEAD now
-      // points at, while the note still attaches to the original
-      // `postHead`. The result is a note on commit A whose contents
-      // describe commit B. Pinning to `postHead` keeps the analysis
-      // and the note consistent.
-      //
-      // The three calls are independent — fan out so we don't pay the
-      // spawn latency serially. Same for the three diff calls below
-      // once we know which form to use.
-      // - `rev-parse --verify ${postHead}~1`: probe whether the parent
-      //   OBJECT is locally available (fails in shallow clones where
-      //   the parent was pruned).
-      // - `log -1 --pretty=%P ${postHead}`: read the parent SHA from
-      //   the commit metadata. Works regardless of shallow status
-      //   because the parent SHA is recorded on the commit itself, not
-      //   derived by walking. Empty output = postHead is a true root
-      //   commit. Non-empty output = postHead has a parent (whether or
-      //   not its object is locally available).
-      // - `rev-parse --show-toplevel`: capture the repo root (HEAD-
-      //   independent).
-      //
-      // `rev-list --count` looks tempting as a "is this a root
-      // commit?" probe but it returns 1 in a depth-1 shallow clone
-      // (only the local object is reachable), aliasing the shallow
-      // and root cases. The parent-SHA approach disambiguates them
-      // correctly.
-      const [hasParentOutput, parentShaOutput, repoRootOutput] =
-        await Promise.all([
-          runGit(`rev-parse --verify ${postHead}~1`),
-          runGit(`log -1 --pretty=%P ${postHead}`),
-          runGit('rev-parse --show-toplevel'),
-        ]);
-      // `rev-parse --verify <sha>~1` is allowed to fail (shallow
-      // clone, true root commit) — treat null and '' uniformly.
-      const hasParent = hasParentOutput !== null && hasParentOutput.length > 0;
-      // `log -1 --pretty=%P <sha>` MUST succeed; if git can't read
-      // postHead's metadata we have no way to tell shallow apart from
-      // a real root commit. Bail.
-      if (parentShaOutput === null) {
-        debugLogger.warn(
-          'getCommittedFileInfo: log -1 --pretty=%P <postHead> failed; ' +
-            'cannot distinguish shallow clone from true root commit.',
-        );
-        return null;
-      }
-      const isTrueRootCommit = parentShaOutput.trim().length === 0;
-      // Shallow clone: postHead has a parent recorded but the object
-      // isn't local. Bail rather than over-attribute via --root.
-      if (!hasParent && !isTrueRootCommit) {
-        debugLogger.warn(
-          'getCommittedFileInfo: <postHead>~1 unreadable but commit is not ' +
-            'the true root (shallow clone?); skipping attribution to avoid ' +
-            'attributing the entire commit contents.',
-        );
-        return null;
-      }
-      // Capture the repo root so the attribution service can
-      // reconcile paths from `git diff` (relative to the toplevel)
-      // against absolute paths recorded by the edit/write tools.
-      // Using the configured target directory as base would zero out
-      // attribution for any file outside it. Tolerate failure (null
-      // -> empty string -> caller falls back to targetDir).
-      const repoRoot = (repoRootOutput ?? '').trim();
-
-      // Choose the diff range:
-      // - amend: `${preHead}..${postHead}` — the actual amend delta.
-      //   `preHead` was captured BEFORE the user's command ran and so
-      //   points at the original (pre-amend) commit. The amend rewrote
-      //   that commit into postHead; diffing them captures only what
-      //   changed in this amend, not the entire amended commit's
-      //   contents (which `${postHead}~1..${postHead}` would falsely
-      //   include — postHead's parent is the original's parent, so
-      //   diffing against it spans both commits' worth of changes).
-      // - has parent: `${postHead}~1..${postHead}` — pin both ends.
-      //   We do NOT use `${preHead}..${postHead}` here: in chains like
-      //   `git reset HEAD~3 && git commit`, preHead points well above
-      //   postHead's parent and the diff would include the reset-away
-      //   commits as deletions, dramatically over-attributing.
-      // - root commit: `diff-tree --root <postHead>` against the empty
-      //   tree.
-      let diffArgs: { name: string; status: string; numstat: string };
-      if (isAmend) {
-        // For amend, the pre-amend SHA we need is `preHead`. It must
-        // be non-null (caller's `attributableInCwd` gate already
-        // captured it for any commit attempt); a missing preHead means
-        // a brand-new repo where amend isn't meaningful anyway.
-        if (preHead === null) {
-          debugLogger.warn(
-            'getCommittedFileInfo: --amend with no preHead; skipping ' +
-              'attribution note (cannot determine amend delta).',
-          );
-          return null;
-        }
-        // Verify the pre-amend SHA still resolves. preHead is captured
-        // synchronously before spawn, but a concurrent `git gc` /
-        // `git prune` could in principle remove the object before we
-        // try to diff against it.
-        const preHeadProbe = await runGit(`rev-parse --verify ${preHead}`);
-        if (preHeadProbe === null || preHeadProbe.length === 0) {
-          debugLogger.warn(
-            'getCommittedFileInfo: --amend preHead unresolvable; skipping ' +
-              'attribution note (cannot determine amend delta).',
-          );
-          return null;
-        }
-        diffArgs = {
-          name: `diff --find-renames --name-only ${preHead} ${postHead}`,
-          status: `diff --find-renames --name-status ${preHead} ${postHead}`,
-          numstat: `diff --find-renames --numstat ${preHead} ${postHead}`,
-        };
-      } else if (hasParent) {
-        diffArgs = {
-          name: `diff --find-renames --name-only ${postHead}~1 ${postHead}`,
-          status: `diff --find-renames --name-status ${postHead}~1 ${postHead}`,
-          numstat: `diff --find-renames --numstat ${postHead}~1 ${postHead}`,
-        };
-      } else {
-        diffArgs = {
-          name: `diff-tree --root --find-renames --no-commit-id -r --name-only ${postHead}`,
-          status: `diff-tree --root --find-renames --no-commit-id -r --name-status ${postHead}`,
-          numstat: `diff-tree --root --find-renames --no-commit-id -r --numstat ${postHead}`,
-        };
-      }
-      const [nameOutput, statusOutput, numstatOutput] = await Promise.all([
-        runGit(diffArgs.name),
-        runGit(diffArgs.status),
-        runGit(diffArgs.numstat),
-      ]);
-
-      // ANY of the three diffs failing (null) is an analysis failure,
-      // NOT an empty commit. Without this check, a `--name-only` that
-      // failed silently used to alias to `--allow-empty`, leaving the
-      // just-committed file's tracked AI edit in the singleton and
-      // re-attributing it to the next commit.
-      if (
-        nameOutput === null ||
-        statusOutput === null ||
-        numstatOutput === null
-      ) {
-        debugLogger.warn(
-          'getCommittedFileInfo: one or more diff calls failed; ' +
-            'cannot distinguish empty commit from analysis failure.',
-        );
-        return null;
-      }
-
-      const files = nameOutput
-        .split('\n')
-        .map((f) => f.trim())
-        .filter(Boolean);
-      if (files.length === 0) return empty;
-
-      // Get deleted files
-      const deletedFiles = new Set<string>();
-      const renamedFiles = new Map<string, string>();
-      for (const line of statusOutput.split('\n')) {
-        if (line.startsWith('D\t')) {
-          deletedFiles.add(line.slice(2).trim());
-          continue;
-        }
-        const parts = line.split('\t');
-        const status = parts[0] ?? '';
-        if (status.startsWith('R') && parts.length >= 3) {
-          renamedFiles.set(parts[1]!.trim(), parts[2]!.trim());
-        }
-      }
-
-      // Get diff sizes from numstat output. Bail if `--numstat`
-      // returned nothing while `--name-only` succeeded — that's the
-      // partial-failure signal for `Promise.all`, and writing a note
-      // anyway would force every file's diffSize to 0, then
-      // generateNotePayload would clamp aiChars to 0 and emit a
-      // structurally valid but factually wrong all-zero attribution.
-      const diffSizes = parseNumstat(numstatOutput);
-      if (diffSizes.size === 0) {
-        debugLogger.warn(
-          'getCommittedFileInfo: --numstat returned empty while ' +
-            '--name-only listed files; skipping attribution note to ' +
-            'avoid emitting all-zero AI percentages.',
-        );
-        return null;
-      }
-
-      return {
-        files,
-        diffSizes,
-        deletedFiles,
-        renamedFiles,
-        repoRoot: repoRoot.length > 0 ? repoRoot : undefined,
-      };
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * Append a configured `Co-authored-by:` trailer to `git commit`
-   * commands when the commit co-author feature is enabled. No-op for
-   * commands that don't carry an inline `-m`/`-am` message (those open
-   * an editor, which we don't try to rewrite).
-   */
-  private addCoAuthorToGitCommit(command: string): string {
-    // Check if commit co-author feature is enabled
-    const gitCoAuthorSettings = this.config.getGitCoAuthor();
-
-    if (!gitCoAuthorSettings.commit) {
-      return command;
-    }
-
-    // Same shell-type guard as addAttributionToPR — bash escaping is
-    // wrong for cmd/PowerShell. Gating on the active shell rather than
-    // the OS platform keeps Windows + Git Bash users (where
-    // getShellConfiguration() reports shell:'bash') working.
-    if (getShellConfiguration().shell !== 'bash') {
-      return command;
-    }
-
-    // Shell-aware detection — a raw regex would falsely match quoted
-    // text such as `echo "git commit"` and hand a corrupted command
-    // (with the trailer mid-string) back to the executor. The
-    // in-cwd check is what we want here: only inject the
-    // trailer when we're confident the commit lands in our cwd.
-    const segmentRange = findAttributableCommitSegment(command);
-    if (!segmentRange) {
-      return command;
-    }
-
-    // Handle different git commit patterns:
-    // Match -m "message" or -m 'message', including combined flags like -am
-    // Use separate patterns to avoid ReDoS (catastrophic backtracking).
-    // The regex tolerates `-m"msg"` shorthand (no space) — bash accepts
-    // both `-m foo` and `-mfoo`, and we shouldn't silently skip the
-    // shorthand form.
-    //
-    // The regex is scoped to the actual `git commit` segment (not the
-    // whole compound command) so a later `git tag -a v1 -m "..."` in
-    // the same chain can't be mistaken for the commit message.
-    //
-    // Pattern breakdown:
-    //   -[a-zA-Z]*m  matches -m, -am, -nm, etc. (combined short flags)
-    //   \s*          matches optional whitespace after the flag
-    //   [^"\\]       matches any char except double-quote and backslash
-    //   \\.          matches escape sequences like \" or \\
-    //   (?:...|...)* matches normal chars or escapes, repeated
-    // Match both the short form (`-m`, `-am`, combined short flags)
-    // and git's long alias `--message` (with optional `=` separator:
-    // `--message="..."`). Inner alternation is non-capturing so the
-    // existing `[full, prefix, body]` destructure still applies.
-    const FLAG_PREFIX = `(?:-[a-zA-Z]*m|--message)\\s*=?\\s*`;
-    const doubleQuotePattern = new RegExp(
-      `(${FLAG_PREFIX})"((?:[^"\\\\]|\\\\.)*)"`,
-      'g',
-    );
-    // Bash single quotes can't be escaped, so apostrophes inside a
-    // single-quoted message use the close-escape-reopen form `'\''`
-    // (e.g. `git commit -m 'don'\''t'`). The inner alternation matches
-    // either a non-apostrophe character or that escape sequence as a
-    // whole, so the trailer lands at the true end of the body — at the
-    // FINAL closing `'` after the user's content — rather than after
-    // the first interior apostrophe. Mirrors `bodySinglePattern` in
-    // `addAttributionToPR`.
-    const singleQuotePattern = new RegExp(
-      `(${FLAG_PREFIX})'((?:[^']|'\\\\'')*)'`,
-      'g',
-    );
-    // Trim a trailing shell comment from the segment so an inert
-    // `git commit -m "real" # -m "fake"` doesn't have `lastMatchOf`
-    // pick the comment's `-m "fake"` and splice the trailer into the
-    // comment (where bash discards it), leaving the actual commit
-    // unattributed.
-    const fullSegment = command.slice(segmentRange.start, segmentRange.end);
-    const commentStart = findUnquotedCommentStart(fullSegment);
-    const segment =
-      commentStart >= 0 ? fullSegment.slice(0, commentStart) : fullSegment;
-    // Git concatenates multiple `-m` values with a blank line, so the
-    // co-author trailer has to land in the *last* `-m` value to be
-    // recognised by `git interpret-trailers`. matchAll → take the
-    // last match (`lastMatchOf` is the shared helper).
-    const doubleMatch = lastMatchOf(segment.matchAll(doubleQuotePattern));
-    const singleMatch = lastMatchOf(segment.matchAll(singleQuotePattern));
-
-    // Pick whichever match appears LAST in the segment, regardless of
-    // quote style — but reject any candidate that's nested inside the
-    // other's range. For `git commit -m "docs mention -m 'flag'"` the
-    // single-quoted `-m 'flag'` lives INSIDE the double-quoted real
-    // message; without the nesting check the later (inner) `-m` would
-    // win and the trailer would be spliced into the body text.
-    const picked = pickOuterLastMatch(doubleMatch, singleMatch);
-    const match = picked.match;
-    const quote = picked.isDouble ? '"' : "'";
-
-    // Escape the configured name/email for the surrounding quote
-    // style — has to follow the actually-selected match.
-    const escape = picked.isDouble
-      ? escapeForBashDoubleQuote
-      : escapeForBashSingleQuote;
-    const escapedName = escape(gitCoAuthorSettings.name ?? '');
-    const escapedEmail = escape(gitCoAuthorSettings.email ?? '');
-    const coAuthor = `\n\nCo-authored-by: ${escapedName} <${escapedEmail}>`;
-
-    if (match) {
-      const [fullMatch, prefix, existingMessage] = match;
-
-      // Bail on `$(...)` command substitution inside the captured
-      // body: our regex's `(?:[^"\\]|\\.)*` body group stops at the
-      // first interior `"`, so a heredoc-style
-      // `git commit -m "$(cat <<'HEREDOC' ... HEREDOC)"` (which the
-      // tool description recommends for multi-line messages) would
-      // be matched only up to the first inner `"`, then the trailer
-      // would be spliced into the middle of the command
-      // substitution and break the shell command. Recognising
-      // `$(` is enough — if it's there we can't safely rewrite
-      // without a real shell parser.
-      //
-      // We do NOT bail on a bare backtick: while `\`cmd "with" quotes\``
-      // suffers the same regex-truncation bug, the common markdown-
-      // style `\`func()\`` in a commit body has no inner `"` and works
-      // fine. Bailing on any backtick would lose attribution for the
-      // common case to defend against a near-zero-traffic pathological
-      // case where the user typed raw backticks INSIDE a double-quoted
-      // body and put inner double-quotes inside the backtick span.
-      // bash itself would interpret that as command substitution
-      // anyway — almost certainly a user error rather than a real
-      // commit message — so the rewrite is at most one of several
-      // things that go wrong.
-      if (existingMessage.includes('$(')) {
-        return command;
-      }
-
-      const newMessage = existingMessage + coAuthor;
-      const replacement = prefix + quote + newMessage + quote;
-
-      // Splice the modified segment back into the original command,
-      // preserving everything outside the commit segment exactly as
-      // the caller had it.
-      const matchStart = (match.index ?? 0) + segmentRange.start;
-      if (matchStart >= segmentRange.start) {
-        return (
-          command.slice(0, matchStart) +
-          replacement +
-          command.slice(matchStart + fullMatch.length)
-        );
-      }
-    }
-
-    // If no -m flag found, the command might open an editor
-    // In this case, we can't easily modify it, so return as-is
-    return command;
-  }
-
-  /**
-   * Detect `gh pr create` commands and append AI attribution text to the
-   * PR body. Format: "Generated with Qwen Code (N-shotted by Qwen-Coder)"
-   * when at least one user prompt has been recorded since the last commit;
-   * otherwise just "Generated with Qwen Code".
-   *
-   * Skipped on Windows: the appended text relies on bash quote-escape
-   * conventions (`\$`, `'\''`) that cmd.exe and PowerShell don't honor,
-   * so on those shells our injection could either break the user-approved
-   * `gh pr create` command or be evaluated as command substitution.
-   * Losing PR attribution on Windows is an acceptable trade for safety.
-   */
-  private addAttributionToPR(command: string): string {
-    // Shell-aware detection — a raw regex would falsely match quoted
-    // text such as `echo "gh pr create --body \"x\""` and rewrite a
-    // command that wasn't actually creating a PR.
-    const ghSegment = findGhPrCreateSegment(command);
-    if (!ghSegment) {
-      return command;
-    }
-
-    // Gate on shell type rather than OS platform: bash escaping is
-    // invalid under cmd/PowerShell but works fine under Windows +
-    // Git Bash, which `getShellConfiguration()` reports as `'bash'`.
-    if (getShellConfiguration().shell !== 'bash') {
-      return command;
-    }
-
-    const gitCoAuthorSettings = this.config.getGitCoAuthor();
-    if (!gitCoAuthorSettings.pr) {
-      return command;
-    }
-
-    const attributionService = CommitAttributionService.getInstance();
-    const shots = attributionService.getPromptsSinceLastCommit();
-    const generator = gitCoAuthorSettings.name ?? 'Qwen-Coder';
-
-    const attribution =
-      shots > 0
-        ? `\n\nGenerated with Qwen Code (${shots}-shotted by ${generator})`
-        : `\n\nGenerated with Qwen Code`;
-
-    // Match both the long form `--body` and the short alias `-b`
-    // (documented in `gh pr create --help`), with either space or
-    // `=` separator: `--body "..."`, `--body="..."`, `-b "..."`,
-    // `-b="..."`. Inner alternation is non-capturing so the existing
-    // `[full, prefix, body]` destructure stays intact.
-    //
-    // Run the regex against just the gh segment, NOT the full
-    // command. Otherwise a compound like
-    // `curl -b "session=abc" && gh pr create --body "summary"` would
-    // have the body regex match `curl`'s `-b` cookie flag and inject
-    // attribution into the cookie value, corrupting the curl call.
-    const BODY_FLAG = `(?:--body|-b)[\\s=]+`;
-    const bodyDoublePattern = new RegExp(
-      `(${BODY_FLAG})"((?:[^"\\\\]|\\\\.)*)"`,
-      'g',
-    );
-    // Bash apostrophes inside a single-quoted body use the
-    // close-escape-reopen form `'\''`. The inner alternation matches
-    // either a non-apostrophe character or that escape sequence as a
-    // whole, so the trailer lands at the true end of the body rather
-    // than after only the first quoted segment.
-    const bodySinglePattern = new RegExp(
-      `(${BODY_FLAG})'((?:[^']|'\\\\'')*)'`,
-      'g',
-    );
-    // Trim a trailing shell comment off the segment for the same
-    // reason as addCoAuthorToGitCommit — `gh pr create --body "real"
-    // # --body "fake"` would otherwise let `lastMatchOf` pick the
-    // comment's `--body "fake"` and inject attribution into a `--body`
-    // flag bash discards.
-    const fullSegment = command.slice(ghSegment.start, ghSegment.end);
-    const commentStart = findUnquotedCommentStart(fullSegment);
-    const segment =
-      commentStart >= 0 ? fullSegment.slice(0, commentStart) : fullSegment;
-    // gh ignores all but the last `--body`/`-b` flag, so the trailer
-    // has to land in the final occurrence to actually appear in the PR.
-    // matchAll → take the last match for each quote style, then pick
-    // whichever sits later in the segment (mirrors addCoAuthorToGitCommit;
-    // shares the `lastMatchOf` helper).
-    const bodyDoubleMatch = lastMatchOf(segment.matchAll(bodyDoublePattern));
-    const bodySingleMatch = lastMatchOf(segment.matchAll(bodySinglePattern));
-    // Pick whichever match appears LAST in the segment, regardless of
-    // quote style — but reject any candidate that's nested inside the
-    // other's range. For `gh pr create --body "docs mention -b 'flag'"`
-    // the inner `-b 'flag'` is INSIDE the outer `--body "..."`; without
-    // a nesting check the inner (later) `-b` would win and the trailer
-    // would be spliced into the body text rather than appended after it.
-    // Shared with addCoAuthorToGitCommit via `pickOuterLastMatch`.
-    const pickedBody = pickOuterLastMatch(bodyDoubleMatch, bodySingleMatch);
-    const bodyMatch = pickedBody.match;
-    const bodyQuote = pickedBody.isDouble ? '"' : "'";
-
-    if (bodyMatch) {
-      const [fullMatch, prefix, existingBody] = bodyMatch;
-      // Same `$(...)` bailout as addCoAuthorToGitCommit: a heredoc-
-      // style body (`gh pr create --body "$(cat <<'EOF' ... EOF)"`)
-      // contains nested `"` that our regex's `(?:[^"\\]|\\.)*` body
-      // group can't span — the match would terminate at the first
-      // interior quote and the splice would land mid-substitution,
-      // corrupting the user-approved command.
-      if (existingBody.includes('$(')) {
-        return command;
-      }
-      // Escape the appended text for the surrounding quote style.
-      // Without this, a configured generator name containing `"`, `$`, a
-      // backtick, or `'` would either break the user-approved `gh pr
-      // create` command or, worse, be interpreted as command substitution.
-      const escapedAttribution = pickedBody.isDouble
-        ? escapeForBashDoubleQuote(attribution)
-        : escapeForBashSingleQuote(attribution);
-      const newBody = existingBody + escapedAttribution;
-      // Splice the modified segment back into the original command,
-      // offsetting the in-segment match index by the segment start.
-      const idx = (bodyMatch.index ?? 0) + ghSegment.start;
-      if (idx >= ghSegment.start) {
-        const replacement = prefix + bodyQuote + newBody + bodyQuote;
-        return (
-          command.slice(0, idx) +
-          replacement +
-          command.slice(idx + fullMatch.length)
-        );
-      }
-    }
-
-    // Reached here means: `gh pr create`/`gh pr new` was detected,
-    // `gitCoAuthor.pr` is enabled, but the regex found no inline
-    // `--body`/`-b` to splice the attribution into. Common causes
-    // are `--body-file <path>`, `--fill` (uses commit messages as
-    // body), or just bare `gh pr create` (opens an editor). The
-    // command runs as the user typed it; we just don't add the
-    // attribution line. Surface this as a debug warning so a user
-    // wondering "why isn't my PR getting the trailer?" can see the
-    // skip in `QWEN_DEBUG_LOG_FILE`. Inline-body rewriting is the
-    // only safe automatic path — `--body-file` would require us to
-    // mutate the user's file on disk; `--fill` and editor flows
-    // have no body in argv at all.
-    debugLogger.warn(
-      'addAttributionToPR: gh pr create detected but no inline ' +
-        '`--body`/`-b` argument found to append attribution to ' +
-        '(--body-file / --fill / editor flows are unsupported); ' +
-        'PR will be created without the AI attribution line. ' +
-        'Pass `--body "..."` inline to enable automatic attribution.',
-    );
-    return command;
   }
 }
 

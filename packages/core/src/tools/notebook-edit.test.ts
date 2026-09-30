@@ -14,7 +14,6 @@ import { ApprovalMode } from '../config/config.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { FileReadCache } from '../services/fileReadCache.js';
 import { StandardFileSystemService } from '../services/fileSystemService.js';
-import { CommitAttributionService } from '../services/commitAttribution.js';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
 import { ToolErrorType } from './tool-error.js';
 import type { ToolInvocation, ToolResult } from './tools.js';
@@ -33,7 +32,6 @@ describe('NotebookEditTool', () => {
   const abortSignal = new AbortController().signal;
 
   beforeEach(() => {
-    CommitAttributionService.resetInstance();
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'notebook-edit-test-'));
     fileReadCache = new FileReadCache();
     mockFileHistoryService = { trackEdit: vi.fn() };
@@ -73,7 +71,6 @@ describe('NotebookEditTool', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    CommitAttributionService.resetInstance();
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
@@ -928,9 +925,6 @@ describe('NotebookEditTool', () => {
     const updated = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     expect(updated.cells[0].source).toEqual(['x = 99']);
     expect(result.llmContent).toContain('modified by the user');
-    expect(
-      CommitAttributionService.getInstance().getFileAttribution(filePath),
-    ).toBeUndefined();
   });
 
   it('uses one current-content snapshot for notebook modify previews', async () => {
@@ -972,8 +966,8 @@ describe('NotebookEditTool', () => {
     expect(proposedContent).not.toContain('x = 999');
   });
 
-  it('records AI-originated notebook writes for commit attribution', async () => {
-    const filePath = writeNotebook('attribution.ipynb', {
+  it('tracks file history for notebook writes', async () => {
+    const filePath = writeNotebook('history.ipynb', {
       nbformat: 4,
       nbformat_minor: 5,
       cells: [{ cell_type: 'code', id: 'a', source: ['x = 1'], metadata: {} }],
@@ -988,10 +982,6 @@ describe('NotebookEditTool', () => {
     }).execute(abortSignal);
 
     expect(result.error).toBeUndefined();
-    const attribution =
-      CommitAttributionService.getInstance().getFileAttribution(filePath);
-    expect(attribution).toBeDefined();
-    expect(attribution!.aiContribution).toBeGreaterThan(0);
     expect(mockFileHistoryService.trackEdit).toHaveBeenCalledWith(filePath);
   });
 

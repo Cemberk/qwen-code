@@ -1,60 +1,26 @@
 # Uninstall
 
-Your uninstall method depends on how you installed the CLI.
+This fork is built from source, so uninstalling means removing what the build
+created.
 
-## Method 1: Using npx
+## Remove the linked `qwen` command
 
-npx runs packages from a temporary cache without a permanent installation. To "uninstall" the CLI, you must clear this cache, which will remove qwen-code and any other packages previously executed with npx.
-
-The npx cache is a directory named `_npx` inside your main npm cache folder. You can find your npm cache path by running `npm config get cache`.
-
-**For macOS / Linux**
-
-```bash
-# The path is typically ~/.npm/_npx
-rm -rf "$(npm config get cache)/_npx"
-```
-
-**For Windows**
-
-_Command Prompt_
-
-```cmd
-:: The path is typically %LocalAppData%\npm-cache\_npx
-rmdir /s /q "%LocalAppData%\npm-cache\_npx"
-```
-
-_PowerShell_
-
-```powershell
-# The path is typically $env:LocalAppData\npm-cache\_npx
-Remove-Item -Path (Join-Path $env:LocalAppData "npm-cache\_npx") -Recurse -Force
-```
-
-## Method 2: Using npm (Global Install)
-
-If you installed the CLI globally (e.g. `npm install -g @qwen-code/qwen-code`), use the `npm uninstall` command with the `-g` flag to remove it.
+If you linked the CLI with `npm link packages/cli`, unlink it:
 
 ```bash
 npm uninstall -g @qwen-code/qwen-code
 ```
 
-This command completely removes the package from your system.
+## Remove the source checkout
 
-## Method 3: Standalone Install
+Delete the directory you cloned the repository into. The build output
+(`dist/` and each package's `dist/`) lives inside it.
 
-If you installed via the standalone installer (`curl ... | bash` or `irm ... | iex`), use the dedicated uninstall script.
+## Remove your configuration and data (optional)
 
-**Linux / macOS**
+Qwen Code keeps settings, session transcripts and logs under `~/.qwen`. Delete
+that directory to remove them:
 
 ```bash
-curl -fsSL https://qwen-code-assets.oss-cn-hangzhou.aliyuncs.com/installation/uninstall-qwen-standalone.sh | bash
+rm -rf ~/.qwen
 ```
-
-**Windows**
-
-```powershell
-irm https://qwen-code-assets.oss-cn-hangzhou.aliyuncs.com/installation/uninstall-qwen-standalone.ps1 | iex
-```
-
-The uninstaller removes the standalone runtime, generated `qwen` wrapper, and installer-managed PATH changes. Your Qwen Code configuration (`~/.qwen`) is preserved by default.

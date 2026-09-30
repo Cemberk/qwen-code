@@ -62,8 +62,6 @@ beforeEach(() => {
     'SANDBOX',
     'QWEN_SANDBOX',
     'QWEN_SANDBOX_NET',
-    'QWEN_SANDBOX_PROXY_COMMAND',
-    'PROXY_COMMAND',
     'QWEN_CODE_SIMPLE',
   ])
     vi.stubEnv(key, undefined);

@@ -49,27 +49,13 @@ describe('classifyRetryError', () => {
   it('classifies provider rate-limit codes as retryable rate limiting', () => {
     expect(
       classifyRetryError(
-        new Error(
-          '{"error":{"code":"1302","message":"您的账户已达到速率限制，请您控制请求频率"}}',
-        ),
+        new Error('{"error":{"code":"429","message":"Rate limit exceeded"}}'),
       ),
     ).toMatchObject({
       kind: 'provider',
       diagnosis: 'retryable',
-      providerCode: '1302',
-      providerMessage: '您的账户已达到速率限制，请您控制请求频率',
-      reason: 'rate-limit',
-    });
-
-    expect(
-      classifyRetryError({
-        error: { code: 1305, message: 'IdealTalk rate limit' },
-      }),
-    ).toMatchObject({
-      kind: 'provider',
-      diagnosis: 'retryable',
-      providerCode: '1305',
-      providerMessage: 'IdealTalk rate limit',
+      providerCode: '429',
+      providerMessage: 'Rate limit exceeded',
       reason: 'rate-limit',
     });
   });
@@ -105,45 +91,22 @@ describe('classifyRetryError', () => {
     });
   });
 
-  it('classifies SSE-embedded non-quota 429 errors as retryable rate limiting', () => {
-    const error = new Error(
-      'id:1\nevent:error\n:HTTP_STATUS/429\ndata:{"request_id":"req-1","code":"Throttling.RateLimit","message":"Rate limit exceeded"}',
+  it('classifies SSE-embedded 429 errors as retryable rate limiting', () => {
+    const error = Object.assign(
+      new Error(
+        'id:1\nevent:error\ndata:{"request_id":"req-1","code":"rate_limit_exceeded","message":"Rate limit exceeded"}',
+      ),
+      { status: 429 },
     );
 
     expect(classifyRetryError(error)).toMatchObject({
       kind: 'sse-provider',
       diagnosis: 'retryable',
       statusCode: 429,
-      providerCode: 'Throttling.RateLimit',
+      providerCode: 'rate_limit_exceeded',
       providerMessage: 'Rate limit exceeded',
       requestId: 'req-1',
       reason: 'rate-limit',
-    });
-  });
-
-  it('classifies SSE-embedded allocation quota errors as provider business failures', () => {
-    const error = new Error(
-      'id:1\nevent:error\n:HTTP_STATUS/429\ndata:{"request_id":"req-1","code":"Throttling.AllocationQuota","message":"Allocated quota exceeded"}',
-    );
-
-    expect(classifyRetryError(error)).toMatchObject({
-      kind: 'provider-business',
-      diagnosis: 'fail-fast',
-      statusCode: 429,
-      providerCode: 'Throttling.AllocationQuota',
-      providerMessage: 'Allocated quota exceeded',
-      requestId: 'req-1',
-      reason: 'allocated-quota-exceeded',
-    });
-  });
-
-  it('does not treat allocation quota text without the structured provider code as fail-fast', () => {
-    expect(
-      classifyRetryError(new Error('previously allocated quota exceeded')),
-    ).toMatchObject({
-      kind: 'unknown',
-      diagnosis: 'unknown',
-      reason: 'unclassified',
     });
   });
 
@@ -360,8 +323,11 @@ describe('classifyRetryError', () => {
   });
 
   it('preserves SSE transport when classifying 529 capacity overload', () => {
-    const error = new Error(
-      'id:1\nevent:error\n:HTTP_STATUS/529\ndata:{"request_id":"req-1","code":"Overloaded","message":"Provider overloaded"}',
+    const error = Object.assign(
+      new Error(
+        'id:1\nevent:error\ndata:{"request_id":"req-1","code":"Overloaded","message":"Provider overloaded"}',
+      ),
+      { status: 529 },
     );
 
     expect(classifyRetryError(error)).toMatchObject({
@@ -495,22 +461,6 @@ describe('classifyRetryError', () => {
     });
   });
 
-  it('classifies allocated-quota errors from direct properties as fail-fast', () => {
-    expect(
-      classifyRetryError({
-        status: 429,
-        code: 'Throttling.AllocationQuota',
-        message: 'Allocated quota exceeded',
-      }),
-    ).toMatchObject({
-      kind: 'provider-business',
-      diagnosis: 'fail-fast',
-      reason: 'allocated-quota-exceeded',
-      statusCode: 429,
-      providerCode: 'Throttling.AllocationQuota',
-    });
-  });
-
   it('does not echo a numeric HTTP-status code as providerCode', () => {
     // `{ status: 429, code: 429 }` is just the HTTP status repeated; it must not
     // surface as a provider-specific code.
@@ -621,8 +571,8 @@ describe('classifyRetryError', () => {
 
   it('classifies a status-less provider body embedded in the message as retryable', () => {
     // The same upstream failure can arrive with the provider's JSON body pasted
-    // into the message rather than on SDK properties. With no `:HTTP_STATUS/`
-    // marker there is no status to classify on, so the request id in the body
+    // into the message rather than on SDK properties. With no status to
+    // classify on, the request id in the body
     // is the only evidence that the provider traced the failure. Raw SSE
     // framing surviving into the message is what earns the `sse-provider` kind
     // here; the SDK strips that framing, so the case above is plain `provider`.
@@ -650,14 +600,14 @@ describe('classifyRetryError', () => {
     // case above does not read that half at all: its request id comes from a
     // separate reader, so KeyError stays unlisted and retryable either way.
     const error = new Error(
-      'id:1\nevent:error\ndata:{"request_id":"req-stream","code":"data_inspection_failed","message":"Output data may contain inappropriate content."}',
+      'id:1\nevent:error\ndata:{"request_id":"req-stream","code":"content_filter","message":"Output data may contain inappropriate content."}',
     );
 
     expect(classifyRetryError(error)).toMatchObject({
       kind: 'sse-provider',
       diagnosis: 'fail-fast',
       reason: 'permanent-provider-code',
-      providerCode: 'data_inspection_failed',
+      providerCode: 'content_filter',
       requestId: 'req-stream',
     });
     expect(isRetryableUpstreamError(error)).toBe(false);
@@ -670,7 +620,7 @@ describe('classifyRetryError', () => {
     // of the providerCode merge.
     const error = Object.assign(new Error('moderation rejection'), {
       error: {
-        code: 'data_inspection_failed',
+        code: 'content_filter',
         message: 'Output data may contain inappropriate content.',
       },
       requestID: 'req-nested',
@@ -680,7 +630,7 @@ describe('classifyRetryError', () => {
       kind: 'provider',
       diagnosis: 'fail-fast',
       reason: 'permanent-provider-code',
-      providerCode: 'data_inspection_failed',
+      providerCode: 'content_filter',
       requestId: 'req-nested',
     });
     expect(isRetryableUpstreamError(error)).toBe(false);
@@ -694,17 +644,9 @@ describe('classifyRetryError', () => {
     // that was never going to change.
     const codes = [
       'content_filter',
-      'data_inspection_failed',
-      // The same rejection the pipeline re-throws out of the provider's body.
-      'DataInspectionFailed',
-      // DashScope spells output moderation with a prefix.
-      'ResponseDataInspectionFailed',
+      'ContentFilter',
       'InvalidApiKey',
-      'Arrearage',
-      // Billing exhaustion that neither quota fast-fail intercepts: one needs a
-      // 429 status plus the free-tier wording, the other a reset time.
       'insufficient_quota',
-      'Model.AccessDenied',
       'invalid_request_error',
       'InvalidParameter',
       // OpenAI's `.type` spelling for a malformed request.
@@ -939,7 +881,9 @@ describe('classifyRetryError', () => {
 
   it('does not copy unparsed SSE frames into providerMessage', () => {
     const classification = classifyRetryError(
-      new Error('id:1\nevent:error\n:HTTP_STATUS/429\ndata:not-json'),
+      Object.assign(new Error('id:1\nevent:error\ndata:not-json'), {
+        status: 429,
+      }),
     );
 
     expect(classification).toMatchObject({
@@ -995,20 +939,25 @@ describe('isFallbackEligible', () => {
 
   it('returns true for SSE-embedded 429/529 capacity errors', () => {
     for (const status of [429, 529]) {
-      const error = new Error(
-        `id:1\nevent:error\n:HTTP_STATUS/${status}\ndata:{"request_id":"req-1","code":"Overloaded","message":"Provider overloaded"}`,
+      const error = Object.assign(
+        new Error(
+          'id:1\nevent:error\ndata:{"request_id":"req-1","code":"Overloaded","message":"Provider overloaded"}',
+        ),
+        { status },
       );
       expect(isFallbackEligible(classifyRetryError(error))).toBe(true);
     }
   });
 
   it('returns false for fail-fast and transport errors', () => {
-    const quotaError = {
-      status: 429,
-      code: 'Throttling.AllocationQuota',
-      message: 'Quota exceeded',
-    };
-    expect(isFallbackEligible(classifyRetryError(quotaError))).toBe(false);
+    expect(
+      isFallbackEligible({
+        kind: 'http',
+        diagnosis: 'fail-fast',
+        reason: 'client-error',
+        statusCode: 429,
+      }),
+    ).toBe(false);
 
     expect(
       isFallbackEligible({

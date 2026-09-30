@@ -163,8 +163,6 @@ describe('LlmChat', async () => {
     mockContentGenerator = {
       generateContent: vi.fn(),
       generateContentStream: vi.fn(),
-      embedContent: vi.fn(),
-      batchEmbedContents: vi.fn(),
     } as unknown as ContentGenerator;
 
     // Default mock implementation for tests that don't care about retry logic
@@ -9649,8 +9647,6 @@ describe('LlmChat', async () => {
         ({
           generateContent: vi.fn(),
           generateContentStream,
-          embedContent: vi.fn(),
-          batchEmbedContents: vi.fn(),
         }) as unknown as ContentGenerator;
       const resolveForModel = vi
         .fn()
@@ -9809,8 +9805,6 @@ describe('LlmChat', async () => {
           generateContent: vi.fn(),
           generateContentStream: fallbackBGenerateContentStream,
           countTokens: vi.fn(),
-          embedContent: vi.fn(),
-          batchEmbedContents: vi.fn(),
           useSummarizedThinking: vi.fn().mockReturnValue(false),
         } as unknown as ContentGenerator,
         contentGeneratorConfig: { modalities: {} },
@@ -9894,8 +9888,6 @@ describe('LlmChat', async () => {
         ({
           generateContent: vi.fn(),
           generateContentStream,
-          embedContent: vi.fn(),
-          batchEmbedContents: vi.fn(),
         }) as unknown as ContentGenerator;
       const resolveForModel = vi
         .fn()
@@ -9984,8 +9976,6 @@ describe('LlmChat', async () => {
       const fallbackBGenerator = {
         generateContent: vi.fn(),
         generateContentStream: fallbackBGenerateContentStream,
-        embedContent: vi.fn(),
-        batchEmbedContents: vi.fn(),
       } as unknown as ContentGenerator;
       const resolveError = new Error('unknown fallback alias');
       const resolveForModel = vi
@@ -10071,8 +10061,6 @@ describe('LlmChat', async () => {
         ({
           generateContent: vi.fn(),
           generateContentStream,
-          embedContent: vi.fn(),
-          batchEmbedContents: vi.fn(),
         }) as unknown as ContentGenerator;
       const resolveForModel = vi
         .fn()
@@ -10233,8 +10221,6 @@ describe('LlmChat', async () => {
         ({
           generateContent: vi.fn(),
           generateContentStream,
-          embedContent: vi.fn(),
-          batchEmbedContents: vi.fn(),
         }) as unknown as ContentGenerator;
       const resolveForModel = vi
         .fn()
@@ -14060,8 +14046,6 @@ describe('LlmChat', async () => {
         contentGenerator: {
           generateContent: vi.fn(),
           generateContentStream: fallbackGenerateContentStream,
-          embedContent: vi.fn(),
-          batchEmbedContents: vi.fn(),
         } as unknown as ContentGenerator,
         retryAuthType: AuthType.USE_OPENAI,
         retryErrorCodes: undefined,
@@ -14452,7 +14436,7 @@ describe('LlmChat', async () => {
       // with a request id, no HTTP status — but re-sending the identical
       // request can never succeed, so the widened gate must not adopt it.
       const permanentError = Object.assign(new Error('Content filtered'), {
-        code: 'data_inspection_failed',
+        code: 'content_filter',
         requestID: 'cd7f37f3-d38a-9dec-804f-f70dda5650eb',
       });
 
@@ -14900,47 +14884,6 @@ describe('LlmChat', async () => {
       }
     });
 
-    it('fast-fails a mid-stream quota-exhaustion error instead of scheduling a rate-limit retry', async () => {
-      // A permanent quota-exhaustion 429 can arrive mid-stream as a
-      // StreamContentError while reading, bypassing the retryWithBackoff
-      // fast-fail that only wraps stream establishment. The stream-side
-      // catch must fast-fail it before the rate-limit branch; otherwise
-      // isRateLimitError (code 429) schedules a 1-5 minute delay on an
-      // error that cannot succeed until the reset time.
-      vi.useFakeTimers();
-
-      try {
-        const quotaError = new StreamContentError(
-          '{"error":{"code":"429","message":"Your token-plan 1-week quota has been exhausted. The quota will reset at 07-27 09:25:00 UTC."}}',
-        );
-        vi.mocked(
-          mockContentGenerator.generateContentStream,
-        ).mockResolvedValueOnce(
-          (async function* () {
-            throw quotaError;
-
-            yield {} as GenerateContentResponse;
-          })(),
-        );
-
-        const stream = await chat.sendMessageStream(
-          'test-model',
-          { message: 'test' },
-          'prompt-quota-fastfail',
-        );
-        const iterator = stream[Symbol.asyncIterator]();
-
-        // Fast-fail: the first pull rejects with the friendly message. No
-        // RETRY event is yielded and no rate-limit delay is scheduled.
-        await expect(iterator.next()).rejects.toThrow(/Quota exhausted/);
-        expect(
-          mockContentGenerator.generateContentStream,
-        ).toHaveBeenCalledTimes(1);
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
     it('retries the statusless Anthropic SSE throttle and completes the next attempt', async () => {
       vi.useFakeTimers();
       try {
@@ -15241,90 +15184,6 @@ describe('LlmChat', async () => {
       }
     });
 
-    it('should retry on GLM rate limit StreamContentError with backoff delay', async () => {
-      vi.useFakeTimers();
-
-      try {
-        const glmError = new StreamContentError(
-          '{"error":{"code":"1302","message":"您的账户已达到速率限制，请您控制请求频率"}}',
-        );
-        async function* failingStreamGenerator() {
-          throw glmError;
-
-          yield {} as GenerateContentResponse;
-        }
-        const failingStream = failingStreamGenerator();
-        const successStream = (async function* () {
-          yield {
-            candidates: [
-              {
-                content: { parts: [{ text: 'Success after GLM retry' }] },
-                finishReason: 'STOP',
-              },
-            ],
-          } as unknown as GenerateContentResponse;
-        })();
-
-        vi.mocked(mockContentGenerator.generateContentStream)
-          .mockResolvedValueOnce(failingStream)
-          .mockResolvedValueOnce(successStream);
-
-        const stream = await chat.sendMessageStream(
-          'test-model',
-          { message: 'test' },
-          'prompt-id-glm-retry',
-        );
-
-        const iterator = stream[Symbol.asyncIterator]();
-        const first = await iterator.next();
-
-        expect(first.done).toBe(false);
-        expect(first.value.type).toBe(StreamEventType.RETRY);
-
-        // Resume generator to schedule the rate limit delay, then advance timers.
-        const secondPromise = iterator.next();
-        await vi.advanceTimersByTimeAsync(60_000);
-        const second = await secondPromise;
-
-        expect(second.done).toBe(false);
-        expect(second.value.type).toBe(StreamEventType.RETRY);
-
-        // Verify retryInfo contains retry metadata
-        if (
-          second.value.type === StreamEventType.RETRY &&
-          second.value.retryInfo
-        ) {
-          expect(second.value.retryInfo.attempt).toBe(1);
-          expect(second.value.retryInfo.maxRetries).toBe(10);
-          expect(second.value.retryInfo.delayMs).toBe(60000);
-        }
-
-        const events: StreamEvent[] = [first.value, second.value];
-        for (;;) {
-          const next = await iterator.next();
-          if (next.done) break;
-          events.push(next.value);
-        }
-
-        expect(
-          mockContentGenerator.generateContentStream,
-        ).toHaveBeenCalledTimes(2);
-        expect(
-          events.filter((e) => e.type === StreamEventType.RETRY),
-        ).toHaveLength(2);
-        expect(
-          events.some(
-            (e) =>
-              e.type === StreamEventType.CHUNK &&
-              e.value.candidates?.[0]?.content?.parts?.[0]?.text ===
-                'Success after GLM retry',
-          ),
-        ).toBe(true);
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
     it('should use configured delay across repeated streamed rate-limit errors', async () => {
       vi.useFakeTimers();
 
@@ -15336,10 +15195,10 @@ describe('LlmChat', async () => {
           retryMaxDelayMs: 5_000,
         });
         const firstError = new StreamContentError(
-          'id:1\nevent:error\n:HTTP_STATUS/429\ndata:{"request_id":"req-1","code":"Throttling.AllocationQuota","message":"Allocated quota exceeded"}',
+          '{"error":{"code":"429","message":"Rate limit exceeded"}}',
         );
         const secondError = new StreamContentError(
-          'id:2\nevent:error\n:HTTP_STATUS/429\ndata:{"request_id":"req-2","code":"Throttling.AllocationQuota","message":"Allocated quota exceeded"}',
+          '{"error":{"code":"429","message":"Rate limit exceeded"}}',
         );
 
         vi.mocked(mockContentGenerator.generateContentStream)
@@ -15432,10 +15291,10 @@ describe('LlmChat', async () => {
           retryMaxDelayMs: 5_000,
         });
         const firstError = new StreamContentError(
-          'id:1\nevent:error\n:HTTP_STATUS/429\ndata:{"request_id":"req-1","code":"Throttling.AllocationQuota","message":"Allocated quota exceeded"}',
+          '{"error":{"code":"429","message":"Rate limit exceeded"}}',
         );
         const secondError = new StreamContentError(
-          'id:2\nevent:error\n:HTTP_STATUS/429\ndata:{"request_id":"req-2","code":"Throttling.AllocationQuota","message":"Allocated quota exceeded"}',
+          '{"error":{"code":"429","message":"Rate limit exceeded"}}',
         );
 
         vi.mocked(mockContentGenerator.generateContentStream)

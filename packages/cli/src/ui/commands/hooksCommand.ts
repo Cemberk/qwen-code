@@ -65,7 +65,6 @@ async function reloadHooksFromSettings(
       {
         systemHooks: settings.getSystemHooks(),
         userHooks: settings.getUserHooks(),
-        projectHooks: settings.getProjectHooks(),
       },
       config.getBareMode() || config.isSafeMode(),
     ),

@@ -470,7 +470,6 @@ export default {
   // Étiquettes des paramètres
   // ============================================================================
   'Vim Mode': 'Mode Vim',
-  'Attribution: commit': 'Attribution : commit',
   'Terminal Bell Notification': 'Notification sonore du terminal',
   Theme: 'Thème',
   'Preferred Editor': 'Éditeur préféré',

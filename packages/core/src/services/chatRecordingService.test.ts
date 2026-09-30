@@ -3640,118 +3640,48 @@ describe('ChatRecordingService', () => {
       expect(mkdirSpy).toHaveBeenCalledTimes(1);
     });
 
-    it('retries an identical attribution snapshot after a synchronous failure', async () => {
-      const snapshot = {
-        type: 'attribution-snapshot' as const,
-        version: 1,
-        surface: 'cli',
-        fileStates: {},
-        promptCount: 0,
-        promptCountAtLastCommit: 0,
-      };
-      const writeFileSpy = vi.spyOn(fs, 'writeFileSync');
-      writeFileSpy.mockImplementationOnce(() => {
-        throw Object.assign(new Error('EACCES'), { code: 'EACCES' });
-      });
+    it('creates the chats directory 0700 and the conversation file 0600', async () => {
+      const mkdirSpy = vi
+        .spyOn(fs, 'mkdirSync')
+        .mockImplementation(() => undefined);
+      const writeSpy = vi
+        .spyOn(fs, 'writeFileSync')
+        .mockImplementation(() => undefined);
       const service = new ChatRecordingService(mockConfig, undefined, false);
 
-      service.recordAttributionSnapshot(snapshot);
+      service.recordUserMessage([{ text: 'private' }]);
       await service.flush();
-      expect(jsonl.writeLine).not.toHaveBeenCalled();
 
-      service.recordAttributionSnapshot(snapshot);
-      await service.flush();
-      expect(jsonl.writeLine).toHaveBeenCalledTimes(1);
+      expect(mkdirSpy).toHaveBeenCalledWith(
+        '/test/project/root/.gemini/projects/test-project/chats',
+        { recursive: true, mode: 0o700 },
+      );
+      expect(writeSpy).toHaveBeenCalledWith(
+        '/test/project/root/.gemini/projects/test-project/chats/test-session-id.jsonl',
+        '',
+        { flag: 'wx', encoding: 'utf8', mode: 0o600 },
+      );
     });
   });
 
-  describe('recordAttributionSnapshot', () => {
-    const baseSnapshot = {
-      type: 'attribution-snapshot' as const,
-      version: 1,
-      surface: 'cli',
-      fileStates: {},
-      promptCount: 0,
-      promptCountAtLastCommit: 0,
-    };
-
-    it('should write each distinct snapshot', async () => {
-      chatRecordingService.recordAttributionSnapshot(baseSnapshot);
-      chatRecordingService.recordAttributionSnapshot({
-        ...baseSnapshot,
-        promptCount: 1,
-      });
-      chatRecordingService.recordAttributionSnapshot({
-        ...baseSnapshot,
-        promptCount: 2,
-      });
-      await chatRecordingService.flush();
-      expect(jsonl.writeLine).toHaveBeenCalledTimes(3);
-    });
-
-    it('refreshes the cached git branch at the attribution turn boundary', async () => {
+  describe('writes', () => {
+    it('refreshes the cached git branch at a turn boundary', async () => {
       vi.mocked(execFileSync)
         .mockReturnValueOnce('main\n')
         .mockReturnValueOnce('feature\n');
 
       chatRecordingService.recordUserMessage([{ text: 'first' }]);
       await chatRecordingService.flush();
-      chatRecordingService.recordAttributionSnapshot({
-        ...baseSnapshot,
-        promptCount: 1,
-      });
+      chatRecordingService.refreshGitBranch();
+      chatRecordingService.recordUserMessage([{ text: 'second' }]);
       await chatRecordingService.flush();
 
-      const userRecord = vi.mocked(jsonl.writeLine).mock
+      const firstRecord = vi.mocked(jsonl.writeLine).mock
         .calls[0][1] as ChatRecord;
-      const attributionRecord = vi.mocked(jsonl.writeLine).mock
+      const secondRecord = vi.mocked(jsonl.writeLine).mock
         .calls[1][1] as ChatRecord;
-      expect(userRecord.gitBranch).toBe('main');
-      expect(attributionRecord.gitBranch).toBe('feature');
-    });
-
-    // Sessions that touch many files emit a non-retry turn snapshot
-    // every prompt cycle. Without dedup, repeated identical snapshots
-    // (no edits, no prompt-counter change) would re-serialize the entire
-    // attribution state into the JSONL on every turn, inflating session
-    // size and slowing /resume.
-    it('should skip a snapshot identical to the previous write', async () => {
-      chatRecordingService.recordAttributionSnapshot(baseSnapshot);
-      chatRecordingService.recordAttributionSnapshot(baseSnapshot);
-      chatRecordingService.recordAttributionSnapshot(baseSnapshot);
-      await chatRecordingService.flush();
-      expect(jsonl.writeLine).toHaveBeenCalledTimes(1);
-    });
-
-    // After rewindRecording, the previous attribution snapshot lives on
-    // the abandoned branch, so the dedup key has to clear — otherwise
-    // the post-rewind identical snapshot would be silently skipped and
-    // /resume on the rewound session would lose all attribution state.
-    it('should re-write an identical snapshot after rewindRecording', async () => {
-      chatRecordingService.recordUserMessage([{ text: 'turn 1' }]);
-      chatRecordingService.recordAttributionSnapshot(baseSnapshot);
-      await chatRecordingService.flush();
-      const beforeRewind = vi.mocked(jsonl.writeLine).mock.calls.length;
-
-      chatRecordingService.rewindRecording(0, { truncatedCount: 0 });
-      // Same snapshot bytes — without the rewind reset this would dedup.
-      chatRecordingService.recordAttributionSnapshot(baseSnapshot);
-      await chatRecordingService.flush();
-      // 1 rewind record + 1 fresh snapshot = 2 more writes after rewind.
-      expect(vi.mocked(jsonl.writeLine).mock.calls.length).toBe(
-        beforeRewind + 2,
-      );
-    });
-
-    it('should not retry an identical snapshot after a write failure', async () => {
-      const writeError = new Error('disk full');
-      vi.mocked(jsonl.writeLine).mockRejectedValueOnce(writeError);
-      chatRecordingService.recordAttributionSnapshot(baseSnapshot);
-      await expect(chatRecordingService.flush()).rejects.toBe(writeError);
-
-      chatRecordingService.recordAttributionSnapshot(baseSnapshot);
-      await expect(chatRecordingService.flush()).rejects.toBe(writeError);
-      expect(jsonl.writeLine).toHaveBeenCalledTimes(1);
+      expect(firstRecord.gitBranch).toBe('main');
+      expect(secondRecord.gitBranch).toBe('feature');
     });
 
     it('should handle fire-and-forget rejection while flush reports it', async () => {

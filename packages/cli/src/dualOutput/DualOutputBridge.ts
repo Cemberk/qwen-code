@@ -152,7 +152,10 @@ export class DualOutputBridge {
           }
         } else if (code === 'ENOENT') {
           // Regular file doesn't exist yet — create it.
-          this.stream = createWriteStream(target.filePath, { flags: 'w' });
+          this.stream = createWriteStream(target.filePath, {
+            flags: 'w',
+            mode: 0o600,
+          });
         } else {
           throw err;
         }

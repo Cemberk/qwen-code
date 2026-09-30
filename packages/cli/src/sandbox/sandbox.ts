@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { exec, execSync, spawn, type ChildProcess } from 'node:child_process';
+import { execSync, spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -13,7 +13,6 @@ import {
   getUserSettingsDir,
   SETTINGS_DIRECTORY_NAME,
 } from '../config/settings.js';
-import { promisify } from 'node:util';
 import type {
   Config,
   SandboxConfig,
@@ -28,8 +27,6 @@ import { writeStderrLine } from '../utils/stdioHelpers.js';
 import { parseSandboxImageName } from '../utils/sandboxImageName.js';
 import { isContainerPathWithinWorkdir } from '../utils/sandbox-path.js';
 import { parseSandboxMountSpec } from '../utils/sandboxMounts.js';
-
-const execAsync = promisify(exec);
 
 function getContainerPath(hostPath: string): string {
   if (os.platform() !== 'win32') {
@@ -51,9 +48,6 @@ function ensureDirectoryAndGetRealPath(dir: string): string {
   return fs.realpathSync(dir);
 }
 
-const LOCAL_DEV_SANDBOX_IMAGE_NAME = 'qwen-code-sandbox';
-const SANDBOX_NETWORK_NAME = 'qwen-code-sandbox';
-const SANDBOX_PROXY_NAME = 'qwen-code-sandbox-proxy';
 /**
  * Exported so the colocation tripwire in `sandbox.test.ts` can iterate every
  * builtin profile by construction instead of pinning a hand-copied snapshot
@@ -62,10 +56,8 @@ const SANDBOX_PROXY_NAME = 'qwen-code-sandbox-proxy';
 export const BUILTIN_SEATBELT_PROFILES = [
   'permissive-open',
   'permissive-closed',
-  'permissive-proxied',
   'restrictive-open',
   'restrictive-closed',
-  'restrictive-proxied',
 ];
 
 export function getSandboxPassthroughEnvArgs(
@@ -305,70 +297,15 @@ export async function start_sandbox(
         ...finalArgv.map((arg) => quote([arg])),
       ].join(' '),
     );
-    // start and set up proxy if QWEN_SANDBOX_PROXY_COMMAND is set
-    const proxyCommand = process.env['QWEN_SANDBOX_PROXY_COMMAND'];
-    let proxyProcess: ChildProcess | undefined = undefined;
-    let sandboxProcess: ChildProcess | undefined = undefined;
-    const sandboxEnv = { ...process.env };
-    if (proxyCommand) {
-      const proxy =
-        process.env['HTTPS_PROXY'] ||
-        process.env['https_proxy'] ||
-        process.env['HTTP_PROXY'] ||
-        process.env['http_proxy'] ||
-        'http://localhost:8877';
-      sandboxEnv['HTTPS_PROXY'] = proxy;
-      sandboxEnv['https_proxy'] = proxy; // lower-case can be required, e.g. for curl
-      sandboxEnv['HTTP_PROXY'] = proxy;
-      sandboxEnv['http_proxy'] = proxy;
-      const noProxy = process.env['NO_PROXY'] || process.env['no_proxy'];
-      if (noProxy) {
-        sandboxEnv['NO_PROXY'] = noProxy;
-        sandboxEnv['no_proxy'] = noProxy;
-      }
-      // Note: CodeQL flags this as js/shell-command-injection-from-environment.
-      // This is intentional - CLI tool executes user-provided proxy commands.
-      proxyProcess = spawn('bash', ['-c', proxyCommand], {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        detached: true,
-      });
-      // install handlers to stop proxy on exit/signal
-      const stopProxy = () => {
-        writeStderrLine('stopping proxy ...');
-        if (proxyProcess?.pid) {
-          process.kill(-proxyProcess.pid, 'SIGTERM');
-        }
-      };
-      process.on('exit', stopProxy);
-      process.on('SIGINT', stopProxy);
-      process.on('SIGTERM', stopProxy);
-
-      // Proxy stdout is intentionally not piped — it disrupts ink rendering.
-      proxyProcess.stderr?.on('data', (data) => {
-        writeStderrLine(data.toString());
-      });
-      proxyProcess.on('close', (code, signal) => {
-        if (sandboxProcess?.pid) {
-          process.kill(-sandboxProcess.pid, 'SIGTERM');
-        }
-        throw new FatalSandboxError(
-          `Proxy command '${proxyCommand}' exited with code ${code}, signal ${signal}`,
-        );
-      });
-      writeStderrLine('waiting for proxy to start ...');
-      await execAsync(
-        `until timeout 0.25 curl -s http://localhost:8877; do sleep 0.25; done`,
-      );
-    }
     // spawn child and let it inherit stdio
     process.stdin.pause();
-    sandboxProcess = spawn(config.command, args, {
+    const sandboxProcess = spawn(config.command, args, {
       stdio: 'inherit',
       ...(childEnv ? { env: { ...process.env, ...childEnv } } : {}),
     });
     return new Promise((resolve, reject) => {
-      sandboxProcess?.on('error', reject);
-      sandboxProcess?.on('close', (code) => {
+      sandboxProcess.on('error', reject);
+      sandboxProcess.on('close', (code) => {
         process.stdin.resume();
         resolve(code ?? 1);
       });
@@ -388,7 +325,7 @@ export async function start_sandbox(
 
   const image = config.image;
   // `image` is optional on SandboxConfig because the in-place backends never
-  // pull one; `loadSandboxConfig` only emits a container command together with
+  // use one; `loadSandboxConfig` only emits a container command together with
   // an image. Fail loudly rather than handing `undefined` to the runtime, where
   // it would stringify into an "undefined" image reference.
   if (!image) {
@@ -434,20 +371,25 @@ export async function start_sandbox(
     }
   }
 
-  // stop if image is missing
-  if (!(await ensureSandboxImageIsPresent(config.command, image))) {
-    const remedy =
-      image === LOCAL_DEV_SANDBOX_IMAGE_NAME
-        ? 'Try running `npm run build:all` or `npm run build:sandbox` under the qwen-code repo to build it locally, or check the image name and your network connection.'
-        : 'Please check the image name, your network connection, or notify qwen-code-dev@service.alibaba.com if the issue persists.';
+  // Images are never pulled: the sandbox only runs a locally built image.
+  writeStderrLine(`Checking for sandbox image: ${image}`);
+  if (!(await imageExists(config.command, image))) {
     throw new FatalSandboxError(
-      `Sandbox image '${image}' is missing or could not be pulled. ${remedy}`,
+      `Sandbox image '${image}' was not found locally. Build it with \`npm run build:sandbox\` under the qwen-code repo, or set tools.sandboxImage / QWEN_SANDBOX_IMAGE to an image that is already present.`,
     );
   }
 
   // use interactive mode and auto-remove container on exit
   // run init binary inside container to forward signals & reap zombies
-  const args = ['run', '-i', '--rm', '--init', '--workdir', containerWorkdir];
+  const args = [
+    'run',
+    '--pull=never',
+    '-i',
+    '--rm',
+    '--init',
+    '--workdir',
+    containerWorkdir,
+  ];
 
   // add custom flags from SANDBOX_FLAGS
   if (process.env['SANDBOX_FLAGS']) {
@@ -557,54 +499,12 @@ export async function start_sandbox(
   }
 
   // expose env-specified ports on the sandbox
-  ports().forEach((p) => args.push('--publish', `${p}:${p}`));
+  ports().forEach((p) => args.push('--publish', `127.0.0.1:${p}:${p}`));
 
   // if DEBUG is set, expose debugging port
   if (process.env['DEBUG']) {
     const debugPort = process.env['DEBUG_PORT'] || '9229';
-    args.push(`--publish`, `${debugPort}:${debugPort}`);
-  }
-
-  // copy proxy environment variables, replacing localhost with SANDBOX_PROXY_NAME
-  // copy as both upper-case and lower-case as is required by some utilities
-  // QWEN_SANDBOX_PROXY_COMMAND implies HTTPS_PROXY unless HTTP_PROXY is set
-  const proxyCommand = process.env['QWEN_SANDBOX_PROXY_COMMAND'];
-
-  if (proxyCommand) {
-    let proxy =
-      process.env['HTTPS_PROXY'] ||
-      process.env['https_proxy'] ||
-      process.env['HTTP_PROXY'] ||
-      process.env['http_proxy'] ||
-      'http://localhost:8877';
-    proxy = proxy.replace('localhost', SANDBOX_PROXY_NAME);
-    if (proxy) {
-      args.push('--env', `HTTPS_PROXY=${proxy}`);
-      args.push('--env', `https_proxy=${proxy}`); // lower-case can be required, e.g. for curl
-      args.push('--env', `HTTP_PROXY=${proxy}`);
-      args.push('--env', `http_proxy=${proxy}`);
-    }
-    const noProxy = process.env['NO_PROXY'] || process.env['no_proxy'];
-    if (noProxy) {
-      args.push('--env', `NO_PROXY=${noProxy}`);
-      args.push('--env', `no_proxy=${noProxy}`);
-    }
-
-    // if using proxy, switch to internal networking through proxy
-    if (proxy) {
-      execSync(
-        `${config.command} network inspect ${SANDBOX_NETWORK_NAME} || ${config.command} network create --internal ${SANDBOX_NETWORK_NAME}`,
-      );
-      args.push('--network', SANDBOX_NETWORK_NAME);
-      // if proxy command is set, create a separate network w/ host access (i.e. non-internal)
-      // we will run proxy in its own container connected to both host network and internal network
-      // this allows proxy to work even on rootless podman on macos with host<->vm<->container isolation
-      if (proxyCommand) {
-        execSync(
-          `${config.command} network inspect ${SANDBOX_PROXY_NAME} || ${config.command} network create ${SANDBOX_PROXY_NAME}`,
-        );
-      }
-    }
+    args.push(`--publish`, `127.0.0.1:${debugPort}:${debugPort}`);
   }
 
   // name container after image, plus random suffix to avoid conflicts
@@ -749,7 +649,6 @@ export async function start_sandbox(
 
   // Determine if the current user's UID/GID should be passed to the sandbox.
   // See shouldUseCurrentUserInSandbox for more details.
-  let userFlag = '';
   const finalEntrypoint = entrypoint(workdir, cliArgs);
 
   // Check if we should use current user's UID/GID in sandbox
@@ -792,14 +691,11 @@ export async function start_sandbox(
     // The entrypoint is always `['bash', '-c', '<command>']`, so we modify the command part.
     finalEntrypoint[2] = `${setupUserCommands} && ${suCommand}`;
 
-    // We still need userFlag for the simpler proxy container, which does not have this issue.
-    userFlag = `--user ${uid}:${gid}`;
     // When forcing a UID in the sandbox, $HOME can be reset to '/', so we copy $HOME as well.
     args.push('--env', `HOME=${os.homedir()}`);
   } else if (isIntegrationTest) {
     // Integration test mode with UID/GID matching disabled: use root
     args.push('--user', 'root');
-    userFlag = '--user root';
   }
   // else: non-IT mode with UID/GID matching disabled - use image default user (node)
 
@@ -809,59 +705,9 @@ export async function start_sandbox(
   // push container entrypoint (including args)
   args.push(...finalEntrypoint);
 
-  // start and set up proxy if QWEN_SANDBOX_PROXY_COMMAND is set
-  let proxyProcess: ChildProcess | undefined = undefined;
-  let sandboxProcess: ChildProcess | undefined = undefined;
-
-  if (proxyCommand) {
-    // run proxyCommand in its own container
-    const proxyContainerCommand = `${config.command} run --rm --init ${userFlag} --name ${SANDBOX_PROXY_NAME} --network ${SANDBOX_PROXY_NAME} -p 8877:8877 -v ${process.cwd()}:${workdir} --workdir ${workdir} ${image} ${proxyCommand}`;
-    const isWindows = os.platform() === 'win32';
-    const proxyShell = isWindows ? 'cmd.exe' : 'bash';
-    const proxyShellArgs = isWindows
-      ? ['/c', proxyContainerCommand]
-      : ['-c', proxyContainerCommand];
-    // Note: CodeQL flags this as js/shell-command-injection-from-environment.
-    // This is intentional - CLI tool executes user-provided proxy commands in container.
-    proxyProcess = spawn(proxyShell, proxyShellArgs, {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      detached: true,
-    });
-    // install handlers to stop proxy on exit/signal
-    const stopProxy = () => {
-      writeStderrLine('stopping proxy container ...');
-      execSync(`${config.command} rm -f ${SANDBOX_PROXY_NAME}`);
-    };
-    process.on('exit', stopProxy);
-    process.on('SIGINT', stopProxy);
-    process.on('SIGTERM', stopProxy);
-
-    // Proxy stdout is intentionally not piped — it disrupts ink rendering.
-    proxyProcess.stderr?.on('data', (data) => {
-      writeStderrLine(data.toString().trim());
-    });
-    proxyProcess.on('close', (code, signal) => {
-      if (sandboxProcess?.pid) {
-        process.kill(-sandboxProcess.pid, 'SIGTERM');
-      }
-      throw new FatalSandboxError(
-        `Proxy container command '${proxyContainerCommand}' exited with code ${code}, signal ${signal}`,
-      );
-    });
-    writeStderrLine('waiting for proxy to start ...');
-    await execAsync(
-      `until timeout 0.25 curl -s http://localhost:8877; do sleep 0.25; done`,
-    );
-    // connect proxy container to sandbox network
-    // (workaround for older versions of docker that don't support multiple --network args)
-    await execAsync(
-      `${config.command} network connect ${SANDBOX_NETWORK_NAME} ${SANDBOX_PROXY_NAME}`,
-    );
-  }
-
   // spawn child and let it inherit stdio
   process.stdin.pause();
-  sandboxProcess = spawn(config.command, args, {
+  const sandboxProcess = spawn(config.command, args, {
     stdio: 'inherit',
     ...(childEnv ? { env: { ...process.env, ...childEnv } } : {}),
   });
@@ -872,7 +718,7 @@ export async function start_sandbox(
       reject(err);
     });
 
-    sandboxProcess?.on('close', (code, signal) => {
+    sandboxProcess.on('close', (code, signal) => {
       process.stdin.resume();
       if (code !== 0 && code !== null) {
         writeStderrLine(
@@ -884,14 +730,11 @@ export async function start_sandbox(
   });
 }
 
-// Helper functions to ensure sandbox image is present
 async function imageExists(sandbox: string, image: string): Promise<boolean> {
   return new Promise((resolve) => {
     // `images -q` lists repository:tag entries only, so a digest reference
-    // (`repo@sha256:…`) lists empty even when its content is local — forcing
-    // a needless registry round-trip for content already present. `image
-    // inspect` resolves digest references against local content offline
-    // (#9527).
+    // (`repo@sha256:…`) lists empty even when its content is local. `image
+    // inspect` resolves digest references against local content (#9527).
     const args = ['image', 'inspect', '--format', '{{.Id}}', image];
     const checkProcess = spawn(sandbox, args);
 
@@ -915,106 +758,4 @@ async function imageExists(sandbox: string, image: string): Promise<boolean> {
       resolve(stdoutData.trim() !== '');
     });
   });
-}
-
-async function pullImage(sandbox: string, image: string): Promise<boolean> {
-  writeStderrLine(`Attempting to pull image ${image} using ${sandbox}...`);
-  return new Promise((resolve) => {
-    const args = ['pull', image];
-    const pullProcess = spawn(sandbox, args, { stdio: 'pipe' });
-
-    let stderrData = '';
-
-    const onStdoutData = (data: Buffer) => {
-      writeStderrLine(data.toString().trim()); // Show pull progress
-    };
-
-    const onStderrData = (data: Buffer) => {
-      stderrData += data.toString();
-      writeStderrLine(data.toString().trim()); // Show pull errors/info from the command itself
-    };
-
-    const onError = (err: Error) => {
-      writeStderrLine(
-        `Failed to start '${sandbox} pull ${image}' command: ${err.message}`,
-      );
-      cleanup();
-      resolve(false);
-    };
-
-    const onClose = (code: number | null) => {
-      if (code === 0) {
-        writeStderrLine(`Successfully pulled image ${image}.`);
-        cleanup();
-        resolve(true);
-      } else {
-        writeStderrLine(
-          `Failed to pull image ${image}. '${sandbox} pull ${image}' exited with code ${code}.`,
-        );
-        if (stderrData.trim()) {
-          // Details already printed by the stderr listener above
-        }
-        cleanup();
-        resolve(false);
-      }
-    };
-
-    const cleanup = () => {
-      if (pullProcess.stdout) {
-        pullProcess.stdout.removeListener('data', onStdoutData);
-      }
-      if (pullProcess.stderr) {
-        pullProcess.stderr.removeListener('data', onStderrData);
-      }
-      pullProcess.removeListener('error', onError);
-      pullProcess.removeListener('close', onClose);
-      if (pullProcess.connected) {
-        pullProcess.disconnect();
-      }
-    };
-
-    if (pullProcess.stdout) {
-      pullProcess.stdout.on('data', onStdoutData);
-    }
-    if (pullProcess.stderr) {
-      pullProcess.stderr.on('data', onStderrData);
-    }
-    pullProcess.on('error', onError);
-    pullProcess.on('close', onClose);
-  });
-}
-
-async function ensureSandboxImageIsPresent(
-  sandbox: string,
-  image: string,
-): Promise<boolean> {
-  writeStderrLine(`Checking for sandbox image: ${image}`);
-  if (await imageExists(sandbox, image)) {
-    writeStderrLine(`Sandbox image ${image} found locally.`);
-    return true;
-  }
-
-  writeStderrLine(`Sandbox image ${image} not found locally.`);
-  if (image === LOCAL_DEV_SANDBOX_IMAGE_NAME) {
-    // user needs to build the image themselves
-    return false;
-  }
-
-  if (await pullImage(sandbox, image)) {
-    // After attempting to pull, check again to be certain
-    if (await imageExists(sandbox, image)) {
-      writeStderrLine(`Sandbox image ${image} is now available after pulling.`);
-      return true;
-    } else {
-      writeStderrLine(
-        `Sandbox image ${image} still not found after a pull attempt. This might indicate an issue with the image name or registry, or the pull command reported success but failed to make the image available.`,
-      );
-      return false;
-    }
-  }
-
-  writeStderrLine(
-    `Failed to obtain sandbox image ${image} after check and pull attempt.`,
-  );
-  return false; // Pull command failed or image still not present
 }

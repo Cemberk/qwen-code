@@ -19,6 +19,8 @@ import type {
   ContentGeneratorConfig,
 } from './contentGenerator.js';
 import { InvalidBaseUrlError } from '../models/modelConfigErrors.js';
+import { GenerateContentResponse } from './genai-compat.js';
+import { LoggingContentGenerator } from './loggingContentGenerator/index.js';
 
 const LOCAL_BASE_URL = 'http://127.0.0.1:11434/v1';
 
@@ -46,7 +48,6 @@ vi.mock('./openaiContentGenerator/index.js', () => ({
         (async function* () {
           yield {};
         })(),
-      embedContent: async () => ({ embeddings: [] }),
     };
   },
 }));
@@ -62,6 +63,11 @@ vi.mock('../utils/openaiLogger.js', () => ({
 describe('createContentGenerator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // These tests cover provider loading, not the logging wrapper.
+    vi.spyOn(
+      LoggingContentGenerator.prototype,
+      'generateContent',
+    ).mockResolvedValue(new GenerateContentResponse());
     openaiMockState.generatorError = null;
     openaiMockState.createCount = 0;
     openaiLoggerMockState.constructorCalls = [];
@@ -86,8 +92,14 @@ describe('createContentGenerator', () => {
 
     expect(openaiMockState.createCount).toBe(0);
     await Promise.all([
-      generator.embedContent({ model: 'test-model', contents: 'one' }),
-      generator.embedContent({ model: 'test-model', contents: 'two' }),
+      generator.generateContent(
+        { model: 'test-model', contents: 'one' },
+        'prompt-id',
+      ),
+      generator.generateContent(
+        { model: 'test-model', contents: 'two' },
+        'prompt-id',
+      ),
     ]);
     expect(openaiMockState.createCount).toBe(1);
   });
@@ -96,14 +108,12 @@ describe('createContentGenerator', () => {
     const generator: ContentGenerator = {
       generateContent: vi.fn(),
       generateContentStream: vi.fn(),
-      embedContent: vi.fn(),
     };
 
     await expect(preloadContentGenerator(generator)).resolves.toBeUndefined();
     resetPreloadedContentGenerator(generator);
     expect(generator.generateContent).not.toHaveBeenCalled();
     expect(generator.generateContentStream).not.toHaveBeenCalled();
-    expect(generator.embedContent).not.toHaveBeenCalled();
   });
 
   it('loads a provider once across concurrent preload and first use', async () => {
@@ -125,7 +135,10 @@ describe('createContentGenerator', () => {
 
     await Promise.all([
       preloadContentGenerator(generator),
-      generator.embedContent({ model: 'test-model', contents: 'hello' }),
+      generator.generateContent(
+        { model: 'test-model', contents: 'hello' },
+        'prompt-id',
+      ),
     ]);
 
     expect(openaiMockState.createCount).toBe(1);
@@ -150,10 +163,10 @@ describe('createContentGenerator', () => {
 
     await preloadContentGenerator(generator);
     resetPreloadedContentGenerator(generator);
-    await generator.embedContent({
-      model: 'test-model',
-      contents: 'hello',
-    });
+    await generator.generateContent(
+      { model: 'test-model', contents: 'hello' },
+      'prompt-id',
+    );
 
     expect(openaiMockState.createCount).toBe(2);
   });
@@ -176,15 +189,15 @@ describe('createContentGenerator', () => {
     );
 
     await preloadContentGenerator(generator);
-    await generator.embedContent({
-      model: 'test-model',
-      contents: 'first',
-    });
+    await generator.generateContent(
+      { model: 'test-model', contents: 'first' },
+      'prompt-id',
+    );
     resetPreloadedContentGenerator(generator);
-    await generator.embedContent({
-      model: 'test-model',
-      contents: 'second',
-    });
+    await generator.generateContent(
+      { model: 'test-model', contents: 'second' },
+      'prompt-id',
+    );
 
     expect(openaiMockState.createCount).toBe(1);
   });
@@ -213,10 +226,10 @@ describe('createContentGenerator', () => {
     await preloadContentGenerator(generator);
     workingDir = '/workspace/after';
     resetPreloadedContentGenerator(generator);
-    await generator.embedContent({
-      model: 'test-model',
-      contents: 'hello',
-    });
+    await generator.generateContent(
+      { model: 'test-model', contents: 'hello' },
+      'prompt-id',
+    );
 
     expect(openaiLoggerMockState.constructorCalls).toEqual([
       { customLogDir: 'logs', cwd: '/workspace/before' },
@@ -250,7 +263,7 @@ describe('createContentGenerator', () => {
       (error: unknown) => error,
     );
     const firstUseError = await generator
-      .embedContent({ model: 'test-model', contents: 'hello' })
+      .generateContent({ model: 'test-model', contents: 'hello' }, 'prompt-id')
       .catch((error: unknown) => error);
 
     expect(preloadError).toBeInstanceOf(Error);
@@ -330,7 +343,10 @@ describe('createContentGenerator - ERR_MODULE_NOT_FOUND handling', () => {
       mockConfig,
     );
     await expect(
-      generator.embedContent({ model: 'test-model', contents: 'hello' }),
+      generator.generateContent(
+        { model: 'test-model', contents: 'hello' },
+        'prompt-id',
+      ),
     ).rejects.toThrow('network timeout');
   });
 
@@ -356,7 +372,10 @@ describe('createContentGenerator - ERR_MODULE_NOT_FOUND handling', () => {
         },
         mockConfig,
       );
-      await generator.embedContent({ model: 'test-model', contents: 'hello' });
+      await generator.generateContent(
+        { model: 'test-model', contents: 'hello' },
+        'prompt-id',
+      );
       expect.unreachable('should have thrown');
     } catch (error) {
       expect(error).toBeInstanceOf(Error);

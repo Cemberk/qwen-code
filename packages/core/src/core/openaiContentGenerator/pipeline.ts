@@ -5,14 +5,12 @@
  */
 
 import type OpenAI from 'openai';
-import {
-  type GenerateContentParameters,
-  GenerateContentResponse,
-} from '@google/genai';
+import type { GenerateContentParameters } from '@google/genai';
 import type {
   ContentGeneratorConfig,
   PromptCacheSharingParameters,
 } from '../contentGenerator.js';
+import { GenerateContentResponse } from '../genai-compat.js';
 import { OpenAIContentConverter } from './converter.js';
 import { openaiRequestCaptureContext } from './requestCaptureContext.js';
 import { StreamingToolCallParser } from './streamingToolCallParser.js';

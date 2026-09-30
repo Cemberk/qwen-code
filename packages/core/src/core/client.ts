@@ -84,7 +84,6 @@ import {
 
 // Services
 import { LoopDetectionService } from '../services/loopDetectionService.js';
-import { CommitAttributionService } from '../services/commitAttribution.js';
 import type { UserPromptRecordPayload } from '../services/chatRecordingService.js';
 
 // Tools
@@ -210,8 +209,7 @@ export enum SendMessageType {
   /**
    * A message delivered to the leader from a teammate. Behaves like a
    * fresh top-level interaction (loop-detector reset + interaction span)
-   * but is not a user prompt — it does not bump commit attribution or get
-   * recorded as a user message.
+   * but is not a user prompt — it is not recorded as a user message.
    */
   Teammate = 'teammate',
   /** Runtime-owned continuation for an active Goal. */
@@ -630,9 +628,6 @@ export class LlmClient {
           resumeTokenCounts.isEstimated,
         );
       }
-
-      // Restore attribution state from the last snapshot in the session
-      this.restoreAttributionFromSession(resumedSessionData.conversation);
     } else {
       if (sessionStartSource !== undefined) {
         await this.startChat(undefined, sessionStartSource, signal);
@@ -646,36 +641,6 @@ export class LlmClient {
 
     // Clean up stale tool result files from previous sessions (fire-and-forget)
     void cleanupOldToolResults(Storage.getGlobalTempDir(), 24 * 60 * 60 * 1000);
-  }
-
-  /**
-   * Restore attribution state from the last snapshot in a resumed session.
-   */
-  private restoreAttributionFromSession(conversation: {
-    messages: Array<{ subtype?: string; systemPayload?: unknown }>;
-  }): void {
-    // Find the last attribution snapshot in the session
-    let lastSnapshot: unknown = null;
-    for (const msg of conversation.messages) {
-      if (
-        msg.subtype === 'attribution_snapshot' &&
-        msg.systemPayload &&
-        typeof msg.systemPayload === 'object' &&
-        'snapshot' in msg.systemPayload
-      ) {
-        lastSnapshot = (msg.systemPayload as { snapshot: unknown }).snapshot;
-      }
-    }
-    if (lastSnapshot && typeof lastSnapshot === 'object') {
-      try {
-        CommitAttributionService.getInstance().restoreFromSnapshot(
-          lastSnapshot as import('../services/commitAttribution.js').AttributionSnapshot,
-        );
-        debugLogger.debug('Restored attribution state from session snapshot');
-      } catch {
-        debugLogger.warn('Failed to restore attribution snapshot');
-      }
-    }
   }
 
   private async restoreLoadedSkillsFromHistory(
@@ -3904,18 +3869,6 @@ export class LlmClient {
           signal,
         );
 
-        // Track prompt count for commit attribution. Only the user typing a
-        // fresh prompt should bump the counter — `ToolResult` (tool-call
-        // continuation), `Retry`, `Hook`, `Cron`, and `Notification` are all
-        // model-driven or background-driven re-entries of the same logical
-        // turn. Counting them inflates the "N-shotted" label in the PR
-        // attribution trailer (one user message becomes "10-shotted" when it
-        // triggered ten tool calls).
-        const attributionService = CommitAttributionService.getInstance();
-        if (messageType === SendMessageType.UserQuery) {
-          attributionService.incrementPromptCount();
-        }
-
         // record user/cron message for session management
         if (messageType === SendMessageType.Cron) {
           this.config
@@ -3972,17 +3925,11 @@ export class LlmClient {
       // headless host excludes runtime Goal turns from the same cap for the
       // same reason, so counting them here would split the two ceilings.
       if (messageType !== SendMessageType.Retry && !isGoalRuntimeTurn) {
-        // Attribution snapshots are recorded on every non-retry turn. File
-        // history snapshots are created only at UserQuery boundaries; later
-        // tool edits update that latest snapshot through trackEdit().
-        this.config
-          .getChatRecordingService()
-          ?.recordAttributionSnapshot(
-            CommitAttributionService.getInstance().toSnapshot(),
-          );
-
+        this.config.getChatRecordingService()?.refreshGitBranch();
         this.sessionTurnCount++;
 
+        // File history snapshots are created only at UserQuery boundaries;
+        // later tool edits update that latest snapshot through trackEdit().
         if (messageType === SendMessageType.UserQuery) {
           try {
             await this.config.getFileHistoryService().makeSnapshot(prompt_id);

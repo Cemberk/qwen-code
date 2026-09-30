@@ -125,7 +125,7 @@ When the selected model comes from `modelProviders`, Qwen Code reads the key fro
 Environment variables can come from these sources, from **highest to lowest priority**:
 
 1. **Shell environment**: `export` in your shell profile, or inline before `qwen`.
-2. **`.env` files**: Qwen Code loads the **first** `.env` file it finds; variables aren't merged across files, and variables already present in the process environment aren't overwritten. The search order, walking upward from the current directory, is `.qwen/.env` then `.env`. If nothing is found, it falls back to `~/.qwen/.env` and then `~/.env`. `.qwen/.env` is recommended because it keeps Qwen Code variables separate from other tools. Some variables (like `DEBUG` and `DEBUG_MODE`) are ignored in project-level `.env` files.
+2. **`.env` files**: variables already present in the process environment aren't overwritten. In a trusted folder Qwen Code reads the first project `.env` it finds walking upward from the current directory (`.qwen/.env` then `.env`); `~/.qwen/.env` and then `~/.env` are always read after it. Model server variables (`OPENAI_*`, `QWEN_CUSTOM_API_KEY_*`, `QWEN_MODEL`) are only taken from `~/.qwen/.env`, `~/.env` or your user settings — a project `.env` can never set them. Some variables (like `DEBUG` and `DEBUG_MODE`) are also ignored in project-level `.env` files.
 3. **`settings.json` → `env`** (lowest priority): applied only when a variable isn't already set by the environment or a `.env` file.
 
 `--openai-api-key` takes precedence over an `OPENAI_API_KEY` value from any of these sources.
@@ -133,5 +133,5 @@ Environment variables can come from these sources, from **highest to lowest prio
 ## Security notes
 
 - Keep the model server bound to loopback as well (for example `127.0.0.1`), so other machines on your network can't reach it.
-- If your server requires a real API key, don't commit it to version control. Prefer `.qwen/.env` (kept out of git) over the `env` field of a shared `settings.json`.
+- If your server requires a real API key, don't commit it to version control. Keep it in `~/.qwen/.env` or your user `settings.json`.
 - Treat terminal output as sensitive if it prints credentials.

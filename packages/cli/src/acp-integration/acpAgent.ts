@@ -1430,8 +1430,6 @@ type QwenCoreSettingKey =
   | 'general.sessionRecapAwayThresholdMinutes'
   | 'general.terminalBell'
   | 'general.notificationMode'
-  | 'general.gitCoAuthor.commit'
-  | 'general.gitCoAuthor.pr'
   | 'general.defaultFileEncoding'
   | 'context.fileFiltering.respectGitIgnore'
   | 'context.fileFiltering.respectQwenIgnore'
@@ -1495,8 +1493,6 @@ const QWEN_CORE_SETTING_DEFINITIONS = {
     type: 'enum',
     values: ['all', 'task-complete'],
   },
-  'general.gitCoAuthor.commit': { type: 'boolean' },
-  'general.gitCoAuthor.pr': { type: 'boolean' },
   'general.defaultFileEncoding': {
     type: 'enum',
     values: ['utf-8', 'utf-8-bom'],
@@ -1903,20 +1899,20 @@ function readCoreSettingValues(
  * normalized exactly the way boot accepts them (parseApprovalModeValue
  * trims, lowercases, and maps the legacy `auto_edit`/`autoedit` aliases), so
  * reload convergence agrees with the settings file for every boot-accepted
- * spelling. A MISSING or falsy key folds to AUTO — the same default
+ * spelling. A MISSING or falsy key folds to DEFAULT — the same default
  * loadCliConfig derives in either case — so a key deletion reaches live
  * sessions on reload instead of pinning a stale privileged mode until daemon
  * restart.
  * A PRESENT but unparseable value returns undefined: boot rejects that file
  * outright (loadCliConfig has no catch around parseApprovalModeValue), so
- * folding it to AUTO would silently escalate the approval gate for every
+ * folding it to DEFAULT would silently change the approval gate for every
  * live session; the reload loop keeps sessions on their current modes until
  * the file is corrected. Restricted (safe/bare) sessions ignore the file at
  * boot entirely; the reload loop converges them on DEFAULT separately.
  */
 function foldReloadApprovalMode(raw: unknown): ApprovalMode | undefined {
   if (!raw) {
-    return ApprovalMode.AUTO;
+    return ApprovalMode.DEFAULT;
   }
   if (typeof raw === 'string') {
     try {
@@ -3907,7 +3903,6 @@ class QwenAgent implements Agent {
           {
             systemHooks: settings.getSystemHooks(),
             userHooks: settings.getUserHooks(),
-            projectHooks: settings.getProjectHooks(),
           },
           buildDisabledSkillNamesProvider(settings),
           undefined,
@@ -13552,13 +13547,11 @@ class QwenAgent implements Agent {
           reloadedSessionWorkflow,
         );
 
-        // Fold a missing key to the fresh-session default (AUTO for
-        // unrestricted sessions; restricted sessions converge on DEFAULT per
-        // session below) so a key deletion reaches live sessions too. A
-        // present-but-invalid value folds to undefined instead: boot rejects
-        // that file, so reload must not converge live sessions on it either
-        // (folding it to AUTO would silently escalate the approval gate),
-        // and the undefined is never recorded as converged.
+        // Fold a missing key to the fresh-session default (DEFAULT) so a key
+        // deletion reaches live sessions too. A present-but-invalid value
+        // folds to undefined instead: boot rejects that file, so reload must
+        // not converge live sessions on it either, and the undefined is never
+        // recorded as converged.
         const reloadedApprovalMode = foldReloadApprovalMode(
           newMerged.tools?.approvalMode,
         );
@@ -14099,7 +14092,6 @@ class QwenAgent implements Agent {
       {
         systemHooks: settings.getSystemHooks(),
         userHooks: settings.getUserHooks(),
-        projectHooks: settings.getProjectHooks(),
       },
       // CRITICAL: close over the per-request `settings` (LoadedSettings
       // instance), NOT over the `mergedSettings` snapshot built above.

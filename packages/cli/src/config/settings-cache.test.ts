@@ -91,6 +91,11 @@ describe('loadSettingsCached', () => {
       'QWEN_CODE_SYSTEM_DEFAULTS_PATH',
       path.join(tmpRoot, 'system', 'system-defaults.json'),
     );
+    // Folder trust is on by default; trust every workspace under test so
+    // workspace settings and project `.env` files take part in the cache key.
+    writeJson(path.join(qwenHome, 'trustedFolders.json'), {
+      [path.join(tmpRoot, 'project')]: 'TRUST_FOLDER',
+    });
     resetModuleState();
   });
 
@@ -135,16 +140,16 @@ describe('loadSettingsCached', () => {
 
     writeJson(
       workspaceSettingsPath(),
-      versioned({ model: { name: 'from-workspace' } }),
+      versioned({ ui: { theme: 'from-workspace' } }),
     );
     const second = loadSettingsCached(workspaceDir);
     expect(second).not.toBe(first);
-    expect(second.merged.model?.name).toBe('from-workspace');
+    expect(second.merged.ui?.theme).toBe('from-workspace');
 
     fs.rmSync(workspaceSettingsPath());
     const third = loadSettingsCached(workspaceDir);
     expect(third).not.toBe(second);
-    expect(third.merged.model?.name).toBeUndefined();
+    expect(third.merged.ui?.theme).toBeUndefined();
   });
 
   it('reloads when a .env file appears closer to the workspace', () => {
@@ -258,21 +263,18 @@ describe('loadSettingsCached', () => {
   it('keeps independent entries per workspace directory', () => {
     const otherWorkspace = path.join(tmpRoot, 'project', 'other');
     fs.mkdirSync(otherWorkspace, { recursive: true });
-    writeJson(
-      workspaceSettingsPath(),
-      versioned({ model: { name: 'ws-app' } }),
-    );
+    writeJson(workspaceSettingsPath(), versioned({ ui: { theme: 'ws-app' } }));
     writeJson(
       workspaceSettingsPath(otherWorkspace),
-      versioned({ model: { name: 'ws-other' } }),
+      versioned({ ui: { theme: 'ws-other' } }),
     );
 
     const first = loadSettingsCached(workspaceDir);
     const other = loadSettingsCached(otherWorkspace);
 
     expect(other).not.toBe(first);
-    expect(first.merged.model?.name).toBe('ws-app');
-    expect(other.merged.model?.name).toBe('ws-other');
+    expect(first.merged.ui?.theme).toBe('ws-app');
+    expect(other.merged.ui?.theme).toBe('ws-other');
     expect(loadSettingsCached(workspaceDir)).toBe(first);
     expect(loadSettingsCached(otherWorkspace)).toBe(other);
   });

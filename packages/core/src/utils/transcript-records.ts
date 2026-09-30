@@ -125,6 +125,7 @@ const KNOWN_RECORD_SUBTYPES = new Set([
   'slash_command',
   'ui_telemetry',
   'at_command',
+  // Legacy: no longer written, still present in older transcripts.
   'attribution_snapshot',
   'notification',
   'background_task_completed',

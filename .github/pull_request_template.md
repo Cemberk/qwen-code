@@ -15,9 +15,9 @@ Don't hard-wrap paragraphs: GitHub renders single newlines as <br>, so wrapped t
 ## Reviewer Test Plan
 
 <!--
-How a reviewer can confirm this PR: reproduction steps, expected vs observed behavior, and evidence. CI runs on macOS, Windows, and Linux — Tested on is what you verified locally.
+How a reviewer can confirm this PR: reproduction steps, expected vs observed behavior, and evidence. CI runs on Linux — Tested on is what you verified locally.
 
-User-visible / TUI: Before/After with tmux-real-user-testing skill, screenshots, or a short recording.
+User-visible / TUI: Before/After with tmux captures, screenshots, or a short recording.
 Non–user-visible (refactor, types, docs): commands and output below; write N/A under Before/After.
 -->
 

@@ -149,11 +149,10 @@ export function validateExecutionSandboxSelection(
     policy &&
     ((legacy && ![false, '0', 'false'].includes(legacy as string | boolean)) ||
       process.env['SANDBOX']?.trim() ||
-      process.env['QWEN_SANDBOX_NET']?.trim() ||
-      process.env['QWEN_SANDBOX_PROXY_COMMAND']?.trim())
+      process.env['QWEN_SANDBOX_NET']?.trim())
   ) {
     throw new InvalidExecutionSandboxConfigError(
-      'tools.executionSandbox cannot be combined with a whole-CLI sandbox, SANDBOX marker, QWEN_SANDBOX_NET or QWEN_SANDBOX_PROXY_COMMAND. Remove the legacy configuration and restart.',
+      'tools.executionSandbox cannot be combined with a whole-CLI sandbox, SANDBOX marker or QWEN_SANDBOX_NET. Remove the legacy configuration and restart.',
     );
   }
   return policy;

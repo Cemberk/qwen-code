@@ -24,10 +24,6 @@ import {
   isUnattendedMode,
   type HeartbeatInfo,
 } from '../utils/retry.js';
-import {
-  isQuotaExhaustedError,
-  formatQuotaExhaustedMessage,
-} from '../utils/quotaErrorDetection.js';
 import { getErrorStatus, isAbortError } from '../utils/errors.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
 import {
@@ -3714,32 +3710,12 @@ export class LlmChat {
             // Handle rate-limit / throttling errors returned as stream content.
             // These arrive as StreamContentError with finish_reason="error_finish"
             // from the pipeline, containing the throttling message in the content.
-            // Covers TPM throttling, GLM rate limits, and other provider throttling.
+            // Covers TPM throttling and other server throttling.
             // Classify once per failed attempt; reused by the rate-limit
             // diagnostics below and the transport-retry decision further down.
             const classification = classifyRetryError(error, {
               extraRetryErrorCodes,
             });
-
-            // Permanent quota exhaustion (e.g. Bailian token-plan "1-week
-            // quota has been exhausted, will reset at ...") can arrive
-            // mid-stream as a StreamContentError, bypassing retryWithBackoff
-            // (which only wraps stream establishment). Fast-fail before the
-            // rate-limit branch: its 429 code would otherwise schedule a 1-5
-            // minute delay on an error that cannot succeed until the reset
-            // time. Throws a plain Error (no .status) and skips model
-            // fallback, matching the retryWithBackoff fast-fail.
-            if (isQuotaExhaustedError(error)) {
-              debugLogger.warn('Quota exhausted mid-stream, fast-failing', {
-                retryPath: 'stream',
-                retryDecision: 'fail-fast',
-                errorKind: classification.kind,
-                classificationReason: classification.reason,
-              });
-              throw new Error(formatQuotaExhaustedMessage(error), {
-                cause: error,
-              });
-            }
 
             const isRateLimit = isRateLimitError(error, extraRetryErrorCodes);
             if (isRateLimit) {

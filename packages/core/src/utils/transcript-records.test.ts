@@ -509,7 +509,6 @@ describe('validateTranscriptRecord', () => {
     slash_command: true,
     ui_telemetry: true,
     at_command: true,
-    attribution_snapshot: true,
     notification: true,
     background_task_completed: true,
     cron: true,
@@ -552,6 +551,18 @@ describe('validateTranscriptRecord', () => {
       ).toEqual([]);
     },
   );
+
+  it('still knows the legacy attribution_snapshot subtype of old transcripts', () => {
+    const { diagnostics } = validateTranscriptRecord(
+      record('system-record', null, {
+        type: 'system',
+        subtype: 'attribution_snapshot',
+      }),
+    );
+    expect(
+      diagnostics.filter((diagnostic) => diagnostic.path === 'subtype'),
+    ).toEqual([]);
+  });
 
   // Likewise for record types.
   const RECORDED_TYPES: Record<ChatRecord['type'], true> = {

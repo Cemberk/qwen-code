@@ -75,15 +75,8 @@ const DECISION_PRIORITY: Readonly<Record<PermissionDecision, number>> = {
  * Split a command for `Bash(...)` rule matching, recognising a trailing Bash
  * comment when it is safe to do so (#11815).
  *
- * The fast path needs one property, not string equality: a `#` recognised
- * here must still begin a comment in the text the shell executes. Equality is
- * unachievable — `ShellTool.execute()` splices attribution trailers into a
- * quoted `git commit -m` / `gh pr create --body` argument after this decision,
- * and `cmd`/PowerShell execution prepends an `applyUtf8Prefix()` encoding
- * prefix. The property survives the trailer splice only because both
- * rewriters trim a trailing unquoted comment first, so the splice lands ahead
- * of the `#`; a rewriter that spliced after it would insert a newline that
- * ends the comment and revives the tail.
+ * The fast path needs one property: a `#` recognised here must still begin a
+ * comment in the text the shell executes.
  *
  * `monitor` is excluded because its scanned string is not an invocation at
  * all: `normalizePermissionContext()` substitutes the quote-stripped

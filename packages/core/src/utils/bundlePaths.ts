@@ -19,9 +19,7 @@ import { fileURLToPath } from 'node:url';
  * the authoritative definition for runtime callers.
  *
  * If you change this value, also re-check anything that filters or lists
- * `dist/` entries (e.g. `scripts/prepare-package.js`,
- * `scripts/create-standalone-package.js`,
- * `vscode-ide-companion/scripts/copy-bundled-cli.js`).
+ * `dist/` entries (e.g. `scripts/prepare-package.js`).
  */
 export const BUNDLE_CHUNK_DIR = 'chunks';
 

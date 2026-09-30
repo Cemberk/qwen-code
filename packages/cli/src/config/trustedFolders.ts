@@ -212,7 +212,7 @@ function writeTrustedFolders(
 ): Record<string, TrustLevel> {
   const dirPath = path.dirname(filePath);
   if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
+    fs.mkdirSync(dirPath, { recursive: true, mode: 0o700 });
   }
 
   const release = lockfile.lockSync(filePath, {
@@ -277,8 +277,7 @@ function writeTrustedFolders(
 
 /** Is folder trust feature enabled per the current applied settings */
 export function isFolderTrustEnabled(settings: Settings): boolean {
-  const folderTrustSetting = settings.security?.folderTrust?.enabled ?? false;
-  return folderTrustSetting;
+  return settings.security?.folderTrust?.enabled ?? true;
 }
 
 export function getExplicitTrustLevel(

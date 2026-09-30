@@ -228,10 +228,9 @@ describe('linter directories', () => {
 // The --write to --check flip in runPrettier() is the whole point of the
 // Prettier lane: --write reformats in place and exits 0 whether or not
 // anything changed, so the lane reported a pass on unformatted code for as
-// long as it was there (#11109). Nothing else pins the flag —
-// ci-platform-lanes.test.js asserts the step exists and is gated, not what it
-// runs — so a refactor or a well-meant "make lint auto-fix again" could
-// restore the silent pass with every suite green.
+// long as it was there (#11109). Nothing else pins the flag, so a refactor or
+// a well-meant "make lint auto-fix again" could restore the silent pass with
+// every suite green.
 describe('prettier lane', () => {
   const repoRoot = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),

@@ -142,16 +142,24 @@ export const PROJECT_ENV_HARDCODED_EXCLUSIONS = [
   'GIT_CONFIG_COUNT',
   'GIT_CONFIG_PARAMETERS',
   // Whole-CLI sandbox selection and network controls remain operator inputs.
-  // QWEN_SANDBOX decides whether a legacy container/Seatbelt boundary runs,
-  // QWEN_SANDBOX_IMAGE selects its image, and the proxy command can execute on
-  // the host during launcher setup. The tool execution sandbox rejects these
+  // QWEN_SANDBOX decides whether a legacy container/Seatbelt boundary runs and
+  // QWEN_SANDBOX_IMAGE selects its image. The tool execution sandbox rejects these
   // legacy controls when its policy is active. A project `.env` or settings.env
   // must not select either boundary or create a mixed-boundary startup failure.
   // The operator's launch environment or a home `.env` remains trusted.
   'QWEN_SANDBOX',
   'QWEN_SANDBOX_IMAGE',
-  'QWEN_SANDBOX_PROXY_COMMAND',
   'QWEN_SANDBOX_NET',
+  // The container/Seatbelt launcher reads these to add docker flags, host
+  // mounts, published ports, container env, the Seatbelt profile, and to build
+  // an image from source — the same operator-only boundary as QWEN_SANDBOX.
+  'SANDBOX_FLAGS',
+  'SANDBOX_MOUNTS',
+  'SANDBOX_PORTS',
+  'SANDBOX_ENV',
+  'SANDBOX_SET_UID_GID',
+  'SEATBELT_PROFILE',
+  'BUILD_SANDBOX',
   // Runtime markers come from the launcher, never from configuration files.
   // They also belong to the all-scope provenance gate below.
   'SANDBOX',
@@ -252,6 +260,47 @@ export function isHardcodedProjectEnvExclusion(key: string): boolean {
     HARDCODED_PROJECT_ENV_EXCLUSIONS.has(lowerKey) ||
     HARDCODED_PROJECT_ENV_EXCLUSION_PATTERNS.some((pattern) =>
       pattern.test(lowerKey),
+    )
+  );
+}
+
+// Variables that pick the model server, its credentials and model, or that
+// route session data (telemetry, debug log, system prompt dump, memory) and
+// commands (Mermaid renderer). A project `.env` and a workspace settings `env`
+// block must never set them: a repository must not redirect the conversation
+// or run its own renderer. Unlike the hardcoded tier above, the operator's own
+// User/System settings `env` may still set them — `/auth` stores the API key
+// there under a QWEN_CUSTOM_API_KEY_* name.
+const PROJECT_ENV_OPERATOR_ONLY_KEYS = [
+  'QWEN_MODEL',
+  'QWEN_DEBUG_LOG_FILE',
+  'QWEN_SYSTEM_MD',
+  'QWEN_SYSTEM_IDENTITY_MD',
+  'QWEN_WRITE_SYSTEM_MD',
+  'QWEN_CODE_MEMORY_BASE_DIR',
+  'QWEN_CODE_MEMORY_LOCAL',
+  'QWEN_CODE_MEMORY_TEAM',
+  'QWEN_CODE_MERMAID_MMD_CLI',
+  'QWEN_CODE_MERMAID_ALLOW_LOCAL_RENDERERS',
+  'QWEN_CODE_SUPPRESS_YOLO_WARNING',
+] as const;
+
+const PROJECT_ENV_OPERATOR_ONLY_PREFIXES = [
+  'openai_',
+  'qwen_custom_api_key_',
+  'qwen_telemetry_',
+] as const;
+
+const PROJECT_ENV_OPERATOR_ONLY: ReadonlySet<string> = new Set(
+  PROJECT_ENV_OPERATOR_ONLY_KEYS.map((key) => key.toLowerCase()),
+);
+
+export function isOperatorOnlyEnvKey(key: string): boolean {
+  const lowerKey = key.toLowerCase();
+  return (
+    PROJECT_ENV_OPERATOR_ONLY.has(lowerKey) ||
+    PROJECT_ENV_OPERATOR_ONLY_PREFIXES.some((prefix) =>
+      lowerKey.startsWith(prefix),
     )
   );
 }

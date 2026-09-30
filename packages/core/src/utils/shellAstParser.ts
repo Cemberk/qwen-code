@@ -98,7 +98,6 @@ const READ_ONLY_ROOT_COMMANDS = new Set([
   'less',
   'ls',
   'more',
-  'printenv',
   'printf',
   'ps',
   'pwd',
@@ -157,9 +156,13 @@ const UNIQ_VALUE_OPTIONS = new Set(
 );
 /**
  * Write-redirection operators in file_redirect nodes.
- * Input-only redirections (`<`, `<<`, `<<<`) are safe.
+ * Input-only redirections (`<`, `<<`, `<<<`) are safe unless their target is
+ * a bash network socket or an expansion.
  */
 const WRITE_REDIRECT_OPERATORS = new Set(['>', '>>', '&>', '&>>', '>|']);
+const NETWORK_REDIRECT_TARGET = /^\/dev\/(?:tcp|udp)\//;
+/** A process environment file such as `/proc/self/environ`. */
+const ENVIRON_PATH = /(?:^|\/)environ$/;
 
 /**
  * Map of root command → known sub-command sets.
@@ -828,7 +831,7 @@ function evaluateGitSafety(args: string[]): ShellCommandSafety {
   if (subcommand === 'remote') {
     const action = rest.find((arg) => !arg.startsWith('-'))?.toLowerCase();
     if (!action) return invokesHelper ? 'unknown' : 'read-only';
-    if (['show', 'get-url'].includes(action))
+    if (action === 'get-url')
       return rest.some((arg) =>
         /^(?:add|remove|rm|rename|set-branches|set-head|set-url|update|prune)$/i.test(
           arg,
@@ -1027,6 +1030,11 @@ function evaluateCommandSafety(commandNode: SyntaxNode): ShellCommandSafety {
     (root === 'printf' &&
       beforeTerminator(args).some((arg) => /^-[^-]*v/.test(arg))) ||
     ['less', 'more'].includes(root) ||
+    // `ps e` (procps) and `ps -E` (BSD) print each process's environment.
+    (root === 'ps' &&
+      beforeTerminator(args).some(
+        (arg) => /^-[^-]*E/.test(arg) || /^[a-zA-Z]*e[a-zA-Z]*$/.test(arg),
+      )) ||
     (['rg', 'ripgrep'].includes(root) &&
       beforeTerminator(args).some((arg) =>
         /^(?:--(?:hostname-bin|pre)(?:=|$)|--search-zip$|-[^-]*z)/.test(arg),
@@ -1039,11 +1047,13 @@ function evaluateCommandSafety(commandNode: SyntaxNode): ShellCommandSafety {
   if (
     result === 'read-only' &&
     root &&
-    /^(awk|find|git|printf|rg|ripgrep|sed|sort|tree|uniq)$/.test(root) &&
+    /^(awk|echo|find|git|printf|rg|ripgrep|sed|sort|tree|uniq)$/.test(root) &&
     argNodes.some((node) => hasShellExpansion(node))
   ) {
     result = 'unknown';
   }
+  if (args.some((arg) => ENVIRON_PATH.test(arg)))
+    result = mergeSafety(result, 'unknown');
   if (
     result === 'write' &&
     !['find', 'git', 'sed', 'sort', 'tree'].includes(root ?? '') &&
@@ -1074,10 +1084,17 @@ function evaluateRedirectionSafety(node: SyntaxNode): ShellCommandSafety {
     );
     if (!operator) return 'unknown';
     if (WRITE_REDIRECT_OPERATORS.has(operator.type)) return 'write';
+    const destination = redirect.childForFieldName('destination');
+    const target = destination ? stripOuterQuotes(destination.text) : '';
+    if (
+      destination &&
+      (NETWORK_REDIRECT_TARGET.test(target) ||
+        ENVIRON_PATH.test(target) ||
+        hasShellExpansion(destination))
+    )
+      return 'unknown';
     if (operator.type === '>&') {
-      const destination = redirect.childForFieldName('destination');
       if (!destination) return 'unknown';
-      const target = stripOuterQuotes(destination.text);
       if (/^(?:\d+|-)$/.test(target)) continue;
       result = mergeSafety(
         result,

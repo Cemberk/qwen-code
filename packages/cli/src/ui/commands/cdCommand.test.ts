@@ -59,6 +59,10 @@ describe('cdCommand', () => {
             addWorkingDirectoryChangedContext,
           }),
         } as unknown as Config,
+        // Folder trust is on by default; the trust prompt has its own cases.
+        settings: {
+          merged: { security: { folderTrust: { enabled: false } } },
+        },
       },
     });
   });

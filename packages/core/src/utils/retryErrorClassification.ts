@@ -13,7 +13,6 @@ export type RetryErrorKind =
   | 'provider'
   | 'transport'
   | 'abort'
-  | 'provider-business'
   | 'unknown';
 
 export type RetryErrorDiagnosis = 'retryable' | 'fail-fast' | 'unknown';
@@ -40,9 +39,8 @@ export interface RetryErrorClassification {
  * logging. It also drives control: `isRetryableUpstreamError` below turns a
  * `'retryable'` diagnosis into the retry verdict for every error an HTTP status
  * cannot decide, and both retry gates end there; a `'fail-fast'` diagnosis keeps
- * a permanent error (e.g. allocated-quota exhaustion surfacing as HTTP 429) out
- * of the unbounded persistent loop; and `isFallbackEligible` reads the status
- * recorded here to decide model fallback.
+ * a permanent error out of the unbounded persistent loop; and
+ * `isFallbackEligible` reads the status recorded here to decide model fallback.
  */
 export function classifyRetryError(
   error: unknown,
@@ -73,15 +71,6 @@ export function classifyRetryError(
     ...(providerMessage !== undefined ? { providerMessage } : {}),
     ...(requestId !== undefined ? { requestId } : {}),
   };
-
-  if (isAllocatedQuotaExceeded(providerCode)) {
-    return {
-      kind: 'provider-business',
-      diagnosis: 'fail-fast',
-      reason: 'allocated-quota-exceeded',
-      ...common,
-    };
-  }
 
   if (isRateLimitError(error, context.extraRetryErrorCodes)) {
     const kind: RetryErrorKind =
@@ -335,10 +324,6 @@ const TRANSPORT_ERROR_CODES = new Set([
   'UND_ERR_SOCKET',
 ]);
 
-function isAllocatedQuotaExceeded(providerCode?: string): boolean {
-  return providerCode === 'Throttling.AllocationQuota';
-}
-
 // Provider codes meaning "re-sending this exact request can never succeed":
 // content moderation, credentials/billing, a malformed request, and a payload
 // refused for its size. Moderation necessarily happens after the provider has
@@ -348,12 +333,11 @@ function isAllocatedQuotaExceeded(providerCode?: string): boolean {
 // identical payload cannot reach it.
 //
 // Separators are optional and case is ignored because one rejection reaches
-// this classifier in several spellings (`data_inspection_failed`,
-// `DataInspectionFailed`, `ResponseDataInspectionFailed`). The anchors are
-// deliberate: under-matching costs a wasted retry ladder, over-matching costs a
-// transient failure that is never retried — the bug this branch exists to fix —
-// so open-ended sub-code qualifiers such as `InvalidParameter.Range` are left
-// out on purpose.
+// this classifier in several spellings (`content_filter`, `ContentFilter`).
+// The anchors are deliberate: under-matching costs a wasted retry ladder,
+// over-matching costs a transient failure that is never retried — the bug this
+// branch exists to fix — so open-ended sub-code qualifiers such as
+// `InvalidParameter.Range` are left out on purpose.
 //
 // The credential, entitlement, missing-model and billing spellings are `type`
 // values the Anthropic SDK maps to 401/403/404 (400 for billing), every one of
@@ -365,7 +349,7 @@ function isAllocatedQuotaExceeded(providerCode?: string): boolean {
 // below, while `rate_limit_error` and `overloaded_error` are caught earlier by
 // the rate-limit arm and its Retry-After-aware delay.
 const PERMANENT_PROVIDER_CODE_PATTERN =
-  /^(?:response[_-]?data[_-]?inspection[_-]?failed|data[_-]?inspection[_-]?failed|content[_-]?filter|invalid[_-]?api[_-]?key|arrearage|insufficient[_-]?quota|model[._-]?access[_-]?denied|invalid[_-]?request[_-]?error|authentication[_-]?error|permission[_-]?error|not[_-]?found[_-]?error|billing[_-]?error|invalid[_-]?parameter(?:[_-]?error)?|context[_-]?length[_-]?exceeded|request[_-]?too[_-]?large)$/i;
+  /^(?:content[_-]?filter|invalid[_-]?api[_-]?key|insufficient[_-]?quota|invalid[_-]?request[_-]?error|authentication[_-]?error|permission[_-]?error|not[_-]?found[_-]?error|billing[_-]?error|invalid[_-]?parameter(?:[_-]?error)?|context[_-]?length[_-]?exceeded|request[_-]?too[_-]?large)$/i;
 
 function isPermanentProviderCode(providerCode?: string): boolean {
   return (
@@ -461,22 +445,9 @@ export function isFallbackEligible(
 
 /**
  * The retry verdict for everything a caller does not already short-circuit on
- * an HTTP status of its own: HTTP 429/503 and provider rate-limit codes,
+ * an HTTP status of its own: HTTP 429/503 and extra rate-limit codes,
  * transport failures, 5xx and 529, and status-less upstream bodies the provider
  * traced with a request id.
- *
- * The rate-limit term is not the redundancy it looks like, but neither is it
- * what keeps throttling retryable: `classifyRetryError` runs the same
- * `isRateLimitError` with the same `extraRetryErrorCodes`, so a throttle this
- * term matches already classifies `'retryable'` without it — deleting the term
- * left the retry, classification and send-loop suites green apart from the one
- * case below. Its only measurable effect is on an error a branch above the
- * rate-limit one already owns: DashScope's allocated-quota exhaustion, which
- * surfaces as HTTP 429 and classifies `fail-fast`. There the term keeps this
- * verdict retryable, so `retryWithBackoff`'s persistent loop bounds the attempt
- * count with its own fail-fast check (3 attempts) rather than stopping at the
- * first. LlmChat's inline predicate short-circuits on its own `status === 429`
- * line, so none of this applies on that path.
  *
  * Both gates end here so the status-less policy is written once. Kept in this
  * module rather than in `retry.ts` because the package barrel re-exports that
@@ -487,9 +458,8 @@ export function isRetryableUpstreamError(
   extraRetryErrorCodes?: readonly number[],
 ): boolean {
   return (
-    isRateLimitError(error, extraRetryErrorCodes) ||
     classifyRetryError(error, { extraRetryErrorCodes }).diagnosis ===
-      'retryable'
+    'retryable'
   );
 }
 

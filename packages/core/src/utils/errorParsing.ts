@@ -4,11 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  isApiError,
-  isStructuredError,
-  QUOTA_EXHAUSTED_PREFIX,
-} from './quotaErrorDetection.js';
+import { isApiError, isStructuredError } from './quotaErrorDetection.js';
 import { getErrorMessage } from './errors.js';
 
 const RATE_LIMIT_MESSAGE =
@@ -23,9 +19,6 @@ const API_ERROR_PREFIX = '[API Error: ';
  * Accepts:
  * 1) base format: "[API Error: ...]"
  * 2) 429 format: "[API Error: ...]" followed by the quota guidance suffix.
- * 3) friendly quota-exhaustion messages ("Quota exhausted: ...") built by
- *    formatQuotaExhaustedMessage — they also arrive via the plain-string
- *    path (a StreamContentError whose .message is the formatted text).
  *
  * Used as an idempotency guard: when an upstream caller has already passed an
  * Error through parseAndFormatApiError, stuffed the formatted string into
@@ -34,12 +27,6 @@ const API_ERROR_PREFIX = '[API Error: ';
  */
 function isAlreadyFormatted(value: string): boolean {
   const trimmed = value.trimEnd();
-
-  // Friendly quota-exhaustion messages built by formatQuotaExhaustedMessage
-  // are already in final form — surface them verbatim, do not wrap.
-  if (trimmed.startsWith(QUOTA_EXHAUSTED_PREFIX)) {
-    return true;
-  }
 
   if (!trimmed.startsWith(API_ERROR_PREFIX)) {
     return false;

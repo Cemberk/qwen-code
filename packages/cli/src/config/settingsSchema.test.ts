@@ -721,7 +721,7 @@ describe('SettingsSchema', () => {
       expect(
         getSettingsSchema().security.properties.folderTrust.properties.enabled
           .default,
-      ).toBe(false);
+      ).toBe(true);
       expect(
         getSettingsSchema().security.properties.folderTrust.properties.enabled
           .showInDialog,
