@@ -5,19 +5,16 @@
  */
 
 import type { Client } from '@modelcontextprotocol/client';
-import type { CallableTool, FunctionCall, Part, Tool } from '@google/genai';
+import type { CallableTool, Tool } from '@google/genai';
 
-type McpToolClient = Pick<Client, 'listTools' | 'callTool'>;
+type McpToolClient = Pick<Client, 'listTools'>;
 type McpListedTool = Awaited<ReturnType<Client['listTools']>>['tools'][number];
 
 const MAX_LISTED_TOOLS = 100;
 
 // Adapted from @google/genai 2.6.0's `mcpToTool` / `McpCallableTool`
 // (Copyright 2025 Google LLC, Apache-2.0) so the SDK stays type-only.
-export function mcpToTool(
-  client: McpToolClient,
-  config: { timeout?: number } = {},
-): CallableTool {
+export function mcpToTool(client: McpToolClient): Pick<CallableTool, 'tool'> {
   let tools: McpListedTool[] = [];
 
   const initialize = async (): Promise<void> => {
@@ -55,25 +52,6 @@ export function mcpToTool(
             : {}),
         })),
       };
-    },
-
-    async callTool(functionCalls: FunctionCall[]): Promise<Part[]> {
-      await initialize();
-      const parts: Part[] = [];
-      for (const functionCall of functionCalls) {
-        if (!tools.some((tool) => tool.name === functionCall.name)) continue;
-        const result = await client.callTool(
-          { name: functionCall.name!, arguments: functionCall.args },
-          config.timeout ? { timeout: config.timeout } : undefined,
-        );
-        parts.push({
-          functionResponse: {
-            name: functionCall.name,
-            response: result.isError ? { error: result } : result,
-          },
-        });
-      }
-      return parts;
     },
   };
 }

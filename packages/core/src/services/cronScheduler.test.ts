@@ -1140,9 +1140,7 @@ describe('CronScheduler', () => {
 
         const runModeWarns = () =>
           warnSpy.mock.calls.filter(
-            (c) =>
-              /isolated/.test(String(c[0])) &&
-              /create_sub_session/.test(String(c[0])),
+            (c) => /isolated/.test(String(c[0])),
           );
 
         await scheduler.enableDurable('session-1');

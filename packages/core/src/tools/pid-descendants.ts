@@ -13,7 +13,7 @@ const execFileAsync = promisify(execFile);
 
 /**
  * Wall-clock budget for each individual snapshot / per-pid query call.
- * Bounded so a hung process-table walk can't stall pool shutdown.
+ * Bounded so a hung process-table walk can't stall MCP server teardown.
  */
 const QUERY_TIMEOUT_MS = 2_000;
 
@@ -31,7 +31,7 @@ const SNAPSHOT_MAXBUFFER_BYTES = 8 * 1024 * 1024;
 /**
  * Hard cap on recursion depth + total descendants returned. Defense
  * against runaway process trees (forkbomb-style) or pathological
- * containers with thousands of children — pool shutdown should not
+ * containers with thousands of children — MCP teardown should not
  * spend more than ~10s on pid enumeration regardless.
  */
 const MAX_DESCENDANTS = 256;
@@ -40,11 +40,10 @@ const MAX_DEPTH = 8;
 /**
  * Return all descendant PIDs (children, grandchildren, …) of `rootPid`.
  *
- * Cross-platform implementation per `docs/design/f2-mcp-transport-pool.md`
- * Uses this from `PoolEntry.shutdown()` to SIGTERM
+ * `McpClientManager`'s discovery-timeout handler uses this to SIGTERM
  * wrapped server processes (`npx @modelcontextprotocol/server-X`,
  * `uvx ...`, `pnpm dlx ...`) that would otherwise leak when the
- * pool entry's primary child is killed.
+ * server's primary child is killed.
  *
  *
  * the implementation switched from per-pid `pgrep -P <pid>` BFS
@@ -52,7 +51,7 @@ const MAX_DEPTH = 8;
  * BFS (Windows) — which forked one subprocess per node visited — to
  * a single process-table snapshot followed by an in-memory tree walk.
  * Two motivations: (1) ~B^D fork count → 1 fork per call, on the
- * hot pool-shutdown path; (2) snapshot consistency — pre-fix BFS
+ * teardown path; (2) snapshot consistency — pre-fix BFS
  * could miss descendants that forked between adjacent BFS levels.
  *
  * Behavior:

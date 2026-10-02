@@ -25,18 +25,8 @@ import {
   setStartupEventSink,
   createDebugLogger,
   persistSessionUsage,
-  PRIVATE_ACP_CAPABILITY_ENV,
-  PRIVATE_CONVERSATIONS_RUNTIME_ENABLE,
-  PRIVATE_CONVERSATIONS_RUNTIME_ENV,
   uiTelemetryService,
 } from '@qwen-code/qwen-code-core';
-import {
-  EXTERNAL_TOOL_GUARD_PROVIDER_ATTACHED_VALUE,
-  EXTERNAL_TOOL_GUARD_REQUIRED_VALUE,
-  EXTERNAL_TOOL_GUARD_TOKEN_ENV,
-  PRIVATE_EXTERNAL_TOOL_GUARD_ENV,
-  PRIVATE_EXTERNAL_TOOL_GUARD_PROVIDER_ENV,
-} from '@qwen-code/acp-bridge/externalToolGuard';
 import dns from 'node:dns';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -89,11 +79,6 @@ import {
   finalizeStartupProfile,
   isStartupProfilerEnabled,
 } from './utils/startupProfiler.js';
-import {
-  isAcpStartupProfilerEnabled,
-  markAcpStartup,
-  recordAcpConfigStartupEvent,
-} from './utils/acp-startup-profiler.js';
 import {
   relaunchAppInChildProcess,
   relaunchOnExitCode,
@@ -411,7 +396,6 @@ function installInteractiveSignalHandlers(wasRaw: boolean): () => void {
 
 export async function main() {
   profileCheckpoint('main_entry');
-  const acpStartupProfilerEnabled = isAcpStartupProfilerEnabled();
   // Bridge core-package startup events (Config.initialize, MCP discovery,
   // LlmClient.setTools) into the cli's startup profiler. Gated on
   // `isStartupProfilerEnabled()` so that when QWEN_CODE_PROFILE_STARTUP is
@@ -420,37 +404,11 @@ export async function main() {
   // of going through this arrow wrapper and the profiler's own enabled
   // check.
   const startupProfilerEnabled = isStartupProfilerEnabled();
-  if (startupProfilerEnabled || acpStartupProfilerEnabled) {
-    setStartupEventSink((name, attrs) => {
-      if (startupProfilerEnabled) recordStartupEvent(name, attrs);
-      if (acpStartupProfilerEnabled) recordAcpConfigStartupEvent(name);
-    });
+  if (startupProfilerEnabled) {
+    setStartupEventSink((name, attrs) => recordStartupEvent(name, attrs));
   }
   setupUnhandledRejectionHandler();
   initializeWarningHandler();
-
-  const privateAcpParentCapability = process.env[PRIVATE_ACP_CAPABILITY_ENV];
-  delete process.env[PRIVATE_ACP_CAPABILITY_ENV];
-  // Captured beside the private parent capability so a Conversations
-  // provenance marker can never be introduced or withdrawn later by settings
-  // or environment files; acceptance below additionally requires ACP mode and
-  // the capability.
-  const conversationsRuntimeMarkerSeen =
-    process.env[PRIVATE_CONVERSATIONS_RUNTIME_ENV] ===
-    PRIVATE_CONVERSATIONS_RUNTIME_ENABLE;
-  delete process.env[PRIVATE_CONVERSATIONS_RUNTIME_ENV];
-  const privateExternalToolGuard =
-    process.env[PRIVATE_EXTERNAL_TOOL_GUARD_ENV] ===
-    EXTERNAL_TOOL_GUARD_REQUIRED_VALUE
-      ? EXTERNAL_TOOL_GUARD_REQUIRED_VALUE
-      : undefined;
-  delete process.env[PRIVATE_EXTERNAL_TOOL_GUARD_ENV];
-  const privateExternalToolGuardProvider =
-    process.env[PRIVATE_EXTERNAL_TOOL_GUARD_PROVIDER_ENV] ===
-    EXTERNAL_TOOL_GUARD_PROVIDER_ATTACHED_VALUE
-      ? EXTERNAL_TOOL_GUARD_PROVIDER_ATTACHED_VALUE
-      : undefined;
-  delete process.env[PRIVATE_EXTERNAL_TOOL_GUARD_PROVIDER_ENV];
 
   if (process.argv.includes('--bare')) {
     process.env[QWEN_CODE_SIMPLE_ENV_VAR] = '1';
@@ -467,43 +425,9 @@ export async function main() {
     // An unwritable home directory is reported by the first write that needs it.
   }
 
-  markAcpStartup('argsParseStart');
   let argv = await parseArguments();
-  // The full yargs `serve` handler captures and deletes this credential while
-  // parsing the subcommand. Other CLI/ACP paths do not use it, so scrub any
-  // ambient value immediately after argument parsing and before Config,
-  // hooks, MCP servers, or tools can initialize.
-  delete process.env[EXTERNAL_TOOL_GUARD_TOKEN_ENV];
-  markAcpStartup('argsParseEnd');
   profileCheckpoint('after_parse_arguments');
   const isAcpMode = argv.acp || argv.experimentalAcp;
-  const conversationsRuntimeProvenance =
-    isAcpMode &&
-    privateAcpParentCapability !== undefined &&
-    conversationsRuntimeMarkerSeen;
-  const privateAcpChildEnv =
-    isAcpMode && privateAcpParentCapability !== undefined
-      ? {
-          [PRIVATE_ACP_CAPABILITY_ENV]: privateAcpParentCapability,
-          ...(conversationsRuntimeProvenance
-            ? {
-                [PRIVATE_CONVERSATIONS_RUNTIME_ENV]:
-                  PRIVATE_CONVERSATIONS_RUNTIME_ENABLE,
-              }
-            : {}),
-          ...(privateExternalToolGuard
-            ? {
-                [PRIVATE_EXTERNAL_TOOL_GUARD_ENV]: privateExternalToolGuard,
-                ...(privateExternalToolGuardProvider
-                  ? {
-                      [PRIVATE_EXTERNAL_TOOL_GUARD_PROVIDER_ENV]:
-                        privateExternalToolGuardProvider,
-                    }
-                  : {}),
-              }
-            : {}),
-        }
-      : undefined;
 
   if (
     (argv.acp || argv.experimentalAcp) &&
@@ -520,11 +444,9 @@ export async function main() {
   }
 
   // Load user settings — bare mode uses minimal config, normal mode loads full.
-  markAcpStartup('settingsLoadStart');
   const settings = isBareMode(argv.bare)
     ? createMinimalSettings()
     : loadSettings();
-  markAcpStartup('settingsLoadEnd');
   const executionSandboxSettings = validateExecutionSandboxSelection(
     settings.merged,
     argv,
@@ -542,10 +464,6 @@ export async function main() {
       'tools.executionSandbox does not yet support ACP, worktree management, LSP, MCP or extensions.',
     );
   }
-  // A user-level .env or settings reload may have reintroduced the marker;
-  // the accepted value already lives in immutable local state.
-  delete process.env[PRIVATE_CONVERSATIONS_RUNTIME_ENV];
-
   // Propagate corruption state to child process via env vars so
   // relaunchAppInChildProcess() doesn't lose the marker.
   if (settings.corruptedPath) {
@@ -751,19 +669,12 @@ export async function main() {
           )
         : injectStdinIntoArgs(process.argv, stdinData);
 
-      // The seatbelt spawn merges `{ ...process.env, ...childEnv }`, so the
-      // marker must not be sitting in process.env at the handoff: auth
-      // validation above re-runs the environment load, and the accepted
-      // provenance travels in `privateAcpChildEnv`, which is spread last.
-      delete process.env[PRIVATE_CONVERSATIONS_RUNTIME_ENV];
-
       await relaunchOnExitCode(() =>
         start_sandbox(
           sandboxConfig,
           memoryArgs,
           partialConfig,
           sandboxArgs,
-          privateAcpChildEnv,
         ),
       );
       process.exit(0);
@@ -786,7 +697,7 @@ export async function main() {
       // restarts. A one-shot prompt can replace this already-loaded process.
       await relaunchAppInChildProcess(memoryArgs, [], {
         afterSpawn: clearCorruptionEnvVars,
-        childEnv: { ...privateAcpChildEnv, ...getRelaunchEnvProvenance() },
+        childEnv: getRelaunchEnvProvenance(),
         environmentChangedSinceBoot: hasLoadedEnvironmentValues(),
         replaceProcess:
           !isAcpMode &&
@@ -950,7 +861,6 @@ export async function main() {
       : new SettingsWatcher(settings);
     settingsWatcher?.startWatching();
 
-    markAcpStartup('configConstructionStart');
     const config = await loadCliConfig(
       settings.merged,
       argv.acp || argv.experimentalAcp
@@ -970,7 +880,6 @@ export async function main() {
       undefined,
       buildEnabledSkillNamesProvider(settings),
     );
-    markAcpStartup('configConstructionEnd');
     profileCheckpoint('after_load_cli_config');
 
     const nonInteractiveHousekeeping =
@@ -1177,31 +1086,13 @@ export async function main() {
     // For other modes, initialize normally
     const { initializeApp } = await import('./core/initializer.js');
     let input = config.getQuestion();
-    markAcpStartup('appInitializationStart');
     const initializationResult = await initializeApp(config, settings);
-    markAcpStartup('appInitializationEnd');
     profileCheckpoint('after_initialize_app');
 
     if (config.getExperimentalZedIntegration()) {
-      markAcpStartup('acpImportStart');
       const { runAcpAgent } = await import('./acp-integration/acpAgent.js');
-      markAcpStartup('acpImportEnd');
       try {
-        await runAcpAgent(config, settings, argv, {
-          privateParentCapability: isAcpMode
-            ? privateAcpParentCapability
-            : undefined,
-          conversationsRuntimeProvenance,
-          externalToolGuardRequired:
-            isAcpMode &&
-            privateAcpParentCapability !== undefined &&
-            privateExternalToolGuard === EXTERNAL_TOOL_GUARD_REQUIRED_VALUE,
-          externalToolGuardProviderAttached:
-            isAcpMode &&
-            privateAcpParentCapability !== undefined &&
-            privateExternalToolGuardProvider ===
-              EXTERNAL_TOOL_GUARD_PROVIDER_ATTACHED_VALUE,
-        });
+        await runAcpAgent(config, settings, argv);
       } finally {
         // Clean up child processes even when ACP setup or shutdown fails.
         prepareFileWatchersForProcessExit();

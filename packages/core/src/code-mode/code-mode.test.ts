@@ -55,7 +55,6 @@ describe('CodeModeOnly exposure', () => {
     'enter_plan_mode',
     'exit_plan_mode',
     'structured_output',
-    'create_sub_session',
     'enter_worktree',
     'exit_worktree',
     'send_message',

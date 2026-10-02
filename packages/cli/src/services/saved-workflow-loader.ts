@@ -57,11 +57,8 @@ export class SavedWorkflowLoader implements ICommandLoader {
     // that doesn't exist.
     if (!this.config.isWorkflowsEnabled?.()) return [];
     // Mirror FileCommandLoader: saved workflows execute project-local code, so
-    // skip discovery in bare mode and in untrusted folders.
+    // skip discovery in bare mode and project workflows in untrusted folders.
     if (this.config.getBareMode?.()) return [];
-    const folderTrustEnabled = !!this.config.getFolderTrustFeature?.();
-    const folderTrust = !!this.config.getFolderTrust?.();
-    if (folderTrustEnabled && !folderTrust) return [];
 
     let entries: SavedWorkflowEntry[];
     try {
@@ -71,7 +68,10 @@ export class SavedWorkflowLoader implements ICommandLoader {
       return [];
     }
     if (signal.aborted) return [];
-    return entries.map((entry) => this.toCommand(entry));
+    const trusted = this.config.isTrustedFolder();
+    return entries
+      .filter((entry) => trusted || entry.source !== 'project')
+      .map((entry) => this.toCommand(entry));
   }
 
   private toCommand(entry: SavedWorkflowEntry): SlashCommand {

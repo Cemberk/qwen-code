@@ -40,7 +40,6 @@ function createAllGatesOnConfig(): Config {
     isWorkflowsEnabled: () => true,
     isManagedMemoryAvailable: () => true,
     getFolderTrust: () => true,
-    getFolderTrustFeature: () => true,
     getFileCheckpointingEnabled: () => true,
     isLspEnabled: () => true,
     isCronEnabled: () => false,

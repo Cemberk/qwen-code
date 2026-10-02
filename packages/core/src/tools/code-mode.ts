@@ -37,7 +37,6 @@ const DIRECT_ONLY_TOOLS = new Set<string>([
   ToolNames.SEND_MESSAGE,
   ToolNames.ENTER_WORKTREE,
   ToolNames.EXIT_WORKTREE,
-  ToolNames.CREATE_SUB_SESSION,
   'speak_to_user',
   'wait_threads',
 ]);

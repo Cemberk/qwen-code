@@ -6,8 +6,8 @@
 
 /**
  * Bounds for the per-server MCP App resource limits, shared by the
- * enforcing read site (`mcp-tool.ts`) and the pool fingerprint
- * (`mcp-pool-key.ts`) so the two cannot drift apart.
+ * enforcing read site (`mcp-tool.ts`) and the transport identity key in
+ * `mcp-client-manager.ts` so the two cannot drift apart.
  */
 export const MCP_APP_RESOURCE_MAX_BYTES_DEFAULT = 1024 * 1024;
 // JSON escaping can expand HTML 6x inside the 32 MiB replay envelope.
@@ -30,7 +30,7 @@ export function boundedAppLimit(
 /**
  * The byte limit a config actually enforces after clamp/floor/fallback.
  * Hashing this instead of the raw configured value keeps configs with
- * byte-identical enforced policy in one pool entry.
+ * byte-identical enforced policy on one transport identity.
  */
 export function effectiveAppResourceMaxBytes(
   value: number | undefined,

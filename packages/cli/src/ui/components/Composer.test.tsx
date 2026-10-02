@@ -62,9 +62,6 @@ vi.mock('./LoadingIndicator.js', () => ({
   ),
 }));
 
-vi.mock('./ContextSummaryDisplay.js', () => ({
-  ContextSummaryDisplay: () => <Text>ContextSummaryDisplay</Text>,
-}));
 
 vi.mock('./AutoAcceptIndicator.js', () => ({
   AutoAcceptIndicator: () => <Text>AutoAcceptIndicator</Text>,

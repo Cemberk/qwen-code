@@ -856,8 +856,7 @@ export class CronScheduler {
         console.warn(
           `CronScheduler: scheduled task ${t.id} was created with the removed ` +
             `'isolated' run mode; it now runs in its bound session (history ` +
-            `accumulates across runs). Recreate it and call create_sub_session ` +
-            `from the prompt for per-run isolation.`,
+            `accumulates across runs).`,
         );
       }
       return true;

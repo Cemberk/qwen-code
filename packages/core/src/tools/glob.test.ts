@@ -6,7 +6,7 @@
 
 import type { GlobToolParams, GlobPath } from './glob.js';
 import { GlobTool, sortFileEntries } from './glob.js';
-import { partListUnionToString } from '../core/llm-request.js';
+import { partToString } from '../utils/partUtils.js';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -224,7 +224,7 @@ describe('GlobTool', () => {
       const params: GlobToolParams = { pattern: '*.sortme' };
       const invocation = globTool.build(params);
       const result = await invocation.execute(abortSignal);
-      const llmContent = partListUnionToString(result.llmContent);
+      const llmContent = partToString(result.llmContent, { verbose: true });
 
       expect(llmContent).toContain('Found 2 file(s)');
       // Ensure llmContent is a string for TypeScript type checking
@@ -511,7 +511,7 @@ describe('GlobTool', () => {
           pattern: '*.streamlimit',
         });
         const result = await invocation.execute(abortSignal);
-        const llmContent = partListUnionToString(result.llmContent);
+        const llmContent = partToString(result.llmContent, { verbose: true });
 
         expect(vi.mocked(glob.globStream).mock.calls.length).toBe(
           globStreamCallsBefore + 1,
@@ -872,7 +872,7 @@ describe('GlobTool', () => {
       const params: GlobToolParams = { pattern: '*.streamlimit' };
       const invocation = globTool.build(params);
       const result = await invocation.execute(abortSignal);
-      const llmContent = partListUnionToString(result.llmContent);
+      const llmContent = partToString(result.llmContent, { verbose: true });
 
       expect(stream.getYielded()).toBeLessThan(totalResults);
       expect(stream.destroy).toHaveBeenCalled();
@@ -887,7 +887,7 @@ describe('GlobTool', () => {
       const params: GlobToolParams = { pattern: '*.trunctest' };
       const invocation = globTool.build(params);
       const result = await invocation.execute(abortSignal);
-      const llmContent = partListUnionToString(result.llmContent);
+      const llmContent = partToString(result.llmContent, { verbose: true });
 
       // Should report all 150 files found
       expect(llmContent).toContain('Found 150 file(s)');

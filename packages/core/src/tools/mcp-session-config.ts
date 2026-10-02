@@ -6,7 +6,7 @@
 
 import type { MCPServerConfig } from '../config/config.js';
 
-export function normalizeMcpIncludeEntry(entry: string): string {
+function normalizeMcpIncludeEntry(entry: string): string {
   const paren = entry.indexOf('(');
   return paren === -1 ? entry : entry.slice(0, paren);
 }
@@ -18,7 +18,7 @@ export function normalizeMcpIncludeEntry(entry: string): string {
  * the runtime filter stay total and agree with each other instead of
  * throwing.
  */
-export function coerceMcpFilterEntries(entries: unknown): string[] {
+function coerceMcpFilterEntries(entries: unknown): string[] {
   return (Array.isArray(entries) ? entries : []).filter(
     (entry): entry is string => typeof entry === 'string',
   );

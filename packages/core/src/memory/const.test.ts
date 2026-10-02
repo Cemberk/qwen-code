@@ -11,14 +11,9 @@ import {
   setMemoryFilename,
   getCurrentMemoryFilename,
   getAllMemoryFilenames,
+  getAllGeminiMdFilenames,
+  setGeminiMdFilename,
 } from '../utils/memory-constants.js';
-import {
-  getAllGeminiMdFilenames as getToolAllGeminiMdFilenames,
-  setMemoryFilename as setToolMemoryFilename,
-  getCurrentMemoryFilename as getToolCurrentMemoryFilename,
-  getAllMemoryFilenames as getToolAllMemoryFilenames,
-  setGeminiMdFilename as setToolGeminiMdFilename,
-} from '../tools/memory-config.js';
 
 // Mock dependencies
 vi.mock(import('node:fs/promises'), async (importOriginal) => {
@@ -59,19 +54,9 @@ describe('setMemoryFilename', () => {
     expect(getAllMemoryFilenames()).toEqual(newNames);
   });
 
-  it('shares filename state with the legacy tools memory config entrypoint', () => {
-    setMemoryFilename(['CUSTOM_CONTEXT.md', 'AGENTS.md']);
-    expect(getToolCurrentMemoryFilename()).toBe('CUSTOM_CONTEXT.md');
-    expect(getToolAllMemoryFilenames()).toEqual(getAllMemoryFilenames());
-
-    setToolMemoryFilename('LEGACY_CONTEXT.md');
-    expect(getCurrentMemoryFilename()).toBe('LEGACY_CONTEXT.md');
-    expect(getAllMemoryFilenames()).toEqual(['LEGACY_CONTEXT.md']);
-  });
-
   it('keeps the legacy public names wired to the renamed state', () => {
-    setToolGeminiMdFilename('LEGACY_NAME.md');
+    setGeminiMdFilename('LEGACY_NAME.md');
     expect(getCurrentMemoryFilename()).toBe('LEGACY_NAME.md');
-    expect(getToolAllGeminiMdFilenames()).toEqual(['LEGACY_NAME.md']);
+    expect(getAllGeminiMdFilenames()).toEqual(['LEGACY_NAME.md']);
   });
 });

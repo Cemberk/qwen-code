@@ -7,18 +7,10 @@
 import type { MCPServerConfig } from '../config/config.js';
 
 /**
- *
- * shared discovery-timeout primitives used by BOTH
- * `McpTransportPool.spawnEntry` (initial connect/discover) AND
- * `PoolEntry.doRestart` (manual restart). Pre-fix only spawn was
- * bounded; a hung restart blocked `restartInFlight` indefinitely
- * and the HTTP route handler never returned.
- *
- * Mirrors `McpClientManager.runWithDiscoveryTimeout` /
- * `discoveryTimeoutFor` exactly (default 30s,
- * per-server `discoveryTimeoutMs` override clamped to [100ms, 300s])
- * — same wall-clock contract regardless of whether a server's
- * discovery happens in pool mode or legacy per-session mode.
+ * Discovery-timeout primitives. Mirrors
+ * `McpClientManager.runWithDiscoveryTimeout` / `discoveryTimeoutFor`
+ * exactly (default 30s, per-server `discoveryTimeoutMs` override clamped
+ * to [100ms, 300s]).
  */
 
 /** Hard floor for the per-server `discoveryTimeoutMs` override. */
@@ -47,12 +39,8 @@ export function discoveryTimeoutFor(cfg: MCPServerConfig): number {
 /**
  * Race `task` against a wall-clock timer. The background `task`
  * promise is NOT cancelled on timeout — Node's Promise model can't
- * cancel an in-flight `await`. Instead, the caller's catch block
- * runs `forceShutdown`/`sweepAndDisconnect` which closes the
- * transport, racing the disconnect ahead of any silent tool
- * registration the slow server might be midway through. Same
- * approach `McpClientManager.runWithDiscoveryTimeout` uses for the
- * same race.
+ * cancel an in-flight `await`; the caller's catch block is responsible
+ * for closing the transport.
  *
  * Returns the `task` value on success; rejects with a
  * `Timed out after Nms: <label>` Error if the timer fires first.

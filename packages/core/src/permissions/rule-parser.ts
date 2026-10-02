@@ -202,11 +202,6 @@ export const TOOL_NAME_ALIASES: Readonly<Record<string, string>> = {
   LoopWakeup: 'loop_wakeup',
   LoopWakeupTool: 'loop_wakeup',
 
-  // Create Sub Session tool
-  create_sub_session: 'create_sub_session',
-  CreateSubSession: 'create_sub_session',
-  CreateSubSessionTool: 'create_sub_session',
-
   // List Agents tool
   list_agents: 'list_agents',
   ListAgents: 'list_agents',

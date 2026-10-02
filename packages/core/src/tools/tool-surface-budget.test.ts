@@ -12,7 +12,6 @@ import { AdvisorTool } from './advisor.js';
 import { ArtifactTool } from './artifact/artifact-tool.js';
 import type { ArtifactPublisher } from './artifact/publisher.js';
 import { AskUserQuestionTool } from './askUserQuestion.js';
-import { CreateSubSessionTool } from './create-sub-session.js';
 import { CronCreateTool } from './cron-create.js';
 import { CronDeleteTool } from './cron-delete.js';
 import { CronListTool } from './cron-list.js';
@@ -172,7 +171,6 @@ const RESIDENT: ReadonlyArray<[name: string, build: Build, budget: number]> = [
 /** Tools that stay out of the first request until `tool_search` loads them. */
 const DEFERRED: ReadonlyArray<[name: string, build: Build]> = [
   ['advisor', (c) => new AdvisorTool(c)],
-  ['create_sub_session', (c) => new CreateSubSessionTool(c)],
   ['cron_create', (c) => new CronCreateTool(c)],
   ['cron_delete', (c) => new CronDeleteTool(c)],
   ['cron_list', (c) => new CronListTool(c)],

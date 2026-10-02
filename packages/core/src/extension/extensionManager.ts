@@ -246,40 +246,17 @@ export interface ExtensionManagerOptions {
   extensionStore?: ExtensionStore;
 }
 
-export interface PrepareExtensionInstallOptions {
-  installMetadata: ExtensionInstallMetadata;
-  initialActivation: InitialExtensionActivation;
-  localSourcePath?: string;
-  requestConsent?: (options?: ExtensionRequestOptions) => Promise<void>;
-  requestSetting?: (setting: ExtensionSetting) => Promise<string>;
-  cwd?: string;
-  signal?: AbortSignal;
-}
-
-export interface PrepareExtensionUpdateOptions {
-  extension: Extension;
-  signal?: AbortSignal;
-}
-
 export interface PreparedExtensionMutation {
   readonly operation: 'install' | 'update';
   readonly identity: { id: string; name: string };
   readonly version: string;
   readonly expectedArtifactGeneration?: number;
   /** @internal */
-  readonly installMetadata: ExtensionInstallMetadata;
-  /** @internal */
-  readonly config: ExtensionConfig;
-  /** @internal */
-  readonly previousConfig?: ExtensionConfig;
-  /** @internal */
   readonly initialActivation: InitialExtensionActivation;
   /** @internal */
   readonly stagingDirectory: string;
   /** @internal */
   readonly destinationDirectory: string;
-  /** @internal */
-  readonly currentDir: string;
   /** @internal */
   readonly cleanupPaths: readonly string[];
   /** @internal */
@@ -288,8 +265,6 @@ export interface PreparedExtensionMutation {
   readonly discardSettings?: () => Promise<void>;
   /** @internal */
   settingsActivated: boolean;
-  /** @internal */
-  consumed: boolean;
   /** @internal */
   disposed: boolean;
 }
@@ -308,24 +283,6 @@ export interface ExtensionStoreMutationResult extends ExtensionStoreSnapshot {
 }
 
 export type ExtensionCommitCallback = (generation: number) => void;
-
-export class PreparedExtensionConsumedError extends Error {
-  readonly code = 'prepared_extension_consumed';
-
-  constructor() {
-    super('Prepared extension mutation has already been consumed.');
-    this.name = 'PreparedExtensionConsumedError';
-  }
-}
-
-export class InvalidPreparedExtensionError extends Error {
-  readonly code = 'invalid_prepared_extension';
-
-  constructor() {
-    super('Prepared extension mutation does not belong to this manager.');
-    this.name = 'InvalidPreparedExtensionError';
-  }
-}
 
 export class ExtensionNotUpdatableError extends Error {
   readonly code = 'extension_not_updatable';
@@ -426,7 +383,6 @@ export class ExtensionManager {
   private readonly workspaceDir: string;
   private readonly preferencesStore: ExtensionPreferencesStore;
   private readonly extensionStore: ExtensionStore;
-  private readonly preparedMutations = new WeakSet<PreparedExtensionMutation>();
   /** See `sourceFingerprint`. `undefined` until the first refresh commits. */
   private lastSourceFingerprint: string | undefined;
   private inFlightSourceRevalidation: Promise<boolean> | undefined;
@@ -1827,18 +1783,18 @@ export class ExtensionManager {
       const endMutation = this.beginMutation('installExtension');
       let prepared: PreparedExtensionMutation | undefined;
       try {
-        prepared = await this.prepareExtensionInstall({
-          installMetadata,
+        prepared = (await this.installExtensionInternal(
+          { ...installMetadata },
+          requestConsent,
+          requestSetting,
+          cwd,
+          undefined,
           initialActivation,
-          ...(requestConsent ? { requestConsent } : {}),
-          ...(requestSetting ? { requestSetting } : {}),
-          ...(cwd ? { cwd } : {}),
-          ...(signal ? { signal } : {}),
-        });
-        const committed = await this.commitPreparedExtensionInternal(
-          prepared,
+          signal,
+          true,
           false,
-        );
+        )) as PreparedExtensionMutation;
+        const committed = await this.commitPreparedExtension(prepared);
         const warnings = committed.warnings ?? [];
         if (!committed.extension || warnings.length > 0) {
           const reloadWarning = committed.warnings?.find(
@@ -1878,23 +1834,6 @@ export class ExtensionManager {
     )) as Extension;
   }
 
-  async prepareExtensionInstall(
-    options: PrepareExtensionInstallOptions,
-  ): Promise<PreparedExtensionMutation> {
-    return (await this.installExtensionInternal(
-      { ...options.installMetadata },
-      options.requestConsent,
-      options.requestSetting,
-      options.cwd,
-      undefined,
-      options.initialActivation,
-      options.signal,
-      true,
-      false,
-      options.localSourcePath,
-    )) as PreparedExtensionMutation;
-  }
-
   private async prepareExtensionUpdateFromState(
     extension: Extension,
     signal?: AbortSignal,
@@ -1922,37 +1861,6 @@ export class ExtensionManager {
     )) as PreparedExtensionMutation;
   }
 
-  async prepareExtensionUpdate(
-    options: PrepareExtensionUpdateOptions,
-  ): Promise<
-    | { upToDate: true; extension: Extension }
-    | { upToDate: false; prepared: PreparedExtensionMutation }
-  > {
-    const state = await checkForExtensionUpdate(
-      options.extension,
-      this,
-      options.signal,
-    );
-    if (state === ExtensionUpdateState.UP_TO_DATE) {
-      return { upToDate: true, extension: options.extension };
-    }
-    if (state === ExtensionUpdateState.NOT_UPDATABLE) {
-      throw new ExtensionNotUpdatableError(options.extension.name);
-    }
-    if (state !== ExtensionUpdateState.UPDATE_AVAILABLE) {
-      throw new Error(
-        `Extension "${options.extension.name}" update check returned ${state}.`,
-      );
-    }
-    return {
-      upToDate: false,
-      prepared: await this.prepareExtensionUpdateFromState(
-        options.extension,
-        options.signal,
-      ),
-    };
-  }
-
   private async installExtensionInternal(
     installMetadata: ExtensionInstallMetadata,
     requestConsent:
@@ -1967,11 +1875,7 @@ export class ExtensionManager {
     signal: AbortSignal | undefined,
     prepareOnly: boolean,
     emitMutation: boolean,
-    localSourcePathOverride?: string,
   ): Promise<Extension | PreparedExtensionMutation> {
-    if (localSourcePathOverride && installMetadata.type !== 'local') {
-      throw new Error('A local source path requires a local install.');
-    }
     const currentDir = cwd ?? this.workspaceDir;
     let extension: Extension | null;
 
@@ -2003,7 +1907,6 @@ export class ExtensionManager {
       await fs.promises.mkdir(extensionsDir, { recursive: true });
 
       if (
-        !localSourcePathOverride &&
         !path.isAbsolute(installMetadata.source) &&
         (installMetadata.type === 'local' || installMetadata.type === 'link')
       ) {
@@ -2026,22 +1929,16 @@ export class ExtensionManager {
 
       if (
         installMetadata.type === 'local' &&
-        isSupportedArchivePath(
-          localSourcePathOverride ?? installMetadata.source,
-        )
+        isSupportedArchivePath(installMetadata.source)
       ) {
         tempDir = await ExtensionStorage.createTmpDir();
-        await extractArchiveFile(
-          localSourcePathOverride ?? installMetadata.source,
-          tempDir,
-          signal,
-        );
+        await extractArchiveFile(installMetadata.source, tempDir, signal);
         localSourcePath = tempDir;
       } else if (
         installMetadata.type === 'local' ||
         installMetadata.type === 'link'
       ) {
-        localSourcePath = localSourcePathOverride ?? installMetadata.source;
+        localSourcePath = installMetadata.source;
       } else {
         throw new Error(`Unsupported install type: ${installMetadata.type}`);
       }
@@ -2251,15 +2148,9 @@ export class ExtensionManager {
             ...(expectedArtifactGeneration === undefined
               ? {}
               : { expectedArtifactGeneration }),
-            installMetadata,
-            config: newExtensionConfig,
-            ...(previousExtensionConfig
-              ? { previousConfig: previousExtensionConfig }
-              : {}),
             initialActivation,
             stagingDirectory: stagingPath,
             destinationDirectory: destinationPath,
-            currentDir,
             cleanupPaths,
             ...(preparedSettings
               ? {
@@ -2268,10 +2159,8 @@ export class ExtensionManager {
                 }
               : {}),
             settingsActivated: false,
-            consumed: false,
             disposed: false,
           };
-          this.preparedMutations.add(prepared);
           ownershipTransferred = true;
           return prepared;
         }
@@ -2396,128 +2285,78 @@ export class ExtensionManager {
     }
   }
 
-  async commitPreparedExtension(
+  private async commitPreparedExtension(
     prepared: PreparedExtensionMutation,
-    onCommitted?: ExtensionCommitCallback,
   ): Promise<CommittedExtensionMutation> {
-    return await this.commitPreparedExtensionInternal(
-      prepared,
-      true,
-      onCommitted,
-    );
-  }
-
-  private async commitPreparedExtensionInternal(
-    prepared: PreparedExtensionMutation,
-    emitMutation: boolean,
-    onCommitted?: ExtensionCommitCallback,
-  ): Promise<CommittedExtensionMutation> {
-    if (!this.preparedMutations.has(prepared)) {
-      throw new InvalidPreparedExtensionError();
-    }
-    if (prepared.consumed) throw new PreparedExtensionConsumedError();
-    prepared.consumed = true;
-    const endMutation = emitMutation
-      ? this.beginMutation(
-          prepared.operation === 'update'
-            ? 'updateExtension'
-            : 'installExtension',
-        )
-      : () => undefined;
+    const snapshot = await this.extensionStore.commitArtifact({
+      operation: prepared.operation,
+      identity: prepared.identity,
+      stagingDirectory: prepared.stagingDirectory,
+      destinationDirectory: prepared.destinationDirectory,
+      ...(prepared.operation === 'install'
+        ? { initialActivation: prepared.initialActivation }
+        : {
+            expectedArtifactGeneration:
+              prepared.expectedArtifactGeneration ?? 0,
+          }),
+    });
+    prepared.settingsActivated = true;
+    const warnings: NonNullable<CommittedExtensionMutation['warnings']> = [];
     try {
-      const stagedExtension = await this.loadExtension(
-        {
-          extensionDir: prepared.stagingDirectory,
-          workspaceDir: prepared.currentDir,
-        },
-        { throwOnError: true },
-      );
-      if (!stagedExtension) {
-        throw new Error('Prepared extension could not be loaded.');
-      }
-      if (
-        stagedExtension.id !== prepared.identity.id ||
-        stagedExtension.name !== prepared.identity.name ||
-        stagedExtension.version !== prepared.version
-      ) {
-        throw new Error('Prepared extension identity changed before commit.');
-      }
-      const snapshot = await this.extensionStore.commitArtifact({
-        operation: prepared.operation,
-        identity: prepared.identity,
-        stagingDirectory: prepared.stagingDirectory,
-        destinationDirectory: prepared.destinationDirectory,
-        ...(prepared.operation === 'install'
-          ? { initialActivation: prepared.initialActivation }
-          : {
-              expectedArtifactGeneration:
-                prepared.expectedArtifactGeneration ?? 0,
-            }),
+      await prepared.commitSettings?.();
+    } catch (error) {
+      warnings.push({
+        code: 'extension_settings_legacy_sync_failed',
+        error: getErrorMessage(error),
       });
-      prepared.settingsActivated = true;
-      const warnings: NonNullable<CommittedExtensionMutation['warnings']> = [];
-      onCommitted?.(snapshot.generation);
-      try {
-        await prepared.commitSettings?.();
-      } catch (error) {
-        warnings.push({
-          code: 'extension_settings_legacy_sync_failed',
-          error: getErrorMessage(error),
-        });
-      }
-      let extension: Extension | undefined;
-      try {
-        extension =
-          (await this.loadExtension(
-            {
-              extensionDir: prepared.destinationDirectory,
-            },
-            { throwOnError: true },
-          )) ?? undefined;
-        if (!extension) throw new Error('Extension not found after commit.');
-        this.extensionCache?.set(extension.name, extension);
-        this.applyStoreActivation(snapshot);
-      } catch (error) {
-        this.extensionCache?.delete(prepared.identity.name);
-        this.applyStoreActivation(snapshot);
-        warnings.push({
-          code: 'extension_reload_failed',
-          error: getErrorMessage(error),
-        });
-      }
-
-      try {
-        await this.refreshTools();
-      } catch (error) {
-        warnings.push({
-          code: 'extension_runtime_refresh_failed',
-          error: getErrorMessage(error),
-        });
-      }
-      for (const error of await this.cleanupPreparedExtension(prepared)) {
-        warnings.push({
-          code: 'extension_temp_cleanup_failed',
-          error: getErrorMessage(error),
-        });
-      }
-      return {
-        identity: prepared.identity,
-        version: prepared.version,
-        generation: snapshot.generation,
-        ...(extension ? { extension } : {}),
-        ...(warnings.length > 0 ? { warnings } : {}),
-      };
-    } finally {
-      endMutation();
     }
+    let extension: Extension | undefined;
+    try {
+      extension =
+        (await this.loadExtension(
+          {
+            extensionDir: prepared.destinationDirectory,
+          },
+          { throwOnError: true },
+        )) ?? undefined;
+      if (!extension) throw new Error('Extension not found after commit.');
+      this.extensionCache?.set(extension.name, extension);
+      this.applyStoreActivation(snapshot);
+    } catch (error) {
+      this.extensionCache?.delete(prepared.identity.name);
+      this.applyStoreActivation(snapshot);
+      warnings.push({
+        code: 'extension_reload_failed',
+        error: getErrorMessage(error),
+      });
+    }
+
+    try {
+      await this.refreshTools();
+    } catch (error) {
+      warnings.push({
+        code: 'extension_runtime_refresh_failed',
+        error: getErrorMessage(error),
+      });
+    }
+    for (const error of await this.cleanupPreparedExtension(prepared)) {
+      warnings.push({
+        code: 'extension_temp_cleanup_failed',
+        error: getErrorMessage(error),
+      });
+    }
+    return {
+      identity: prepared.identity,
+      version: prepared.version,
+      generation: snapshot.generation,
+      ...(extension ? { extension } : {}),
+      ...(warnings.length > 0 ? { warnings } : {}),
+    };
   }
 
-  async disposePreparedExtension(
+  private async disposePreparedExtension(
     prepared: PreparedExtensionMutation,
   ): Promise<void> {
-    if (!this.preparedMutations.has(prepared)) {
-      throw new InvalidPreparedExtensionError();
-    }
     for (const error of await this.cleanupPreparedExtension(prepared)) {
       debugLogger.warn(
         `Failed to clean prepared extension files: ${getErrorMessage(error)}`,
@@ -2759,10 +2598,7 @@ export class ExtensionManager {
 
     try {
       prepared = await this.prepareExtensionUpdateFromState(extension, signal);
-      const committed = await this.commitPreparedExtensionInternal(
-        prepared,
-        false,
-      );
+      const committed = await this.commitPreparedExtension(prepared);
       const warnings = committed.warnings ?? [];
       for (const warning of warnings) {
         debugLogger.warn(

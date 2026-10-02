@@ -36,8 +36,7 @@ import {
   detectFileEncoding,
   fileExists,
 } from './fileUtils.js';
-import { decodeBufferWithEncodingInfo } from '../services/sync-file-encoding.js';
-import { iconvEncode } from './iconvHelper.js';
+import { loadIconvLite } from './load-iconv-lite.js';
 import { LargeNonUtf8TextError } from './read-text-range.js';
 import type { Config } from '../config/config.js';
 import { StandardFileSystemService } from '../services/fileSystemService.js';
@@ -555,31 +554,6 @@ describe('fileUtils', () => {
     });
 
     describe('readFileWithEncodingInfo', () => {
-      it('should decode plain UTF-8 buffers without reading from a path', () => {
-        const result = decodeBufferWithEncodingInfo(
-          Buffer.from('Hello', 'utf8'),
-        );
-        expect(result).toEqual({
-          content: 'Hello',
-          encoding: 'utf-8',
-          bom: false,
-        });
-      });
-
-      it('should decode UTF-8 BOM buffers without reading from a path', () => {
-        const result = decodeBufferWithEncodingInfo(
-          Buffer.concat([
-            Buffer.from([0xef, 0xbb, 0xbf]),
-            Buffer.from('Hello', 'utf8'),
-          ]),
-        );
-        expect(result).toEqual({
-          content: 'Hello',
-          encoding: 'utf-8',
-          bom: true,
-        });
-      });
-
       it('should return bom: false and encoding utf-8 for plain UTF-8 file', async () => {
         const filePath = path.join(testDir, 'info-utf8.txt');
         await fsPromises.writeFile(filePath, 'Hello', 'utf8');
@@ -3497,7 +3471,7 @@ describe('fileUtils', () => {
     });
 
     it('should propagate large non-UTF-8 errors through bounded reads', async () => {
-      const gbkLine = iconvEncode('中文日志行\n', 'gbk');
+      const gbkLine = (await loadIconvLite()).encode('中文日志行\n', 'gbk');
       const gbkChunk = Buffer.concat(
         Array.from({ length: 1024 }, () => gbkLine),
       );

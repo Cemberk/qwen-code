@@ -21,12 +21,7 @@ import type {
 } from './tools.js';
 import type { PermissionDecision } from '../permissions/types.js';
 import { BaseDeclarativeTool, BaseToolInvocation, Kind } from './tools.js';
-import type {
-  CallableTool,
-  FunctionCall,
-  Part,
-  PartListUnion,
-} from '@google/genai';
+import type { FunctionCall, Part, PartListUnion } from '@google/genai';
 import { StructuredToolError, ToolErrorType } from './tool-error.js';
 import type { Config, MCPServerConfig } from '../config/config.js';
 import { truncateToolOutput } from './truncation.js';
@@ -194,7 +189,7 @@ function isParentAbortOutcome(value: unknown): value is ParentAbortOutcome {
 
 function createParentAbortRace(
   signal: AbortSignal,
-  forwardAbort?: (reason: unknown) => void,
+  forwardAbort: (reason: unknown) => void,
 ): {
   promise: Promise<ParentAbortOutcome>;
   dispose: () => void;
@@ -209,7 +204,7 @@ function createParentAbortRace(
       // microtask before forwardAbort triggers the SDK rejection, so the
       // parent outcome always wins the race.
       resolve({ [PARENT_ABORT_OUTCOME]: true, reason });
-      forwardAbort?.(reason);
+      forwardAbort(reason);
     };
     if (signal.aborted) {
       onAbort();
@@ -339,7 +334,7 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
     'MCP tool execution may have completed before the connection failed. Automatic replay was skipped because the call could not be verified as safe to replay. Do not retry automatically; verify the outcome before trying again.';
 
   constructor(
-    private readonly mcpTool: CallableTool,
+    private readonly mcpClient: McpDirectClient,
     readonly serverName: string,
     readonly serverToolName: string,
     readonly displayName: string,
@@ -348,7 +343,6 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
     readonly trust?: boolean,
     params: ToolParams = {},
     private readonly cliConfig?: Config,
-    private readonly mcpClient?: McpDirectClient,
     private readonly mcpTimeout?: number,
     private readonly mcpToolIdleTimeoutMs?: number,
     private readonly annotations?: McpToolAnnotations,
@@ -494,7 +488,7 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
       const newTool = await this.attemptReconnect();
       if (newTool) {
         const newInvocation = new DiscoveredMCPToolInvocation(
-          newTool['mcpTool'],
+          newTool['mcpClient'],
           this.serverName,
           this.serverToolName,
           this.displayName,
@@ -503,7 +497,6 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
           newTool.trust,
           this.params,
           this.cliConfig,
-          newTool['mcpClient'],
           this.mcpTimeout,
           this.mcpToolIdleTimeoutMs,
           newTool.annotations,
@@ -578,28 +571,13 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
     );
   }
 
-  async execute(
-    signal: AbortSignal,
-    updateOutput?: (output: ToolResultDisplay) => void,
-  ): Promise<ToolResult> {
-    // Use direct MCP client if available (supports progress notifications),
-    // otherwise fall back to the mcpToTool wrapper.
-    if (this.mcpClient) {
-      return this.executeWithDirectClient(signal, updateOutput);
-    }
-    if (this.onAppResult) {
-      throw new Error('MCP App tool calls require a direct MCP client.');
-    }
-    return this.executeWithCallableTool(signal);
-  }
-
   /**
    * Execute using the raw MCP SDK Client, which supports progress
    * notifications via the onprogress callback. This enables real-time
    * streaming of progress updates to the user during long-running
    * MCP tool calls (e.g., browser automation).
    */
-  private async executeWithDirectClient(
+  async execute(
     signal: AbortSignal,
     updateOutput?: (output: ToolResultDisplay) => void,
   ): Promise<ToolResult> {
@@ -651,7 +629,7 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
       const invocationContext = this.allowInvocationContext
         ? getInvocationContext()
         : undefined;
-      const callPromise = this.mcpClient!.callTool(
+      const callPromise = this.mcpClient.callTool(
         {
           name: this.serverToolName,
           arguments: this.params as Record<string, unknown>,
@@ -834,7 +812,7 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
     fallbackText: string,
     signal: AbortSignal,
   ): Promise<McpAppResultDisplay | undefined> {
-    if (!this.appResourceUri || !this.mcpClient?.readResource) return undefined;
+    if (!this.appResourceUri || !this.mcpClient.readResource) return undefined;
 
     const configuredMaxBytes = this.appResourceLimits?.appResourceMaxBytes;
     const configuredTimeoutMs = this.appResourceLimits?.appResourceTimeoutMs;
@@ -940,67 +918,6 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
         toolArguments: this.params,
         fallbackText: [warning, fallbackText].filter(Boolean).join('\n\n'),
       };
-    }
-  }
-
-  /**
-   * Fallback: execute using the mcpToTool CallableTool wrapper.
-   * This path does NOT support progress notifications.
-   */
-  private async executeWithCallableTool(
-    signal: AbortSignal,
-  ): Promise<ToolResult> {
-    if (signal.aborted) {
-      throw createToolCallAbortError();
-    }
-
-    const functionCalls: FunctionCall[] = [
-      {
-        name: this.serverToolName,
-        args: this.params,
-      },
-    ];
-    const parentAbortRace = createParentAbortRace(signal);
-
-    // Race MCP tool call with abort signal to respect cancellation
-    try {
-      const callPromise = this.mcpTool.callTool(functionCalls);
-      const outcome = await Promise.race([
-        callPromise,
-        parentAbortRace.promise,
-      ]);
-      if (isParentAbortOutcome(outcome)) {
-        throw outcome.reason;
-      }
-      const rawResponseParts = await this.boundImages(outcome, signal);
-
-      if (this.isMCPToolError(rawResponseParts)) {
-        return await this.buildMcpToolError(rawResponseParts, functionCalls[0]);
-      }
-
-      const transformedParts = clampMcpInlineMedia(
-        transformMcpContentToParts(rawResponseParts),
-      );
-      const truncated = await this.truncateTextParts(transformedParts);
-
-      return {
-        llmContent: truncated.parts,
-        returnDisplay: getDisplayFromPartsWithPersistedOutput(
-          transformedParts,
-          truncated.persistedOutputFiles,
-        ),
-        persistedOutputFiles: truncated.persistedOutputFiles,
-      };
-    } catch (error) {
-      if (isExecutionTimeoutFailure(error, this.serverName, signal)) {
-        throw new StructuredToolError(
-          getErrorMessage(error),
-          ToolErrorType.EXECUTION_TIMEOUT,
-        );
-      }
-      return this.handleReconnectOnError(error, signal);
-    } finally {
-      parentAbortRace.dispose();
     }
   }
 
@@ -1127,7 +1044,7 @@ export class DiscoveredMCPTool extends BaseDeclarativeTool<
   }
 
   constructor(
-    private readonly mcpTool: CallableTool,
+    private readonly mcpClient: McpDirectClient,
     readonly serverName: string,
     readonly serverToolName: string,
     description: string,
@@ -1135,7 +1052,6 @@ export class DiscoveredMCPTool extends BaseDeclarativeTool<
     readonly trust?: boolean,
     nameOverride?: string,
     private readonly cliConfig?: Config,
-    private readonly mcpClient?: McpDirectClient,
     private readonly mcpTimeout?: number,
     private readonly mcpToolIdleTimeoutMs?: number,
     readonly annotations?: McpToolAnnotations,
@@ -1201,7 +1117,7 @@ export class DiscoveredMCPTool extends BaseDeclarativeTool<
 
   asFullyQualifiedTool(): DiscoveredMCPTool {
     return new DiscoveredMCPTool(
-      this.mcpTool,
+      this.mcpClient,
       this.serverName,
       this.serverToolName,
       this.description,
@@ -1209,7 +1125,6 @@ export class DiscoveredMCPTool extends BaseDeclarativeTool<
       this.trust,
       generateValidName(`mcp__${this.serverName}__${this.serverToolName}`),
       this.cliConfig,
-      this.mcpClient,
       this.mcpTimeout,
       this.mcpToolIdleTimeoutMs,
       this.annotations,
@@ -1227,7 +1142,7 @@ export class DiscoveredMCPTool extends BaseDeclarativeTool<
   ): DiscoveredMCPTool {
     if (appResourceUi === this.appResourceUi) return this;
     return new DiscoveredMCPTool(
-      this.mcpTool,
+      this.mcpClient,
       this.serverName,
       this.serverToolName,
       this.description,
@@ -1235,7 +1150,6 @@ export class DiscoveredMCPTool extends BaseDeclarativeTool<
       this.trust,
       this.name,
       this.cliConfig,
-      this.mcpClient,
       this.mcpTimeout,
       this.mcpToolIdleTimeoutMs,
       this.annotations,
@@ -1243,56 +1157,6 @@ export class DiscoveredMCPTool extends BaseDeclarativeTool<
       this.allowInvocationContext,
       this.appResourceUri,
       appResourceUi,
-      this.appResourceLimits,
-      this.appVisibility,
-    );
-  }
-
-  /**
-   * Return a clone of this tool with a different `trust` value while
-   * keeping every other field (including the shared underlying
-   * `CallableTool` / MCP transport) identical.
-   *
-   * Kept as the trust-only convenience used by non-pool callers. Pooled
-   * session views use `withSessionConfig` because eager loading can differ
-   * between sessions too.
-   */
-  withTrust(trust: boolean | undefined): DiscoveredMCPTool {
-    return this.withSessionConfig(trust, this.alwaysLoad);
-  }
-
-  /**
-   * Return a per-session projection of metadata that does not belong to the
-   * shared MCP transport snapshot. Pool entries can be shared by sessions
-   * whose trust and eager-loading settings differ, so neither field may be
-   * mutated on the canonical tool instance.
-   */
-  withSessionConfig(
-    trust: boolean | undefined,
-    alwaysLoad: boolean,
-  ): DiscoveredMCPTool {
-    if (trust === this.trust && alwaysLoad === this.alwaysLoad) return this;
-    return new DiscoveredMCPTool(
-      this.mcpTool,
-      this.serverName,
-      this.serverToolName,
-      this.description,
-      this.parameterSchema,
-      trust,
-      // Preserve the original name (do NOT re-call generateValidName)
-      // — equal-by-name is the registry's deduplication key, and a
-      // different name would race-register two tools in the same
-      // session.
-      this.name,
-      this.cliConfig,
-      this.mcpClient,
-      this.mcpTimeout,
-      this.mcpToolIdleTimeoutMs,
-      this.annotations,
-      alwaysLoad,
-      this.allowInvocationContext,
-      this.appResourceUri,
-      this.appResourceUi,
       this.appResourceLimits,
       this.appVisibility,
     );
@@ -1326,7 +1190,7 @@ export class DiscoveredMCPTool extends BaseDeclarativeTool<
     cliConfig: Config | undefined = this.cliConfig,
   ): ToolInvocation<ToolParams, ToolResult> {
     return new DiscoveredMCPToolInvocation(
-      this.mcpTool,
+      this.mcpClient,
       this.serverName,
       this.serverToolName,
       this.displayName,
@@ -1335,7 +1199,6 @@ export class DiscoveredMCPTool extends BaseDeclarativeTool<
       this.trust,
       params,
       cliConfig,
-      this.mcpClient,
       this.mcpTimeout,
       this.mcpToolIdleTimeoutMs,
       this.annotations,
@@ -1601,7 +1464,7 @@ function transformResourceLinkBlock(block: McpResourceLinkBlock): Part {
 /**
  * Transforms the raw MCP content blocks from the SDK response into a
  * standard GenAI Part array.
- * @param sdkResponse The raw Part[] array from `mcpTool.callTool()`.
+ * @param sdkResponse The Part[] from `wrapMcpCallToolResultAsParts()`.
  * @returns A clean Part[] array ready for the scheduler.
  */
 function transformMcpContentToParts(sdkResponse: Part[]): Part[] {

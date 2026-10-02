@@ -83,9 +83,6 @@ export enum LlmEventType {
   ModelFallback = 'model_fallback',
 }
 
-/** @deprecated Use `LlmEventType`; retained until a future major release. */
-export { LlmEventType as GeminiEventType };
-
 export type ServerLlmRetryEvent = {
   type: LlmEventType.Retry;
   retryInfo?: RetryInfo;

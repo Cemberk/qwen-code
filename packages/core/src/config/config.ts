@@ -95,7 +95,6 @@ import { setMemoryFilename } from '../utils/memory-constants.js';
 import { canUseRipgrep } from '../utils/ripgrepUtils.js';
 import { recordStartupEvent } from '../utils/startupEventSink.js';
 import { ToolRegistry, type ToolFactory } from '../tools/tool-registry.js';
-import type { McpBudgetEvent } from '../tools/mcp-client-manager.js';
 import { ToolNames } from '../tools/tool-names.js';
 import {
   ToolMode,
@@ -154,7 +153,6 @@ import {
   SENSITIVE_SPAN_ATTRIBUTE_MAX_LENGTH_LIMIT,
   isValidSensitiveSpanAttributeMaxLength,
   isTelemetrySdkInitialized,
-  addDaemonRequestAttribute,
   initializeTelemetry,
   shutdownTelemetry,
   refreshSessionContext,
@@ -278,10 +276,6 @@ import type {
   SessionRestoreProjection,
   SessionRuntimeResumeState,
 } from '../services/session-transcript-reader.js';
-import {
-  assertSessionExecutionEngine,
-  type SessionExecutionEngine,
-} from '../services/session-execution-engine.js';
 import {
   SessionTranscriptChangedError,
   SessionWriterError,
@@ -815,12 +809,6 @@ export interface ConfigParameters {
   sessionRestoreProjectionSource?: () => Promise<
     SessionRestoreProjection | undefined
   >;
-  /**
-   * Engine a paired host selected for this session. Initialization records it
-   * as the owner of a new transcript, or requires the restored transcript to
-   * prove it, before hooks, MCP or tools start.
-   */
-  sessionExecutionEngine?: SessionExecutionEngine;
   sandbox?: SandboxConfig;
   targetDir: string;
   /**
@@ -1841,13 +1829,10 @@ export interface ConfigInitializeOptions {
    * skip MCP
    * discovery entirely (both inline tool-registry-time discovery AND
    * the post-`createToolRegistry` background `startMcpDiscoveryInBackground`).
-   * The bootstrap config in ACP daemon mode uses this to AVOID spawning
-   * MCP servers under the bootstrap's pool-less McpClientManager.
-   * Pre-fix every stdio MCP server was spawned twice — once by the
-   * bootstrap (legacy per-server path, invisible to pool / budget /
-   * drainAll / pid-sweep) and once by each session's pool-routed
-   * discovery — silently violating the workspace budget contract.
-   * The bootstrap's MCP clients were never actually used to serve a
+   * The ACP bootstrap config uses this to AVOID spawning MCP servers
+   * that no session uses: every stdio MCP server would otherwise be
+   * spawned twice — once by the bootstrap and once by each session's
+   * own discovery. The bootstrap's MCP clients were never actually used to serve a
    * session (each session builds its own per-session Config and runs
    * its own discovery), so skipping at the bootstrap layer is safe
    * AND closes the 2N subprocess leak.
@@ -1953,59 +1938,6 @@ function resolveCronRecurringMaxAgeDays(setting: number | undefined): number {
   }
   return normalizeRecurringMaxAge(raw, DEFAULT_RECURRING_MAX_AGE_DAYS);
 }
-
-/** Request from the `create_sub_session` tool to spawn a fresh top-level
- * sub-session and run a prompt in it. */
-export interface SubSessionSpawnRequest {
-  prompt: string;
-  /** `'sent'` = resolve as soon as the prompt is dispatched; `'first-turn'` =
-   * resolve after the sub-session's first turn finishes (result returned). */
-  completion: 'sent' | 'first-turn';
-  /** Optional model service id for the sub-session. */
-  model?: string;
-  /** Optional display name for the sub-session in the session list. */
-  name?: string;
-}
-
-/** Result returned to the `create_sub_session` tool. `result` (the sub-session's
- * first-turn output) is present only for `completion: 'first-turn'`. */
-export interface SubSessionSpawnResult {
-  sessionId: string;
-  result?: string;
-  stopReason?: string;
-  /** Whether the parent lineage was durably persisted to the sub-session's
-   * transcript. `false` = live-only (the parent link disappears from the
-   * persisted session list after a daemon restart). Absent when unknown. */
-  parentSessionPersisted?: boolean;
-}
-
-/**
- * Injected capability that spawns a sub-session. Used by the `create_sub_session`
- * tool. Wired ONLY by the daemon/ACP session layer (`Session.ts` →
- * `this.client.extMethod`); absent in interactive TUI / headless (no bridge),
- * which is precisely the tool's daemon-only gate.
- */
-export type SubSessionSpawner = (
-  req: SubSessionSpawnRequest,
-) => Promise<SubSessionSpawnResult>;
-
-export interface CurrentSessionScheduledTaskCreateRequest {
-  cron: string;
-  prompt: string;
-  recurring: boolean;
-  promptId: string;
-}
-
-export interface CurrentSessionScheduledTaskCreateResult {
-  id: string;
-  cron: string;
-}
-
-/** Daemon-only capability used by `cron_create` to bind a durable task to the
- * session whose active turn is executing the tool. */
-export type CurrentSessionScheduledTaskCreator = (
-  req: CurrentSessionScheduledTaskCreateRequest,
-) => Promise<CurrentSessionScheduledTaskCreateResult>;
 
 class SessionWriterShutdownError extends SessionWriterUnavailableError {}
 
@@ -2342,7 +2274,6 @@ export class Config {
   private readonly sessionRestoreProjectionSource?: () => Promise<
     SessionRestoreProjection | undefined
   >;
-  private readonly sessionExecutionEngine?: SessionExecutionEngine;
   private restoredFileHistory = false;
   private goalRestoreActivation?: () => Promise<void>;
   private rejectGoalRestoreActivation?: (reason?: unknown) => void;
@@ -2378,17 +2309,6 @@ export class Config {
   private pendingRecoveredAgentsNotice: string | null = null;
   private debugLogger: DebugLogger;
   private toolRegistry!: ToolRegistry;
-  /**
-   * callback stashed BEFORE
-   * `initialize()` runs and applied as soon as `toolRegistry` is up,
-   * so the manager's `setOnBudgetEvent` is wired before
-   * `startMcpDiscoveryInBackground` (or legacy blocking discovery)
-   * fires the first pass. Pre-fix the acpAgent registered after
-   * `initialize()` returned, missing the first pass entirely under
-   * `QWEN_CODE_LEGACY_MCP_BLOCKING=1` and racing against background
-   * discovery completion under the default mode.
-   */
-  private pendingMcpBudgetCallback?: (event: McpBudgetEvent) => void;
   private promptRegistry!: PromptRegistry;
   private resourceRegistry!: ResourceRegistry;
   private subagentManager!: SubagentManager;
@@ -2833,7 +2753,6 @@ export class Config {
     }
     this.sessionData = params.sessionData;
     this.sessionRestoreProjectionSource = params.sessionRestoreProjectionSource;
-    this.sessionExecutionEngine = params.sessionExecutionEngine;
     this.setSessionRestoreProjection(params.sessionRestoreProjection);
     // Daemon Configs use sessionIdContext and must not replace the
     // single-session CLI fallback with whichever session was created last.
@@ -3405,7 +3324,6 @@ export class Config {
         }
       }
       options?.signal?.throwIfAborted();
-      await this.bindSessionExecutionEngine();
       registerSessionProjectDir(this.sessionId, this.storage.getProjectDir());
       this.sessionProjectDirRegistered = true;
       await this.initializeInternal(options);
@@ -3440,25 +3358,6 @@ export class Config {
       }
       throw error;
     }
-  }
-
-  /**
-   * Runs after the writer can take records and before any initialization side
-   * effect. A restore is checked against the owner read from its own snapshot;
-   * without chat recording there is no durable session to own.
-   */
-  private async bindSessionExecutionEngine(): Promise<void> {
-    const engine = this.sessionExecutionEngine;
-    if (engine === undefined) return;
-    if (this.sessionRestoreProjectionSource || this.sessionData) {
-      assertSessionExecutionEngine(
-        this.pendingSessionRestoreProjection?.executionEngine,
-        this.sessionId,
-        engine,
-      );
-      return;
-    }
-    await this.chatRecordingService?.recordExecutionEngine(engine);
   }
 
   private async initializeInternal(
@@ -4020,7 +3919,7 @@ export class Config {
     //
     // Also gated on `!options?.skipMcpDiscovery` — the ACP
     // bootstrap path passes `skipMcpDiscovery: true` so the bootstrap
-    // config doesn't run discovery under its pool-less manager.
+    // config doesn't spawn MCP servers no session uses.
     //
     // Safe/bare mode still skip discovery when there's nothing to discover
     // (the common case: no top-tier servers supplied) — this block predates
@@ -4168,10 +4067,6 @@ export class Config {
       let authoritative: ResumedSessionData | undefined;
       let projection: SessionRestoreProjection | undefined;
       if (this.sessionRestoreProjectionSource) {
-        addDaemonRequestAttribute(
-          'qwen-code.daemon.session_restore.projection_acquisition',
-          'after_writer_lease',
-        );
         projection = await this.sessionRestoreProjectionSource();
         this.setSessionRestoreProjection(projection);
       } else if (this.sessionData || lease.transcriptExistedAtAcquire) {
@@ -6807,32 +6702,6 @@ export class Config {
   }
 
   /**
-   * optional workspace-shared MCP transport pool
-   * injected by the daemon-mode `QwenAgent`. When set, the wrapping
-   * `ToolRegistry` threads it into `McpClientManager`, which delegates
-   * non-SDK MCP server discovery to the pool instead of spawning its
-   * own per-session `McpClient`. Standalone `qwen` (non-daemon) leaves
-   * this `undefined` and the manager keeps its previous behavior.
-   *
-   * Eagerly instantiated by `QwenAgent` (per Q6 resolved); the
-   * pool itself is lazy w.r.t. actual MCP work — it spawns nothing
-   * until the first `acquire()` from a session.
-   */
-  private mcpTransportPool?: import('../tools/mcp-transport-pool.js').McpTransportPool;
-
-  setMcpTransportPool(
-    pool: import('../tools/mcp-transport-pool.js').McpTransportPool | undefined,
-  ): void {
-    this.mcpTransportPool = pool;
-  }
-
-  getMcpTransportPool():
-    | import('../tools/mcp-transport-pool.js').McpTransportPool
-    | undefined {
-    return this.mcpTransportPool;
-  }
-
-  /**
    * T2.8: return the raw settings-layer MCP servers map (without the
    * runtime overlay or extension contributions). Used by
    * `McpClientManager.addRuntimeMcpServer` to detect shadow-over-
@@ -7163,8 +7032,8 @@ export class Config {
         await registry
           .getMcpClientManager()
           .discoverAllMcpToolsIncremental(this);
-        // The pool path returns an in-flight promise, so re-run after any
-        // coalesced change to ensure the latest effective config is applied.
+        // Re-run after any coalesced change to ensure the latest effective
+        // config is applied.
         let pass = 1;
         while (this.mcpReconcilePending) {
           this.mcpReconcilePending = false;
@@ -10772,26 +10641,6 @@ export class Config {
       });
     }
 
-    // create_sub_session is daemon-only: it needs the bridge, wired onto the
-    // Config as a sub-session spawner by the ACP session. Registering it
-    // unconditionally advertised a tool that can never work in interactive TUI
-    // / headless runs, so gate on the spawner actually being present.
-    //
-    // The ACP session's own registry is built before its constructor wires the
-    // spawner, so that one is registered by the Session itself. Every registry
-    // built afterwards reaches the spawner from here: sub-agent and override
-    // configs derive from the base Config, and `copyDiscoveredToolsFrom`
-    // carries discovered tools only, so without this a daemon sub-agent would
-    // silently lose the tool.
-    if (this.getSubSessionSpawner()) {
-      await registerLazy(ToolNames.CREATE_SUB_SESSION, async () => {
-        const { CreateSubSessionTool } = await import(
-          '../tools/create-sub-session.js'
-        );
-        return new CreateSubSessionTool(this);
-      });
-    }
-
     // Register team collaboration tools (experimental). The team-specific
     // tools (team_create/team_delete/task_create/task_update/task_list)
     // are gated on this flag.
@@ -10849,34 +10698,6 @@ export class Config {
       return new MonitorTool(this);
     });
 
-    // apply any pending MCP
-    // budget-event callback BEFORE `discoverAllTools` (legacy blocking
-    // mode runs MCP discovery synchronously in there) and BEFORE the
-    // post-`createToolRegistry` `startMcpDiscoveryInBackground` (default
-    // mode). Either way the manager has its callback wired at the
-    // moment the first discovery pass fires, so end-of-pass events
-    // for that pass are routed through the SDK push channel.
-    if (this.pendingMcpBudgetCallback) {
-      const mgr = registry.getMcpClientManager();
-      if (mgr && typeof mgr.setOnBudgetEvent === 'function') {
-        mgr.setOnBudgetEvent(this.pendingMcpBudgetCallback);
-      }
-      // clear after consumption so a
-      // subsequent `createToolRegistry` call (e.g. subagent override
-      // via `createApprovalModeOverride` /
-      // `buildSubagentContextOverride`) doesn't re-apply the parent
-      // session's callback to a fresh manager. Subagent contexts run
-      // their own MCP clients but should NOT push budget events
-      // through the parent's ACP session — that would route subagent
-      // telemetry to the wrong subscriber.
-      //
-      // Late-call setter (`setMcpBudgetEventCallback` after
-      // `initialize()`) is unaffected: it dispatches directly to the
-      // existing manager via the `if (this.toolRegistry)` branch,
-      // not through `pendingMcpBudgetCallback`.
-      this.pendingMcpBudgetCallback = undefined;
-    }
-
     if (!options?.skipDiscovery) {
       await registry.discoverAllTools();
     }
@@ -10884,78 +10705,6 @@ export class Config {
       `ToolRegistry created: ${JSON.stringify(registry.getAllToolNames())} (${registry.getAllToolNames().length} tools)`,
     );
     return registry;
-  }
-
-  /**
-   * register the MCP guardrail
-   * push-event callback. Acceptable to call at any point in the
-   * Config lifecycle — before, during, or after `initialize()`.
-   *
-   * Two paths:
-   * - **Pre-init** (no `toolRegistry` yet): stash on
-   *   `pendingMcpBudgetCallback`. `createToolRegistry` will apply it
-   *   to the freshly-constructed manager and clear the stash (round
-   *   6 fix). The stash is the ONLY way to reach a manager that
-   *   doesn't exist yet.
-   * - **Late** (`toolRegistry` already exists): dispatch directly to
-   *   the existing manager. **DO NOT** also stash — that's the
-   *   round-7 fix. Pre-fix, both paths assigned to
-   *   `pendingMcpBudgetCallback` regardless, so a subsequent
-   *   `createToolRegistry` (subagent override via
-   *   `createApprovalModeOverride` /
-   *   `buildSubagentContextOverride`) would re-apply the parent
-   *   session's callback to the subagent's fresh manager — routing
-   *   subagent telemetry through the wrong ACP session.
-   *
-   * `cb: undefined` clears the registration. `off`-mode managers
-   * silently drop the callback (their state machine never runs).
-   */
-  setMcpBudgetEventCallback(
-    cb: ((event: McpBudgetEvent) => void) | undefined,
-  ): void {
-    if (this.toolRegistry) {
-      // Late-call path: apply directly. Do NOT stash — see comment
-      // above for the subagent isolation rationale.
-      const mgr = this.toolRegistry.getMcpClientManager?.();
-      if (mgr && typeof mgr.setOnBudgetEvent === 'function') {
-        mgr.setOnBudgetEvent(cb);
-      }
-      this.pendingMcpBudgetCallback = undefined;
-      return;
-    }
-    // Pre-init path: stash for `createToolRegistry` to consume.
-    this.pendingMcpBudgetCallback = cb;
-  }
-
-  private subSessionSpawner?: SubSessionSpawner;
-
-  private currentSessionScheduledTaskCreator?: CurrentSessionScheduledTaskCreator;
-
-  /**
-   * Wire the sub-session spawner used by the `create_sub_session` tool. Set by
-   * the daemon/ACP session layer (which routes it to the bridge over
-   * `extMethod`); left unset in interactive TUI / headless, where the tool is
-   * therefore never registered. `undefined` clears it on session teardown.
-   */
-  setSubSessionSpawner(spawner: SubSessionSpawner | undefined): void {
-    this.subSessionSpawner = spawner;
-  }
-
-  /** The injected sub-session spawner, or undefined outside daemon mode. */
-  getSubSessionSpawner(): SubSessionSpawner | undefined {
-    return this.subSessionSpawner;
-  }
-
-  setCurrentSessionScheduledTaskCreator(
-    creator: CurrentSessionScheduledTaskCreator | undefined,
-  ): void {
-    this.currentSessionScheduledTaskCreator = creator;
-  }
-
-  getCurrentSessionScheduledTaskCreator():
-    | CurrentSessionScheduledTaskCreator
-    | undefined {
-    return this.currentSessionScheduledTaskCreator;
   }
 }
 

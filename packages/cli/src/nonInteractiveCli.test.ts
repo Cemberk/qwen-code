@@ -367,7 +367,6 @@ describe('runNonInteractive', () => {
       getDebugMode: vi.fn().mockReturnValue(false),
       getOutputFormat: vi.fn().mockReturnValue('text'),
       getJsonSchema: vi.fn().mockReturnValue(undefined),
-      getFolderTrustFeature: vi.fn().mockReturnValue(false),
       getFolderTrust: vi.fn().mockReturnValue(false),
       isTrustedFolder: vi.fn().mockReturnValue(true),
       getIncludePartialMessages: vi.fn().mockReturnValue(false),

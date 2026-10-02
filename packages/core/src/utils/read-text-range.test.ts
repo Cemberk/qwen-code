@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { iconvEncode } from './iconvHelper.js';
+import { loadIconvLite } from './load-iconv-lite.js';
 import {
   CursorNotAtLineBoundaryError,
   LargeNonUtf8TextError,
@@ -545,7 +545,7 @@ describe('readTextRange', () => {
   });
 
   it('rejects large non-UTF-8 files with a targeted error', async () => {
-    const gbkLine = iconvEncode('中文日志行\n', 'gbk');
+    const gbkLine = (await loadIconvLite()).encode('中文日志行\n', 'gbk');
     const repeatCount = Math.ceil((11 * 1024 * 1024) / gbkLine.length);
     const filePath = await writeFile(
       'gbk.log',
@@ -565,7 +565,7 @@ describe('readTextRange', () => {
   it('rejects large files with invalid UTF-8 beyond the encoding sample', async () => {
     const mostlyAsciiThenGbk = Buffer.concat([
       Buffer.alloc(9 * 1024, 'a'),
-      iconvEncode('你好', 'gbk'),
+      (await loadIconvLite()).encode('你好', 'gbk'),
       Buffer.alloc(11 * 1024 * 1024, 'b'),
     ]);
     const filePath = await writeFile('late-gbk.log', mostlyAsciiThenGbk);
@@ -1084,7 +1084,7 @@ describe('readTextCursorWindowFromHandle', () => {
   });
 
   it('refuses a non-UTF-8 file', async () => {
-    const gbk = iconvEncode('中文日志\n'.repeat(100), 'gbk');
+    const gbk = (await loadIconvLite()).encode('中文日志\n'.repeat(100), 'gbk');
     await withHandle('gbk.log', gbk, async (fh, size) => {
       await expect(
         readTextCursorWindowFromHandle(fh, {

@@ -5421,6 +5421,3 @@ export class LlmClient {
     return info;
   }
 }
-
-/** @deprecated Use `LlmClient`; retained until a future major release. */
-export { LlmClient as GeminiClient };

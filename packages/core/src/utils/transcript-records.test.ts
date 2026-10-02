@@ -7,7 +7,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ChatRecord } from '../services/chatRecordingService.js';
 import {
-  isTranscriptConversationRecord,
   prepareTranscriptRecords,
   projectUserTranscriptForDisplay,
   validateTranscriptRecord,
@@ -332,35 +331,6 @@ describe('prepareTranscriptRecords', () => {
     );
   });
 
-  it.each([
-    'managed_session_header_v1',
-    'managed_session_event_v1',
-    'managed_session_commit_v1',
-  ])('keeps %s out of ordinary conversation projection', (subtype) => {
-    const managedRecord = record('managed', 'root', {
-      type: 'system',
-      subtype,
-      message: undefined,
-      systemPayload: { managedSession: {} },
-    });
-    const prepared = prepareTranscriptRecords([
-      record('root', null),
-      managedRecord,
-    ]);
-
-    expect(prepared.records.map((item) => item.uuid)).toEqual(['root']);
-    expect(prepared.diagnostics).not.toContainEqual(
-      expect.objectContaining({
-        code: 'unknown_record_or_part',
-        recordId: 'managed',
-        path: 'subtype',
-      }),
-    );
-    expect(isTranscriptConversationRecord({ type: 'system', subtype })).toBe(
-      false,
-    );
-  });
-
   it('rejects mixed sessions and an explicit artifact leaf', () => {
     expect(() =>
       prepareTranscriptRecords([
@@ -502,8 +472,7 @@ describe('projectUserTranscriptForDisplay', () => {
 describe('validateTranscriptRecord', () => {
   // Typed as a total record, so a subtype added to ChatRecord fails to compile
   // here until it is listed, and then fails below until the validator knows it.
-  // An unknown subtype makes the whole transcript incomplete, which a paired
-  // host reads as unprovable ownership and refuses to restore.
+  // An unknown subtype makes the whole transcript incomplete.
   const RECORDED_SUBTYPES: Record<NonNullable<ChatRecord['subtype']>, true> = {
     chat_compression: true,
     slash_command: true,
@@ -516,7 +485,6 @@ describe('validateTranscriptRecord', () => {
     custom_title: true,
     parent_session: true,
     session_source: true,
-    session_execution_engine: true,
     session_model: true,
     session_approval_mode: true,
     rewind: true,
@@ -535,9 +503,6 @@ describe('validateTranscriptRecord', () => {
     goal_turn_end: true,
     realtime_message: true,
     turn_result: true,
-    managed_session_header_v1: true,
-    managed_session_event_v1: true,
-    managed_session_commit_v1: true,
   };
 
   it.each(Object.keys(RECORDED_SUBTYPES))(

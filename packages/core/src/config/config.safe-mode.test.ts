@@ -45,18 +45,16 @@ vi.mock('../tools/tool-registry', () => {
   ToolRegistryMock.prototype.getFunctionDeclarations = vi.fn(() => []);
   ToolRegistryMock.mockImplementation(function (this: {
     __mcpManagerMock: {
-      setOnBudgetEvent: Mock;
       discoverAllMcpToolsIncremental: Mock;
     };
   }) {
     this.__mcpManagerMock = {
-      setOnBudgetEvent: vi.fn(),
       discoverAllMcpToolsIncremental: vi.fn().mockResolvedValue(undefined),
     };
     return this;
   });
   ToolRegistryMock.prototype.getMcpClientManager = function (this: {
-    __mcpManagerMock: { setOnBudgetEvent: Mock };
+    __mcpManagerMock: { discoverAllMcpToolsIncremental: Mock };
   }) {
     return this.__mcpManagerMock;
   };

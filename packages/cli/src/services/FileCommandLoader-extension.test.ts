@@ -47,8 +47,7 @@ describe('FileCommandLoader - Extension Commands Support', () => {
     });
 
     const mockConfig = {
-      getFolderTrustFeature: vi.fn(() => false),
-      getFolderTrust: vi.fn(() => true),
+      isTrustedFolder: vi.fn(() => true),
       getProjectRoot: vi.fn(() => projectRoot),
       storage: new Storage(projectRoot),
       getExtensions: vi.fn(() => [
@@ -106,8 +105,7 @@ describe('FileCommandLoader - Extension Commands Support', () => {
     });
 
     const mockConfig = {
-      getFolderTrustFeature: vi.fn(() => false),
-      getFolderTrust: vi.fn(() => true),
+      isTrustedFolder: vi.fn(() => true),
       getProjectRoot: vi.fn(() => projectRoot),
       storage: new Storage(projectRoot),
       getExtensions: vi.fn(() => [
@@ -157,8 +155,7 @@ describe('FileCommandLoader - Extension Commands Support', () => {
     });
 
     const mockConfig = {
-      getFolderTrustFeature: vi.fn(() => false),
-      getFolderTrust: vi.fn(() => true),
+      isTrustedFolder: vi.fn(() => true),
       getProjectRoot: vi.fn(() => projectRoot),
       storage: new Storage(projectRoot),
       getExtensions: vi.fn(() => [
@@ -205,8 +202,7 @@ describe('FileCommandLoader - Extension Commands Support', () => {
     });
 
     const mockConfig = {
-      getFolderTrustFeature: vi.fn(() => false),
-      getFolderTrust: vi.fn(() => true),
+      isTrustedFolder: vi.fn(() => true),
       getProjectRoot: vi.fn(() => projectRoot),
       storage: new Storage(projectRoot),
       getExtensions: vi.fn(() => [
@@ -254,8 +250,7 @@ describe('FileCommandLoader - Extension Commands Support', () => {
     });
 
     const mockConfig = {
-      getFolderTrustFeature: vi.fn(() => false),
-      getFolderTrust: vi.fn(() => true),
+      isTrustedFolder: vi.fn(() => true),
       getProjectRoot: vi.fn(() => projectRoot),
       storage: new Storage(projectRoot),
       getExtensions: vi.fn(() => [
@@ -308,8 +303,7 @@ describe('FileCommandLoader - Extension Commands Support', () => {
     });
 
     const mockConfig = {
-      getFolderTrustFeature: vi.fn(() => false),
-      getFolderTrust: vi.fn(() => true),
+      isTrustedFolder: vi.fn(() => true),
       getProjectRoot: vi.fn(() => projectRoot),
       storage: new Storage(projectRoot),
       getExtensions: vi.fn(() => [

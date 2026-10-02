@@ -13,7 +13,6 @@ import {
   detectLineEnding,
   ensureCrlfLineEndings,
 } from './fileSystemService.js';
-import { encodeTextFileContent } from './sync-file-encoding.js';
 
 const mockPlatform = vi.hoisted(() => vi.fn().mockReturnValue('linux'));
 const mockGetSystemEncoding = vi.hoisted(() =>
@@ -343,21 +342,6 @@ describe('StandardFileSystemService', () => {
   });
 
   describe('writeTextFile', () => {
-    it('encodeTextFileContent returns final bytes for UTF-8 and CRLF metadata', () => {
-      const encoded = encodeTextFileContent('/test/file.txt', 'a\nb\n', {
-        lineEnding: 'crlf',
-      });
-      expect(encoded.toString('utf8')).toBe('a\r\nb\r\n');
-    });
-
-    it('encodeTextFileContent preserves UTF-8 BOM in returned bytes', () => {
-      const encoded = encodeTextFileContent('/test/file.txt', 'Hello', {
-        bom: true,
-      });
-      expect(Array.from(encoded.subarray(0, 3))).toEqual([0xef, 0xbb, 0xbf]);
-      expect(encoded.subarray(3).toString('utf8')).toBe('Hello');
-    });
-
     it('should write file content using fs', async () => {
       vi.mocked(fs.writeFile).mockResolvedValue();
 

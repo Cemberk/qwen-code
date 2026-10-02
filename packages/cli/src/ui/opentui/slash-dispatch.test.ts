@@ -73,7 +73,6 @@ describe('model-invocable commands registration (ink loader-effect parity)', () 
       isWorkflowsEnabled: () => false,
       isManagedMemoryAvailable: () => false,
       getFolderTrust: () => false,
-      getFolderTrustFeature: () => false,
       getFileCheckpointingEnabled: () => false,
       isLspEnabled: () => false,
       isCronEnabled: () => false,

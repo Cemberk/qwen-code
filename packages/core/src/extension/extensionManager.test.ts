@@ -1042,137 +1042,6 @@ describe('extension tests', () => {
       });
     });
 
-    it('prepares without mutating the store and commits exactly once', async () => {
-      const archivePath = path.join(tempWorkspaceDir, 'prepared-ext.zip');
-      fs.writeFileSync(archivePath, 'archive');
-      mockExtractArchiveFile.mockImplementation(
-        async (_source: string, destination: string) => {
-          writeExtractedExtension(destination, 'prepared-ext');
-        },
-      );
-      const manager = createExtensionManager();
-      const events: ExtensionMutationEvent[] = [];
-      manager.addMutationListener((event) => events.push(event));
-      await manager.refreshCache();
-      const before = await manager.getExtensionStoreSnapshot();
-
-      const prepared = await manager.prepareExtensionInstall({
-        installMetadata: { type: 'local', source: archivePath },
-        initialActivation: { scope: 'user' },
-        requestConsent: async () => {},
-      });
-
-      expect(fs.existsSync(path.join(userExtensionsDir, 'prepared-ext'))).toBe(
-        false,
-      );
-      expect((await manager.getExtensionStoreSnapshot()).generation).toBe(
-        before.generation,
-      );
-      expect(events).toEqual([]);
-
-      const committed = await manager.commitPreparedExtension(prepared);
-      expect(committed.extension?.name).toBe('prepared-ext');
-      expect(committed.generation).toBe(before.generation + 1);
-      await expect(
-        manager.commitPreparedExtension(prepared),
-      ).rejects.toMatchObject({ code: 'prepared_extension_consumed' });
-      await manager.disposePreparedExtension(prepared);
-      await manager.disposePreparedExtension(prepared);
-      expect(events).toEqual([
-        { id: 1, phase: 'start', operation: 'installExtension' },
-        { id: 1, phase: 'end', operation: 'installExtension' },
-      ]);
-    });
-
-    it('reads an uploaded archive from a local path without persisting that path', async () => {
-      const archivePath = path.join(tempWorkspaceDir, 'uploaded.zip');
-      fs.writeFileSync(archivePath, 'archive');
-      mockExtractArchiveFile.mockImplementation(
-        async (_source: string, destination: string) => {
-          writeExtractedExtension(destination, 'uploaded-extension');
-        },
-      );
-      const manager = createExtensionManager();
-
-      const prepared = await manager.prepareExtensionInstall({
-        installMetadata: { type: 'local', source: 'upload:uploaded.zip' },
-        localSourcePath: archivePath,
-        initialActivation: { scope: 'user' },
-        requestConsent: async () => {},
-      });
-
-      expect(mockExtractArchiveFile).toHaveBeenLastCalledWith(
-        archivePath,
-        expect.any(String),
-        undefined,
-      );
-      expect(prepared.installMetadata.source).toBe('upload:uploaded.zip');
-
-      await manager.commitPreparedExtension(prepared);
-      const metadata = manager.loadInstallMetadata(
-        path.join(userExtensionsDir, 'uploaded-extension'),
-      );
-      expect(metadata?.source).toBe('upload:uploaded.zip');
-      await manager.disposePreparedExtension(prepared);
-      expect(fs.existsSync(archivePath)).toBe(true);
-    });
-
-    it('rejects a local source path for non-local installs', async () => {
-      const archivePath = path.join(tempWorkspaceDir, 'uploaded.zip');
-      fs.writeFileSync(archivePath, 'archive');
-      const manager = createExtensionManager();
-
-      await expect(
-        manager.prepareExtensionInstall({
-          installMetadata: {
-            type: 'link',
-            source: tempWorkspaceDir,
-          },
-          localSourcePath: archivePath,
-          initialActivation: { scope: 'user' },
-          requestConsent: async () => {},
-        }),
-      ).rejects.toThrow('A local source path requires a local install.');
-    });
-
-    it('signals the durable commit before runtime refresh completes', async () => {
-      const archivePath = path.join(tempWorkspaceDir, 'commit-boundary.zip');
-      fs.writeFileSync(archivePath, 'archive');
-      mockExtractArchiveFile.mockImplementation(
-        async (_source: string, destination: string) => {
-          writeExtractedExtension(destination, 'commit-boundary');
-        },
-      );
-      const manager = createExtensionManager();
-      let finishRefresh!: () => void;
-      const refreshBlocked = new Promise<void>((resolve) => {
-        finishRefresh = resolve;
-      });
-      vi.spyOn(manager, 'refreshTools').mockImplementation(
-        async () => await refreshBlocked,
-      );
-      const prepared = await manager.prepareExtensionInstall({
-        installMetadata: { type: 'local', source: archivePath },
-        initialActivation: { scope: 'user' },
-        requestConsent: async () => {},
-      });
-      const committedGenerations: number[] = [];
-      let settled = false;
-
-      const committing = manager
-        .commitPreparedExtension(prepared, (generation) => {
-          committedGenerations.push(generation);
-        })
-        .finally(() => {
-          settled = true;
-        });
-
-      await vi.waitFor(() => expect(committedGenerations).toHaveLength(1));
-      expect(settled).toBe(false);
-      finishRefresh();
-      await committing;
-    });
-
     it('fully validates the staged extension before commit', async () => {
       const archivePath = path.join(tempWorkspaceDir, 'invalid-context.zip');
       fs.writeFileSync(archivePath, 'archive');
@@ -1193,11 +1062,10 @@ describe('extension tests', () => {
       const before = await manager.getExtensionStoreSnapshot();
 
       await expect(
-        manager.prepareExtensionInstall({
-          installMetadata: { type: 'local', source: archivePath },
-          initialActivation: { scope: 'user' },
-          requestConsent: async () => {},
-        }),
+        manager.installExtension(
+          { type: 'local', source: archivePath },
+          async () => {},
+        ),
       ).rejects.toThrow();
 
       expect(await manager.getExtensionStoreSnapshot()).toEqual(before);
@@ -1219,19 +1087,13 @@ describe('extension tests', () => {
         },
       );
       const manager = createExtensionManager();
-      const prepared = await manager.prepareExtensionInstall({
-        installMetadata: { type: 'local', source: archivePath },
-        initialActivation: { scope: 'user' },
-        requestConsent: async () => {},
-      });
 
-      try {
-        const committed = await manager.commitPreparedExtension(prepared);
-        expect(committed.version).toBe('1.0.0');
-        expect(committed.extension?.version).toBe('1.0.0');
-      } finally {
-        await manager.disposePreparedExtension(prepared);
-      }
+      const extension = await manager.installExtension(
+        { type: 'local', source: archivePath },
+        async () => {},
+      );
+
+      expect(extension.version).toBe('1.0.0');
     });
 
     it('stops archive preparation when cancellation follows extraction', async () => {
@@ -1245,15 +1107,15 @@ describe('extension tests', () => {
       const manager = createExtensionManager();
 
       await expect(
-        manager.prepareExtensionInstall({
-          installMetadata: {
-            type: 'local',
-            source: archivePath,
-          },
-          initialActivation: { scope: 'user' },
-          requestConsent: async () => {},
-          signal: controller.signal,
-        }),
+        manager.installExtension(
+          { type: 'local', source: archivePath },
+          async () => {},
+          undefined,
+          undefined,
+          undefined,
+          { scope: 'user' },
+          controller.signal,
+        ),
       ).rejects.toBe(reason);
     });
 
@@ -1276,28 +1138,17 @@ describe('extension tests', () => {
         },
       );
       const manager = createExtensionManager();
-      const prepared = await manager.prepareExtensionInstall({
-        installMetadata: {
-          type: 'local',
-          source: archivePath,
-        },
-        initialActivation: { scope: 'user' },
-        requestConsent: async () => {},
-      });
 
-      try {
-        await manager.commitPreparedExtension(prepared);
-        expect(
-          path.normalize(
-            fs.readFileSync(
-              path.join(prepared.destinationDirectory, 'README.md'),
-              'utf8',
-            ),
-          ),
-        ).toBe(path.join(prepared.destinationDirectory, 'scripts', 'setup.sh'));
-      } finally {
-        await manager.disposePreparedExtension(prepared);
-      }
+      const extension = await manager.installExtension(
+        { type: 'local', source: archivePath },
+        async () => {},
+      );
+
+      expect(
+        path.normalize(
+          fs.readFileSync(path.join(extension.path, 'README.md'), 'utf8'),
+        ),
+      ).toBe(path.join(extension.path, 'scripts', 'setup.sh'));
     });
 
     it('does not report a temp cleanup warning when an immediate retry succeeds', async () => {
@@ -1310,98 +1161,34 @@ describe('extension tests', () => {
       );
       const manager = createExtensionManager();
       await manager.refreshCache();
-      const prepared = await manager.prepareExtensionInstall({
-        installMetadata: { type: 'local', source: archivePath },
-        initialActivation: { scope: 'user' },
-        requestConsent: async () => {},
-      });
-      const cleanupPath = prepared.cleanupPaths[0]!;
       const rm = fs.promises.rm.bind(fs.promises);
-      let cleanupAttempts = 0;
+      const deniedOnce = new Set<string>();
       vi.spyOn(fs.promises, 'rm').mockImplementation(
         async (target, options) => {
-          if (target === cleanupPath && cleanupAttempts++ === 0) {
+          const targetPath = String(target);
+          if (
+            /^qwen-extension[A-Za-z0-9]{6}$/.test(path.basename(targetPath)) &&
+            !deniedOnce.has(targetPath)
+          ) {
+            deniedOnce.add(targetPath);
             throw new Error('cleanup denied');
           }
           return await rm(target, options);
         },
       );
 
-      const committed = await manager.commitPreparedExtension(prepared);
-
-      expect(committed.generation).toBeGreaterThan(0);
-      expect(committed.warnings).toBeUndefined();
-      expect(prepared.disposed).toBe(true);
-      await expect(
-        manager.disposePreparedExtension(prepared),
-      ).resolves.toBeUndefined();
-      expect(cleanupAttempts).toBe(2);
-      expect(fs.existsSync(cleanupPath)).toBe(false);
-    });
-
-    it('reports deferred settings failure as a post-commit warning', async () => {
-      const archivePath = path.join(tempWorkspaceDir, 'settings-warning.zip');
-      fs.writeFileSync(archivePath, 'archive');
-      mockExtractArchiveFile.mockImplementation(
-        async (_source: string, destination: string) => {
-          writeExtractedExtension(destination, 'settings-warning');
-        },
+      // installExtension throws on any commit warning, including
+      // extension_temp_cleanup_failed.
+      const extension = await manager.installExtension(
+        { type: 'local', source: archivePath },
+        async () => {},
       );
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-      const prepared = await manager.prepareExtensionInstall({
-        installMetadata: { type: 'local', source: archivePath },
-        initialActivation: { scope: 'user' },
-        requestConsent: async () => {},
-      });
-      Object.defineProperty(prepared, 'commitSettings', {
-        value: vi.fn().mockRejectedValue(new Error('keychain unavailable')),
-      });
 
-      const committed = await manager.commitPreparedExtension(prepared);
-
-      expect(committed.warnings).toContainEqual({
-        code: 'extension_settings_legacy_sync_failed',
-        error: 'keychain unavailable',
-      });
-    });
-
-    it('signals the durable commit before deferred settings finish', async () => {
-      const archivePath = path.join(tempWorkspaceDir, 'settings-deferred.zip');
-      fs.writeFileSync(archivePath, 'archive');
-      mockExtractArchiveFile.mockImplementation(
-        async (_source: string, destination: string) => {
-          writeExtractedExtension(destination, 'settings-deferred');
-        },
-      );
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-      const prepared = await manager.prepareExtensionInstall({
-        installMetadata: { type: 'local', source: archivePath },
-        initialActivation: { scope: 'user' },
-        requestConsent: async () => {},
-      });
-      let finishSettings!: () => void;
-      const settingsBlocked = new Promise<void>((resolve) => {
-        finishSettings = resolve;
-      });
-      const commitSettings = vi.fn(async () => await settingsBlocked);
-      Object.defineProperty(prepared, 'commitSettings', {
-        value: commitSettings,
-      });
-      const onCommitted = vi.fn();
-
-      const committing = manager.commitPreparedExtension(prepared, onCommitted);
-      await vi.waitFor(() => expect(commitSettings).toHaveBeenCalledOnce());
-
-      expect(onCommitted).toHaveBeenCalledOnce();
-      expect(onCommitted.mock.invocationCallOrder[0]).toBeLessThan(
-        commitSettings.mock.invocationCallOrder[0]!,
-      );
-      finishSettings();
-      await expect(committing).resolves.toMatchObject({
-        identity: { name: 'settings-deferred' },
-      });
+      expect(extension.name).toBe('cleanup-warning');
+      expect(deniedOnce.size).toBeGreaterThan(0);
+      for (const target of deniedOnce) {
+        expect(fs.existsSync(target)).toBe(false);
+      }
     });
 
     it('surfaces committed runtime refresh warnings after install reloads', async () => {
@@ -1434,56 +1221,6 @@ describe('extension tests', () => {
           },
         ],
       });
-    });
-
-    it('does not commit settings when a prepared install commit fails', async () => {
-      const archivePath = path.join(tempWorkspaceDir, 'commit-failure.zip');
-      fs.writeFileSync(archivePath, 'archive');
-      mockExtractArchiveFile.mockImplementation(
-        async (_source: string, destination: string) => {
-          writeExtractedExtension(destination, 'commit-failure');
-        },
-      );
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-      const prepared = await manager.prepareExtensionInstall({
-        installMetadata: { type: 'local', source: archivePath },
-        initialActivation: { scope: 'user' },
-        requestConsent: async () => {},
-      });
-      const commitSettings = vi.fn();
-      Object.defineProperty(prepared, 'commitSettings', {
-        value: commitSettings,
-      });
-      vi.spyOn(
-        ExtensionStore.prototype,
-        'commitArtifact',
-      ).mockRejectedValueOnce(new Error('disk full'));
-
-      await expect(manager.commitPreparedExtension(prepared)).rejects.toThrow(
-        'disk full',
-      );
-      expect(commitSettings).not.toHaveBeenCalled();
-      await manager.disposePreparedExtension(prepared);
-    });
-
-    it('rejects forged prepared handles without deleting their paths', async () => {
-      const manager = createExtensionManager();
-      const protectedPath = path.join(tempWorkspaceDir, 'keep-me');
-      fs.mkdirSync(protectedPath);
-      const forged = {
-        stagingDirectory: protectedPath,
-        cleanupPaths: [],
-        disposed: false,
-      } as unknown as PreparedExtensionMutation;
-
-      await expect(
-        manager.commitPreparedExtension(forged),
-      ).rejects.toMatchObject({ code: 'invalid_prepared_extension' });
-      await expect(
-        manager.disposePreparedExtension(forged),
-      ).rejects.toMatchObject({ code: 'invalid_prepared_extension' });
-      expect(fs.existsSync(protectedPath)).toBe(true);
     });
 
     it('should install an extension from a local archive', async () => {
@@ -3358,78 +3095,6 @@ describe('extension tests', () => {
       ).toMatchObject({ version: '2.0.0' });
     });
 
-    it('rejects an invalid staged extension before commit', async () => {
-      const archivePath = path.join(tempWorkspaceDir, 'install-reload.zip');
-      fs.writeFileSync(archivePath, 'archive');
-      mockExtractArchiveFile.mockImplementation(
-        async (_source: string, destination: string) => {
-          fs.mkdirSync(destination, { recursive: true });
-          fs.writeFileSync(
-            path.join(destination, EXTENSIONS_CONFIG_FILENAME),
-            JSON.stringify({ name: 'my-extension', version: '1.0.0' }),
-          );
-        },
-      );
-      const manager = createExtensionManager();
-      const prepared = await manager.prepareExtensionInstall({
-        installMetadata: { type: 'local', source: archivePath },
-        initialActivation: { scope: 'user' },
-        requestConsent: async () => {},
-      });
-      fs.writeFileSync(
-        path.join(prepared.stagingDirectory, EXTENSIONS_CONFIG_FILENAME),
-        '{ invalid json',
-      );
-      const before = await manager.getExtensionStoreSnapshot();
-
-      try {
-        await expect(manager.commitPreparedExtension(prepared)).rejects.toThrow(
-          'Failed to load extension config',
-        );
-      } finally {
-        await manager.disposePreparedExtension(prepared);
-      }
-
-      expect(await manager.getExtensionStoreSnapshot()).toEqual(before);
-      expect(fs.existsSync(prepared.destinationDirectory)).toBe(false);
-    });
-
-    it('rejects staged identity changes before commit', async () => {
-      const archivePath = path.join(tempWorkspaceDir, 'identity-change.zip');
-      fs.writeFileSync(archivePath, 'archive');
-      mockExtractArchiveFile.mockImplementation(
-        async (_source: string, destination: string) => {
-          fs.mkdirSync(destination, { recursive: true });
-          fs.writeFileSync(
-            path.join(destination, EXTENSIONS_CONFIG_FILENAME),
-            JSON.stringify({ name: 'original-name', version: '1.0.0' }),
-          );
-        },
-      );
-      const manager = createExtensionManager();
-      const prepared = await manager.prepareExtensionInstall({
-        installMetadata: { type: 'local', source: archivePath },
-        initialActivation: { scope: 'user' },
-        requestConsent: async () => {},
-      });
-      fs.writeFileSync(
-        path.join(prepared.stagingDirectory, EXTENSIONS_CONFIG_FILENAME),
-        JSON.stringify({ name: 'changed-name', version: '1.0.0' }),
-      );
-      const before = await manager.getExtensionStoreSnapshot();
-
-      try {
-        await expect(manager.commitPreparedExtension(prepared)).rejects.toThrow(
-          'Prepared extension identity changed before commit.',
-        );
-      } finally {
-        await manager.disposePreparedExtension(prepared);
-      }
-
-      expect(await manager.getExtensionStoreSnapshot()).toEqual(before);
-      expect(fs.existsSync(prepared.destinationDirectory)).toBe(false);
-    });
-
     it('reports a committed update reload failure as needing restart', async () => {
       const archivePath = path.join(tempWorkspaceDir, 'reload-failure.zip');
       fs.writeFileSync(archivePath, 'archive');
@@ -3461,7 +3126,6 @@ describe('extension tests', () => {
         config: { ...extension.config, version: '2.0.0' },
       };
       vi.spyOn(manager, 'loadExtension')
-        .mockResolvedValueOnce(updatedExtension)
         .mockResolvedValueOnce(updatedExtension)
         .mockResolvedValueOnce(null);
       const callback = vi.fn();

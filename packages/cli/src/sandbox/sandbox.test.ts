@@ -9,11 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { pathToFileURL } from 'node:url';
-import {
-  FatalSandboxError,
-  PRIVATE_ACP_CAPABILITY_ENV,
-  QWEN_DIR,
-} from '@qwen-code/qwen-code-core';
+import { FatalSandboxError, QWEN_DIR } from '@qwen-code/qwen-code-core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const spawnMock = vi.hoisted(() => vi.fn());
@@ -49,7 +45,7 @@ afterEach(() => {
 });
 
 describe('start_sandbox', () => {
-  it('passes child environment variables into a container sandbox', async () => {
+  it('passes the warnings file into a container sandbox', async () => {
     vi.stubEnv('SANDBOX_SET_UID_GID', 'false');
     vi.stubEnv('QWEN_CODE_WARNINGS_FILE', '/tmp/qwen-code-warnings-test.txt');
     vi.spyOn(fs, 'existsSync').mockReturnValue(true);
@@ -72,26 +68,18 @@ describe('start_sandbox', () => {
       })
       .mockReturnValueOnce(child);
 
-    const capability = 'private-capability';
     const result = start_sandbox(
       { command: 'docker', image: 'example.com/qwen-code:latest' },
       [],
       undefined,
       [process.execPath, '/path/to/cli.js', '--acp'],
-      { [PRIVATE_ACP_CAPABILITY_ENV]: capability },
     );
 
     await vi.waitFor(() => expect(spawnMock).toHaveBeenCalledTimes(2));
     const args = spawnMock.mock.calls[1]?.[1] as string[];
-    const options = spawnMock.mock.calls[1]?.[2];
     expect(args[args.indexOf('--hostname') + 1]).toBe(
       args[args.indexOf('--name') + 1],
     );
-    const envFlagIndex = args.indexOf(PRIVATE_ACP_CAPABILITY_ENV);
-    expect(args.slice(envFlagIndex - 1, envFlagIndex + 1)).toEqual([
-      '--env',
-      PRIVATE_ACP_CAPABILITY_ENV,
-    ]);
     const warningsFlagIndex = args.indexOf(
       'QWEN_CODE_WARNINGS_FILE=/tmp/qwen-code-warnings-test.txt',
     );
@@ -99,13 +87,6 @@ describe('start_sandbox', () => {
       '--env',
       'QWEN_CODE_WARNINGS_FILE=/tmp/qwen-code-warnings-test.txt',
     ]);
-    expect(options).toEqual(
-      expect.objectContaining({
-        env: expect.objectContaining({
-          [PRIVATE_ACP_CAPABILITY_ENV]: capability,
-        }),
-      }),
-    );
 
     child.emit('close', 0);
     await expect(result).resolves.toBe(0);

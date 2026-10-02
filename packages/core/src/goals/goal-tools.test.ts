@@ -116,7 +116,6 @@ describe('GetGoalTool', () => {
 
   it('keeps both Goal tools visible and out of deferred search', () => {
     const config = {
-      getMcpTransportPool: () => undefined,
       getDisabledTools: () => new Set<string>(),
       getVisibleTools: () => new Set<string>(),
       getGoalRuntime: () => undefined as never,

@@ -58,12 +58,8 @@ const TomlCommandDefSchema = z.object({
  */
 export class FileCommandLoader implements ICommandLoader {
   private readonly projectRoot: string;
-  private readonly folderTrustEnabled: boolean;
-  private readonly folderTrust: boolean;
 
   constructor(private readonly config: Config | null) {
-    this.folderTrustEnabled = !!config?.getFolderTrustFeature();
-    this.folderTrust = !!config?.getFolderTrust();
     this.projectRoot = config?.getProjectRoot() || process.cwd();
   }
 
@@ -105,10 +101,6 @@ export class FileCommandLoader implements ICommandLoader {
           ...globOptions,
           cwd: dirInfo.path,
         });
-
-        if (this.folderTrustEnabled && !this.folderTrust) {
-          return [];
-        }
 
         // Process TOML files
         const tomlCommandPromises = tomlFiles.map((file) =>
@@ -164,8 +156,10 @@ export class FileCommandLoader implements ICommandLoader {
     // 1. User commands
     dirs.push({ path: Storage.getUserCommandsDir() });
 
-    // 2. Project commands (override user commands)
-    dirs.push({ path: storage.getProjectCommandsDir() });
+    // 2. Project commands (override user commands), trusted folders only
+    if (this.config?.isTrustedFolder()) {
+      dirs.push({ path: storage.getProjectCommandsDir() });
+    }
 
     // 3. Extension commands (processed last to detect all conflicts)
     if (this.config) {

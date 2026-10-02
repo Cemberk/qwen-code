@@ -13,13 +13,9 @@ function fakeClient(pages: Array<{ tools: unknown[]; nextCursor?: string }>) {
     const index = cursor ? Number(cursor) : 0;
     return pages[index];
   });
-  const callTool = vi.fn(async () => ({
-    content: [{ type: 'text', text: 'ok' }],
-  }));
   return {
-    client: { listTools, callTool } as unknown as Client,
+    client: { listTools } as unknown as Client,
     listTools,
-    callTool,
   };
 }
 
@@ -72,30 +68,5 @@ describe('mcpToTool', () => {
     await expect(mcpToTool(client).tool()).rejects.toThrow(
       'Duplicate function name a found in MCP tools',
     );
-  });
-
-  it('calls only listed tools and wraps their results', async () => {
-    const { client, callTool } = fakeClient([
-      { tools: [{ name: 'a', inputSchema: {} }] },
-    ]);
-
-    const parts = await mcpToTool(client, { timeout: 5 }).callTool([
-      { name: 'a', args: { x: 1 } },
-      { name: 'unknown', args: {} },
-    ]);
-
-    expect(callTool).toHaveBeenCalledOnce();
-    expect(callTool).toHaveBeenCalledWith(
-      { name: 'a', arguments: { x: 1 } },
-      { timeout: 5 },
-    );
-    expect(parts).toEqual([
-      {
-        functionResponse: {
-          name: 'a',
-          response: { content: [{ type: 'text', text: 'ok' }] },
-        },
-      },
-    ]);
   });
 });

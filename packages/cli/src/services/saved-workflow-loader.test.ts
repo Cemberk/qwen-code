@@ -33,8 +33,7 @@ function makeConfig(overrides: Partial<Record<string, unknown>> = {}): Config {
   return {
     isWorkflowsEnabled: () => true,
     getBareMode: () => false,
-    getFolderTrustFeature: () => false,
-    getFolderTrust: () => false,
+    isTrustedFolder: () => true,
     ...overrides,
   } as unknown as Config;
 }
@@ -387,16 +386,19 @@ describe('SavedWorkflowLoader', () => {
     expect(listMock).not.toHaveBeenCalled();
   });
 
-  it('returns [] when folder trust is enabled but the folder is untrusted', async () => {
-    listMock.mockResolvedValue([entry()]);
-    const cmds = await new SavedWorkflowLoader(
-      makeConfig({
-        getFolderTrustFeature: () => true,
-        getFolderTrust: () => false,
+  it('skips project workflows in an untrusted folder', async () => {
+    listMock.mockResolvedValue([
+      entry({ name: 'deep-research', source: 'project' }),
+      entry({
+        name: 'triage',
+        scriptPath: '/home/.qwen/workflows/triage.js',
+        source: 'user',
       }),
+    ]);
+    const cmds = await new SavedWorkflowLoader(
+      makeConfig({ isTrustedFolder: () => false }),
     ).loadCommands(signal);
-    expect(cmds).toEqual([]);
-    expect(listMock).not.toHaveBeenCalled();
+    expect(cmds.map((c) => c.name)).toEqual(['triage']);
   });
 
   it('returns [] for a null config', async () => {

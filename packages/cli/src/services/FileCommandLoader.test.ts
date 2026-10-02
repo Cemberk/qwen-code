@@ -4,9 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import * as os from 'node:os';
 import * as path from 'node:path';
-import type { Config } from '@qwen-code/qwen-code-core';
-import { Storage } from '@qwen-code/qwen-code-core';
+import type { ConfigParameters } from '@qwen-code/qwen-code-core';
+import { Config, Storage } from '@qwen-code/qwen-code-core';
 import mock from 'mock-fs';
 import { FileCommandLoader } from './FileCommandLoader.js';
 import { assert, vi } from 'vitest';
@@ -226,8 +227,7 @@ describe('FileCommandLoader', () => {
     const mockConfig = {
       getProjectRoot: vi.fn(() => '/path/to/project'),
       getExtensions: vi.fn(() => []),
-      getFolderTrustFeature: vi.fn(() => false),
-      getFolderTrust: vi.fn(() => false),
+      isTrustedFolder: vi.fn(() => true),
     } as unknown as Config;
     const loader = new FileCommandLoader(mockConfig);
     const commands = await loader.loadCommands(signal);
@@ -271,8 +271,7 @@ describe('FileCommandLoader', () => {
     const mockConfig = {
       getProjectRoot: vi.fn(() => process.cwd()),
       getExtensions: vi.fn(() => []),
-      getFolderTrustFeature: vi.fn(() => false),
-      getFolderTrust: vi.fn(() => false),
+      isTrustedFolder: vi.fn(() => true),
     } as unknown as Config;
     const loader = new FileCommandLoader(mockConfig);
     const commands = await loader.loadCommands(signal);
@@ -327,8 +326,7 @@ describe('FileCommandLoader', () => {
     const mockConfig = {
       getProjectRoot: vi.fn(() => process.cwd()),
       getExtensions: vi.fn(() => []),
-      getFolderTrustFeature: vi.fn(() => false),
-      getFolderTrust: vi.fn(() => false),
+      isTrustedFolder: vi.fn(() => true),
       getBareMode: vi.fn(() => true),
     } as unknown as Config;
     const loader = new FileCommandLoader(mockConfig);
@@ -589,8 +587,7 @@ describe('FileCommandLoader', () => {
             path: extensionDir,
           },
         ]),
-        getFolderTrustFeature: vi.fn(() => false),
-        getFolderTrust: vi.fn(() => false),
+        isTrustedFolder: vi.fn(() => true),
       } as unknown as Config;
       const loader = new FileCommandLoader(mockConfig);
       const commands = await loader.loadCommands(signal);
@@ -627,8 +624,7 @@ describe('FileCommandLoader', () => {
             format: 'agent-plugins-v1',
           },
         ]),
-        getFolderTrustFeature: vi.fn(() => false),
-        getFolderTrust: vi.fn(() => false),
+        isTrustedFolder: vi.fn(() => true),
       } as unknown as Config;
 
       const commands = await new FileCommandLoader(mockConfig).loadCommands(
@@ -676,8 +672,7 @@ describe('FileCommandLoader', () => {
             path: extensionDir,
           },
         ]),
-        getFolderTrustFeature: vi.fn(() => false),
-        getFolderTrust: vi.fn(() => false),
+        isTrustedFolder: vi.fn(() => true),
       } as unknown as Config;
       const loader = new FileCommandLoader(mockConfig);
       const commands = await loader.loadCommands(signal);
@@ -785,8 +780,7 @@ describe('FileCommandLoader', () => {
             path: extensionDir2,
           },
         ]),
-        getFolderTrustFeature: vi.fn(() => false),
-        getFolderTrust: vi.fn(() => false),
+        isTrustedFolder: vi.fn(() => true),
       } as unknown as Config;
       const loader = new FileCommandLoader(mockConfig);
       const commands = await loader.loadCommands(signal);
@@ -823,8 +817,7 @@ describe('FileCommandLoader', () => {
             path: extensionDir,
           },
         ]),
-        getFolderTrustFeature: vi.fn(() => false),
-        getFolderTrust: vi.fn(() => false),
+        isTrustedFolder: vi.fn(() => true),
       } as unknown as Config;
       const loader = new FileCommandLoader(mockConfig);
       const commands = await loader.loadCommands(signal);
@@ -857,8 +850,7 @@ describe('FileCommandLoader', () => {
         getExtensions: vi.fn(() => [
           { name: 'a', version: '1.0.0', isActive: true, path: extensionDir },
         ]),
-        getFolderTrustFeature: vi.fn(() => false),
-        getFolderTrust: vi.fn(() => false),
+        isTrustedFolder: vi.fn(() => true),
       } as unknown as Config;
       const loader = new FileCommandLoader(mockConfig);
       const commands = await loader.loadCommands(signal);
@@ -1247,47 +1239,78 @@ describe('FileCommandLoader', () => {
     });
   });
 
-  describe('with folder trust enabled', () => {
-    it('loads multiple commands', async () => {
-      const mockConfig = {
-        getProjectRoot: vi.fn(() => '/path/to/project'),
-        getExtensions: vi.fn(() => []),
-        getFolderTrustFeature: vi.fn(() => true),
-        getFolderTrust: vi.fn(() => true),
-      } as unknown as Config;
-      const userCommandsDir = Storage.getUserCommandsDir();
+  describe('folder trust', () => {
+    const userCommandsDir = Storage.getUserCommandsDir();
+    const projectCommandsDir = new Storage(
+      process.cwd(),
+    ).getProjectCommandsDir();
+    const extensionDir = path.join(os.tmpdir(), 'trust-ext');
+
+    async function loadCommandNames(
+      trust: Pick<ConfigParameters, 'folderTrust' | 'trustedFolder'>,
+    ): Promise<string[]> {
+      const config = new Config({
+        sessionId: 'file-command-loader-trust',
+        targetDir: process.cwd(),
+        cwd: process.cwd(),
+        debugMode: false,
+        ...trust,
+      });
+      vi.spyOn(config, 'getExtensions').mockReturnValue([
+        {
+          id: 'trust-ext',
+          name: 'trust-ext',
+          version: '1.0.0',
+          isActive: true,
+          path: extensionDir,
+          contextFiles: [],
+          config: { name: 'trust-ext', version: '1.0.0' },
+        },
+      ] as unknown as ReturnType<Config['getExtensions']>);
       mock({
-        [userCommandsDir]: {
-          'test1.toml': 'prompt = "Prompt 1"',
-          'test2.toml': 'prompt = "Prompt 2"',
+        [userCommandsDir]: { 'user-cmd.toml': 'prompt = "User prompt"' },
+        [projectCommandsDir]: {
+          'project-cmd.toml': 'prompt = "Project prompt"',
+        },
+        [extensionDir]: {
+          commands: { 'ext-cmd.toml': 'prompt = "Extension prompt"' },
         },
       });
+      const commands = await new FileCommandLoader(config).loadCommands(
+        signal,
+      );
+      return commands.map((command) => command.name);
+    }
 
-      const loader = new FileCommandLoader(mockConfig);
-      const commands = await loader.loadCommands(signal);
-
-      expect(commands).toHaveLength(2);
+    it('skips project commands in an untrusted folder but keeps user and extension commands', async () => {
+      expect(
+        await loadCommandNames({ folderTrust: true, trustedFolder: false }),
+      ).toEqual(['user-cmd', 'ext-cmd']);
     });
 
-    it('does not load when folder is not trusted', async () => {
-      const mockConfig = {
-        getProjectRoot: vi.fn(() => '/path/to/project'),
-        getExtensions: vi.fn(() => []),
-        getFolderTrustFeature: vi.fn(() => true),
-        getFolderTrust: vi.fn(() => false),
-      } as unknown as Config;
-      const userCommandsDir = Storage.getUserCommandsDir();
+    it('loads project commands in a trusted folder', async () => {
+      expect(
+        await loadCommandNames({ folderTrust: true, trustedFolder: true }),
+      ).toEqual(['user-cmd', 'project-cmd', 'ext-cmd']);
+    });
+
+    it('loads project commands when folder trust is disabled', async () => {
+      expect(await loadCommandNames({ folderTrust: false })).toEqual([
+        'user-cmd',
+        'project-cmd',
+        'ext-cmd',
+      ]);
+    });
+
+    it('skips project commands without a config', async () => {
       mock({
-        [userCommandsDir]: {
-          'test1.toml': 'prompt = "Prompt 1"',
-          'test2.toml': 'prompt = "Prompt 2"',
+        [userCommandsDir]: { 'user-cmd.toml': 'prompt = "User prompt"' },
+        [projectCommandsDir]: {
+          'project-cmd.toml': 'prompt = "Project prompt"',
         },
       });
-
-      const loader = new FileCommandLoader(mockConfig);
-      const commands = await loader.loadCommands(signal);
-
-      expect(commands).toHaveLength(0);
+      const commands = await new FileCommandLoader(null).loadCommands(signal);
+      expect(commands.map((command) => command.name)).toEqual(['user-cmd']);
     });
   });
 

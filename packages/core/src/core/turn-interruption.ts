@@ -70,7 +70,7 @@ export function completedToolCallBoundary(
 }
 
 // Envelope the background registries wrap a notification's `modelText` in.
-// Seven construction sites in six modules: `packages/cli/src/serve/create-sub-session.ts`,
+// Six construction sites in five modules:
 // `packages/core/src/services/monitorRegistry.ts` (two),
 // `packages/core/src/services/backgroundShellRegistry.ts`,
 // `packages/core/src/agents/background-tasks.ts`,

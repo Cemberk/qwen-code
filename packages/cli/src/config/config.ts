@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { SessionExecutionEngine } from '@qwen-code/qwen-code-core/services/session-execution-engine.js';
 import {
   type ModelProposedGoalsMode,
   ApprovalMode,
@@ -40,7 +39,6 @@ import {
   type MCPServerConfig,
   type SkillLevel,
   MAX_SUBAGENT_DEPTH_LIMIT,
-  addDaemonRequestAttribute,
   BUILT_IN_OUTPUT_STYLES,
   findOutputStyle,
   loadOutputStyleCatalog,
@@ -1492,8 +1490,6 @@ export async function loadCliConfig(
         sessionId: string,
       ) => Promise<SessionRestoreProjection | undefined>;
     };
-    /** Engine a paired host selected; the Config persists or verifies it. */
-    executionEngine?: SessionExecutionEngine;
   },
   enabledSkillNamesProvider?: () => ReadonlySet<string>,
 ): Promise<Config> {
@@ -2050,10 +2046,6 @@ export async function loadCliConfig(
         settings.experimental?.sessionWriterLease === true;
       if (sessionRestoreProjectionSource) {
         if (!deferProjectionUntilWriterLease && !argv.forkSession) {
-          addDaemonRequestAttribute(
-            'qwen-code.daemon.session_restore.projection_acquisition',
-            'preloaded',
-          );
           sessionRestoreProjection =
             await sessionRestoreProjectionSource(sessionId);
         }
@@ -2065,10 +2057,6 @@ export async function loadCliConfig(
         writeStderrLine(message);
         process.exit(1);
       }
-    }
-
-    if (sessionId) {
-      sessionService.assertLegacySessionExecution(sessionId);
     }
 
     if (argv.forkSession && sessionId) {
@@ -2086,10 +2074,6 @@ export async function loadCliConfig(
       if (sessionRestoreProjectionSource) {
         sessionData = undefined;
         if (!deferProjectionUntilWriterLease) {
-          addDaemonRequestAttribute(
-            'qwen-code.daemon.session_restore.projection_acquisition',
-            'preloaded',
-          );
           sessionRestoreProjection =
             await sessionRestoreProjectionSource(forkedSessionId);
         }
@@ -2201,7 +2185,6 @@ export async function loadCliConfig(
     sessionData,
     sessionRestoreProjection,
     sessionRestoreProjectionSource: boundSessionRestoreProjectionSource,
-    sessionExecutionEngine: hostPolicy?.executionEngine,
     sandbox: sandboxConfig,
     targetDir: cwd,
     provisionalWorkspace,

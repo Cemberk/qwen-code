@@ -225,21 +225,6 @@ export class McpClient {
   private transport: Transport | undefined;
   private status: MCPServerStatus = MCPServerStatus.DISCONNECTED;
   private isDisconnecting = false;
-  /**
-   * captures the most recent error
-   * delivered to the SDK Client's `onerror` callback. The pool entry's
-   *  silent-drop block (the DISCONNECTED-on-active branch inside
-   * `PoolEntry.statusChangeListener`) reads this via
-   * `getLastTransportError()` to thread the upstream cause (EPIPE,
-   * server crash) into the `'failed'` event's `lastError`
-   * string instead of emitting only the synthetic
-   * `'transport disconnected (silent transport drop)'` marker. Reset
-   * at the top of `connect()` so a successful reconnect clears stale
-   * state. No reset on `disconnect()` — McpClient instances are GC'd
-   * at pool entry teardown; field staleness has no observable
-   * consumer post-disconnect.
-   */
-  private lastTransportError?: Error;
   private instructions: string | undefined;
 
   constructor(
@@ -263,12 +248,6 @@ export class McpClient {
   async connect(): Promise<void> {
     this.isDisconnecting = false;
     invocationContextClients.delete(this.client);
-    // clear stale upstream error from
-    // any prior connect/disconnect cycle. The silent-drop reader
-    // is otherwise satisfied by `undefined` and falls back to the
-    // synthetic marker — but a stale error from a previous incarnation
-    // would mis-attribute a fresh transport drop to an old cause.
-    this.lastTransportError = undefined;
     this.updateStatus(MCPServerStatus.CONNECTING);
     try {
       this.transport = await this.createTransport();
@@ -277,13 +256,6 @@ export class McpClient {
         if (this.isDisconnecting) {
           return;
         }
-        // capture the upstream error
-        // BEFORE the synchronous `updateStatus(DISCONNECTED)` cascades
-        // to PoolEntry's statusChangeListener. The listener's
-        // silent-drop block reads `lastTransportError` inline; setting
-        // it ahead of `updateStatus` guarantees the field is populated
-        // by the time the listener fires.
-        this.lastTransportError = error;
         debugLogger.error(
           `MCP ERROR (${this.serverName}): ${getErrorMessage(error)}`,
         );
@@ -345,20 +317,6 @@ export class McpClient {
    * and logs; we just need the status registry to reflect reality.
    */
   async discover(cliConfig: Config): Promise<void> {
-    // legacy
-    // `discover()` path (used by non-pool sessions and any direct
-    // McpClient consumers) MUST apply config filters at discovery
-    // time — pre-PR `this.discoverTools(cliConfig)` defaulted
-    // `applyConfigFilters` to `true`, so `trust: true` server config
-    // → tool's trust set; `includeTools`/`excludeTools` filtered out
-    // disallowed tools. The refactor routed `discover()` through
-    // `discoverAndReturn` which used to hardcode
-    // `{ applyConfigFilters: false }` (matching pool semantics where
-    // `SessionMcpView.applyTools` is the authoritative filter), but
-    // that broke the legacy path: trust silently became `undefined`
-    // (operators saw unexpected permission prompts) and include/
-    // exclude filters were ignored. Now `discoverAndReturn` defaults
-    // to applying filters; pool callers explicitly opt out.
     const { tools, prompts, resources } =
       await this.discoverAndReturn(cliConfig);
     for (const tool of tools) {
@@ -369,15 +327,13 @@ export class McpClient {
     }
     // Resources are registered via the Config-owned `ResourceRegistry`
     // rather than a constructor-injected field. `this.promptRegistry` is
-    // already `cliConfig.getPromptRegistry()` on this non-pool path, so
+    // already `cliConfig.getPromptRegistry()`, so
     // this is the same single global registry — fetching it here avoids
     // threading a 4th registry through all ~20 `new McpClient(...)` sites.
     //
     // Clear-then-register makes re-discovery (health-monitor reconnect,
     // incremental settings-change discovery) idempotent: a resource the
     // server dropped between discoveries must not linger in the registry.
-    // Mirrors `SessionMcpView.applyResources`' remove-then-register on the
-    // pool path.
     //
     // Guard on `resources.length > 0`: `listMcpResources` swallows ALL errors
     // (including transient network failures / timeouts) and returns [], so an
@@ -398,10 +354,6 @@ export class McpClient {
   /**
    * Pure discovery — returns tools and prompts WITHOUT registering them.
    *
-   * pool path: a single shared `McpClient` produces this
-   * snapshot once; per-session `SessionMcpView` instances each
-   * register a filtered/decorated copy into their own registries.
-   *
    * Behavior mirrors `discover()` for error handling: status flips to
    * DISCONNECTED on any failure (so the global status registry +
    * `getFailedMcpServerNames()` reflect reality), then re-throws.
@@ -409,19 +361,8 @@ export class McpClient {
    * Returns the same combined "no prompts or tools" error that `discover()`
    * raised previously, so callers that distinguish "server up but empty" from
    * "server down" still get the right signal.
-   *
-   * @param opts.applyConfigFilters Whether to apply `includeTools` /
-   *   `excludeTools` filtering and set the `trust` field on returned
-   *   tools at discovery time. Defaults to `true` (legacy `discover()`
-   *   semantics). Pool callers pass `false` because per-session
-   *   `SessionMcpView.applyTools` is the authoritative filter
-   *   (otherwise pool-mode trust + filtering would apply twice
-   *   inconsistently across sessions).
    */
-  async discoverAndReturn(
-    cliConfig: Config,
-    opts?: { applyConfigFilters?: boolean },
-  ): Promise<{
+  async discoverAndReturn(cliConfig: Config): Promise<{
     tools: DiscoveredMCPTool[];
     prompts: DiscoveredMCPPrompt[];
     resources: DiscoveredMCPResource[];
@@ -444,7 +385,6 @@ export class McpClient {
           this.serverConfig,
           this.client,
           cliConfig,
-          { applyConfigFilters: opts?.applyConfigFilters ?? true },
         ),
       ]);
       const tools = applyListingAppResourceUi(toolDiscovery.tools, resources);
@@ -512,8 +452,8 @@ export class McpClient {
    * for SDK transports and for stdio transports that have not yet
    * connected or have already exited.
    *
-   * `PoolEntry.forceShutdown` reads this to enumerate
-   * descendant pids (via `listDescendantPids`) before calling
+   * The discovery-timeout handler in `McpClientManager` reads this to
+   * enumerate descendant pids (via `listDescendantPids`) before calling
    * `client.disconnect()`, so wrapper processes like
    * `npx @modelcontextprotocol/server-X` and `uvx ...` don't leak.
    */
@@ -521,20 +461,6 @@ export class McpClient {
     const t = this.transport as { pid?: number | null } | undefined;
     if (!t || typeof t.pid !== 'number' || t.pid <= 0) return undefined;
     return t.pid;
-  }
-
-  /**
-   * expose the most recent SDK Client
-   * `onerror` payload so PoolEntry's silent-drop block can thread
-   * the upstream cause (EPIPE, server-side crash) into the
-   * `'failed'` event's `lastError` string. Returns `undefined` if no
-   * error has been observed since the last `connect()`. Caller falls
-   * back to the synthetic marker on `undefined`. Population site: the
-   * `client.onerror` arrow inside `connect()` (this file). Consumer:
-   * the silent-drop block inside `PoolEntry.statusChangeListener`.
-   */
-  getLastTransportError(): Error | undefined {
-    return this.lastTransportError;
   }
 
   getInstructions(): string | undefined {
@@ -600,22 +526,6 @@ let mcpDiscoveryState: MCPDiscoveryState = MCPDiscoveryState.NOT_STARTED;
  */
 export function getMCPDiscoveryState(): MCPDiscoveryState {
   return mcpDiscoveryState;
-}
-
-/**
- * expose a setter so
- * `McpClientManager.discoverAllMcpToolsViaPool` can update the
- * module-global `mcpDiscoveryState`. Pre-fix the pool path only
- * updated the manager-local state, leaving the global at
- * `NOT_STARTED` while pool discovery was running or already
- * complete — `GET /workspace/mcp` and the MCP preflight cell read
- * the global and reported `not_started` for a workspace whose
- * discovery had finished. Per-session managers don't have the
- * concept of "ALL workspace discovery complete" anymore in pool
- * mode, so the pool path becomes the canonical writer when active.
- */
-export function setMCPDiscoveryState(state: MCPDiscoveryState): void {
-  mcpDiscoveryState = state;
 }
 
 /**
@@ -688,7 +598,7 @@ export function populateMcpServerCommand(
   }
   if (cwd === undefined) return result;
   // Stamp the session cwd onto implicit stdio servers so a worktree
-  // relocation rebinds them (cwd is part of the pool fingerprint).
+  // relocation rebinds them (cwd is part of the connected-config key).
   return Object.fromEntries(
     Object.entries(result).map(([name, server]) => [
       name,
@@ -821,7 +731,6 @@ export async function discoverTools(
   mcpServerConfig: MCPServerConfig,
   mcpClient: Client,
   cliConfig: Config,
-  opts?: { applyConfigFilters?: boolean },
 ): Promise<DiscoveredMCPTool[]> {
   return (
     await discoverToolsWithMetadata(
@@ -829,7 +738,6 @@ export async function discoverTools(
       mcpServerConfig,
       mcpClient,
       cliConfig,
-      opts,
     )
   ).tools;
 }
@@ -844,7 +752,6 @@ async function discoverToolsWithMetadata(
   mcpServerConfig: MCPServerConfig,
   mcpClient: Client,
   cliConfig: Config,
-  opts?: { applyConfigFilters?: boolean },
 ): Promise<ToolDiscoveryResult> {
   try {
     const listedTools: Array<
@@ -871,9 +778,7 @@ async function discoverToolsWithMetadata(
     // Legacy listTools must remain lenient because some servers implement
     // tools/list without declaring the tools capability during initialization.
     const discoveryClient = { listTools } as unknown as Client;
-    const mcpCallableTool = mcpToTool(discoveryClient, {
-      timeout: mcpServerConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
-    });
+    const mcpCallableTool = mcpToTool(discoveryClient);
     const tool = await retryWithBackoff(
       () => mcpCallableTool.tool(),
       `${mcpServerName}/tools/list`,
@@ -905,7 +810,6 @@ async function discoverToolsWithMetadata(
     }
 
     const mcpTimeout = mcpServerConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC;
-    const applyConfigFilters = opts?.applyConfigFilters ?? true;
     const discoveredTools: DiscoveredMCPTool[] = [];
     let hadVisibilityFilteredTools = false;
     for (const funcDecl of tool.functionDeclarations) {
@@ -926,10 +830,7 @@ async function discoverToolsWithMetadata(
           continue;
         }
 
-        if (
-          applyConfigFilters &&
-          !isEnabled(funcDecl, mcpServerName, mcpServerConfig)
-        ) {
+        if (!isEnabled(funcDecl, mcpServerName, mcpServerConfig)) {
           continue;
         }
 
@@ -944,15 +845,14 @@ async function discoverToolsWithMetadata(
 
         discoveredTools.push(
           new DiscoveredMCPTool(
-            mcpCallableTool,
+            mcpClient,
             mcpServerName,
             funcDecl.name!,
             funcDecl.description ?? '',
             funcDecl.parametersJsonSchema ?? { type: 'object', properties: {} },
-            applyConfigFilters ? mcpServerConfig.trust : undefined,
+            mcpServerConfig.trust,
             undefined,
             cliConfig,
-            mcpClient, // raw MCP Client for direct callTool with progress
             mcpTimeout,
             cliConfig?.getMcpToolIdleTimeoutMs?.(),
             annotationsMap.get(funcDecl.name!),
@@ -1023,9 +923,7 @@ function canUseModernTypedHelper(
 /**
  * Pure prompt listing. Asks the MCP server for its prompts and returns
  * enriched `DiscoveredMCPPrompt[]` (with `serverName` + bound `invoke`)
- * WITHOUT registering them anywhere. pool uses this so a single
- * shared transport can produce the snapshot once and let each session's
- * `SessionMcpView` register into its own registry.
+ * WITHOUT registering them anywhere.
  *
  * Returns `[]` on protocol errors or when the server has no prompts —
  * matches `discoverPrompts` swallow-and-continue behavior.
@@ -1144,9 +1042,7 @@ export async function invokeMcpPrompt(
 
 /**
  * Lists resources advertised by an MCP server (`resources/list`) WITHOUT
- * registering them anywhere — the pool uses this so a single shared
- * transport can produce the snapshot once and let each session register
- * into its own registry. Mirrors `listMcpPrompts`.
+ * registering them anywhere. Mirrors `listMcpPrompts`.
  *
  * As with prompts, we do NOT skip the wire request when
  * `getServerCapabilities()?.resources` is absent: some servers expose

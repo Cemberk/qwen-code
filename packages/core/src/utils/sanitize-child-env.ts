@@ -4,22 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { PRIVATE_ACP_CAPABILITY_ENV } from './invocation-context.js';
-
 /**
- * Env vars that carry Qwen-internal credentials or private parent
- * capabilities. These must never be inherited by a child process the agent
+ * Env vars that carry Qwen-internal credentials. These must never be inherited by a child process the agent
  * launches on the user's behalf — shell commands, the monitor tool, or a stdio
  * MCP server — because no legitimate user command needs them and leaking them
  * to arbitrary agent-run commands is a credential-exposure gap (issue #6601).
  *
- * `QWEN_SERVER_TOKEN` is the serve-daemon bearer token, `QWEN_DAEMON_TOKEN`
- * is the channel-daemon worker token, `QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN`
- * is the daemon-local external-tool guard credential (never handed to the
- * ACP child: the daemon holds it for its loopback guard client and every
- * spawn path explicitly scrubs it), and `QWEN_CODE_PRIVATE_ACP_CAPABILITY`
- * authenticates the daemon-spawned ACP child. Their direct consumers
- * already scrub them from `process.env` after reading them.
+ * `QWEN_SERVER_TOKEN` is the serve-daemon bearer token and `QWEN_DAEMON_TOKEN`
+ * is the channel-daemon worker token.
  *
  * The same list gates `$VAR` substitution in settings, extension and hook
  * configuration (`isInternalSecretEnvVar`): those files can come from a
@@ -36,8 +28,6 @@ import { PRIVATE_ACP_CAPABILITY_ENV } from './invocation-context.js';
 export const INTERNAL_SECRET_ENV_VARS: readonly string[] = [
   'QWEN_SERVER_TOKEN',
   'QWEN_DAEMON_TOKEN',
-  'QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN',
-  PRIVATE_ACP_CAPABILITY_ENV,
 ];
 
 const INTERNAL_SECRET_ENV_VAR_NAMES = new Set(

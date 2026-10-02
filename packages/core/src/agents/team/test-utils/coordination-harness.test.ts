@@ -2184,7 +2184,6 @@ describe('TeamCoordinationHarness', () => {
       expect(toolConfig?.tools).toContain('send_message');
       expect(toolConfig?.tools).not.toContain('run_shell_command');
       expect(toolConfig?.tools).not.toContain('save_memory');
-      expect(toolConfig?.tools).not.toContain('create_sub_session');
     });
 
     it('concurrent spawns cannot exceed MAX_TEAMMATES', async () => {

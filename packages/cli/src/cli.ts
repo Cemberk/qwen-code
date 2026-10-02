@@ -481,10 +481,6 @@ async function parseYargsCommand(
 export async function runCliEntry(
   rawArgv: readonly string[] = process.argv.slice(2),
 ): Promise<void> {
-  // No route consumes an inherited external-tool guard token. Scrub it
-  // before any route can start a child process.
-  delete process.env['QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN'];
-
   const argv = normalizeCliArgv(rawArgv);
   const route = resolveBootstrapRoute(argv);
 
@@ -501,19 +497,11 @@ export async function runCliEntry(
     return;
   }
 
-  const acpStartupProfiler = rawArgv.some(
-    (arg) => arg === '--acp' || arg === '--experimental-acp',
-  )
-    ? await import('./utils/acp-startup-profiler.js')
-    : undefined;
-  acpStartupProfiler?.initializeAcpStartupProfiler();
-  acpStartupProfiler?.markAcpStartup('geminiImportStart');
   // The bin launcher only enables the cache for its in-process fast paths;
   // this route pays for compiling the whole CLI on every launch without it.
   const { default: nodeModule } = await import('node:module');
   nodeModule.enableCompileCache?.();
   const { main } = await import('./llm.js');
-  acpStartupProfiler?.markAcpStartup('geminiImportEnd');
   await main();
 }
 

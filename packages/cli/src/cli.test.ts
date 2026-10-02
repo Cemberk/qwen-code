@@ -36,8 +36,6 @@ import {
 const mocks = vi.hoisted(() => ({
   main: vi.fn(),
   initStartupProfiler: vi.fn(),
-  initializeAcpStartupProfiler: vi.fn(),
-  markAcpStartup: vi.fn(),
   initCpuProfiler: vi.fn(),
   mcpHandler: vi.fn(),
   mcpBuilder: vi.fn(),
@@ -53,11 +51,6 @@ vi.mock('./llm.js', () => ({
 
 vi.mock('./utils/startupProfiler.js', () => ({
   initStartupProfiler: mocks.initStartupProfiler,
-}));
-
-vi.mock('./utils/acp-startup-profiler.js', () => ({
-  initializeAcpStartupProfiler: mocks.initializeAcpStartupProfiler,
-  markAcpStartup: mocks.markAcpStartup,
 }));
 
 vi.mock('./utils/cpuProfiler.js', () => ({
@@ -662,8 +655,6 @@ describe('runCliEntry', () => {
   const savedEnv = {
     CLI_VERSION: process.env['CLI_VERSION'],
     LC_ALL: process.env['LC_ALL'],
-    QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN:
-      process.env['QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN'],
   };
 
   let stdout: string[];
@@ -699,12 +690,6 @@ describe('runCliEntry', () => {
       delete process.env['LC_ALL'];
     } else {
       process.env['LC_ALL'] = savedEnv.LC_ALL;
-    }
-    if (savedEnv.QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN === undefined) {
-      delete process.env['QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN'];
-    } else {
-      process.env['QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN'] =
-        savedEnv.QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN;
     }
     vi.restoreAllMocks();
   });
@@ -916,42 +901,9 @@ describe('runCliEntry', () => {
     expect(mocks.main).not.toHaveBeenCalled();
   });
 
-  it('scrubs the external Guard token before startup', async () => {
-    process.env['QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN'] = 'guard-secret';
-    mocks.main.mockImplementationOnce(async () => {
-      expect(
-        process.env['QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN'],
-      ).toBeUndefined();
-    });
-
-    await runCliEntry([]);
-
-    expect(mocks.main).toHaveBeenCalledTimes(1);
-  });
-
   it('loads gemini on the default path', async () => {
     await runCliEntry([]);
 
-    expect(mocks.main).toHaveBeenCalledTimes(1);
-    expect(mocks.initializeAcpStartupProfiler).not.toHaveBeenCalled();
-  });
-
-  it('profiles the Gemini module import only on the ACP path', async () => {
-    await runCliEntry(['--acp']);
-
-    expect(mocks.initializeAcpStartupProfiler).toHaveBeenCalledTimes(1);
-    expect(mocks.markAcpStartup.mock.calls).toEqual([
-      ['geminiImportStart'],
-      ['geminiImportEnd'],
-    ]);
-    expect(mocks.main).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not profile when ACP is explicitly disabled', async () => {
-    await runCliEntry(['--acp=false']);
-
-    expect(mocks.initializeAcpStartupProfiler).not.toHaveBeenCalled();
-    expect(mocks.markAcpStartup).not.toHaveBeenCalled();
     expect(mocks.main).toHaveBeenCalledTimes(1);
   });
 });

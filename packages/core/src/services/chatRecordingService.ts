@@ -17,12 +17,6 @@ import { getCurrentAgentId } from '../agents/runtime/agent-context.js';
 import { ApprovalMode } from '../config/approval-mode.js';
 import path from 'node:path';
 import fs from 'node:fs';
-import { isManagedExecutionTranscriptSync } from '../utils/sessionStorageUtils.js';
-import {
-  SessionExecutionEngineError,
-  type SessionExecutionEngine,
-  type SessionExecutionEnginePayload,
-} from './session-execution-engine.js';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type {
@@ -319,7 +313,6 @@ export interface ChatRecord {
     | 'custom_title'
     | 'parent_session'
     | 'session_source'
-    | 'session_execution_engine'
     | 'session_model'
     | 'session_approval_mode'
     | 'rewind'
@@ -337,10 +330,7 @@ export interface ChatRecord {
     | 'goal_runtime'
     | 'goal_turn_end'
     | 'realtime_message'
-    | 'turn_result'
-    | 'managed_session_header_v1'
-    | 'managed_session_event_v1'
-    | 'managed_session_commit_v1';
+    | 'turn_result';
   /** Explicit source classification used by Goal evidence validation. */
   provenance?: ChatRecordProvenance;
   /** Goal identity and logical turn that owned this model-facing record. */
@@ -391,7 +381,6 @@ export interface ChatRecord {
     | ParentSessionRecordPayload
     | SessionSourceRecordPayload
     | SessionModelRecordPayload
-    | SessionExecutionEnginePayload
     | SessionApprovalModeRecordPayload
     | NotificationRecordPayload
     | UserPromptRecordPayload
@@ -1234,12 +1223,6 @@ export class ChatRecordingService {
           `Failed to create conversation file at ${conversationFile}: ${message}`,
         );
       }
-    }
-    if (isManagedExecutionTranscriptSync(conversationFile)) {
-      throw new SessionExecutionEngineError(
-        this.getSessionId(),
-        'belongs to managed, cannot record with legacy',
-      );
     }
     this.cachedConversationFile = conversationFile;
     return conversationFile;
@@ -2870,21 +2853,6 @@ export class ChatRecordingService {
       }
       return false;
     }
-  }
-
-  /**
-   * Persist the execution engine that owns this session. A failed write
-   * rejects, so creation fails instead of continuing without a durable owner.
-   * A session without chat recording has no recorder, so nothing is written.
-   */
-  async recordExecutionEngine(engine: SessionExecutionEngine): Promise<void> {
-    const systemPayload: SessionExecutionEnginePayload = { version: 1, engine };
-    await this.appendRecordStrict({
-      ...this.createBaseRecord('system'),
-      type: 'system',
-      subtype: 'session_execution_engine',
-      systemPayload,
-    });
   }
 
   /** Persist immutable creator attribution near the start of the transcript. */

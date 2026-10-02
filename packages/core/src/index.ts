@@ -79,7 +79,6 @@ export {
   findPlanModeEntryBatchBoundaryIndex,
 } from './core/plan-mode-entry-policy.js';
 export * from './core/llm-chat.js';
-export * from './core/llm-request.js';
 export * from './core/inlineMediaLimit.js';
 export * from './core/insightProtocol.js';
 export * from './core/logger.js';
@@ -115,40 +114,13 @@ export * from './tools/mcp-client-manager.js';
 // the read_mcp_resource tool).
 export * from './tools/mcp-resource-content.js';
 export { runWithTimeout } from './tools/mcp-discovery-timeout.js';
-// pool primitives consumed by acpAgent (daemon
-// pool construction) and downstream daemon status routes.
-export {
-  McpTransportPool,
-  type DrainResult,
-  type McpPoolSnapshot,
-  type McpTransportPoolOptions,
-} from './tools/mcp-transport-pool.js';
-export {
-  POOLED_TRANSPORTS_DEFAULT,
-  connectionIdOf,
-  mcpTransportOf,
-  parseConnectionId,
-  type McpTransportKind,
-  type PoolKey,
-} from './tools/mcp-pool-key.js';
-export type { ConnectionId, PoolEvent } from './tools/mcp-pool-events.js';
-export { WorkspaceMcpBudget } from './tools/mcp-workspace-budget.js';
 export * from './tools/mcp-tool.js';
 export * from './tools/read-file.js';
 export * from './tools/ripGrep.js';
 export * from './tools/sdk-control-client-transport.js';
 export * from './tools/client-mcp-registrar.js';
 export * from './tools/modifiable-tool.js';
-export type {
-  ManagedToolExecutionResult,
-  ManagedToolInvocationStatus,
-  ManagedToolV2Client,
-} from './tools/managed-tool-runtime.js';
-export {
-  managedToolDigest,
-  type ManagedToolInvocationReference,
-} from './tools/managed-tool-protocol.js';
-export * from './managed-runtime/managed-session-records.js';
+export type { ManagedToolV2Client } from './tools/managed-tool-runtime.js';
 
 // Selective re-exports of types/utilities from tool files (avoids loading full tool modules)
 export {
@@ -274,18 +246,12 @@ export type {
   FindingBaseline,
   ReportFindingsLevel,
 } from './tools/report-findings.js';
-export { CreateSubSessionTool } from './tools/create-sub-session.js';
 export type {
   ArtifactPublisher,
   PublishArtifactInput,
   PublishedArtifact,
 } from './tools/artifact/publisher.js';
 export type { CronCreateTool, CronCreateParams } from './tools/cron-create.js';
-export type {
-  CurrentSessionScheduledTaskCreateRequest,
-  CurrentSessionScheduledTaskCreateResult,
-  CurrentSessionScheduledTaskCreator,
-} from './config/config.js';
 export type { CronListTool, CronListParams } from './tools/cron-list.js';
 export type { CronDeleteTool, CronDeleteParams } from './tools/cron-delete.js';
 export {
@@ -361,10 +327,6 @@ export * from './services/fileReadCache.js';
 export * from './services/fileSystemService.js';
 export * from './services/tool-write-origin.js';
 export {
-  decodeBufferWithEncodingInfo,
-  encodeTextFileContent,
-} from './services/sync-file-encoding.js';
-export {
   CursorNotAtLineBoundaryError,
   LargeNonUtf8TextError,
   TextScanBudgetExceededError,
@@ -432,7 +394,6 @@ export type {
 } from './services/session-transcript-reader.js';
 export * from './utils/conversation-chain.js';
 export * from './utils/transcript-records.js';
-export * from './utils/conversation-branches.js';
 export * from './services/sessionTitle.js';
 export * from './services/sleepInhibitor.js';
 // Named exports keep @internal test helpers out of the barrel.

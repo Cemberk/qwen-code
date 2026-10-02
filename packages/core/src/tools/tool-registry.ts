@@ -267,18 +267,9 @@ export class ToolRegistry {
     sendSdkMcpMessage?: SendSdkMcpMessage,
   ) {
     this.config = config;
-    // options-bag
-    // ctor; previously 7 positional args with `undefined, undefined`
-    // sentinels for `healthConfig` / `budgetConfig`. `pool` is
-    // forwarded from Config (set by daemon-mode QwenAgent in
-    // `newSessionConfig`); when undefined the manager keeps its previous
-    // per-session spawn behavior, when defined non-SDK MCP discovery
-    // goes through `pool.acquire` so N sessions in the same workspace
-    // share one transport per unique server config.
     this.mcpClientManager = new McpClientManager(this.config, this, {
       eventEmitter,
       sendSdkMcpMessage,
-      pool: this.config.getMcpTransportPool(),
     });
   }
 
@@ -701,10 +692,7 @@ export class ToolRegistry {
    * Discover or re-discover tools for a single MCP server.
    * @param serverName - The name of the server to discover tools from.
    */
-  async discoverToolsForServer(
-    serverName: string,
-    reconnect = false,
-  ): Promise<void> {
+  async discoverToolsForServer(serverName: string): Promise<void> {
     this.removeMcpToolsByServer(serverName);
 
     this.config.getPromptRegistry().removePromptsByServer(serverName);
@@ -713,7 +701,6 @@ export class ToolRegistry {
     await this.mcpClientManager.discoverMcpToolsForServer(
       serverName,
       this.config,
-      reconnect,
     );
   }
 
