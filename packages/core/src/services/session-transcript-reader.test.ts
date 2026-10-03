@@ -9,13 +9,12 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockDebugLogger, mockAddDaemonRequestAttribute } = vi.hoisted(() => ({
+const { mockDebugLogger } = vi.hoisted(() => ({
   mockDebugLogger: {
     debug: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
   },
-  mockAddDaemonRequestAttribute: vi.fn(),
 }));
 
 const { statFault } = vi.hoisted(() => ({
@@ -24,10 +23,6 @@ const { statFault } = vi.hoisted(() => ({
 
 vi.mock('../utils/debugLogger.js', () => ({
   createDebugLogger: () => mockDebugLogger,
-}));
-
-vi.mock('../telemetry/daemon-tracing.js', () => ({
-  addDaemonRequestAttribute: mockAddDaemonRequestAttribute,
 }));
 
 vi.mock('node:fs/promises', async (importOriginal) => {
@@ -1403,44 +1398,6 @@ describe('SessionTranscriptReader', () => {
     expect(recoverGoalFromRecords(projection!.runtime.goalRecords)).toEqual(
       recoverGoalFromRecords(loaded!.conversation.messages),
     );
-    expect(mockAddDaemonRequestAttribute).toHaveBeenCalledWith(
-      'qwen-code.daemon.session_restore.transcript_index_ms',
-      expect.any(Number),
-    );
-    expect(mockAddDaemonRequestAttribute).toHaveBeenCalledWith(
-      'qwen-code.daemon.session_restore.resume_state_select_ms',
-      expect.any(Number),
-    );
-    expect(mockAddDaemonRequestAttribute).toHaveBeenCalledWith(
-      'qwen-code.daemon.session_restore.selected_record_read_ms',
-      expect.any(Number),
-    );
-    for (const attribute of [
-      'transcript_bytes',
-      'records_indexed',
-      'active_records',
-      'selected_records',
-      'selected_bytes',
-      'replay_records',
-      'replay_bytes',
-    ]) {
-      expect(mockAddDaemonRequestAttribute).toHaveBeenCalledWith(
-        `qwen-code.daemon.session_restore.${attribute}`,
-        expect.any(Number),
-      );
-    }
-    expect(mockAddDaemonRequestAttribute).toHaveBeenCalledWith(
-      'qwen-code.daemon.session_restore.index_cache_state',
-      'fresh',
-    );
-    expect(mockAddDaemonRequestAttribute).toHaveBeenCalledWith(
-      'qwen-code.daemon.session_restore.replay_mode',
-      'none',
-    );
-    expect(mockAddDaemonRequestAttribute).toHaveBeenCalledWith(
-      'qwen-code.daemon.session_restore.compression_selected',
-      expect.any(Boolean),
-    );
   });
 
   it('uses the bounded persisted-title picker instead of the full active chain', async () => {
@@ -2505,14 +2462,6 @@ describe('SessionTranscriptReader', () => {
     expect(liveResume?.replay).toBeUndefined();
     expect(liveResume?.artifactSnapshot).toEqual(liveLoad?.artifactSnapshot);
     expect(liveResume).not.toHaveProperty('runtime');
-    expect(mockAddDaemonRequestAttribute).toHaveBeenCalledWith(
-      'qwen-code.daemon.session_restore.index_cache_state',
-      'miss',
-    );
-    expect(mockAddDaemonRequestAttribute).toHaveBeenCalledWith(
-      'qwen-code.daemon.session_restore.index_cache_state',
-      'hit',
-    );
   });
 
   it('keeps backward pages within a normal user turn boundary', async () => {

@@ -634,7 +634,6 @@ describe('mcp-client', () => {
         { command: 'test-command' },
         mockedClient,
         cfgWithResources(),
-        { applyConfigFilters: false },
       );
 
       expect(tools.map((tool) => tool.serverToolName)).toEqual([
@@ -731,9 +730,7 @@ describe('mcp-client', () => {
         false,
       );
       await client.connect();
-      const snapshot = await client.discoverAndReturn(cfgWithResources(), {
-        applyConfigFilters: false,
-      });
+      const snapshot = await client.discoverAndReturn(cfgWithResources());
 
       expect(snapshot.tools[0]?.appResourceLimits).toEqual({
         appResourceMaxBytes: 2_097_152,
@@ -767,7 +764,6 @@ describe('mcp-client', () => {
         { command: 'test-command' },
         mockedClient,
         cfgWithResources(),
-        { applyConfigFilters: false },
       );
 
       expect(vi.mocked(mockedClient.request)).toHaveBeenCalledWith(
@@ -861,72 +857,6 @@ describe('mcp-client', () => {
       );
 
       expect(Object.hasOwn(callTool.mock.calls[0][0], '_meta')).toBe(false);
-    });
-
-    it('discoverAndReturn with { applyConfigFilters: false } ignores config filters and trust for shared pool snapshots', async () => {
-      const mockedClient = {
-        connect: vi.fn(),
-        registerCapabilities: vi.fn(),
-        setRequestHandler: vi.fn(),
-        getServerCapabilities: vi.fn().mockReturnValue({}),
-        listTools: vi.fn().mockResolvedValue({ tools: [] }),
-        getInstructions: vi.fn(),
-      };
-      vi.mocked(ClientLib.Client).mockReturnValue(
-        mockedClient as unknown as ClientLib.Client,
-      );
-      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
-        {} as SdkClientStdioLib.StdioClientTransport,
-      );
-      vi.mocked(McpCallableToolLib.mcpToTool).mockReturnValue({
-        tool: () =>
-          Promise.resolve({
-            functionDeclarations: [
-              { name: 'allowed' },
-              { name: 'filtered_out' },
-            ],
-          }),
-      } as unknown as CallableTool);
-      const toolRegistry = {
-        registerTool: vi.fn(),
-      } as unknown as ToolRegistry;
-      const client = new McpClient(
-        'pure-filter-server',
-        new MCPServerConfig(
-          'test-command',
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          true,
-          undefined,
-          ['allowed'],
-          ['filtered_out'],
-        ),
-        toolRegistry,
-        {} as PromptRegistry,
-        {} as WorkspaceContext,
-        false,
-      );
-      await client.connect();
-
-      // R23 T1: pool callers explicitly opt out of filters via the
-      // `applyConfigFilters: false` opts argument. Default
-      // `discoverAndReturn(cliConfig)` (no opts) applies filters,
-      // matching the legacy `discover()` semantics expected by
-      // non-pool consumers.
-      const snapshot = await client.discoverAndReturn(cfgWithResources(), {
-        applyConfigFilters: false,
-      });
-
-      expect(snapshot.tools.map((tool) => tool.serverToolName)).toEqual([
-        'allowed',
-        'filtered_out',
-      ]);
-      expect(snapshot.tools.every((tool) => tool.trust === undefined)).toBe(
-        true,
-      );
-      expect(toolRegistry.registerTool).not.toHaveBeenCalled();
     });
 
     it('discoverAndReturn (default) applies config filters and trust — legacy non-pool callers (R23 T1)', async () => {

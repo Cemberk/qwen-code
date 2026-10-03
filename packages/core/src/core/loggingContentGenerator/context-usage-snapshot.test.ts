@@ -18,7 +18,10 @@ import {
   estimateContextTextTokens,
 } from '../../services/tokenEstimation.js';
 import type { SkillConfig } from '../../skills/types.js';
-import { DiscoveredMCPTool } from '../../tools/mcp-tool.js';
+import {
+  DiscoveredMCPTool,
+  type McpDirectClient,
+} from '../../tools/mcp-tool.js';
 import { buildSkillLlmContent } from '../../tools/skill-utils.js';
 import { ToolNames } from '../../tools/tool-names.js';
 import { serializeContextUsage } from '../../telemetry/context-usage.js';
@@ -80,7 +83,7 @@ describe('createContextUsageSnapshot', () => {
       skill.body,
     );
     const mcpTool = new DiscoveredMCPTool(
-      {} as CallableTool,
+      {} as McpDirectClient,
       'server',
       'search',
       'Search',

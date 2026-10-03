@@ -15,7 +15,7 @@ import {
   DiscoveredTool,
   deferredDeclarationFingerprint,
 } from './tool-registry.js';
-import { DiscoveredMCPTool } from './mcp-tool.js';
+import { DiscoveredMCPTool, type McpDirectClient } from './mcp-tool.js';
 import { ExitPlanModeTool } from './exitPlanMode.js';
 import type { FunctionDeclaration, CallableTool } from '@google/genai';
 import { mcpToTool } from './mcp-callable-tool.js';
@@ -150,12 +150,11 @@ describe('ToolRegistry', () => {
     resourceUri = 'ui://app/view',
   ) =>
     new DiscoveredMCPTool(
-      createMockCallableTool([]),
+      {} as McpDirectClient,
       server,
       name,
       'App tool',
       { type: 'object', properties: {} },
-      undefined,
       undefined,
       undefined,
       undefined,
@@ -316,7 +315,7 @@ describe('ToolRegistry', () => {
         async () => new MockTool({ name: 'structured_output' }),
       );
 
-      const mockCallable = {} as CallableTool;
+      const mockCallable = {} as McpDirectClient;
       const collidingMcp = new DiscoveredMCPTool(
         mockCallable,
         'rogue-server',
@@ -367,7 +366,7 @@ describe('ToolRegistry', () => {
       });
       const registry = new ToolRegistry(disabledConfig);
       const mcpTool = new DiscoveredMCPTool(
-        {} as CallableTool,
+        {} as McpDirectClient,
         'zybio',
         'literature.search_pubmed',
         'description',
@@ -388,7 +387,7 @@ describe('ToolRegistry', () => {
       });
       const registry = new ToolRegistry(disabledConfig);
       const mcpTool = new DiscoveredMCPTool(
-        {} as CallableTool,
+        {} as McpDirectClient,
         'server',
         'x'.repeat(80),
         'description',
@@ -458,7 +457,7 @@ describe('ToolRegistry', () => {
         async () => new MockTool({ name: 'structured_output' }),
       );
       const collidingMcp = new DiscoveredMCPTool(
-        {} as CallableTool,
+        {} as McpDirectClient,
         'rogue-server',
         'structured_output',
         'description',
@@ -723,7 +722,7 @@ describe('ToolRegistry', () => {
     });
 
     it('sorts MCP declarations deterministically regardless of registration order', () => {
-      const mcpCallable = {} as CallableTool;
+      const mcpCallable = {} as McpDirectClient;
       const registryA = new ToolRegistry(config);
       const registryB = new ToolRegistry(config);
 
@@ -813,7 +812,7 @@ describe('ToolRegistry', () => {
     });
 
     describe('preloadDeferredToolsWithinBudget', () => {
-      const mcpCallable = {} as CallableTool;
+      const mcpCallable = {} as McpDirectClient;
       const makeMcpTool = (serverToolName: string) =>
         new DiscoveredMCPTool(
           mcpCallable,
@@ -960,7 +959,7 @@ describe('ToolRegistry', () => {
     });
 
     it('getDeferredToolSummary includes MCP server names', () => {
-      const mcpCallable = {} as CallableTool;
+      const mcpCallable = {} as McpDirectClient;
       toolRegistry.registerTool(
         new DiscoveredMCPTool(
           mcpCallable,
@@ -993,7 +992,7 @@ describe('ToolRegistry', () => {
       );
       registry.registerTool(
         new DiscoveredMCPTool(
-          {} as CallableTool,
+          {} as McpDirectClient,
           'schedule-server',
           'cron_list',
           'list scheduled jobs',
@@ -1010,7 +1009,7 @@ describe('ToolRegistry', () => {
       // `revealed: true` from before the disconnect — that would leak
       // into `getFunctionDeclarations` before the model has any way to
       // know the tool exists this session.
-      const mcpCallable = {} as CallableTool;
+      const mcpCallable = {} as McpDirectClient;
       const tool = new DiscoveredMCPTool(
         mcpCallable,
         'slack',
@@ -1035,7 +1034,7 @@ describe('ToolRegistry', () => {
         properties: { text: { type: 'string' } },
       };
       const tool = new DiscoveredMCPTool(
-        {} as CallableTool,
+        {} as McpDirectClient,
         'slack',
         'send_message',
         'send a message',
@@ -1057,7 +1056,7 @@ describe('ToolRegistry', () => {
 
       // A replacement republishing a changed contract does not match it.
       const replacement = new DiscoveredMCPTool(
-        {} as CallableTool,
+        {} as McpDirectClient,
         'slack',
         'send_message',
         'send a message',
@@ -1336,7 +1335,7 @@ describe('ToolRegistry', () => {
     it('should return only tools matching the server name, sorted by name', async () => {
       const server1Name = 'mcp-server-uno';
       const server2Name = 'mcp-server-dos';
-      const mockCallable = {} as CallableTool;
+      const mockCallable = {} as McpDirectClient;
       const mcpTool1_c = new DiscoveredMCPTool(
         mockCallable,
         server1Name,

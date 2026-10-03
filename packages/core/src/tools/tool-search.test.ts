@@ -5,14 +5,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { CallableTool } from '@google/genai';
 import type { ConfigParameters } from '../config/config.js';
 import { Config, ApprovalMode } from '../config/config.js';
 import {
   deferredDeclarationFingerprint,
   ToolRegistry,
 } from './tool-registry.js';
-import { DiscoveredMCPTool } from './mcp-tool.js';
+import { DiscoveredMCPTool, type McpDirectClient } from './mcp-tool.js';
 import { MockTool } from '../test-utils/mock-tool.js';
 import { ToolSearchTool, scoreTool, tokenize } from './tool-search.js';
 import { resolveDeferredToolCall, ToolCallTool } from './tool-call.js';
@@ -274,7 +273,7 @@ describe('scoreTool', () => {
       // on name, isolating the MCP vs built-in weight difference.
       description: 'an action',
     });
-    const mcpCallable = {} as CallableTool;
+    const mcpCallable = {} as McpDirectClient;
     const mcp = new DiscoveredMCPTool(
       mcpCallable,
       'slack',
@@ -294,7 +293,7 @@ describe('scoreTool', () => {
     // refactor that switches to a tighter word-boundary regex must
     // preserve this — otherwise MCP tools silently downgrade from the
     // exact-suffix score (12) to substring (6).
-    const mcpCallable = {} as CallableTool;
+    const mcpCallable = {} as McpDirectClient;
     const mcp = new DiscoveredMCPTool(
       mcpCallable,
       'github',
@@ -708,7 +707,7 @@ describe('ToolSearchTool', () => {
     };
     const makeTool = (inputSchema: unknown = declaration) =>
       new DiscoveredMCPTool(
-        {} as CallableTool,
+        {} as McpDirectClient,
         'slack',
         'send_message',
         'send a message',
@@ -767,7 +766,7 @@ describe('ToolSearchTool', () => {
   it('records a deferred tool reviewed while revealed, so hiding it again does not drop the gate (#11321)', async () => {
     registry.registerTool(new ToolCallTool(registry));
     const reviewed = new DiscoveredMCPTool(
-      {} as CallableTool,
+      {} as McpDirectClient,
       'slack',
       'send_message',
       'send a message',
@@ -792,7 +791,7 @@ describe('ToolSearchTool', () => {
     registry.removeMcpToolsByServer('slack');
     registry.registerTool(
       new DiscoveredMCPTool(
-        {} as CallableTool,
+        {} as McpDirectClient,
         'slack',
         'send_message',
         'send a message',

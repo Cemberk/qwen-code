@@ -23,7 +23,7 @@ import { getWorkspacePackageJsonPaths } from '../workspaces.js';
 // A coupled manifest no later step rewrites: steps 6-7 of version.js only
 // touch the root and packages/cli (config.sandboxImageUri), so any text
 // change here is pnpm's.
-const LAYOUT_CANARY = 'packages/acp-bridge/package.json';
+const LAYOUT_CANARY = 'packages/web-templates/package.json';
 
 /**
  * Put a manifest into a layout `pnpm version` rewrites: dependency entries in
@@ -34,8 +34,8 @@ const LAYOUT_CANARY = 'packages/acp-bridge/package.json';
  */
 function perturbManifestLayout(text) {
   const manifest = JSON.parse(text);
-  manifest.dependencies = Object.fromEntries(
-    Object.entries(manifest.dependencies).reverse(),
+  manifest.devDependencies = Object.fromEntries(
+    Object.entries(manifest.devDependencies).reverse(),
   );
   manifest.optionalDependencies = {};
   return JSON.stringify(manifest, null, 2) + '\n';

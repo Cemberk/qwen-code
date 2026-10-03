@@ -425,14 +425,9 @@ export const handleSlashCommand = async (
     return { type: 'no_command' };
   }
 
-  const isAcpMode = config.getExperimentalZedIntegration();
-  const isInteractive = config.isInteractive();
-
-  const executionMode: ExecutionMode = isAcpMode
-    ? 'acp'
-    : isInteractive
-      ? 'interactive'
-      : 'non_interactive';
+  const executionMode: ExecutionMode = config.isInteractive()
+    ? 'interactive'
+    : 'non_interactive';
 
   // Load all commands to check if the command exists but is not allowed
   const allLoaders = [

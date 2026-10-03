@@ -246,7 +246,7 @@ async function main() {
       ['transcriptRecords', 'utils/transcript-records.ts'], ['envVarResolver', 'utils/envVarResolver.ts'],
       ['shellResult', 'utils/shell-result.ts'],
       ['goalWire', 'goals/goal-wire.ts'], ['memoryScopes', 'memory/scopes.ts'],
-      ['subSessionConstants', 'tools/sub-session-constants.ts'], ['toolWriteOrigin', 'services/tool-write-origin.ts'],
+      ['toolWriteOrigin', 'services/tool-write-origin.ts'],
       ['userPromptSubmitContext', 'hooks/user-prompt-submit-context.ts'], ['noFollowOpen', 'utils/no-follow-open.ts'],
       ['conversationsRuntimeMarker', 'utils/conversations-runtime-marker.ts'],
       ['storage', 'config/storage.ts'], ['atomicFileWrite', 'utils/atomicFileWrite.ts'],

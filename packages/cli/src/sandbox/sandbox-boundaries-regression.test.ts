@@ -20,15 +20,11 @@ describe('retired bwrap state grants', () => {
     fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'qwen-retired-bwrap-'));
     const marker = path.join(fixture, 'existing-config');
     fs.writeFileSync(marker, 'preserved');
-    const state = path.join(fixture, 'absent-state');
     await expect(
-      start_sandbox(
-        { command: 'bwrap' },
-        [],
-        undefined,
-        [process.execPath, '/installed/cli.js'],
-        { QWEN_HOME: state },
-      ),
+      start_sandbox({ command: 'bwrap' }, [], undefined, [
+        process.execPath,
+        '/installed/cli.js',
+      ]),
     ).rejects.toThrow('tools.executionSandbox');
     expect(fs.readFileSync(marker, 'utf8')).toBe('preserved');
     expect(fs.readdirSync(fixture)).toEqual(['existing-config']);

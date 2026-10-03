@@ -53,7 +53,7 @@ import {
 } from './dialogs-shared.js';
 import type { DialogListItem } from './dialogs-core.js';
 import { C } from './theme.js';
-import { getReasoningEffortsForConfig } from '../../acp-integration/model-configuration.js';
+import { getReasoningEffortsForConfig } from '../../utils/model-configuration.js';
 
 interface LabeledItem<T> extends DialogListItem<T> {
   label: string;

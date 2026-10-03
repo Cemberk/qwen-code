@@ -20,7 +20,7 @@ overrides:
   react-markdown: ^9.0.0
   '@agentclientprotocol/sdk>zod': 3.25.76
 
-pnpmfileChecksum: sha256-6eQwplM44iAOoGoYdQM/N+ICMpUI1BmYVz8RyIV73G4=
+pnpmfileChecksum: sha256-G+oB5MVT/jzKwYNJMZNP+JMg/cmxS/aJuH02cI/rUPk=
 
 importers:
 
@@ -42,9 +42,6 @@ importers:
       '@emnapi/runtime':
         specifier: 1.11.3
         version: 1.11.3
-      '@qwen-code/acp-bridge':
-        specifier: workspace:*
-        version: link:packages/acp-bridge
       '@qwen-code/qwen-code':
         specifier: workspace:*
         version: link:packages/cli
@@ -208,24 +205,6 @@ importers:
       '@lydell/node-pty-win32-x64':
         specifier: 1.2.0-beta.10
         version: 1.2.0-beta.10
-  packages/acp-bridge:
-    dependencies:
-      '@agentclientprotocol/sdk':
-        specifier: ^0.14.1
-        version: 0.14.1(zod@3.25.76)
-      '@qwen-code/qwen-code-core':
-        specifier: workspace:*
-        version: link:../core
-    devDependencies:
-      '@types/node':
-        specifier: 20.19.1
-        version: 20.19.1
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-      vitest:
-        specifier: ^3.1.1
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@20.19.1)(jiti@2.7.0)(jsdom@26.1.0(supports-color@7.2.0))(lightningcss@1.32.0)(msw@2.10.4(@types/node@20.19.1)(typescript@5.8.3))(supports-color@7.2.0)(tsx@4.20.3)(yaml@2.9.0)
   packages/cli:
     dependencies:
       '@agentclientprotocol/sdk':
@@ -240,9 +219,6 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.30.0
         version: 1.30.0(supports-color@7.2.0)(zod@3.25.76)
-      '@qwen-code/acp-bridge':
-        specifier: workspace:*
-        version: link:../acp-bridge
       '@qwen-code/qwen-code-core':
         specifier: workspace:*
         version: link:../core

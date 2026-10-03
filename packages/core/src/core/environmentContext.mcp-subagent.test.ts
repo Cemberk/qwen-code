@@ -8,8 +8,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { Config } from '../config/config.js';
 import type { MCPServerConfig } from '../config/config.js';
 import { buildMcpServerInstructionsReminder } from './environmentContext.js';
-import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
-import type { CallableTool } from '@google/genai';
+import { DiscoveredMCPTool, type McpDirectClient } from '../tools/mcp-tool.js';
 import {
   rebuildToolRegistryOnOverride,
   hasRebuiltToolRegistry,
@@ -148,7 +147,7 @@ describe('MCP server instructions and subagent registries', () => {
     // assertions green, blessing the regression this file exists to catch.
     parent.registerTool(
       new DiscoveredMCPTool(
-        {} as CallableTool,
+        {} as McpDirectClient,
         'server-a',
         'do_thing',
         'A discovered tool from server-a.',

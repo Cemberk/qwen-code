@@ -9,12 +9,11 @@ import {
   McpClientManager,
   type McpClientManagerOptions,
 } from './mcp-client-manager.js';
-import { McpClient, populateMcpServerCommand } from './mcp-client.js';
+import { McpClient } from './mcp-client.js';
 import type { ToolRegistry } from './tool-registry.js';
-import { MCPServerConfig, type Config } from '../config/config.js';
+import type { MCPServerConfig, Config } from '../config/config.js';
 import type { PromptRegistry } from '../prompts/prompt-registry.js';
 import type { WorkspaceContext } from '../utils/workspaceContext.js';
-import { connectionIdOf } from './mcp-pool-key.js';
 import { listDescendantPids, sigtermPids } from './pid-descendants.js';
 import { expectWithinLatencyBudget } from '../test-utils/latency-budget.js';
 
@@ -1872,24 +1871,9 @@ describe('McpClientManager — PR 14 guardrails', () => {
         }) as unknown as McpClient,
     );
     const config = configWithServers({ a: { command: 'node' } });
-    const manager = mkManager({
-      config,
-      options: { budgetConfig: { clientBudget: 1, budgetMode: 'enforce' } },
-    });
+    const manager = mkManager({ config });
     await manager.discoverAllMcpTools(config);
-    // Transport closed before client reference dropped + slot released.
+    // Transport closed before the client reference is dropped.
     expect(disconnectCalls).toBeGreaterThanOrEqual(1);
-    expect(manager.getMcpClientAccounting().reservedSlots).toEqual([]);
   });
-
 });
-
-// Issue #4175 PR 14b: push events + hysteresis state machine. Kept in
-// its own describe so a future revert of PR 14b drops a single
-// contiguous block. Mirrors PR 14's testing style (mock `McpClient`,
-// fluent `configWithServers` helper). Imports are dynamic to keep
-// the spy on `McpClient` cleanly bound per test (vi.mocked module
-// already mocked at file top).
-// ────────────────────────────────────────────────────────────────────
-// T2.8: addRuntimeMcpServer / removeRuntimeMcpServer
-// ────────────────────────────────────────────────────────────────────

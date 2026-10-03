@@ -11,9 +11,6 @@
       "@qwen-code/qwen-code-core/shellResult": [
         "../core/src/utils/shell-result.ts"
       ],
-      "@qwen-code/qwen-code-core/subSessionConstants": [
-        "../core/src/tools/sub-session-constants.ts"
-      ],
       "@qwen-code/qwen-code-core/transcriptRecords": [
         "../core/src/utils/transcript-records.ts"
       ],
@@ -43,15 +40,7 @@
       "@qwen-code/qwen-code-core/conversationsRuntimeMarker": [
         "../core/src/utils/conversations-runtime-marker.ts"
       ],
-      "@qwen-code/qwen-code-core/*": ["../core/src/*"],
-      "@qwen-code/acp-bridge": ["../acp-bridge/src/index.ts"],
-      "@qwen-code/acp-bridge/transcriptReplay": [
-        "../acp-bridge/src/transcript-replay.ts"
-      ],
-      "@qwen-code/acp-bridge/daemonMemoryBudget": [
-        "../acp-bridge/src/daemon-memory-budget.ts"
-      ],
-      "@qwen-code/acp-bridge/*": ["../acp-bridge/src/*"]
+      "@qwen-code/qwen-code-core/*": ["../core/src/*"]
     }
   },
   "include": [
@@ -129,5 +118,5 @@
     "src/services/prompt-processors/shellProcessor.test.ts",
     "src/commands/extensions/examples/**"
   ],
-  "references": [{ "path": "../core" }, { "path": "../acp-bridge" }]
+  "references": [{ "path": "../core" }]
 }

@@ -463,59 +463,6 @@ describe('parseArguments', () => {
     expect(argv.insecure).toBe(true);
   });
 
-  it('rejects --json-schema combined with --acp', async () => {
-    // ACP runs an independent turn loop (runAcpAgent) that doesn't honour
-    // the synthetic structured_output terminal contract. The yargs check
-    // must reject the combination at parse time so users get an actionable
-    // error instead of silently watching the run never terminate.
-    process.argv = [
-      'node',
-      'script.js',
-      '--acp',
-      '--json-schema',
-      '{"type":"object"}',
-    ];
-
-    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit called');
-    });
-    mockWriteStderrLine.mockClear();
-
-    await expect(parseArguments()).rejects.toThrow('process.exit called');
-
-    expect(mockWriteStderrLine).toHaveBeenCalledWith(
-      expect.stringContaining('--json-schema cannot be used with --acp'),
-    );
-
-    mockExit.mockRestore();
-  });
-
-  it('rejects --json-schema combined with --experimental-acp (deprecated alias)', async () => {
-    // --experimental-acp is the deprecated alias; the same mutual-
-    // exclusion logic must apply or users get the silent-no-terminate
-    // behaviour the --acp check was added to prevent.
-    process.argv = [
-      'node',
-      'script.js',
-      '--experimental-acp',
-      '--json-schema',
-      '{"type":"object"}',
-    ];
-
-    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit called');
-    });
-    mockWriteStderrLine.mockClear();
-
-    await expect(parseArguments()).rejects.toThrow('process.exit called');
-
-    expect(mockWriteStderrLine).toHaveBeenCalledWith(
-      expect.stringContaining('--json-schema cannot be used with --acp'),
-    );
-
-    mockExit.mockRestore();
-  });
-
   it('rejects --json-schema combined with --prompt-interactive (-i)', async () => {
     // The interactive flow doesn't honour the synthetic-tool terminal
     // contract — `structured_output` would just print "accepted" and
@@ -1260,32 +1207,6 @@ describe('loadCliConfig', () => {
     await loadCliConfig({}, argv);
 
     expect(process.env['QWEN_DEBUG_LOG_FILE']).toBe('1');
-  });
-
-  it('maps --restore-ask-user-question only in ACP mode', async () => {
-    process.argv = [
-      'node',
-      'script.js',
-      '--acp',
-      '--restore-ask-user-question',
-    ];
-    const argv = await parseArguments();
-    const config = await loadCliConfig({}, argv);
-    expect(config.getRestoreAskUserQuestion()).toBe(true);
-  });
-
-  it('ignores --restore-ask-user-question outside ACP mode', async () => {
-    process.argv = ['node', 'script.js', '--restore-ask-user-question'];
-    const argv = await parseArguments();
-    const config = await loadCliConfig({}, argv);
-    expect(config.getRestoreAskUserQuestion()).toBe(false);
-  });
-
-  it('defaults restoreAskUserQuestion to false', async () => {
-    process.argv = ['node', 'script.js', '--acp'];
-    const argv = await parseArguments();
-    const config = await loadCliConfig({}, argv);
-    expect(config.getRestoreAskUserQuestion()).toBe(false);
   });
 
   it('wires the skill settings lists provider outside bare and safe mode', async () => {
@@ -2611,7 +2532,6 @@ describe('loadCliConfig', () => {
     expect(projectionSource).toHaveBeenCalledWith(sourceSessionId);
     expect(mockConfigConstructorParams).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        experimentalZedIntegration: false,
         sessionWriterLeaseEnabled: true,
         sessionRestoreProjection: expect.objectContaining({
           sessionId: sourceSessionId,
@@ -2972,19 +2892,6 @@ describe('loadCliConfig telemetry', () => {
     expect(mockConfigConstructorParams).toHaveBeenCalledWith(
       expect.objectContaining({
         question: '',
-        deferTelemetryInitialization: true,
-      }),
-    );
-  });
-
-  it('should defer telemetry for ACP startup', async () => {
-    process.argv = ['node', 'script.js', '--acp', '--telemetry'];
-    const argv = await parseArguments();
-
-    await loadCliConfig({}, argv);
-
-    expect(mockConfigConstructorParams).toHaveBeenCalledWith(
-      expect.objectContaining({
         deferTelemetryInitialization: true,
       }),
     );
@@ -5082,13 +4989,6 @@ describe('loadCliConfig interactive', () => {
     const config = await loadCliConfig({}, argv, undefined, []);
     expect(config.isInteractive()).toBe(false);
     expect(config.getShouldUseNodePtyShell()).toBe(false);
-  });
-
-  it('should keep the interactive shell default for ACP with a prompt', async () => {
-    process.argv = ['node', 'script.js', '--acp', '--prompt', 'test'];
-    const argv = await parseArguments();
-    const config = await loadCliConfig({}, argv, undefined, []);
-    expect(config.getShouldUseNodePtyShell()).toBe(true);
   });
 
   it('should keep the interactive shell default for configured file input', async () => {

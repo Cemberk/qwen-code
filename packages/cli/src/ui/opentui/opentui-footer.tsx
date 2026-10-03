@@ -39,7 +39,7 @@ import { useAnimationFrame } from '../hooks/useAnimationFrame.js';
 import { fmtTokens } from '../components/stats-helpers.js';
 import { formatApprovalModeName } from '../utils/approvalModeDisplay.js';
 import { formatModelWithReasoning } from '../statusLinePresets.js';
-import { getReasoningForDisplay } from '../../acp-integration/model-configuration.js';
+import { getReasoningForDisplay } from '../../utils/model-configuration.js';
 import {
   contextUsageLabel,
   formatDuration,

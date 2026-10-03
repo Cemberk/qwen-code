@@ -128,8 +128,7 @@ for (const flag of ['--help', '-h', '--version', '-v']) {
 KNOWN_FAST_PATH_FLAGS.add('--sandbox-session-id');
 // Hidden boolean options registered inline in config.ts; like the sandbox
 // option above they are valid top-level flags the scanner should admit
-// instead of demoting (e.g. `qwen --experimental-acp --help`).
-KNOWN_FAST_PATH_FLAGS.add('--experimental-acp');
+// instead of demoting (e.g. `qwen --experimental-skills --help`).
 KNOWN_FAST_PATH_FLAGS.add('--experimental-skills');
 
 function isValueToken(arg: string | undefined): arg is string {

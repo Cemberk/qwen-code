@@ -222,7 +222,7 @@ describe('handleSlashCommand', () => {
         name: 'export',
         description: 'Export',
         kind: CommandKind.BUILT_IN,
-        supportedModes: ['acp'],
+        supportedModes: ['non_interactive'],
         action: vi.fn().mockResolvedValue({
           type: 'message',
           messageType: 'info',
@@ -231,7 +231,6 @@ describe('handleSlashCommand', () => {
         }),
       },
     ]);
-    vi.mocked(mockConfig.getExperimentalZedIntegration).mockReturnValue(true);
     const result = await handleSlashCommand(
       '/export md',
       abortController,
@@ -281,11 +280,10 @@ describe('handleSlashCommand', () => {
         altNames: ['reset', 'new'],
         description: 'Reset the session',
         kind: CommandKind.BUILT_IN,
-        supportedModes: ['acp'] as const,
+        supportedModes: ['non_interactive'] as const,
         action,
       },
     ]);
-    vi.mocked(mockConfig.getExperimentalZedIntegration).mockReturnValue(true);
 
     const result = await handleSlashCommand(
       '/reset',
@@ -339,14 +337,13 @@ describe('handleSlashCommand', () => {
       name: 'advisor',
       description: 'Ask for advice',
       kind: CommandKind.BUILT_IN,
-      supportedModes: ['acp'] as const,
+      supportedModes: ['non_interactive'] as const,
       action: vi.fn().mockResolvedValue({
         type: 'message',
         messageType: 'info',
         content: 'ok',
       }),
     };
-    vi.mocked(mockConfig.getExperimentalZedIntegration).mockReturnValue(true);
     mockGetCommands.mockReturnValue([mockCommand]);
 
     await handleSlashCommand(
@@ -465,8 +462,7 @@ describe('handleSlashCommand', () => {
     });
   });
 
-  it('returns canonical state for ACP /goal clear', async () => {
-    vi.mocked(mockConfig.getExperimentalZedIntegration).mockReturnValue(true);
+  it('returns canonical state for /goal clear', async () => {
     mockGetCommands.mockReturnValue([goalCommand]);
 
     await handleSlashCommand(
@@ -634,40 +630,6 @@ describe('handleSlashCommand', () => {
       name: 'review-skill',
       level: 'project',
       filePath: '/test/project/.qwen/skills/auto-skill-review/SKILL.md',
-    });
-  });
-
-  it('records ACP SKILL submit_prompt commands in session metrics', async () => {
-    vi.mocked(mockConfig.getExperimentalZedIntegration).mockReturnValue(true);
-    const mockSkillCommand = {
-      name: 'review',
-      description: 'Review code',
-      kind: CommandKind.SKILL,
-      supportedModes: ['acp'] as const,
-      action: vi.fn().mockResolvedValue({
-        type: 'submit_prompt',
-        content: [{ text: 'Review prompt' }],
-      }),
-    };
-    mockGetCommands.mockReturnValue([mockSkillCommand]);
-
-    const result = await handleSlashCommand(
-      '/review',
-      abortController,
-      mockConfig,
-      mockSettings,
-    );
-
-    expect(result.type).toBe('submit_prompt');
-    expect(
-      uiTelemetryService.getMetricsForSession('test-session').skills,
-    ).toEqual({
-      totalCalls: 1,
-      totalSuccess: 1,
-      totalFail: 0,
-      byName: {
-        review: { count: 1, success: 1, fail: 0 },
-      },
     });
   });
 
@@ -1609,7 +1571,7 @@ describe('getAvailableCommands', () => {
       description: 'Export current session',
       kind: CommandKind.BUILT_IN,
       modelInvocable: true,
-      supportedModes: ['acp'] as const,
+      supportedModes: ['non_interactive'] as const,
       action: vi.fn(),
     };
     const customCommand = {
@@ -1617,7 +1579,7 @@ describe('getAvailableCommands', () => {
       description: 'Custom export helper',
       kind: CommandKind.FILE,
       modelInvocable: true,
-      supportedModes: ['acp'] as const,
+      supportedModes: ['non_interactive'] as const,
       action: vi.fn(),
     };
     mockGetCommands.mockReturnValue([exportCommand, customCommand]);
@@ -1625,7 +1587,7 @@ describe('getAvailableCommands', () => {
     const commands = await getAvailableCommands(
       mockConfig,
       new AbortController().signal,
-      'acp',
+      'non_interactive',
       {
         system: { path: '', settings: {} },
         systemDefaults: { path: '', settings: {} },
@@ -1650,7 +1612,7 @@ describe('getAvailableCommands', () => {
         description: 'Expand prompt',
         kind: CommandKind.FILE,
         modelInvocable: true,
-        supportedModes: ['acp'] as const,
+        supportedModes: ['non_interactive'] as const,
       },
     ]);
 
@@ -1668,7 +1630,7 @@ describe('getAvailableCommands', () => {
       modelDescription: 'Model-facing description',
       kind: CommandKind.FILE,
       modelInvocable: true,
-      supportedModes: ['acp'] as const,
+      supportedModes: ['non_interactive'] as const,
       action: vi.fn().mockResolvedValue({
         type: 'submit_prompt',
         content: 'expanded prompt',

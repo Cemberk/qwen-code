@@ -7,8 +7,7 @@
 /**
  * @fileoverview Checks that a compiled cli can still reach core by module path.
  *
- * The cli's own sources — and the workspace package its runtime graph pulls in
- * (acp-bridge) — say
+ * The cli's own sources say
  * `@qwen-code/qwen-code-core/config/storage.js` and the like. Inside the repo
  * those resolve through tsconfig `paths` (for tsc and esbuild) or through
  * vitest aliases (for the suites) — three mechanisms, none of which the
@@ -35,15 +34,7 @@ const EXPORT_PROBES = new Map([
   ['@qwen-code/qwen-code-core/noFollowOpen', 'openSyncNoFollow'],
 ]);
 const specifiers = new Set(EXPORT_PROBES.keys());
-// acp-bridge is a runtime dependency of the cli, and its
-// compiled dist keeps core subpath specifiers verbatim just like the cli's own
-// dist. Scanning them too gates entries that only a dependency names (e.g.
-// ./goalWire, ./transcriptRecords, ./subSessionConstants); without this, those
-// exports entries could be deleted while every gate stays green.
-const scannedSources = [
-  path.join(root, 'packages', 'cli', 'src'),
-  path.join(root, 'packages', 'acp-bridge', 'src'),
-];
+const scannedSources = [path.join(root, 'packages', 'cli', 'src')];
 const coreSpecifier = /['"](@qwen-code\/qwen-code-core\/[^'"]+)['"]/g;
 for (const sourceDir of scannedSources) {
   for (const relativePath of globSync('**/*.{ts,tsx}', { cwd: sourceDir })) {

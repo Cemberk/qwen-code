@@ -19,7 +19,7 @@ import {
   REASONING_EFFORT_TIERS,
 } from '@qwen-code/qwen-code-core';
 import { formatEffortChangeMessage } from './effort-utils.js';
-import { getReasoningEffortsForConfig } from '../../acp-integration/model-configuration.js';
+import { getReasoningEffortsForConfig } from '../../utils/model-configuration.js';
 
 const TIER_LIST = REASONING_EFFORT_TIERS.join(', ');
 

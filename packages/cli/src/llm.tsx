@@ -8,7 +8,6 @@ import {
   getRelaunchEnvProvenance,
   hasLoadedEnvironmentValues,
 } from './config/environment.js';
-import { prepareFileWatchersForProcessExit } from '@qwen-code/qwen-code-core/utils/file-watcher-cleanup.js';
 import { validateExecutionSandboxSelection } from './config/execution-sandbox-settings.js';
 import {
   type ChatRecord,
@@ -427,18 +426,6 @@ export async function main() {
 
   let argv = await parseArguments();
   profileCheckpoint('after_parse_arguments');
-  const isAcpMode = argv.acp || argv.experimentalAcp;
-
-  if (
-    (argv.acp || argv.experimentalAcp) &&
-    process.env['QWEN_CODE_SCRUB_ELECTRON_RUN_AS_NODE'] === '1'
-  ) {
-    delete process.env['ELECTRON_RUN_AS_NODE'];
-    if (process.env['QWEN_CODE_NO_RELAUNCH'] || process.env['SANDBOX']) {
-      delete process.env['QWEN_CODE_SCRUB_ELECTRON_RUN_AS_NODE'];
-    }
-  }
-
   if (isBareMode(argv.bare)) {
     process.env[QWEN_CODE_SIMPLE_ENV_VAR] = '1';
   }
@@ -453,15 +440,13 @@ export async function main() {
   );
   if (
     executionSandboxSettings &&
-    (argv.acp ||
-      argv.experimentalAcp ||
-      argv.worktree !== undefined ||
+    (argv.worktree !== undefined ||
       argv.experimentalLsp ||
       argv.mcpConfig ||
       argv.extensions?.length)
   ) {
     throw new Error(
-      'tools.executionSandbox does not yet support ACP, worktree management, LSP, MCP or extensions.',
+      'tools.executionSandbox does not yet support worktree management, LSP, MCP or extensions.',
     );
   }
   // Propagate corruption state to child process via env vars so
@@ -601,13 +586,12 @@ export async function main() {
         writeStderrLine(`Error authenticating: ${err}`);
         process.exit(1);
       }
-      // For stream-json and ACP modes, don't read stdin here — stdin carries
+      // For stream-json mode, don't read stdin here — stdin carries
       // protocol data (not a user prompt) and should be forwarded to the sandbox
       // intact via stdio: 'inherit'.
       const inputFormat = argv.inputFormat as string | undefined;
-      const isAcpMode = argv.acp || argv.experimentalAcp;
       let stdinData = '';
-      if (!process.stdin.isTTY && inputFormat !== 'stream-json' && !isAcpMode) {
+      if (!process.stdin.isTTY && inputFormat !== 'stream-json') {
         stdinData = await readStdin();
       }
 
@@ -670,18 +654,12 @@ export async function main() {
         : injectStdinIntoArgs(process.argv, stdinData);
 
       await relaunchOnExitCode(() =>
-        start_sandbox(
-          sandboxConfig,
-          memoryArgs,
-          partialConfig,
-          sandboxArgs,
-        ),
+        start_sandbox(sandboxConfig, memoryArgs, partialConfig, sandboxArgs),
       );
       process.exit(0);
     } else if (
       memoryArgs.length === 0 &&
       !hasLoadedEnvironmentValues() &&
-      !isAcpMode &&
       argv.inputFormat !== InputFormat.STREAM_JSON &&
       !(argv.inputFile ?? settings.merged.dualOutput?.inputFile) &&
       argv.jsonFd === undefined &&
@@ -700,7 +678,6 @@ export async function main() {
         childEnv: getRelaunchEnvProvenance(),
         environmentChangedSinceBoot: hasLoadedEnvironmentValues(),
         replaceProcess:
-          !isAcpMode &&
           argv.inputFormat !== InputFormat.STREAM_JSON &&
           !argv.promptInteractive &&
           !(argv.inputFile ?? settings.merged.dualOutput?.inputFile) &&
@@ -764,19 +741,7 @@ export async function main() {
   // saved inside the target worktree. Creates the worktree directory on
   // disk and chdirs into it; on failure we emit to stderr and exit before
   // any expensive initialization runs.
-  //
-  // ACP mode is exempt: the ACP host (Zed, etc.) supplies its own per-session
-  // cwd, and the startup-level chdir would not propagate. Reject the
-  // combination with a clear error rather than silently dropping --worktree.
   let startupWorktreeContext: StartupWorktreeContext | null = null;
-  if (argv.worktree !== undefined && (argv.acp || argv.experimentalAcp)) {
-    writeStderrLine(
-      '--worktree cannot be combined with --acp / --experimental-acp. ' +
-        'Pass the worktree path as the cwd of the ACP loadSession / newSession ' +
-        'request instead.',
-    );
-    process.exit(1);
-  }
   {
     const startupRes = await setupStartupWorktree(argv.worktree, {
       symlinkDirectories: settings.merged.worktree?.symlinkDirectories,
@@ -863,9 +828,7 @@ export async function main() {
 
     const config = await loadCliConfig(
       settings.merged,
-      argv.acp || argv.experimentalAcp
-        ? { ...argv, chatRecording: false }
-        : argv,
+      argv,
       process.cwd(),
       argv.extensions,
       // Pass separated hooks for proper source attribution
@@ -882,10 +845,9 @@ export async function main() {
     );
     profileCheckpoint('after_load_cli_config');
 
-    const nonInteractiveHousekeeping =
-      !config.isInteractive() || config.getExperimentalZedIntegration()
-        ? await import('./services/housekeeping/scheduler.js')
-        : undefined;
+    const nonInteractiveHousekeeping = !config.isInteractive()
+      ? await import('./services/housekeeping/scheduler.js')
+      : undefined;
     if (nonInteractiveHousekeeping) {
       registerCleanup(() =>
         nonInteractiveHousekeeping.stopNonInteractiveOpenAILogHousekeeping(),
@@ -1088,18 +1050,6 @@ export async function main() {
     let input = config.getQuestion();
     const initializationResult = await initializeApp(config, settings);
     profileCheckpoint('after_initialize_app');
-
-    if (config.getExperimentalZedIntegration()) {
-      const { runAcpAgent } = await import('./acp-integration/acpAgent.js');
-      try {
-        await runAcpAgent(config, settings, argv);
-      } finally {
-        // Clean up child processes even when ACP setup or shutdown fails.
-        prepareFileWatchersForProcessExit();
-        await runExitCleanup();
-      }
-      process.exit(0);
-    }
 
     const startupWarnings = [
       ...new Set([

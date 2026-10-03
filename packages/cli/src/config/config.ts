@@ -161,10 +161,7 @@ export interface CliArgs {
   allowedMcpServerNames: string[] | undefined;
   mcpConfig: string | undefined;
   allowedTools: string[] | undefined;
-  acp: boolean | undefined;
-  experimentalAcp: boolean | undefined;
   experimentalLsp: boolean | undefined;
-  restoreAskUserQuestion: boolean | undefined;
   extensions: string[] | undefined;
   listExtensions: boolean | undefined;
   openaiLogging: boolean | undefined;
@@ -595,13 +592,6 @@ export async function parseArguments(): Promise<CliArgs> {
         .option('sandbox-image', DEFAULT_COMMAND_OPTIONS['sandbox-image'])
         .option('yolo', DEFAULT_COMMAND_OPTIONS.yolo)
         .option('approval-mode', DEFAULT_COMMAND_OPTIONS['approval-mode'])
-        .option('acp', DEFAULT_COMMAND_OPTIONS.acp)
-        .option('experimental-acp', {
-          type: 'boolean' as const,
-          description:
-            'Starts the agent in ACP mode (deprecated, use --acp instead)',
-          hidden: true,
-        })
         .option('experimental-skills', {
           type: 'boolean' as const,
           description:
@@ -609,10 +599,6 @@ export async function parseArguments(): Promise<CliArgs> {
           hidden: true,
         })
         .option('experimental-lsp', DEFAULT_COMMAND_OPTIONS['experimental-lsp'])
-        .option(
-          'restore-ask-user-question',
-          DEFAULT_COMMAND_OPTIONS['restore-ask-user-question'],
-        )
         .option('allowed-mcp-server-names', {
           ...DEFAULT_COMMAND_OPTIONS['allowed-mcp-server-names'],
           string: true,
@@ -799,15 +785,6 @@ export async function parseArguments(): Promise<CliArgs> {
               // wins.
               return '--json-schema cannot be used with --input-format stream-json; the "first structured_output call ends the session" contract is incompatible with the long-lived stream-json input protocol.';
             }
-            if (argv['acp'] || argv['experimentalAcp']) {
-              // ACP runs an external IDE/Zed protocol on its own turn loop
-              // (runAcpAgent), which doesn't honour the synthetic
-              // structured_output contract. Without this check the tool
-              // would register but its "session ends now" llmContent would
-              // just be relayed back into the ACP chat, leaving the run
-              // open and silently ignoring --json-schema.
-              return '--json-schema cannot be used with --acp; structured output is only honoured by the headless non-interactive flow.';
-            }
             const hasPrompt = !!argv['prompt'];
             const query = argv['query'] as string | string[] | undefined;
             const hasPositionalQuery = Array.isArray(query)
@@ -899,17 +876,6 @@ export async function parseArguments(): Promise<CliArgs> {
 
   // The import format is now only controlled by settings.memoryImportFormat
   // We no longer accept it as a CLI argument
-
-  // Handle deprecated --experimental-acp flag
-  if (result['experimentalAcp']) {
-    writeStderrLine(
-      '\x1b[33m⚠ Warning: --experimental-acp is deprecated and will be removed in a future release. Please use --acp instead.\x1b[0m',
-    );
-    // Map experimental-acp to acp if acp is not explicitly set
-    if (!result['acp']) {
-      (result as Record<string, unknown>)['acp'] = true;
-    }
-  }
 
   return result as unknown as CliArgs;
 }
@@ -1515,8 +1481,6 @@ export async function loadCliConfig(
     sandboxEnabled &&
     (argv.promptInteractive !== undefined ||
       argv.inputFormat === 'stream-json' ||
-      argv.acp ||
-      argv.experimentalAcp ||
       argv.worktree !== undefined ||
       argv.experimentalLsp ||
       argv.mcpConfig ||
@@ -1874,13 +1838,7 @@ export async function loadCliConfig(
   // In non-interactive mode, tools that require a user prompt are denied unless
   // the caller has explicitly allowed them. Stream-JSON input is excluded from
   // this logic because approval can be sent programmatically via JSON messages.
-  const isAcpMode = argv.acp || argv.experimentalAcp;
-  if (
-    !bareMode &&
-    !interactive &&
-    !isAcpMode &&
-    inputFormat !== InputFormat.STREAM_JSON
-  ) {
+  if (!bareMode && !interactive && inputFormat !== InputFormat.STREAM_JSON) {
     const denyUnlessAllowed = (toolName: ToolName): void => {
       if (!isExplicitlyAllowed(toolName)) {
         const name = toolName as string;
@@ -2018,7 +1976,6 @@ export async function loadCliConfig(
   let sessionRestoreProjection: SessionRestoreProjection | undefined;
   const sessionRestoreProjectionSource =
     hostPolicy?.sessionRestore?.projectionSource;
-  let deferProjectionUntilWriterLease = false;
 
   if (argv.continue || argv.resume) {
     const sessionService = new SessionService(cwd);
@@ -2039,13 +1996,8 @@ export async function loadCliConfig(
       // session UUID by llm.tsx (which handles custom title lookup and
       // the interactive picker for ambiguous matches).
       sessionId = argv.resume;
-      deferProjectionUntilWriterLease =
-        sessionRestoreProjectionSource !== undefined &&
-        (argv.chatRecording ?? settings.general?.chatRecording ?? true) &&
-        isAcpMode === true &&
-        settings.experimental?.sessionWriterLease === true;
       if (sessionRestoreProjectionSource) {
-        if (!deferProjectionUntilWriterLease && !argv.forkSession) {
+        if (!argv.forkSession) {
           sessionRestoreProjection =
             await sessionRestoreProjectionSource(sessionId);
         }
@@ -2073,10 +2025,8 @@ export async function loadCliConfig(
       sessionId = forkedSessionId;
       if (sessionRestoreProjectionSource) {
         sessionData = undefined;
-        if (!deferProjectionUntilWriterLease) {
-          sessionRestoreProjection =
-            await sessionRestoreProjectionSource(forkedSessionId);
-        }
+        sessionRestoreProjection =
+          await sessionRestoreProjectionSource(forkedSessionId);
       } else {
         sessionData = await sessionService.loadSession(forkedSessionId);
         if (!sessionData) {
@@ -2176,7 +2126,6 @@ export async function loadCliConfig(
   const isExplicitOneShotPrompt =
     !interactive &&
     hasPrompt &&
-    !isAcpMode &&
     !(argv.inputFile ?? settings.dualOutput?.inputFile) &&
     inputFormat !== InputFormat.STREAM_JSON;
 
@@ -2313,7 +2262,7 @@ export async function loadCliConfig(
     // defers it until after the initialize response is written. Events emitted
     // before deferred init are an accepted startup-latency tradeoff. `qwen -i
     // "prompt"` still initializes eagerly because it auto-submits after render.
-    deferTelemetryInitialization: isAcpMode || (interactive && !question),
+    deferTelemetryInitialization: interactive && !question,
     clearContextOnIdle: settings.context?.clearContextOnIdle,
     fileFiltering: settings.context?.fileFiltering,
     plansDirectory: settings.plansDirectory,
@@ -2331,14 +2280,6 @@ export async function loadCliConfig(
     maxToolCalls: resolveMaxToolCalls(argv, settings),
     // Undefined flows through to Config's default (5) and clamp logic.
     maxSubagentDepth: resolveMaxSubagentDepth(argv, settings),
-    experimentalZedIntegration: argv.acp || argv.experimentalAcp || false,
-    // ACP/serve-scoped: only the spawned ACP child can re-hang a restored
-    // ask_user_question. In the plain TUI the flag would skip load-time
-    // orphan repair (client.ts) with nothing able to re-hang the question,
-    // leaving the resumed session wedged until the next send repairs it.
-    restoreAskUserQuestion:
-      (argv.acp || argv.experimentalAcp || false) &&
-      argv.restoreAskUserQuestion === true,
     sessionWriterLeaseEnabled:
       settings.experimental?.sessionWriterLease === true,
     cronEnabled: settings.experimental?.cron ?? true,

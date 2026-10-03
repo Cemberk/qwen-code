@@ -9,7 +9,6 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 
-import acpBridgeConfig from '../../packages/acp-bridge/vitest.config.js';
 import cliConfig from '../../packages/cli/vitest.config.js';
 import coreConfig from '../../packages/core/vitest.config.js';
 import { getTestCiWorkspacePackageJsonPaths } from '../workspaces.js';
@@ -32,7 +31,6 @@ type ExemptionConfig = {
 };
 
 const configs: Record<string, ExemptionConfig> = {
-  'packages/acp-bridge': acpBridgeConfig,
   'packages/cli': cliConfig,
   'packages/core': coreConfig,
   'scripts/tests': scriptsTestsConfig,
@@ -65,8 +63,6 @@ const configModules: Record<
   string,
   () => Promise<{ default: ExemptionConfig }>
 > = {
-  'packages/acp-bridge': () =>
-    import('../../packages/acp-bridge/vitest.config.js'),
   'packages/cli': () => import('../../packages/cli/vitest.config.js'),
   'packages/core': () => import('../../packages/core/vitest.config.js'),
   'scripts/tests': () => import('./vitest.config.js'),
@@ -108,12 +104,6 @@ describe('shared-pool test timeout', () => {
     });
   }
 
-  // The gated ternaries: off the pool these must fall back to vitest's own
-  // default, so a hang on a developer machine still fails in 5s. One list,
-  // iterated by both off-pool arms below — a newly gated workspace gets
-  // registered in two places (the map and here), not three.
-  const OFF_POOL_DEFAULT = ['packages/acp-bridge'] as const;
-
   // cli and core gate the same way but pin 15s off the pool instead of the
   // default. Naming the value is what stops either ternary being flattened to
   // the pool number: the floor above passes on 60_000, so without this a real
@@ -124,10 +114,6 @@ describe('shared-pool test timeout', () => {
   };
 
   async function expectOffPoolCeilings() {
-    for (const name of OFF_POOL_DEFAULT) {
-      const mod = await configModules[name]!();
-      expect(mod.default.test?.testTimeout, name).toBeUndefined();
-    }
     for (const [name, ms] of Object.entries(OFF_POOL_PINNED)) {
       const mod = await configModules[name]!();
       expect(mod.default.test?.testTimeout, name).toBe(ms);
@@ -178,11 +164,7 @@ describe('shared-pool test timeout', () => {
     // No gated ternary, hence no off-pool branch to sample: scripts/tests
     // carries a flat literal.
     const FLAT_CEILING_CONFIGS = ['scripts/tests'];
-    const arms = [
-      ...OFF_POOL_DEFAULT,
-      ...Object.keys(OFF_POOL_PINNED),
-      ...FLAT_CEILING_CONFIGS,
-    ];
+    const arms = [...Object.keys(OFF_POOL_PINNED), ...FLAT_CEILING_CONFIGS];
     expect(new Set(arms).size, 'one off-pool arm per workspace').toBe(
       arms.length,
     );

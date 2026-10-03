@@ -8,7 +8,7 @@
  * Vitest globalSetup guard for package-local unit tests.
  *
  * In a fresh clone or a new worktree, workspace packages such as
- * `@qwen-code/acp-bridge` and `@qwen-code/web-templates` have no `dist/`
+ * `@qwen-code/web-templates` has no `dist/`
  * output until `npm run build` has run, and
  * `src/generated/git-commit.ts` does not exist until `npm run generate`
  * has run. Unit tests that import them then fail during collection with
@@ -39,7 +39,7 @@ export const repoRoot = path.resolve(__dirname, '..');
 // that is not source-aliased, add its package here as well.
 export const DIST_PREREQUISITES = {
   'packages/core': ['packages/core'],
-  'packages/cli': ['packages/acp-bridge', 'packages/web-templates'],
+  'packages/cli': ['packages/web-templates'],
 };
 
 // Generated files that unit tests import but that a fresh checkout does

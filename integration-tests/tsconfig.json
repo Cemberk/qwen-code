@@ -41,9 +41,6 @@
       // (`../../packages/cli/src/...`), so those files get checked here too
       // and must resolve their own imports.
       "@qwen-code/qwen-code-core": ["../packages/core/src/index.ts"],
-      "@qwen-code/qwen-code-core/subSessionConstants": [
-        "../packages/core/src/tools/sub-session-constants.ts"
-      ],
       "@qwen-code/qwen-code-core/transcriptRecords": [
         "../packages/core/src/utils/transcript-records.ts"
       ],
@@ -83,57 +80,6 @@
       ],
       "@qwen-code/qwen-code-core/userPromptSubmitContext": [
         "../packages/core/src/hooks/user-prompt-submit-context.ts"
-      ],
-      "@qwen-code/acp-bridge": ["../packages/acp-bridge/src/index.ts"],
-      "@qwen-code/acp-bridge/bridge": ["../packages/acp-bridge/src/bridge.ts"],
-      "@qwen-code/acp-bridge/bridgeClient": [
-        "../packages/acp-bridge/src/bridgeClient.ts"
-      ],
-      "@qwen-code/acp-bridge/bridgeErrors": [
-        "../packages/acp-bridge/src/bridgeErrors.ts"
-      ],
-      "@qwen-code/acp-bridge/bridgeFileSystem": [
-        "../packages/acp-bridge/src/bridgeFileSystem.ts"
-      ],
-      "@qwen-code/acp-bridge/bridgeOptions": [
-        "../packages/acp-bridge/src/bridgeOptions.ts"
-      ],
-      "@qwen-code/acp-bridge/bridgeTypes": [
-        "../packages/acp-bridge/src/bridgeTypes.ts"
-      ],
-      "@qwen-code/acp-bridge/channelControlTimeouts": [
-        "../packages/acp-bridge/src/channel-control-timeouts.ts"
-      ],
-      "@qwen-code/acp-bridge/childHeapPolicy": [
-        "../packages/acp-bridge/src/child-heap-policy.ts"
-      ],
-      "@qwen-code/acp-bridge/daemonEventTypes": [
-        "../packages/acp-bridge/src/daemonEventTypes.ts"
-      ],
-      "@qwen-code/acp-bridge/daemonMemoryBudget": [
-        "../packages/acp-bridge/src/daemon-memory-budget.ts"
-      ],
-      "@qwen-code/acp-bridge/eventBus": [
-        "../packages/acp-bridge/src/eventBus.ts"
-      ],
-      "@qwen-code/acp-bridge/externalToolGuard": [
-        "../packages/acp-bridge/src/externalToolGuard.ts"
-      ],
-      "@qwen-code/acp-bridge/logRedaction": [
-        "../packages/acp-bridge/src/logRedaction.ts"
-      ],
-      "@qwen-code/acp-bridge/mcpTimeouts": [
-        "../packages/acp-bridge/src/mcpTimeouts.ts"
-      ],
-      "@qwen-code/acp-bridge/sessionArtifacts": [
-        "../packages/acp-bridge/src/sessionArtifacts.ts"
-      ],
-      "@qwen-code/acp-bridge/status": ["../packages/acp-bridge/src/status.ts"],
-      "@qwen-code/acp-bridge/transcriptReplay": [
-        "../packages/acp-bridge/src/transcript-replay.ts"
-      ],
-      "@qwen-code/acp-bridge/workspacePaths": [
-        "../packages/acp-bridge/src/workspacePaths.ts"
       ],
       // cli's insight TemplateRenderer.ts imports web-templates; without an
       // entry it resolves through the exports map to dist, leaving the

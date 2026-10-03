@@ -69,7 +69,10 @@ import {
 } from './session-context.js';
 import { createSessionRootContext } from './tracer.js';
 import { emitSessionEnd, emitSessionStart } from './session-events.js';
-import { extractDaemonHttpTraceContext } from './daemon-tracing.js';
+import {
+  DAEMON_TRACEPARENT_META_KEY,
+  extractDaemonTraceContext,
+} from './daemon-tracing.js';
 import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
 import { UndiciInstrumentation } from '@opentelemetry/instrumentation-undici';
 import { sessionIdContext } from '../utils/sessionIdContext.js';
@@ -257,13 +260,15 @@ describe('Telemetry SDK', () => {
       // The pre-init state (fresh registry, empty fallback holder → no
       // parent context) is covered by daemon-tracing.test.ts; this test
       // proves the other half of the wiring: after initializeTelemetry the
-      // sdk-impl chunk has injected the W3C fallback, so inbound HTTP
+      // sdk-impl chunk has injected the W3C fallback, so inbound _meta
       // extraction resolves a remote parent even though the global
       // propagator stays a no-op (NodeSDK is mocked, nothing registers one).
       await initializeTelemetry(mockConfig);
 
-      const extracted = extractDaemonHttpTraceContext({
-        traceparent: `00-${'3'.repeat(32)}-${'4'.repeat(16)}-01`,
+      const extracted = extractDaemonTraceContext({
+        _meta: {
+          [DAEMON_TRACEPARENT_META_KEY]: `00-${'3'.repeat(32)}-${'4'.repeat(16)}-01`,
+        },
       });
       expect(trace.getSpanContext(extracted!)?.traceId).toBe('3'.repeat(32));
       expect(trace.getSpanContext(extracted!)?.isRemote).toBe(true);

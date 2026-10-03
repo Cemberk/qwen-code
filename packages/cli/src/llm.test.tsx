@@ -43,7 +43,6 @@ import {
   OutputFormat,
   Storage,
 } from '@qwen-code/qwen-code-core';
-import { EXTERNAL_TOOL_GUARD_REQUIRED_VALUE } from '@qwen-code/acp-bridge/externalToolGuard';
 
 const mockPrepareFileWatchersForProcessExit = vi.hoisted(() => vi.fn());
 vi.mock(
@@ -61,7 +60,6 @@ const mockWriteStdoutLine = vi.hoisted(() => vi.fn());
 const mockConsumeLastRenderError = vi.hoisted(() => vi.fn());
 const mockHandleListExtensions = vi.hoisted(() => vi.fn());
 const mockStartPostRenderPrefetches = vi.hoisted(() => vi.fn());
-const mockRunAcpAgent = vi.hoisted(() => vi.fn());
 const mockStartNonInteractiveOpenAILogHousekeeping = vi.hoisted(() => vi.fn());
 const mockStopNonInteractiveOpenAILogHousekeeping = vi.hoisted(() =>
   vi.fn(async () => {}),
@@ -110,31 +108,6 @@ afterAll(() => {
     process.env['HOME'] = savedHome;
   }
   rmSync(llmTestHome, { recursive: true, force: true });
-});
-
-describe('gemini import boundary', () => {
-  it('does not statically import ACP or noninteractive auth branches', () => {
-    const source = readFileSync('src/llm.tsx', 'utf8');
-
-    expect(source).not.toContain(
-      "import { runAcpAgent } from './acp-integration/acpAgent.js'",
-    );
-    expect(source).not.toContain(
-      "import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js'",
-    );
-    expect(source).not.toContain(
-      "import { initializeApp } from './core/initializer.js'",
-    );
-    expect(source).toMatch(
-      /await import\(\s*['"]\.\/acp-integration\/acpAgent\.js['"]\s*\)/,
-    );
-    expect(source).toMatch(
-      /await import\(\s*['"]\.\/validateNonInterActiveAuth\.js['"]\s*\)/,
-    );
-    expect(source).toMatch(
-      /await import\(\s*['"]\.\/core\/initializer\.js['"]\s*\)/,
-    );
-  });
 });
 
 // Custom error to identify mock process.exit calls
@@ -253,10 +226,6 @@ vi.mock('./core/initializer.js', () => ({
 vi.mock('./startup/startup-prefetch.js', () => ({
   startPostRenderPrefetches: (...args: unknown[]) =>
     mockStartPostRenderPrefetches(...args),
-}));
-
-vi.mock('./acp-integration/acpAgent.js', () => ({
-  runAcpAgent: (...args: unknown[]) => mockRunAcpAgent(...args),
 }));
 
 vi.mock('./services/housekeeping/scheduler.js', async (importOriginal) => {
@@ -410,609 +379,6 @@ describe('llm.tsx main function', () => {
     vi.restoreAllMocks();
   });
 
-  it('relaunches before config load and preserves only private managed ACP activation', async () => {
-    const processExitSpy = vi
-      .spyOn(process, 'exit')
-      .mockImplementation((code) => {
-        throw new MockProcessExitError(code);
-      });
-    const { relaunchAppInChildProcess } = await import('./utils/relaunch.js');
-    const { loadCliConfig, parseArguments } = await import(
-      './config/config.js'
-    );
-    const { loadSettings } = await import('./config/settings.js');
-    const { loadSandboxConfig } = await import('./config/sandboxConfig.js');
-    vi.mocked(loadSandboxConfig).mockResolvedValue(undefined);
-    vi.mocked(parseArguments).mockResolvedValue({ acp: true } as CliArgs);
-    vi.stubEnv('QWEN_CODE_PRIVATE_ACP_CAPABILITY', 'private-capability');
-    vi.stubEnv(
-      'QWEN_CODE_PRIVATE_EXTERNAL_TOOL_GUARD',
-      EXTERNAL_TOOL_GUARD_REQUIRED_VALUE,
-    );
-    vi.stubEnv('QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN', 'guard-secret');
-    vi.stubEnv('QWEN_CODE_NO_RELAUNCH', '');
-
-    const callOrder: string[] = [];
-    vi.mocked(relaunchAppInChildProcess).mockImplementation(
-      async (_memoryArgs, _extraArgs, options) => {
-        callOrder.push('relaunch');
-        expect(
-          process.env['QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN'],
-        ).toBeUndefined();
-        expect(process.env['QWEN_CODE_PRIVATE_ACP_CAPABILITY']).toBeUndefined();
-        expect(
-          process.env['QWEN_CODE_PRIVATE_EXTERNAL_TOOL_GUARD'],
-        ).toBeUndefined();
-        expect(options?.childEnv).toEqual({
-          QWEN_CODE_PRIVATE_ACP_CAPABILITY: 'private-capability',
-          QWEN_CODE_PRIVATE_EXTERNAL_TOOL_GUARD:
-            EXTERNAL_TOOL_GUARD_REQUIRED_VALUE,
-          QWEN_CODE_PRIVATE_RELAUNCH_ENV_PROVENANCE:
-            '{"dotEnv":[],"settingsEnv":[]}',
-        });
-      },
-    );
-    vi.mocked(loadCliConfig).mockImplementation(async () => {
-      callOrder.push('loadCliConfig');
-      return {
-        isInteractive: () => false,
-        getQuestion: () => '',
-        getSandbox: () => false,
-        getApprovalMode: () => ApprovalMode.DEFAULT,
-        getDebugMode: () => false,
-        getListExtensions: () => false,
-        getMcpServers: () => ({}),
-        getTopTierMcpServers: () => undefined,
-        getModelProvidersConfig: () => undefined,
-        initialize: vi.fn(),
-        waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-        getExperimentalZedIntegration: () => false,
-        getScreenReader: () => false,
-        getMemoryFileCount: () => 0,
-        getProjectRoot: () => '/',
-        getOutputFormat: () => OutputFormat.TEXT,
-        getWarnings: () => [],
-        isSafeMode: () => false,
-        getModelsConfig: () => ({ getCurrentAuthType: () => null }),
-        getSessionId: () => 'test-session-id',
-      } as unknown as Config;
-    });
-    vi.mocked(loadSettings).mockReturnValue({
-      errors: [],
-      merged: {
-        advanced: { autoConfigureMemory: true },
-        security: { auth: {} },
-        ui: {},
-      },
-      setValue: vi.fn(),
-      forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
-      migrationWarnings: [],
-      getSystemHooks: () => undefined,
-      getUserHooks: () => undefined,
-    } as never);
-    try {
-      try {
-        await main();
-      } catch (e) {
-        // Mocked process exit throws an error.
-        if (!(e instanceof MockProcessExitError)) throw e;
-      }
-    } finally {
-      vi.unstubAllEnvs();
-    }
-
-    // It is critical that we call relaunch before loadCliConfig to avoid
-    // loading config in the outer process when we are going to relaunch.
-    // By ensuring we don't load the config we also ensure we don't trigger any
-    // operations that might require loading the config such as such as
-    // initializing mcp servers.
-    // For the sandbox case we still have to load a partial cli config.
-    // we can authorize outside the sandbox.
-    expect(callOrder).toEqual(['relaunch', 'loadCliConfig']);
-    expect(relaunchAppInChildProcess).toHaveBeenCalledWith(
-      expect.any(Array),
-      [],
-      expect.objectContaining({
-        childEnv: {
-          QWEN_CODE_PRIVATE_ACP_CAPABILITY: 'private-capability',
-          QWEN_CODE_PRIVATE_EXTERNAL_TOOL_GUARD:
-            EXTERNAL_TOOL_GUARD_REQUIRED_VALUE,
-          QWEN_CODE_PRIVATE_RELAUNCH_ENV_PROVENANCE:
-            '{"dotEnv":[],"settingsEnv":[]}',
-        },
-      }),
-    );
-    processExitSpy.mockRestore();
-  });
-
-  it('carries the Conversations marker through the relaunch only with the private capability', async () => {
-    const processExitSpy = vi
-      .spyOn(process, 'exit')
-      .mockImplementation((code) => {
-        throw new MockProcessExitError(code);
-      });
-    const { relaunchAppInChildProcess } = await import('./utils/relaunch.js');
-    const { loadCliConfig, parseArguments } = await import(
-      './config/config.js'
-    );
-    const { loadSettings } = await import('./config/settings.js');
-    const { loadSandboxConfig } = await import('./config/sandboxConfig.js');
-    vi.mocked(loadSandboxConfig).mockResolvedValue(undefined);
-    vi.mocked(parseArguments).mockResolvedValue({ acp: true } as CliArgs);
-    vi.stubEnv('QWEN_CODE_PRIVATE_ACP_CAPABILITY', 'private-capability');
-    vi.stubEnv('QWEN_CODE_PRIVATE_CONVERSATIONS_RUNTIME', '1');
-    vi.stubEnv('QWEN_CODE_NO_RELAUNCH', '');
-
-    vi.mocked(relaunchAppInChildProcess).mockImplementation(
-      async (_memoryArgs, _extraArgs, options) => {
-        expect(
-          process.env['QWEN_CODE_PRIVATE_CONVERSATIONS_RUNTIME'],
-        ).toBeUndefined();
-        expect(options?.childEnv).toEqual({
-          QWEN_CODE_PRIVATE_ACP_CAPABILITY: 'private-capability',
-          QWEN_CODE_PRIVATE_CONVERSATIONS_RUNTIME: '1',
-          QWEN_CODE_PRIVATE_RELAUNCH_ENV_PROVENANCE:
-            '{"dotEnv":[],"settingsEnv":[]}',
-        });
-      },
-    );
-    vi.mocked(loadCliConfig).mockImplementation(async () => {
-      // A user-level .env must not reintroduce the marker after settings and
-      // environment loading; the accepted value already lives in the relaunch
-      // payload.
-      expect(
-        process.env['QWEN_CODE_PRIVATE_CONVERSATIONS_RUNTIME'],
-      ).toBeUndefined();
-      return {
-        isInteractive: () => false,
-        getQuestion: () => '',
-        getSandbox: () => false,
-        getApprovalMode: () => ApprovalMode.DEFAULT,
-        getDebugMode: () => false,
-        getListExtensions: () => false,
-        getMcpServers: () => ({}),
-        getTopTierMcpServers: () => undefined,
-        getModelProvidersConfig: () => undefined,
-        initialize: vi.fn(),
-        waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-        getExperimentalZedIntegration: () => false,
-        getScreenReader: () => false,
-        getMemoryFileCount: () => 0,
-        getProjectRoot: () => '/',
-        getOutputFormat: () => OutputFormat.TEXT,
-        getWarnings: () => [],
-        isSafeMode: () => false,
-        getModelsConfig: () => ({ getCurrentAuthType: () => null }),
-        getSessionId: () => 'test-session-id',
-      } as unknown as Config;
-    });
-    vi.mocked(loadSettings).mockReturnValue({
-      errors: [],
-      merged: {
-        advanced: { autoConfigureMemory: true },
-        security: { auth: {} },
-        ui: {},
-      },
-      setValue: vi.fn(),
-      forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
-      migrationWarnings: [],
-      getSystemHooks: () => undefined,
-      getUserHooks: () => undefined,
-    } as never);
-    try {
-      try {
-        await main();
-      } catch (e) {
-        // Mocked process exit throws an error.
-        if (!(e instanceof MockProcessExitError)) throw e;
-      }
-    } finally {
-      vi.unstubAllEnvs();
-    }
-
-    expect(relaunchAppInChildProcess).toHaveBeenCalledWith(
-      expect.any(Array),
-      [],
-      expect.objectContaining({
-        childEnv: {
-          QWEN_CODE_PRIVATE_ACP_CAPABILITY: 'private-capability',
-          QWEN_CODE_PRIVATE_CONVERSATIONS_RUNTIME: '1',
-          QWEN_CODE_PRIVATE_RELAUNCH_ENV_PROVENANCE:
-            '{"dotEnv":[],"settingsEnv":[]}',
-        },
-      }),
-    );
-    processExitSpy.mockRestore();
-  });
-
-  it('does not accept the Conversations marker without the private capability', async () => {
-    const processExitSpy = vi
-      .spyOn(process, 'exit')
-      .mockImplementation((code) => {
-        throw new MockProcessExitError(code);
-      });
-    const { relaunchAppInChildProcess } = await import('./utils/relaunch.js');
-    const { loadCliConfig, parseArguments } = await import(
-      './config/config.js'
-    );
-    const { loadSettings } = await import('./config/settings.js');
-    const { loadSandboxConfig } = await import('./config/sandboxConfig.js');
-    vi.mocked(loadSandboxConfig).mockResolvedValue(undefined);
-    vi.mocked(parseArguments).mockResolvedValue({ acp: true } as CliArgs);
-    vi.stubEnv('QWEN_CODE_PRIVATE_CONVERSATIONS_RUNTIME', '1');
-    vi.stubEnv('QWEN_CODE_NO_RELAUNCH', '');
-
-    vi.mocked(relaunchAppInChildProcess).mockImplementation(
-      async (_memoryArgs, _extraArgs, options) => {
-        expect(options?.childEnv ?? {}).not.toHaveProperty(
-          'QWEN_CODE_PRIVATE_CONVERSATIONS_RUNTIME',
-        );
-      },
-    );
-    vi.mocked(loadCliConfig).mockImplementation(
-      async () =>
-        ({
-          isInteractive: () => false,
-          getQuestion: () => '',
-          getSandbox: () => false,
-          getApprovalMode: () => ApprovalMode.DEFAULT,
-          getDebugMode: () => false,
-          getListExtensions: () => false,
-          getMcpServers: () => ({}),
-          getTopTierMcpServers: () => undefined,
-          getModelProvidersConfig: () => undefined,
-          initialize: vi.fn(),
-          waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-          getExperimentalZedIntegration: () => false,
-          getScreenReader: () => false,
-          getMemoryFileCount: () => 0,
-          getProjectRoot: () => '/',
-          getOutputFormat: () => OutputFormat.TEXT,
-          getWarnings: () => [],
-          isSafeMode: () => false,
-          getModelsConfig: () => ({ getCurrentAuthType: () => null }),
-          getSessionId: () => 'test-session-id',
-        }) as unknown as Config,
-    );
-    vi.mocked(loadSettings).mockReturnValue({
-      errors: [],
-      merged: {
-        advanced: { autoConfigureMemory: true },
-        security: { auth: {} },
-        ui: {},
-      },
-      setValue: vi.fn(),
-      forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
-      migrationWarnings: [],
-      getSystemHooks: () => undefined,
-      getUserHooks: () => undefined,
-    } as never);
-    try {
-      try {
-        await main();
-      } catch (e) {
-        if (!(e instanceof MockProcessExitError)) throw e;
-      }
-    } finally {
-      vi.unstubAllEnvs();
-    }
-
-    expect(relaunchAppInChildProcess).toHaveBeenCalled();
-    processExitSpy.mockRestore();
-  });
-
-  it('rejects a Conversations marker whose value is not the exact enable value', async () => {
-    const processExitSpy = vi
-      .spyOn(process, 'exit')
-      .mockImplementation((code) => {
-        throw new MockProcessExitError(code);
-      });
-    const { relaunchAppInChildProcess } = await import('./utils/relaunch.js');
-    const { loadCliConfig, parseArguments } = await import(
-      './config/config.js'
-    );
-    const { loadSettings } = await import('./config/settings.js');
-    const { loadSandboxConfig } = await import('./config/sandboxConfig.js');
-    vi.mocked(loadSandboxConfig).mockResolvedValue(undefined);
-    vi.mocked(parseArguments).mockResolvedValue({ acp: true } as CliArgs);
-    vi.stubEnv('QWEN_CODE_PRIVATE_ACP_CAPABILITY', 'private-capability');
-    // A stray marker exported while debugging the daemon must not be accepted.
-    vi.stubEnv('QWEN_CODE_PRIVATE_CONVERSATIONS_RUNTIME', 'yes');
-    vi.stubEnv('QWEN_CODE_NO_RELAUNCH', '');
-
-    vi.mocked(relaunchAppInChildProcess).mockImplementation(
-      async (_memoryArgs, _extraArgs, options) => {
-        expect(options?.childEnv).toEqual({
-          QWEN_CODE_PRIVATE_ACP_CAPABILITY: 'private-capability',
-          QWEN_CODE_PRIVATE_RELAUNCH_ENV_PROVENANCE:
-            '{"dotEnv":[],"settingsEnv":[]}',
-        });
-      },
-    );
-    vi.mocked(loadCliConfig).mockImplementation(
-      async () =>
-        ({
-          isInteractive: () => false,
-          getQuestion: () => '',
-          getSandbox: () => false,
-          getApprovalMode: () => ApprovalMode.DEFAULT,
-          getDebugMode: () => false,
-          getListExtensions: () => false,
-          getMcpServers: () => ({}),
-          getTopTierMcpServers: () => undefined,
-          getModelProvidersConfig: () => undefined,
-          initialize: vi.fn(),
-          waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-          getExperimentalZedIntegration: () => false,
-          getScreenReader: () => false,
-          getMemoryFileCount: () => 0,
-          getProjectRoot: () => '/',
-          getOutputFormat: () => OutputFormat.TEXT,
-          getWarnings: () => [],
-          isSafeMode: () => false,
-          getModelsConfig: () => ({ getCurrentAuthType: () => null }),
-          getSessionId: () => 'test-session-id',
-        }) as unknown as Config,
-    );
-    vi.mocked(loadSettings).mockReturnValue({
-      errors: [],
-      merged: {
-        advanced: { autoConfigureMemory: true },
-        security: { auth: {} },
-        ui: {},
-      },
-      setValue: vi.fn(),
-      forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
-      migrationWarnings: [],
-      getSystemHooks: () => undefined,
-      getUserHooks: () => undefined,
-    } as never);
-    try {
-      try {
-        await main();
-      } catch (e) {
-        if (!(e instanceof MockProcessExitError)) throw e;
-      }
-    } finally {
-      vi.unstubAllEnvs();
-    }
-
-    expect(relaunchAppInChildProcess).toHaveBeenCalled();
-    processExitSpy.mockRestore();
-  });
-
-  it('scrubs a marker re-introduced by environment loading before the relaunch', async () => {
-    const processExitSpy = vi
-      .spyOn(process, 'exit')
-      .mockImplementation((code) => {
-        throw new MockProcessExitError(code);
-      });
-    const { relaunchAppInChildProcess } = await import('./utils/relaunch.js');
-    const { loadCliConfig, parseArguments } = await import(
-      './config/config.js'
-    );
-    const { loadSettings } = await import('./config/settings.js');
-    const { loadSandboxConfig } = await import('./config/sandboxConfig.js');
-    vi.mocked(loadSandboxConfig).mockResolvedValue(undefined);
-    vi.mocked(parseArguments).mockResolvedValue({ acp: true } as CliArgs);
-    // No marker at entry: this is an ordinary ACP session, so provenance is
-    // denied and `privateAcpChildEnv` carries only the capability.
-    delete process.env['QWEN_CODE_PRIVATE_CONVERSATIONS_RUNTIME'];
-    vi.stubEnv('QWEN_CODE_NO_RELAUNCH', '');
-
-    vi.mocked(loadSettings).mockImplementation(() => {
-      // A home-scoped `.env` is applied during settings/environment loading,
-      // after the entry-point capture. The relaunch env is
-      // `{ ...process.env, ...childEnv }`, so scrubbing process.env is the
-      // only defense on this branch.
-      process.env['QWEN_CODE_PRIVATE_CONVERSATIONS_RUNTIME'] = '1';
-      return {
-        errors: [],
-        merged: {
-          advanced: { autoConfigureMemory: true },
-          security: { auth: {} },
-          ui: {},
-        },
-        setValue: vi.fn(),
-        forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
-        migrationWarnings: [],
-        getSystemHooks: () => undefined,
-        getUserHooks: () => undefined,
-      } as never;
-    });
-    vi.mocked(relaunchAppInChildProcess).mockImplementation(
-      async (_memoryArgs, _extraArgs, options) => {
-        expect(
-          process.env['QWEN_CODE_PRIVATE_CONVERSATIONS_RUNTIME'],
-        ).toBeUndefined();
-        expect(options?.childEnv ?? {}).not.toHaveProperty(
-          'QWEN_CODE_PRIVATE_CONVERSATIONS_RUNTIME',
-        );
-      },
-    );
-    vi.mocked(loadCliConfig).mockImplementation(
-      async () =>
-        ({
-          isInteractive: () => false,
-          getQuestion: () => '',
-          getSandbox: () => false,
-          getApprovalMode: () => ApprovalMode.DEFAULT,
-          getDebugMode: () => false,
-          getListExtensions: () => false,
-          getMcpServers: () => ({}),
-          getTopTierMcpServers: () => undefined,
-          getModelProvidersConfig: () => undefined,
-          initialize: vi.fn(),
-          waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-          getExperimentalZedIntegration: () => false,
-          getScreenReader: () => false,
-          getMemoryFileCount: () => 0,
-          getProjectRoot: () => '/',
-          getOutputFormat: () => OutputFormat.TEXT,
-          getWarnings: () => [],
-          isSafeMode: () => false,
-          getModelsConfig: () => ({ getCurrentAuthType: () => null }),
-          getSessionId: () => 'test-session-id',
-        }) as unknown as Config,
-    );
-    try {
-      try {
-        await main();
-      } catch (e) {
-        if (!(e instanceof MockProcessExitError)) throw e;
-      }
-    } finally {
-      delete process.env['QWEN_CODE_PRIVATE_CONVERSATIONS_RUNTIME'];
-      vi.unstubAllEnvs();
-    }
-
-    expect(relaunchAppInChildProcess).toHaveBeenCalled();
-    processExitSpy.mockRestore();
-  });
-
-  it('scrubs a re-injected Conversations marker before the sandbox handoff', async () => {
-    const originalArgv = process.argv;
-    process.argv = ['node', 'script.js', '--acp', '-p', 'hello'];
-    const processExitSpy = vi
-      .spyOn(process, 'exit')
-      .mockImplementation((code) => {
-        throw new MockProcessExitError(code);
-      });
-    const { loadCliConfig, parseArguments } = await import(
-      './config/config.js'
-    );
-    const { loadSettings } = await import('./config/settings.js');
-    const { loadSandboxConfig } = await import('./config/sandboxConfig.js');
-    const { start_sandbox } = await import('./sandbox/sandbox.js');
-    vi.mocked(start_sandbox).mockClear();
-    vi.mocked(parseArguments).mockResolvedValue({
-      acp: true,
-      prompt: 'hello',
-    } as unknown as CliArgs);
-    vi.stubEnv('QWEN_CODE_PRIVATE_ACP_CAPABILITY', 'private-capability');
-    // No marker at entry, so the parent denies Conversations provenance.
-    delete process.env['QWEN_CODE_PRIVATE_CONVERSATIONS_RUNTIME'];
-
-    vi.mocked(loadSettings).mockReturnValue({
-      errors: [],
-      merged: { advanced: {}, security: { auth: {} }, ui: {} },
-      setValue: vi.fn(),
-      forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
-      migrationWarnings: [],
-      getSystemHooks: () => undefined,
-      getUserHooks: () => undefined,
-    } as never);
-    vi.mocked(loadSandboxConfig).mockResolvedValue({
-      command: 'sandbox-exec',
-      image: 'ghcr.io/qwenlm/qwen-code:1.0.0',
-    });
-    vi.mocked(loadCliConfig).mockImplementation(async () => {
-      // Auth validation re-runs the environment load after the post-settings
-      // scrub; a home-scoped `.env` re-applies the marker here.
-      process.env['QWEN_CODE_PRIVATE_CONVERSATIONS_RUNTIME'] = '1';
-      return {
-        getModelsConfig: () => ({ getCurrentAuthType: () => null }),
-        getSessionId: () => '123e4567-e89b-12d3-a456-426614174000',
-      } as unknown as Config;
-    });
-
-    let markerAtSpawn: string | undefined;
-    vi.mocked(start_sandbox).mockImplementation((async () => {
-      markerAtSpawn = process.env['QWEN_CODE_PRIVATE_CONVERSATIONS_RUNTIME'];
-      return 0;
-    }) as unknown as typeof start_sandbox);
-
-    try {
-      try {
-        await main();
-      } catch (e) {
-        if (!(e instanceof MockProcessExitError)) throw e;
-      }
-    } finally {
-      process.argv = originalArgv;
-      delete process.env['QWEN_CODE_PRIVATE_CONVERSATIONS_RUNTIME'];
-      vi.unstubAllEnvs();
-      processExitSpy.mockRestore();
-    }
-
-    // The seatbelt spawn merges `{ ...process.env, ...childEnv }`, so a marker
-    // left in process.env would reach a child that also inherits the
-    // capability and `--acp` — accepting provenance the parent denied.
-    expect(start_sandbox).toHaveBeenCalledOnce();
-    expect(markerAtSpawn).toBeUndefined();
-    const childEnv = vi.mocked(start_sandbox).mock.calls[0]?.[4];
-    expect(childEnv ?? {}).not.toHaveProperty(
-      'QWEN_CODE_PRIVATE_CONVERSATIONS_RUNTIME',
-    );
-  });
-
-  // The accepted path through the sandbox handoff: `utils/sandbox.ts` merges
-  // `{ ...process.env, ...childEnv }` with childEnv last, so an accepted
-  // marker must ride in the childEnv argument — the pre-spawn scrub keeps it
-  // out of process.env by design.
-  it('carries the Conversations marker into the sandbox handoff when provenance is accepted', async () => {
-    const originalArgv = process.argv;
-    process.argv = ['node', 'script.js', '--acp'];
-    const processExitSpy = vi
-      .spyOn(process, 'exit')
-      .mockImplementation((code) => {
-        throw new MockProcessExitError(code);
-      });
-    const { loadCliConfig, parseArguments } = await import(
-      './config/config.js'
-    );
-    const { loadSettings } = await import('./config/settings.js');
-    const { loadSandboxConfig } = await import('./config/sandboxConfig.js');
-    const { start_sandbox } = await import('./sandbox/sandbox.js');
-    vi.mocked(start_sandbox).mockClear();
-    vi.mocked(parseArguments).mockResolvedValue({ acp: true } as CliArgs);
-    vi.stubEnv('QWEN_CODE_PRIVATE_ACP_CAPABILITY', 'private-capability');
-    vi.stubEnv('QWEN_CODE_PRIVATE_CONVERSATIONS_RUNTIME', '1');
-
-    vi.mocked(loadSettings).mockReturnValue({
-      errors: [],
-      merged: { advanced: {}, security: { auth: {} }, ui: {} },
-      setValue: vi.fn(),
-      forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
-      migrationWarnings: [],
-      getSystemHooks: () => undefined,
-      getUserHooks: () => undefined,
-    } as never);
-    vi.mocked(loadSandboxConfig).mockResolvedValue({
-      command: 'sandbox-exec',
-      image: 'ghcr.io/qwenlm/qwen-code:1.0.0',
-    });
-    vi.mocked(loadCliConfig).mockImplementation(
-      async () =>
-        ({
-          getModelsConfig: () => ({ getCurrentAuthType: () => null }),
-          getSessionId: () => '123e4567-e89b-12d3-a456-426614174000',
-        }) as unknown as Config,
-    );
-    vi.mocked(start_sandbox).mockImplementation(
-      (async () => 0) as unknown as typeof start_sandbox,
-    );
-
-    try {
-      try {
-        await main();
-      } catch (e) {
-        if (!(e instanceof MockProcessExitError)) throw e;
-      }
-    } finally {
-      process.argv = originalArgv;
-      delete process.env['QWEN_CODE_PRIVATE_CONVERSATIONS_RUNTIME'];
-      vi.unstubAllEnvs();
-      processExitSpy.mockRestore();
-    }
-
-    expect(start_sandbox).toHaveBeenCalledOnce();
-    expect(vi.mocked(start_sandbox).mock.calls[0]?.[4]).toEqual({
-      QWEN_CODE_PRIVATE_ACP_CAPABILITY: 'private-capability',
-      QWEN_CODE_PRIVATE_CONVERSATIONS_RUNTIME: '1',
-    });
-  });
-
   it('handles --list-extensions before sandbox and app config startup', async () => {
     vi.clearAllMocks();
     const processExitSpy = vi
@@ -1059,65 +425,6 @@ describe('llm.tsx main function', () => {
     processExitSpy.mockRestore();
   });
 
-  it.each([
-    ['before the ACP relaunch', { acp: true }, {}, undefined, '1'],
-    [
-      'in the relaunched ACP process',
-      { acp: true },
-      { QWEN_CODE_NO_RELAUNCH: 'true' },
-      undefined,
-      undefined,
-    ],
-    [
-      'in the sandboxed ACP process',
-      { acp: true },
-      { SANDBOX: 'sandbox-exec' },
-      undefined,
-      undefined,
-    ],
-    [
-      'outside managed ACP startup',
-      {},
-      { QWEN_CODE_NO_RELAUNCH: 'true' },
-      '1',
-      '1',
-    ],
-    [
-      'ACP without bootstrap marker',
-      { acp: true },
-      { QWEN_CODE_SCRUB_ELECTRON_RUN_AS_NODE: undefined },
-      '1',
-      undefined,
-    ],
-  ])(
-    'manages Electron bootstrap env %s',
-    async (_name, argv, extraEnv, expectedElectron, expectedMarker) => {
-      vi.stubEnv('ELECTRON_RUN_AS_NODE', '1');
-      vi.stubEnv('QWEN_CODE_SCRUB_ELECTRON_RUN_AS_NODE', '1');
-      vi.stubEnv('QWEN_CODE_NO_RELAUNCH', '');
-      for (const [key, value] of Object.entries(extraEnv)) {
-        vi.stubEnv(key, value);
-      }
-
-      const { parseArguments } = await import('./config/config.js');
-      const { loadSettings } = await import('./config/settings.js');
-      vi.mocked(parseArguments).mockResolvedValue(argv as CliArgs);
-      vi.mocked(loadSettings).mockImplementation(() => {
-        expect(process.env['ELECTRON_RUN_AS_NODE']).toBe(expectedElectron);
-        expect(process.env['QWEN_CODE_SCRUB_ELECTRON_RUN_AS_NODE']).toBe(
-          expectedMarker,
-        );
-        throw new Error('stop after env check');
-      });
-
-      try {
-        await expect(main()).rejects.toThrow('stop after env check');
-      } finally {
-        vi.unstubAllEnvs();
-      }
-    },
-  );
-
   // Pins the process-replacement predicate in llm.tsx: a one-shot headless
   // prompt replaces the already-loaded process, while supervisor-backed
   // modes (ACP, -i, stream-json / file / json-fd input) keep the parent.
@@ -1144,11 +451,6 @@ describe('llm.tsx main function', () => {
         label: 'headless slash-command prompt',
         argv: { prompt: '/stats' },
         expected: 'in-process',
-      },
-      {
-        label: 'acp mode',
-        argv: { acp: true, prompt: 'hi' },
-        expected: false,
       },
       {
         label: 'interactive prompt (-i)',
@@ -1348,30 +650,6 @@ describe('llm.tsx main function', () => {
       }
     },
   );
-
-  it('keeps the external Guard token available to command parsing and scrubs it before settings load', async () => {
-    vi.stubEnv('QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN', 'guard-secret');
-    const { parseArguments } = await import('./config/config.js');
-    const { loadSettings } = await import('./config/settings.js');
-    vi.mocked(parseArguments).mockImplementation(async () => {
-      expect(process.env['QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN']).toBe(
-        'guard-secret',
-      );
-      return {} as CliArgs;
-    });
-    vi.mocked(loadSettings).mockImplementation(() => {
-      expect(
-        process.env['QWEN_CODE_EXTERNAL_TOOL_GUARD_TOKEN'],
-      ).toBeUndefined();
-      throw new Error('stop after Guard token env check');
-    });
-
-    try {
-      await expect(main()).rejects.toThrow('stop after Guard token env check');
-    } finally {
-      vi.unstubAllEnvs();
-    }
-  });
 
   it('should skip full settings discovery in bare mode', async () => {
     const originalArgv = process.argv;
@@ -2528,8 +1806,6 @@ describe('llm.tsx OpenTUI renderer dispatch', () => {
       allowedMcpServerNames: undefined,
       mcpConfig: undefined,
       allowedTools: undefined,
-      acp: undefined,
-      experimentalAcp: undefined,
       extensions: undefined,
       listExtensions: undefined,
       openaiLogging: undefined,
@@ -2552,7 +1828,6 @@ describe('llm.tsx OpenTUI renderer dispatch', () => {
       maxToolCalls: undefined,
       maxSubagentDepth: undefined,
       experimentalLsp: undefined,
-      restoreAskUserQuestion: undefined,
       chatRecording: undefined,
       sessionId: undefined,
       fallbackModel: undefined,
@@ -2750,8 +2025,6 @@ describe('llm.tsx main function kitty protocol', () => {
       allowedMcpServerNames: undefined,
       mcpConfig: undefined,
       allowedTools: undefined,
-      acp: undefined,
-      experimentalAcp: undefined,
       extensions: undefined,
       listExtensions: undefined,
       openaiLogging: undefined,
@@ -2774,7 +2047,6 @@ describe('llm.tsx main function kitty protocol', () => {
       maxToolCalls: undefined,
       maxSubagentDepth: undefined,
       experimentalLsp: undefined,
-      restoreAskUserQuestion: undefined,
       chatRecording: undefined,
       sessionId: undefined,
       fallbackModel: undefined,
@@ -2866,8 +2138,6 @@ describe('llm.tsx main function kitty protocol', () => {
       allowedMcpServerNames: undefined,
       mcpConfig: undefined,
       allowedTools: undefined,
-      acp: undefined,
-      experimentalAcp: undefined,
       extensions: undefined,
       listExtensions: undefined,
       openaiLogging: undefined,
@@ -2890,7 +2160,6 @@ describe('llm.tsx main function kitty protocol', () => {
       maxToolCalls: undefined,
       maxSubagentDepth: undefined,
       experimentalLsp: undefined,
-      restoreAskUserQuestion: undefined,
       chatRecording: undefined,
       sessionId: undefined,
       fallbackModel: undefined,
@@ -2981,8 +2250,6 @@ describe('llm.tsx main function kitty protocol', () => {
       allowedMcpServerNames: undefined,
       mcpConfig: undefined,
       allowedTools: undefined,
-      acp: undefined,
-      experimentalAcp: undefined,
       extensions: undefined,
       listExtensions: undefined,
       openaiLogging: undefined,
@@ -3005,7 +2272,6 @@ describe('llm.tsx main function kitty protocol', () => {
       maxToolCalls: undefined,
       maxSubagentDepth: undefined,
       experimentalLsp: undefined,
-      restoreAskUserQuestion: undefined,
       chatRecording: undefined,
       sessionId: undefined,
       fallbackModel: undefined,
@@ -3024,154 +2290,6 @@ describe('llm.tsx main function kitty protocol', () => {
         initializeTelemetry: true,
       },
     );
-  });
-
-  it('runs the ACP agent when Zed integration is enabled', async () => {
-    const { loadCliConfig, parseArguments } = await import(
-      './config/config.js'
-    );
-    const { loadSettings } = await import('./config/settings.js');
-    const cleanupModule = await import('./utils/cleanup.js');
-    const initializerModule = await import('./core/initializer.js');
-    const initializeAppSpy = vi
-      .spyOn(initializerModule, 'initializeApp')
-      .mockResolvedValue({
-        authError: null,
-        themeError: null,
-        shouldOpenAuthDialog: false,
-        memoryFileCount: 0,
-      });
-    vi.mocked(loadCliConfig).mockResolvedValue({
-      ...sessionRegistryConfigStub,
-      isInteractive: () => true,
-      getQuestion: () => '',
-      getSandbox: () => false,
-      getDebugMode: () => false,
-      getListExtensions: () => false,
-      getMcpServers: () => ({}),
-      getTopTierMcpServers: () => undefined,
-      getModelProvidersConfig: () => undefined,
-      initialize: vi.fn(),
-      waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-      getExperimentalZedIntegration: () => true,
-      getScreenReader: () => false,
-      getMemoryFileCount: () => 0,
-      getWarnings: () => [],
-      isSafeMode: () => false,
-      getModelsConfig: () => ({ getCurrentAuthType: () => null }),
-      getUsageStatisticsEnabled: () => true,
-      getSessionId: () => 'test-session-id',
-    } as unknown as Config);
-    vi.mocked(loadSettings).mockReturnValue({
-      errors: [],
-      merged: {
-        advanced: {},
-        security: { auth: {} },
-        ui: {},
-      },
-      setValue: vi.fn(),
-      forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
-      migrationWarnings: [],
-      getSystemHooks: () => undefined,
-      getUserHooks: () => undefined,
-    } as never);
-    vi.mocked(parseArguments).mockResolvedValue({
-      model: undefined,
-      sandbox: undefined,
-      sandboxImage: undefined,
-      debug: undefined,
-      prompt: undefined,
-      promptInteractive: undefined,
-      systemPrompt: undefined,
-      appendSystemPrompt: undefined,
-      outputStyle: undefined,
-      query: undefined,
-      yolo: undefined,
-      bare: undefined,
-      approvalMode: undefined,
-      telemetry: undefined,
-      telemetryLogPrompts: undefined,
-      telemetryOutfile: undefined,
-      allowedMcpServerNames: undefined,
-      mcpConfig: undefined,
-      allowedTools: undefined,
-      acp: undefined,
-      experimentalAcp: undefined,
-      extensions: undefined,
-      listExtensions: undefined,
-      openaiLogging: undefined,
-      openaiApiKey: undefined,
-      openaiBaseUrl: undefined,
-      openaiLoggingDir: undefined,
-      includeDirectories: undefined,
-      screenReader: undefined,
-      inputFormat: undefined,
-      outputFormat: undefined,
-      includePartialMessages: undefined,
-      continue: undefined,
-      resume: undefined,
-      coreTools: undefined,
-      excludeTools: undefined,
-      disabledSlashCommands: undefined,
-      authType: undefined,
-      maxSessionTurns: undefined,
-      maxWallTime: undefined,
-      maxToolCalls: undefined,
-      maxSubagentDepth: undefined,
-      experimentalLsp: undefined,
-      restoreAskUserQuestion: undefined,
-      chatRecording: undefined,
-      sessionId: undefined,
-      fallbackModel: undefined,
-    });
-
-    // Mock process.exit to throw instead of terminating the process
-    const originalExit = process.exit;
-    process.exit = ((code?: string | number | null | undefined) => {
-      throw new MockProcessExitError(code);
-    }) as unknown as typeof process.exit;
-
-    try {
-      await main();
-    } catch (e) {
-      if (!(e instanceof MockProcessExitError)) throw e;
-    } finally {
-      process.exit = originalExit;
-    }
-
-    expect(initializeAppSpy).toHaveBeenCalledWith(
-      expect.any(Object),
-      expect.any(Object),
-    );
-    expect(mockRunAcpAgent).toHaveBeenCalledWith(
-      expect.any(Object),
-      expect.any(Object),
-      expect.any(Object),
-      {
-        privateParentCapability: undefined,
-      },
-    );
-
-    const acpFailure = new Error('ACP failed');
-    mockRunAcpAgent.mockRejectedValueOnce(acpFailure);
-    process.exit = ((code?: string | number | null | undefined) => {
-      throw new MockProcessExitError(code);
-    }) as unknown as typeof process.exit;
-    try {
-      await expect(main()).rejects.toBe(acpFailure);
-    } finally {
-      process.exit = originalExit;
-    }
-
-    expect(cleanupModule.runExitCleanup).toHaveBeenCalledTimes(2);
-    expect(mockPrepareFileWatchersForProcessExit).toHaveBeenCalledTimes(2);
-    for (const index of [0, 1]) {
-      expect(
-        mockPrepareFileWatchersForProcessExit.mock.invocationCallOrder[index],
-      ).toBeLessThan(
-        vi.mocked(cleanupModule.runExitCleanup).mock.invocationCallOrder[index],
-      );
-    }
   });
 
   // Shared config/settings mocks for the interactive signal-handler tests.

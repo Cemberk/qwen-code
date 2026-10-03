@@ -6,7 +6,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionUpdate } from '@agentclientprotocol/sdk';
-import { LOAD_REPLAY_META_KEY } from '@qwen-code/acp-bridge/bridgeTypes';
+import { LOAD_REPLAY_META_KEY } from '../session-replay/replay-meta.js';
 import type { ToolResultBoundaryObservation } from '@qwen-code/qwen-code-core';
 import type { CLIUserMessage } from './types.js';
 

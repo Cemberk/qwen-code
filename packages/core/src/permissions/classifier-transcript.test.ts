@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { CallableTool, Content } from '@google/genai';
-import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
+import type { Content } from '@google/genai';
+import { DiscoveredMCPTool, type McpDirectClient } from '../tools/mcp-tool.js';
 import {
   buildClassifierContents,
   MAX_HISTORICAL_ACTION_CHARS,
@@ -1074,7 +1074,7 @@ describe('buildClassifierContents with a discovered MCP tool', () => {
   const callableTool = {
     tool: async () => ({}),
     callTool: async () => [],
-  } as unknown as CallableTool;
+  } as unknown as McpDirectClient;
 
   it('surfaces server, tool, annotations and arguments for the pending call', () => {
     const mcpTool = new DiscoveredMCPTool(
@@ -1083,7 +1083,6 @@ describe('buildClassifierContents with a discovered MCP tool', () => {
       'post_message',
       'Post a message',
       { type: 'object', properties: {} },
-      undefined,
       undefined,
       undefined,
       undefined,

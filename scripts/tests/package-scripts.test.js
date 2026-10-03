@@ -78,7 +78,7 @@ describe('package scripts', () => {
         fixture: 'file:../fixture',
       },
       devDependencies: {
-        '@qwen-code/acp-bridge': 'file:../acp-bridge',
+        '@qwen-code/qwen-code-core': 'file:../core',
       },
       optionalDependencies: {
         '@qwen-code/qwen-code': '0.22.4',
@@ -92,7 +92,7 @@ describe('package scripts', () => {
         fixture: 'file:../fixture',
       },
       devDependencies: {
-        '@qwen-code/acp-bridge': 'workspace:*',
+        '@qwen-code/qwen-code-core': 'workspace:*',
       },
       optionalDependencies: {
         '@qwen-code/qwen-code': 'workspace:*',

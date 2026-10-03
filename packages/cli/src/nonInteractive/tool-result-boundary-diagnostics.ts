@@ -5,7 +5,7 @@
  */
 
 import type { SessionUpdate } from '@agentclientprotocol/sdk';
-import { LOAD_REPLAY_META_KEY } from '@qwen-code/acp-bridge/bridgeTypes';
+import { LOAD_REPLAY_META_KEY } from '../session-replay/replay-meta.js';
 import {
   observeToolResultBoundary,
   type ToolResultBoundaryArtifact,

@@ -426,10 +426,7 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
         `Attempting to reconnect MCP server '${this.serverName}'...`,
       );
       const toolRegistry = this.cliConfig.getToolRegistry();
-      await toolRegistry.discoverToolsForServer(
-        this.serverName,
-        this.onAppResult !== undefined,
-      );
+      await toolRegistry.discoverToolsForServer(this.serverName);
 
       const newTool = await toolRegistry.ensureTool(this.registeredToolName);
       if (newTool instanceof DiscoveredMCPTool) {

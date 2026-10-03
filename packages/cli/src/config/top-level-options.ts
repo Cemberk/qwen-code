@@ -206,20 +206,10 @@ export const DEFAULT_COMMAND_OPTIONS = {
       (mode) => `${mode} (${APPROVAL_MODE_DESCRIPTIONS[mode]})`,
     ).join(', ')}`,
   },
-  acp: {
-    type: 'boolean' as const,
-    description: 'Starts the agent in ACP mode',
-  },
   'experimental-lsp': {
     type: 'boolean' as const,
     description:
       'Enable experimental LSP (Language Server Protocol) feature for code intelligence',
-    default: false,
-  },
-  'restore-ask-user-question': {
-    type: 'boolean' as const,
-    description:
-      'On daemon session load/resume, re-hang a trailing unanswered ask_user_question instead of synthesizing a failed tool result',
     default: false,
   },
   'allowed-mcp-server-names': {

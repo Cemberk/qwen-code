@@ -30,7 +30,7 @@ import checkUnitTestPrerequisites, {
 
 const guardUrl = new URL('../vitest-global-setup.js', import.meta.url);
 
-// Mirrors the real manifest shape: acp-bridge/web-templates/core declare their
+// Mirrors the real manifest shape: web-templates/core declare their
 // entry via exports['.'].import.
 function manifestFor(rel) {
   return {
@@ -91,12 +91,12 @@ describe('vitest-global-setup prerequisite guard', () => {
 
   it('reports an unbuilt workspace package and a missing generated file', () => {
     root = buildFixtureRoot();
-    rmSync(path.join(root, 'packages/acp-bridge/dist/index.js'));
+    rmSync(path.join(root, 'packages/web-templates/dist/index.js'));
     rmSync(path.join(root, 'packages/cli/src/generated/git-commit.ts'));
 
     const missing = findMissingPrerequisites('packages/cli', root);
     expect(missing).toHaveLength(2);
-    expect(missing[0]).toContain('packages/acp-bridge');
+    expect(missing[0]).toContain('packages/web-templates');
     expect(missing[0]).toContain('has not been built');
     expect(missing[1]).toContain('packages/cli/src/generated/git-commit.ts');
   });
@@ -190,11 +190,11 @@ describe('subpath exports entries are probed', () => {
 
   it('flags a missing subpath dist file even when the . entry exists', () => {
     root = buildFixtureRoot();
-    const bridgeDir = path.join(root, 'packages/acp-bridge');
+    const bridgeDir = path.join(root, 'packages/web-templates');
     writeFileSync(
       path.join(bridgeDir, 'package.json'),
       JSON.stringify({
-        name: 'fake-acp-bridge',
+        name: 'fake-web-templates',
         exports: {
           '.': { import: './dist/index.js' },
           './sessionRestoreTimeout': {
@@ -211,11 +211,11 @@ describe('subpath exports entries are probed', () => {
 
   it('does not probe dist targets the consumer aliases to source', () => {
     root = buildFixtureRoot();
-    const bridgeDir = path.join(root, 'packages/acp-bridge');
+    const bridgeDir = path.join(root, 'packages/web-templates');
     writeFileSync(
       path.join(bridgeDir, 'package.json'),
       JSON.stringify({
-        name: 'fake-acp-bridge',
+        name: 'fake-web-templates',
         exports: {
           '.': { import: './dist/index.js' },
           './aliasedSubpath': { import: './dist/aliased-subpath.js' },
@@ -230,7 +230,7 @@ describe('subpath exports entries are probed', () => {
         'export default defineConfig({',
         '  resolve: {',
         '    alias: {',
-        "      'fake-acp-bridge/aliasedSubpath': '../acp-bridge/src/aliased-subpath.ts',",
+        "      'fake-web-templates/aliasedSubpath': '../web-templates/src/aliased-subpath.ts',",
         '    },',
         '  },',
         '});',
@@ -252,16 +252,16 @@ describe('subpath exports entries are probed', () => {
     writeFileSync(
       configPath,
       [
-        "alias: { '@qwen-code/acp-bridge/status': 'x', '@qwen-code/sdk/daemon': 'y' }",
-        "// '@qwen-code/acp-bridge/commented': 'x'",
-        "/* '@qwen-code/acp-bridge/blocked': 'x' */",
+        "alias: { '@qwen-code/web-templates/status': 'x', '@qwen-code/sdk/daemon': 'y' }",
+        "// '@qwen-code/web-templates/commented': 'x'",
+        "/* '@qwen-code/web-templates/blocked': 'x' */",
       ].join('\n'),
     );
     const aliases = aliasedSpecifiers(configPath);
-    expect(aliases.has('@qwen-code/acp-bridge/status')).toBe(true);
+    expect(aliases.has('@qwen-code/web-templates/status')).toBe(true);
     expect(aliases.has('@qwen-code/sdk/daemon')).toBe(true);
-    expect(aliases.has('@qwen-code/acp-bridge/commented')).toBe(false);
-    expect(aliases.has('@qwen-code/acp-bridge/blocked')).toBe(false);
+    expect(aliases.has('@qwen-code/web-templates/commented')).toBe(false);
+    expect(aliases.has('@qwen-code/web-templates/blocked')).toBe(false);
     // A missing config yields an empty set rather than throwing.
     expect(aliasedSpecifiers(path.join(root, 'nope.ts'))).toEqual(new Set());
   });
@@ -285,14 +285,14 @@ describe('checkAndReport', () => {
 
   it('returns 1 and prints the actionable message when prerequisites are missing', () => {
     root = buildFixtureRoot();
-    rmSync(path.join(root, 'packages/acp-bridge/dist/index.js'));
+    rmSync(path.join(root, 'packages/web-templates/dist/index.js'));
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const cwd = path.join(root, 'packages/cli');
     expect(checkAndReport({ cwd, root })).toBe(1);
     expect(errSpy).toHaveBeenCalledTimes(1);
     const printed = errSpy.mock.calls[0][0];
     expect(printed).toContain('npm run build');
-    expect(printed).toContain('packages/acp-bridge');
+    expect(printed).toContain('packages/web-templates');
   });
 
   it('yields silently when cwd matches the repo root (no known package key)', () => {
@@ -370,7 +370,7 @@ describe('guard probe edge cases (round 3)', () => {
 
   it('derives the package key when cwd reaches the root through a symlink', () => {
     root = buildFixtureRoot();
-    rmSync(path.join(root, 'packages/acp-bridge/dist/index.js'));
+    rmSync(path.join(root, 'packages/web-templates/dist/index.js'));
     const link = `${root}-link`;
     symlinkSync(root, link);
     try {
@@ -378,7 +378,7 @@ describe('guard probe edge cases (round 3)', () => {
       expect(
         checkAndReport({ cwd: path.join(link, 'packages/cli'), root }),
       ).toBe(1);
-      expect(errSpy.mock.calls[0][0]).toContain('packages/acp-bridge');
+      expect(errSpy.mock.calls[0][0]).toContain('packages/web-templates');
     } finally {
       rmSync(link);
     }
@@ -400,7 +400,7 @@ describe('default export (the vitest globalSetup entry)', () => {
 
   it('uses the vitest project root and exits 1 when prerequisites are missing', () => {
     root = buildFixtureRoot();
-    rmSync(path.join(root, 'packages/acp-bridge/dist/index.js'));
+    rmSync(path.join(root, 'packages/web-templates/dist/index.js'));
     process.env['QWEN_VITEST_GUARD_ROOT'] = root;
     const exitSpy = vi
       .spyOn(process, 'exit')
@@ -410,7 +410,7 @@ describe('default export (the vitest globalSetup entry)', () => {
       config: { root: path.join(root, 'packages/cli') },
     });
     expect(exitSpy).toHaveBeenCalledWith(1);
-    expect(errSpy.mock.calls[0][0]).toContain('packages/acp-bridge');
+    expect(errSpy.mock.calls[0][0]).toContain('packages/web-templates');
   });
 
   it('does not exit when the hermetic checkout is ready', () => {
@@ -461,11 +461,11 @@ describe('default export (the vitest globalSetup entry)', () => {
 
   it('subprocess: exits 1 and prints the fix command on a broken checkout', () => {
     root = buildFixtureRoot();
-    rmSync(path.join(root, 'packages/acp-bridge/dist/index.js'));
+    rmSync(path.join(root, 'packages/web-templates/dist/index.js'));
     const res = runGuardSubprocess(path.join(root, 'packages/cli'));
     expect(res.status).toBe(1);
     expect(res.stderr).toContain('npm run build');
-    expect(res.stderr).toContain('packages/acp-bridge');
+    expect(res.stderr).toContain('packages/web-templates');
   });
 
   it('subprocess: exits 0 silently on a ready checkout', () => {

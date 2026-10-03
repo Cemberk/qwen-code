@@ -406,7 +406,6 @@ export default tseslint.config(
   // Specific CLI files that intentionally wrap console usage
   {
     files: [
-      'packages/cli/src/acp-integration/acpAgent.ts',      // console infrastructure for ACP mode
       'packages/cli/src/utils/stdioHelpers.ts',            // wraps console.clear()
     ],
     rules: { 'no-console': 'off' },

@@ -2781,7 +2781,6 @@ describe('DiscoveredMCPTool', () => {
 
   describe('auto-reconnect on connection error', () => {
     const idempotentAnnotations = { idempotentHint: true } as const;
-    const readOnlyAnnotations = { readOnlyHint: true } as const;
     const unsafeReplayErrorMessage =
       'MCP tool execution may have completed before the connection failed. Automatic replay was skipped because the call could not be verified as safe to replay. Do not retry automatically; verify the outcome before trying again.';
 
@@ -2850,7 +2849,7 @@ describe('DiscoveredMCPTool', () => {
 
       expect(mockMcpClient.callTool).toHaveBeenCalledTimes(1);
       expect(newMockMcpClient.callTool).toHaveBeenCalledTimes(1);
-      expect(discoverToolsForServer).toHaveBeenCalledWith(serverName, false);
+      expect(discoverToolsForServer).toHaveBeenCalledWith(serverName);
       expect(ensureTool).toHaveBeenCalledWith(reconnectTool.name);
       expect(result.llmContent).toEqual([{ text: 'Success after reconnect' }]);
     });
@@ -2991,7 +2990,7 @@ describe('DiscoveredMCPTool', () => {
           mode === 'cancelled' ? 0 : 1,
         );
         if (mode !== 'cancelled') {
-          expect(discoverToolsForServer).toHaveBeenCalledWith(serverName, true);
+          expect(discoverToolsForServer).toHaveBeenCalledWith(serverName);
         }
         expect(received).not.toHaveBeenCalled();
         expect(reconnectedClient.callTool).not.toHaveBeenCalled();
@@ -3166,7 +3165,7 @@ describe('DiscoveredMCPTool', () => {
       ).rejects.toThrow(unsafeReplayErrorMessage);
 
       expect(initialClient.callTool).toHaveBeenCalledTimes(1);
-      expect(discoverToolsForServer).toHaveBeenCalledWith(serverName, false);
+      expect(discoverToolsForServer).toHaveBeenCalledWith(serverName);
       expect(ensureTool).toHaveBeenCalledTimes(1);
     });
 
@@ -3213,7 +3212,7 @@ describe('DiscoveredMCPTool', () => {
           tool.build({ param: 'test' }).execute(new AbortController().signal),
         ).rejects.toThrow(unsafeReplayErrorMessage);
 
-        expect(discoverToolsForServer).toHaveBeenCalledWith(serverName, false);
+        expect(discoverToolsForServer).toHaveBeenCalledWith(serverName);
       },
     );
 

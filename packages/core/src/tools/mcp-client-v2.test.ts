@@ -237,7 +237,6 @@ describe('configured MCP SDK v2 negotiation', () => {
         { type: 'sdk' } as MCPServerConfig,
         client,
         {} as Config,
-        { applyConfigFilters: false },
       );
       expect(discoveredTool?.appResourceUri).toBe('ui://demo/dashboard');
       await expect(
@@ -343,7 +342,6 @@ describe('configured MCP SDK v2 negotiation', () => {
         { type: 'sdk' } as MCPServerConfig,
         client,
         {} as Config,
-        { applyConfigFilters: false },
       );
       expect(tools.map((tool) => tool.serverToolName)).toEqual(
         Array.from({ length: pageCount }, (_, index) => `tool-${index}`),
@@ -419,7 +417,6 @@ describe('configured MCP SDK v2 negotiation', () => {
         { type: 'sdk' } as MCPServerConfig,
         client,
         {} as Config,
-        { applyConfigFilters: false },
       );
       expect(tools.map((tool) => tool.serverToolName)).toEqual(['echo']);
       await expect(client.callTool({ name: 'echo' })).resolves.toMatchObject({

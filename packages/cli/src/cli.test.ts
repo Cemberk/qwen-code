@@ -224,9 +224,6 @@ describe('resolveBootstrapRoute', () => {
     // The hidden boolean options registered inline in config.ts are part of
     // the known-safe grammar, so they must not demote a plain help argv to
     // the slow path (base served these on the fast path).
-    expect(resolveBootstrapRoute(['--experimental-acp', '--help'])).toBe(
-      'help',
-    );
     expect(resolveBootstrapRoute(['--experimental-skills', '--help'])).toBe(
       'help',
     );

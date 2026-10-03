@@ -62,7 +62,7 @@ import {
   getOptInToolNotFoundMessage,
   isToolCallConcurrencySafe,
 } from './coreToolScheduler.js';
-import type { CallableTool, Part, PartListUnion } from '@google/genai';
+import type { Part, PartListUnion } from '@google/genai';
 import {
   MockModifiableTool,
   MockTool,
@@ -80,7 +80,7 @@ import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { WriteFileTool } from '../tools/write-file.js';
 import { AskUserQuestionTool } from '../tools/askUserQuestion.js';
 import { ShellTool, ShellToolInvocation } from '../tools/shell.js';
-import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
+import { DiscoveredMCPTool, type McpDirectClient } from '../tools/mcp-tool.js';
 import type { ShellToolParams } from '../tools/shell.js';
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
 import {
@@ -14826,7 +14826,7 @@ describe('CoreToolScheduler telemetry spans', () => {
     const mcpTool = new DiscoveredMCPTool(
       {
         callTool: vi.fn().mockRejectedValue(new Error('MCP transport failed')),
-      } as unknown as CallableTool,
+      } as unknown as McpDirectClient,
       'test-server',
       'test-tool',
       'Test MCP tool',
@@ -14851,7 +14851,7 @@ describe('CoreToolScheduler telemetry spans', () => {
     const mcpTool = new DiscoveredMCPTool(
       {
         callTool: vi.fn(),
-      } as unknown as CallableTool,
+      } as unknown as McpDirectClient,
       'test-server',
       'test-tool',
       'Test MCP tool',

@@ -10,7 +10,6 @@
 // the workspace manifests, so a newly added package fails that test until
 // it is listed here.
 export const workspacePackageNames = new Set([
-  '@qwen-code/acp-bridge',
   '@qwen-code/qwen-code',
   '@qwen-code/qwen-code-core',
   '@qwen-code/web-templates',

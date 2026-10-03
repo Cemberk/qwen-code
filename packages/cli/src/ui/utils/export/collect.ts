@@ -13,9 +13,9 @@ import type {
 } from '@qwen-code/qwen-code-core';
 import { parseGoalStateRecordPayloadV2 } from '@qwen-code/qwen-code-core/goals/goal-reducer.js';
 import type { GenerateContentResponseUsageMetadata } from '@google/genai';
-import type { SessionContext } from '../../../acp-integration/session/types.js';
+import type { SessionContext } from '../../../session-replay/types.js';
 import type { SessionUpdate, ToolCall } from '@agentclientprotocol/sdk';
-import { HistoryReplayer } from '../../../acp-integration/session/history-replayer.js';
+import { HistoryReplayer } from '../../../session-replay/history-replayer.js';
 import { getExplicitToolResultCallId } from '../../../utils/chat-record-tool-call-id.js';
 import type {
   ExportConfig,
