@@ -8,7 +8,6 @@ import { describe, it, expect } from 'vitest';
 import {
   buildClassifierSystemPrompt,
   BUILTIN_ALLOW,
-  BUILTIN_DENY,
   BUILTIN_ENVIRONMENT,
   BUILTIN_HARD_DENY,
   BUILTIN_SOFT_DENY,
@@ -33,7 +32,7 @@ describe('buildClassifierSystemPrompt', () => {
 
   it('contains the built-in DENY entries when no user hints are configured', () => {
     const prompt = buildClassifierSystemPrompt(makeConfig({}));
-    for (const entry of BUILTIN_DENY) {
+    for (const entry of [...BUILTIN_SOFT_DENY, ...BUILTIN_HARD_DENY]) {
       expect(prompt).toContain(entry);
     }
   });
@@ -65,7 +64,7 @@ describe('buildClassifierSystemPrompt', () => {
     );
     expect(prompt).toContain(userDeny);
     const userIdx = prompt.indexOf(userDeny);
-    for (const builtIn of BUILTIN_DENY) {
+    for (const builtIn of [...BUILTIN_SOFT_DENY, ...BUILTIN_HARD_DENY]) {
       expect(prompt.indexOf(builtIn)).toBeLessThan(userIdx);
     }
   });
@@ -218,14 +217,6 @@ describe('buildClassifierSystemPrompt', () => {
     expect(allowIdx).toBeLessThan(softIdx);
     expect(softIdx).toBeLessThan(hardIdx);
     expect(hardIdx).toBeLessThan(envIdx);
-  });
-
-  it('combined BUILTIN_DENY export equals SOFT + HARD for backward compatibility', () => {
-    // Keep the combined export stable for callers that do not need severity.
-    expect([...BUILTIN_DENY]).toEqual([
-      ...BUILTIN_SOFT_DENY,
-      ...BUILTIN_HARD_DENY,
-    ]);
   });
 
   it('renders legacy `hints.deny` under the User SOFT BLOCK section', () => {

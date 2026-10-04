@@ -122,14 +122,10 @@ describe('Config workflows feature gate', () => {
     expect(cfg.isWorkflowsEnabled()).toBe(true);
   });
 
-  // TST-I1: "respects setWorkflowsEnabled(true)" was deleted — it is a
-  // getter/setter tautology that tests no logic.
-
   it('QWEN_CODE_DISABLE_WORKFLOWS=1 overrides everything', () => {
     process.env['QWEN_CODE_DISABLE_WORKFLOWS'] = '1';
     process.env['QWEN_CODE_ENABLE_WORKFLOWS'] = '1';
-    const cfg = new Config({ ...baseParams });
-    cfg.setWorkflowsEnabled(true);
+    const cfg = new Config({ ...baseParams, workflowsEnabled: true });
     expect(cfg.isWorkflowsEnabled()).toBe(false);
   });
 

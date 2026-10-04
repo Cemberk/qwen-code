@@ -232,8 +232,7 @@ export class PermissionController extends BaseController {
     // before that call would leave this controller answering `allow` for every
     // later `can_use_tool` (checkPermissionMode reads context.permissionMode)
     // while core Config stayed in DEFAULT and the host had been told the
-    // escalation failed. The error keeps propagating so acpAgent can still map
-    // it to a typed `trust_gate` rejection.
+    // escalation failed. The error keeps propagating to the caller.
     this.context.config.setApprovalMode(mode as ApprovalMode);
     this.context.permissionMode = mode;
 

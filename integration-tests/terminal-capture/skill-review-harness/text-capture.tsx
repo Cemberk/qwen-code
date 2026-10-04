@@ -245,13 +245,9 @@ async function main() {
     const named = new Map([
       ['transcriptRecords', 'utils/transcript-records.ts'], ['envVarResolver', 'utils/envVarResolver.ts'],
       ['shellResult', 'utils/shell-result.ts'],
-      ['goalWire', 'goals/goal-wire.ts'], ['memoryScopes', 'memory/scopes.ts'],
-      ['toolWriteOrigin', 'services/tool-write-origin.ts'],
-      ['userPromptSubmitContext', 'hooks/user-prompt-submit-context.ts'], ['noFollowOpen', 'utils/no-follow-open.ts'],
-      ['conversationsRuntimeMarker', 'utils/conversations-runtime-marker.ts'],
+      ['goalWire', 'goals/goal-wire.ts'],
       ['storage', 'config/storage.ts'], ['atomicFileWrite', 'utils/atomicFileWrite.ts'],
       ['debugLogger', 'utils/debugLogger.ts'], ['board', 'board.ts'],
-      ['telemetryConstants', 'telemetry/constants.ts'],
     ]);
     export function resolve(specifier, context, nextResolve) {
       if (specifier === '@qwen-code/qwen-code-core') {

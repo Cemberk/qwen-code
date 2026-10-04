@@ -7,12 +7,7 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { mcpCommand } from './mcpCommand.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
-import {
-  MCPServerStatus,
-  MCPDiscoveryState,
-  getMCPServerStatus,
-  getMCPDiscoveryState,
-} from '@qwen-code/qwen-code-core';
+import { MCPServerStatus, getMCPServerStatus } from '@qwen-code/qwen-code-core';
 
 vi.mock('@qwen-code/qwen-code-core', async (importOriginal) => {
   const actual =
@@ -20,7 +15,6 @@ vi.mock('@qwen-code/qwen-code-core', async (importOriginal) => {
   return {
     ...actual,
     getMCPServerStatus: vi.fn(),
-    getMCPDiscoveryState: vi.fn(),
   };
 });
 
@@ -42,9 +36,6 @@ describe('mcpCommand', () => {
 
     // Default mock implementations
     vi.mocked(getMCPServerStatus).mockReturnValue(MCPServerStatus.CONNECTED);
-    vi.mocked(getMCPDiscoveryState).mockReturnValue(
-      MCPDiscoveryState.COMPLETED,
-    );
 
     // Create mock config with all necessary methods
     mockConfig = {

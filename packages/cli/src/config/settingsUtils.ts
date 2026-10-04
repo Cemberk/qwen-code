@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import * as fs from 'node:fs';
 import type { Settings, SettingScope, LoadedSettings } from './settings.js';
 import type {
   SettingDefinition,
@@ -69,15 +68,6 @@ export function requiresRestart(key: string): boolean {
  */
 export function getDefaultValue(key: string): SettingsValue {
   return getFlattenedSchema()[key]?.default;
-}
-
-/**
- * Get all setting keys that require restart
- */
-export function getRestartRequiredSettings(): string[] {
-  return Object.values(getFlattenedSchema())
-    .filter((definition) => definition.requiresRestart)
-    .map((definition) => definition.key);
 }
 
 /**
@@ -670,67 +660,6 @@ export function nextBooleanSettingValue(
  */
 export function isDefaultValue(key: string, settings: Settings): boolean {
   return !settingExistsInScope(key, settings);
-}
-
-/**
- * Backup a settings file before modification.
- * Always creates a fresh backup with `.orig` suffix (overwrites any stale backup).
- * @param filePath - Path to the settings file to backup
- * @returns boolean indicating whether a backup was created
- */
-export function backupSettingsFile(filePath: string): boolean {
-  try {
-    if (fs.existsSync(filePath)) {
-      const backupPath = `${filePath}.orig`;
-      fs.copyFileSync(filePath, backupPath);
-      return true;
-    }
-  } catch (_e) {
-    // Ignore backup errors, proceed without backup
-  }
-  return false;
-}
-
-/**
- * Restore a settings file from its `.orig` backup created by {@link backupSettingsFile}.
- * Removes the backup file after a successful restore.
- * @param filePath - Path to the settings file to restore
- * @returns boolean indicating whether the restore succeeded
- */
-export function restoreSettingsFromBackup(filePath: string): boolean {
-  try {
-    const backupPath = `${filePath}.orig`;
-    if (fs.existsSync(backupPath)) {
-      fs.copyFileSync(backupPath, filePath);
-      fs.unlinkSync(backupPath);
-      return true;
-    }
-  } catch (err) {
-    // Caller handles the boolean failure, but log the underlying cause so
-    // EACCES / disk full / file-locked don't all look identical from
-    // upstream — the adapter's own warning then has something to point at.
-    // eslint-disable-next-line no-console -- best-effort rollback path
-    console.error(
-      `[settingsUtils] restoreSettingsFromBackup(${filePath}) failed:`,
-      err,
-    );
-  }
-  return false;
-}
-
-/**
- * Remove the `.orig` backup after a successful operation.
- * @param filePath - Path to the settings file whose backup should be removed
- */
-export function cleanupSettingsBackup(filePath: string): void {
-  try {
-    const backupPath = `${filePath}.orig`;
-    if (fs.existsSync(backupPath)) {
-      fs.unlinkSync(backupPath);
-    }
-  } catch (_e) {
-    // Ignore cleanup errors — non-critical
-  }
 }
 
 export const TEST_ONLY = { clearFlattenedSchema };

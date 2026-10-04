@@ -1,10 +1,7 @@
 import { Storage } from '../config/storage.js';
 import path from 'node:path';
 import * as os from 'node:os';
-import {
-  EXTENSION_SETTINGS_FILENAME,
-  EXTENSIONS_CONFIG_FILENAME,
-} from './variables.js';
+import { EXTENSION_SETTINGS_FILENAME } from './variables.js';
 import * as fs from 'node:fs';
 
 export class ExtensionStorage {
@@ -19,10 +16,6 @@ export class ExtensionStorage {
       ExtensionStorage.getUserExtensionsDir(),
       this.extensionName,
     );
-  }
-
-  getConfigPath(): string {
-    return path.join(this.getExtensionDir(), EXTENSIONS_CONFIG_FILENAME);
   }
 
   getEnvFilePath(): string {

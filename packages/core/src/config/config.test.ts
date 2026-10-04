@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Mock } from 'vitest';
-import { mkdir, mkdtemp, open, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import type { Stats } from 'node:fs';
 import type {
   ConfigParameters,
@@ -19,7 +19,6 @@ import {
   Config,
   ApprovalMode,
   APPROVAL_MODES,
-  APPROVAL_MODE_INFO,
   MCPServerConfig,
   deriveAgentConfig,
   deriveApprovalModeConfig,
@@ -61,7 +60,6 @@ import { InputFormat } from '../output/types.js';
 import {
   AuthType,
   createContentGenerator,
-  resetPreloadedContentGenerator,
   resolveContentGeneratorConfigWithSources,
 } from '../core/contentGenerator.js';
 import { DEFAULT_TOKEN_LIMIT } from '../core/tokenLimits.js';
@@ -84,7 +82,7 @@ import { ToolNames } from '../tools/tool-names.js';
 import { applySkillSideEffects } from '../tools/skill-utils.js';
 import { fireNotificationHook } from '../core/toolHookTriggers.js';
 import { AgentType, HookEventName } from '../hooks/types.js';
-import { MessageBus } from '../confirmation-bus/message-bus.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import {
   MessageBusType,
   type HookExecutionRequest,
@@ -110,18 +108,11 @@ import { getTeamMemoryShareabilityWarning } from '../memory/team-memory-git-stat
 import * as runtimeStatus from '../utils/runtimeStatus.js';
 import * as sessionRegistry from '../services/session-registry.js';
 
-/**
- * A settled registration for the shared record, the shape
- * `registerSession` reports. Every test here models a process holding one
- * session; the slot only differs for a process hosting several.
- */
+/** A settled registration, the shape `registerSession` reports. */
 function sharedRegistration(
   registered = true,
 ): Promise<sessionRegistry.SessionRegistration> {
-  return Promise.resolve({
-    registered,
-    slot: sessionRegistry.SHARED_RECORD_SLOT,
-  });
+  return Promise.resolve({ registered });
 }
 import {
   ExtensionManager,
@@ -146,12 +137,6 @@ import {
   type GoalTurnHost,
 } from '../goals/goal-runtime.js';
 import type { GoalTurnPermit } from '../goals/goal-protocol.js';
-import {
-  getSessionWriterLockPath,
-  SessionTranscriptChangedError,
-  SessionWriterLease,
-  SessionWriterUnavailableError,
-} from '../services/session-writer-lease.js';
 import * as jsonl from '../utils/jsonl-utils.js';
 import { checkPriorRead } from '../tools/priorReadEnforcement.js';
 import { ToolErrorType } from '../tools/tool-error.js';
@@ -851,7 +836,6 @@ describe('Server Config (config.ts)', () => {
   const TARGET_DIR = '/path/to/target';
   const DEBUG_MODE = false;
   const QUESTION = 'test question';
-  const USER_MEMORY = 'Test User Memory';
   const TELEMETRY_SETTINGS = { enabled: false };
   const baseParams: ConfigParameters = {
     cwd: '/tmp',
@@ -859,7 +843,6 @@ describe('Server Config (config.ts)', () => {
     targetDir: TARGET_DIR,
     debugMode: DEBUG_MODE,
     question: QUESTION,
-    userMemory: USER_MEMORY,
     telemetry: TELEMETRY_SETTINGS,
     model: MODEL,
     chatRecording: false,
@@ -931,15 +914,6 @@ describe('Server Config (config.ts)', () => {
       expect(config.getProjectHooks()).toBeUndefined();
     });
 
-    it('replaces project hooks without leaking them into user hooks', () => {
-      const config = new Config({ ...baseParams });
-
-      config.setHooksFromSettings({ projectHooks });
-
-      expect(config.getProjectHooks()).toBe(projectHooks);
-      expect(config.getUserHooks()).toBeUndefined();
-    });
-
     it('replaces the legacy merged hooks so a removed hook cannot return through the fallback', () => {
       const config = new Config({ ...baseParams, hooks: userHooks });
       expect(config.getUserHooks()).toBe(userHooks);
@@ -955,7 +929,6 @@ describe('Server Config (config.ts)', () => {
 
       config.setHooksFromSettings({
         userHooks,
-        projectHooks,
         hooks: userHooks,
       });
 
@@ -972,10 +945,9 @@ describe('Server Config (config.ts)', () => {
           trustedFolder,
         });
 
-        config.setHooksFromSettings({ userHooks, projectHooks });
+        config.setHooksFromSettings({ hooks: projectHooks });
 
         expect(config.getProjectHooks()).toBeUndefined();
-        expect(config.getUserHooks()).toBe(userHooks);
       },
     );
 
@@ -1010,17 +982,6 @@ describe('Server Config (config.ts)', () => {
 
       expect(config.getUserHooks()).toBe(userHooks);
       expect(config.getProjectHooks()).toBeUndefined();
-    });
-
-    it('does not read the merged hooks as user hooks when only project hooks are supplied', () => {
-      const config = new Config({
-        ...baseParams,
-        projectHooks,
-        hooks: mergedHooks,
-      });
-
-      expect(config.getProjectHooks()).toBe(projectHooks);
-      expect(config.getUserHooks()).toBeUndefined();
     });
 
     it('still serves the merged hooks as user and project hooks when no scope is supplied', () => {
@@ -1125,150 +1086,10 @@ describe('Server Config (config.ts)', () => {
         ...baseParams,
         trustedFolder: false,
         systemHooks,
-        projectHooks,
       });
 
       expect(config.getSystemHooks()).toBe(systemHooks);
       expect(config.getProjectHooks()).toBeUndefined();
-    });
-  });
-
-  describe('onMessageBusChange', () => {
-    it('calls a listener at once when a bus already exists', () => {
-      const config = new Config({ ...baseParams });
-      const bus = new MessageBus();
-      config.setMessageBus(bus);
-      const listener = vi.fn();
-
-      config.onMessageBusChange(listener);
-
-      expect(listener).toHaveBeenCalledTimes(1);
-      expect(listener).toHaveBeenCalledWith(config.getMessageBus());
-    });
-
-    it('waits for initialize when no bus exists yet', async () => {
-      const config = new Config({ ...baseParams });
-      const listener = vi.fn();
-
-      config.onMessageBusChange(listener);
-      expect(listener).not.toHaveBeenCalled();
-
-      await config.initialize();
-
-      expect(listener).toHaveBeenCalledTimes(1);
-      expect(listener).toHaveBeenCalledWith(config.getMessageBus());
-    });
-
-    it('announces the bus only once it can run hooks', async () => {
-      const config = new Config({ ...baseParams });
-      const requestListenerCounts: number[] = [];
-      config.onMessageBusChange((bus) => {
-        requestListenerCounts.push(
-          bus.listenerCount(MessageBusType.HOOK_EXECUTION_REQUEST),
-        );
-      });
-
-      await config.initialize();
-
-      expect(requestListenerCounts).toHaveLength(1);
-      expect(requestListenerCounts[0]).toBeGreaterThanOrEqual(1);
-    });
-
-    it('stops notifying a disposed listener', () => {
-      const config = new Config({ ...baseParams });
-      const listener = vi.fn();
-      const dispose = config.onMessageBusChange(listener);
-
-      dispose();
-      config.setMessageBus(new MessageBus());
-
-      expect(listener).not.toHaveBeenCalled();
-    });
-
-    it('keeps initializing and notifying others when a listener throws', async () => {
-      const config = new Config({ ...baseParams });
-      config.onMessageBusChange(() => {
-        throw new Error('observer broke');
-      });
-      const other = vi.fn();
-      config.onMessageBusChange(other);
-
-      await expect(config.initialize()).resolves.toBeUndefined();
-
-      expect(other).toHaveBeenCalledTimes(1);
-    });
-
-    it('handles a rejection from an async listener', async () => {
-      const config = new Config({ ...baseParams });
-      let catchSpy: ReturnType<typeof vi.fn> | undefined;
-      config.onMessageBusChange(() => {
-        // Created while notified, so the only chance to handle it is the
-        // caller's: nothing else attaches a handler before it settles.
-        const rejection = Promise.reject(new Error('async observer broke'));
-        catchSpy = vi.spyOn(rejection, 'catch') as unknown as ReturnType<
-          typeof vi.fn
-        >;
-        return rejection;
-      });
-
-      await expect(config.initialize()).resolves.toBeUndefined();
-
-      expect(catchSpy).toHaveBeenCalledTimes(1);
-    });
-
-    it('lets a listener dispose itself while it is notified', () => {
-      const config = new Config({ ...baseParams });
-      const calls: string[] = [];
-      const dispose = config.onMessageBusChange(() => {
-        calls.push('self-disposing');
-        dispose();
-      });
-      config.onMessageBusChange(() => {
-        calls.push('other');
-      });
-
-      expect(() => config.setMessageBus(new MessageBus())).not.toThrow();
-      config.setMessageBus(new MessageBus());
-
-      expect(calls).toEqual(['self-disposing', 'other', 'other']);
-    });
-
-    it('notifies a listener added during notification exactly once', () => {
-      const config = new Config({ ...baseParams });
-      const late = vi.fn();
-      const dispose = config.onMessageBusChange(() => {
-        dispose();
-        config.onMessageBusChange(late);
-      });
-
-      config.setMessageBus(new MessageBus());
-
-      // Once from its own registration, which sees the bus already set; the
-      // announcement in progress must not reach it a second time.
-      expect(late).toHaveBeenCalledTimes(1);
-    });
-
-    it('does not re-announce the bus it already has', () => {
-      const config = new Config({ ...baseParams });
-      const bus = new MessageBus();
-      config.setMessageBus(bus);
-      const listener = vi.fn();
-      config.onMessageBusChange(listener);
-
-      config.setMessageBus(bus);
-
-      expect(listener).toHaveBeenCalledTimes(1);
-    });
-
-    it('announces nothing when all hooks are disabled', async () => {
-      const config = new Config({ ...baseParams, disableAllHooks: true });
-      const listener = vi.fn();
-      config.onMessageBusChange(listener);
-
-      await config.initialize();
-
-      expect(config.getMessageBus()).toBeUndefined();
-      expect(listener).not.toHaveBeenCalled();
     });
   });
 
@@ -1505,31 +1326,11 @@ describe('Server Config (config.ts)', () => {
       const sessionId = 'cfg-shutdown-test-session';
       const config = new Config({ ...baseParams, sessionId });
       expect(getSessionProjectDir(sessionId)).toBeUndefined();
-      await config.initialize({
-        skipLlmInitialization: true,
-        skipHooks: true,
-        skipMcpDiscovery: true,
-        skipSkillManager: true,
-        skipFileCheckpointing: true,
-      });
+      await config.initialize({ skipMcpDiscovery: true });
       expect(getSessionProjectDir(sessionId)).toBeDefined();
       await config.shutdown();
       // In daemon mode this is what stops the map growing per session.
       expect(getSessionProjectDir(sessionId)).toBeUndefined();
-    });
-
-    it('accepts the deprecated Gemini initialization option', async () => {
-      const config = new Config(baseParams);
-      await config.initialize({
-        skipGeminiInitialization: true,
-        skipHooks: true,
-        skipMcpDiscovery: true,
-        skipSkillManager: true,
-        skipFileCheckpointing: true,
-      });
-
-      expect(config.getGeminiClient()).toBe(config.getLlmClient());
-      await config.shutdown();
     });
   });
 
@@ -1669,28 +1470,6 @@ describe('Server Config (config.ts)', () => {
     });
   });
 
-  describe('memory file count compatibility', () => {
-    it('keeps the legacy parameter and accessors until a future major release', () => {
-      const config = new Config({ ...baseParams, geminiMdFileCount: 2 });
-
-      expect(config.getMemoryFileCount()).toBe(2);
-      expect(config.getGeminiMdFileCount()).toBe(2);
-
-      config.setGeminiMdFileCount(3);
-      expect(config.getMemoryFileCount()).toBe(3);
-    });
-
-    it('prefers the renamed parameter when both names are present', () => {
-      const config = new Config({
-        ...baseParams,
-        geminiMdFileCount: 2,
-        memoryFileCount: 4,
-      });
-
-      expect(config.getMemoryFileCount()).toBe(4);
-    });
-  });
-
   describe('getMemoryAgentTimeoutMinutes', () => {
     it('returns undefined when unset', () => {
       expect(
@@ -1759,33 +1538,6 @@ describe('Server Config (config.ts)', () => {
           memoryAgentMaxTurns: 2.5,
         }).getMemoryAgentMaxTurns(),
       ).toBeUndefined();
-    });
-  });
-
-  describe('restorable ask_user_question preservation', () => {
-    it('defaults to off when the restore switch is unset', () => {
-      const config = new Config(baseParams);
-      expect(config.getRestoreAskUserQuestion()).toBe(false);
-      expect(config.getPreserveRestorableAskUserQuestion()).toBe(false);
-    });
-
-    it('preserves by default when the restore switch is on', () => {
-      const config = new Config({
-        ...baseParams,
-        restoreAskUserQuestion: true,
-      });
-      expect(config.getRestoreAskUserQuestion()).toBe(true);
-      expect(config.getPreserveRestorableAskUserQuestion()).toBe(true);
-    });
-
-    it('stops preserving after suppression, without touching the restore switch', () => {
-      const config = new Config({
-        ...baseParams,
-        restoreAskUserQuestion: true,
-      });
-      config.suppressRestorableAskUserQuestionPreservation();
-      expect(config.getPreserveRestorableAskUserQuestion()).toBe(false);
-      expect(config.getRestoreAskUserQuestion()).toBe(true);
     });
   });
 
@@ -1999,43 +1751,20 @@ describe('Server Config (config.ts)', () => {
       expect(config.getSessionWorkflowPlanRevision()).toBeUndefined();
     });
 
-    it('hot-reloads the gate through its provider and clears context on disable', () => {
-      let enabled = true;
+    it('keeps gate reads pure so prototype wrappers never shadow the base revision', () => {
       const config = new Config({
         ...baseParams,
         sessionWorkflowEnabled: true,
       });
-      config.setSessionWorkflowEnabledProvider(() => enabled);
-      config.setSessionWorkflowPlanRevision({
-        planId: 'plan-1',
-        sourceCallId: 'call-1',
-        todoIds: ['todo-1', 'todo-2'],
-      });
-      expect(config.getSessionWorkflowPlanRevision()).toEqual({
-        planId: 'plan-1',
-        sourceCallId: 'call-1',
-        todoIds: ['todo-1', 'todo-2'],
-      });
-
-      enabled = false;
-      expect(config.isSessionWorkflowEnabled()).toBe(false);
-      expect(config.getSessionWorkflowPlanRevision()).toBeUndefined();
-    });
-
-    it('keeps gate reads pure so prototype wrappers never shadow the base revision', () => {
-      let enabled = false;
-      const config = new Config({ ...baseParams });
-      config.setSessionWorkflowEnabledProvider(() => enabled);
       // Subagent/teammate runtimes wrap the session Config in
       // Object.create(base) prototypes.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const wrapper = Object.create(config) as any;
 
-      // A gate-off read through the wrapper must not materialize an OWN
-      // sessionWorkflowPlanRevision on it — that would permanently shadow
-      // the session-global base value once the gate flips on and a revision
-      // is approved.
-      expect(wrapper.isSessionWorkflowEnabled()).toBe(false);
+      // A gate read through the wrapper must not materialize an OWN
+      // sessionWorkflowPlanRevision on it — that would shadow the
+      // session-global base value once a revision is approved.
+      expect(wrapper.isSessionWorkflowEnabled()).toBe(true);
       expect(
         Object.prototype.hasOwnProperty.call(
           wrapper,
@@ -2043,7 +1772,6 @@ describe('Server Config (config.ts)', () => {
         ),
       ).toBe(false);
 
-      enabled = true;
       config.setSessionWorkflowPlanRevision({
         planId: 'plan-1',
         sourceCallId: 'call-1',
@@ -2880,12 +2608,7 @@ describe('Server Config (config.ts)', () => {
         .mockRejectedValue(new Error('probe unavailable'));
       try {
         const config = new Config(parameters());
-        const record = vi.spyOn(
-          config as unknown as { activateChatRecording: () => unknown },
-          'activateChatRecording',
-        );
         await expect(config.initialize()).rejects.toThrow('probe unavailable');
-        expect(record).not.toHaveBeenCalled();
         expect(HookSystem).not.toHaveBeenCalled();
         expect(SkillManager.prototype.startWatching).not.toHaveBeenCalled();
         expect(ToolRegistry.prototype.registerFactory).not.toHaveBeenCalled();
@@ -2911,7 +2634,7 @@ describe('Server Config (config.ts)', () => {
           'refreshCache',
         );
         await config.initialize();
-        expect(probe).toHaveBeenCalledWith(admittedPolicy, undefined);
+        expect(probe).toHaveBeenCalledWith(admittedPolicy);
         expect(config.getShellExecutionSandbox()).toBe(resolvedPolicy);
         expect(HookSystem).not.toHaveBeenCalled();
         expect(maybeRunAutoSkillCurator).not.toHaveBeenCalled();
@@ -3033,23 +2756,14 @@ describe('Server Config (config.ts)', () => {
       expect(parent.isCronEnabled()).toBe(false);
       expect(parent.isLspEnabled()).toBe(false);
       expect(parent.getFileCheckpointingEnabled()).toBe(false);
-      expect(() => parent.enableFileCheckpointing()).toThrow('unavailable');
       expect(() =>
         parent.addMcpServers({ remote: { command: 'node' } }),
-      ).toThrow('does not support MCP');
-      expect(() =>
-        parent.addRuntimeMcpServer('remote', { command: 'node' }),
       ).toThrow('does not support MCP');
       await expect(
         parent.reinitializeMcpServers({ remote: { command: 'node' } }),
       ).rejects.toThrow('does not support MCP');
       expect(parent.getMcpServers()).toEqual({});
       expect(parent.getExtensions()).toEqual([]);
-      const fileService = parent.getFileSystemService();
-      expect(() => parent.setFileSystemService(fileService)).toThrow(
-        'delegated filesystem',
-      );
-      expect(parent.getFileSystemService()).toBe(fileService);
       const child = deriveWorktreeConfig(
         parent,
         path.join(TARGET_DIR, 'child'),
@@ -3161,43 +2875,28 @@ describe('Server Config (config.ts)', () => {
       expect(parent.getWorkingDir()).toBe('/tmp');
     });
 
-    it('prohibits inherited session-writer lifecycle access', async () => {
+    it('prohibits closing the session writer from a derived Config', async () => {
       const parent = new Config(baseParams);
       const beginClose = vi.fn();
       const close = vi.fn().mockResolvedValue(undefined);
-      const assertCanStartTurn = vi.fn().mockResolvedValue(undefined);
       (
         parent as unknown as {
           chatRecordingService: {
-            hasWriteOwnership: () => boolean;
             beginClose: () => void;
             close: () => Promise<void>;
-            assertCanStartTurn: () => Promise<void>;
           };
         }
       ).chatRecordingService = {
-        hasWriteOwnership: () => true,
         beginClose,
         close,
-        assertCanStartTurn,
       };
       const child = deriveConfig(parent);
 
-      expect(child.hasSessionWriteOwnership()).toBe(false);
-      expect(() => child.setSessionWriterReclaimPolicy('never')).toThrow(
-        'Session write ownership could not be verified.',
-      );
-      expect(() => child.setSessionWriterTakeoverPolicy('certified')).toThrow(
-        'Session write ownership could not be verified.',
-      );
       expect(() => child.closeSessionWriter()).toThrow(
         'Session write ownership could not be verified.',
       );
-      await expect(child.assertCanStartTurn()).resolves.toBeUndefined();
-      expect(assertCanStartTurn).not.toHaveBeenCalled();
       expect(beginClose).not.toHaveBeenCalled();
       expect(close).not.toHaveBeenCalled();
-      expect(parent.hasSessionWriteOwnership()).toBe(true);
     });
 
     it('prohibits initializing a derived Config', async () => {
@@ -3265,7 +2964,6 @@ describe('Server Config (config.ts)', () => {
         initialized: boolean;
         toolRegistry: ToolRegistry;
         chatRecordingService: {
-          hasWriteOwnership: () => boolean;
           beginClose: () => void;
           close: () => Promise<void>;
           finalize: () => void;
@@ -3277,7 +2975,6 @@ describe('Server Config (config.ts)', () => {
       internal.initialized = true;
       internal.toolRegistry = { stop } as unknown as ToolRegistry;
       internal.chatRecordingService = {
-        hasWriteOwnership: () => false,
         beginClose,
         close,
         finalize,
@@ -3287,7 +2984,6 @@ describe('Server Config (config.ts)', () => {
       internal.arenaManager = { cleanup: arenaCleanup };
       const wrapped = Object.create(deriveConfig(parent)) as Config;
 
-      expect(wrapped.hasSessionWriteOwnership()).toBe(false);
       expect(() => wrapped.closeSessionWriter()).toThrow(
         'Session write ownership could not be verified.',
       );
@@ -3303,9 +2999,7 @@ describe('Server Config (config.ts)', () => {
       await expect(wrapped.cleanupArenaRuntime(true)).rejects.toThrow(
         'Derived Configs cannot clean up Arena runtime',
       );
-      await expect(
-        wrapped.shutdown({ shutdownTelemetry: false }),
-      ).resolves.toBeUndefined();
+      await expect(wrapped.shutdown()).resolves.toBeUndefined();
 
       expect(stop).not.toHaveBeenCalled();
       expect(beginClose).not.toHaveBeenCalled();
@@ -3367,9 +3061,7 @@ describe('Server Config (config.ts)', () => {
       };
       const child = deriveConfig(parent);
 
-      await expect(
-        child.shutdown({ shutdownTelemetry: false }),
-      ).resolves.toBeUndefined();
+      await expect(child.shutdown()).resolves.toBeUndefined();
 
       expect(stop).not.toHaveBeenCalled();
       expect(finalize).not.toHaveBeenCalled();
@@ -3655,7 +3347,6 @@ describe('Server Config (config.ts)', () => {
         allowed: ['y'],
         pending: ['z'],
       });
-      expect(config.getAllowedMcpServers()).toEqual(['y']);
     });
 
     it('getMcpServers filters by glob pattern in allowedMcpServers', async () => {
@@ -3777,29 +3468,12 @@ describe('Server Config (config.ts)', () => {
       );
       expect(config.isMcpServerDisabled('puppeteer')).toBe(true);
     });
-
-    it('getBlockedMcpServers returns servers not matching allowed glob', () => {
-      const config = new Config({
-        ...baseParams,
-        mcpServers: {
-          puppeteer: srvA,
-          'my-puppeteer': srvA,
-          playwright: srvB,
-        },
-      });
-      config.setAllowedMcpServers(['*puppeteer*']);
-      const blocked = config.getBlockedMcpServers();
-      const blockedNames = blocked.map((s) => s.name);
-      expect(blockedNames).toContain('playwright');
-      expect(blockedNames).not.toContain('puppeteer');
-      expect(blockedNames).not.toContain('my-puppeteer');
-    });
   });
 
   describe('MemoryPressureMonitor isolation', () => {
     it('returns a distinct monitor for child Configs created via deriveConfig', async () => {
       const parent = new Config(baseParams);
-      await parent.initialize({ skipLlmInitialization: true });
+      await parent.initialize();
       const child = deriveConfig(parent);
 
       const parentMonitor = parent.getMemoryPressureMonitor();
@@ -3813,7 +3487,7 @@ describe('Server Config (config.ts)', () => {
 
     it('resets monitor cleanup state when starting a new session', async () => {
       const config = new Config(baseParams);
-      await config.initialize({ skipLlmInitialization: true });
+      await config.initialize();
       const monitor = config.getMemoryPressureMonitor();
       expect(monitor).toBeDefined();
       const resetSpy = vi.spyOn(monitor!, 'resetForNewSession');
@@ -3875,7 +3549,7 @@ describe('Server Config (config.ts)', () => {
       process.env['QWEN_MEMORY_PRESSURE_CRITICAL'] = '0.9';
 
       const config = new Config(baseParams);
-      await config.initialize({ skipLlmInitialization: true });
+      await config.initialize();
       mockMemoryRatio(0.35);
 
       expect(config.getMemoryPressureMonitor()?.getPressureLevel()).toBe(
@@ -3890,7 +3564,7 @@ describe('Server Config (config.ts)', () => {
       process.env['QWEN_MEMORY_PRESSURE_CRITICAL'] = '0.9';
 
       const config = new Config(baseParams);
-      await config.initialize({ skipLlmInitialization: true });
+      await config.initialize();
       mockMemoryRatio(0.35);
 
       expect(config.getMemoryPressureMonitor()?.getPressureLevel()).toBe(
@@ -3906,7 +3580,7 @@ describe('Server Config (config.ts)', () => {
       process.env['QWEN_MEMORY_PRESSURE_SOFT'] = '0.7';
 
       const config = new Config(baseParams);
-      await config.initialize({ skipLlmInitialization: true });
+      await config.initialize();
 
       expect(config.getMemoryPressureMonitor()).toBeDefined();
       expect(stderrSpy).toHaveBeenCalledWith(
@@ -3923,7 +3597,7 @@ describe('Server Config (config.ts)', () => {
         process.env['QWEN_MEMORY_PRESSURE_SOFT'] = value;
 
         const config = new Config(baseParams);
-        await config.initialize({ skipLlmInitialization: true });
+        await config.initialize();
         mockMemoryRatio(0.35);
 
         expect(config.getMemoryPressureMonitor()?.getPressureLevel()).toBe(
@@ -3955,7 +3629,7 @@ describe('Server Config (config.ts)', () => {
       });
 
       const config = new Config(baseParams);
-      await config.initialize({ skipLlmInitialization: true });
+      await config.initialize();
       mockMemoryRatio(0.85);
 
       config.getMemoryPressureMonitor()?.performCheck();
@@ -3972,7 +3646,7 @@ describe('Server Config (config.ts)', () => {
       process.env['QWEN_MEMORY_PRESSURE_HARD'] = '0.6';
       process.env['QWEN_MEMORY_PRESSURE_CRITICAL'] = '0.9';
       const parent = new Config(baseParams);
-      await parent.initialize({ skipLlmInitialization: true });
+      await parent.initialize();
 
       process.env['QWEN_MEMORY_PRESSURE_SOFT'] = '0.9';
       process.env['QWEN_MEMORY_PRESSURE_HARD'] = '0.95';
@@ -3987,13 +3661,7 @@ describe('Server Config (config.ts)', () => {
   describe('startNewSession', () => {
     it('clears loaded Skill state at the session boundary', async () => {
       const config = new Config({ ...baseParams });
-      await config.initialize({
-        skipGeminiInitialization: true,
-        skipHooks: true,
-        skipMcpDiscovery: true,
-        skipSkillManager: true,
-        skipFileCheckpointing: true,
-      });
+      await config.initialize({ skipMcpDiscovery: true });
       const clearLoadedSkills = vi.fn();
       vi.spyOn(config.getToolRegistry(), 'getTool').mockImplementation(
         (name: string) =>
@@ -4011,13 +3679,7 @@ describe('Server Config (config.ts)', () => {
       // `PermissionManager` outlives the swap, so without the purge a skill's
       // grant would keep auto-approving in a session that never loaded it.
       const config = new Config({ ...baseParams });
-      await config.initialize({
-        skipLlmInitialization: true,
-        skipHooks: true,
-        skipMcpDiscovery: true,
-        skipSkillManager: true,
-        skipFileCheckpointing: true,
-      });
+      await config.initialize({ skipMcpDiscovery: true });
       const permissionManager = config.getPermissionManager()!;
       const gitPush = {
         toolName: ToolNames.SHELL,
@@ -4042,13 +3704,7 @@ describe('Server Config (config.ts)', () => {
     it('records no lifecycle transition when resuming the current session id', async () => {
       const sessionId = 'same-session-id';
       const config = new Config({ ...baseParams, sessionId });
-      await config.initialize({
-        skipLlmInitialization: true,
-        skipHooks: true,
-        skipMcpDiscovery: true,
-        skipSkillManager: true,
-        skipFileCheckpointing: true,
-      });
+      await config.initialize({ skipMcpDiscovery: true });
       vi.mocked(logSessionEnd).mockClear();
       vi.mocked(logStartSession).mockClear();
       const clearLoadedSkills = vi.fn();
@@ -4074,13 +3730,7 @@ describe('Server Config (config.ts)', () => {
 
     it('pins the outgoing chat recorder to the outgoing session id', async () => {
       const config = new Config({ ...baseParams, chatRecording: true });
-      await config.initialize({
-        skipLlmInitialization: true,
-        skipHooks: true,
-        skipMcpDiscovery: true,
-        skipSkillManager: true,
-        skipFileCheckpointing: true,
-      });
+      await config.initialize({ skipMcpDiscovery: true });
       const outgoingSessionId = config.getSessionId();
       const outgoingRecorder = config.getChatRecordingService();
       expect(outgoingRecorder).toBeDefined();
@@ -4094,13 +3744,7 @@ describe('Server Config (config.ts)', () => {
 
     it('ends the outgoing session before starting a replacement without continuation', async () => {
       const config = new Config({ ...baseParams });
-      await config.initialize({
-        skipLlmInitialization: true,
-        skipHooks: true,
-        skipMcpDiscovery: true,
-        skipSkillManager: true,
-        skipFileCheckpointing: true,
-      });
+      await config.initialize({ skipMcpDiscovery: true });
       const outgoingSessionId = config.getSessionId();
       const endedSessionIds: string[] = [];
       vi.mocked(logSessionEnd).mockClear();
@@ -4124,13 +3768,7 @@ describe('Server Config (config.ts)', () => {
 
     it('carries the outgoing session id when resuming a different persisted session', async () => {
       const config = new Config({ ...baseParams });
-      await config.initialize({
-        skipLlmInitialization: true,
-        skipHooks: true,
-        skipMcpDiscovery: true,
-        skipSkillManager: true,
-        skipFileCheckpointing: true,
-      });
+      await config.initialize({ skipMcpDiscovery: true });
       const outgoingSessionId = config.getSessionId();
       vi.mocked(logStartSession).mockClear();
 
@@ -4143,40 +3781,6 @@ describe('Server Config (config.ts)', () => {
         expect.anything(),
         outgoingSessionId,
       );
-    });
-
-    it('rejects a session switch while the current recorder owns the writer lease', () => {
-      const config = new Config({ ...baseParams, chatRecording: true });
-      const originalSessionId = config.getSessionId();
-      const finalize = vi.fn();
-      const flush = vi.fn().mockResolvedValue(undefined);
-      const recorder = {
-        finalize,
-        flush,
-        hasWriteOwnership: () => true,
-      };
-      (
-        config as unknown as {
-          chatRecordingService: typeof recorder;
-        }
-      ).chatRecordingService = recorder;
-
-      vi.mocked(logSessionEnd).mockClear();
-      vi.mocked(logStartSession).mockClear();
-
-      expect(() => config.startNewSession('replacement-session')).toThrow(
-        expect.objectContaining({
-          name: 'SessionWriterUnavailableError',
-          errorKind: 'session_writer_unavailable',
-        }),
-      );
-      expect(config.getSessionId()).toBe(originalSessionId);
-      expect(config.getChatRecordingService()).toBe(recorder);
-      expect(finalize).not.toHaveBeenCalled();
-      expect(flush).not.toHaveBeenCalled();
-      // A rejected switch must leave the live session's lifecycle untouched.
-      expect(logSessionEnd).not.toHaveBeenCalled();
-      expect(logStartSession).not.toHaveBeenCalled();
     });
 
     const resumedGoalSession = (
@@ -4225,127 +3829,6 @@ describe('Server Config (config.ts)', () => {
         lastCompletedUuid: record.uuid,
       };
     };
-
-    // A transcript whose newest Goal record is a paused Goal. Restoring it
-    // reads the record and writes nothing; what the deferred restore has to
-    // get right is the ordering against the session writer.
-    const pausedGoalSession = (): ResumedSessionData => {
-      const record = {
-        uuid: 'paused-goal',
-        parentUuid: null,
-        sessionId: 'resumed-session',
-        timestamp: new Date(0).toISOString(),
-        type: 'system',
-        subtype: 'goal_state',
-        provenance: 'goal_control',
-        cwd: '/tmp',
-        version: 'test',
-        systemPayload: {
-          v: 2,
-          cause: 'pause',
-          snapshot: {
-            v: 2,
-            activity: 'idle',
-            goal: {
-              goalId: 'goal-1',
-              revision: 1,
-              objective: 'ship the thing',
-              status: 'paused',
-              evidenceCursor: { recordId: 'paused-goal' },
-              turnCount: 0,
-              activeTimeMs: 0,
-              tokensUsed: 0,
-              createdAt: 1,
-              updatedAt: 1,
-            },
-          },
-        },
-      } as unknown as ChatRecord;
-      return {
-        conversation: {
-          sessionId: 'resumed-session',
-          projectHash: 'test',
-          startTime: new Date(0).toISOString(),
-          lastUpdated: new Date(0).toISOString(),
-          messages: [record],
-        },
-        filePath: '/tmp/resumed-session.jsonl',
-        lastCompletedUuid: record.uuid,
-      };
-    };
-
-    // Under a writer lease the recorder is `inactive` until it is handed the
-    // lease, and rejects every write until then. Restore waits for the
-    // lease so that the first Goal turn a restored active Goal starts does
-    // not write into that guard, and so that `restore()` cannot latch a
-    // lease-timing failure as `recoveryError` for the whole session.
-    // Ordering is the deciding variable, so this asserts the deferred
-    // restore lands the goal rather than bricking the runtime.
-    it('waits for the session writer before restoring a Goal', async () => {
-      const config = new Config({
-        ...baseParams,
-        chatRecording: true,
-        experimentalZedIntegration: true,
-        sessionWriterLeaseEnabled: true,
-        sessionData: pausedGoalSession(),
-      });
-      const recorder = config.getChatRecordingService();
-      if (!recorder) throw new Error('expected a chat recording service');
-      expect(recorder.hasWriteOwnership()).toBe(false);
-
-      let settled = false;
-      const ready = config.getGoalRuntimeReady().then(
-        (runtime) => {
-          settled = true;
-          return runtime;
-        },
-        (error: unknown) => {
-          settled = true;
-          throw error;
-        },
-      );
-      // Flush microtasks: the pre-fix code had already rejected by here.
-      await Promise.resolve();
-      await Promise.resolve();
-      expect(settled).toBe(false);
-
-      const recordGoalState = vi
-        .spyOn(recorder, 'recordGoalState')
-        .mockResolvedValue({} as ChatRecord);
-      // Stands in for `activateChatRecording()` handing over the lease.
-      vi.spyOn(recorder, 'hasWriteOwnership').mockReturnValue(true);
-      (
-        config as unknown as { startPendingGoalRestore(): void }
-      ).startPendingGoalRestore();
-
-      const runtime = await ready;
-      // Restoring reads the journal and writes nothing to it.
-      expect(recordGoalState).not.toHaveBeenCalled();
-      expect(runtime.getSnapshot().goal).toMatchObject({
-        objective: 'ship the thing',
-        status: 'paused',
-      });
-      // The runtime is usable, not latched on `recoveryError` — which is
-      // what `assertOperational()` would rethrow from every later
-      // beginTurn/dispatch/finishTurn.
-      expect(() => runtime.beginTurn('turn-1')).not.toThrow();
-    });
-
-    it('fails a deferred Goal restore instead of hanging when the writer never arrives', async () => {
-      const config = new Config({
-        ...baseParams,
-        chatRecording: true,
-        experimentalZedIntegration: true,
-        sessionWriterLeaseEnabled: true,
-        sessionData: pausedGoalSession(),
-      });
-      const ready = config.getGoalRuntimeReady();
-      config.startNewSession('replacement-session');
-
-      await expect(ready).rejects.toBeInstanceOf(
-        GoalPersistenceUnavailableError,
-      );
-    });
 
     it('parks one approved proposal and hands it to the client once', () => {
       const config = new Config({ ...baseParams, chatRecording: true });
@@ -4482,83 +3965,6 @@ describe('Server Config (config.ts)', () => {
       );
     });
 
-    it('holds selective Goal readiness and autonomous work until finalization', async () => {
-      const record = resumedGoalSession('active').conversation.messages[0]!;
-      const config = new Config({
-        ...baseParams,
-        chatRecording: true,
-        sessionRestoreProjection: {
-          sessionId: 'resumed-session',
-          filePath: '/tmp/resumed-session.jsonl',
-          startTime: new Date(0).toISOString(),
-          lastUpdated: new Date(0).toISOString(),
-          runtime: {
-            apiHistory: [],
-            uiTelemetryEvents: [],
-            recording: {
-              lastCompletedUuid: record.uuid,
-              turnParentUuids: [],
-            },
-            goalRecords: [record],
-            initialTurn: 0,
-            backgroundNotificationTaskIds: [],
-          },
-        },
-      });
-      const started: string[] = [];
-      config.bindGoalTurnHost({
-        startGoalTurn: vi.fn(async ({ permit }) => {
-          started.push(permit.goalId);
-        }),
-        preemptGoalTurn: vi.fn(),
-      });
-      let ready = false;
-      void config.getGoalRuntimeReady().then(() => {
-        ready = true;
-      });
-
-      await Promise.resolve();
-      expect(ready).toBe(false);
-      expect(started).toEqual([]);
-
-      config.finalizeSessionRestore();
-
-      await expect(config.getGoalRuntimeReady()).resolves.toBe(
-        config.getGoalRuntime(),
-      );
-      await vi.waitFor(() => expect(started).toEqual(['g-resumed']));
-    });
-
-    it('rejects selective Goal readiness when restore is abandoned', async () => {
-      const record = resumedGoalSession('active').conversation.messages[0]!;
-      const config = new Config({
-        ...baseParams,
-        chatRecording: true,
-        sessionRestoreProjection: {
-          sessionId: 'resumed-session',
-          filePath: '/tmp/resumed-session.jsonl',
-          startTime: new Date(0).toISOString(),
-          lastUpdated: new Date(0).toISOString(),
-          runtime: {
-            apiHistory: [],
-            uiTelemetryEvents: [],
-            recording: {
-              lastCompletedUuid: record.uuid,
-              turnParentUuids: [],
-            },
-            goalRecords: [record],
-            initialTurn: 0,
-            backgroundNotificationTaskIds: [],
-          },
-        },
-      });
-      const readiness = config.getGoalRuntimeReady();
-
-      config.startNewSession('replacement-session');
-
-      await expect(readiness).rejects.toThrow('Session restore was abandoned');
-    });
-
     it('owns one durable Goal runtime per canonical session', async () => {
       const config = new Config({ ...baseParams, chatRecording: true });
       const first = config.getGoalRuntime();
@@ -4581,7 +3987,7 @@ describe('Server Config (config.ts)', () => {
         chatRecording: true,
         goalTokenBudget: 1_234,
       });
-      expect(config.getGoalTokenBudgetGrant()).toBe(1_234);
+      expect(config['goalTokenBudgetGrant']).toBe(1_234);
 
       const runtime = config.getGoalRuntime();
       await runtime.dispatch({ action: 'create', objective: 'ship' });
@@ -4603,7 +4009,7 @@ describe('Server Config (config.ts)', () => {
           chatRecording: true,
           goalTokenBudget,
         });
-        expect(config.getGoalTokenBudgetGrant()).toBe(Number.POSITIVE_INFINITY);
+        expect(config['goalTokenBudgetGrant']).toBe(Number.POSITIVE_INFINITY);
 
         const runtime = config.getGoalRuntime();
         await runtime.dispatch({ action: 'create', objective: 'ship' });
@@ -4638,9 +4044,7 @@ describe('Server Config (config.ts)', () => {
           chatRecording: true,
           goalTokenBudget,
         });
-        expect(config.getGoalTokenBudgetGrant()).toBe(
-          GOAL_DEFAULT_TOKEN_BUDGET,
-        );
+        expect(config['goalTokenBudgetGrant']).toBe(GOAL_DEFAULT_TOKEN_BUDGET);
 
         const runtime = config.getGoalRuntime();
         await runtime.dispatch({ action: 'create', objective: 'ship' });
@@ -4683,8 +4087,8 @@ describe('Server Config (config.ts)', () => {
         goalMaxTurns: 20,
         goalMaxActiveMinutes: 30,
       });
-      expect(config.getGoalTurnBudgetGrant()).toBe(20);
-      expect(config.getGoalActiveTimeBudgetGrantMs()).toBe(1_800_000);
+      expect(config['goalTurnBudgetGrant']).toBe(20);
+      expect(config['goalActiveTimeBudgetGrantMs']).toBe(1_800_000);
 
       const runtime = config.getGoalRuntime();
       await runtime.dispatch({ action: 'create', objective: 'ship' });
@@ -4699,8 +4103,8 @@ describe('Server Config (config.ts)', () => {
       // Unlike the token budget, the default is nothing: a cadence is what an
       // operator asks for, not a guard every Goal needs.
       const config = new Config({ ...baseParams, chatRecording: true });
-      expect(config.getGoalTurnBudgetGrant()).toBe(Number.POSITIVE_INFINITY);
-      expect(config.getGoalActiveTimeBudgetGrantMs()).toBe(
+      expect(config['goalTurnBudgetGrant']).toBe(Number.POSITIVE_INFINITY);
+      expect(config['goalActiveTimeBudgetGrantMs']).toBe(
         Number.POSITIVE_INFINITY,
       );
 
@@ -4724,7 +4128,7 @@ describe('Server Config (config.ts)', () => {
         chatRecording: true,
         goalMaxTurns: v,
       });
-      expect(config.getGoalTurnBudgetGrant()).toBe(Number.POSITIVE_INFINITY);
+      expect(config['goalTurnBudgetGrant']).toBe(Number.POSITIVE_INFINITY);
     });
 
     it.each([
@@ -4740,7 +4144,7 @@ describe('Server Config (config.ts)', () => {
           chatRecording: true,
           goalMaxActiveMinutes: v,
         });
-        expect(config.getGoalActiveTimeBudgetGrantMs()).toBe(
+        expect(config['goalActiveTimeBudgetGrantMs']).toBe(
           Number.POSITIVE_INFINITY,
         );
       },
@@ -5007,9 +4411,6 @@ describe('Server Config (config.ts)', () => {
       await expect(config.getGoalRuntimeReady()).rejects.toBeInstanceOf(
         GoalPersistenceUnavailableError,
       );
-      await expect(config.getGoalRuntimePrepared()).rejects.toBeInstanceOf(
-        GoalPersistenceUnavailableError,
-      );
     });
 
     it('does not leak the canonical Goal runtime through subagent prototypes', async () => {
@@ -5026,9 +4427,6 @@ describe('Server Config (config.ts)', () => {
           preemptGoalTurn: vi.fn(),
         }),
       ).toThrow(GoalPersistenceUnavailableError);
-      await expect(
-        child.rebaseGoalRuntimeFromActiveTranscript(),
-      ).rejects.toThrow(GoalPersistenceUnavailableError);
       await child.shutdown();
       expect(() => canonical.getSnapshot()).not.toThrow();
       expect(config.getGoalRuntime()).toBe(canonical);
@@ -5145,7 +4543,6 @@ describe('Server Config (config.ts)', () => {
         await expect(recorder.flush()).rejects.toBe(error);
 
         expect(listener).toHaveBeenCalledOnce();
-        await expect(config.assertCanStartTurn()).resolves.toBeUndefined();
         expect(listener).toHaveBeenCalledWith({ sessionId, error });
       } finally {
         writeLine.mockRestore();
@@ -5238,10 +4635,10 @@ describe('Server Config (config.ts)', () => {
     const config = new Config({
       ...baseParams,
       lsp: { enabled: true },
-      lspClient: {
-        getStatusSnapshot,
-      } as unknown as ConfigParameters['lspClient'],
     });
+    config.setLspClient({
+      getStatusSnapshot,
+    } as unknown as Parameters<Config['setLspClient']>[0]);
 
     expect(config.getLspStatusSnapshot()).toEqual({
       enabled: true,
@@ -5325,28 +4722,12 @@ describe('Server Config (config.ts)', () => {
     });
   });
 
-  it('keeps project-derived features disabled for a provisional workspace', () => {
-    const config = new Config({
-      ...baseParams,
-      provisionalWorkspace: true,
-      lsp: { enabled: true },
-      workflowsEnabled: true,
-      enableTeamMemory: true,
-      enableAutoSkill: true,
-    });
-
-    expect(config.isLspEnabled()).toBe(false);
-    expect(config.isWorkflowsEnabled()).toBe(false);
-    expect(config.getTeamMemoryEnabled()).toBe(false);
-    expect(config.getAutoSkillEnabled()).toBe(false);
-  });
-
   it('should report unavailable LSP status when client lacks a status snapshot API', () => {
     const config = new Config({
       ...baseParams,
       lsp: { enabled: true },
-      lspClient: {} as unknown as ConfigParameters['lspClient'],
     });
+    config.setLspClient({} as unknown as Parameters<Config['setLspClient']>[0]);
 
     expect(config.getLspStatusSnapshot()).toEqual({
       enabled: true,
@@ -5364,19 +4745,19 @@ describe('Server Config (config.ts)', () => {
     const config = new Config({
       ...baseParams,
       lsp: { enabled: true },
-      lspClient: {
-        getStatusSnapshot: vi.fn().mockReturnValue({
-          enabled: true,
-          configuredServers: 1,
-          readyServers: 0,
-          failedServers: 1,
-          inProgressServers: 0,
-          notStartedServers: 0,
-          servers: [],
-          initializationError: 'client failed',
-        }),
-      } as unknown as ConfigParameters['lspClient'],
     });
+    config.setLspClient({
+      getStatusSnapshot: vi.fn().mockReturnValue({
+        enabled: true,
+        configuredServers: 1,
+        readyServers: 0,
+        failedServers: 1,
+        inProgressServers: 0,
+        notStartedServers: 0,
+        servers: [],
+        initializationError: 'client failed',
+      }),
+    } as unknown as Parameters<Config['setLspClient']>[0]);
 
     config.setLspInitializationError('discovery failed');
 
@@ -5433,10 +4814,10 @@ describe('Server Config (config.ts)', () => {
     const config = new Config({
       ...baseParams,
       lsp: { enabled: true },
-      lspClient: {
-        reinitialize,
-      } as unknown as ConfigParameters['lspClient'],
     });
+    config.setLspClient({
+      reinitialize,
+    } as unknown as Parameters<Config['setLspClient']>[0]);
 
     await expect(config.reinitializeLsp()).resolves.toBe(result);
     expect(reinitialize).toHaveBeenCalledOnce();
@@ -5456,10 +4837,10 @@ describe('Server Config (config.ts)', () => {
     const config = new Config({
       ...baseParams,
       lsp: { enabled: true },
-      lspClient: {
-        reinitialize: vi.fn().mockResolvedValue(result),
-      } as unknown as ConfigParameters['lspClient'],
     });
+    config.setLspClient({
+      reinitialize: vi.fn().mockResolvedValue(result),
+    } as unknown as Parameters<Config['setLspClient']>[0]);
 
     await expect(config.reinitializeLsp()).resolves.toBe(result);
     expect(config.getLspStatusSnapshot()).toMatchObject({
@@ -5471,10 +4852,10 @@ describe('Server Config (config.ts)', () => {
     const config = new Config({
       ...baseParams,
       lsp: { enabled: true },
-      lspClient: {
-        reinitialize: vi.fn().mockRejectedValue(new Error('invalid lsp json')),
-      } as unknown as ConfigParameters['lspClient'],
     });
+    config.setLspClient({
+      reinitialize: vi.fn().mockRejectedValue(new Error('invalid lsp json')),
+    } as unknown as Parameters<Config['setLspClient']>[0]);
 
     await expect(config.reinitializeLsp()).rejects.toThrow('invalid lsp json');
     expect(config.getLspStatusSnapshot()).toMatchObject({
@@ -5500,10 +4881,10 @@ describe('Server Config (config.ts)', () => {
     const config = new Config({
       ...baseParams,
       lsp: { enabled: true },
-      lspClient: {
-        reinitialize,
-      } as unknown as ConfigParameters['lspClient'],
     });
+    config.setLspClient({
+      reinitialize,
+    } as unknown as Parameters<Config['setLspClient']>[0]);
 
     await expect(config.reinitializeLsp()).rejects.toThrow('invalid lsp json');
     expect(config.getLspStatusSnapshot()).toMatchObject({
@@ -5542,10 +4923,10 @@ describe('Server Config (config.ts)', () => {
     const config = new Config({
       ...baseParams,
       lsp: { enabled: true },
-      lspClient: {
-        reinitialize,
-      } as unknown as ConfigParameters['lspClient'],
     });
+    config.setLspClient({
+      reinitialize,
+    } as unknown as Parameters<Config['setLspClient']>[0]);
 
     await expect(config.reinitializeLsp()).resolves.toBe(partialFailure);
     expect(config.getLspStatusSnapshot()).toMatchObject({
@@ -5557,392 +4938,6 @@ describe('Server Config (config.ts)', () => {
   });
 
   describe('initialize', () => {
-    it('accepts managed handoff only after certified takeover is configured', async () => {
-      const standalone = new Config(baseParams);
-      await standalone.closeSessionWriter({ handoff: true });
-      expect(
-        (
-          standalone as unknown as {
-            sessionWriterHandoffRequested: boolean;
-          }
-        ).sessionWriterHandoffRequested,
-      ).toBe(false);
-
-      const managed = new Config(baseParams);
-      managed.setSessionWriterTakeoverPolicy('certified');
-      await managed.closeSessionWriter({ handoff: true });
-      expect(
-        (
-          managed as unknown as {
-            sessionWriterHandoffRequested: boolean;
-          }
-        ).sessionWriterHandoffRequested,
-      ).toBe(true);
-    });
-
-    it.each([
-      [
-        'an ACP session without an opt-in',
-        { experimentalZedIntegration: true },
-      ],
-      [
-        'a non-ACP session with the setting enabled',
-        { sessionWriterLeaseEnabled: true },
-      ],
-      [
-        'an ACP session with an invalid truthy opt-in',
-        {
-          experimentalZedIntegration: true,
-          sessionWriterLeaseEnabled: 'true' as unknown as boolean,
-        },
-      ],
-    ])(
-      'uses the legacy recorder without acquiring a writer lease for %s',
-      async (_name, params) => {
-        const acquire = vi.spyOn(SessionWriterLease, 'acquire');
-        const config = new Config({
-          ...baseParams,
-          ...params,
-          chatRecording: true,
-        });
-
-        await (
-          config as unknown as { activateChatRecording(): Promise<void> }
-        ).activateChatRecording();
-
-        expect(acquire).not.toHaveBeenCalled();
-        expect(config.isSessionWriterLeaseEnabled()).toBe(false);
-        expect(config.hasSessionWriteOwnership()).toBe(false);
-        await expect(
-          config
-            .getChatRecordingService()
-            ?.runWithWriteBarrier(async () => 'legacy'),
-        ).resolves.toBe('legacy');
-        acquire.mockRestore();
-      },
-    );
-
-    it('adopts the active transcript when writer activation sees both states', async () => {
-      const sessionId = '550e8400-e29b-41d4-a716-446655440099';
-      const sessionData = {
-        conversation: {
-          sessionId,
-          projectHash: 'test',
-          startTime: new Date(0).toISOString(),
-          lastUpdated: new Date(0).toISOString(),
-          messages: [],
-        },
-        filePath: `/tmp/${sessionId}.jsonl`,
-        lastCompletedUuid: null,
-      } as ResumedSessionData;
-      const config = new Config({
-        ...baseParams,
-        sessionId,
-        chatRecording: true,
-        experimentalZedIntegration: true,
-        sessionWriterLeaseEnabled: true,
-      });
-      const service = config.getSessionService();
-      vi.spyOn(service, 'getSessionLocation').mockResolvedValue('conflict');
-      const loadSession = vi
-        .spyOn(service, 'loadSession')
-        .mockResolvedValue(sessionData);
-      const lease = {
-        sessionId,
-        transcriptExistedAtAcquire: true,
-        isReleased: false,
-        assertOwnedAndUnchanged: vi.fn().mockResolvedValue(undefined),
-        release: vi.fn().mockResolvedValue(undefined),
-      } as unknown as SessionWriterLease;
-      const acquire = vi
-        .spyOn(SessionWriterLease, 'acquire')
-        .mockResolvedValue(lease);
-
-      await (
-        config as unknown as { activateChatRecording(): Promise<void> }
-      ).activateChatRecording();
-
-      expect(loadSession).toHaveBeenCalledWith(sessionId);
-      expect(config.hasSessionWriteOwnership()).toBe(true);
-      acquire.mockRestore();
-    });
-
-    it('releases a pending lease while a real baseline read is gated', async () => {
-      const root = await mkdtemp(path.join(os.tmpdir(), 'qwen-config-writer-'));
-      const runtimeBaseDir = path.join(root, 'runtime');
-      const projectDir = path.join(root, 'project');
-      await mkdir(projectDir, { recursive: true });
-      Storage.setRuntimeBaseDir(runtimeBaseDir);
-      const config = new Config({
-        ...baseParams,
-        sessionId: 'pending-baseline',
-        cwd: projectDir,
-        targetDir: projectDir,
-        chatRecording: true,
-        experimentalZedIntegration: true,
-        sessionWriterLeaseEnabled: true,
-      });
-      const transcriptPath = config.getTranscriptPath();
-      await mkdir(path.dirname(transcriptPath), { recursive: true });
-      const transcript = Buffer.alloc(2 * 1024 * 1024, 0x20);
-      transcript[transcript.byteLength - 1] = 0x0a;
-      await writeFile(transcriptPath, transcript);
-      const lockPath = getSessionWriterLockPath(
-        runtimeBaseDir,
-        'pending-baseline',
-      );
-      const probe = await open(transcriptPath, 'r');
-      const fileHandlePrototype = Object.getPrototypeOf(probe) as {
-        read: typeof probe.read;
-      };
-      await probe.close();
-      const originalRead = fileHandlePrototype.read;
-      let releaseRead!: () => void;
-      const readGate = new Promise<void>((resolve) => {
-        releaseRead = resolve;
-      });
-      let notifyReadStarted!: () => void;
-      const readStarted = new Promise<void>((resolve) => {
-        notifyReadStarted = resolve;
-      });
-      let gated = false;
-      const read = vi
-        .spyOn(fileHandlePrototype, 'read')
-        .mockImplementation(async function (
-          this: fs.promises.FileHandle,
-          ...args
-        ) {
-          const result = await originalRead.apply(this, args);
-          const values = args as readonly unknown[];
-          if (!gated && values[2] === 1024 * 1024) {
-            gated = true;
-            notifyReadStarted();
-            await readGate;
-          }
-          return result;
-        });
-      const actualFs =
-        await vi.importActual<typeof import('node:fs')>('node:fs');
-      (fs.readFileSync as Mock).mockImplementation(
-        (pathOrDescriptor: unknown) =>
-          typeof pathOrDescriptor === 'number'
-            ? actualFs.readFileSync(pathOrDescriptor, 'utf8')
-            : undefined,
-      );
-
-      try {
-        const initialize = config.initialize();
-        await readStarted;
-        await expect(stat(lockPath)).resolves.toBeDefined();
-        const close = config.closeSessionWriter();
-
-        await vi.waitFor(
-          () =>
-            expect(stat(lockPath)).rejects.toMatchObject({
-              code: 'ENOENT',
-            }),
-          { timeout: 1_000 },
-        );
-        expect(gated).toBe(true);
-        releaseRead();
-        await expect(close).resolves.toBeUndefined();
-        await expect(initialize).rejects.toMatchObject({
-          name: 'SessionWriterUnavailableError',
-        });
-        expect(config.hasSessionWriteOwnership()).toBe(false);
-        expect(config.getChatRecordingService()?.hasWriteOwnership()).toBe(
-          false,
-        );
-      } finally {
-        releaseRead();
-        read.mockRestore();
-        Storage.setRuntimeBaseDir(null);
-        await rm(root, { recursive: true, force: true });
-      }
-    });
-
-    it('treats managed shutdown during writer acquisition as a clean terminal', async () => {
-      const config = new Config({
-        ...baseParams,
-        chatRecording: true,
-        experimentalZedIntegration: true,
-        sessionWriterLeaseEnabled: true,
-      });
-      let resolveAcquire!: (lease: SessionWriterLease) => void;
-      const acquireGate = new Promise<SessionWriterLease>((resolve) => {
-        resolveAcquire = resolve;
-      });
-      let released = false;
-      const release = vi.fn().mockImplementation(async () => {
-        released = true;
-      });
-      const lease = {
-        transcriptExistedAtAcquire: false,
-        release,
-        get isReleased() {
-          return released;
-        },
-      } as unknown as SessionWriterLease;
-      const acquire = vi
-        .spyOn(SessionWriterLease, 'acquire')
-        .mockReturnValue(acquireGate);
-
-      const initialize = config.initialize();
-      await vi.waitFor(() => expect(acquire).toHaveBeenCalledOnce());
-      const close = config.closeSessionWriter();
-      resolveAcquire(lease);
-
-      await expect(close).resolves.toBeUndefined();
-      await expect(initialize).rejects.toMatchObject({
-        name: 'SessionWriterUnavailableError',
-      });
-      expect(release).toHaveBeenCalledOnce();
-      expect(config.hasSessionWriteOwnership()).toBe(false);
-      acquire.mockRestore();
-    });
-
-    it('retries pending lease durability without reporting stale ownership', async () => {
-      const config = new Config({
-        ...baseParams,
-        chatRecording: true,
-        experimentalZedIntegration: true,
-        sessionWriterLeaseEnabled: true,
-      });
-      const cleanupFailure = new SessionWriterUnavailableError();
-      let released = false;
-      let durabilityPending = false;
-      const release = vi
-        .fn()
-        .mockImplementationOnce(async () => {
-          released = true;
-          durabilityPending = true;
-          throw cleanupFailure;
-        })
-        .mockImplementationOnce(async () => {
-          durabilityPending = false;
-        });
-      const lease = {
-        release,
-        get isReleased() {
-          return released;
-        },
-        get isReleaseDurabilityPending() {
-          return durabilityPending;
-        },
-      } as unknown as SessionWriterLease;
-      (
-        config as unknown as {
-          pendingSessionWriterLease: SessionWriterLease;
-        }
-      ).pendingSessionWriterLease = lease;
-
-      await expect(config.closeSessionWriter()).rejects.toBe(cleanupFailure);
-      expect(config.hasSessionWriteOwnership()).toBe(false);
-
-      await expect(config.closeSessionWriter()).resolves.toBeUndefined();
-      expect(release).toHaveBeenCalledTimes(2);
-      expect(config.hasSessionWriteOwnership()).toBe(false);
-    });
-
-    it('preserves activation and lease release failures', async () => {
-      const config = new Config({
-        ...baseParams,
-        chatRecording: true,
-        experimentalZedIntegration: true,
-        sessionWriterLeaseEnabled: true,
-      });
-      expect(config.isSessionWriterLeaseEnabled()).toBe(true);
-      const activationError = new SessionTranscriptChangedError();
-      const releaseError = new Error('lease release failed');
-      const release = vi.fn().mockRejectedValue(releaseError);
-      const acquire = vi
-        .spyOn(SessionWriterLease, 'acquire')
-        .mockResolvedValue({
-          transcriptExistedAtAcquire: false,
-          release,
-        } as unknown as SessionWriterLease);
-      vi.spyOn(
-        config.getSessionService(),
-        'getSessionLocation',
-      ).mockRejectedValue(activationError);
-
-      const result = await config.initialize().catch((error: unknown) => error);
-
-      expect(result).toMatchObject({
-        name: 'SessionWriterUnavailableError',
-        errorKind: 'session_writer_unavailable',
-        rpcCode: -32023,
-        httpStatus: 503,
-        cause: expect.any(AggregateError),
-      });
-      expect(
-        (result as Error & { cause: AggregateError }).cause.errors,
-      ).toEqual([activationError, releaseError]);
-      expect(release).toHaveBeenCalledOnce();
-      acquire.mockRestore();
-    });
-
-    it('does not report the same acquisition release failure twice', async () => {
-      const config = new Config({
-        ...baseParams,
-        chatRecording: true,
-        experimentalZedIntegration: true,
-        sessionWriterLeaseEnabled: true,
-      });
-      const activationError = new SessionTranscriptChangedError();
-      const releaseError = new Error('lease release failed');
-      const acquisitionFailure = new SessionWriterUnavailableError({
-        cause: new AggregateError([activationError, releaseError]),
-      });
-      const release = vi.fn().mockRejectedValue(releaseError);
-      const lease = {
-        release,
-        isReleased: false,
-      } as unknown as SessionWriterLease;
-      const acquire = vi
-        .spyOn(SessionWriterLease, 'acquire')
-        .mockImplementation(async (options) => {
-          options.onOwnershipAcquired?.(lease);
-          throw acquisitionFailure;
-        });
-
-      const result = await config.initialize().catch((error: unknown) => error);
-
-      expect(result).toBe(acquisitionFailure);
-      expect(release).toHaveBeenCalledOnce();
-      acquire.mockRestore();
-    });
-
-    it('does not duplicate a concurrent activation and close failure', async () => {
-      const config = new Config({
-        ...baseParams,
-        chatRecording: true,
-        experimentalZedIntegration: true,
-        sessionWriterLeaseEnabled: true,
-      });
-      const activationError = new SessionTranscriptChangedError();
-      let rejectAcquire!: (error: Error) => void;
-      const acquireGate = new Promise<SessionWriterLease>(
-        (_resolve, reject) => {
-          rejectAcquire = reject;
-        },
-      );
-      const acquire = vi
-        .spyOn(SessionWriterLease, 'acquire')
-        .mockReturnValue(acquireGate);
-
-      const initialize = config.initialize().catch((error: unknown) => error);
-      await vi.waitFor(() => expect(acquire).toHaveBeenCalledOnce());
-      const close = config
-        .closeSessionWriter()
-        .catch((error: unknown) => error);
-      rejectAcquire(activationError);
-
-      expect(await close).toBe(activationError);
-      expect(await initialize).toBe(activationError);
-      acquire.mockRestore();
-    });
-
     it('preserves initialization and recording close failures', async () => {
       const config = new Config(baseParams);
       const initializationError = new Error('initialization failed');
@@ -5974,34 +4969,6 @@ describe('Server Config (config.ts)', () => {
       expect(
         (result as Error & { cause: AggregateError }).cause.errors,
       ).toEqual([initializationError, closeError]);
-    });
-
-    it('preserves initialization cancellation when recording close fails', async () => {
-      const config = new Config(baseParams);
-      const controller = new AbortController();
-      const abortReason = new Error('session initialization deadline exceeded');
-      const closeError = new Error('recording close failed');
-      vi.spyOn(
-        config as unknown as {
-          initializeInternal: (options?: {
-            signal?: AbortSignal;
-          }) => Promise<void>;
-        },
-        'initializeInternal',
-      ).mockImplementation(async (options) => {
-        controller.abort(abortReason);
-        options?.signal?.throwIfAborted();
-      });
-      const close = vi
-        .spyOn(config, 'closeSessionWriter')
-        .mockRejectedValue(closeError);
-
-      const result = await config
-        .initialize({ signal: controller.signal })
-        .catch((error: unknown) => error);
-
-      expect(result).toBe(abortReason);
-      expect(close).toHaveBeenCalledOnce();
     });
 
     it('runs due auto-skill curation before loading skills when enabled', async () => {
@@ -6044,49 +5011,6 @@ describe('Server Config (config.ts)', () => {
       expect(SkillManager).toHaveBeenCalledTimes(1);
     });
 
-    it('waits for in-flight initialization before cleaning late resources', async () => {
-      const config = new Config(baseParams);
-      let releaseInitialization!: () => void;
-      const initializationGate = new Promise<void>((resolve) => {
-        releaseInitialization = resolve;
-      });
-      const stop = vi.fn().mockResolvedValue(undefined);
-      const internal = config as unknown as {
-        initializeInternal: () => Promise<void>;
-        toolRegistry: ToolRegistry;
-      };
-      const initializeInternal = vi
-        .spyOn(internal, 'initializeInternal')
-        .mockImplementation(async () => {
-          await initializationGate;
-          internal.toolRegistry = { stop } as unknown as ToolRegistry;
-        });
-
-      const initialize = config.initialize();
-      await vi.waitFor(() => expect(initializeInternal).toHaveBeenCalledOnce());
-      let shutdownSettled = false;
-      const shutdown = config
-        .shutdown({
-          shutdownTelemetry: false,
-          skipSessionWriter: true,
-          strictResourceCleanup: true,
-        })
-        .then(() => {
-          shutdownSettled = true;
-        });
-
-      await new Promise<void>((resolve) => {
-        setImmediate(resolve);
-      });
-      expect(shutdownSettled).toBe(false);
-      expect(stop).not.toHaveBeenCalled();
-
-      releaseInitialization();
-      await expect(initialize).resolves.toBeUndefined();
-      await expect(shutdown).resolves.toBeUndefined();
-      expect(stop).toHaveBeenCalledOnce();
-    });
-
     it('does not let incomplete initialization block best-effort shutdown', async () => {
       const config = new Config(baseParams);
       let releaseInitialization!: () => void;
@@ -6108,61 +5032,12 @@ describe('Server Config (config.ts)', () => {
       const initialize = config.initialize();
       await vi.waitFor(() => expect(initializeInternal).toHaveBeenCalledOnce());
 
-      await expect(
-        config.shutdown({
-          shutdownTelemetry: false,
-          skipSessionWriter: true,
-        }),
-      ).resolves.toBeUndefined();
+      await expect(config.shutdown()).resolves.toBeUndefined();
       expect(stop).not.toHaveBeenCalled();
 
       releaseInitialization();
       await expect(initialize).resolves.toBeUndefined();
       await vi.waitFor(() => expect(stop).toHaveBeenCalledOnce());
-    });
-
-    it('keeps strict shutdown waiting when best-effort shutdown starts first', async () => {
-      const config = new Config(baseParams);
-      let releaseInitialization!: () => void;
-      const initializationGate = new Promise<void>((resolve) => {
-        releaseInitialization = resolve;
-      });
-      const stop = vi.fn().mockResolvedValue(undefined);
-      const internal = config as unknown as {
-        initializeInternal: () => Promise<void>;
-        toolRegistry: ToolRegistry;
-      };
-      vi.spyOn(internal, 'initializeInternal').mockImplementation(async () => {
-        await initializationGate;
-        internal.toolRegistry = { stop } as unknown as ToolRegistry;
-      });
-
-      const initialize = config.initialize();
-      const bestEffortShutdown = config.shutdown({
-        shutdownTelemetry: false,
-        skipSessionWriter: true,
-      });
-      let strictShutdownSettled = false;
-      const strictShutdown = config
-        .shutdown({
-          shutdownTelemetry: false,
-          skipSessionWriter: true,
-          strictResourceCleanup: true,
-        })
-        .then(() => {
-          strictShutdownSettled = true;
-        });
-
-      await bestEffortShutdown;
-      await new Promise<void>((resolve) => {
-        setImmediate(resolve);
-      });
-      expect(strictShutdownSettled).toBe(false);
-
-      releaseInitialization();
-      await initialize;
-      await strictShutdown;
-      expect(stop).toHaveBeenCalledOnce();
     });
 
     it('runs resource cleanup once across concurrent shutdown calls', async () => {
@@ -6177,16 +5052,7 @@ describe('Server Config (config.ts)', () => {
       });
       await config.initialize();
 
-      await Promise.all([
-        config.shutdown({
-          shutdownTelemetry: false,
-          skipSessionWriter: true,
-        }),
-        config.shutdown({
-          shutdownTelemetry: false,
-          skipSessionWriter: true,
-        }),
-      ]);
+      await Promise.all([config.shutdown(), config.shutdown()]);
 
       expect(stop).toHaveBeenCalledOnce();
     });
@@ -6213,11 +5079,7 @@ describe('Server Config (config.ts)', () => {
         abortController,
       });
 
-      await config.shutdown({
-        shutdownTelemetry: false,
-        skipSessionWriter: true,
-        strictResourceCleanup: true,
-      });
+      await config.shutdown();
 
       expect(abortController.signal.aborted).toBe(true);
       expect(registry.get('wf_1234')?.status).toBe('cancelled');
@@ -6238,47 +5100,8 @@ describe('Server Config (config.ts)', () => {
       });
       await config.initialize();
 
-      await config.shutdown({
-        shutdownTelemetry: false,
-        skipSessionWriter: true,
-      });
-      await config.shutdown({
-        shutdownTelemetry: false,
-        skipSessionWriter: true,
-      });
-
-      expect(stop).toHaveBeenCalledTimes(2);
-    });
-
-    it('propagates resource cleanup failures in strict mode and allows retry', async () => {
-      const config = new Config(baseParams);
-      const stop = vi
-        .fn()
-        .mockRejectedValueOnce(new Error('stop failed'))
-        .mockResolvedValue(undefined);
-      const internal = config as unknown as {
-        initializeInternal: () => Promise<void>;
-        toolRegistry: ToolRegistry;
-      };
-      vi.spyOn(internal, 'initializeInternal').mockImplementation(async () => {
-        internal.toolRegistry = { stop } as unknown as ToolRegistry;
-      });
-      await config.initialize();
-
-      await expect(
-        config.shutdown({
-          shutdownTelemetry: false,
-          skipSessionWriter: true,
-          strictResourceCleanup: true,
-        }),
-      ).rejects.toThrow('stop failed');
-      await expect(
-        config.shutdown({
-          shutdownTelemetry: false,
-          skipSessionWriter: true,
-          strictResourceCleanup: true,
-        }),
-      ).resolves.toBeUndefined();
+      await config.shutdown();
+      await config.shutdown();
 
       expect(stop).toHaveBeenCalledTimes(2);
     });
@@ -6297,10 +5120,7 @@ describe('Server Config (config.ts)', () => {
       });
 
       const result = await config.initialize().catch((error: unknown) => error);
-      await config.shutdown({
-        shutdownTelemetry: false,
-        skipSessionWriter: true,
-      });
+      await config.shutdown();
 
       expect(result).toBe(initializationError);
       expect(stop).toHaveBeenCalledOnce();
@@ -6342,7 +5162,7 @@ describe('Server Config (config.ts)', () => {
 
       const initialize = config.initialize();
       await vi.waitFor(() => expect(initializeInternal).toHaveBeenCalledOnce());
-      const shutdown = config.shutdown({ shutdownTelemetry: false });
+      const shutdown = config.shutdown();
 
       expect(beginClose).toHaveBeenCalledOnce();
       expect(finalize).not.toHaveBeenCalled();
@@ -6357,81 +5177,11 @@ describe('Server Config (config.ts)', () => {
     it('rejects initialization after shutdown has started', async () => {
       const config = new Config(baseParams);
 
-      await config.shutdown({
-        shutdownTelemetry: false,
-        skipSessionWriter: true,
-      });
+      await config.shutdown();
 
       await expect(config.initialize()).rejects.toThrow(
         'Config is shutting down',
       );
-    });
-
-    it('rejects a pre-aborted initialization without consuming the Config', async () => {
-      const config = new Config(baseParams);
-      const controller = new AbortController();
-      const abortReason = new Error('initialization cancelled before start');
-      controller.abort(abortReason);
-
-      await expect(
-        config.initialize({ signal: controller.signal }),
-      ).rejects.toBe(abortReason);
-
-      const initializeInternal = vi
-        .spyOn(
-          config as unknown as {
-            initializeInternal: () => Promise<void>;
-          },
-          'initializeInternal',
-        )
-        .mockResolvedValue(undefined);
-      await expect(config.initialize()).resolves.toBeUndefined();
-      expect(initializeInternal).toHaveBeenCalledOnce();
-      await config.shutdown({ shutdownTelemetry: false });
-    });
-
-    it('forwards cancellation into Gemini client initialization', async () => {
-      const config = new Config(baseParams);
-      const controller = new AbortController();
-      const abortReason = new Error('initialization deadline exceeded');
-      const refreshHierarchicalMemory = vi.spyOn(
-        config,
-        'refreshHierarchicalMemory',
-      );
-      let markGeminiEntered!: () => void;
-      const geminiEntered = new Promise<void>((resolve) => {
-        markGeminiEntered = resolve;
-      });
-      const geminiInitialize = vi
-        .spyOn(config.getGeminiClient(), 'initialize')
-        .mockImplementation(async (_source, signal) => {
-          expect(signal).toBe(controller.signal);
-          markGeminiEntered();
-          await new Promise<void>((_resolve, reject) => {
-            if (signal?.aborted) {
-              reject(signal.reason);
-              return;
-            }
-            signal?.addEventListener('abort', () => reject(signal.reason), {
-              once: true,
-            });
-          });
-        });
-
-      const initialization = config.initialize({ signal: controller.signal });
-      await geminiEntered;
-      controller.abort(abortReason);
-
-      await expect(initialization).rejects.toBe(abortReason);
-      expect(geminiInitialize).toHaveBeenCalledWith(
-        undefined,
-        controller.signal,
-      );
-      expect(refreshHierarchicalMemory).toHaveBeenCalledWith(
-        'session_start',
-        controller.signal,
-      );
-      await config.shutdown({ shutdownTelemetry: false });
     });
 
     it('preserves graceful writer finalization after successful initialization', async () => {
@@ -6464,7 +5214,7 @@ describe('Server Config (config.ts)', () => {
         }),
       };
 
-      await config.shutdown({ shutdownTelemetry: false });
+      await config.shutdown();
 
       expect(order).toEqual(['finalize', 'flush', 'beginClose', 'close']);
     });
@@ -6528,37 +5278,6 @@ describe('Server Config (config.ts)', () => {
       );
     });
 
-    it('rejects a joining caller whose signal is already aborted', async () => {
-      const config = new Config({
-        ...baseParams,
-      });
-
-      let release!: () => void;
-      const gate = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      vi.spyOn(
-        config as unknown as {
-          initializeInternal: () => Promise<void>;
-        },
-        'initializeInternal',
-      ).mockImplementation(() => gate);
-
-      const first = config.initialize();
-      const controller = new AbortController();
-      const abortReason = new Error('joining caller already aborted');
-      controller.abort(abortReason);
-      // A joining caller cannot have its options honored, so an
-      // already-aborted signal fails fast instead of blocking on the first
-      // flight. Assert the rejection while the gate is still held: settling
-      // the first flight first would let a guard placed after the `await`
-      // reject with the same reason and pass.
-      const joining = config.initialize({ signal: controller.signal });
-      await expect(joining).rejects.toBe(abortReason);
-      release();
-      await expect(first).resolves.toBeUndefined();
-    });
-
     it('shares a failed in-flight initialization with concurrent callers', async () => {
       const config = new Config({
         ...baseParams,
@@ -6618,73 +5337,12 @@ describe('Server Config (config.ts)', () => {
       ]);
     });
 
-    it('should skip hook, skill, and file checkpointing side effects when requested', async () => {
-      const config = new Config({
-        ...baseParams,
-        fileCheckpointingEnabled: true,
-      });
-
-      await expect(
-        config.initialize({
-          skipMcpDiscovery: true,
-          skipHooks: true,
-          skipSkillManager: true,
-          skipFileCheckpointing: true,
-        }),
-      ).resolves.toBeUndefined();
-
-      expect(HookSystem).not.toHaveBeenCalled();
-      expect(config.getHookSystem()).toBeUndefined();
-      expect(SkillManager).not.toHaveBeenCalled();
-      expect(config.getSkillManager()).toBeNull();
-      expect(config.getFileCheckpointingEnabled()).toBe(false);
-    });
-
-    it('warms tools strictly by default and leniently when lenientToolWarmup is set', async () => {
-      // Regression guard for the read-only transcript-replay path: a Config that
-      // skips the SkillManager must warm tools leniently, otherwise warmAll()
-      // aborts initialize() when SkillTool's constructor throws.
+    it('warms tools strictly', async () => {
       const warmAll = vi.mocked(ToolRegistry.prototype.warmAll);
 
       warmAll.mockClear();
       await new Config({ ...baseParams }).initialize();
       expect(warmAll).toHaveBeenLastCalledWith({ strict: true });
-
-      warmAll.mockClear();
-      await new Config({ ...baseParams }).initialize({
-        skipSkillManager: true,
-        lenientToolWarmup: true,
-      });
-      expect(warmAll).toHaveBeenLastCalledWith({ strict: false });
-    });
-
-    it('defers cwd-sensitive initialization for a provisional workspace', async () => {
-      const config = new Config({
-        ...baseParams,
-        provisionalWorkspace: true,
-      });
-      const llmClient = vi.mocked(LlmClient).mock.results.at(-1)?.value as
-        | { initialize: Mock }
-        | undefined;
-
-      await config.initialize();
-
-      expect(config.isProvisionalWorkspace()).toBe(true);
-      expect(loadServerHierarchicalMemory).not.toHaveBeenCalled();
-      expect(maybeRunAutoSkillCurator).not.toHaveBeenCalled();
-      expect(ToolRegistry.prototype.warmAll).not.toHaveBeenCalled();
-      expect(llmClient?.initialize).not.toHaveBeenCalled();
-
-      await Promise.all([
-        config.activateProvisionalWorkspace(),
-        config.activateProvisionalWorkspace(),
-      ]);
-
-      expect(llmClient?.initialize).toHaveBeenCalledOnce();
-      expect(ToolRegistry.prototype.warmAll).toHaveBeenCalledOnce();
-      expect(ToolRegistry.prototype.warmAll).toHaveBeenCalledWith({
-        strict: true,
-      });
     });
 
     it('registers loop_wakeup when cron is enabled', async () => {
@@ -6871,7 +5529,6 @@ describe('Server Config (config.ts)', () => {
 
     it.each([
       ['interactive', { interactive: true }],
-      ['ACP', { experimentalZedIntegration: true }],
       ['stream-json', { inputFormat: InputFormat.STREAM_JSON }],
     ] as const)(
       'registers user-interaction tools in %s sessions',
@@ -6896,8 +5553,8 @@ describe('Server Config (config.ts)', () => {
       const config = new Config({
         ...baseParams,
         interactive: true,
-        sdkMode: true,
       });
+      config.setSdkMode(true);
       await config.initialize();
 
       const registeredNames = (
@@ -6920,7 +5577,6 @@ describe('Server Config (config.ts)', () => {
       expect(registeredNames).toContain(ToolNames.PROPOSE_GOAL);
     });
     it.each([
-      ['ACP', { experimentalZedIntegration: true, interactive: true }],
       [
         'stream-json',
         { inputFormat: InputFormat.STREAM_JSON, interactive: true },
@@ -6937,24 +5593,6 @@ describe('Server Config (config.ts)', () => {
         expect(registeredNames).toContain(ToolNames.GET_GOAL);
         expect(registeredNames).toContain(ToolNames.UPDATE_GOAL);
         expect(registeredNames).not.toContain(ToolNames.PROPOSE_GOAL);
-      },
-    );
-    it.each(['alwaysAsk', 'disabled'] as const)(
-      'honors %s for an ACP host with explicit Goal proposal support',
-      async (modelProposedGoals) => {
-        const config = new Config({
-          ...baseParams,
-          experimentalZedIntegration: true,
-          modelProposedGoals,
-        });
-        config.setGoalProposalHostSupported(true);
-        await config.initialize();
-        const registeredNames = (
-          ToolRegistry.prototype.registerFactory as Mock
-        ).mock.calls.map((call) => call[0]);
-        expect(registeredNames.includes(ToolNames.PROPOSE_GOAL)).toBe(
-          modelProposedGoals === 'alwaysAsk',
-        );
       },
     );
     it('does not register propose_goal when goals.modelProposed is disabled', async () => {
@@ -6976,7 +5614,6 @@ describe('Server Config (config.ts)', () => {
       const config = new Config({
         ...baseParams,
         interactive: false,
-        experimentalZedIntegration: false,
         inputFormat: InputFormat.TEXT,
       });
       await config.initialize();
@@ -6992,7 +5629,6 @@ describe('Server Config (config.ts)', () => {
       const config = new Config({
         ...baseParams,
         interactive: false,
-        experimentalZedIntegration: false,
         inputFormat: InputFormat.TEXT,
       });
       await config.initialize();
@@ -7009,7 +5645,6 @@ describe('Server Config (config.ts)', () => {
       const config = new Config({
         ...baseParams,
         interactive: false,
-        experimentalZedIntegration: false,
         inputFormat: InputFormat.TEXT,
       });
       await config.initialize();
@@ -7043,7 +5678,6 @@ describe('Server Config (config.ts)', () => {
       const config = new Config({
         ...baseParams,
         interactive: true,
-        sdkMode: false,
       });
       await config.initialize();
 
@@ -7054,32 +5688,10 @@ describe('Server Config (config.ts)', () => {
       expect(registeredNames).toContain(ToolNames.RECORD_ARTIFACT);
     });
 
-    it.each([true, false])(
-      'registers saved-page publishing only for recorded managed sessions (%s)',
-      async (chatRecording) => {
-        const config = new Config({
-          ...baseParams,
-          interactive: false,
-          sdkMode: false,
-          chatRecording,
-        });
-        config.setArtifactSnapshotsEnabled(true);
-        await config.initialize();
-        const registeredNames = (
-          ToolRegistry.prototype.registerFactory as Mock
-        ).mock.calls.map((call) => call[0]);
-        expect(registeredNames.includes(ToolNames.ARTIFACT)).toBe(
-          chatRecording,
-        );
-        if (chatRecording) expect(config.shouldAutoOpenArtifact()).toBe(false);
-      },
-    );
-
     it('registers display_image only for the main interactive TUI', async () => {
       const interactive = new Config({
         ...baseParams,
         interactive: true,
-        sdkMode: false,
       });
       await interactive.initialize();
 
@@ -7088,7 +5700,7 @@ describe('Server Config (config.ts)', () => {
         ToolNames.DISPLAY_IMAGE,
       );
 
-      for (const params of [
+      for (const { sdkMode, ...params } of [
         { interactive: false, sdkMode: false },
         { interactive: true, sdkMode: true },
         {
@@ -7104,6 +5716,7 @@ describe('Server Config (config.ts)', () => {
       ]) {
         registerToolMock.mockClear();
         const config = new Config({ ...baseParams, ...params });
+        config.setSdkMode(sdkMode);
         await config.initialize();
         expect(
           registerToolMock.mock.calls.map((call) => call[0]),
@@ -7148,7 +5761,6 @@ describe('Server Config (config.ts)', () => {
       const config = new Config({
         ...baseParams,
         interactive: false,
-        sdkMode: false,
       });
       await config.initialize();
 
@@ -7159,116 +5771,10 @@ describe('Server Config (config.ts)', () => {
       expect(registeredNames).toContain(ToolNames.RECORD_ARTIFACT);
     });
 
-    it('binds record_source only for a supported top-level session and refreshes it after session rotation', async () => {
-      const { SessionSourceService } = await import(
-        '../services/session-sources.js'
-      );
-      const config = new Config({
-        ...baseParams,
-        interactive: false,
-        sdkMode: false,
-      });
-      const factory = vi.fn(
-        () =>
-          new SessionSourceService({
-            sessionId: config.getSessionId(),
-            workspaceCwd: () => config.getTargetDir(),
-            load: async () => ({}),
-            persist: async () => undefined,
-          }),
-      );
-      config.setSessionSourceServiceFactory(factory);
-      const original = config.getSessionSourceService();
-      await config.initialize();
-      const registeredNames = (
-        ToolRegistry.prototype.registerFactory as Mock
-      ).mock.calls.map((call) => call[0]);
-      expect(registeredNames).toContain(ToolNames.RECORD_SOURCE);
-      const child = Object.create(config) as Config;
-      expect(child.getSessionSourceService()).toBeUndefined();
-      config.startNewSession('replacement-source-session');
-      expect(factory).toHaveBeenCalledTimes(2);
-      expect(config.getSessionSourceService()).not.toBe(original);
-    });
-
-    it.each(['registered', 'deferred', 'disabled'] as const)(
-      'registers a source tool bound after initialization with %s permissions',
-      async (status) => {
-        const { SessionSourceService } = await import(
-          '../services/session-sources.js'
-        );
-        const config = new Config({ ...baseParams, sdkMode: false });
-        await config.initialize();
-        const registry = config.getToolRegistry();
-        const existingRegistry = registry;
-        (ToolRegistry.prototype.registerFactory as Mock).mockClear();
-        (
-          ToolRegistry.prototype.registerPermissionDeferredFactory as Mock
-        ).mockClear();
-        vi.spyOn(
-          config.getPermissionManager()!,
-          'getToolRegistrationStatus',
-        ).mockResolvedValue(status);
-        config.setSessionSourceServiceFactory(
-          () =>
-            new SessionSourceService({
-              sessionId: config.getSessionId(),
-              workspaceCwd: () => config.getTargetDir(),
-              load: async () => ({}),
-              persist: async () => undefined,
-            }),
-        );
-        await config.registerSessionSourceTool();
-        expect(config.getToolRegistry()).toBe(existingRegistry);
-        const eagerNames = (
-          ToolRegistry.prototype.registerFactory as Mock
-        ).mock.calls.map((call) => call[0]);
-        const deferredNames = (
-          ToolRegistry.prototype.registerPermissionDeferredFactory as Mock
-        ).mock.calls.map((call) => call[0]);
-        expect(eagerNames.includes(ToolNames.RECORD_SOURCE)).toBe(
-          status === 'registered',
-        );
-        expect(deferredNames.includes(ToolNames.RECORD_SOURCE)).toBe(
-          status === 'deferred',
-        );
-      },
-    );
-
-    it('does not register record_source without a bound service or in SDK sessions', async () => {
-      const { SessionSourceService } = await import(
-        '../services/session-sources.js'
-      );
-      for (const sdkMode of [false, true]) {
-        (ToolRegistry.prototype.registerFactory as Mock).mockClear();
-        const config = new Config({
-          ...baseParams,
-          interactive: false,
-          sdkMode,
-        });
-        if (sdkMode)
-          config.setSessionSourceServiceFactory(
-            () =>
-              new SessionSourceService({
-                sessionId: config.getSessionId(),
-                workspaceCwd: () => config.getTargetDir(),
-                load: async () => ({}),
-                persist: async () => undefined,
-              }),
-          );
-        await config.initialize();
-        const names = (
-          ToolRegistry.prototype.registerFactory as Mock
-        ).mock.calls.map((call) => call[0]);
-        expect(names).not.toContain(ToolNames.RECORD_SOURCE);
-      }
-    });
-
     it('registers report_findings even in headless sessions — review run depends on it', async () => {
       const config = new Config({
         ...baseParams,
         interactive: false,
-        sdkMode: false,
       });
       await config.initialize();
 
@@ -7276,16 +5782,6 @@ describe('Server Config (config.ts)', () => {
         ToolRegistry.prototype.registerFactory as Mock
       ).mock.calls.map((call) => call[0]);
       expect(registeredNames).toContain(ToolNames.REPORT_FINDINGS);
-    });
-
-    it('enables historical artifact snapshots only when a managed caller opts in', () => {
-      const config = new Config({ ...baseParams, chatRecording: true });
-      expect(config.isArtifactSnapshotsEnabled()).toBe(false);
-      config.setArtifactSnapshotsEnabled(true);
-      expect(config.isArtifactSnapshotsEnabled()).toBe(true);
-      const unrecorded = new Config({ ...baseParams, chatRecording: false });
-      unrecorded.setArtifactSnapshotsEnabled(true);
-      expect(unrecorded.isArtifactSnapshotsEnabled()).toBe(false);
     });
 
     describe('isArtifactEnabled', () => {
@@ -7320,7 +5816,6 @@ describe('Server Config (config.ts)', () => {
         const config = new Config({
           ...baseParams,
           interactive: true,
-          sdkMode: false,
         });
         expect(config.isArtifactEnabled()).toBe(true);
       });
@@ -7330,7 +5825,6 @@ describe('Server Config (config.ts)', () => {
           ...baseParams,
           artifactEnabled: false,
           interactive: true,
-          sdkMode: false,
         });
         expect(config.isArtifactEnabled()).toBe(false);
         expect(config.isRecordArtifactEnabled()).toBe(false);
@@ -7344,7 +5838,6 @@ describe('Server Config (config.ts)', () => {
           ...baseParams,
           artifactEnabled: true,
           interactive: true,
-          sdkMode: false,
         });
 
         expect(config.isArtifactEnabled()).toBe(false);
@@ -7356,8 +5849,8 @@ describe('Server Config (config.ts)', () => {
         const config = new Config({
           ...baseParams,
           interactive: true,
-          sdkMode: true,
         });
+        config.setSdkMode(true);
 
         expect(config.isArtifactEnabled()).toBe(false);
       });
@@ -7368,7 +5861,6 @@ describe('Server Config (config.ts)', () => {
         const config = new Config({
           ...baseParams,
           interactive: false,
-          sdkMode: false,
         });
 
         expect(config.isArtifactEnabled()).toBe(false);
@@ -7379,7 +5871,6 @@ describe('Server Config (config.ts)', () => {
         const config = new Config({
           ...baseParams,
           interactive: false,
-          sdkMode: false,
         });
 
         expect(config.isArtifactEnabled()).toBe(false);
@@ -7393,7 +5884,6 @@ describe('Server Config (config.ts)', () => {
           ...baseParams,
           artifactEnabled: false,
           interactive: true,
-          sdkMode: false,
         });
 
         expect(config.isArtifactEnabled()).toBe(true);
@@ -7757,8 +6247,9 @@ describe('Server Config (config.ts)', () => {
         ...baseParams,
         disableAllHooks: false,
       });
-      // Set messageBus using the setter
-      config.setMessageBus(mockMessageBus as unknown as MessageBus);
+      vi.spyOn(config, 'getMessageBus').mockReturnValue(
+        mockMessageBus as unknown as MessageBus,
+      );
 
       const authType = AuthType.USE_OPENAI;
       const mockContentConfig = {
@@ -8213,20 +6704,11 @@ describe('Server Config (config.ts)', () => {
     });
   });
 
-  it('Config constructor should store userMemory correctly', () => {
+  it('Config constructor should resolve the target dir and start with empty user memory', () => {
     const config = new Config(baseParams);
 
-    expect(config.getUserMemory()).toBe(USER_MEMORY);
-    // Verify other getters if needed
-    expect(config.getTargetDir()).toBe(path.resolve(TARGET_DIR)); // Check resolved path
-  });
-
-  it('Config constructor should default userMemory to empty string if not provided', () => {
-    const paramsWithoutMemory: ConfigParameters = { ...baseParams };
-    delete paramsWithoutMemory.userMemory;
-    const config = new Config(paramsWithoutMemory);
-
     expect(config.getUserMemory()).toBe('');
+    expect(config.getTargetDir()).toBe(path.resolve(TARGET_DIR)); // Check resolved path
   });
 
   it('Config constructor should enable runtime sleep prevention by default', () => {
@@ -8512,9 +6994,9 @@ describe('Server Config (config.ts)', () => {
   it('warns about a large always-on context on a large window, naming the token bound', async () => {
     const config = new Config({
       ...baseParams,
-      userMemory: 'a'.repeat(48_000), // ~12,000 tokens
       generationConfig: { contextWindowSize: 1_000_000 },
     });
+    config.setUserMemory('a'.repeat(48_000)); // ~12,000 tokens
 
     const warnings = config.getWarnings();
 
@@ -8534,9 +7016,9 @@ describe('Server Config (config.ts)', () => {
   it('keeps naming the percentage when the ratio is the binding bound', async () => {
     const config = new Config({
       ...baseParams,
-      userMemory: 'a'.repeat(800), // 200 tokens, against 15% of 1,000
       generationConfig: { contextWindowSize: 1_000 },
     });
+    config.setUserMemory('a'.repeat(800)); // 200 tokens, against 15% of 1,000
 
     expect(config.getWarnings()).toContainEqual(
       expect.stringContaining("more than 15% of this model's 1,000 token"),
@@ -8873,9 +7355,9 @@ describe('Server Config (config.ts)', () => {
   it('getWarnings should include oversized context before initialize refresh runs', () => {
     const config = new Config({
       ...baseParams,
-      userMemory: 'a'.repeat(800),
       generationConfig: { contextWindowSize: 1000 },
     });
+    config.setUserMemory('a'.repeat(800));
 
     expect(config.getWarnings()).toContainEqual(
       expect.stringContaining(
@@ -8889,8 +7371,8 @@ describe('Server Config (config.ts)', () => {
     const config = new Config({
       ...baseParams,
       model: 'unknown-model-for-context-warning-test',
-      userMemory: 'a'.repeat((warningThresholdTokens + 1) * 4),
     });
+    config.setUserMemory('a'.repeat((warningThresholdTokens + 1) * 4));
 
     expect(config.getWarnings()).toContainEqual(
       expect.stringContaining(
@@ -8949,8 +7431,6 @@ describe('Server Config (config.ts)', () => {
     );
     const newDir = path.resolve('/path/to/other');
     const workspaceContext = config.getWorkspaceContext();
-    const directoriesChanged = vi.fn();
-    workspaceContext.onDirectoriesChanged(directoriesChanged);
     const chdirSpy = vi.spyOn(process, 'chdir').mockImplementation(() => {
       // Keep the test process in its original directory.
     });
@@ -8968,7 +7448,6 @@ describe('Server Config (config.ts)', () => {
     expect(config.getWorkspaceContext().getDirectories()[0]).toBe(newDir);
     expect(config.storage.getProjectRoot()).toBe(newDir);
     expect(disposeResidentAgents).toHaveBeenCalledOnce();
-    expect(directoriesChanged).toHaveBeenCalled();
     expect(loadServerHierarchicalMemory).toHaveBeenCalledWith(
       newDir,
       expect.any(Array),
@@ -8982,43 +7461,6 @@ describe('Server Config (config.ts)', () => {
 
     chdirSpy.mockRestore();
     cwdSpy.mockRestore();
-  });
-
-  it('relocateWorkingDirectory should preserve leased storage for an ACP cwd change', async () => {
-    const config = new Config(baseParams);
-    const generator = {} as ContentGenerator;
-    (
-      config as unknown as {
-        contentGenerator: ContentGenerator;
-      }
-    ).contentGenerator = generator;
-    const originalStorage = config.storage;
-    const originalPersistenceRoot = originalStorage.getProjectRoot();
-    const newDir = path.resolve('/path/to/other');
-    (
-      config as unknown as {
-        chatRecordingService: { hasWriteOwnership: () => boolean };
-      }
-    ).chatRecordingService = { hasWriteOwnership: () => true };
-
-    await expect(
-      config.relocateWorkingDirectory(newDir, newDir, {
-        skipProcessChdir: true,
-        skipArtifactMigration: true,
-      }),
-    ).resolves.toEqual({});
-
-    expect(config.getTargetDir()).toBe(newDir);
-    expect(resetPreloadedContentGenerator).toHaveBeenCalledWith(generator);
-    expect(config.storage).toBe(originalStorage);
-    expect(config.getSessionService().getProjectRoot()).toBe(
-      originalPersistenceRoot,
-    );
-    await expect(config.relocateWorkingDirectory(newDir)).rejects.toMatchObject(
-      {
-        errorKind: 'session_writer_unavailable',
-      },
-    );
   });
 
   it('relocateWorkingDirectory should recreate cwd-derived file service', async () => {
@@ -9150,7 +7592,6 @@ describe('Server Config (config.ts)', () => {
       oldChatsDir,
       `${sessionId}.worktree.json`,
     );
-    const oldPrSessionPath = path.join(oldChatsDir, `${sessionId}.pr.json`);
     const newTranscriptPath = path.join(newChatsDir, `${sessionId}.jsonl`);
     const newRuntimeStatusPath = path.join(
       newChatsDir,
@@ -9160,7 +7601,6 @@ describe('Server Config (config.ts)', () => {
       newChatsDir,
       `${sessionId}.worktree.json`,
     );
-    const newPrSessionPath = path.join(newChatsDir, `${sessionId}.pr.json`);
     const chdirSpy = vi.spyOn(process, 'chdir').mockImplementation(() => {
       // Keep the test process in its original directory.
     });
@@ -9169,7 +7609,6 @@ describe('Server Config (config.ts)', () => {
       oldTranscriptPath,
       oldRuntimeStatusPath,
       oldWorktreeSessionPath,
-      oldPrSessionPath,
     ];
     vi.mocked(fs.existsSync).mockImplementation((pathToCheck) => {
       const checked = pathToCheck.toString();
@@ -9192,10 +7631,6 @@ describe('Server Config (config.ts)', () => {
     expect(fs.renameSync).toHaveBeenCalledWith(
       oldWorktreeSessionPath,
       newWorktreeSessionPath,
-    );
-    expect(fs.renameSync).toHaveBeenCalledWith(
-      oldPrSessionPath,
-      newPrSessionPath,
     );
     expect(config.getTranscriptPath()).toBe(newTranscriptPath);
 
@@ -9255,13 +7690,10 @@ describe('Server Config (config.ts)', () => {
     // sessions apart; the switch must reach it (and the directory-derived
     // name) or `qwen sessions ps` keeps showing the folder that was left.
     await vi.waitFor(() => {
-      expect(patchSessionRecordSpy).toHaveBeenCalledWith(
-        {
-          cwd: newDir,
-          name: sessionRegistry.deriveSessionName(newDir, sessionId),
-        },
-        sessionRegistry.SHARED_RECORD_SLOT,
-      );
+      expect(patchSessionRecordSpy).toHaveBeenCalledWith({
+        cwd: newDir,
+        name: sessionRegistry.deriveSessionName(newDir, sessionId),
+      });
       expect(settled).toContain('patch');
     });
     expect(settled[0]).toBe('relocated');
@@ -9300,13 +7732,10 @@ describe('Server Config (config.ts)', () => {
 
     // The patch rides its own fire-and-forget chain; let it settle.
     await vi.waitFor(() =>
-      expect(patchSessionRecordSpy).toHaveBeenCalledWith(
-        {
-          cwd: newDir,
-          name: sessionRegistry.deriveSessionName(newDir, sessionId),
-        },
-        sessionRegistry.SHARED_RECORD_SLOT,
-      ),
+      expect(patchSessionRecordSpy).toHaveBeenCalledWith({
+        cwd: newDir,
+        name: sessionRegistry.deriveSessionName(newDir, sessionId),
+      }),
     );
     expect(writeRuntimeStatusSpy).not.toHaveBeenCalled();
 
@@ -9380,13 +7809,10 @@ describe('Server Config (config.ts)', () => {
     const newSessionId = config.startNewSession('replacement-session');
 
     await vi.waitFor(() =>
-      expect(patchSessionRecordSpy).toHaveBeenCalledWith(
-        {
-          sessionId: newSessionId,
-          cwd: config.getTargetDir(),
-        },
-        sessionRegistry.SHARED_RECORD_SLOT,
-      ),
+      expect(patchSessionRecordSpy).toHaveBeenCalledWith({
+        sessionId: newSessionId,
+        cwd: config.getTargetDir(),
+      }),
     );
 
     writeRuntimeStatusSpy.mockRestore();
@@ -9398,8 +7824,7 @@ describe('Server Config (config.ts)', () => {
     let finishRegistration!: (registered: boolean) => void;
     const registration = new Promise<sessionRegistry.SessionRegistration>(
       (resolve) => {
-        finishRegistration = (registered) =>
-          resolve({ registered, slot: sessionRegistry.SHARED_RECORD_SLOT });
+        finishRegistration = (registered) => resolve({ registered });
       },
     );
     let finishPatch!: () => void;
@@ -9424,13 +7849,10 @@ describe('Server Config (config.ts)', () => {
 
     finishRegistration(true);
     await vi.waitFor(() => {
-      expect(patchSessionRecordSpy).toHaveBeenCalledWith(
-        {
-          sessionId: newSessionId,
-          cwd: config.getTargetDir(),
-        },
-        sessionRegistry.SHARED_RECORD_SLOT,
-      );
+      expect(patchSessionRecordSpy).toHaveBeenCalledWith({
+        sessionId: newSessionId,
+        cwd: config.getTargetDir(),
+      });
     });
     expect(unregisterSessionSpy).not.toHaveBeenCalled();
 
@@ -9504,13 +7926,10 @@ describe('Server Config (config.ts)', () => {
     await config.relocateWorkingDirectory(newDir);
 
     await vi.waitFor(() =>
-      expect(patchSessionRecordSpy).toHaveBeenCalledWith(
-        {
-          cwd: newDir,
-          name: sessionRegistry.deriveSessionName(newDir, sessionId),
-        },
-        sessionRegistry.SHARED_RECORD_SLOT,
-      ),
+      expect(patchSessionRecordSpy).toHaveBeenCalledWith({
+        cwd: newDir,
+        name: sessionRegistry.deriveSessionName(newDir, sessionId),
+      }),
     );
 
     writeRuntimeStatusSpy.mockRestore();
@@ -9935,16 +8354,6 @@ describe('Server Config (config.ts)', () => {
       },
       signal,
     );
-  });
-
-  it('Config constructor should call setMemoryFilename with contextFileName if provided', () => {
-    const contextFileName = 'CUSTOM_AGENTS.md';
-    const paramsWithContextFile: ConfigParameters = {
-      ...baseParams,
-      contextFileName,
-    };
-    new Config(paramsWithContextFile);
-    expect(mockSetMemoryFilename).toHaveBeenCalledWith(contextFileName);
   });
 
   it('Config constructor should not call setMemoryFilename if contextFileName is not provided', () => {
@@ -11376,114 +9785,6 @@ describe('setApprovalMode with folder trust', () => {
     );
   });
 
-  describe('DAC plan workflow', () => {
-    it('notifies after a Plan execution mode is selected or changed', () => {
-      const config = new Config(baseParams);
-      vi.spyOn(config, 'isTrustedFolder').mockReturnValue(true);
-      config.setApprovalMode(ApprovalMode.YOLO);
-      const states: Array<{
-        mode: ApprovalMode;
-        prePlanMode: ApprovalMode;
-        executionMode: ApprovalMode | undefined;
-      }> = [];
-      config.onApprovalModeChange((mode, prePlanMode) => {
-        states.push({
-          mode,
-          prePlanMode: prePlanMode ?? ApprovalMode.DEFAULT,
-          executionMode: config.getPlanExecutionMode(),
-        });
-      });
-
-      config.setPlanMode(true, ApprovalMode.YOLO);
-      config.setPlanMode(true, ApprovalMode.AUTO_EDIT);
-      config.setPlanMode(true, ApprovalMode.AUTO_EDIT);
-
-      expect(states).toEqual([
-        {
-          mode: ApprovalMode.PLAN,
-          prePlanMode: ApprovalMode.YOLO,
-          executionMode: ApprovalMode.YOLO,
-        },
-        {
-          mode: ApprovalMode.PLAN,
-          prePlanMode: ApprovalMode.YOLO,
-          executionMode: ApprovalMode.AUTO_EDIT,
-        },
-      ]);
-    });
-
-    it.each([
-      ApprovalMode.DEFAULT,
-      ApprovalMode.AUTO_EDIT,
-      ApprovalMode.AUTO,
-      ApprovalMode.YOLO,
-    ])('keeps planning while selecting %s for execution', (mode) => {
-      const config = new Config(baseParams);
-      vi.spyOn(config, 'isTrustedFolder').mockReturnValue(true);
-      config.setApprovalMode(ApprovalMode.YOLO);
-      config.setPlanMode(true, ApprovalMode.YOLO);
-      const revision = config.getApprovalModeRevision();
-
-      config.setPlanMode(true, mode);
-
-      expect(config.getApprovalMode()).toBe(ApprovalMode.PLAN);
-      expect(config.getPlanExecutionMode()).toBe(mode);
-      expect(config.getPrePlanMode()).toBe(ApprovalMode.YOLO);
-      expect(config.getApprovalModeRevision()).toBe(revision);
-      expect(config.consumePendingManualPlanExitNotice()).toBe(false);
-      config.setPlanMode(false, mode);
-      expect(config.getApprovalMode()).toBe(mode);
-      expect(config.getPlanExecutionMode()).toBeUndefined();
-      expect(config.consumePendingManualPlanExitNotice()).toBe(true);
-    });
-
-    it('clears the selected policy on approved or legacy exits', () => {
-      const config = new Config(baseParams);
-      vi.spyOn(config, 'isTrustedFolder').mockReturnValue(true);
-      config.setPlanMode(true, ApprovalMode.YOLO);
-      config.setApprovalMode(ApprovalMode.YOLO, {
-        fromApprovedPlanExit: true,
-      });
-      expect(config.getPlanExecutionMode()).toBeUndefined();
-      config.setPlanMode(true, ApprovalMode.AUTO_EDIT);
-      config.setApprovalMode(ApprovalMode.DEFAULT);
-      expect(config.getPlanExecutionMode()).toBeUndefined();
-    });
-
-    it('rejects privileged policies before changing an untrusted config', () => {
-      const config = new Config(baseParams);
-      config.setApprovalMode(ApprovalMode.DEFAULT);
-      vi.spyOn(config, 'isTrustedFolder').mockReturnValue(false);
-      expect(() => config.setPlanMode(true, ApprovalMode.YOLO)).toThrow(
-        TrustGateError,
-      );
-      expect(config.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
-      expect(config.getPlanExecutionMode()).toBeUndefined();
-      config.setPlanMode(true, ApprovalMode.DEFAULT);
-      expect(() => config.setPlanMode(true, ApprovalMode.AUTO_EDIT)).toThrow(
-        TrustGateError,
-      );
-      expect(config.getApprovalMode()).toBe(ApprovalMode.PLAN);
-      expect(config.getPlanExecutionMode()).toBe(ApprovalMode.DEFAULT);
-    });
-
-    it('rejects Plan as an execution policy and isolates derived configs', () => {
-      const config = new Config(baseParams);
-      vi.spyOn(config, 'isTrustedFolder').mockReturnValue(true);
-      expect(() => config.setPlanMode(true, ApprovalMode.PLAN)).toThrow(
-        'Plan is not an execution approval mode',
-      );
-      config.setPlanMode(true, ApprovalMode.YOLO);
-      const child = deriveConfig(config);
-      expect(child.getPlanExecutionMode()).toBeUndefined();
-      expect(() => child.setPlanMode(false, ApprovalMode.DEFAULT)).toThrow(
-        'Derived Configs cannot change plan workflow mode',
-      );
-      expect(config.getApprovalMode()).toBe(ApprovalMode.PLAN);
-      expect(config.getPlanExecutionMode()).toBe(ApprovalMode.YOLO);
-    });
-  });
-
   describe('prePlanMode tracking', () => {
     it('notifies canonical listeners after approval state changes', () => {
       const config = new Config(baseParams);
@@ -11578,9 +9879,11 @@ describe('setApprovalMode with folder trust', () => {
       config.setApprovalMode(ApprovalMode.PLAN);
       config.setApprovalMode(ApprovalMode.DEFAULT);
 
-      expect(config.consumePendingManualPlanExitNotice()).toBe(true);
+      expect(config.takePendingManualPlanExitNotice() !== undefined).toBe(true);
       // One-shot: consumed on first read.
-      expect(config.consumePendingManualPlanExitNotice()).toBe(false);
+      expect(config.takePendingManualPlanExitNotice() !== undefined).toBe(
+        false,
+      );
     });
 
     it('does not queue the exit notice for an approved plan exit', () => {
@@ -11592,7 +9895,9 @@ describe('setApprovalMode with folder trust', () => {
         fromApprovedPlanExit: true,
       });
 
-      expect(config.consumePendingManualPlanExitNotice()).toBe(false);
+      expect(config.takePendingManualPlanExitNotice() !== undefined).toBe(
+        false,
+      );
     });
 
     it('clears a stale exit notice when plan mode is re-entered', () => {
@@ -11603,7 +9908,9 @@ describe('setApprovalMode with folder trust', () => {
       config.setApprovalMode(ApprovalMode.DEFAULT);
       config.setApprovalMode(ApprovalMode.PLAN);
 
-      expect(config.consumePendingManualPlanExitNotice()).toBe(false);
+      expect(config.takePendingManualPlanExitNotice() !== undefined).toBe(
+        false,
+      );
     });
 
     it('does not queue the exit notice for non-plan mode changes', () => {
@@ -11613,7 +9920,9 @@ describe('setApprovalMode with folder trust', () => {
       config.setApprovalMode(ApprovalMode.AUTO_EDIT);
       config.setApprovalMode(ApprovalMode.DEFAULT);
 
-      expect(config.consumePendingManualPlanExitNotice()).toBe(false);
+      expect(config.takePendingManualPlanExitNotice() !== undefined).toBe(
+        false,
+      );
     });
 
     it('claims the latest non-plan mode and supports a matching restore', () => {
@@ -11886,14 +10195,6 @@ describe('setApprovalMode with folder trust', () => {
       expect(autoIdx).toBeGreaterThan(autoEditIdx);
       expect(autoIdx).toBeLessThan(yoloIdx);
     });
-
-    it('APPROVAL_MODE_INFO has an entry for AUTO', () => {
-      expect(APPROVAL_MODE_INFO[ApprovalMode.AUTO]).toEqual({
-        id: ApprovalMode.AUTO,
-        name: 'Auto',
-        description: expect.stringContaining('classifier'),
-      });
-    });
   });
 
   describe('getAutoModeSettings', () => {
@@ -11966,37 +10267,6 @@ describe('setApprovalMode with folder trust', () => {
       );
     });
 
-    it('should load plan from disk', () => {
-      const config = new Config(baseParams);
-      (fs.readFileSync as Mock).mockReturnValue('# Saved Plan');
-
-      const plan = config.loadPlan();
-      expect(plan).toBe('# Saved Plan');
-    });
-
-    it('should return undefined when no plan file exists', () => {
-      const config = new Config(baseParams);
-      const enoentError = new Error('ENOENT') as NodeJS.ErrnoException;
-      enoentError.code = 'ENOENT';
-      (fs.readFileSync as Mock).mockImplementation(() => {
-        throw enoentError;
-      });
-
-      const plan = config.loadPlan();
-      expect(plan).toBeUndefined();
-    });
-
-    it('should rethrow non-ENOENT errors from loadPlan', () => {
-      const config = new Config(baseParams);
-      const permError = new Error('EACCES') as NodeJS.ErrnoException;
-      permError.code = 'EACCES';
-      (fs.readFileSync as Mock).mockImplementation(() => {
-        throw permError;
-      });
-
-      expect(() => config.loadPlan()).toThrow('EACCES');
-    });
-
     it('should use session ID in plan file path', () => {
       const config = new Config({
         ...baseParams,
@@ -12043,7 +10313,7 @@ describe('setApprovalMode with folder trust', () => {
       );
     });
 
-    it('should save and load plan from configured plansDirectory', () => {
+    it('should save a plan to the configured plansDirectory', () => {
       const config = new Config({
         ...baseParams,
         sessionId: 'test-session-123',
@@ -12084,8 +10354,7 @@ describe('setApprovalMode with folder trust', () => {
         'utf-8',
       );
       expect(fs.renameSync).toHaveBeenCalledWith(tmpPath, filePath);
-      expect(config.loadPlan()).toBe('# My Plan');
-      expect(fs.readFileSync).toHaveBeenCalledWith(filePath, 'utf-8');
+      expect(storedFiles.get(filePath)).toBe('# My Plan');
     });
 
     it('saves a plan on a derived agent config whose cwd differs from the project root', () => {
@@ -12137,7 +10406,7 @@ describe('setApprovalMode with folder trust', () => {
         'utf-8',
       );
       expect(fs.renameSync).toHaveBeenCalledWith(tmpPath, filePath);
-      expect(agentConfig.loadPlan()).toBe('# My Plan');
+      expect(storedFiles.get(filePath)).toBe('# My Plan');
       expect(config.getTargetDir()).toBe(targetDir);
     });
 
@@ -12194,44 +10463,6 @@ describe('setApprovalMode with folder trust', () => {
           'plansDirectory must resolve within the project root',
         );
         expect(fs.unlinkSync).toHaveBeenCalledWith(filePath);
-      } finally {
-        vi.mocked(fs.realpathSync).mockImplementation((pathToResolve) =>
-          pathToResolve.toString(),
-        );
-      }
-    });
-
-    it('should reject loading a plan when final file path escapes targetDir', () => {
-      const config = new Config({
-        ...baseParams,
-        sessionId: 'test-session-123',
-        plansDirectory: './project-plans',
-      });
-      const targetDir = path.resolve(baseParams.targetDir);
-      const plansDir = path.join(targetDir, 'project-plans');
-      const filePath = path.join(plansDir, 'test-session-123.md');
-      const outsideFilePath = path.resolve(
-        path.dirname(targetDir),
-        'outside-plans',
-        'test-session-123.md',
-      );
-      vi.mocked(fs.readFileSync).mockClear();
-      vi.mocked(fs.realpathSync).mockImplementation((pathToResolve) => {
-        const resolvedPath = pathToResolve.toString();
-        if (resolvedPath === targetDir || resolvedPath === plansDir) {
-          return resolvedPath;
-        }
-        if (resolvedPath === filePath) {
-          return outsideFilePath;
-        }
-        return resolvedPath;
-      });
-
-      try {
-        expect(() => config.loadPlan()).toThrow(
-          'plansDirectory must resolve within the project root',
-        );
-        expect(fs.readFileSync).not.toHaveBeenCalled();
       } finally {
         vi.mocked(fs.realpathSync).mockImplementation((pathToResolve) =>
           pathToResolve.toString(),
@@ -12366,11 +10597,7 @@ describe('setApprovalMode with folder trust', () => {
         expect(() => config.savePlan('# My Plan')).toThrow(
           'plansDirectory must resolve within the project root',
         );
-        expect(() => config.loadPlan()).toThrow(
-          'plansDirectory must resolve within the project root',
-        );
         expect(fs.mkdirSync).not.toHaveBeenCalled();
-        expect(fs.readFileSync).not.toHaveBeenCalled();
       } finally {
         vi.mocked(fs.realpathSync).mockImplementation((pathToResolve) =>
           pathToResolve.toString(),
@@ -12527,46 +10754,6 @@ describe('disabledTools runtime sync (#4282 fold-in 5 P2-2 / #4297 fold-in 5)', 
     const config = new Config(baseParams);
     expect(config.getDisabledTools()).toEqual(new Set());
   });
-
-  it('setDisabledTools replaces the live snapshot for runtime sync', () => {
-    // The daemon's `acpAgent` MCP-restart handler calls
-    // `setDisabledTools(new Set(disabledList))` after re-reading
-    // workspace settings, so a `tools.disabled` toggle applied
-    // since this Config was constructed takes effect on the next
-    // `ToolRegistry.registerTool` call. Pin that contract so a
-    // future regression that drops the setter (or re-freezes the
-    // field) fails this test instead of silently re-enabling
-    // tools the user just disabled.
-    const config = new Config({
-      ...baseParams,
-      disabledTools: ['A', 'B'],
-    });
-    expect(config.getDisabledTools()).toEqual(new Set(['A', 'B']));
-    config.setDisabledTools(new Set(['B', 'C']));
-    expect(config.getDisabledTools()).toEqual(new Set(['B', 'C']));
-  });
-
-  it('setDisabledTools copies the input — caller mutations do not leak', () => {
-    // The setter constructs a fresh `new Set(disabled)` from the
-    // input, so a caller that holds a reference to the input set
-    // and later mutates it cannot retroactively change the live
-    // Config snapshot. Locks this defensive-copy contract.
-    const config = new Config(baseParams);
-    const liveInput = new Set(['X']);
-    config.setDisabledTools(liveInput);
-    liveInput.add('Y');
-    expect(config.getDisabledTools()).toEqual(new Set(['X']));
-    expect(config.getDisabledTools().has('Y')).toBe(false);
-  });
-
-  it('setDisabledTools accepts an empty set (clears the live snapshot)', () => {
-    const config = new Config({
-      ...baseParams,
-      disabledTools: ['A', 'B'],
-    });
-    config.setDisabledTools(new Set());
-    expect(config.getDisabledTools()).toEqual(new Set());
-  });
 });
 
 describe('visibleTools', () => {
@@ -12625,7 +10812,6 @@ describe('BaseLlmClient Lifecycle', () => {
   const TARGET_DIR = '/path/to/target';
   const DEBUG_MODE = false;
   const QUESTION = 'test question';
-  const USER_MEMORY = 'Test User Memory';
   const TELEMETRY_SETTINGS = { enabled: false };
   const baseParams: ConfigParameters = {
     cwd: '/tmp',
@@ -12633,7 +10819,6 @@ describe('BaseLlmClient Lifecycle', () => {
     targetDir: TARGET_DIR,
     debugMode: DEBUG_MODE,
     question: QUESTION,
-    userMemory: USER_MEMORY,
     telemetry: TELEMETRY_SETTINGS,
     model: MODEL,
     chatRecording: false,
@@ -12771,17 +10956,6 @@ describe('Model Switching and Config Updates', () => {
     // vision-bridge gate reflects the new model (it reads getEffectiveInputModalities()).
     expect(updatedConfig['modalities']).toEqual({ image: true });
     expect(config.getEffectiveInputModalities()).toEqual({ image: true });
-
-    // Verify sources are also updated
-    const sources = config.getContentGeneratorConfigSources();
-    expect(sources['model']?.kind).toBe('programmatic');
-    expect(sources['model']?.detail).toBe('user');
-    expect(sources['contextWindowSize']?.kind).toBe('computed');
-    expect(sources['contextWindowSize']?.detail).toBe('auto');
-    expect(sources['samplingParams']?.kind).toBe('settings');
-    expect(sources['enableCacheControl']?.kind).toBe('settings');
-    expect(sources['toolResultContentFormat']?.kind).toBe('settings');
-    expect(sources['modalities']?.kind).toBe('computed');
   });
 
   it('should run a full refresh when switching models', async () => {
@@ -13012,90 +11186,6 @@ describe('Model Switching and Config Updates', () => {
           expect(config.getModel()).toBe(baseParams.model);
         },
       );
-    });
-  });
-
-  describe('Config runtime MCP overlay', () => {
-    it('addRuntimeMcpServer does not mutate this.mcpServers', () => {
-      const config = new Config({
-        ...baseParams,
-        mcpServers: {
-          'settings-server': new MCPServerConfig('cmd-a'),
-        },
-      });
-      // Simulate post-init state
-      (config as unknown as { initialized: boolean }).initialized = true;
-      config.addRuntimeMcpServer(
-        'runtime-server',
-        new MCPServerConfig('cmd-b'),
-      );
-      const settingsLayer = (
-        config as unknown as {
-          mcpServers: Record<string, MCPServerConfig>;
-        }
-      ).mcpServers;
-      expect(Object.keys(settingsLayer)).toEqual(['settings-server']);
-      expect(settingsLayer['runtime-server']).toBeUndefined();
-    });
-
-    it('removeRuntimeMcpServer returns false when name not present', () => {
-      const config = new Config(baseParams);
-      expect(config.removeRuntimeMcpServer('does-not-exist')).toBe(false);
-    });
-
-    it('removeRuntimeMcpServer returns true and drops the entry', () => {
-      const config = new Config(baseParams);
-      (config as unknown as { initialized: boolean }).initialized = true;
-      config.addRuntimeMcpServer('x', new MCPServerConfig('cmd'));
-      expect(config.removeRuntimeMcpServer('x')).toBe(true);
-      expect(config.removeRuntimeMcpServer('x')).toBe(false);
-    });
-  });
-
-  describe('getMcpServers cascade with runtime overlay', () => {
-    it('runtime layer overlays settings layer (last write wins)', () => {
-      const config = new Config({
-        ...baseParams,
-        mcpServers: {
-          shared: new MCPServerConfig('settings-cmd'),
-        },
-      });
-      (config as unknown as { initialized: boolean }).initialized = true;
-      config.addRuntimeMcpServer('shared', new MCPServerConfig('runtime-cmd'));
-      const merged = config.getMcpServers();
-      expect(merged!['shared'].command).toBe('runtime-cmd');
-    });
-
-    it('runtime-only entries appear in cascade', () => {
-      const config = new Config({ ...baseParams, mcpServers: {} });
-      (config as unknown as { initialized: boolean }).initialized = true;
-      config.addRuntimeMcpServer('only-runtime', new MCPServerConfig('cmd'));
-      const merged = config.getMcpServers();
-      expect(merged!['only-runtime']).toBeDefined();
-    });
-
-    it('removing runtime entry restores settings entry', () => {
-      const config = new Config({
-        ...baseParams,
-        mcpServers: {
-          shared: new MCPServerConfig('settings-cmd'),
-        },
-      });
-      (config as unknown as { initialized: boolean }).initialized = true;
-      config.addRuntimeMcpServer('shared', new MCPServerConfig('runtime-cmd'));
-      expect(config.getMcpServers()!['shared'].command).toBe('runtime-cmd');
-      config.removeRuntimeMcpServer('shared');
-      expect(config.getMcpServers()!['shared'].command).toBe('settings-cmd');
-    });
-
-    it('isMcpServerDisabled still flags runtime entries when excluded', () => {
-      const config = new Config({ ...baseParams });
-      (config as unknown as { initialized: boolean }).initialized = true;
-      config.addRuntimeMcpServer('blocked', new MCPServerConfig('cmd'));
-      config.setExcludedMcpServers(['blocked']);
-      // The entry appears in getMcpServers (UI layer filters via isMcpServerDisabled)
-      expect(config.getMcpServers()!['blocked']).toBeDefined();
-      expect(config.isMcpServerDisabled('blocked')).toBe(true);
     });
   });
 

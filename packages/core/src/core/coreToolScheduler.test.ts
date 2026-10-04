@@ -16,7 +16,6 @@ import type {
   ToolCallRequestInfo,
   ToolConfirmationPayload,
   ToolInvocation,
-  ToolInvocationGuard,
   ToolExecutionStatus,
   ToolResult,
   ToolResultDisplay,
@@ -94,11 +93,6 @@ import {
   DEFERRED_TOOL_CALL_CANCELLATION_PREFIX,
   DEFERRED_TOOL_CALL_REFUSAL_PREFIX,
 } from '../tools/tool-call.js';
-import {
-  getInvocationContext,
-  runWithInvocationContext,
-  type InvocationContextV1,
-} from '../utils/invocation-context.js';
 import { getPlanModeSystemReminder } from './prompts.js';
 import { PLAN_MODE_ENTRY_SIBLING_SKIP_MESSAGE } from './plan-mode-entry-policy.js';
 import {
@@ -379,7 +373,6 @@ vi.mock('../telemetry/session-tracing.js', () => ({
   ),
   startInteractionSpan: vi.fn(),
   endInteractionSpan: vi.fn(),
-  startLLMRequestSpan: vi.fn(),
   endLLMRequestSpan: vi.fn(),
   clearSessionTracingForTesting: vi.fn(),
   // truncateSpanError is exported from session-tracing and used in
@@ -393,21 +386,6 @@ vi.mock('fs/promises', () => ({
   writeFile: vi.fn(),
   mkdir: vi.fn(),
 }));
-
-const evaluateGuardSpy = vi.hoisted(() => vi.fn());
-vi.mock('./tool-invocation-guard.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('./tool-invocation-guard.js')>();
-  return {
-    ...actual,
-    evaluateToolInvocationGuard: (
-      ...args: Parameters<typeof actual.evaluateToolInvocationGuard>
-    ) => {
-      evaluateGuardSpy(...args);
-      return actual.evaluateToolInvocationGuard(...args);
-    },
-  };
-});
 
 class TestApprovalTool extends BaseDeclarativeTool<{ id: string }, ToolResult> {
   static readonly Name = 'testApprovalTool';
@@ -729,7 +707,6 @@ describe('CoreToolScheduler', () => {
       getChatRecordingService: () => undefined,
       getLlmClient: () => ({ recordTrustedUserAnswers }),
       isInteractive: () => true,
-      getExperimentalZedIntegration: () => false,
       getInputFormat: () => InputFormat.TEXT,
     } as unknown as Config;
     const params = {
@@ -1120,7 +1097,6 @@ describe('CoreToolScheduler', () => {
         }),
         isInteractive: () => true,
         getInputFormat: () => undefined,
-        getExperimentalZedIntegration: () => false,
         getActiveTodoWorkChainOwner: options.getActiveTodoWorkChainOwner,
         // Threaded into resolveDeferredToolCall so the bridge's exclusion
         // check mirrors prepareTools()'s depth-gated AgentTool re-admission
@@ -1895,18 +1871,7 @@ describe('CoreToolScheduler', () => {
     ).toBe(ToolNames.TOOL_CALL);
   });
 
-  it('restores the invocation context when a delayed confirmation executes', async () => {
-    const invocationContext: InvocationContextV1 = {
-      version: 1,
-      sessionId: 'session-context',
-      promptId: 'prompt-context',
-    };
-    const unrelatedContext: InvocationContextV1 = {
-      ...invocationContext,
-      sessionId: 'unrelated-session',
-      promptId: 'unrelated-prompt',
-    };
-    let observedContext: InvocationContextV1 | undefined;
+  it('restores the request prompt and work chain when a delayed confirmation executes', async () => {
     let observedPromptId: string | undefined;
     let observedTodoWorkChainId: string | undefined;
     const tool = new MockTool({
@@ -1919,7 +1884,6 @@ describe('CoreToolScheduler', () => {
         onConfirm: vi.fn().mockResolvedValue(undefined),
       }),
       execute: async () => {
-        observedContext = getInvocationContext();
         observedPromptId = promptIdContext.getStore();
         observedTodoWorkChainId = todoWorkChainContext.getStore();
         return { llmContent: 'ok', returnDisplay: 'ok' };
@@ -1931,19 +1895,17 @@ describe('CoreToolScheduler', () => {
       getActiveTodoWorkChainOwner: () => 'mapped-work-chain',
     });
 
-    await runWithInvocationContext(invocationContext, () =>
-      scheduler.schedule(
-        [
-          {
-            callId: 'approval-context-call',
-            name: tool.name,
-            args: {},
-            isClientInitiated: false,
-            prompt_id: invocationContext.promptId,
-          },
-        ],
-        new AbortController().signal,
-      ),
+    await scheduler.schedule(
+      [
+        {
+          callId: 'approval-context-call',
+          name: tool.name,
+          args: {},
+          isClientInitiated: false,
+          prompt_id: 'prompt-context',
+        },
+      ],
+      new AbortController().signal,
     );
     const waiting = (await waitForStatus(
       onToolCallsUpdate,
@@ -1951,15 +1913,14 @@ describe('CoreToolScheduler', () => {
     )) as WaitingToolCall;
 
     await todoWorkChainContext.run('stale-work-chain', () =>
-      runWithInvocationContext(unrelatedContext, () =>
+      promptIdContext.run('unrelated-prompt', () =>
         waiting.confirmationDetails.onConfirm(
           ToolConfirmationOutcome.ProceedOnce,
         ),
       ),
     );
 
-    expect(observedContext).toEqual(invocationContext);
-    expect(observedPromptId).toBe(invocationContext.promptId);
+    expect(observedPromptId).toBe('prompt-context');
     expect(observedTodoWorkChainId).toBe('mapped-work-chain');
   });
 
@@ -9119,7 +9080,6 @@ describe('CoreToolScheduler with payload', () => {
       getUseModelRouter: () => false,
       getLlmClient: () => null, // No client needed for these tests
       isInteractive: () => true, // Required to prevent auto-denial of tool calls
-      getExperimentalZedIntegration: () => false,
       getChatRecordingService: () => undefined,
       getMessageBus: vi.fn().mockReturnValue(undefined),
       getDisableAllHooks: vi.fn().mockReturnValue(true),
@@ -9544,7 +9504,6 @@ describe('CoreToolScheduler edit cancellation', () => {
       getUseModelRouter: () => false,
       getLlmClient: () => null, // No client needed for these tests
       isInteractive: () => true, // Required to prevent auto-denial of tool calls
-      getExperimentalZedIntegration: () => false,
       getChatRecordingService: () => undefined,
       getMessageBus: vi.fn().mockReturnValue(undefined),
       getDisableAllHooks: vi.fn().mockReturnValue(true),
@@ -9651,7 +9610,6 @@ describe('CoreToolScheduler YOLO mode', () => {
       getUseModelRouter: () => false,
       getLlmClient: () => null,
       isInteractive: () => isInteractive,
-      getExperimentalZedIntegration: () => false,
       getChatRecordingService: () => undefined,
       getMessageBus: vi.fn().mockReturnValue(undefined),
       getDisableAllHooks: vi.fn().mockReturnValue(true),
@@ -10523,7 +10481,6 @@ describe('CoreToolScheduler request queueing', () => {
       getUseModelRouter: () => false,
       getLlmClient: () => null, // No client needed for these tests
       isInteractive: () => true, // Required to prevent auto-denial of tool calls
-      getExperimentalZedIntegration: () => false,
       getChatRecordingService: () => undefined,
       getMessageBus: vi.fn().mockReturnValue(undefined),
       getDisableAllHooks: vi.fn().mockReturnValue(true),
@@ -10537,7 +10494,6 @@ describe('CoreToolScheduler request queueing', () => {
       getFunctionDeclarationsFiltered: () => [],
       registerTool: () => {},
       discoverAllTools: async () => {},
-      discoverMcpTools: async () => {},
       discoverToolsForServer: async () => {},
       removeMcpToolsByServer: () => {},
       getAllTools: () => [],
@@ -11709,7 +11665,6 @@ describe('CoreToolScheduler plan mode with ask_user_question', () => {
       getUseModelRouter: () => false,
       getLlmClient: () => null,
       isInteractive: () => true,
-      getExperimentalZedIntegration: () => false,
       getChatRecordingService: () => undefined,
       getMessageBus: vi.fn().mockReturnValue(undefined),
       getDisableAllHooks: vi.fn().mockReturnValue(true),
@@ -12497,7 +12452,6 @@ describe('CoreToolScheduler Plan shell routing', () => {
     disableHooks?: boolean;
     avoidPermissionPrompts?: boolean;
     targetDir?: () => string;
-    toolInvocationGuard?: ToolInvocationGuard;
   }) {
     const tools = new Map(options.tools.map((tool) => [tool.name, tool]));
     const registry = {
@@ -12543,7 +12497,6 @@ describe('CoreToolScheduler Plan shell routing', () => {
       getUseModelRouter: () => false,
       getLlmClient: () => null,
       isInteractive: () => options.interactive ?? true,
-      getExperimentalZedIntegration: () => false,
       getInputFormat: () => InputFormat.TEXT,
       getChatRecordingService: () => undefined,
       getMessageBus: () => options.messageBus,
@@ -12551,7 +12504,6 @@ describe('CoreToolScheduler Plan shell routing', () => {
       getShouldAvoidPermissionPrompts: () =>
         options.avoidPermissionPrompts ?? false,
       getOnPersistPermissionRule: () => undefined,
-      getToolInvocationGuard: () => options.toolInvocationGuard,
     } as unknown as Config;
 
     return {
@@ -12637,136 +12589,6 @@ describe('CoreToolScheduler Plan shell routing', () => {
 
     expect(execute).toHaveBeenCalledOnce();
     expect(getConfirmationDetails).not.toHaveBeenCalled();
-  });
-
-  it('runs the host guard with final params and denies before execution', async () => {
-    const execute = vi.fn();
-    const toolInvocationGuard = vi
-      .fn()
-      .mockResolvedValue({ allowed: false, reason: 'host policy denied' });
-    const { scheduler, onAllToolCallsComplete } = buildPlanShellScheduler({
-      tools: [shellTool({ execute })],
-      toolInvocationGuard,
-      targetDir: () => '/workspace',
-    });
-
-    await scheduler.schedule(
-      [request('guard-denied', 'git status')],
-      new AbortController().signal,
-    );
-    await vi.waitFor(() => expect(onAllToolCallsComplete).toHaveBeenCalled());
-
-    expect(toolInvocationGuard).toHaveBeenCalledWith({
-      callId: 'guard-denied',
-      toolName: ToolNames.SHELL,
-      args: { command: 'git status', directory: '/workspace' },
-      signal: expect.any(AbortSignal),
-      sessionId: 'plan-shell-session',
-      cwd: '/workspace',
-    });
-    expect(execute).not.toHaveBeenCalled();
-    const completed = onAllToolCallsComplete.mock.calls[0][0] as ToolCall[];
-    const deniedCall = completed[0];
-    expect(deniedCall.status).toBe('error');
-    expect(JSON.stringify(deniedCall)).toContain('host policy denied');
-    if (deniedCall.status !== 'error') {
-      throw new Error('Expected the guarded tool call to fail');
-    }
-    expect(deniedCall.response.errorType).toBe(ToolErrorType.EXECUTION_DENIED);
-    expect(deniedCall.response.executionStatus).toBe('not_started');
-  });
-
-  it('executes once when the host guard allows the final invocation', async () => {
-    const execute = vi.fn().mockResolvedValue({
-      llmContent: 'ok',
-      returnDisplay: 'ok',
-    });
-    const toolInvocationGuard = vi.fn().mockResolvedValue({ allowed: true });
-    const { scheduler, onAllToolCallsComplete } = buildPlanShellScheduler({
-      tools: [shellTool({ execute })],
-      toolInvocationGuard,
-      targetDir: () => '/workspace',
-    });
-
-    await scheduler.schedule(
-      [request('guard-allowed', 'git status')],
-      new AbortController().signal,
-    );
-    await vi.waitFor(() => expect(onAllToolCallsComplete).toHaveBeenCalled());
-
-    expect(toolInvocationGuard).toHaveBeenCalledWith({
-      callId: 'guard-allowed',
-      toolName: ToolNames.SHELL,
-      args: { command: 'git status', directory: '/workspace' },
-      signal: expect.any(AbortSignal),
-      sessionId: 'plan-shell-session',
-      cwd: '/workspace',
-    });
-    expect(execute).toHaveBeenCalledOnce();
-    const completed = onAllToolCallsComplete.mock.calls[0][0] as ToolCall[];
-    const allowedCall = completed[0];
-    expect(allowedCall.status).toBe('success');
-    if (allowedCall.status !== 'success') {
-      throw new Error('Expected the guarded tool call to succeed');
-    }
-    expect(allowedCall.response.executionStatus).toBe('success');
-  });
-
-  it('cancels without execution when aborted while awaiting the host guard', async () => {
-    const execute = vi.fn();
-    let resolveGuard!: (decision: { allowed: true }) => void;
-    const toolInvocationGuard = vi.fn(
-      () =>
-        new Promise<{ allowed: true }>((resolve) => {
-          resolveGuard = resolve;
-        }),
-    );
-    const { scheduler, onAllToolCallsComplete } = buildPlanShellScheduler({
-      tools: [shellTool({ execute })],
-      toolInvocationGuard,
-    });
-    const abortController = new AbortController();
-
-    const schedule = scheduler.schedule(
-      [request('guard-aborted', 'git status')],
-      abortController.signal,
-    );
-    await vi.waitFor(() => expect(toolInvocationGuard).toHaveBeenCalledOnce());
-    abortController.abort();
-    resolveGuard({ allowed: true });
-
-    await schedule;
-    await vi.waitFor(() => expect(onAllToolCallsComplete).toHaveBeenCalled());
-    expect(execute).not.toHaveBeenCalled();
-    const completed = onAllToolCallsComplete.mock.calls[0][0] as ToolCall[];
-    const cancelledCall = completed[0];
-    expect(cancelledCall.status).toBe('cancelled');
-    if (cancelledCall.status !== 'cancelled') {
-      throw new Error('Expected the guarded tool call to be cancelled');
-    }
-    expect(cancelledCall.response.executionStatus).toBe('not_started');
-  });
-
-  it('skips guard evaluation entirely when no guard is configured', async () => {
-    evaluateGuardSpy.mockClear();
-    const execute = vi.fn().mockResolvedValue({
-      llmContent: 'ok',
-      returnDisplay: 'ok',
-    });
-    const { scheduler, onAllToolCallsComplete } = buildPlanShellScheduler({
-      tools: [shellTool({ execute })],
-    });
-
-    await scheduler.schedule(
-      [request('no-guard', 'git status')],
-      new AbortController().signal,
-    );
-    await vi.waitFor(() => expect(onAllToolCallsComplete).toHaveBeenCalled());
-
-    expect(evaluateGuardSpy).not.toHaveBeenCalled();
-    expect(execute).toHaveBeenCalledOnce();
-    const completed = onAllToolCallsComplete.mock.calls[0][0] as ToolCall[];
-    expect(completed[0].status).toBe('success');
   });
 
   it('limits PM-confirmed read-only shell calls to exact one-off approval', async () => {
@@ -13312,7 +13134,6 @@ describe('CoreToolScheduler telemetry spans', () => {
     isInteractive?: boolean;
     inputFormat?: InputFormat;
     shouldAvoidPermissionPrompts?: boolean;
-    experimentalZedIntegration?: boolean;
     approvalMode?: ApprovalMode;
     includeSensitiveSpanAttributes?: boolean;
     sensitiveSpanAttributeMaxLength?: number;
@@ -13383,8 +13204,6 @@ describe('CoreToolScheduler telemetry spans', () => {
       // canPromptForAskBounce when a PreToolUse hook returns 'ask'.
       isInteractive: () => options.isInteractive ?? true,
       getInputFormat: () => options.inputFormat ?? InputFormat.TEXT,
-      getExperimentalZedIntegration: () =>
-        options.experimentalZedIntegration ?? false,
       getShouldAvoidPermissionPrompts: () =>
         options.shouldAvoidPermissionPrompts ?? false,
       getTelemetryIncludeSensitiveSpanAttributes: () =>
@@ -15085,7 +14904,6 @@ describe('CoreToolScheduler telemetry spans', () => {
     isInteractive?: boolean;
     inputFormat?: InputFormat;
     shouldAvoidPermissionPrompts?: boolean;
-    experimentalZedIntegration?: boolean;
     args?: Record<string, unknown>;
     abortController?: AbortController;
     tools?: AnyDeclarativeTool[];
@@ -15555,26 +15373,6 @@ describe('CoreToolScheduler telemetry spans', () => {
     expect(getBlockedSpans()).toHaveLength(1);
   });
 
-  it('bounces a non-interactive ask under the Zed integration', async () => {
-    const execute = vi.fn().mockResolvedValue({
-      llmContent: 'ok',
-      returnDisplay: 'ok',
-    });
-    const messageBus = askMessageBus();
-    const { onToolCallsUpdate } = await scheduleWithAsk({
-      messageBus,
-      execute,
-      isInteractive: false,
-      experimentalZedIntegration: true,
-    });
-    const waiting = (await waitForStatus(
-      onToolCallsUpdate,
-      'awaiting_approval',
-    )) as WaitingToolCall;
-    expect(waiting.confirmationDetails.type).toBe('info');
-    expect(getBlockedSpans()).toHaveLength(1);
-  });
-
   it("a sibling's ProceedAlways must not auto-approve a bounced ask", async () => {
     toolSpanRecords.length = 0;
     // Both tools bounce on a PreToolUse 'ask'. Approving toolB with
@@ -16019,7 +15817,6 @@ describe('CoreToolScheduler telemetry spans', () => {
       getUseModelRouter: () => false,
       getLlmClient: () => null,
       isInteractive: () => true,
-      getExperimentalZedIntegration: () => false,
       getChatRecordingService: () => undefined,
       getMessageBus: vi.fn().mockReturnValue(undefined),
       getDisableAllHooks: vi.fn().mockReturnValue(true),
@@ -16501,7 +16298,6 @@ describe('CoreToolScheduler telemetry spans', () => {
       getUseModelRouter: () => false,
       getLlmClient: () => null,
       isInteractive: () => true,
-      getExperimentalZedIntegration: () => false,
       getChatRecordingService: () => undefined,
       getMessageBus: vi.fn().mockReturnValue(undefined),
       getDisableAllHooks: vi.fn().mockReturnValue(true),
@@ -16606,7 +16402,6 @@ describe('CoreToolScheduler telemetry spans', () => {
       getLlmClient: () => null,
       getChatRecordingService: () => undefined,
       isInteractive: () => true,
-      getExperimentalZedIntegration: () => false,
       getMessageBus: vi.fn().mockReturnValue(undefined),
       getDisableAllHooks: vi.fn().mockReturnValue(true),
     } as unknown as Config;
@@ -16846,7 +16641,6 @@ describe('CoreToolScheduler telemetry spans', () => {
       getUseModelRouter: () => false,
       getLlmClient: () => null,
       isInteractive: () => true,
-      getExperimentalZedIntegration: () => false,
       getChatRecordingService: () => undefined,
       getMessageBus: vi.fn().mockReturnValue(undefined),
       getDisableAllHooks: vi.fn().mockReturnValue(true),
@@ -16916,7 +16710,6 @@ describe('CoreToolScheduler telemetry spans', () => {
       getLlmClient: () => null,
       isInteractive: () => false, // forces non-interactive deny path
       getInputFormat: () => undefined,
-      getExperimentalZedIntegration: () => false,
       getChatRecordingService: () => undefined,
       getMessageBus: vi.fn().mockReturnValue(undefined),
       getDisableAllHooks: vi.fn().mockReturnValue(true),
@@ -17008,7 +16801,6 @@ describe('CoreToolScheduler telemetry spans', () => {
       getUseModelRouter: () => false,
       getLlmClient: () => null,
       isInteractive: () => true,
-      getExperimentalZedIntegration: () => false,
       getChatRecordingService: () => undefined,
       getMessageBus: vi.fn().mockReturnValue(messageBus),
       getDisableAllHooks: vi.fn().mockReturnValue(false),
@@ -17079,7 +16871,6 @@ describe('CoreToolScheduler telemetry spans', () => {
       getUseModelRouter: () => false,
       getLlmClient: () => null,
       isInteractive: () => true,
-      getExperimentalZedIntegration: () => false,
       getChatRecordingService: () => undefined,
       getMessageBus: vi.fn().mockReturnValue(undefined),
       getDisableAllHooks: vi.fn().mockReturnValue(true),
@@ -17208,7 +16999,6 @@ describe('CoreToolScheduler telemetry spans', () => {
       getUseModelRouter: () => false,
       getLlmClient: () => null,
       isInteractive: () => true,
-      getExperimentalZedIntegration: () => false,
       getChatRecordingService: () => undefined,
       getMessageBus: vi.fn().mockReturnValue(undefined),
       getDisableAllHooks: vi.fn().mockReturnValue(true),
@@ -17478,7 +17268,6 @@ describe('CoreToolScheduler telemetry spans', () => {
       getUseModelRouter: () => false,
       getLlmClient: () => null,
       isInteractive: () => true,
-      getExperimentalZedIntegration: () => false,
       getChatRecordingService: () => undefined,
       getMessageBus: vi.fn().mockReturnValue(undefined),
       getDisableAllHooks: vi.fn().mockReturnValue(true),
@@ -17712,7 +17501,6 @@ describe('CoreToolScheduler telemetry spans', () => {
       getUseModelRouter: () => false,
       getLlmClient: () => null,
       isInteractive: () => true,
-      getExperimentalZedIntegration: () => false,
       getChatRecordingService: () => undefined,
       getMessageBus: vi.fn().mockReturnValue(undefined),
       getDisableAllHooks: vi.fn().mockReturnValue(true),
@@ -19071,7 +18859,6 @@ describe('CoreToolScheduler validation retry loop detection', () => {
       getUseModelRouter: () => false,
       getLlmClient: () => null,
       isInteractive: () => true,
-      getExperimentalZedIntegration: () => false,
       getChatRecordingService: () => undefined,
       getMessageBus: vi.fn().mockReturnValue(undefined),
       getDisableAllHooks: vi.fn().mockReturnValue(true),
@@ -19413,7 +19200,6 @@ describe('CoreToolScheduler validation retry loop detection', () => {
       getUseModelRouter: () => false,
       getLlmClient: () => null,
       isInteractive: () => true,
-      getExperimentalZedIntegration: () => false,
       getChatRecordingService: () => undefined,
       getMessageBus: vi.fn().mockReturnValue(undefined),
       getDisableAllHooks: vi.fn().mockReturnValue(true),
@@ -21034,7 +20820,6 @@ describe('CoreToolScheduler prompt_id propagation', () => {
         getUseModelRouter: () => false,
         getLlmClient: () => null,
         isInteractive: () => true,
-        getExperimentalZedIntegration: () => false,
         getChatRecordingService: () => undefined,
         getMessageBus: () => messageBus,
         getDisableAllHooks: () => !rebuild,
@@ -21125,7 +20910,6 @@ describe('CoreToolScheduler prompt_id propagation', () => {
       getUseModelRouter: () => false,
       getLlmClient: () => null,
       isInteractive: () => true,
-      getExperimentalZedIntegration: () => false,
       getChatRecordingService: () => undefined,
       getMessageBus: vi.fn().mockReturnValue(undefined),
       getDisableAllHooks: vi.fn().mockReturnValue(true),
@@ -21196,7 +20980,6 @@ describe('CoreToolScheduler prompt_id propagation', () => {
       getUseModelRouter: () => false,
       getLlmClient: () => null,
       isInteractive: () => true,
-      getExperimentalZedIntegration: () => false,
       getChatRecordingService: () => undefined,
       getMessageBus: vi.fn().mockReturnValue(undefined),
       getDisableAllHooks: vi.fn().mockReturnValue(true),
@@ -21268,7 +21051,6 @@ describe('CoreToolScheduler prompt_id propagation', () => {
       getUseModelRouter: () => false,
       getLlmClient: () => null,
       isInteractive: () => true,
-      getExperimentalZedIntegration: () => false,
       getChatRecordingService: () => undefined,
       getMessageBus: vi.fn().mockReturnValue(undefined),
       getDisableAllHooks: vi.fn().mockReturnValue(true),

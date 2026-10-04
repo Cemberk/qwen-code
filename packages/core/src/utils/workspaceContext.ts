@@ -12,8 +12,6 @@ import { createDebugLogger } from './debugLogger.js';
 
 const debugLogger = createDebugLogger('WORKSPACE');
 
-export type Unsubscribe = () => void;
-
 export interface ResolvedWorkspaceDirectories {
   directories: Set<string>;
   initialDirectories: Set<string>;
@@ -27,7 +25,6 @@ export interface ResolvedWorkspaceDirectories {
 export class WorkspaceContext {
   private directories = new Set<string>();
   private initialDirectories: Set<string>;
-  private onDirectoriesChangedListeners = new Set<() => void>();
   /**
    * Memoized realpath results. Every workspace-bounded tool call ultimately
    * routes through {@link fullyResolvedPath} → `fs.realpathSync`; without
@@ -56,30 +53,6 @@ export class WorkspaceContext {
   }
 
   /**
-   * Registers a listener that is called when the workspace directories change.
-   * @param listener The listener to call.
-   * @returns A function to unsubscribe the listener.
-   */
-  onDirectoriesChanged(listener: () => void): Unsubscribe {
-    this.onDirectoriesChangedListeners.add(listener);
-    return () => {
-      this.onDirectoriesChangedListeners.delete(listener);
-    };
-  }
-
-  private notifyDirectoriesChanged() {
-    // Iterate over a copy of the set in case a listener unsubscribes itself or others.
-    for (const listener of [...this.onDirectoriesChangedListeners]) {
-      try {
-        listener();
-      } catch (e) {
-        // Don't let one listener break others.
-        debugLogger.error('Error in WorkspaceContext listener:', e);
-      }
-    }
-  }
-
-  /**
    * Adds a directory to the workspace.
    * @param directory The directory path to add (can be relative or absolute)
    * @param basePath Optional base path for resolving relative paths (defaults to cwd)
@@ -94,7 +67,6 @@ export class WorkspaceContext {
         return;
       }
       this.directories.add(resolved);
-      this.notifyDirectoriesChanged();
     } catch (err) {
       debugLogger.warn(
         `Skipping unreadable directory: ${directory} (${err instanceof Error ? err.message : String(err)})`,
@@ -179,38 +151,7 @@ export class WorkspaceContext {
     }
 
     this.directories.delete(resolved);
-    this.notifyDirectoriesChanged();
     return true;
-  }
-
-  /**
-   * Checks whether a directory is an initial (non-removable) directory.
-   */
-  isInitialDirectory(directory: string): boolean {
-    try {
-      const resolved = WorkspaceContext.resolveAndValidateDir(directory);
-      return this.initialDirectories.has(resolved);
-    } catch {
-      const absolutePath = path.isAbsolute(directory)
-        ? directory
-        : path.resolve(process.cwd(), directory);
-      return this.initialDirectories.has(absolutePath);
-    }
-  }
-
-  setDirectories(directories: readonly string[]): void {
-    const newDirectories = new Set<string>();
-    for (const dir of directories) {
-      newDirectories.add(WorkspaceContext.resolveAndValidateDir(dir));
-    }
-
-    if (
-      newDirectories.size !== this.directories.size ||
-      ![...newDirectories].every((d) => this.directories.has(d))
-    ) {
-      this.directories = newDirectories;
-      this.notifyDirectoriesChanged();
-    }
   }
 
   applyRootDirectories(resolved: ResolvedWorkspaceDirectories): void {
@@ -221,20 +162,9 @@ export class WorkspaceContext {
         newDirectories.add(existing);
       }
     }
-    const directoriesChanged =
-      newDirectories.size !== this.directories.size ||
-      ![...newDirectories].every((d) => this.directories.has(d));
-    const initialDirectoriesChanged =
-      newInitialDirectories.size !== this.initialDirectories.size ||
-      ![...newInitialDirectories].every((d) => this.initialDirectories.has(d));
-
     this.directories = newDirectories;
     this.initialDirectories = newInitialDirectories;
     this.resolvedPathCache.clear();
-
-    if (directoriesChanged || initialDirectoriesChanged) {
-      this.notifyDirectoriesChanged();
-    }
   }
 
   /**

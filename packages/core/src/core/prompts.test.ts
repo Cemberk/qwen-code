@@ -979,8 +979,8 @@ describe('main-session style: reminder decision matches prompt section', () => {
     getModel: () => 'test-model',
     getOutputStyle: () => opts.style,
     getCodeModeOnly: () => opts.codeModeOnly ?? false,
-    getExperimentalZedIntegration: () => opts.acp,
-    getInputFormat: () => InputFormat.TEXT,
+    getInputFormat: () =>
+      opts.acp ? InputFormat.STREAM_JSON : InputFormat.TEXT,
     isInteractive: () => opts.interactive,
     isTodoWriteEnabled: () => false,
   });
@@ -1175,7 +1175,6 @@ describe('main-session style: project trust gate', () => {
     getModel: () => 'test-model',
     getCodeModeOnly: () => false,
     getOutputStyle: () => style,
-    getExperimentalZedIntegration: () => false,
     getInputFormat: () => InputFormat.TEXT,
     isInteractive: () => true,
     isTodoWriteEnabled: () => false,
@@ -1742,7 +1741,6 @@ describe('resident tool gating (#12032)', () => {
       getModel: () => 'gpt-4',
       getOutputStyle: () => undefined,
       getCodeModeOnly: () => false,
-      getExperimentalZedIntegration: () => false,
       getInputFormat: () => InputFormat.TEXT,
       isInteractive: () => true,
       isTodoWriteEnabled: () => false,
@@ -2191,17 +2189,11 @@ describe('getCompressionPrompt', () => {
 
 describe('resolveInteractionMode', () => {
   const makeConfig = (opts: {
-    zed?: boolean;
     inputFormat?: string;
     interactive?: boolean;
   }) => ({
-    getExperimentalZedIntegration: () => opts.zed ?? false,
     getInputFormat: () => opts.inputFormat ?? InputFormat.TEXT,
     isInteractive: () => opts.interactive ?? false,
-  });
-
-  it("resolves the Zed integration to 'acp'", () => {
-    expect(resolveInteractionMode(makeConfig({ zed: true }))).toBe('acp');
   });
 
   it("resolves a stream-json session to 'acp' so the model may still ask questions", () => {
@@ -2243,13 +2235,11 @@ describe('resolveInteractionMode', () => {
     // throw and must not resolve to 'acp'.
     expect(
       resolveInteractionMode({
-        getExperimentalZedIntegration: () => false,
         isInteractive: () => true,
       }),
     ).toBe('interactive');
     expect(
       resolveInteractionMode({
-        getExperimentalZedIntegration: () => false,
         isInteractive: () => false,
       }),
     ).toBe('headless');

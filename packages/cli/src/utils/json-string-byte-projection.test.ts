@@ -7,7 +7,7 @@
 import { Buffer } from 'node:buffer';
 import { describe, expect, it } from 'vitest';
 import {
-  jsonStringJsonByteLength,
+  jsonStringPayloadByteLength,
   projectJsonStringToByteBudget,
 } from './json-string-byte-projection.js';
 
@@ -34,7 +34,7 @@ describe('JSON string byte projection', () => {
     ];
 
     for (const sample of samples) {
-      expect(jsonStringJsonByteLength(sample)).toBe(jsonBytes(sample));
+      expect(2 + jsonStringPayloadByteLength(sample)).toBe(jsonBytes(sample));
     }
   });
 
@@ -63,7 +63,7 @@ describe('JSON string byte projection', () => {
       for (let index = 0; index < length; index++) {
         value += atoms[random() % atoms.length];
       }
-      expect(jsonStringJsonByteLength(value)).toBe(jsonBytes(value));
+      expect(2 + jsonStringPayloadByteLength(value)).toBe(jsonBytes(value));
     }
   });
 

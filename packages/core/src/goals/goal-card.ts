@@ -12,10 +12,10 @@ import type {
 } from './goal-protocol.js';
 
 /**
- * The Goal card ACP clients render as history: the Web Shell shows one per
- * transition it admits, and a pre-#7895 transcript replays the cards it
- * recorded in this same shape. The wire key is `_meta.goalStatus`; the live
- * Goal is never derived from it (clients read `_meta.goalState`).
+ * The Goal card a transcript replay renders as history: a pre-#7895
+ * transcript replays the cards it recorded in this same shape. The wire key
+ * is `_meta.goalStatus`; the live Goal is never derived from it (readers use
+ * `_meta.goalState`).
  */
 export type GoalCardKind =
   | 'set'

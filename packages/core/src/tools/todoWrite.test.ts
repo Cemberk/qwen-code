@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { TodoWriteParams } from './todoWrite.js';
-import { TodoWriteTool, listTodoSessions } from './todoWrite.js';
+import { TodoWriteTool } from './todoWrite.js';
 import { DefaultHookOutput, HookPhase, type TodoItem } from '../hooks/types.js';
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
@@ -1680,22 +1680,5 @@ describe('TodoWriteTool – runtime output directory', () => {
     const checkedPath = mockFsSync.existsSync.mock.calls[0]?.[0] as string;
     expect(checkedPath).toContain(path.join(customRuntimeDir, 'todos'));
     expect(invocation.getDescription()).toBe('Create todos');
-  });
-
-  it('should list todo sessions from custom runtime dir', async () => {
-    const customRuntimeDir = path.resolve('custom', 'runtime');
-    Storage.setRuntimeBaseDir(customRuntimeDir);
-    mockFs.readdir.mockResolvedValue([
-      'a.json',
-      'b.json',
-      'README.md',
-    ] as never);
-
-    const sessions = await listTodoSessions();
-
-    expect(mockFs.readdir).toHaveBeenCalledWith(
-      path.join(customRuntimeDir, 'todos'),
-    );
-    expect(sessions).toEqual(['a', 'b']);
   });
 });

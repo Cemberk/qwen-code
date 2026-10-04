@@ -233,10 +233,7 @@ export function setupUncaughtExceptionHandler(config: Config) {
     // Monitors are spawned `detached` (their own process group) so the tool
     // can group-kill them; a side effect is that they outlive this process
     // unless something kills them first. Reap whatever is still running on
-    // the registry of the Config this handler was installed with — each ACP
-    // session builds its own Config with its own MonitorRegistry, and those
-    // per-session registries are not covered here (a daemon-wide reap needs
-    // process-wide registry tracking; deliberately follow-up work). The
+    // the registry of the Config this handler was installed with. The
     // crashed session can never consume their terminal events, and the
     // in-memory registry gives a resumed session no way to reattach. The
     // SIGKILL escalation timer in the abort path cannot survive the exit
@@ -563,9 +560,6 @@ export async function main() {
         },
         buildDisabledSkillNamesProvider(settings),
         undefined,
-        undefined,
-        undefined,
-        undefined,
         buildEnabledSkillNamesProvider(settings),
       );
 
@@ -837,10 +831,7 @@ export async function main() {
         userHooks: settings.getUserHooks(),
       },
       buildDisabledSkillNamesProvider(settings),
-      undefined,
       settingsWatcher,
-      undefined,
-      undefined,
       buildEnabledSkillNamesProvider(settings),
     );
     profileCheckpoint('after_load_cli_config');
@@ -932,9 +923,7 @@ export async function main() {
         // Refresh the notice with the override addendum (if any). When
         // there is no override this is a no-op text-wise; on override it
         // gives the model the "you overrode <previous-slug>" hint. TUI
-        // and headless consume this via Config.consumePendingStartupWorktreeNotice();
-        // ACP is excluded above (`--worktree` × `--acp` is mutually
-        // exclusive — see the mutex check earlier in this function).
+        // and headless consume this via Config.consumePendingStartupWorktreeNotice().
         config.setPendingStartupWorktreeNotice(
           buildStartupWorktreeNotice(
             startupWorktreeContext,

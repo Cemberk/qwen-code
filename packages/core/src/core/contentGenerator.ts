@@ -9,11 +9,7 @@ import type {
   GenerateContentResponse,
 } from '@google/genai';
 import type { Config } from '../config/config.js';
-import type {
-  ConfigSource,
-  ConfigSourceKind,
-  ConfigSources,
-} from '../utils/configResolver.js';
+import type { ConfigSource, ConfigSources } from '../utils/configResolver.js';
 import {
   DEFAULT_API_KEY_ENV_VAR,
   DEFAULT_MODEL_ENV_VAR,
@@ -161,9 +157,6 @@ export type ContentGeneratorConfig = {
   toolResultContentFormat?: 'parts' | 'string';
 };
 
-// Keep the public ContentGeneratorConfigSources API, but reuse the generic
-// source-tracking types from utils/configResolver to avoid duplication.
-export type ContentGeneratorConfigSourceKind = ConfigSourceKind;
 export type ContentGeneratorConfigSource = ConfigSource;
 export type ContentGeneratorConfigSources = ConfigSources;
 
@@ -369,7 +362,6 @@ function wrapProviderLoadError(error: unknown): unknown {
 
 class LazyContentGenerator implements ContentGenerator {
   private generatorPromise?: Promise<ContentGenerator>;
-  private preloadedOnly = false;
 
   constructor(private readonly loader: () => Promise<ContentGenerator>) {}
 
@@ -379,21 +371,7 @@ class LazyContentGenerator implements ContentGenerator {
   }
 
   private getGeneratorForUse(): Promise<ContentGenerator> {
-    this.preloadedOnly = false;
     return this.getGenerator();
-  }
-
-  preload(): Promise<ContentGenerator> {
-    if (!this.generatorPromise) {
-      this.preloadedOnly = true;
-    }
-    return this.getGenerator();
-  }
-
-  resetPreload(): void {
-    if (!this.preloadedOnly) return;
-    this.preloadedOnly = false;
-    this.generatorPromise = undefined;
   }
 
   async generateContent(
@@ -414,24 +392,6 @@ class LazyContentGenerator implements ContentGenerator {
       request,
       userPromptId,
     );
-  }
-}
-
-/** @internal */
-export async function preloadContentGenerator(
-  generator: ContentGenerator,
-): Promise<void> {
-  if (generator instanceof LazyContentGenerator) {
-    await generator.preload();
-  }
-}
-
-/** @internal */
-export function resetPreloadedContentGenerator(
-  generator: ContentGenerator | undefined,
-): void {
-  if (generator instanceof LazyContentGenerator) {
-    generator.resetPreload();
   }
 }
 

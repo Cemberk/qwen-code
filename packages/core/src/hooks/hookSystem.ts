@@ -31,8 +31,6 @@ import type {
   HookEventName,
   FunctionHookCallback,
   CommandHookConfig,
-  PendingAsyncHook,
-  PendingAsyncOutput,
   MessagesProvider,
   StopFailureErrorType,
   TodoItem,
@@ -105,13 +103,6 @@ export class HookSystem {
    */
   getMessagesProvider(): MessagesProvider | undefined {
     return this.messagesProvider;
-  }
-
-  /**
-   * Get the hook event bus for firing events
-   */
-  getEventHandler(): HookEventHandler {
-    return this.hookEventHandler;
   }
 
   /**
@@ -676,16 +667,6 @@ export class HookSystem {
   }
 
   /**
-   * Remove a hook by ID (searches all events)
-   * @param sessionId Session ID
-   * @param hookId Hook ID to remove
-   * @returns True if hook was found and removed
-   */
-  removeSessionHook(sessionId: string, hookId: string): boolean {
-    return this.sessionHooksManager.removeHook(sessionId, hookId);
-  }
-
-  /**
    * Check if a session has any hooks registered
    * @param sessionId Session ID
    * @returns True if session has hooks
@@ -718,47 +699,5 @@ export class HookSystem {
    */
   getAsyncRegistry(): AsyncHookRegistry {
     return this.hookRunner.getAsyncRegistry();
-  }
-
-  /**
-   * Get all pending async hooks
-   */
-  getPendingAsyncHooks(): PendingAsyncHook[] {
-    return this.getAsyncRegistry().getPendingHooks();
-  }
-
-  /**
-   * Get pending async hooks for a specific session
-   */
-  getPendingAsyncHooksForSession(sessionId: string): PendingAsyncHook[] {
-    return this.getAsyncRegistry().getPendingHooksForSession(sessionId);
-  }
-
-  /**
-   * Get and clear pending async output for delivery to the next turn
-   */
-  getPendingAsyncOutput(): PendingAsyncOutput {
-    return this.getAsyncRegistry().getPendingOutput();
-  }
-
-  /**
-   * Check if there are any pending async outputs
-   */
-  hasPendingAsyncOutput(): boolean {
-    return this.getAsyncRegistry().hasPendingOutput();
-  }
-
-  /**
-   * Check if there are any running async hooks
-   */
-  hasRunningAsyncHooks(): boolean {
-    return this.getAsyncRegistry().hasRunningHooks();
-  }
-
-  /**
-   * Check for timed out async hooks and mark them
-   */
-  checkAsyncHookTimeouts(): void {
-    this.getAsyncRegistry().checkTimeouts();
   }
 }

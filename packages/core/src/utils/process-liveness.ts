@@ -87,13 +87,6 @@ function isZombie(pid: number): boolean {
  * machine crashes or loses power, so the boot id is what makes every
  * pre-reboot token provably foreign.
  *
- * `session-writer-lease.ts`'s `readProcessStartIdentity` builds the same
- * Linux identity, and is deliberately left alone: its token is a
- * persisted on-disk format with takeover semantics, so unifying them is a
- * change to that file's contract rather than a refactor. If a third
- * caller ever needs this, it imports from here — two is already the
- * limit.
- *
  * When the boot id is unreadable this returns `null` rather than a bare
  * tick count: emitting two token shapes on one machine would let a reader
  * that has the boot id "mismatch" a live session recorded without it and

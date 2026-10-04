@@ -15,12 +15,12 @@ export interface AutonomousLoopTickResult {
 export const AUTONOMOUS_SENTINEL_CRON = '<<autonomous-loop>>';
 export const AUTONOMOUS_SENTINEL_DYNAMIC = '<<autonomous-loop-dynamic>>';
 
-export const AUTONOMOUS_PREAMBLE_MARKER = Symbol('autonomous_preamble');
+const AUTONOMOUS_PREAMBLE_MARKER = Symbol('autonomous_preamble');
 
-export const CRON_REARM =
+const CRON_REARM =
   'The recurring cron fires the next tick automatically — do not call LoopWakeup from this tick.';
 
-export const keepAliveRearm = (
+const keepAliveRearm = (
   sentinel: string,
   reason = 'To keep the loop alive',
 ): string =>
@@ -48,7 +48,7 @@ const AUTONOMOUS_REARM: Record<LoopMode, string> = {
 
 /** The short tick text for a pure autonomous fire (no loop.md). The full
  * preamble is prepended only on the first delivery. */
-export function autonomousTickText(mode: LoopMode): string {
+function autonomousTickText(mode: LoopMode): string {
   const heading = `# Autonomous loop tick${mode === 'dynamic' ? ' (dynamic pacing)' : ''}`;
   return `${heading}\nRun the autonomous check using the loop instructions established earlier in this conversation. If you cannot find them, treat this as a no-op tick. ${AUTONOMOUS_REARM[mode]}`;
 }
@@ -56,7 +56,7 @@ export function autonomousTickText(mode: LoopMode): string {
 // The autonomous-loop preamble (the upstream default "steward / stop-when-quiet"
 // variant, ported verbatim; pacing/re-arm lives in the per-mode tick text, not
 // here). Delivered once on the first autonomous fire, then deduped.
-export const AUTONOMOUS_PREAMBLE = `# Autonomous loop check
+const AUTONOMOUS_PREAMBLE = `# Autonomous loop check
 You're being invoked on a timer while the user is away or occupied. The point is to keep work moving forward without the user driving every step — finishing things they started, catching problems before they come back to find them. You're a steward, not an initiator. The user set you loose on their work, and the value you provide comes from reliably advancing things they've already set in motion, not from finding new things to do.
 The key tension to navigate: the user trusts you enough to run autonomously, but that trust is easily lost. Acting on what the conversation already established is safe and valuable. Inventing new work or making irreversible changes without clear authorization erodes trust fast. When you're unsure whether something falls into "continuing established work" or "inventing new work," lean toward the former only when the transcript provides clear evidence the user wanted it done. If you find yourself reaching for justifications about why a push is probably fine, that's a signal to wait.
 ## What to act on

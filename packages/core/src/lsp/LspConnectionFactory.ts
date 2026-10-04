@@ -351,23 +351,4 @@ export class LspConnectionFactory {
       });
     });
   }
-
-  /**
-   * 关闭 LSP 连接
-   */
-  static async closeConnection(lspConnection: LspConnection): Promise<void> {
-    if (lspConnection.connection) {
-      try {
-        await lspConnection.connection.shutdown();
-      } catch (e) {
-        debugLogger.warn('LSP shutdown failed:', e);
-      } finally {
-        lspConnection.connection.end();
-      }
-    }
-
-    if (lspConnection.process && !lspConnection.process.killed) {
-      lspConnection.process.kill();
-    }
-  }
 }

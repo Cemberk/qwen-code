@@ -59,7 +59,6 @@ export async function handleInstall(args: InstallArgs) {
       requestConsent,
       undefined,
       workspaceDir,
-      undefined,
       scope === 'project'
         ? { scope: 'workspace', workspacePath: workspaceDir }
         : { scope: 'user' },

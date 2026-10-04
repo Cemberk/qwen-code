@@ -633,8 +633,8 @@ describe('_runHousekeepingForTesting (debug-logs cleanup)', () => {
 
   it('sweeps pseudo-session debug logs but keeps unrelated files', async () => {
     const old = new Date(Date.now() - 60 * MS_PER_DAY);
-    // Fixed-name files the ACP layer appends to under non-UUID session-id
-    // contexts — sweepable via the call-site allowlist.
+    // Fixed-name files the removed ACP layer appended to under non-UUID
+    // session-id contexts — sweepable via the call-site allowlist.
     const replay = mkDebugLog('transcript-replay', old);
     const discovery = mkDebugLog('workspace-mcp-discovery', old);
     // Genuinely unrelated files still fail the real isValidSessionId and

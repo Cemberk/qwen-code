@@ -70,7 +70,7 @@ export function getEffectiveSupportedModes(cmd: SlashCommand): ExecutionMode[] {
     case CommandKind.FILE:
     case CommandKind.SKILL:
     case CommandKind.MCP_PROMPT:
-      return ['interactive', 'non_interactive', 'acp'];
+      return ['interactive', 'non_interactive'];
     default:
       return ['interactive'];
   }

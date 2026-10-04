@@ -23,7 +23,6 @@ import {
   BaseJsonOutputAdapter,
   type MessageState,
   type ResultOptions,
-  partsToString,
   partsToContentBlock,
   toolResultContent,
   extractTextFromBlocks,
@@ -1724,34 +1723,6 @@ describe('BaseJsonOutputAdapter', () => {
       });
     });
 
-    describe('partsToString', () => {
-      it('should convert text parts to string', () => {
-        const parts: Part[] = [{ text: 'Hello' }, { text: ' World' }];
-
-        const result = partsToString(parts);
-
-        expect(result).toBe('Hello World');
-      });
-
-      it('should handle non-text parts', () => {
-        const parts: Part[] = [
-          { text: 'Hello' },
-          { functionCall: { name: 'test' } },
-        ];
-
-        const result = partsToString(parts);
-
-        expect(result).toContain('Hello');
-        expect(result).toContain('functionCall');
-      });
-
-      it('should handle empty array', () => {
-        const result = partsToString([]);
-
-        expect(result).toBe('');
-      });
-    });
-
     describe('toolResultContent', () => {
       it('should extract content from resultDisplay', () => {
         const response = {
@@ -1765,34 +1736,6 @@ describe('BaseJsonOutputAdapter', () => {
         const result = toolResultContent(response);
 
         expect(result).toBe('Tool result');
-      });
-
-      it('maps mcp_app displays to fallbackText', () => {
-        const response = {
-          callId: 'app-1',
-          resultDisplay: {
-            type: 'mcp_app' as const,
-            serverName: 'demo',
-            resourceUri: 'ui://demo/dashboard',
-            html: '<main>Revenue</main>',
-            toolResult: {
-              content: [{ type: 'text', text: 'Dashboard ready' }],
-            },
-            toolArguments: {},
-            fallbackText: 'Dashboard ready',
-          },
-          responseParts: [
-            {
-              functionResponse: {
-                response: {},
-              },
-            },
-          ],
-          error: undefined,
-          errorType: undefined,
-        };
-
-        expect(toolResultContent(response)).toBe('Dashboard ready');
       });
 
       it('includes the vision bridge disclosure with tool content', () => {

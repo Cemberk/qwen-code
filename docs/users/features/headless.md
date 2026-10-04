@@ -87,10 +87,6 @@ Runtime-scheduled Goal continuation segments do not count against `--max-session
 
 With `--output-format stream-json`, each Goal status change emits a `stream_event` whose `event.type` is `goal_state`. This state event is emitted even without `--include-partial-messages`. The `active_goal` event that used to follow it as a compatibility projection is no longer emitted; automation reads `goal_state`.
 
-> [!note]
->
-> This behavior applies to standard headless CLI runs. ACP-driven sessions drive the same Goal runtime through the `sessionGoalControl` extension method, and receive each status change as a `session/update` notification carrying `_meta.goalState` instead of a `goal_state` stream event.
-
 ## Customize the Main Session Prompt
 
 You can change the main session system prompt for a single CLI run without editing shared memory files.
@@ -321,7 +317,6 @@ Qwen Code can abort an unattended run when it crosses one of the following thres
 - **`structured_output` is exempt from `--max-tool-calls`.** Under `--json-schema`, the model's terminal `structured_output` call is the "I'm done" contract, not real work — it doesn't count against `--max-tool-calls` so a budget-edge completion isn't aborted as a false positive. The exemption is unconditional (including failed Ajv validations), so a model stuck in a malformed-output retry loop is NOT bounded by `--max-tool-calls`; combine with `--max-session-turns` or `--max-wall-time` to cap retries.
 - **`structured_output` is NOT exempt from `--max-session-turns`.** That counter is pre-existing and bumps for every turn including the terminal contract. Size `--max-session-turns` to `N+1` if you want to allow `N` real-work turns under `--json-schema`.
 - **Single-shot vs `--input-format stream-json`:** in stream-json input mode Qwen Code resets the budget counters at the start of every user message; the budget is per-message, not per-process.
-- **ACP sessions:** the ACP session path does NOT currently consult `--max-wall-time` / `--max-tool-calls` from settings.json. These budgets only apply to single-shot `qwen -p` runs and to `--input-format stream-json` sessions.
 
 ### Recommended combinations
 

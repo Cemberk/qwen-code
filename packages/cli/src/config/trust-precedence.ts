@@ -7,8 +7,6 @@
 import * as path from 'node:path';
 import { getPathComparisonVariants, isWithinRoot } from './path-comparison.js';
 
-export type TrustRuleLevel = 'TRUST_FOLDER' | 'TRUST_PARENT' | 'DO_NOT_TRUST';
-
 export interface TrustPrecedenceRule<TPayload = undefined> {
   readonly level: 'trusted' | 'untrusted';
   readonly variants: ReadonlySet<string>;

@@ -14,28 +14,13 @@ import {
   logAuth,
   type ProviderSetupInputs,
 } from '@qwen-code/qwen-code-core';
-import {
-  useAuthCommand,
-  normalizeCustomModelIds,
-  maskApiKey,
-} from './useAuth.js';
+import { useAuthCommand, normalizeModelIds, maskApiKey } from './useAuth.js';
 import { setNestedPropertySafe } from '../../config/settingsUtils.js';
 
 vi.mock('@qwen-code/qwen-code-core', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@qwen-code/qwen-code-core')>()),
   logAuth: vi.fn(),
 }));
-
-vi.mock('../../config/settingsUtils.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../config/settingsUtils.js')>();
-  return {
-    ...actual,
-    backupSettingsFile: vi.fn(),
-    restoreSettingsFromBackup: vi.fn(),
-    cleanupSettingsBackup: vi.fn(),
-  };
-});
 
 vi.mock('../../config/modelProvidersScope.js', () => ({
   getPersistScopeForModelSelection: vi.fn(() => 'user'),
@@ -325,43 +310,41 @@ describe('generateCustomApiKeyEnvKey', () => {
   });
 });
 
-describe('normalizeCustomModelIds', () => {
+describe('normalizeModelIds', () => {
   it('splits comma-separated model IDs', () => {
-    const result = normalizeCustomModelIds('qwen/qwen3-coder,openai/gpt-4.1');
+    const result = normalizeModelIds('qwen/qwen3-coder,openai/gpt-4.1');
     expect(result).toEqual(['qwen/qwen3-coder', 'openai/gpt-4.1']);
   });
 
   it('trims whitespace from each model ID', () => {
-    const result = normalizeCustomModelIds(
-      ' qwen/qwen3-coder , openai/gpt-4.1 ',
-    );
+    const result = normalizeModelIds(' qwen/qwen3-coder , openai/gpt-4.1 ');
     expect(result).toEqual(['qwen/qwen3-coder', 'openai/gpt-4.1']);
   });
 
   it('deduplicates while preserving order', () => {
-    const result = normalizeCustomModelIds(
+    const result = normalizeModelIds(
       'qwen/qwen3-coder,openai/gpt-4.1,qwen/qwen3-coder',
     );
     expect(result).toEqual(['qwen/qwen3-coder', 'openai/gpt-4.1']);
   });
 
   it('removes empty entries', () => {
-    const result = normalizeCustomModelIds('qwen/qwen3-coder,,openai/gpt-4.1');
+    const result = normalizeModelIds('qwen/qwen3-coder,,openai/gpt-4.1');
     expect(result).toEqual(['qwen/qwen3-coder', 'openai/gpt-4.1']);
   });
 
   it('returns empty array for empty input', () => {
-    const result = normalizeCustomModelIds('');
+    const result = normalizeModelIds('');
     expect(result).toEqual([]);
   });
 
   it('returns empty array for whitespace-only input', () => {
-    const result = normalizeCustomModelIds('  ,  ,  ');
+    const result = normalizeModelIds('  ,  ,  ');
     expect(result).toEqual([]);
   });
 
   it('handles single model ID', () => {
-    const result = normalizeCustomModelIds('qwen/qwen3-coder');
+    const result = normalizeModelIds('qwen/qwen3-coder');
     expect(result).toEqual(['qwen/qwen3-coder']);
   });
 });

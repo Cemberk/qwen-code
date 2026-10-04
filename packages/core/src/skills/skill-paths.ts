@@ -131,10 +131,3 @@ export async function assertRealProjectSkillPath(
     }
   }
 }
-
-export function sanitizeSkillName(name: string): string {
-  return name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, '-');
-}

@@ -4,20 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Tool Use Summary Generator
- *
- * Generates a short human-readable label (git-commit-subject style, ~30 chars)
- * describing what a batch of tool calls accomplished. Uses the configured fast
- * model so the call is cheap; runs in parallel with the next turn's API call so
- * its ~1s latency is hidden behind the 5-30s main-model streaming.
- *
- * Ported from Claude Code (`services/toolUseSummary/toolUseSummaryGenerator.ts`).
- * The system prompt is verbatim; the input/output shape and truncation rules
- * are preserved for behavioral parity with the SDK `tool_use_summary` message.
- */
-
-import { randomUUID } from 'node:crypto';
 import type { Config } from '../config/config.js';
 import { runSideQuery } from '../utils/sideQuery.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
@@ -36,23 +22,6 @@ export interface ToolUseSummaryMessage {
   precedingToolUseIds: string[];
   uuid: string;
   timestamp: string;
-}
-
-/**
- * Creates a `tool_use_summary` message. The UUID and timestamp are generated
- * here so the message is immediately serializable for recording/SDK emission.
- */
-export function createToolUseSummaryMessage(
-  summary: string,
-  precedingToolUseIds: string[],
-): ToolUseSummaryMessage {
-  return {
-    type: 'tool_use_summary',
-    summary,
-    precedingToolUseIds,
-    uuid: randomUUID(),
-    timestamp: new Date().toISOString(),
-  };
 }
 
 export const TOOL_USE_SUMMARY_SYSTEM_PROMPT = `Write a short summary label describing what these tool calls accomplished. It appears as a single-line row in a mobile app and truncates around 30 characters, so think git-commit-subject, not sentence.

@@ -6,23 +6,18 @@
 
 import {
   trace,
-  context,
   ROOT_CONTEXT,
   type Span,
   type Context,
-  SpanStatusCode,
   TraceFlags,
 } from '@opentelemetry/api';
-import { SERVICE_NAME } from './constants.js';
 import { deriveTraceId, randomSpanId } from './trace-id-utils.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
 
-const tracer = trace.getTracer(SERVICE_NAME);
 const debugLogger = createDebugLogger('OTEL_TRACER');
 const TELEMETRY_WARNING_INTERVAL_MS = 30_000;
 export const API_CALL_FAILED_SPAN_STATUS_MESSAGE = 'API call failed';
 export const API_CALL_ABORTED_SPAN_STATUS_MESSAGE = 'API call aborted';
-const OPERATION_FAILED_SPAN_STATUS_MESSAGE = 'Operation failed';
 let lastTelemetryWarningMs: number | undefined;
 let suppressedTelemetryWarnings = 0;
 
@@ -62,151 +57,6 @@ export function safeSetStatus(
     warnTelemetryOperationFailed('setStatus', error);
     // OTel errors must not mask caller behavior.
   }
-}
-
-function safeEndSpan(span: Span): void {
-  try {
-    span.end();
-  } catch (error) {
-    warnTelemetryOperationFailed('end', error);
-    // OTel errors must not mask caller behavior.
-  }
-}
-
-// SYNC: keep parent-resolution logic in step with resolveParentContext()
-// in telemetry/session-tracing.ts.
-function getParentContext(): Context {
-  return context.active();
-}
-
-/**
- * Wraps a Span to track whether setStatus has been called by the callback.
- * This prevents withSpan from overwriting an ERROR status that the caller
- * has already set on handled-failure paths (e.g. tool hook denial).
- */
-function wrapSpanWithStatusTracking(span: Span): {
-  wrappedSpan: Span;
-  wasStatusSet: () => boolean;
-} {
-  let statusSet = false;
-  const wrappedSpan = new Proxy(span, {
-    get(target, prop, receiver) {
-      if (prop === 'setStatus') {
-        return (status: Parameters<Span['setStatus']>[0]) => {
-          statusSet = true;
-          safeSetStatus(target, status);
-          return target;
-        };
-      }
-      const value = Reflect.get(target, prop, receiver);
-      return typeof value === 'function' ? value.bind(target) : value;
-    },
-  }) as Span;
-  return { wrappedSpan, wasStatusSet: () => statusSet };
-}
-
-/**
- * Options for {@link withSpan}.
- */
-export interface WithSpanOptions {
-  /**
-   * When true (default), withSpan automatically sets OK status if the
-   * callback resolves without having set a status. When false, the caller
-   * is responsible for setting a terminal status in every code path.
-   * Use false when the callback handles multiple outcomes (success, error,
-   * cancellation) and each path sets its own status.
-   */
-  autoOkOnSuccess?: boolean;
-}
-
-/**
- * Run an async function within a new OTel span.
- * When no parent span is active, the span becomes a trace root with a
- * fresh SDK-generated traceId. When the OTel SDK is not initialized,
- * the tracer is a noop.
- *
- * If the callback sets a status explicitly (e.g. ERROR on a handled failure),
- * withSpan will not overwrite it. Only when no status has been set and the
- * callback resolves without throwing will the span be marked OK (unless
- * autoOkOnSuccess is false). If the callback throws before setting status,
- * the span is marked ERROR with a generic message so raw exception text is
- * not exported to OTel backends.
- */
-export async function withSpan<T>(
-  name: string,
-  attributes: Record<string, string | number | boolean>,
-  fn: (span: Span) => Promise<T>,
-  options?: WithSpanOptions,
-): Promise<T> {
-  const autoOkOnSuccess = options?.autoOkOnSuccess ?? true;
-  const parentCtx = getParentContext();
-  return tracer.startActiveSpan(
-    name,
-    { attributes },
-    parentCtx,
-    async (span) => {
-      const { wrappedSpan, wasStatusSet } = wrapSpanWithStatusTracking(span);
-      try {
-        const result = await fn(wrappedSpan);
-        if (autoOkOnSuccess && !wasStatusSet()) {
-          safeSetStatus(span, { code: SpanStatusCode.OK });
-        }
-        return result;
-      } catch (error) {
-        if (!wasStatusSet()) {
-          safeSetStatus(span, {
-            code: SpanStatusCode.ERROR,
-            message: OPERATION_FAILED_SPAN_STATUS_MESSAGE,
-          });
-        }
-        throw error;
-      } finally {
-        safeEndSpan(span);
-      }
-    },
-  );
-}
-
-/**
- * Start a span manually, returning the span and a function to run code
- * within that span's context.
- *
- * Unlike withSpan, this helper does not automatically set a terminal status
- * or end the span. Callers must set the final status themselves and call
- * span.end() from a finally block. Use runInContext around any eager work
- * that should be parented to this span, and around async-generator iteration
- * when the span must remain active while the consumer pulls values.
- *
- * Example:
- *
- *   const { span, runInContext } = startSpanWithContext('stream', attrs);
- *   try {
- *     return await runInContext(() => doWork());
- *   } catch (error) {
- *     span.setStatus({ code: SpanStatusCode.ERROR, message: 'failed' });
- *     throw error;
- *   } finally {
- *     span.end();
- *   }
- *
- * For a returned stream, put the try/catch/finally in the returned generator
- * wrapper so the span ends when iteration completes, not when the stream is
- * created.
- */
-export function startSpanWithContext(
-  name: string,
-  attributes: Record<string, string | number | boolean>,
-): {
-  span: Span;
-  runInContext: <T>(fn: () => T) => T;
-} {
-  const parentCtx = getParentContext();
-  const span = tracer.startSpan(name, { attributes }, parentCtx);
-  const spanCtx = trace.setSpan(parentCtx, span);
-  return {
-    span,
-    runInContext: <T>(fn: () => T) => context.with(spanCtx, fn),
-  };
 }
 
 /**

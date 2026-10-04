@@ -476,9 +476,6 @@ function projectWorkerView(view: GoalWorkerView, snapshot: GoalSnapshotV2) {
  */
 export const PROPOSE_GOAL_OBJECTIVE_MAX_CHARACTERS = 1500;
 
-export const formatProposeGoalRecoveryNotStarted = (objective: string) =>
-  `The approved Goal was not started because the turn did not finish normally. To start it, run:\n/goal set ${objective}`;
-
 export const formatProposeGoalRecoveryFailed = (objective: string) =>
   `The approved Goal could not be started. Check the Goal status before trying again, or run:\n/goal set ${objective}`;
 

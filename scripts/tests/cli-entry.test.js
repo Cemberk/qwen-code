@@ -48,7 +48,7 @@ describe('scripts/cli-entry.js production entry', () => {
     vi.clearAllMocks();
     // A non-fast-path command on Windows, so the entry takes the spawnSync
     // branch (mocked) instead of importing the real dist/cli.js in-process.
-    process.argv = ['node', 'scripts/cli-entry.js', 'review', 'check'];
+    process.argv = ['node', 'scripts/cli-entry.js', 'extensions', 'list'];
     Object.defineProperty(process, 'platform', { value: 'win32' });
     // The entry exits after its child returns; the import must survive that.
     exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined);
@@ -63,8 +63,8 @@ describe('scripts/cli-entry.js production entry', () => {
   it('stamps QWEN_CODE_CLI with its own path, overriding an inherited one', async () => {
     // The dev and start launchers had this pin; the production entry — the one
     // every npm install actually runs — did not, so a regression back to
-    // honouring an inherited value would route installed review subprocesses to
-    // an outer or stale CLI with every test green.
+    // honouring an inherited value would route installed subprocesses to an
+    // outer or stale CLI with every test green.
     const inherited = process.env.QWEN_CODE_CLI;
     process.env.QWEN_CODE_CLI = '/somewhere/else/entirely/qwen';
     try {
@@ -75,36 +75,6 @@ describe('scripts/cli-entry.js production entry', () => {
     } finally {
       if (inherited === undefined) delete process.env.QWEN_CODE_CLI;
       else process.env.QWEN_CODE_CLI = inherited;
-    }
-  });
-
-  it('prefers the standalone launcher shim, which carries the bundled Node', async () => {
-    // The standalone package launches this file through `bin/qwen`, a shim that
-    // selects the BUNDLED Node — the host may have none — and announces itself
-    // via QWEN_CODE_LAUNCHER_PATH. There, stamping this file would hand every
-    // subprocess a `#!/usr/bin/env node` script on a machine where that resolves
-    // to nothing. The shim is the entry that reaches this build; stamp it.
-    const inheritedCli = process.env.QWEN_CODE_CLI;
-    const inheritedShim = process.env.QWEN_CODE_LAUNCHER_PATH;
-    process.env.QWEN_CODE_LAUNCHER_PATH = '/opt/qwen-standalone/bin/qwen';
-    delete process.env.QWEN_CODE_CLI;
-    existsSyncMock.mockImplementation(
-      (p) => normalizePath(p) === '/opt/qwen-standalone/bin/qwen',
-    );
-    try {
-      await import('../cli-entry.js?stamps-shim');
-      expect(process.env.QWEN_CODE_CLI).toBe('/opt/qwen-standalone/bin/qwen');
-      // And the hint is CONSUMED, not leaked: the mcp fast path never
-      // reaches the spawn branch that used to delete it, and a child qwen from
-      // a different checkout would read the leftover shim and republish it as
-      // its own entry — the wrong build, wearing this one's stamp.
-      expect('QWEN_CODE_LAUNCHER_PATH' in process.env).toBe(false);
-    } finally {
-      if (inheritedCli === undefined) delete process.env.QWEN_CODE_CLI;
-      else process.env.QWEN_CODE_CLI = inheritedCli;
-      if (inheritedShim === undefined)
-        delete process.env.QWEN_CODE_LAUNCHER_PATH;
-      else process.env.QWEN_CODE_LAUNCHER_PATH = inheritedShim;
     }
   });
 
@@ -170,7 +140,7 @@ describe('scripts/cli-entry.js production entry', () => {
       await import('../cli-entry.js?in-process');
 
       expect(spawnSyncMock).not.toHaveBeenCalled();
-      expect(process.argv.slice(1)).toEqual([cliPath, 'review', 'check']);
+      expect(process.argv.slice(1)).toEqual([cliPath, 'extensions', 'list']);
       expect(typeof globalThis.gc).toBe('function');
       // Supervised relaunches and tool subprocesses inherit it from here.
       expect(process.env.NODE_COMPILE_CACHE).toBe('/tmp/node-compile-cache');
@@ -186,7 +156,12 @@ describe('scripts/cli-entry.js production entry', () => {
 
         expect(spawnSyncMock).toHaveBeenCalledWith(
           process.execPath,
-          ['--expose-gc', expect.stringMatching(/cli\.js$/), 'review', 'check'],
+          [
+            '--expose-gc',
+            expect.stringMatching(/cli\.js$/),
+            'extensions',
+            'list',
+          ],
           expect.anything(),
         );
       } finally {

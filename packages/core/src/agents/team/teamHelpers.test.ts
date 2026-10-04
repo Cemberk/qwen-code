@@ -15,9 +15,6 @@ import {
   formatAgentId,
   generateUniqueTeammateName,
   assignTeammateColor,
-  clearTeammateColors,
-  setMemberActive,
-  findMemberById,
   findMemberByName,
   classifyShutdownResponse,
   readTeamFile,
@@ -102,7 +99,6 @@ function makeMember(
     name,
     joinedAt: Date.now(),
     cwd: '/tmp',
-    tmuxPaneId: '',
     subscriptions: [],
     ...rest,
   };
@@ -218,59 +214,6 @@ describe('assignTeammateColor', () => {
     );
     // 10 members using all 10 colors → wraps to index 0
     expect(assignTeammateColor(members)).toBe(TEAMMATE_COLORS[0]);
-  });
-});
-
-describe('clearTeammateColors', () => {
-  it('removes color from all members', () => {
-    const members = [
-      makeMember({ name: 'a', color: '#FF0000' }),
-      makeMember({ name: 'b', color: '#00FF00' }),
-    ];
-    const cleared = clearTeammateColors(members);
-
-    expect(cleared[0]!.color).toBeUndefined();
-    expect(cleared[1]!.color).toBeUndefined();
-  });
-
-  it('does not mutate input', () => {
-    const members = [makeMember({ name: 'a', color: '#FF0000' })];
-    clearTeammateColors(members);
-    expect(members[0]!.color).toBe('#FF0000');
-  });
-
-  it('preserves other fields', () => {
-    const members = [makeMember({ name: 'a', color: '#FF0000' })];
-    const cleared = clearTeammateColors(members);
-    expect(cleared[0]!.name).toBe('a');
-    expect(cleared[0]!.agentId).toBe('a@test-team');
-  });
-});
-
-describe('setMemberActive', () => {
-  it('sets isActive for matching member', () => {
-    const members = [makeMember({ name: 'a' }), makeMember({ name: 'b' })];
-    const updated = setMemberActive(members, 'a@test-team', false);
-
-    expect(updated[0]!.isActive).toBe(false);
-    expect(updated[1]!.isActive).toBeUndefined();
-  });
-
-  it('does not mutate input', () => {
-    const members = [makeMember({ name: 'a' })];
-    setMemberActive(members, 'a@test-team', false);
-    expect(members[0]!.isActive).toBeUndefined();
-  });
-});
-
-describe('findMemberById', () => {
-  it('finds member by agentId', () => {
-    const members = [makeMember({ name: 'a' }), makeMember({ name: 'b' })];
-    expect(findMemberById(members, 'b@test-team')?.name).toBe('b');
-  });
-
-  it('returns undefined for unknown ID', () => {
-    expect(findMemberById([], 'nope')).toBeUndefined();
   });
 });
 

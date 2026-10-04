@@ -68,7 +68,7 @@ describe('rememberCommand', () => {
     expect(result).toHaveProperty('refreshContextFilesOnWrite', true);
   });
 
-  it('declares acp in supportedModes', () => {
-    expect(rememberCommand.supportedModes).toEqual(['interactive', 'acp']);
+  it('declares interactive-only supportedModes', () => {
+    expect(rememberCommand.supportedModes).toEqual(['interactive']);
   });
 });

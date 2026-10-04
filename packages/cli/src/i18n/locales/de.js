@@ -103,8 +103,6 @@ export default {
     'Skills konnten nicht geladen werden: {{error}}',
   'Failed to save skills configuration: {{error}}':
     'Speichern der Skill-Konfiguration fehlgeschlagen: {{error}}',
-  'All available skills are disabled. Edit ~/.qwen/settings.json or .qwen/settings.json (skills.disabled) to re-enable.':
-    'Alle verfügbaren Skills sind deaktiviert. Bearbeite ~/.qwen/settings.json oder .qwen/settings.json (skills.disabled), um sie wieder zu aktivieren.',
   'Press esc to close.': 'Esc drücken, um zu schließen.',
   '{{count}} skills · ': '{{count}} Skills · ',
   '{{matched}} / {{total}} skills · ': '{{matched}} / {{total}} Skills · ',
@@ -550,8 +548,6 @@ export default {
     'Sie installieren eine Erweiterung von {{originSource}}. Einige Funktionen funktionieren möglicherweise nicht perfekt mit Qwen Code.',
   'Extension "{{name}}" installed successfully and enabled.':
     'Erweiterung "{{name}}" erfolgreich installiert und aktiviert.',
-  'The github URL, local path, or marketplace source (marketplace-url:plugin-name) of the extension to install.':
-    'Die GitHub-URL, der lokale Pfad oder die Marketplace-Quelle (marketplace-url:plugin-name) der zu installierenden Erweiterung.',
   'Acknowledge the security risks of installing an extension and skip the confirmation prompt.':
     'Sicherheitsrisiken der Erweiterungsinstallation bestätigen und Bestätigungsaufforderung überspringen.',
   'The source argument must be provided.':
@@ -1923,8 +1919,6 @@ export default {
     'Arena benötigt mindestens 2 Modelle. Verwenden Sie --models model1,model2 zur Angabe.',
   'Arena started with {{count}} agents on task: "{{task}}"\nModels:\n{{modelList}}':
     'Arena mit {{count}} Agents für Aufgabe "{{task}}" gestartet\nModelle:\n{{modelList}}',
-  'Arena panes are running in tmux. Attach with: `{{command}}`':
-    'Arena-Panels laufen in tmux. Verbinden mit: `{{command}}`',
   '[{{label}}] failed: {{error}}': '[{{label}}] fehlgeschlagen: {{error}}',
   'Loading suggestions...': 'Vorschläge werden geladen...',
   'Show context window usage breakdown. Use "/context detail" for per-item breakdown.':
@@ -2027,10 +2021,6 @@ export default {
   out: 'aus',
   'In/Out': 'Ein/Aus',
   // Update command
-  'Standalone install detected. Please rerun the standalone installer to update:':
-    'Standalone-Installation erkannt. Bitte führen Sie den Standalone-Installer zum Aktualisieren erneut aus:',
-  'Unable to auto-update this standalone installation. Please reinstall from:':
-    'Diese Standalone-Installation kann nicht automatisch aktualisiert werden. Bitte neu installieren von:',
 
   // ============================================================================
   // reload-plugins command

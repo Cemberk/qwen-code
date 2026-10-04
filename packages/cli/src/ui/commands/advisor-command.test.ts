@@ -148,7 +148,6 @@ describe('advisorCommand', () => {
     expect(advisorCommand.supportedModes).toEqual([
       'interactive',
       'non_interactive',
-      'acp',
     ]);
   });
 
@@ -635,15 +634,15 @@ describe('advisorCommand', () => {
     });
   });
 
-  describe('acp mode', () => {
+  describe('non-interactive mode', () => {
     it('should return message result with review on success', async () => {
       mockRunForkedAgent.mockResolvedValue(advisorResult());
-      const acpContext = createMockCommandContext({
-        executionMode: 'acp',
+      const headlessContext = createMockCommandContext({
+        executionMode: 'non_interactive',
         services: { config: createConfig() },
       });
 
-      const result = await advisorCommand.action!(acpContext, 'review');
+      const result = await advisorCommand.action!(headlessContext, 'review');
 
       expect(result).toEqual({
         type: 'message',
@@ -651,17 +650,17 @@ describe('advisorCommand', () => {
         content: ADVISOR_MARKDOWN,
       });
       expect(mockRunForkedAgent).toHaveBeenCalledTimes(1);
-      expect(acpContext.ui.setPendingItem).not.toHaveBeenCalled();
+      expect(headlessContext.ui.setPendingItem).not.toHaveBeenCalled();
     });
 
     it('should return error message on failure', async () => {
       mockRunForkedAgent.mockRejectedValue(new Error('Model error'));
-      const acpContext = createMockCommandContext({
-        executionMode: 'acp',
+      const headlessContext = createMockCommandContext({
+        executionMode: 'non_interactive',
         services: { config: createConfig() },
       });
 
-      const result = await advisorCommand.action!(acpContext, 'review');
+      const result = await advisorCommand.action!(headlessContext, 'review');
 
       expect(result).toEqual({
         type: 'message',

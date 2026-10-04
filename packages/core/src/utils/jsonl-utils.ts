@@ -33,7 +33,6 @@ const debugLogger = createDebugLogger('JSONL');
 
 type JsonlReadOptions = {
   throwOnNonEnoentError?: boolean;
-  onIncompleteRead?: () => void;
 };
 
 type JsonlReadLinesOptions = {
@@ -299,14 +298,12 @@ export async function read<T = unknown>(
       const trimmed = line.trim();
       if (trimmed.length === 0) continue;
       const parsed = parseLineTolerantWithIntegrity<T>(trimmed, filePath);
-      if (!parsed.complete) options.onIncompleteRead?.();
       for (const obj of parsed.records) results.push(obj);
     }
 
     return results;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-      options.onIncompleteRead?.();
       debugLogger.error(`Error reading ${filePath}:`, error);
       if (options.throwOnNonEnoentError) {
         throw error;

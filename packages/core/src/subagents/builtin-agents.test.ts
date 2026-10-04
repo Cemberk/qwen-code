@@ -128,23 +128,11 @@ describe('BuiltinAgentRegistry', () => {
     });
   });
 
-  describe('getBuiltinAgentNames', () => {
-    it('should return array of agent names', () => {
-      const names = BuiltinAgentRegistry.getBuiltinAgentNames();
-
-      expect(names).toBeInstanceOf(Array);
-      expect(names).toContain('general-purpose');
-      expect(names.every((name) => typeof name === 'string')).toBe(true);
-    });
-  });
-
   describe('consistency', () => {
     it('should maintain consistency across all methods', () => {
-      const agents = BuiltinAgentRegistry.getBuiltinAgents();
-      const names = BuiltinAgentRegistry.getBuiltinAgentNames();
-
-      // Names should match agents
-      expect(names).toEqual(agents.map((agent) => agent.name));
+      const names = BuiltinAgentRegistry.getBuiltinAgents().map(
+        (agent) => agent.name,
+      );
 
       // Each name should be valid
       names.forEach((name) => {

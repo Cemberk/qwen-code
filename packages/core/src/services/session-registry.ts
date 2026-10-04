@@ -10,17 +10,9 @@
  * Each top-level session writes `<global dir>/sessions/<pid>.json` at
  * startup and unlinks it on exit. The directory is flat and keyed by PID
  * so that "who else is running" is one `readdir` plus a handful of small
- * reads.
- *
- * A process that hosts several sessions at once — the `qwen --acp` child a
- * daemon spawns — writes one record per session instead, named
- * `<pid>-<8 hex>.json`. They are separate sessions with separate ids,
- * names and working directories, and one record cannot describe them all.
- * The suffix is minted at registration and never moves: a session id
- * swapped underneath (a `/clear`, a session load) is a patch, because a
- * record that renamed itself would strand every reader holding the old
- * name. Which record a caller means is its `slot` — see
- * {@link RegisterSessionFields.slot}.
+ * reads. Readers also accept `<pid>-<8 hex>.json`, the per-session records
+ * other builds write for a process hosting several sessions; this build
+ * writes only the PID-keyed one.
  *
  * The index is scoped to one Qwen home: the global dir resolves
  * `QWEN_HOME` on every call, so a session started under a redirected
@@ -75,7 +67,7 @@
  * undiscoverable until the file is removed by hand.
  */
 
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { Storage } from '../config/storage.js';
@@ -96,8 +88,7 @@ export const SESSION_REGISTRY_SCHEMA_VERSION = 1;
  * 0700 keeps the listing — session names and their work dirs — readable
  * only by its owner. The records are also written `noFollow`, so a
  * pre-planted symlink at `<pid>.json` cannot redirect a registration
- * write elsewhere; `session-writer-lease.ts` gets the same guard from
- * `O_NOFOLLOW`.
+ * write elsewhere.
  */
 const REGISTRY_DIR_MODE = 0o700;
 const REGISTRY_FILE_MODE = 0o600;
@@ -106,8 +97,8 @@ const REGISTRY_FILE_MODE = 0o600;
 const MAX_RECORD_BYTES = 64 * 1024;
 
 /**
- * Only `<digits>.json`, or the `<digits>-<8 hex>.json` a process hosting
- * several sessions writes, is a candidate record.
+ * Only `<digits>.json`, or the `<digits>-<8 hex>.json` another build writes
+ * for a process hosting several sessions, is a candidate record.
  *
  * This is deliberately strict. A lenient `parseInt` prefix match would
  * read `2026-planning-notes.json` as PID 2026, fail its liveness check,
@@ -115,31 +106,6 @@ const MAX_RECORD_BYTES = 64 * 1024;
  * exactly.
  */
 const RECORD_FILENAME = /^\d+(-[0-9a-f]{8})?\.json$/;
-
-/**
- * Characters that render as nothing: control and format characters, and
- * the line and paragraph separators — by Unicode category, so zero-width
- * spaces, bidi overrides and soft hyphens are covered along with the blocks
- * nobody thinks to list.
- */
-const INVISIBLE_CHARACTERS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+/gu;
-
-/** Longest label kept before the session-name cap applies, in code points. */
-const MAX_LABEL_CHARS = 200;
-
-/**
- * Flatten a caller-supplied label to one line of printable text, so a
- * name cannot read differently than it compares or rewrite the terminal.
- */
-function flattenLabel(value: string): string {
-  const oneLine = value.replace(INVISIBLE_CHARACTERS, ' ').trim();
-  // Counted in code points, so the cut never leaves half of an astral
-  // character behind as a lone surrogate.
-  const points = Array.from(oneLine);
-  return points.length > MAX_LABEL_CHARS
-    ? `${points.slice(0, MAX_LABEL_CHARS - 1).join('')}\u2026`
-    : oneLine;
-}
 
 /**
  * Temp files left by `atomicWriteJSON` next to their target. Matched
@@ -165,46 +131,25 @@ function pidOfRecordFilename(name: string): number | null {
 const TEMP_MAX_AGE_MS = 5 * 60 * 1000;
 
 /**
- * What kind of process registered: an interactive terminal, a
- * `qwen --acp` process running on its own, one the daemon spawned, or a
- * program that is not Qwen Code at all.
+ * What kind of process registered. This build registers only the
+ * interactive terminal (`tui`); other builds write other kinds.
  *
- * A label for listings and for aggregators that want to tell a user's own
- * terminals apart from sessions something else is driving. Nothing that
- * decides trust reads it: a record is written by the process it
- * describes, so this is a claim like `name` and `cwd`. What a sender may
- * do is decided by what its connection presents (see `uds-inbox.ts`).
+ * A label for listings. Nothing that decides trust reads it: a record is
+ * written by the process it describes, so this is a claim like `name` and
+ * `cwd`.
  */
-export type SessionKind = 'tui' | 'headless' | 'serve' | 'external';
-
-/** The kinds this build writes. Readers accept more; see {@link KIND_RE}. */
-export const SESSION_KINDS: readonly SessionKind[] = [
-  'tui',
-  'headless',
-  'serve',
-  'external',
-];
+const SESSION_KIND = 'tui';
 
 /**
  * What a reader keeps in `kind`.
  *
- * Deliberately wider than {@link SESSION_KINDS}: a newer build may write a
- * kind this one has never heard of, and dropping it would make that
- * indistinguishable from a record too old to carry one — which is the one
- * case that reads as `tui`. Bounded and shape-checked like every other
- * field that crosses a process boundary.
+ * Deliberately open: another build may write a kind this one has never
+ * heard of, and dropping it would make that indistinguishable from a
+ * record too old to carry one — which is the one case that reads as
+ * `tui`. Bounded and shape-checked like every other field that crosses a
+ * process boundary.
  */
 const KIND_RE = /^[a-z][a-z0-9-]{0,15}$/;
-
-/**
- * Longest explicit display name kept.
- *
- * Derived names are short by construction, but an explicit one comes from
- * a caller and lands in `qwen sessions ps`, so it is flattened to one
- * line, then bounded. Short because it is printed in a fixed-width table
- * column.
- */
-export const MAX_SESSION_NAME_CHARS = 40;
 
 /** One live session, as recorded on disk. */
 export interface SessionRegistryRecord {
@@ -225,12 +170,12 @@ export interface SessionRegistryRecord {
   startedAt: number;
   qwenVersion: string | null;
   /**
-   * What registered this session; see {@link SessionKind}.
+   * What registered this session; see {@link SESSION_KIND}.
    *
-   * Typed as `string` rather than `SessionKind` because a reader keeps a
-   * kind it does not recognize (a newer build's) rather than dropping it.
-   * Absent means the writer predates the field, which is the interactive
-   * UI: nothing else registered before it existed.
+   * Typed as `string` because a reader keeps a kind it does not recognize
+   * (another build's) rather than dropping it. Absent means the writer
+   * predates the field, which is the interactive UI: nothing else
+   * registered before it existed.
    */
   kind?: string;
 }
@@ -239,70 +184,11 @@ export interface RegisterSessionFields {
   sessionId: string;
   cwd: string;
   qwenVersion?: string | null;
-  /** What is registering. Defaults to `tui`, the only historical writer. */
-  kind?: SessionKind;
-  /**
-   * Display name to record instead of the derived one.
-   *
-   * For a caller whose directory says nothing useful about it — a voice
-   * front-end or a relay wants to be called what its user calls it, not
-   * after whatever directory it happens to have started in. Flattened and
-   * bounded on the way in; one that flattens to nothing falls back to the
-   * derived name rather than recording a session nobody can address.
-   */
-  name?: string;
-  /**
-   * Which record this registration owns.
-   *
-   * `shared` — the default, and what a process holding one session wants —
-   * is the single `<pid>.json` keyed by this PID. `own` mints a record of
-   * its own, `<pid>-<8 hex>.json`, for a process hosting several sessions
-   * at once: they are separate sessions with separate ids and working
-   * directories, and one record cannot describe them all.
-   *
-   * The suffix is minted rather than derived from the session id on
-   * purpose. An id can be swapped under a running session (`/clear`, a
-   * session load), and a record that renamed itself when that happened
-   * would strand every reader holding the old name; the record is patched
-   * in place instead, and its filename never moves.
-   */
-  slot?: 'shared' | 'own';
 }
 
-/**
- * Which record a registration owns, as its owner refers to it later.
- *
- * `SHARED_RECORD_SLOT` is the process-wide `<pid>.json`; anything else is
- * the 8-hex suffix of a `<pid>-<8 hex>.json`. Patch, unregister and
- * own-record reads all take one, so a process with several records says
- * which of them it means.
- */
-export type SessionRecordSlot = string;
-
-/** The slot of the one record a single-session process writes. */
-export const SHARED_RECORD_SLOT = 'shared';
-
-/** What a registration reports back: whether it landed, and where. */
+/** What a registration reports back: whether it landed. */
 export interface SessionRegistration {
   registered: boolean;
-  slot: SessionRecordSlot;
-}
-
-/**
- * The name to record: an explicit one, flattened and bounded, or the one
- * derived from the working directory.
- */
-function resolveSessionName(fields: RegisterSessionFields): string {
-  const explicit = flattenLabel(fields.name ?? '');
-  if (explicit.length === 0) {
-    return deriveSessionName(fields.cwd, fields.sessionId);
-  }
-  // Counted in code points, like `deriveSessionName`'s own cap: slicing
-  // UTF-16 units can cut an astral character into a lone surrogate.
-  const points = Array.from(explicit);
-  return points.length > MAX_SESSION_NAME_CHARS
-    ? `${points.slice(0, MAX_SESSION_NAME_CHARS - 1).join('')}…`
-    : explicit;
 }
 
 /**
@@ -333,45 +219,32 @@ export function getSessionRecordPath(): string {
 }
 
 /**
- * The record paths captured when registrations succeed, by slot.
+ * The record path captured when registration succeeds.
  *
  * `getGlobalQwenDir()` resolves a relative `QWEN_HOME` against the CURRENT
  * `process.cwd()` on every call, and `/cd` changes the cwd mid-session —
  * so patch and unregister must keep operating on the directory
  * registration wrote to rather than wherever the cwd moved afterwards.
- *
- * A map rather than one path because a process can hold several records
- * at once (see `RegisterSessionFields.slot`), and each of its sessions
- * patches and removes its own.
  */
-const registeredRecordPaths = new Map<SessionRecordSlot, string>();
+let registeredRecordPath: string | null = null;
 
 /**
- * Test-only: clear the registration-path captures so a suite starts each
+ * Test-only: clear the registration-path capture so a suite starts each
  * test from the unregistered state regardless of what an earlier test
  * registered. Without a reset, tests that need the capture empty only
  * pass by accident of test order.
  */
 export function resetRegisteredRecordPathForTest(): void {
-  registeredRecordPaths.clear();
+  registeredRecordPath = null;
 }
 
 /**
- * Where a slot's record lives, or null when this process has none.
- *
- * The shared slot falls back to the PID-keyed path: a process that never
- * registered still has one well-defined place its record would be, and
- * the callers that read it are no-ops on a missing file anyway. A minted
- * slot has no such fallback — its filename exists only because a
- * registration returned it — so an unknown one is "no record", never a
- * guessed path that could belong to another session.
+ * Where this process's record lives. A process that never registered
+ * still has one well-defined place its record would be, and the callers
+ * that read it are no-ops on a missing file anyway.
  */
-function thisProcessRecordPath(
-  slot: SessionRecordSlot = SHARED_RECORD_SLOT,
-): string | null {
-  const captured = registeredRecordPaths.get(slot);
-  if (captured !== undefined) return captured;
-  return slot === SHARED_RECORD_SLOT ? getSessionRecordPath() : null;
+function thisProcessRecordPath(): string {
+  return registeredRecordPath ?? getSessionRecordPath();
 }
 
 /**
@@ -429,19 +302,10 @@ export function deriveSessionName(cwd: string, sessionId: string): string {
  * swept by any healthy reader, so it would poison its PID slot until
  * removed by hand. In all of these cases this session simply stays
  * undiscoverable.
- *
- * Reports the slot alongside the verdict, because a process holding more
- * than one record has to be told which one it just wrote in order to
- * patch or remove it later.
  */
 export async function registerSession(
   fields: RegisterSessionFields,
 ): Promise<SessionRegistration> {
-  // Minted before any of the refusals below so every exit reports the same
-  // slot, whether or not a record reached the disk. It is a name, not a
-  // reservation: nothing is written or held by minting one.
-  const slot =
-    fields.slot === 'own' ? randomBytes(4).toString('hex') : SHARED_RECORD_SLOT;
   let procStart = readProcStartToken(process.pid);
   if (process.platform === 'linux' && procStart === null) {
     // Boot-id read failures are not cached, so a second attempt recovers
@@ -451,7 +315,7 @@ export async function registerSession(
       debugLogger.debug(
         'registerSession: start token unreadable; refusing to write an impersonable record',
       );
-      return { registered: false, slot };
+      return { registered: false };
     }
   }
   let pidNs = readPidNamespaceId();
@@ -468,7 +332,7 @@ export async function registerSession(
       debugLogger.debug(
         'registerSession: namespace id unreadable; refusing to write an unreclaimable record',
       );
-      return { registered: false, slot };
+      return { registered: false };
     }
   }
   const record: SessionRegistryRecord = {
@@ -478,18 +342,15 @@ export async function registerSession(
     pidNs,
     sessionId: fields.sessionId,
     cwd: fields.cwd,
-    name: resolveSessionName(fields),
+    name: deriveSessionName(fields.cwd, fields.sessionId),
     startedAt: Date.now(),
     qwenVersion: fields.qwenVersion ?? null,
-    kind: fields.kind ?? 'tui',
+    kind: SESSION_KIND,
   };
 
   try {
     const dir = getSessionRegistryDir();
-    const filePath =
-      slot === SHARED_RECORD_SLOT
-        ? getSessionRecordPath()
-        : path.join(dir, `${process.pid}-${slot}.json`);
+    const filePath = getSessionRecordPath();
     // A record already at our path may belong to a live session that
     // collided with us on the PID number across a namespace or machine
     // boundary (host + devcontainer, sibling containers, NFS-shared
@@ -504,19 +365,19 @@ export async function registerSession(
       debugLogger.debug(
         'registerSession: record path read failed transiently; refusing to overwrite an intact record',
       );
-      return { registered: false, slot };
+      return { registered: false };
     }
     if (existing.status === 'unsupported-version') {
       debugLogger.debug(
         'registerSession: record path held by a newer-schema record',
       );
-      return { registered: false, slot };
+      return { registered: false };
     }
     if (existing.status === 'ok' && !matchesLocalIdentity(existing.record)) {
       debugLogger.debug(
         'registerSession: record path held by a foreign-identity record',
       );
-      return { registered: false, slot };
+      return { registered: false };
     }
     await fs.mkdir(dir, { recursive: true, mode: REGISTRY_DIR_MODE });
     // mkdir's mode is masked by the umask, and does nothing at all when
@@ -539,11 +400,11 @@ export async function registerSession(
       forceMode: true,
       noFollow: true,
     });
-    registeredRecordPaths.set(slot, filePath);
-    return { registered: true, slot };
+    registeredRecordPath = filePath;
+    return { registered: true };
   } catch (error) {
     debugLogger.debug(`registerSession failed: ${describe(error)}`);
-    return { registered: false, slot };
+    return { registered: false };
   }
 }
 
@@ -569,16 +430,12 @@ export async function patchSessionRecord(
   patch: Partial<
     Omit<SessionRegistryRecord, 'pid' | 'schemaVersion' | 'procStart' | 'pidNs'>
   >,
-  slot: SessionRecordSlot = SHARED_RECORD_SLOT,
 ): Promise<boolean> {
   try {
     // Inside the try: the fallback `getGlobalQwenDir()` resolution reads
     // the home directory and can throw, and this function promises never
     // to reject.
-    const filePath = thisProcessRecordPath(slot);
-    // A slot this process never registered has no record to merge into,
-    // and no path worth guessing — the same no-op a missing file gets.
-    if (filePath === null) return false;
+    const filePath = thisProcessRecordPath();
     const existing = await readRecord(filePath);
     // Missing, unreadable, newer-schema, or not actually a record for
     // this PID, namespace and boot: the path is keyed by PID alone, and
@@ -616,16 +473,10 @@ export async function patchSessionRecord(
   }
 }
 
-/**
- * Remove one of this process's records. Safe to call when none was
- * written, and for a slot that never registered.
- */
-export async function unregisterSession(
-  slot: SessionRecordSlot = SHARED_RECORD_SLOT,
-): Promise<void> {
+/** Remove this process's record. Safe to call when none was written. */
+export async function unregisterSession(): Promise<void> {
   try {
-    const filePath = thisProcessRecordPath(slot);
-    if (filePath === null) return;
+    const filePath = thisProcessRecordPath();
     // The path is keyed by PID alone, and PIDs collide across namespace
     // and machine boundaries: the record sitting at our path may belong
     // to a live session on the other side of a shared home. Unlink only
@@ -637,14 +488,14 @@ export async function unregisterSession(
     const existing = await readRecord(filePath);
     if (existing.status === 'read-error') {
       // The one branch that keeps the capture. The file is intact and
-      // may still be this session's own, and a minted path cannot be
-      // derived a second time — forgetting it here would leave a record
-      // this process can no longer name, patch or remove, advertising a
-      // session that is gone until the PID itself dies. Every other exit
-      // below has established that the path is not ours to hold.
+      // may still be this session's own, and a relative `QWEN_HOME` may
+      // no longer resolve to it — forgetting it here would leave a record
+      // this process can no longer remove, advertising a session that is
+      // gone until the PID itself dies. Every other exit below has
+      // established that the path is not ours to hold.
       return;
     }
-    registeredRecordPaths.delete(slot);
+    registeredRecordPath = null;
     if (existing.status === 'unsupported-version') return;
     if (existing.status === 'ok' && !matchesLocalIdentity(existing.record)) {
       return;
@@ -653,39 +504,6 @@ export async function unregisterSession(
   } catch (error) {
     if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return;
     debugLogger.debug(`unregisterSession failed: ${describe(error)}`);
-  }
-}
-
-/**
- * This process's own record, as the registry currently holds it.
- *
- * Null when this session never registered, when its record is not
- * readable, or when the record at this PID's path was written by another
- * incarnation of the PID (another namespace, another boot, or a dead
- * predecessor whose token no longer matches) — the same tests
- * `patchSessionRecord` applies before it will merge into a record, so a
- * caller never reads back a record that a patch would have refused to
- * touch. Never throws.
- */
-export async function readOwnSessionRecord(
-  slot: SessionRecordSlot = SHARED_RECORD_SLOT,
-): Promise<SessionRegistryRecord | null> {
-  try {
-    const filePath = thisProcessRecordPath(slot);
-    if (filePath === null) return null;
-    const existing = await readRecord(filePath);
-    if (existing.status !== 'ok' || !matchesLocalIdentity(existing.record)) {
-      return null;
-    }
-    const record = existing.record;
-    const currentToken = readProcStartToken(process.pid);
-    if (record.procStart !== null && record.procStart !== currentToken) {
-      return null;
-    }
-    return record;
-  } catch (error) {
-    debugLogger.debug(`readOwnSessionRecord failed: ${describe(error)}`);
-    return null;
   }
 }
 

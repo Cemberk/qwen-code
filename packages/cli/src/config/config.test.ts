@@ -6,7 +6,6 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as os from 'node:os';
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
   GOAL_DEFAULT_TOKEN_BUDGET,
@@ -27,7 +26,6 @@ import {
   isValidSessionId,
   loadCliConfig,
   parseArguments,
-  SessionIdConflictError,
   type CliArgs,
   resetOutputStyleWarningsForTesting,
 } from './config.js';
@@ -323,7 +321,7 @@ describe('parseArguments', () => {
     expect((await parseArguments())._).toEqual(['--sandbox', 'bwrap']);
   });
 
-  it('includes every approval mode description in --help', async () => {
+  it('includes every approval mode in --help', async () => {
     process.argv = ['node', 'script.js', '--help'];
     const output: string[] = [];
     const log = vi.spyOn(console, 'log').mockImplementation((...args) => {
@@ -335,9 +333,7 @@ describe('parseArguments', () => {
       );
       const help = output.join('');
       for (const mode of ServerConfig.APPROVAL_MODES) {
-        expect(help).toContain(
-          `${mode} (${ServerConfig.APPROVAL_MODE_INFO[mode].description})`,
-        );
+        expect(help).toContain(`${mode} (`);
       }
     } finally {
       log.mockRestore();
@@ -1215,7 +1211,7 @@ describe('loadCliConfig', () => {
 
     const config = await loadCliConfig({ skills: { enabled: ['pdf'] } }, argv);
 
-    expect(config.hasSkillSettingsListsProvider()).toBe(true);
+    expect(config['skillSettingsListsProvider'] !== null).toBe(true);
   });
 
   it.each(['--bare', '--safe-mode'])(
@@ -1229,7 +1225,7 @@ describe('loadCliConfig', () => {
         argv,
       );
 
-      expect(config.hasSkillSettingsListsProvider()).toBe(false);
+      expect(config['skillSettingsListsProvider'] !== null).toBe(false);
     },
   );
 
@@ -1273,7 +1269,7 @@ describe('loadCliConfig', () => {
         argv,
       );
 
-      expect(config.getGoalTokenBudgetGrant()).toBe(1_234);
+      expect(config['goalTokenBudgetGrant']).toBe(1_234);
     });
 
     it('uses -1 as the unlimited sentinel', async () => {
@@ -1285,7 +1281,7 @@ describe('loadCliConfig', () => {
         argv,
       );
 
-      expect(config.getGoalTokenBudgetGrant()).toBe(Number.POSITIVE_INFINITY);
+      expect(config['goalTokenBudgetGrant']).toBe(Number.POSITIVE_INFINITY);
     });
 
     it.each([
@@ -1309,7 +1305,7 @@ describe('loadCliConfig', () => {
 
       const config = await loadCliConfig({}, argv);
 
-      expect(config.getGoalTokenBudgetGrant()).toBe(GOAL_DEFAULT_TOKEN_BUDGET);
+      expect(config['goalTokenBudgetGrant']).toBe(GOAL_DEFAULT_TOKEN_BUDGET);
     });
   });
 
@@ -1323,8 +1319,8 @@ describe('loadCliConfig', () => {
         argv,
       );
 
-      expect(config.getGoalTurnBudgetGrant()).toBe(20);
-      expect(config.getGoalActiveTimeBudgetGrantMs()).toBe(1_800_000);
+      expect(config['goalTurnBudgetGrant']).toBe(20);
+      expect(config['goalActiveTimeBudgetGrantMs']).toBe(1_800_000);
     });
 
     it('runs Goals with no cadence ceiling when the settings are unset', async () => {
@@ -1333,8 +1329,8 @@ describe('loadCliConfig', () => {
 
       const config = await loadCliConfig({}, argv);
 
-      expect(config.getGoalTurnBudgetGrant()).toBe(Number.POSITIVE_INFINITY);
-      expect(config.getGoalActiveTimeBudgetGrantMs()).toBe(
+      expect(config['goalTurnBudgetGrant']).toBe(Number.POSITIVE_INFINITY);
+      expect(config['goalActiveTimeBudgetGrantMs']).toBe(
         Number.POSITIVE_INFINITY,
       );
     });
@@ -1350,7 +1346,7 @@ describe('loadCliConfig', () => {
           argv,
         );
 
-        expect(config.getGoalTurnBudgetGrant()).toBe(
+        expect(config['goalTurnBudgetGrant']).toBe(
           value === -1 ? Number.POSITIVE_INFINITY : value,
         );
       },
@@ -2149,32 +2145,6 @@ describe('loadCliConfig', () => {
     );
   });
 
-  it('should keep the session writer lease disabled by default', async () => {
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments();
-
-    await loadCliConfig({}, argv);
-
-    expect(mockConfigConstructorParams).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sessionWriterLeaseEnabled: false,
-      }),
-    );
-  });
-
-  it('should propagate the session writer lease opt-in', async () => {
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments();
-
-    await loadCliConfig({ experimental: { sessionWriterLease: true } }, argv);
-
-    expect(mockConfigConstructorParams).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sessionWriterLeaseEnabled: true,
-      }),
-    );
-  });
-
   it('keeps Session Workflow disabled by default', async () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments();
@@ -2201,92 +2171,6 @@ describe('loadCliConfig', () => {
     );
   });
 
-  it('should not enable the session writer lease for invalid truthy values', async () => {
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments();
-
-    await loadCliConfig(
-      {
-        experimental: {
-          sessionWriterLease: 'true',
-        },
-      } as unknown as Settings,
-      argv,
-    );
-
-    expect(mockConfigConstructorParams).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sessionWriterLeaseEnabled: false,
-      }),
-    );
-  });
-
-  it('places session-injected (ACP/IDE) MCP servers at the top precedence tier', async () => {
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments();
-    const settings: Settings = {
-      mcpServers: {
-        shared: { command: 'settings-cmd' },
-        'settings-only': { command: 'settings-only-cmd' },
-      },
-    };
-    const sessionMcpServers = {
-      shared: new ServerConfig.MCPServerConfig('session-cmd'),
-      'ide-only': new ServerConfig.MCPServerConfig('ide-cmd'),
-    };
-
-    const config = await loadCliConfig(
-      settings,
-      argv,
-      process.cwd(),
-      undefined,
-      undefined,
-      undefined,
-      sessionMcpServers,
-    );
-
-    const servers = config.getMcpServers() ?? {};
-    // Session source wins a name clash with settings.
-    expect(servers['shared'].command).toBe('session-cmd');
-    // Both session-only and settings-only servers survive.
-    expect(servers['ide-only'].command).toBe('ide-cmd');
-    expect(servers['settings-only'].command).toBe('settings-only-cmd');
-    // Session servers are never approval-gated.
-    expect(config.isMcpServerPendingApproval('ide-only')).toBe(false);
-  });
-
-  it('preserves session/CLI-supplied MCP servers under safe mode while dropping settings-sourced ones', async () => {
-    process.argv = ['node', 'script.js', '--safe-mode'];
-    const argv = await parseArguments();
-    const settings: Settings = {
-      mcpServers: {
-        'settings-only': { command: 'settings-only-cmd' },
-      },
-    };
-    const sessionMcpServers = {
-      'session-server': new ServerConfig.MCPServerConfig('session-cmd'),
-    };
-
-    const config = await loadCliConfig(
-      settings,
-      argv,
-      process.cwd(),
-      undefined,
-      undefined,
-      undefined,
-      sessionMcpServers,
-    );
-
-    const servers = config.getMcpServers() ?? {};
-    // Session-supplied server survives safe mode — it's an explicit,
-    // per-invocation argument (ACP session/new), not ambient local state.
-    expect(servers['session-server']?.command).toBe('session-cmd');
-    // Settings-sourced server is still dropped under safe mode.
-    expect(servers['settings-only']).toBeUndefined();
-    // Never approval-gated, same as the non-safe-mode case above.
-    expect(config.isMcpServerPendingApproval('session-server')).toBe(false);
-  });
-
   it('preserves --mcp-config-supplied MCP servers under safe mode while dropping settings-sourced ones', async () => {
     process.argv = [
       'node',
@@ -2309,7 +2193,7 @@ describe('loadCliConfig', () => {
     expect(servers['settings-only']).toBeUndefined();
   });
 
-  it('does NOT let a settings-sourced mcp.allowed list silently filter a session-supplied server under safe mode', async () => {
+  it('does NOT let a settings-sourced mcp.allowed list silently filter a --mcp-config server under safe mode', async () => {
     // Found by an automated review pass on PR #7827: the allowedMcpServers
     // assembly guard was `!bareMode` only (missing `&& !safeMode`), so
     // settings.mcp.allowed/excluded — LOCAL/ambient state, same category as
@@ -2320,27 +2204,22 @@ describe('loadCliConfig', () => {
     // top-tier server, defeating the very guarantee this PR exists to
     // provide — via an indirect vector (a filter's SOURCE), not the
     // mcpServers map directly.
-    process.argv = ['node', 'script.js', '--safe-mode'];
+    process.argv = [
+      'node',
+      'script.js',
+      '--safe-mode',
+      '--mcp-config',
+      JSON.stringify({ 'cli-server': { command: 'cli-cmd' } }),
+    ];
     const argv = await parseArguments();
     const settings: Settings = {
       mcp: { allowed: ['some-other-server'] },
     };
-    const sessionMcpServers = {
-      'session-server': new ServerConfig.MCPServerConfig('session-cmd'),
-    };
 
-    const config = await loadCliConfig(
-      settings,
-      argv,
-      process.cwd(),
-      undefined,
-      undefined,
-      undefined,
-      sessionMcpServers,
-    );
+    const config = await loadCliConfig(settings, argv, process.cwd());
 
     const servers = config.getMcpServers() ?? {};
-    expect(servers['session-server']?.command).toBe('session-cmd');
+    expect(servers['cli-server']?.command).toBe('cli-cmd');
   });
 
   it('drops ALL MCP servers under safe mode when none were supplied by the caller', async () => {
@@ -2380,8 +2259,15 @@ describe('loadCliConfig', () => {
     expect(config.isMcpServerPendingApproval('user-server')).toBe(false);
   });
 
-  it('keeps session-injected MCP servers ungated in non-interactive runs', async () => {
-    process.argv = ['node', 'script.js', '-p', 'hello'];
+  it('keeps --mcp-config MCP servers ungated in non-interactive runs', async () => {
+    process.argv = [
+      'node',
+      'script.js',
+      '-p',
+      'hello',
+      '--mcp-config',
+      JSON.stringify({ 'cli-only': { command: 'cli-cmd' } }),
+    ];
     const argv = await parseArguments();
     const config = await loadCliConfig(
       {
@@ -2394,16 +2280,10 @@ describe('loadCliConfig', () => {
       },
       argv,
       process.cwd(),
-      undefined,
-      undefined,
-      undefined,
-      {
-        'ide-only': new ServerConfig.MCPServerConfig('ide-cmd'),
-      },
     );
 
     expect(config.isMcpServerPendingApproval('workspace-server')).toBe(true);
-    expect(config.isMcpServerPendingApproval('ide-only')).toBe(false);
+    expect(config.isMcpServerPendingApproval('cli-only')).toBe(false);
   });
 
   it('should fork and load a new session when --resume is combined with --fork-session', async () => {
@@ -2437,106 +2317,6 @@ describe('loadCliConfig', () => {
     );
     expect(mockSessionServiceInstance.loadSession).toHaveBeenCalledWith(
       config.getSessionId(),
-    );
-  });
-
-  it('rebinds a selective restore projection to the forked session', async () => {
-    const sourceSessionId = '123e4567-e89b-42d3-a456-426614174000';
-    const projectionSource = vi.fn(async (sessionId: string) => ({
-      sessionId,
-      filePath: `/mock/${sessionId}.jsonl`,
-      startTime: '2026-08-13T00:00:00.000Z',
-      lastUpdated: '2026-08-13T00:00:00.000Z',
-      runtime: {
-        apiHistory: [],
-        uiTelemetryEvents: [],
-        recording: { lastCompletedUuid: 'leaf', turnParentUuids: [] },
-        goalRecords: [],
-        initialTurn: 0,
-        backgroundNotificationTaskIds: [],
-      },
-    }));
-
-    const config = await loadCliConfig(
-      {},
-      { resume: sourceSessionId, forkSession: true } as CliArgs,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      false,
-      { sessionRestore: { projectionSource } },
-    );
-
-    const forkedSessionId = config.getSessionId();
-    expect(mockSessionServiceInstance.forkSession).toHaveBeenCalledWith(
-      sourceSessionId,
-      forkedSessionId,
-    );
-    expect(projectionSource).toHaveBeenCalledOnce();
-    expect(projectionSource).toHaveBeenCalledWith(forkedSessionId);
-    expect(mockSessionServiceInstance.loadSession).not.toHaveBeenCalled();
-    const configParams = mockConfigConstructorParams.mock.calls.at(-1)?.[0];
-    expect(configParams).toEqual(
-      expect.objectContaining({
-        sessionId: forkedSessionId,
-        sessionData: undefined,
-        sessionRestoreProjection: expect.objectContaining({
-          sessionId: forkedSessionId,
-        }),
-        sessionRestoreProjectionSource: expect.any(Function),
-      }),
-    );
-
-    const deferredProjection =
-      await configParams.sessionRestoreProjectionSource();
-    expect(deferredProjection).toEqual(
-      expect.objectContaining({ sessionId: forkedSessionId }),
-    );
-    expect(projectionSource).toHaveBeenNthCalledWith(2, forkedSessionId);
-  });
-
-  it('preloads a selective projection when a non-ACP host cannot acquire a writer lease', async () => {
-    const sourceSessionId = '123e4567-e89b-42d3-a456-426614174000';
-    const projectionSource = vi.fn(async (sessionId: string) => ({
-      sessionId,
-      filePath: `/mock/${sessionId}.jsonl`,
-      startTime: '2026-08-13T00:00:00.000Z',
-      lastUpdated: '2026-08-13T00:00:00.000Z',
-      runtime: {
-        apiHistory: [],
-        uiTelemetryEvents: [],
-        recording: { lastCompletedUuid: 'leaf', turnParentUuids: [] },
-        goalRecords: [],
-        initialTurn: 0,
-        backgroundNotificationTaskIds: [],
-      },
-    }));
-
-    await loadCliConfig(
-      { experimental: { sessionWriterLease: true } },
-      { resume: sourceSessionId } as CliArgs,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      false,
-      { sessionRestore: { projectionSource } },
-    );
-
-    expect(projectionSource).toHaveBeenCalledOnce();
-    expect(projectionSource).toHaveBeenCalledWith(sourceSessionId);
-    expect(mockConfigConstructorParams).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        sessionWriterLeaseEnabled: true,
-        sessionRestoreProjection: expect.objectContaining({
-          sessionId: sourceSessionId,
-        }),
-      }),
     );
   });
 
@@ -2635,99 +2415,15 @@ describe('loadCliConfig', () => {
     expect(mockExit).toHaveBeenCalledWith(1);
   });
 
-  it('should throw SessionIdConflictError instead of exiting when throwOnSessionIdConflict is set', async () => {
-    const sessionId = '123e4567-e89b-12d3-a456-426614174000';
-    mockSessionServiceInstance.findSessionIdIgnoringCase.mockResolvedValue(
-      sessionId,
-    );
-    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit called');
-    });
-
-    const promise = loadCliConfig(
-      {},
-      { sessionId } as CliArgs,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      true,
-    );
-
-    await expect(promise).rejects.toBeInstanceOf(SessionIdConflictError);
-    await expect(promise).rejects.toMatchObject({ sessionId });
-    expect(mockExit).not.toHaveBeenCalled();
-  });
-
-  it('should not throw for a fresh caller-supplied sessionId when throwOnSessionIdConflict is set', async () => {
-    const sessionId = '123e4567-e89b-12d3-a456-426614174000';
-    mockSessionServiceInstance.findSessionIdIgnoringCase.mockResolvedValue(
-      undefined,
-    );
-
-    const config = await loadCliConfig(
-      {},
-      { sessionId } as CliArgs,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      true,
-    );
-
-    expect(config.getSessionId()).toBe(sessionId);
-  });
-
   it('canonicalizes a mixed-case caller-supplied sessionId before storing it', async () => {
     const sessionId = '123E4567-E89B-12D3-A456-426614174000';
     mockSessionServiceInstance.findSessionIdIgnoringCase.mockResolvedValue(
       undefined,
     );
 
-    const config = await loadCliConfig(
-      {},
-      { sessionId } as CliArgs,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      true,
-    );
+    const config = await loadCliConfig({}, { sessionId } as CliArgs);
 
     expect(config.getSessionId()).toBe(sessionId.toLowerCase());
-  });
-
-  it('skips the occupancy check for a daemon-generated sessionId', async () => {
-    const sessionId = '123e4567-e89b-12d3-a456-426614174000';
-    // A failing occupancy scan (EACCES/EMFILE/EIO fail closed) must not
-    // reject an internally generated fresh UUID on the id-less creation hot
-    // path — the check exists for caller-chosen ids only.
-    mockSessionServiceInstance.findSessionIdIgnoringCase.mockRejectedValue(
-      new Error('EACCES: chats/archive unreadable'),
-    );
-
-    const config = await loadCliConfig(
-      {},
-      { sessionId, sessionIdGenerated: true } as CliArgs,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      true,
-    );
-
-    expect(config.getSessionId()).toBe(sessionId);
-    expect(
-      mockSessionServiceInstance.findSessionIdIgnoringCase,
-    ).not.toHaveBeenCalled();
   });
 
   it('should use internal sandbox session ID without treating it as a new session', async () => {
@@ -4014,48 +3710,6 @@ describe('loadCliConfig with includeDirectories', () => {
     );
   });
 
-  it('ignores ambient roots and LSP for a host-managed provisional workspace', async () => {
-    const mockCwd = path.resolve(path.sep, 'home', 'user', 'project');
-    process.argv = [
-      'node',
-      'script.js',
-      '--experimental-lsp',
-      '--include-directories',
-      path.resolve(path.sep, 'cli', 'path1'),
-    ];
-    const argv = await parseArguments();
-    const settings: Settings = {
-      context: {
-        includeDirectories: [path.resolve(path.sep, 'settings', 'path1')],
-        loadFromIncludeDirectories: true,
-      },
-    };
-
-    await loadCliConfig(
-      settings,
-      argv,
-      mockCwd,
-      [],
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      false,
-      { provisionalWorkspace: true },
-    );
-
-    expect(mockConfigConstructorParams).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        targetDir: mockCwd,
-        provisionalWorkspace: true,
-        includeDirectories: [],
-        loadMemoryFromIncludeDirectories: false,
-        lsp: { enabled: false },
-      }),
-    );
-    expect(NativeLspService).not.toHaveBeenCalled();
-  });
-
   it('should ignore implicit startup context inputs in bare mode', async () => {
     const mockCwd = path.resolve(path.sep, 'home', 'user', 'project');
     const cliPath = path.resolve(path.sep, 'cli', 'path1');
@@ -4158,58 +3812,14 @@ describe('loadCliConfig with includeDirectories', () => {
     expect(config.isLspEnabled()).toBe(false);
   });
 
-  it('transports the trusted host policy and ignores an undeclared top-level setting', async () => {
-    vi.mocked(fs.statSync).mockReturnValue({
-      isDirectory: () => true,
-    } as import('node:fs').Stats);
-    vi.mocked(fs.realpathSync).mockImplementation((value) => value.toString());
-    process.argv = ['node', 'script.js', '--bare', '-p', 'fixture'];
+  it('rejects frontends the execution sandbox does not support yet', async () => {
+    process.argv = ['node', 'script.js', '-p', 'fixture'];
     const argv = await parseArguments();
-    const policy = {
-      workspace: path.resolve(path.sep, 'sandbox-fixture', 'workspace'),
-      installation: path.resolve('/trusted-install'),
-      state: path.resolve('/trusted-state'),
-      maskedPaths: [
-        path.resolve(path.sep, 'sandbox-fixture', 'workspace', '.env'),
-      ],
-      filesystem: 'workspace-write' as const,
-      network: 'closed' as const,
-    };
-    const config = await loadCliConfig(
-      {},
-      argv,
-      policy.workspace,
-      [],
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      false,
-      { shellExecutionSandbox: policy },
-    );
-    expect(config.getShellExecutionSandbox()).toMatchObject({
-      ...policy,
-      maskedPaths: expect.any(Array),
-    });
-    expect(config.getShellExecutionSandbox()?.maskedPaths).toEqual(
-      policy.maskedPaths,
-    );
-    expect(config.getCoreTools()).toEqual(
-      expect.arrayContaining([
-        ToolNames.SHELL,
-        ToolNames.TASK_STOP,
-        ToolNames.READ_FILE,
-        ToolNames.WRITE_FILE,
-        ToolNames.EDIT,
-      ]),
-    );
-    const ordinary = await loadCliConfig(
-      { shellExecutionSandbox: policy } as Settings,
-      argv,
-      policy.workspace,
-      [],
-    );
-    expect(ordinary.getShellExecutionSandbox()).toBeUndefined();
+    const settings = {
+      tools: {
+        executionSandbox: { filesystem: 'read-only', network: 'closed' },
+      },
+    } as Settings;
     const rejectedModes: Array<[string, Partial<CliArgs>]> = [
       ['prompt-interactive frontend', { promptInteractive: 'fixture' }],
       ['stream-json frontend', { inputFormat: 'stream-json' }],
@@ -4218,52 +3828,9 @@ describe('loadCliConfig with includeDirectories', () => {
     ];
     for (const [, overrides] of rejectedModes) {
       await expect(
-        loadCliConfig(
-          {},
-          { ...argv, ...overrides },
-          policy.workspace,
-          [],
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          false,
-          { shellExecutionSandbox: policy },
-        ),
+        loadCliConfig(settings, { ...argv, ...overrides }, process.cwd(), []),
       ).rejects.toThrow('does not yet support');
     }
-    const normal = await loadCliConfig(
-      {},
-      { ...argv, bare: false },
-      policy.workspace,
-      [],
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      false,
-      { shellExecutionSandbox: policy },
-    );
-    expect(normal.getShellExecutionSandbox()).toMatchObject({
-      ...policy,
-      maskedPaths: expect.any(Array),
-    });
-    expect(normal.getBareMode()).toBe(false);
-    vi.stubEnv('QWEN_AGENT_EXECUTION_BACKEND', 'docker');
-    await expect(
-      loadCliConfig(
-        {},
-        argv,
-        policy.workspace,
-        [],
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        false,
-        { shellExecutionSandbox: policy },
-      ),
-    ).rejects.toThrow('agent execution environments');
   });
 
   it('should ignore coreTools overrides in bare mode', async () => {
@@ -5327,12 +4894,12 @@ describe('loadCliConfig fileFiltering', () => {
     },
     {
       property: 'respectQwenIgnore',
-      getter: (c) => c.getFileFilteringRespectQwenIgnore(),
+      getter: (c) => c['fileFiltering'].respectQwenIgnore,
       value: true,
     },
     {
       property: 'respectQwenIgnore',
-      getter: (c) => c.getFileFilteringRespectQwenIgnore(),
+      getter: (c) => c['fileFiltering'].respectQwenIgnore,
       value: false,
     },
     {

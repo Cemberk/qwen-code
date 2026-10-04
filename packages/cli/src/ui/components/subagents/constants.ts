@@ -21,16 +21,6 @@ export const WIZARD_STEPS = {
 // Total number of wizard steps
 export const TOTAL_WIZARD_STEPS = 6;
 
-// Step names for display
-export const STEP_NAMES: Record<number, string> = {
-  [WIZARD_STEPS.LOCATION_SELECTION]: 'Location Selection',
-  [WIZARD_STEPS.GENERATION_METHOD]: 'Generation Method',
-  [WIZARD_STEPS.DESCRIPTION_INPUT]: 'Description Input',
-  [WIZARD_STEPS.TOOL_SELECTION]: 'Tool Selection',
-  [WIZARD_STEPS.COLOR_SELECTION]: 'Color Selection',
-  [WIZARD_STEPS.FINAL_CONFIRMATION]: 'Final Confirmation',
-};
-
 // Color options for subagent display
 export const COLOR_OPTIONS = [
   {

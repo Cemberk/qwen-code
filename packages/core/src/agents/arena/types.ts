@@ -6,7 +6,7 @@
 
 import type { Content } from '@google/genai';
 import type { WorktreeInfo } from '../../services/gitWorktreeService.js';
-import type { DisplayMode } from '../backends/types.js';
+
 import type { AgentStatus } from '../runtime/agent-types.js';
 
 /**
@@ -189,12 +189,6 @@ export interface ArenaStartOptions {
   timeoutSeconds?: number;
   /** Approval mode to use for agents (inherited from main process) */
   approvalMode?: string;
-  /** Initial terminal columns for agent PTYs (default: process.stdout.columns or 120) */
-  cols?: number;
-  /** Initial terminal rows for agent PTYs (default: process.stdout.rows or 40) */
-  rows?: number;
-  /** Display mode preference */
-  displayMode?: DisplayMode;
   /**
    * Optional chat history from the main session to seed each arena agent
    * with conversational context. When provided, this history is prepended
@@ -211,11 +205,6 @@ export interface ArenaCallbacks {
   onAgentStart?: (agentId: string, model: ArenaModelConfig) => void;
   /** Called when an agent completes */
   onAgentComplete?: (result: ArenaAgentResult) => void;
-  /** Called when agent stats are updated */
-  onAgentStatsUpdate?: (
-    agentId: string,
-    stats: Partial<ArenaAgentStats>,
-  ) => void;
   /** Called when the arena session completes */
   onArenaComplete?: (result: ArenaSessionResult) => void;
   /** Called on arena error */
@@ -223,16 +212,14 @@ export interface ArenaCallbacks {
 }
 
 /**
- * File format for per-agent status (child → main process).
- * Written atomically by ArenaAgentClient to
- * `<arenaSessionDir>/agents/<safeAgentId>.json`.
+ * File format for per-agent status, written atomically by ArenaManager to
+ * `<arenaSessionDir>/agents/<safeAgentId>.json` for external consumers.
  */
 export interface ArenaStatusFile {
   agentId: string;
   status: AgentStatus;
   updatedAt: number;
   rounds: number;
-  currentActivity?: string;
   stats: ArenaAgentStats;
   finalSummary: string | null;
   error: string | null;
@@ -243,7 +230,7 @@ export interface ArenaStatusFile {
  *
  * Initially written by GitWorktreeService with static config fields
  * (arenaSessionId, sourceRepoPath, worktreeNames, baseBranch, createdAt).
- * Dynamically updated by ArenaManager with agent status data during polling.
+ * Updated by ArenaManager with agent status data as agents progress.
  */
 export interface ArenaConfigFile {
   /** Arena session identifier */
@@ -256,20 +243,10 @@ export interface ArenaConfigFile {
   baseBranch?: string;
   /** Timestamp when the session was created */
   createdAt: number;
-  /** Timestamp of the last status update (set by ArenaManager polling) */
+  /** Timestamp of the last status update (set by ArenaManager) */
   updatedAt?: number;
-  /** Per-agent status data, keyed by agentId (set by ArenaManager polling) */
+  /** Per-agent status data, keyed by agentId (set by ArenaManager) */
   agents?: Record<string, ArenaStatusFile>;
-}
-
-/**
- * Control signal format for control.json (main → child process).
- * Written by ArenaManager, consumed (read + deleted) by ArenaAgentClient.
- */
-export interface ArenaControlSignal {
-  type: 'shutdown' | 'cancel';
-  reason: string;
-  timestamp: number;
 }
 
 /**

@@ -27,7 +27,6 @@ import {
   isInlineModelOverrideAllowed,
   parseAcpModelOption,
 } from '../../utils/acpModelUtils.js';
-import { recordDaemonSessionModelFromConfig } from '../../utils/session-model-persistence.js';
 
 const MAIN_MODEL_CONFIGURATION_HINT =
   'Configure models in settings.modelProviders and ensure the required environment variables are set. In interactive mode, run /auth to configure or switch providers, or run /model without arguments to choose from configured models.';
@@ -124,35 +123,30 @@ async function switchMainModel(
   currentAuthType: AuthType,
   modelArg: string,
   scopeOverride?: SettingScope,
-  persistSelection = true,
 ): Promise<string> {
   const parsed = parseAcpModelOption(modelArg);
 
   if (parsed.authType) {
     await config.switchModel(parsed.authType, parsed.modelId);
-    if (persistSelection) {
-      persistSetting(
-        settings,
-        'security.auth.selectedType',
-        parsed.authType,
-        scopeOverride,
-      );
-      persistSetting(settings, 'model.name', parsed.modelId, scopeOverride);
-      // `/model <id>` selects by id only, so clear any baseUrl disambiguator left
-      // by a previous model-picker selection — otherwise next launch would
-      // resolve to a different provider than this switch just chose. Use an
-      // empty-string tombstone so the clear overrides a lower-scope value (an
-      // undefined write is dropped from JSON and would not override on merge).
-      persistSetting(settings, 'model.baseUrl', '', scopeOverride);
-    }
+    persistSetting(
+      settings,
+      'security.auth.selectedType',
+      parsed.authType,
+      scopeOverride,
+    );
+    persistSetting(settings, 'model.name', parsed.modelId, scopeOverride);
+    // `/model <id>` selects by id only, so clear any baseUrl disambiguator left
+    // by a previous model-picker selection — otherwise next launch would
+    // resolve to a different provider than this switch just chose. Use an
+    // empty-string tombstone so the clear overrides a lower-scope value (an
+    // undefined write is dropped from JSON and would not override on merge).
+    persistSetting(settings, 'model.baseUrl', '', scopeOverride);
     return parsed.modelId;
   }
 
   await config.switchModel(currentAuthType, modelArg, undefined);
-  if (persistSelection) {
-    persistSetting(settings, 'model.name', modelArg, scopeOverride);
-    persistSetting(settings, 'model.baseUrl', '', scopeOverride);
-  }
+  persistSetting(settings, 'model.name', modelArg, scopeOverride);
+  persistSetting(settings, 'model.baseUrl', '', scopeOverride);
   return modelArg;
 }
 
@@ -304,7 +298,7 @@ export const modelCommand: SlashCommand = {
   argumentHint:
     '[--fast|--vision|--compaction] [--project|--global] [<model-id>] | <model-id> <prompt>',
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
   completion: async (context, partialArg) => {
     if (partialArg) {
       const flagCompletions = [
@@ -399,20 +393,6 @@ export const modelCommand: SlashCommand = {
         content: t(
           'Cannot use both --project and --global. Choose one scope flag.',
         ),
-      };
-    }
-    const auxiliarySelection =
-      /(?:^|\s)--(?:fast|vision|compaction)(?:\s|$)/.test(rawArgs);
-    if (
-      (hasProject &&
-        context.executionPolicy?.allowWorkspaceSettingsWrite === false) ||
-      (context.executionPolicy?.persistModelSelection === false &&
-        (hasProject || hasGlobal || auxiliarySelection))
-    ) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: t('This model selection is not available in this session.'),
       };
     }
     // Reject --project when workspace is untrusted — workspace settings are
@@ -781,20 +761,6 @@ export const modelCommand: SlashCommand = {
       }
 
       if (inlinePrompt) {
-        // ACP hosts send the prompt on the session model via a separate
-        // pipeline that doesn't thread a per-turn override, so the inline form
-        // would silently run on the default model. Reject it there rather than
-        // mislead; the two-step `/model <id>` flow still works in ACP.
-        if (context.executionMode === 'acp') {
-          return {
-            type: 'message',
-            messageType: 'error',
-            content: t(
-              "Inline one-shot override isn't supported in this mode — run '/model {{model}}' first, then send your prompt.",
-              { model: modelName },
-            ),
-          };
-        }
         // Scope flags are silently consumed by parseScopeFlags but the inline
         // prompt path doesn't persist the model. Reject the combination to avoid
         // surprising the user with a "(this project)" confirmation that never
@@ -859,11 +825,7 @@ export const modelCommand: SlashCommand = {
         authType,
         modelName,
         scopeOverride,
-        context.executionPolicy?.persistModelSelection !== false,
       );
-      if (context.executionMode === 'acp') {
-        await recordDaemonSessionModelFromConfig(config);
-      }
       return {
         type: 'message',
         messageType: 'info',
@@ -871,7 +833,7 @@ export const modelCommand: SlashCommand = {
       };
     }
 
-    // Non-interactive/ACP: set model if an arg was provided, otherwise show current model
+    // Non-interactive: set model if an arg was provided, otherwise show current model
     if (context.executionMode !== 'interactive') {
       // /model with no args — show current model
       const currentModel = config.getModel() ?? 'unknown';

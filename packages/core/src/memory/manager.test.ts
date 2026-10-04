@@ -9,11 +9,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { Content } from '@google/genai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  globalMemoryManager,
-  MemoryManager,
-  type MemoryTaskRecord,
-} from './manager.js';
+import { MemoryManager, type MemoryTaskRecord } from './manager.js';
 import { ensureAutoMemoryScaffold } from './store.js';
 import {
   getAutoMemoryMetadataPath,
@@ -1233,12 +1229,6 @@ describe('MemoryManager', () => {
         total: 10,
         ranges: [{ start: 0, end: 5 }],
       });
-    });
-  });
-
-  describe('globalMemoryManager', () => {
-    it('is a MemoryManager instance', () => {
-      expect(globalMemoryManager).toBeInstanceOf(MemoryManager);
     });
   });
 

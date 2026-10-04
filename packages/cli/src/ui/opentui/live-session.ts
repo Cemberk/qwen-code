@@ -348,9 +348,7 @@ function imageFormatWarningEvent(): OpenTuiStreamEvent {
 /**
  * ink parity (`applyVisionBridgeIfNeeded`): with a vision bridge configured and
  * a primary model that cannot read images, an image must be converted before it
- * reaches the model — never forwarded as raw `inlineData`. The shape follows the
- * other non-ink port of this hop (acp-integration
- * `Session.#applyBridgeConversionsIfNeeded`) rather than ink's React hook.
+ * reaches the model — never forwarded as raw `inlineData`.
  *
  * `null` parts mean "do not send this": the turn stops (fresh hop) or the
  * message is dropped (steering hop), exactly as ink declines.

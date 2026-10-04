@@ -544,7 +544,6 @@ class WriteFileToolInvocation extends BaseToolInvocation<
         {
           path: file_path,
           content,
-          toolWriteOrigin: 'write_file',
           _meta: {
             bom: useBOM,
             encoding: detectedEncoding,
@@ -699,19 +698,6 @@ class WriteFileToolInvocation extends BaseToolInvocation<
   }
 }
 
-/**
- * Kept for the cross-package contract test in `workspace-file-read.test.ts`:
- * the daemon's `GET /file` route resolves the `workspacePath` this produces.
- * Delegates to `buildWorkspaceArtifactMetadata` so the two agree by construction.
- */
-export function buildRecordArtifactReminder(
-  config: Config,
-  filePath: string,
-): string | null {
-  const artifact = buildWorkspaceArtifactMetadata(config, filePath);
-  return artifact ? formatRecordArtifactReminder(artifact.workspacePath) : null;
-}
-
 function formatRecordArtifactReminder(workspacePath: string): string {
   return (
     `This file was automatically recorded as a workspace artifact with ` +
@@ -730,9 +716,8 @@ export function buildWorkspaceArtifactMetadata(
     return null;
   }
   const title = path.basename(recorded.filePath);
-  // The daemon store rejects titles and paths that are too long, carry control
-  // characters, or contain markup; skip the artifact rather than tell the model
-  // it was recorded when it will be dropped.
+  // Skip titles and paths that are too long, carry control characters, or
+  // contain markup rather than record an artifact no surface can show safely.
   if (
     title.length > ARTIFACT_TITLE_MAX_LENGTH ||
     hasControlCharacter(title) ||

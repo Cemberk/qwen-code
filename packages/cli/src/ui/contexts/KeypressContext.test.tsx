@@ -13,12 +13,9 @@ import type { Key } from './KeypressContext.js';
 import {
   KeypressProvider,
   useKeypressContext,
-  DRAG_COMPLETION_TIMEOUT_MS,
   PASTE_IDLE_TIMEOUT_MS,
   // CSI_END_O,
   // SS3_END,
-  SINGLE_QUOTE,
-  DOUBLE_QUOTE,
 } from './KeypressContext.js';
 import { useStdin } from 'ink';
 import { EventEmitter } from 'node:events';
@@ -2673,7 +2670,7 @@ describe('Drag and Drop Handling', () => {
           meta: false,
           shift: false,
           paste: false,
-          sequence: SINGLE_QUOTE,
+          sequence: "'",
         });
       });
 
@@ -2681,7 +2678,7 @@ describe('Drag and Drop Handling', () => {
       expect(keyHandler).toHaveBeenCalledTimes(1);
       expect(keyHandler).toHaveBeenCalledWith(
         expect.objectContaining({
-          sequence: SINGLE_QUOTE,
+          sequence: "'",
           paste: false,
         }),
       );
@@ -2703,7 +2700,7 @@ describe('Drag and Drop Handling', () => {
           meta: false,
           shift: false,
           paste: false,
-          sequence: DOUBLE_QUOTE,
+          sequence: '"',
         });
       });
 
@@ -2711,7 +2708,7 @@ describe('Drag and Drop Handling', () => {
       expect(keyHandler).toHaveBeenCalledTimes(1);
       expect(keyHandler).toHaveBeenCalledWith(
         expect.objectContaining({
-          sequence: DOUBLE_QUOTE,
+          sequence: '"',
           paste: false,
         }),
       );
@@ -2736,7 +2733,7 @@ describe('Drag and Drop Handling', () => {
           meta: false,
           shift: false,
           paste: false,
-          sequence: SINGLE_QUOTE,
+          sequence: "'",
         });
       });
 
@@ -2803,7 +2800,7 @@ describe('Drag and Drop Handling', () => {
 
       // Fast-forward timeout - should not trigger any additional broadcasts
       act(() => {
-        vi.advanceTimersByTime(DRAG_COMPLETION_TIMEOUT_MS + 10);
+        vi.advanceTimersByTime(110);
       });
 
       // Still 6 broadcasts - no drag detection

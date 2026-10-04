@@ -6,7 +6,6 @@
 
 import path from 'node:path';
 import type { Config } from '../config/config.js';
-import { getAllMemoryFilenames } from './memory-constants.js';
 
 /**
  * Common ignore patterns used across multiple tools for basic exclusions.
@@ -140,60 +139,6 @@ export class FileExclusions {
   }
 
   /**
-   * Gets comprehensive default exclusion patterns for operations like read-many-files.
-   * Includes all standard exclusions: directories, binary files, system files, etc.
-   */
-  getDefaultExcludePatterns(options: ExcludeOptions = {}): string[] {
-    const {
-      includeDefaults = true,
-      customPatterns = [],
-      runtimePatterns = [],
-      includeDynamicPatterns = true,
-    } = options;
-
-    const patterns: string[] = [];
-
-    // Add base defaults if requested
-    if (includeDefaults) {
-      patterns.push(...DEFAULT_FILE_EXCLUDES);
-    }
-
-    // Add dynamic patterns (like context filenames)
-    if (includeDynamicPatterns) {
-      for (const filename of getAllMemoryFilenames()) {
-        patterns.push(`**/${filename}`);
-      }
-    }
-
-    // Add custom patterns from configuration
-    // TODO: getCustomExcludes method needs to be implemented in Config interface
-    if (this.config) {
-      const configCustomExcludes = this.config.getCustomExcludes?.() ?? [];
-      patterns.push(...configCustomExcludes);
-    }
-
-    // Add user-provided custom patterns
-    patterns.push(...customPatterns);
-
-    // Add runtime patterns (e.g., from CLI)
-    patterns.push(...runtimePatterns);
-
-    return patterns;
-  }
-
-  /**
-   * Gets exclude patterns for read-many-files tool with legacy compatibility.
-   * This maintains the same behavior as the previous getDefaultExcludes() function.
-   */
-  getReadManyFilesExcludes(additionalExcludes: string[] = []): string[] {
-    return this.getDefaultExcludePatterns({
-      includeDefaults: true,
-      runtimePatterns: additionalExcludes,
-      includeDynamicPatterns: true,
-    });
-  }
-
-  /**
    * Gets exclude patterns for glob tool operations.
    * Uses core patterns by default but can be extended with additional patterns.
    */
@@ -205,14 +150,6 @@ export class FileExclusions {
     const configPatterns = this.config?.getCustomExcludes?.() ?? [];
 
     return [...corePatterns, ...configPatterns, ...additionalExcludes];
-  }
-
-  /**
-   * Builds exclude patterns with full customization options.
-   * This is the most flexible method for advanced use cases.
-   */
-  buildExcludePatterns(options: ExcludeOptions): string[] {
-    return this.getDefaultExcludePatterns(options);
   }
 }
 

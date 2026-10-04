@@ -33,7 +33,7 @@
  *
  *   With visual-height fix (current):
  *     clearTerminalPair=5, clearScreen=10, eraseLine=434, cursorUp=130
- *   Without the fix (sliceTextByVisualHeight + overhead-aware budget removed):
+ *   Without the fix (visual-height slicing + overhead-aware budget removed):
  *     clearTerminalPair=2, clearScreen=4,  eraseLine=469, cursorUp=134
  *
  * The clear-pair / clear-screen counts go *up* with the fix in this scenario

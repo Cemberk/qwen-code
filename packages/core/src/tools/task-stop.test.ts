@@ -54,10 +54,9 @@ describe('TaskStopTool', () => {
       outputFile: '/tmp/test.jsonl',
     });
 
-    const result = await tool.validateBuildAndExecute(
-      { task_id: 'agent-1' },
-      new AbortController().signal,
-    );
+    const result = await tool
+      .build({ task_id: 'agent-1' })
+      .execute(new AbortController().signal);
 
     expect(result.error).toBeUndefined();
     expect(result.llmContent).toContain('Cancellation requested');
@@ -67,10 +66,9 @@ describe('TaskStopTool', () => {
   });
 
   it('returns error for non-existent task', async () => {
-    const result = await tool.validateBuildAndExecute(
-      { task_id: 'nope' },
-      new AbortController().signal,
-    );
+    const result = await tool
+      .build({ task_id: 'nope' })
+      .execute(new AbortController().signal);
 
     expect(result.error?.type).toBe(ToolErrorType.TASK_STOP_NOT_FOUND);
     expect(result.llmContent).toContain('No background task found');
@@ -88,10 +86,9 @@ describe('TaskStopTool', () => {
     });
     registry.complete('agent-1', 'done');
 
-    const result = await tool.validateBuildAndExecute(
-      { task_id: 'agent-1' },
-      new AbortController().signal,
-    );
+    const result = await tool
+      .build({ task_id: 'agent-1' })
+      .execute(new AbortController().signal);
 
     expect(result.error?.type).toBe(ToolErrorType.TASK_STOP_NOT_RUNNING);
     expect(result.llmContent).toContain('not running');
@@ -108,10 +105,9 @@ describe('TaskStopTool', () => {
       outputFile: '/tmp/test.jsonl',
     });
 
-    const result = await tool.validateBuildAndExecute(
-      { task_id: 'agent-1' },
-      new AbortController().signal,
-    );
+    const result = await tool
+      .build({ task_id: 'agent-1' })
+      .execute(new AbortController().signal);
 
     expect(result.llmContent).toContain('Search for auth code');
     expect(result.returnDisplay).toContain('Search for auth code');
@@ -129,10 +125,9 @@ describe('TaskStopTool', () => {
     });
     abandonBackgroundAgent.mockReturnValue(true);
 
-    const result = await tool.validateBuildAndExecute(
-      { task_id: 'agent-1' },
-      new AbortController().signal,
-    );
+    const result = await tool
+      .build({ task_id: 'agent-1' })
+      .execute(new AbortController().signal);
 
     expect(abandonBackgroundAgent).toHaveBeenCalledWith('agent-1');
     expect(result.error).toBeUndefined();
@@ -152,10 +147,9 @@ describe('TaskStopTool', () => {
         abortController: ac,
       });
 
-      const result = await tool.validateBuildAndExecute(
-        { task_id: 'bg_a1b2c3d4' },
-        new AbortController().signal,
-      );
+      const result = await tool
+        .build({ task_id: 'bg_a1b2c3d4' })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeUndefined();
       expect(result.llmContent).toContain('background shell "bg_a1b2c3d4"');
@@ -184,10 +178,9 @@ describe('TaskStopTool', () => {
       });
       shellRegistry.complete('bg_done', 0, Date.now());
 
-      const result = await tool.validateBuildAndExecute(
-        { task_id: 'bg_done' },
-        new AbortController().signal,
-      );
+      const result = await tool
+        .build({ task_id: 'bg_done' })
+        .execute(new AbortController().signal);
 
       expect(result.error?.type).toBe(ToolErrorType.TASK_STOP_NOT_RUNNING);
       expect(result.llmContent).toContain('Background shell "bg_done"');
@@ -218,10 +211,9 @@ describe('TaskStopTool', () => {
         abortController: shellAc,
       });
 
-      const result = await tool.validateBuildAndExecute(
-        { task_id: 'shared-id' },
-        new AbortController().signal,
-      );
+      const result = await tool
+        .build({ task_id: 'shared-id' })
+        .execute(new AbortController().signal);
 
       expect(result.llmContent).toContain('background agent');
       expect(agentAc.signal.aborted).toBe(true);
@@ -250,10 +242,9 @@ describe('TaskStopTool', () => {
         outputFile: '/tmp/test.jsonl',
       });
 
-      const result = await tool.validateBuildAndExecute(
-        { task_id: 'mon_123' },
-        new AbortController().signal,
-      );
+      const result = await tool
+        .build({ task_id: 'mon_123' })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeUndefined();
       expect(result.llmContent).toContain('Monitor "mon_123" cancelled');
@@ -281,10 +272,9 @@ describe('TaskStopTool', () => {
       });
       monitorRegistry.complete('mon_done', 0);
 
-      const result = await tool.validateBuildAndExecute(
-        { task_id: 'mon_done' },
-        new AbortController().signal,
-      );
+      const result = await tool
+        .build({ task_id: 'mon_done' })
+        .execute(new AbortController().signal);
 
       expect(result.error?.type).toBe(ToolErrorType.TASK_STOP_NOT_RUNNING);
       expect(result.llmContent).toContain('Background monitor "mon_done"');
@@ -318,10 +308,9 @@ describe('TaskStopTool', () => {
       } as unknown as Config;
       const localTool = new TaskStopTool(localConfig);
 
-      const result = await localTool.validateBuildAndExecute(
-        { task_id: 'dream-running-1' },
-        new AbortController().signal,
-      );
+      const result = await localTool
+        .build({ task_id: 'dream-running-1' })
+        .execute(new AbortController().signal);
 
       expect(cancelTask).toHaveBeenCalledWith('dream-running-1');
       expect(result.error).toBeUndefined();
@@ -355,10 +344,9 @@ describe('TaskStopTool', () => {
       } as unknown as Config;
       const localTool = new TaskStopTool(localConfig);
 
-      const result = await localTool.validateBuildAndExecute(
-        { task_id: 'dream-done-1' },
-        new AbortController().signal,
-      );
+      const result = await localTool
+        .build({ task_id: 'dream-done-1' })
+        .execute(new AbortController().signal);
 
       expect(cancelTask).not.toHaveBeenCalled();
       expect(result.error?.type).toBe(ToolErrorType.TASK_STOP_NOT_RUNNING);
@@ -387,10 +375,9 @@ describe('TaskStopTool', () => {
         }),
       } as unknown as Config);
 
-      const result = await localTool.validateBuildAndExecute(
-        { task_id: migrationRecord.id },
-        new AbortController().signal,
-      );
+      const result = await localTool
+        .build({ task_id: migrationRecord.id })
+        .execute(new AbortController().signal);
 
       expect(cancelTask).toHaveBeenCalledWith(migrationRecord.id);
       expect(result.error).toBeUndefined();
@@ -426,10 +413,9 @@ describe('TaskStopTool', () => {
       } as unknown as Config;
       const localTool = new TaskStopTool(localConfig);
 
-      const result = await localTool.validateBuildAndExecute(
-        { task_id: 'extract-running-1' },
-        new AbortController().signal,
-      );
+      const result = await localTool
+        .build({ task_id: 'extract-running-1' })
+        .execute(new AbortController().signal);
 
       expect(cancelTask).not.toHaveBeenCalled();
       expect(result.error?.type).toBe(ToolErrorType.TASK_STOP_NOT_CANCELLABLE);
@@ -465,10 +451,9 @@ describe('TaskStopTool', () => {
       } as unknown as Config;
       const localTool = new TaskStopTool(localConfig);
 
-      const result = await localTool.validateBuildAndExecute(
-        { task_id: 'dream-broken-1' },
-        new AbortController().signal,
-      );
+      const result = await localTool
+        .build({ task_id: 'dream-broken-1' })
+        .execute(new AbortController().signal);
 
       expect(result.error?.type).toBe(ToolErrorType.TASK_STOP_INTERNAL_ERROR);
       expect(result.llmContent).toContain('could not be cancelled');

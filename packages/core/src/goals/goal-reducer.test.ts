@@ -15,8 +15,6 @@ import {
   isGoalActiveTimeBudgetSpent,
   isGoalTurnBudgetSpent,
   goalRequiresExactPermit,
-  GOAL_PAUSE_REASON_COMMAND,
-  GOAL_PAUSE_REASON_MAX_CHARACTERS,
   GOAL_PAUSE_REASON_USER_INTERRUPT,
   type GoalControlRequest,
   type GoalRecord,
@@ -26,7 +24,6 @@ import {
   GoalConflictError,
   GoalInvalidTransitionError,
   elapsedActiveTime,
-  parseGoalControlRequest,
   parseGoalSnapshotV2,
   parseGoalStateRecordPayloadV2,
   reduceGoalControl,
@@ -227,51 +224,6 @@ describe('goal reducer', () => {
 
     expect(paused?.status).toBe('paused');
     expect(paused?.lastReason).toBeUndefined();
-  });
-
-  it('parses a pause reason, and rejects one that is empty, oversized, or misplaced', () => {
-    expect(
-      parseGoalControlRequest({
-        action: 'pause',
-        expectedGoalId: 'g-1',
-        expectedRevision: 1,
-        reason: GOAL_PAUSE_REASON_COMMAND,
-      }),
-    ).toEqual({
-      action: 'pause',
-      expectedGoalId: 'g-1',
-      expectedRevision: 1,
-      reason: GOAL_PAUSE_REASON_COMMAND,
-    });
-
-    for (const reason of [
-      '   ',
-      '',
-      'x'.repeat(GOAL_PAUSE_REASON_MAX_CHARACTERS + 1),
-      42,
-      { text: 'nope' },
-    ]) {
-      expect(
-        parseGoalControlRequest({
-          action: 'pause',
-          expectedGoalId: 'g-1',
-          expectedRevision: 1,
-          reason,
-        }),
-      ).toBeUndefined();
-    }
-
-    // Only a pause carries one: resume and clear stay exact-key requests.
-    for (const action of ['resume', 'clear'] as const) {
-      expect(
-        parseGoalControlRequest({
-          action,
-          expectedGoalId: 'g-1',
-          expectedRevision: 1,
-          reason: GOAL_PAUSE_REASON_COMMAND,
-        }),
-      ).toBeUndefined();
-    }
   });
 
   it('pauses and resumes without changing revision or evidence cursor', () => {
@@ -761,51 +713,6 @@ describe('goal reducer', () => {
       );
     },
   );
-
-  it('strictly parses persisted idle goal snapshots and control requests', () => {
-    const record = goalRecord();
-    expect(
-      parseGoalStateRecordPayloadV2({
-        v: 2,
-        cause: 'create',
-        snapshot: snapshot(record),
-      }),
-    ).toEqual({ v: 2, cause: 'create', snapshot: snapshot(record) });
-    expect(
-      parseGoalStateRecordPayloadV2({
-        v: 2,
-        cause: 'create',
-        snapshot: { ...snapshot(record), activity: 'running' },
-      }),
-    ).toBeUndefined();
-    expect(
-      parseGoalControlRequest({ action: 'create', objective: 'ship' }),
-    ).toEqual({
-      action: 'create',
-      objective: 'ship',
-    });
-    expect(
-      parseGoalControlRequest({
-        action: 'edit',
-        objective: '  ',
-        expectedGoalId: 'g-1',
-        expectedRevision: 1,
-      }),
-    ).toBeUndefined();
-    expect(
-      parseGoalControlRequest({
-        action: 'pause',
-        expectedGoalId: 'g-1',
-      }),
-    ).toBeUndefined();
-    expect(
-      parseGoalControlRequest({
-        action: 'pause',
-        expectedGoalId: 'g-1',
-        expectedRevision: 0,
-      }),
-    ).toBeUndefined();
-  });
 
   it.each(['idle', 'running', 'verifying'] as const)(
     'parses %s activity in public wire snapshots',

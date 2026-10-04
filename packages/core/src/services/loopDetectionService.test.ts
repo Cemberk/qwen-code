@@ -27,6 +27,18 @@ import {
   LoopDetectionService,
 } from './loopDetectionService.js';
 
+// The production callers run the always-on safeties first and then the
+// heuristic checks; tests drive both through one call.
+function addAndCheck(
+  service: LoopDetectionService,
+  event: Parameters<LoopDetectionService['checkAlwaysOnSafeties']>[0],
+): boolean {
+  return (
+    service.checkAlwaysOnSafeties(event) ||
+    service.addAndCheckHeuristicLoops(event)
+  );
+}
+
 vi.mock('../telemetry/loggers.js', () => ({
   logLoopDetected: vi.fn(),
 }));
@@ -116,7 +128,7 @@ describe('LoopDetectionService', () => {
     it(`should not detect a loop for fewer than TOOL_CALL_LOOP_THRESHOLD identical calls`, () => {
       const event = createToolCallRequestEvent('testTool', { param: 'value' });
       for (let i = 0; i < TOOL_CALL_LOOP_THRESHOLD - 1; i++) {
-        expect(service.addAndCheck(event)).toBe(false);
+        expect(addAndCheck(service, event)).toBe(false);
       }
       expect(loggers.logLoopDetected).not.toHaveBeenCalled();
     });
@@ -124,18 +136,18 @@ describe('LoopDetectionService', () => {
     it(`should detect a loop on the TOOL_CALL_LOOP_THRESHOLD-th identical call`, () => {
       const event = createToolCallRequestEvent('testTool', { param: 'value' });
       for (let i = 0; i < TOOL_CALL_LOOP_THRESHOLD - 1; i++) {
-        service.addAndCheck(event);
+        addAndCheck(service, event);
       }
-      expect(service.addAndCheck(event)).toBe(true);
+      expect(addAndCheck(service, event)).toBe(true);
       expect(loggers.logLoopDetected).toHaveBeenCalledTimes(1);
     });
 
     it('should detect a loop on subsequent identical calls', () => {
       const event = createToolCallRequestEvent('testTool', { param: 'value' });
       for (let i = 0; i < TOOL_CALL_LOOP_THRESHOLD; i++) {
-        service.addAndCheck(event);
+        addAndCheck(service, event);
       }
-      expect(service.addAndCheck(event)).toBe(true);
+      expect(addAndCheck(service, event)).toBe(true);
       expect(loggers.logLoopDetected).toHaveBeenCalledTimes(1);
     });
 
@@ -151,9 +163,9 @@ describe('LoopDetectionService', () => {
       });
 
       for (let i = 0; i < TOOL_CALL_LOOP_THRESHOLD - 2; i++) {
-        expect(service.addAndCheck(event1)).toBe(false);
-        expect(service.addAndCheck(event2)).toBe(false);
-        expect(service.addAndCheck(event3)).toBe(false);
+        expect(addAndCheck(service, event1)).toBe(false);
+        expect(addAndCheck(service, event2)).toBe(false);
+        expect(addAndCheck(service, event3)).toBe(false);
       }
     });
 
@@ -167,14 +179,14 @@ describe('LoopDetectionService', () => {
 
       // Send events just below the threshold
       for (let i = 0; i < TOOL_CALL_LOOP_THRESHOLD - 1; i++) {
-        expect(service.addAndCheck(toolCallEvent)).toBe(false);
+        expect(addAndCheck(service, toolCallEvent)).toBe(false);
       }
 
       // Send a different event type
-      expect(service.addAndCheck(otherEvent)).toBe(false);
+      expect(addAndCheck(service, otherEvent)).toBe(false);
 
       // Send the tool call event again, which should now trigger the loop
-      expect(service.addAndCheck(toolCallEvent)).toBe(true);
+      expect(addAndCheck(service, toolCallEvent)).toBe(true);
       expect(loggers.logLoopDetected).toHaveBeenCalledTimes(1);
     });
 
@@ -202,13 +214,11 @@ describe('LoopDetectionService', () => {
         service.checkAlwaysOnSafeties(event);
       }
 
-      expect(service.getConsecutiveToolCallCount()).toBe(
+      expect(service['toolCallRepetitionCount']).toBe(
         TOOL_CALL_LOOP_THRESHOLD - 1,
       );
       expect(service.checkAlwaysOnSafeties(event)).toBe(true);
-      expect(service.getConsecutiveToolCallCount()).toBe(
-        TOOL_CALL_LOOP_THRESHOLD,
-      );
+      expect(service['toolCallRepetitionCount']).toBe(TOOL_CALL_LOOP_THRESHOLD);
     });
 
     it('halts consecutive identical calls via the always-on guard', () => {
@@ -265,7 +275,7 @@ describe('LoopDetectionService', () => {
       service.disableForSession();
       const event = createToolCallRequestEvent('testTool', { param: 'value' });
       for (let i = 0; i < TOOL_CALL_LOOP_THRESHOLD; i++) {
-        expect(service.addAndCheck(event)).toBe(false);
+        expect(addAndCheck(service, event)).toBe(false);
       }
       expect(loggers.logLoopDetected).not.toHaveBeenCalled();
     });
@@ -596,7 +606,7 @@ describe('LoopDetectionService', () => {
       service.reset('');
       for (let i = 0; i < 1000; i++) {
         const content = generateRandomString(10);
-        const isLoop = service.addAndCheck(createContentEvent(content));
+        const isLoop = addAndCheck(service, createContentEvent(content));
         expect(isLoop).toBe(false);
       }
       expect(loggers.logLoopDetected).not.toHaveBeenCalled();
@@ -608,7 +618,7 @@ describe('LoopDetectionService', () => {
 
       let isLoop = false;
       for (let i = 0; i < CONTENT_LOOP_THRESHOLD; i++) {
-        isLoop = service.addAndCheck(createContentEvent(repeatedContent));
+        isLoop = addAndCheck(service, createContentEvent(repeatedContent));
       }
       expect(isLoop).toBe(true);
       expect(loggers.logLoopDetected).toHaveBeenCalledTimes(1);
@@ -620,12 +630,13 @@ describe('LoopDetectionService', () => {
 
       let isLoop = false;
       for (let i = 0; i < CONTENT_LOOP_THRESHOLD; i++) {
-        isLoop = service.addAndCheck(createContentEvent(repeatedContent));
+        isLoop = addAndCheck(service, createContentEvent(repeatedContent));
         // A fresh filler each cycle: repetitions separated by VARYING
         // content are not a loop. (Reusing one identical filler made the
         // whole stream byte-periodic, which the long-period rule for
         // issue #1775 correctly treats as a chant.)
-        isLoop = service.addAndCheck(
+        isLoop = addAndCheck(
+          service,
           createContentEvent(generateRandomString(500)),
         );
       }
@@ -638,7 +649,7 @@ describe('LoopDetectionService', () => {
     const feed = (content: string, times: number): boolean => {
       let isLoop = false;
       for (let i = 0; i < times; i++) {
-        isLoop = service.addAndCheck(createContentEvent(content));
+        isLoop = addAndCheck(service, createContentEvent(content));
       }
       return isLoop;
     };
@@ -698,14 +709,17 @@ describe('LoopDetectionService', () => {
       service.reset('');
       const repeatedContent = createRepetitiveContent(1, CONTENT_CHUNK_SIZE);
 
-      service.addAndCheck(createContentEvent('```\n'));
+      addAndCheck(service, createContentEvent('```\n'));
 
       for (let i = 0; i < CONTENT_LOOP_THRESHOLD; i++) {
-        const isLoop = service.addAndCheck(createContentEvent(repeatedContent));
+        const isLoop = addAndCheck(
+          service,
+          createContentEvent(repeatedContent),
+        );
         expect(isLoop).toBe(false);
       }
 
-      const isLoop = service.addAndCheck(createContentEvent('\n```'));
+      const isLoop = addAndCheck(service, createContentEvent('\n```'));
       expect(isLoop).toBe(false);
       expect(loggers.logLoopDetected).not.toHaveBeenCalled();
     });
@@ -716,18 +730,19 @@ describe('LoopDetectionService', () => {
 
       // Add some repetitive content outside of code block
       for (let i = 0; i < CONTENT_LOOP_THRESHOLD - 2; i++) {
-        service.addAndCheck(createContentEvent(repeatedContent));
+        addAndCheck(service, createContentEvent(repeatedContent));
       }
 
       // Now transition into a code block - this should prevent loop detection
       // even though we were already close to the threshold
       const codeBlockStart = '```javascript\n';
-      const isLoop = service.addAndCheck(createContentEvent(codeBlockStart));
+      const isLoop = addAndCheck(service, createContentEvent(codeBlockStart));
       expect(isLoop).toBe(false);
 
       // Continue adding repetitive content inside the code block - should not trigger loop
       for (let i = 0; i < CONTENT_LOOP_THRESHOLD; i++) {
-        const isLoopInside = service.addAndCheck(
+        const isLoopInside = addAndCheck(
+          service,
           createContentEvent(repeatedContent),
         );
         expect(isLoopInside).toBe(false);
@@ -740,12 +755,15 @@ describe('LoopDetectionService', () => {
       service.reset('');
 
       // Start with content that puts us inside a code block
-      service.addAndCheck(createContentEvent('Here is some code:\n```\n'));
+      addAndCheck(service, createContentEvent('Here is some code:\n```\n'));
 
       // Verify we are now inside a code block and any content should be ignored for loop detection
       const repeatedContent = createRepetitiveContent(1, CONTENT_CHUNK_SIZE);
       for (let i = 0; i < CONTENT_LOOP_THRESHOLD + 5; i++) {
-        const isLoop = service.addAndCheck(createContentEvent(repeatedContent));
+        const isLoop = addAndCheck(
+          service,
+          createContentEvent(repeatedContent),
+        );
         expect(isLoop).toBe(false);
       }
 
@@ -757,26 +775,28 @@ describe('LoopDetectionService', () => {
       const repeatedContent = createRepetitiveContent(1, CONTENT_CHUNK_SIZE);
 
       // Outside code block - should track content
-      service.addAndCheck(createContentEvent('Normal text '));
+      addAndCheck(service, createContentEvent('Normal text '));
 
       // Enter code block (1 fence) - should stop tracking
-      const enterResult = service.addAndCheck(createContentEvent('```\n'));
+      const enterResult = addAndCheck(service, createContentEvent('```\n'));
       expect(enterResult).toBe(false);
 
       // Inside code block - should not track loops
       for (let i = 0; i < 5; i++) {
-        const insideResult = service.addAndCheck(
+        const insideResult = addAndCheck(
+          service,
           createContentEvent(repeatedContent),
         );
         expect(insideResult).toBe(false);
       }
 
       // Exit code block (2nd fence) - should reset tracking but still return false
-      const exitResult = service.addAndCheck(createContentEvent('```\n'));
+      const exitResult = addAndCheck(service, createContentEvent('```\n'));
       expect(exitResult).toBe(false);
 
       // Enter code block again (3rd fence) - should stop tracking again
-      const reenterResult = service.addAndCheck(
+      const reenterResult = addAndCheck(
+        service,
         createContentEvent('```python\n'),
       );
       expect(reenterResult).toBe(false);
@@ -788,13 +808,13 @@ describe('LoopDetectionService', () => {
       service.reset('');
       const repeatedContent = createRepetitiveContent(1, CONTENT_CHUNK_SIZE);
 
-      service.addAndCheck(createContentEvent('```'));
-      service.addAndCheck(createContentEvent('\nsome code\n'));
-      service.addAndCheck(createContentEvent('```'));
+      addAndCheck(service, createContentEvent('```'));
+      addAndCheck(service, createContentEvent('\nsome code\n'));
+      addAndCheck(service, createContentEvent('```'));
 
       let isLoop = false;
       for (let i = 0; i < CONTENT_LOOP_THRESHOLD; i++) {
-        isLoop = service.addAndCheck(createContentEvent(repeatedContent));
+        isLoop = addAndCheck(service, createContentEvent(repeatedContent));
       }
       expect(isLoop).toBe(true);
       expect(loggers.logLoopDetected).toHaveBeenCalledTimes(1);
@@ -802,9 +822,12 @@ describe('LoopDetectionService', () => {
 
     it('should handle content with multiple code blocks and no loops', () => {
       service.reset('');
-      service.addAndCheck(createContentEvent('```\ncode1\n```'));
-      service.addAndCheck(createContentEvent('\nsome text\n'));
-      const isLoop = service.addAndCheck(createContentEvent('```\ncode2\n```'));
+      addAndCheck(service, createContentEvent('```\ncode1\n```'));
+      addAndCheck(service, createContentEvent('\nsome text\n'));
+      const isLoop = addAndCheck(
+        service,
+        createContentEvent('```\ncode2\n```'),
+      );
 
       expect(isLoop).toBe(false);
       expect(loggers.logLoopDetected).not.toHaveBeenCalled();
@@ -814,13 +837,13 @@ describe('LoopDetectionService', () => {
       service.reset('');
       const repeatedContent = createRepetitiveContent(1, CONTENT_CHUNK_SIZE);
 
-      service.addAndCheck(createContentEvent('```'));
-      service.addAndCheck(createContentEvent('\ncode1\n'));
-      service.addAndCheck(createContentEvent('```'));
+      addAndCheck(service, createContentEvent('```'));
+      addAndCheck(service, createContentEvent('\ncode1\n'));
+      addAndCheck(service, createContentEvent('```'));
 
       let isLoop = false;
       for (let i = 0; i < CONTENT_LOOP_THRESHOLD; i++) {
-        isLoop = service.addAndCheck(createContentEvent(repeatedContent));
+        isLoop = addAndCheck(service, createContentEvent(repeatedContent));
       }
 
       expect(isLoop).toBe(true);
@@ -832,14 +855,17 @@ describe('LoopDetectionService', () => {
       const repeatingTokens =
         'for (let i = 0; i < 10; i++) { console.log(i); }';
 
-      service.addAndCheck(createContentEvent('```\n'));
+      addAndCheck(service, createContentEvent('```\n'));
 
       for (let i = 0; i < 20; i++) {
-        const isLoop = service.addAndCheck(createContentEvent(repeatingTokens));
+        const isLoop = addAndCheck(
+          service,
+          createContentEvent(repeatingTokens),
+        );
         expect(isLoop).toBe(false);
       }
 
-      const isLoop = service.addAndCheck(createContentEvent('\n```'));
+      const isLoop = addAndCheck(service, createContentEvent('\n```'));
       expect(isLoop).toBe(false);
       expect(loggers.logLoopDetected).not.toHaveBeenCalled();
     });
@@ -849,17 +875,17 @@ describe('LoopDetectionService', () => {
       const repeatedContent = createRepetitiveContent(1, CONTENT_CHUNK_SIZE);
 
       for (let i = 0; i < CONTENT_LOOP_THRESHOLD - 1; i++) {
-        service.addAndCheck(createContentEvent(repeatedContent));
+        addAndCheck(service, createContentEvent(repeatedContent));
       }
 
       // This should not trigger a loop because of the reset
-      service.addAndCheck(createContentEvent('```'));
+      addAndCheck(service, createContentEvent('```'));
 
       // We are now in a code block, so loop detection should be off.
       // Let's add the repeated content again, it should not trigger a loop.
       let isLoop = false;
       for (let i = 0; i < CONTENT_LOOP_THRESHOLD; i++) {
-        isLoop = service.addAndCheck(createContentEvent(repeatedContent));
+        isLoop = addAndCheck(service, createContentEvent(repeatedContent));
         expect(isLoop).toBe(false);
       }
 
@@ -870,15 +896,18 @@ describe('LoopDetectionService', () => {
       const repeatedContent = createRepetitiveContent(1, CONTENT_CHUNK_SIZE);
 
       for (let i = 0; i < CONTENT_LOOP_THRESHOLD - 1; i++) {
-        service.addAndCheck(createContentEvent(repeatedContent));
+        addAndCheck(service, createContentEvent(repeatedContent));
       }
 
       // This should reset tracking and not trigger a loop
-      service.addAndCheck(createContentEvent('| Column 1 | Column 2 |'));
+      addAndCheck(service, createContentEvent('| Column 1 | Column 2 |'));
 
       // Add more repeated content after table - should not trigger loop
       for (let i = 0; i < CONTENT_LOOP_THRESHOLD - 1; i++) {
-        const isLoop = service.addAndCheck(createContentEvent(repeatedContent));
+        const isLoop = addAndCheck(
+          service,
+          createContentEvent(repeatedContent),
+        );
         expect(isLoop).toBe(false);
       }
 
@@ -890,15 +919,18 @@ describe('LoopDetectionService', () => {
       const repeatedContent = createRepetitiveContent(1, CONTENT_CHUNK_SIZE);
 
       for (let i = 0; i < CONTENT_LOOP_THRESHOLD - 1; i++) {
-        service.addAndCheck(createContentEvent(repeatedContent));
+        addAndCheck(service, createContentEvent(repeatedContent));
       }
 
       // This should reset tracking and not trigger a loop
-      service.addAndCheck(createContentEvent('* List item'));
+      addAndCheck(service, createContentEvent('* List item'));
 
       // Add more repeated content after list - should not trigger loop
       for (let i = 0; i < CONTENT_LOOP_THRESHOLD - 1; i++) {
-        const isLoop = service.addAndCheck(createContentEvent(repeatedContent));
+        const isLoop = addAndCheck(
+          service,
+          createContentEvent(repeatedContent),
+        );
         expect(isLoop).toBe(false);
       }
 
@@ -910,15 +942,18 @@ describe('LoopDetectionService', () => {
       const repeatedContent = createRepetitiveContent(1, CONTENT_CHUNK_SIZE);
 
       for (let i = 0; i < CONTENT_LOOP_THRESHOLD - 1; i++) {
-        service.addAndCheck(createContentEvent(repeatedContent));
+        addAndCheck(service, createContentEvent(repeatedContent));
       }
 
       // This should reset tracking and not trigger a loop
-      service.addAndCheck(createContentEvent('## Heading'));
+      addAndCheck(service, createContentEvent('## Heading'));
 
       // Add more repeated content after heading - should not trigger loop
       for (let i = 0; i < CONTENT_LOOP_THRESHOLD - 1; i++) {
-        const isLoop = service.addAndCheck(createContentEvent(repeatedContent));
+        const isLoop = addAndCheck(
+          service,
+          createContentEvent(repeatedContent),
+        );
         expect(isLoop).toBe(false);
       }
 
@@ -930,15 +965,18 @@ describe('LoopDetectionService', () => {
       const repeatedContent = createRepetitiveContent(1, CONTENT_CHUNK_SIZE);
 
       for (let i = 0; i < CONTENT_LOOP_THRESHOLD - 1; i++) {
-        service.addAndCheck(createContentEvent(repeatedContent));
+        addAndCheck(service, createContentEvent(repeatedContent));
       }
 
       // This should reset tracking and not trigger a loop
-      service.addAndCheck(createContentEvent('> Quote text'));
+      addAndCheck(service, createContentEvent('> Quote text'));
 
       // Add more repeated content after blockquote - should not trigger loop
       for (let i = 0; i < CONTENT_LOOP_THRESHOLD - 1; i++) {
-        const isLoop = service.addAndCheck(createContentEvent(repeatedContent));
+        const isLoop = addAndCheck(
+          service,
+          createContentEvent(repeatedContent),
+        );
         expect(isLoop).toBe(false);
       }
 
@@ -962,11 +1000,11 @@ describe('LoopDetectionService', () => {
 
         // Build up to near threshold
         for (let i = 0; i < CONTENT_LOOP_THRESHOLD - 1; i++) {
-          service.addAndCheck(createContentEvent(repeatedContent));
+          addAndCheck(service, createContentEvent(repeatedContent));
         }
 
         // Reset should occur with list item - add newline to ensure it starts at beginning
-        service.addAndCheck(createContentEvent('\n' + listFormat));
+        addAndCheck(service, createContentEvent('\n' + listFormat));
 
         // Should not trigger loop after reset - use different content to avoid any cached state issues
         const newRepeatedContent = createRepetitiveContent(
@@ -974,7 +1012,8 @@ describe('LoopDetectionService', () => {
           CONTENT_CHUNK_SIZE,
         );
         for (let i = 0; i < CONTENT_LOOP_THRESHOLD - 1; i++) {
-          const isLoop = service.addAndCheck(
+          const isLoop = addAndCheck(
+            service,
             createContentEvent(newRepeatedContent),
           );
           expect(isLoop).toBe(false);
@@ -999,11 +1038,11 @@ describe('LoopDetectionService', () => {
 
         // Build up to near threshold
         for (let i = 0; i < CONTENT_LOOP_THRESHOLD - 1; i++) {
-          service.addAndCheck(createContentEvent(repeatedContent));
+          addAndCheck(service, createContentEvent(repeatedContent));
         }
 
         // Reset should occur with table format - add newline to ensure it starts at beginning
-        service.addAndCheck(createContentEvent('\n' + tableFormat));
+        addAndCheck(service, createContentEvent('\n' + tableFormat));
 
         // Should not trigger loop after reset - use different content to avoid any cached state issues
         const newRepeatedContent = createRepetitiveContent(
@@ -1011,7 +1050,8 @@ describe('LoopDetectionService', () => {
           CONTENT_CHUNK_SIZE,
         );
         for (let i = 0; i < CONTENT_LOOP_THRESHOLD - 1; i++) {
-          const isLoop = service.addAndCheck(
+          const isLoop = addAndCheck(
+            service,
             createContentEvent(newRepeatedContent),
           );
           expect(isLoop).toBe(false);
@@ -1038,11 +1078,11 @@ describe('LoopDetectionService', () => {
 
         // Build up to near threshold
         for (let i = 0; i < CONTENT_LOOP_THRESHOLD - 1; i++) {
-          service.addAndCheck(createContentEvent(repeatedContent));
+          addAndCheck(service, createContentEvent(repeatedContent));
         }
 
         // Reset should occur with heading - add newline to ensure it starts at beginning
-        service.addAndCheck(createContentEvent('\n' + headingFormat));
+        addAndCheck(service, createContentEvent('\n' + headingFormat));
 
         // Should not trigger loop after reset - use different content to avoid any cached state issues
         const newRepeatedContent = createRepetitiveContent(
@@ -1050,7 +1090,8 @@ describe('LoopDetectionService', () => {
           CONTENT_CHUNK_SIZE,
         );
         for (let i = 0; i < CONTENT_LOOP_THRESHOLD - 1; i++) {
-          const isLoop = service.addAndCheck(
+          const isLoop = addAndCheck(
+            service,
             createContentEvent(newRepeatedContent),
           );
           expect(isLoop).toBe(false);
@@ -1064,7 +1105,7 @@ describe('LoopDetectionService', () => {
   describe('Edge Cases', () => {
     it('should handle empty content', () => {
       const event = createContentEvent('');
-      expect(service.addAndCheck(event)).toBe(false);
+      expect(addAndCheck(service, event)).toBe(false);
     });
   });
 
@@ -1074,7 +1115,7 @@ describe('LoopDetectionService', () => {
       const dividerContent = '-'.repeat(CONTENT_CHUNK_SIZE);
       let isLoop = false;
       for (let i = 0; i < CONTENT_LOOP_THRESHOLD + 5; i++) {
-        isLoop = service.addAndCheck(createContentEvent(dividerContent));
+        isLoop = addAndCheck(service, createContentEvent(dividerContent));
         expect(isLoop).toBe(false);
       }
       expect(loggers.logLoopDetected).not.toHaveBeenCalled();
@@ -1085,7 +1126,7 @@ describe('LoopDetectionService', () => {
       const dividerContent = '╭─'.repeat(CONTENT_CHUNK_SIZE / 2);
       let isLoop = false;
       for (let i = 0; i < CONTENT_LOOP_THRESHOLD + 5; i++) {
-        isLoop = service.addAndCheck(createContentEvent(dividerContent));
+        isLoop = addAndCheck(service, createContentEvent(dividerContent));
         expect(isLoop).toBe(false);
       }
       expect(loggers.logLoopDetected).not.toHaveBeenCalled();
@@ -1099,13 +1140,13 @@ describe('LoopDetectionService', () => {
         param: 'value',
       });
       for (let i = 0; i < 9; i++) {
-        service.addAndCheck(contentEvent);
+        addAndCheck(service, contentEvent);
       }
 
-      service.addAndCheck(toolEvent);
+      addAndCheck(service, toolEvent);
 
       // Should start fresh
-      expect(service.addAndCheck(createContentEvent('Fresh content.'))).toBe(
+      expect(addAndCheck(service, createContentEvent('Fresh content.'))).toBe(
         false,
       );
     });
@@ -1116,8 +1157,8 @@ describe('LoopDetectionService', () => {
       const otherEvent = {
         type: 'unhandled_event',
       } as unknown as ServerLlmStreamEvent;
-      expect(service.addAndCheck(otherEvent)).toBe(false);
-      expect(service.addAndCheck(otherEvent)).toBe(false);
+      expect(addAndCheck(service, otherEvent)).toBe(false);
+      expect(addAndCheck(service, otherEvent)).toBe(false);
     });
   });
 
@@ -1126,7 +1167,8 @@ describe('LoopDetectionService', () => {
       service.reset('');
 
       for (let i = 0; i < 3; i++) {
-        service.addAndCheck(
+        addAndCheck(
+          service,
           createThoughtEvent('Plan', 'Inspect the migration script.'),
         );
       }
@@ -1142,15 +1184,18 @@ describe('LoopDetectionService', () => {
     it('should not detect loop with varied thoughts', () => {
       service.reset('');
 
-      service.addAndCheck(createThoughtEvent('Plan', 'Inspect the schema.'));
-      service.addAndCheck(
+      addAndCheck(service, createThoughtEvent('Plan', 'Inspect the schema.'));
+      addAndCheck(
+        service,
         createThoughtEvent('Analysis', 'Check migration risks.'),
       );
-      service.addAndCheck(
+      addAndCheck(
+        service,
         createThoughtEvent('Plan', 'Evaluate rollout alternatives.'),
       );
 
-      const isLoop = service.addAndCheck(
+      const isLoop = addAndCheck(
+        service,
         createThoughtEvent('Next', 'Draft the fix.'),
       );
       expect(isLoop).toBe(false);
@@ -1165,16 +1210,19 @@ describe('LoopDetectionService', () => {
       // history. A healthy long-running session where the model revisits
       // the same phrase after making progress on unrelated steps should
       // *not* trip this detector — only a sustained consecutive run does.
-      service.addAndCheck(createThoughtEvent('Plan', 'Inspect the schema.'));
-      service.addAndCheck(
+      addAndCheck(service, createThoughtEvent('Plan', 'Inspect the schema.'));
+      addAndCheck(
+        service,
         createThoughtEvent('Analysis', 'Consider migration.'),
       );
-      service.addAndCheck(createThoughtEvent('Analysis', 'Review indexes.'));
-      service.addAndCheck(createThoughtEvent('Plan', 'Inspect the schema.'));
-      service.addAndCheck(
+      addAndCheck(service, createThoughtEvent('Analysis', 'Review indexes.'));
+      addAndCheck(service, createThoughtEvent('Plan', 'Inspect the schema.'));
+      addAndCheck(
+        service,
         createThoughtEvent('Analysis', 'Consider rollout risks.'),
       );
-      const isLoop = service.addAndCheck(
+      const isLoop = addAndCheck(
+        service,
         createThoughtEvent('Plan', 'Inspect the schema.'),
       );
       expect(isLoop).toBe(false);
@@ -1187,15 +1235,18 @@ describe('LoopDetectionService', () => {
       // Regression: thoughtHistory previously persisted across ToolCallRequest
       // events within a single prompt. Three identical thoughts separated by
       // real tool-call progress would incorrectly fire REPETITIVE_THOUGHTS.
-      service.addAndCheck(createThoughtEvent('Plan', 'Inspect the schema.'));
-      service.addAndCheck(
+      addAndCheck(service, createThoughtEvent('Plan', 'Inspect the schema.'));
+      addAndCheck(
+        service,
         createToolCallRequestEvent('read_file', { path: 'a.sql' }),
       );
-      service.addAndCheck(createThoughtEvent('Plan', 'Inspect the schema.'));
-      service.addAndCheck(
+      addAndCheck(service, createThoughtEvent('Plan', 'Inspect the schema.'));
+      addAndCheck(
+        service,
         createToolCallRequestEvent('read_file', { path: 'b.sql' }),
       );
-      const isLoop = service.addAndCheck(
+      const isLoop = addAndCheck(
+        service,
         createThoughtEvent('Plan', 'Inspect the schema.'),
       );
       expect(isLoop).toBe(false);
@@ -1209,7 +1260,8 @@ describe('LoopDetectionService', () => {
       // into thoughtHistory, which conflated prose with the model's actual
       // reasoning channel. Thought detection now runs only on Thought events.
       for (let i = 0; i < 5; i++) {
-        service.addAndCheck(
+        addAndCheck(
+          service,
           createContentEvent('I should check the config, maybe it helps.'),
         );
       }
@@ -1243,7 +1295,8 @@ describe('LoopDetectionService', () => {
     ): boolean => {
       let detected = false;
       for (let i = 0; i < text.length && !detected; i += deltaSize) {
-        detected = service.addAndCheck(
+        detected = addAndCheck(
+          service,
           createThoughtEvent('', text.slice(i, i + deltaSize)),
         );
       }
@@ -1256,7 +1309,8 @@ describe('LoopDetectionService', () => {
     ): boolean => {
       let detected = false;
       for (let i = 0; i < text.length && !detected; i += deltaSize) {
-        detected = service.addAndCheck(
+        detected = addAndCheck(
+          service,
           createContentEvent(text.slice(i, i + deltaSize)),
         );
       }
@@ -1391,7 +1445,7 @@ describe('LoopDetectionService', () => {
       let detectedAt = -1;
       for (let i = 0; i < chant.length; i += DELTA) {
         if (
-          service.addAndCheck(createContentEvent(chant.slice(i, i + DELTA)))
+          addAndCheck(service, createContentEvent(chant.slice(i, i + DELTA)))
         ) {
           detectedAt = i + DELTA;
           break;
@@ -1468,7 +1522,8 @@ describe('LoopDetectionService', () => {
       // state: an unbalanced fence in a thought used to flip the shared
       // inCodeBlock parity, which nothing clears mid-turn, silently
       // disabling visible-content detection for the rest of the turn.
-      service.addAndCheck(
+      addAndCheck(
+        service,
         createThoughtEvent('', 'Let me look at this snippet:\n```'),
       );
       const detected = streamAsMisalignedContentDeltas(CHANTED_UNIT.repeat(40));
@@ -1562,7 +1617,8 @@ describe('LoopDetectionService', () => {
     const streamAsThoughts = (text: string): boolean => {
       let detected = false;
       for (let i = 0; i < text.length && !detected; i += ATTEMPT_DELTA) {
-        detected = service.addAndCheck(
+        detected = addAndCheck(
+          service,
           createThoughtEvent('', text.slice(i, i + ATTEMPT_DELTA)),
         );
       }
@@ -1572,7 +1628,8 @@ describe('LoopDetectionService', () => {
     const streamAsContent = (text: string): boolean => {
       let detected = false;
       for (let i = 0; i < text.length && !detected; i += ATTEMPT_DELTA) {
-        detected = service.addAndCheck(
+        detected = addAndCheck(
+          service,
           createContentEvent(text.slice(i, i + ATTEMPT_DELTA)),
         );
       }
@@ -1587,9 +1644,9 @@ describe('LoopDetectionService', () => {
       // CHANTING_IDENTICAL_SENTENCES mid-stream.
       const attempt = variedText(1400, 42);
       expect(streamAsThoughts(attempt)).toBe(false);
-      service.addAndCheck(createRetryEvent());
+      addAndCheck(service, createRetryEvent());
       expect(streamAsThoughts(attempt)).toBe(false);
-      service.addAndCheck(createRetryEvent());
+      addAndCheck(service, createRetryEvent());
       expect(streamAsThoughts(attempt)).toBe(false);
       expect(service.getLastLoopType()).toBeNull();
     });
@@ -1598,9 +1655,9 @@ describe('LoopDetectionService', () => {
       service.reset('');
       const attempt = variedText(1400, 43);
       expect(streamAsContent(attempt)).toBe(false);
-      service.addAndCheck(createRetryEvent());
+      addAndCheck(service, createRetryEvent());
       expect(streamAsContent(attempt)).toBe(false);
-      service.addAndCheck(createRetryEvent());
+      addAndCheck(service, createRetryEvent());
       expect(streamAsContent(attempt)).toBe(false);
       expect(service.getLastLoopType()).toBeNull();
     });
@@ -1612,7 +1669,7 @@ describe('LoopDetectionService', () => {
       const attempt = variedText(300, 7);
       for (let copy = 0; copy < 5; copy++) {
         if (copy > 0) {
-          service.addAndCheck(createRetryEvent());
+          addAndCheck(service, createRetryEvent());
         }
         expect(streamAsThoughts(attempt)).toBe(false);
       }
@@ -1629,7 +1686,7 @@ describe('LoopDetectionService', () => {
       const unit = variedText(298, 21);
       const chant = unit.repeat(6);
       expect(streamAsThoughts(chant.slice(0, 1192))).toBe(false);
-      service.addAndCheck(createRetryEvent(true));
+      addAndCheck(service, createRetryEvent(true));
       expect(streamAsThoughts(chant.slice(1192, 1292))).toBe(true);
       expect(service.getLastLoopType()).toBe(
         LoopType.CHANTING_IDENTICAL_SENTENCES,
@@ -1644,7 +1701,7 @@ describe('LoopDetectionService', () => {
       const unit = variedText(298, 21);
       const chant = unit.repeat(6);
       expect(streamAsThoughts(chant.slice(0, 1192))).toBe(false);
-      service.addAndCheck(createRetryEvent());
+      addAndCheck(service, createRetryEvent());
       expect(streamAsThoughts(chant.slice(1192, 1292))).toBe(false);
       expect(service.getLastLoopType()).toBeNull();
     });
@@ -1658,7 +1715,7 @@ describe('LoopDetectionService', () => {
       const attempt = variedText(1400, 99);
       expect(streamAsThoughts(attempt)).toBe(false);
       expect(streamAsThoughts(attempt)).toBe(false);
-      service.addAndCheck(createModelFallbackEvent());
+      addAndCheck(service, createModelFallbackEvent());
       expect(streamAsThoughts(attempt)).toBe(false);
       expect(streamAsThoughts(attempt)).toBe(false);
       expect(service.getLastLoopType()).toBeNull();
@@ -1669,7 +1726,7 @@ describe('LoopDetectionService', () => {
       // The reset must not blind the detector: a real chant re-accumulates
       // after the restart and still fires.
       const unit = variedText(298, 21);
-      service.addAndCheck(createRetryEvent());
+      addAndCheck(service, createRetryEvent());
       expect(streamAsThoughts(unit.repeat(40))).toBe(true);
       expect(service.getLastLoopType()).toBe(
         LoopType.CHANTING_IDENTICAL_SENTENCES,
@@ -1742,7 +1799,7 @@ describe('LoopDetectionService', () => {
         const piece = text.slice(i, i + DELTA);
         streamed += piece.length;
         if (
-          service.addAndCheck({
+          addAndCheck(service, {
             type: LlmEventType.Content,
             value: piece,
           })
@@ -1773,7 +1830,7 @@ describe('LoopDetectionService', () => {
         const piece = text.slice(i, i + DELTA);
         streamed += piece.length;
         expect(
-          service.addAndCheck({ type: LlmEventType.Content, value: piece }),
+          addAndCheck(service, { type: LlmEventType.Content, value: piece }),
         ).toBe(false);
         if (streamed === insideSlackBand) {
           // Past the window, inside the slack band: no physical trim yet —
@@ -1827,7 +1884,8 @@ describe('LoopDetectionService', () => {
     const streamAsThoughts = (text: string): boolean => {
       let detected = false;
       for (let i = 0; i < text.length && !detected; i += DELTA) {
-        detected = service.addAndCheck(
+        detected = addAndCheck(
+          service,
           createThoughtEvent('', text.slice(i, i + DELTA)),
         );
       }
@@ -1866,7 +1924,8 @@ describe('LoopDetectionService', () => {
     // it an initial pass. Tests that want to exercise the detector must
     // fire a non-read tool first so subsequent reads are judged normally.
     const primeNonReadTool = () => {
-      service.addAndCheck(
+      addAndCheck(
+        service,
         createToolCallRequestEvent('write_file', {
           path: 'prime.txt',
           content: '',
@@ -1884,14 +1943,14 @@ describe('LoopDetectionService', () => {
         const event = createToolCallRequestEvent('read_file', {
           path: `file${i}.txt`,
         });
-        const isLoop = service.addAndCheck(event);
+        const isLoop = addAndCheck(service, event);
         expect(isLoop).toBe(false);
       }
 
       const event = createToolCallRequestEvent('read_file', {
         path: 'file7.txt',
       });
-      const isLoop = service.addAndCheck(event);
+      const isLoop = addAndCheck(service, event);
       expect(isLoop).toBe(true);
       expect(loggers.logLoopDetected).toHaveBeenCalledWith(
         mockConfig,
@@ -1911,7 +1970,8 @@ describe('LoopDetectionService', () => {
       // prior non-read tool — nothing should fire.
       for (let i = 0; i < 20; i++) {
         const name = i % 2 === 0 ? 'read_file' : 'list_directory';
-        const isLoop = service.addAndCheck(
+        const isLoop = addAndCheck(
+          service,
           createToolCallRequestEvent(name, { path: `f${i}` }),
         );
         expect(isLoop).toBe(false);
@@ -1927,14 +1987,16 @@ describe('LoopDetectionService', () => {
 
       // No firing before the cold-start gate flips.
       for (let i = 0; i < 7; i++) {
-        service.addAndCheck(
+        addAndCheck(
+          service,
           createToolCallRequestEvent('read_file', { path: `pre${i}.txt` }),
         );
       }
       expect(loggers.logLoopDetected).not.toHaveBeenCalled();
 
       // A non-read tool lands — gate opens.
-      service.addAndCheck(
+      addAndCheck(
+        service,
         createToolCallRequestEvent('write_file', {
           path: 'out.txt',
           content: 'x',
@@ -1946,7 +2008,8 @@ describe('LoopDetectionService', () => {
       // and FILE_READ_THRESHOLD read-likes accumulate, detection fires.
       let detected = false;
       for (let i = 0; i < FILE_READ_WINDOW + 2 && !detected; i++) {
-        detected = service.addAndCheck(
+        detected = addAndCheck(
+          service,
           createToolCallRequestEvent('read_file', { path: `post${i}.txt` }),
         );
       }
@@ -1964,18 +2027,22 @@ describe('LoopDetectionService', () => {
       // Mix of read-like tool names that either appear in the exact allowlist
       // (read_file, read_many_files, list_directory, zoom_image) or match the
       // read_/list_ prefix fallback used for MCP-provided tools.
-      service.addAndCheck(
+      addAndCheck(
+        service,
         createToolCallRequestEvent('read_many_files', {
           paths: ['file1.txt'],
         }),
       );
-      service.addAndCheck(
+      addAndCheck(
+        service,
         createToolCallRequestEvent('list_directory', { path: '.' }),
       );
-      service.addAndCheck(
+      addAndCheck(
+        service,
         createToolCallRequestEvent('read_resource', { uri: 'a' }),
       );
-      service.addAndCheck(
+      addAndCheck(
+        service,
         createToolCallRequestEvent('zoom_image', {
           file_path: 'chart.png',
           x1: 0,
@@ -1984,17 +2051,20 @@ describe('LoopDetectionService', () => {
           y2: 500,
         }),
       );
-      service.addAndCheck(createToolCallRequestEvent('list_projects', {}));
-      service.addAndCheck(
+      addAndCheck(service, createToolCallRequestEvent('list_projects', {}));
+      addAndCheck(
+        service,
         createToolCallRequestEvent('read_file', { path: 'file5.txt' }),
       );
-      service.addAndCheck(
+      addAndCheck(
+        service,
         createToolCallRequestEvent('read_many_files', {
           paths: ['file6.txt'],
         }),
       );
 
-      const isLoop = service.addAndCheck(
+      const isLoop = addAndCheck(
+        service,
         createToolCallRequestEvent('list_directory', { path: 'nested' }),
       );
       expect(isLoop).toBe(true);
@@ -2022,7 +2092,8 @@ describe('LoopDetectionService', () => {
       ];
       for (let i = 0; i < 6; i++) {
         const name = nonReadLikeNames[i % nonReadLikeNames.length];
-        const isLoop = service.addAndCheck(
+        const isLoop = addAndCheck(
+          service,
           createToolCallRequestEvent(name, { i }),
         );
         expect(isLoop).toBe(false);
@@ -2038,26 +2109,32 @@ describe('LoopDetectionService', () => {
       primeNonReadTool();
 
       // Mix of read and non-read operations
-      service.addAndCheck(
+      addAndCheck(
+        service,
         createToolCallRequestEvent('read_file', { path: 'file1.txt' }),
       );
-      service.addAndCheck(
+      addAndCheck(
+        service,
         createToolCallRequestEvent('write_file', {
           path: 'file2.txt',
           content: 'test',
         }),
       );
-      service.addAndCheck(
+      addAndCheck(
+        service,
         createToolCallRequestEvent('read_file', { path: 'file3.txt' }),
       );
-      service.addAndCheck(
+      addAndCheck(
+        service,
         createToolCallRequestEvent('execute', { command: 'ls' }),
       );
-      service.addAndCheck(
+      addAndCheck(
+        service,
         createToolCallRequestEvent('read_file', { path: 'file4.txt' }),
       );
 
-      const isLoop = service.addAndCheck(
+      const isLoop = addAndCheck(
+        service,
         createToolCallRequestEvent('read_file', { path: 'file5.txt' }),
       );
       expect(isLoop).toBe(false);
@@ -2079,14 +2156,16 @@ describe('LoopDetectionService', () => {
 
       // STAGNATION_THRESHOLD - 1 calls must not fire
       for (let i = 0; i < 7; i++) {
-        const isLoop = service.addAndCheck(
+        const isLoop = addAndCheck(
+          service,
           createToolCallRequestEvent('search_code', { query: `term${i}` }),
         );
         expect(isLoop).toBe(false);
       }
 
       // THRESHOLD-th consecutive same-name call triggers stagnation
-      const isLoop = service.addAndCheck(
+      const isLoop = addAndCheck(
+        service,
         createToolCallRequestEvent('search_code', { query: 'term7' }),
       );
       expect(isLoop).toBe(true);
@@ -2101,13 +2180,15 @@ describe('LoopDetectionService', () => {
 
       // Accumulate 5 consecutive same-name calls (below threshold)
       for (let i = 0; i < 5; i++) {
-        service.addAndCheck(
+        addAndCheck(
+          service,
           createToolCallRequestEvent('search_code', { query: `a${i}` }),
         );
       }
 
       // A different tool resets the streak
-      service.addAndCheck(
+      addAndCheck(
+        service,
         createToolCallRequestEvent('write_file', {
           path: 'out.txt',
           content: 'x',
@@ -2116,7 +2197,8 @@ describe('LoopDetectionService', () => {
 
       // 5 more calls of the original tool: streak only reaches 5, below threshold
       for (let i = 0; i < 5; i++) {
-        const isLoop = service.addAndCheck(
+        const isLoop = addAndCheck(
+          service,
           createToolCallRequestEvent('search_code', { query: `b${i}` }),
         );
         expect(isLoop).toBe(false);
@@ -2127,7 +2209,8 @@ describe('LoopDetectionService', () => {
       service.reset('');
 
       for (let i = 0; i < 8; i++) {
-        const isLoop = service.addAndCheck(
+        const isLoop = addAndCheck(
+          service,
           createToolCallRequestEvent(ToolNames.TOOL_CALL, {
             name: `mcp__service_${i}__read`,
             arguments: { id: i },
@@ -2142,7 +2225,8 @@ describe('LoopDetectionService', () => {
 
       for (let i = 0; i < 7; i++) {
         expect(
-          service.addAndCheck(
+          addAndCheck(
+            service,
             createToolCallRequestEvent(ToolNames.TOOL_CALL, {
               name: 'mcp__github__get_issue',
               arguments: { number: i },
@@ -2151,7 +2235,8 @@ describe('LoopDetectionService', () => {
         ).toBe(false);
       }
       expect(
-        service.addAndCheck(
+        addAndCheck(
+          service,
           createToolCallRequestEvent(ToolNames.TOOL_CALL, {
             name: 'mcp__github__get_issue',
             arguments: { number: 7 },
@@ -2841,9 +2926,7 @@ describe('LoopDetectionService', () => {
         );
       }
       expect(fired).toBe(true);
-      expect(service.getConsecutiveToolCallCount()).toBe(
-        TOOL_CALL_LOOP_THRESHOLD,
-      );
+      expect(service['toolCallRepetitionCount']).toBe(TOOL_CALL_LOOP_THRESHOLD);
       expect(service.getLastLoopType()).toBe(
         LoopType.CONSECUTIVE_IDENTICAL_TOOL_CALLS,
       );
@@ -2939,7 +3022,7 @@ describe('LoopDetectionService', () => {
       heuristicService.reset('oscillating-global');
       let detected = false;
       for (let i = 0; i < 4 * GLOBAL_DUPLICATE_THRESHOLD && !detected; i++) {
-        detected = heuristicService.addAndCheck(taskListEvent(`call-${i}`));
+        detected = addAndCheck(heuristicService, taskListEvent(`call-${i}`));
         if (detected) break;
         detected = heuristicService.recordToolResult(
           { name: 'task_list', args: TASK_LIST_ARGS },
@@ -3240,7 +3323,8 @@ ${boardState}
         for (const name of interleaved) {
           const args = name === 'task_list' ? TASK_LIST_ARGS : { step: round };
           expect(
-            heuristicService.addAndCheck(
+            addAndCheck(
+              heuristicService,
               createToolCallRequestEvent(name, args),
             ),
           ).toBe(false);
@@ -3271,7 +3355,7 @@ ${boardState}
         for (const name of interleaved) {
           const args = name === 'task_list' ? TASK_LIST_ARGS : { step: round };
           if (
-            stuckService.addAndCheck(createToolCallRequestEvent(name, args))
+            addAndCheck(stuckService, createToolCallRequestEvent(name, args))
           ) {
             detected = true;
             break;
@@ -3303,7 +3387,8 @@ ${boardState}
       for (let i = 0; i < 12; i++) {
         const args = { owner: `peer-${i % 3}` };
         expect(
-          heuristicService.addAndCheck(
+          addAndCheck(
+            heuristicService,
             createToolCallRequestEvent('task_list', args),
           ),
         ).toBe(false);
@@ -3324,7 +3409,8 @@ ${boardState}
       let fired = false;
       for (let i = 0; i < 12; i++) {
         const args = { owner: `peer-${i % 3}` };
-        fired = frozenService.addAndCheck(
+        fired = addAndCheck(
+          frozenService,
           createToolCallRequestEvent('task_list', args),
         );
         if (fired) break;

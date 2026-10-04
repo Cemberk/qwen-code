@@ -122,8 +122,6 @@ export default {
     'No s’han pogut carregar les habilitats: {{error}}',
   'Failed to save skills configuration: {{error}}':
     "No s'ha pogut desar la configuració d'habilitats: {{error}}",
-  'All available skills are disabled. Edit ~/.qwen/settings.json or .qwen/settings.json (skills.disabled) to re-enable.':
-    'Totes les habilitats disponibles estan desactivades. Edita ~/.qwen/settings.json o .qwen/settings.json (skills.disabled) per tornar-les a activar.',
   'Press esc to close.': 'Premeu Esc per tancar.',
   '{{count}} skills · ': '{{count}} habilitats · ',
   '{{matched}} / {{total}} skills · ': '{{matched}} / {{total}} habilitats · ',
@@ -621,8 +619,6 @@ export default {
     'Esteu instal·lant una extensió des de {{originSource}}. Algunes funcions poden no funcionar perfectament amb Qwen Code.',
   'Extension "{{name}}" installed successfully and enabled.':
     'L\'extensió "{{name}}" s\'ha instal·lat i activat correctament.',
-  'The github URL, local path, or marketplace source (marketplace-url:plugin-name) of the extension to install.':
-    "La URL de GitHub, el camí local o la font del mercat (marketplace-url:nom-del-connector) de l'extensió a instal·lar.",
   'Acknowledge the security risks of installing an extension and skip the confirmation prompt.':
     "Acceptar els riscos de seguretat d'instal·lar una extensió i ometre el missatge de confirmació.",
   'The source argument must be provided.': "Cal proporcionar l'argument font.",
@@ -1908,8 +1904,6 @@ export default {
     'Arena requereix almenys 2 models. Utilitzeu --models model1,model2 per especificar-los.',
   'Arena started with {{count}} agents on task: "{{task}}"\nModels:\n{{modelList}}':
     'Arena iniciada amb {{count}} agents a la tasca: "{{task}}"\nModels:\n{{modelList}}',
-  'Arena panes are running in tmux. Attach with: `{{command}}`':
-    "Els panells d'Arena s'estan executant a tmux. Adjunteu-vos amb: `{{command}}`",
   '[{{label}}] failed: {{error}}': '[{{label}}] ha fallat: {{error}}',
   'Loading suggestions...': "S'estan carregant els suggeriments...",
   'Show per-item context usage breakdown.':
@@ -1978,10 +1972,6 @@ export default {
   'History collapsed: {{n}} messages hidden. Use /history expand-now to show.':
     'Història reduïda: {{n}} missatges ocults. Utilitzeu /history expand-now per mostrar.',
   // Update command
-  'Standalone install detected. Please rerun the standalone installer to update:':
-    'S’ha detectat una instal·lació independent. Torneu a executar l’instal·lador independent per actualitzar:',
-  'Unable to auto-update this standalone installation. Please reinstall from:':
-    'No es pot actualitzar automàticament aquesta instal·lació autònoma. Reinstal·leu des de:',
 
   // ============================================================================
   // reload-plugins command
@@ -2074,8 +2064,6 @@ export default {
   'MCP "{{name}}" {{state}}.': 'MCP «{{name}}» {{state}}.',
   'MCP servers': 'MCP servers',
   'Mark for Update': 'Marca per actualitzar',
-  'No extensions or marketplaces added yet.':
-    "Encara no s'ha afegit cap extensió ni mercat.",
   'No plugins or MCP servers installed.':
     'No hi ha connectors ni MCP servers instal·lats.',
   None: 'Cap',
@@ -2128,7 +2116,6 @@ export default {
   'toolDisplayName.CronList': 'Llista tasques programades',
   'toolDisplayName.CronDelete': 'Suprimeix tasca programada',
   'toolDisplayName.LoopWakeup': 'Desperta el bucle',
-  'toolDisplayName.CreateSubSession': 'Crea subsessió',
   'toolDisplayName.ListAgents': "Llista d'agents",
   'toolDisplayName.TaskCreate': 'Crea tasca',
   'toolDisplayName.TaskUpdate': 'Actualitza tasca',
@@ -2194,8 +2181,6 @@ export default {
     "L'extensió «{{name}}» s'ha instal·lat correctament i està activada per a l'espai de treball actual.",
   'You need at least one command before continuing.':
     'Cal com a mínim una ordre abans de continuar.',
-  'Installs an extension from a git repository URL, local path, scoped npm package (@scope/name), or claude marketplace (marketplace-url:plugin-name).':
-    "Instal·la una extensió des d'una URL de repositori git, un camí local, un paquet npm amb àmbit (@scope/nom) o del mercat de Claude (marketplace-url:nom-del-connector).",
   Description: 'Descripció',
   'Delete Session': 'Suprimir sessió',
   'List installed extensions': 'Llistar les extensions instal·lades',
@@ -2235,12 +2220,6 @@ export default {
   // ============================================================================
   // Model, veu, visió
   // ============================================================================
-  'Switch the model for this session (--fast for suggestion model, --voice for voice transcription model, [model-id] to switch immediately).':
-    'Canvia el model per a aquesta sessió (--fast per al model de suggeriments, --voice per al model de transcripció de veu, [model-id] per canviar immediatament).',
-  'Switch the model for this session (--fast for suggestion model, --voice for voice transcription model, --vision for the vision bridge model, --project to persist to project settings, --global to persist to user settings, [model-id] to switch immediately, or [model-id] [prompt] to run a one-off prompt on another model; the inline prompt is sent verbatim without @file expansion).':
-    "Canvia el model per a aquesta sessió (--fast per al model de suggeriments, --voice per al model de transcripció de veu, --vision per al model pont de visió, --project per persistir a la configuració del projecte, --global per persistir a la configuració d'usuari, [model-id] per canviar immediatament, o [model-id] [prompt] per executar un únic prompt en un altre model; el prompt en línia s'envia literalment sense expansió de @fitxer).",
-  "Inline one-shot override isn't supported in this mode — run '/model {{model}}' first, then send your prompt.":
-    "La sobreescriptura d'un únic ús en línia no s'admet en aquest mode — executeu primer '/model {{model}}' i, després, envieu el vostre prompt.",
   "Inline one-shot override can't switch providers. '{{model}}' belongs to a different provider — run '/model {{model}}' first, then send your prompt.":
     "La sobreescriptura d'un únic ús en línia no pot canviar de proveïdor. «{{model}}» pertany a un proveïdor diferent — executeu primer '/model {{model}}' i, després, envieu el vostre prompt.",
   "⚠ '{{model}}' is not a known image-capable model; the vision bridge may fail on images.":
@@ -2256,8 +2235,6 @@ export default {
   'Vision Model': 'Model de visió',
   'No models are configured.': 'No hi ha cap model configurat.',
   'Configured models: {{models}}.': 'Models configurats: {{models}}.',
-  "Voice model '{{modelName}}' cannot be used for transcription.":
-    'El model de veu «{{modelName}}» no es pot usar per a la transcripció.',
 
   // ============================================================================
   // Plans i subscripcions

@@ -14,7 +14,6 @@ import {
   readInbox,
   writeMessage,
   consumeUnread,
-  clearInbox,
   clearAllInboxes,
   sendStructuredMessage,
   disposeInboxLocks,
@@ -212,20 +211,6 @@ describe('mailbox', () => {
     const unreadRemaining = remaining.filter((m) => !m.read);
     expect(unreadRemaining).toHaveLength(1);
     expect(unreadRemaining[0]!.type).toBe('task_assignment');
-  });
-
-  // ─── clearInbox ────────────────────────────────────────────
-
-  it('clears an inbox', async () => {
-    await writeMessage('team', 'worker', makeMessage());
-    await clearInbox('team', 'worker');
-
-    const messages = await readInbox('team', 'worker');
-    expect(messages).toEqual([]);
-  });
-
-  it('does not throw when clearing nonexistent inbox', async () => {
-    await expect(clearInbox('team', 'nobody')).resolves.not.toThrow();
   });
 
   // ─── clearAllInboxes ───────────────────────────────────────

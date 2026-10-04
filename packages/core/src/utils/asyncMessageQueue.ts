@@ -46,9 +46,4 @@ export class AsyncMessageQueue<T> {
   get size(): number {
     return this.items.length;
   }
-
-  /** Whether `drain()` has been called. */
-  get isDrained(): boolean {
-    return this.drained;
-  }
 }

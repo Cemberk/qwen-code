@@ -174,35 +174,6 @@ export const INK_SUPPORTED_NAMES = new Set([
 ]);
 
 /**
- * Checks if a color string is valid (hex, Ink-supported color name, or CSS color name).
- * This function uses the same validation logic as the Theme class's _resolveColor method
- * to ensure consistency between validation and resolution.
- * @param color The color string to validate.
- * @returns True if the color is valid.
- */
-export function isValidColor(color: string): boolean {
-  const lowerColor = color.toLowerCase();
-
-  // 1. Check if it's a hex code
-  if (lowerColor.startsWith('#')) {
-    return /^#[0-9A-Fa-f]{3}([0-9A-Fa-f]{3})?$/.test(color);
-  }
-
-  // 2. Check if it's an Ink supported name
-  if (INK_SUPPORTED_NAMES.has(lowerColor)) {
-    return true;
-  }
-
-  // 3. Check if it's a known CSS name we can map to hex
-  if (CSS_NAME_TO_HEX_MAP[lowerColor]) {
-    return true;
-  }
-
-  // 4. Not a valid color
-  return false;
-}
-
-/**
  * Resolves a CSS color value (name or hex) into an Ink-compatible color string.
  * @param colorValue The raw color string (e.g., 'blue', '#ff0000', 'darkkhaki').
  * @returns An Ink-compatible color string (hex or name), or undefined if not resolvable.
@@ -235,7 +206,7 @@ export function resolveColor(colorValue: string): string | undefined {
 }
 
 // Basic Ink color names that resolveColor passes through as names rather than
-// hex. Needed so interpolateColor can blend them numerically.
+// hex. Needed so toHex can resolve them.
 const INK_NAME_TO_HEX: Readonly<Record<string, string>> = {
   black: '#000000',
   red: '#ff0000',
@@ -277,39 +248,4 @@ export function toHex(color: string): string | undefined {
     return undefined;
   }
   return INK_NAME_TO_HEX[resolved];
-}
-
-/**
- * Linearly blends two colors in RGB space.
- * @param color1 Returned (unchanged) when factor <= 0.
- * @param color2 Returned (unchanged) when factor >= 1.
- * @param factor Blend amount in [0, 1] from color1 toward color2.
- * @returns A #rrggbb hex string, or '' if either color cannot be parsed.
- */
-export function interpolateColor(
-  color1: string,
-  color2: string,
-  factor: number,
-): string {
-  if (factor <= 0) {
-    return color1;
-  }
-  if (factor >= 1) {
-    return color2;
-  }
-  const h1 = toHex(color1);
-  const h2 = toHex(color2);
-  if (!h1 || !h2) {
-    return '';
-  }
-  const r1 = parseInt(h1.slice(1, 3), 16);
-  const g1 = parseInt(h1.slice(3, 5), 16);
-  const b1 = parseInt(h1.slice(5, 7), 16);
-  const r2 = parseInt(h2.slice(1, 3), 16);
-  const g2 = parseInt(h2.slice(3, 5), 16);
-  const b2 = parseInt(h2.slice(5, 7), 16);
-  const lerp = (a: number, b: number) => Math.round(a + (b - a) * factor);
-  const toByte = (n: number) =>
-    Math.max(0, Math.min(255, n)).toString(16).padStart(2, '0');
-  return `#${toByte(lerp(r1, r2))}${toByte(lerp(g1, g2))}${toByte(lerp(b1, b2))}`;
 }

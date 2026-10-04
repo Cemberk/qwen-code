@@ -315,7 +315,6 @@ describe('useLlmStream', () => {
         .fn()
         .mockReturnValue(contentGeneratorConfig),
       getMaxSessionTurns: vi.fn(() => 50),
-      getArenaAgentClient: vi.fn(() => null),
       isCronEnabled: vi.fn(() => false),
       getCronScheduler: vi.fn(() => null),
       getEmitToolUseSummaries: vi.fn(() => false),
@@ -1378,7 +1377,6 @@ describe('useLlmStream', () => {
 
   it('labels loop wakeup cron notifications as Loop', async () => {
     const scheduler = {
-      hasPendingWork: true,
       enableDurable: vi.fn().mockResolvedValue(undefined),
       start: vi.fn(
         (
@@ -1412,7 +1410,6 @@ describe('useLlmStream', () => {
       | ((job: { prompt: string; cronExpr?: string; missed?: boolean }) => void)
       | null = null;
     const scheduler = {
-      hasPendingWork: true,
       enableDurable: vi.fn().mockResolvedValue(undefined),
       start: vi.fn(
         (
@@ -1474,7 +1471,6 @@ describe('useLlmStream', () => {
 
   it('skips missed autonomous loop wakeup sentinels', async () => {
     const scheduler = {
-      hasPendingWork: true,
       enableDurable: vi.fn().mockResolvedValue(undefined),
       start: vi.fn(
         (
@@ -13995,7 +13991,6 @@ describe('useLlmStream', () => {
           | ((job: { prompt: string; cronExpr?: string }) => void)
           | null = null;
         const scheduler = {
-          hasPendingWork: true,
           enableDurable: vi.fn().mockResolvedValue(undefined),
           start: vi.fn((callback: (job: { prompt: string }) => void) => {
             schedulerCallback = callback;
@@ -20476,7 +20471,6 @@ describe('useLlmStream', () => {
         }),
         stop: vi.fn(),
         getExitSummary: vi.fn(() => null),
-        hasPendingWork: false,
       };
 
       const { rerender } = renderCronHook(scheduler, false);
@@ -20500,7 +20494,6 @@ describe('useLlmStream', () => {
         start: vi.fn(),
         stop: vi.fn(),
         getExitSummary: vi.fn(() => null),
-        hasPendingWork: false,
       };
 
       renderCronHook(scheduler, false);
@@ -20526,7 +20519,6 @@ describe('useLlmStream', () => {
         start: vi.fn(),
         stop: vi.fn(),
         getExitSummary: vi.fn(() => null),
-        hasPendingWork: false,
       };
 
       const { unmount } = renderCronHook(scheduler, true);
@@ -20552,7 +20544,6 @@ describe('useLlmStream', () => {
         start: vi.fn(),
         stop: vi.fn(),
         getExitSummary: vi.fn(() => null),
-        hasPendingWork: false,
       };
 
       renderCronHook(scheduler, true);

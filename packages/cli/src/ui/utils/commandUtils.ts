@@ -294,30 +294,6 @@ export const copyToClipboard = async (text: string): Promise<void> => {
   }
 };
 
-export const getUrlOpenCommand = (): string => {
-  // --- Determine the OS-specific command to open URLs ---
-  let openCmd: string;
-  switch (process.platform) {
-    case 'darwin':
-      openCmd = 'open';
-      break;
-    case 'win32':
-      openCmd = 'start';
-      break;
-    case 'linux':
-      openCmd = 'xdg-open';
-      break;
-    default:
-      // Default to xdg-open, which appears to be supported for the less popular operating systems.
-      openCmd = 'xdg-open';
-      debugLogger.warn(
-        `Unknown platform: ${process.platform}. Attempting to open URLs with: ${openCmd}.`,
-      );
-      break;
-  }
-  return openCmd;
-};
-
 /**
  * Represents a slash command token found mid-input (not at position 0).
  * e.g., in "hello /st", startPos=6, partialCommand="st"

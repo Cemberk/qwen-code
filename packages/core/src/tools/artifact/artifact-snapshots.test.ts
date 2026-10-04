@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createHash, randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,10 +13,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   deleteArtifactSnapshot,
   retainArtifactSnapshot,
-  readArtifactSnapshot,
-  saveArtifactSnapshot,
 } from './artifact-snapshots.js';
-import { MAX_ARTIFACT_BYTES } from './html.js';
+import { PUBLISHED_CONTENT_SHA256_METADATA_KEY } from '../../services/session-artifact-persistence.js';
+import type { ToolArtifact } from '../tools.js';
 
 describe('saved Artifact versions', () => {
   let runtime: string;
@@ -28,116 +28,54 @@ describe('saved Artifact versions', () => {
     await fs.rm(runtime, { recursive: true, force: true });
   });
 
-  it('saves distinct invocations, preserving exact UTF-8 bytes after later saves', async () => {
-    const html = '<h1>第一版</h1><script>let count=0</script>';
-    const first = await saveArtifactSnapshot(
-      html,
-      'Page',
-      'https://example.com/latest',
-      'owner',
-      runtime,
+  // Saved webpage versions are no longer written, but session cleanup still
+  // reclaims the ones older transcripts reference. This writes that on-disk
+  // layout: `<runtime>/artifacts/snapshots/<id>/{index.html,references/<owner>}`.
+  async function writeSnapshotFixture(
+    html: string,
+    sessionId: string,
+  ): Promise<ToolArtifact> {
+    const id = randomUUID();
+    const dir = path.join(runtime, 'artifacts', 'snapshots', id);
+    await fs.mkdir(path.join(dir, 'references'), { recursive: true });
+    await fs.writeFile(
+      path.join(
+        dir,
+        'references',
+        createHash('sha256').update(sessionId).digest('hex'),
+      ),
+      '',
     );
-    const repeated = await saveArtifactSnapshot(
-      html,
-      'Page',
-      'https://example.com/latest',
-      'owner',
-      runtime,
-    );
-    const second = await saveArtifactSnapshot(
-      '<h1>第二版</h1>',
-      'Page',
-      'https://example.com/latest',
-      'owner',
-      runtime,
-    );
-    expect(
-      new Set([first.managedId, repeated.managedId, second.managedId]).size,
-    ).toBe(3);
-    await expect(readArtifactSnapshot(first, runtime)).resolves.toBe(html);
-    await expect(readArtifactSnapshot(second, runtime)).resolves.toBe(
-      '<h1>第二版</h1>',
-    );
-    await expect(
-      readArtifactSnapshot(first, path.join(runtime, 'other')),
-    ).rejects.toThrow();
-  });
+    const file = path.join(dir, 'index.html');
+    await fs.writeFile(file, html);
+    return {
+      kind: 'html',
+      storage: 'published',
+      title: 'Page',
+      url: pathToFileURL(file).href,
+      managedId: `preview-${id}`,
+      mimeType: 'text/html',
+      sizeBytes: Buffer.byteLength(html, 'utf8'),
+      metadata: {
+        artifactType: 'web_preview_snapshot',
+        'qwen.snapshot.references': 1,
+        publishedUrl: 'https://example.com',
+        [PUBLISHED_CONTENT_SHA256_METADATA_KEY]: createHash('sha256')
+          .update(html)
+          .digest('hex'),
+      },
+    };
+  }
 
-  it('rejects missing, changed and oversized files without reading latest', async () => {
-    const snapshot = await saveArtifactSnapshot(
-      'original',
-      'Page',
-      'https://example.com/latest',
-      'owner',
-      runtime,
-    );
-    const file = fileURLToPath(snapshot.url!);
-    await fs.writeFile(file, 'changed');
-    await expect(readArtifactSnapshot(snapshot, runtime)).rejects.toThrow();
-    const handle = await fs.open(file, 'r+');
-    await handle.truncate(MAX_ARTIFACT_BYTES + 1);
-    await handle.close();
-    await expect(readArtifactSnapshot(snapshot, runtime)).rejects.toThrow();
-    await fs.unlink(file);
-    await expect(readArtifactSnapshot(snapshot, runtime)).rejects.toThrow();
-  });
-
-  it('rejects forged descriptors and symlink files or directories even with matching bytes', async () => {
-    const snapshot = await saveArtifactSnapshot(
-      'original',
-      'Page',
-      'https://example.com/latest',
-      'owner',
-      runtime,
-    );
-    for (const override of [
-      { source: 'client' },
-      { toolName: 'record_artifact' },
-      { source: 'tool', toolName: 'record_artifact' },
-      { managedId: '../outside' },
-      { metadata: { artifactType: 'web_preview_snapshot' } },
-      { storage: 'external_url' as const },
-      { url: 'file:///tmp/elsewhere.html' },
-    ]) {
-      await expect(
-        readArtifactSnapshot({ ...snapshot, ...override }, runtime),
-      ).rejects.toThrow();
-    }
-    const file = fileURLToPath(snapshot.url!);
-    const outside = path.join(runtime, 'outside.html');
-    await fs.writeFile(outside, 'original');
-    await fs.unlink(file);
-    await fs.symlink(outside, file);
-    await expect(readArtifactSnapshot(snapshot, runtime)).rejects.toThrow();
-    const dir = path.dirname(file);
-    await fs.rm(dir, { recursive: true });
-    const otherDir = path.join(runtime, 'other');
-    await fs.mkdir(otherDir);
-    await fs.writeFile(path.join(otherDir, 'index.html'), 'original');
-    await fs.symlink(otherDir, dir, 'dir');
-    await expect(readArtifactSnapshot(snapshot, runtime)).rejects.toThrow();
-  });
+  const readSnapshot = (snapshot: ToolArtifact) =>
+    fs.readFile(fileURLToPath(snapshot.url!), 'utf8');
 
   it('reclaims an evicted snapshot while retained versions stay readable', async () => {
-    const first = await saveArtifactSnapshot(
-      '<h1>v1</h1>',
-      'Page',
-      'https://example.com/latest',
-      'owner',
-      runtime,
-    );
-    const second = await saveArtifactSnapshot(
-      '<h1>v2</h1>',
-      'Page',
-      'https://example.com/latest',
-      'owner',
-      runtime,
-    );
+    const first = await writeSnapshotFixture('<h1>v1</h1>', 'owner');
+    const second = await writeSnapshotFixture('<h1>v2</h1>', 'owner');
     await deleteArtifactSnapshot(first, runtime, 'owner');
-    await expect(readArtifactSnapshot(first, runtime)).rejects.toThrow();
-    await expect(readArtifactSnapshot(second, runtime)).resolves.toBe(
-      '<h1>v2</h1>',
-    );
+    await expect(readSnapshot(first)).rejects.toThrow();
+    await expect(readSnapshot(second)).resolves.toBe('<h1>v2</h1>');
     // Reclaiming an already-reclaimed snapshot is a quiet no-op.
     await expect(
       deleteArtifactSnapshot(first, runtime, 'owner'),
@@ -145,20 +83,12 @@ describe('saved Artifact versions', () => {
   });
 
   it('preserves unloaded fork ownership and removes bytes only for the final owner', async () => {
-    const snapshot = await saveArtifactSnapshot(
-      'shared',
-      'Page',
-      'https://example.com',
-      'owner',
-      runtime,
-    );
+    const snapshot = await writeSnapshotFixture('shared', 'owner');
     await retainArtifactSnapshot(snapshot, runtime, 'fork', 'committed-fork');
     await retainArtifactSnapshot(snapshot, runtime, 'fork', 'failed-fork');
     await deleteArtifactSnapshot(snapshot, runtime, 'fork', 'failed-fork');
     await deleteArtifactSnapshot(snapshot, runtime, 'owner');
-    await expect(readArtifactSnapshot(snapshot, runtime)).resolves.toBe(
-      'shared',
-    );
+    await expect(readSnapshot(snapshot)).resolves.toBe('shared');
     await deleteArtifactSnapshot(snapshot, runtime, 'fork');
     await expect(
       fs.stat(path.dirname(fileURLToPath(snapshot.url!))),
@@ -166,40 +96,24 @@ describe('saved Artifact versions', () => {
   });
 
   it('uses the captured runtime and never collects an untracked legacy snapshot', async () => {
-    const snapshot = await saveArtifactSnapshot(
-      'history',
-      'Page',
-      'https://example.com',
-      'owner',
-      runtime,
-    );
+    const snapshot = await writeSnapshotFixture('history', 'owner');
     vi.stubEnv('QWEN_RUNTIME_DIR', path.join(runtime, 'other'));
     await deleteArtifactSnapshot(
       snapshot,
       path.join(runtime, 'other'),
       'owner',
     );
-    await expect(readArtifactSnapshot(snapshot, runtime)).resolves.toBe(
-      'history',
-    );
+    await expect(readSnapshot(snapshot)).resolves.toBe('history');
     const legacy = { ...snapshot, metadata: { ...snapshot.metadata } };
     delete legacy.metadata['qwen.snapshot.references'];
     await deleteArtifactSnapshot(legacy, runtime, 'owner');
-    await expect(readArtifactSnapshot(snapshot, runtime)).resolves.toBe(
-      'history',
-    );
+    await expect(readSnapshot(snapshot)).resolves.toBe('history');
     await deleteArtifactSnapshot(snapshot, runtime, 'owner');
-    await expect(readArtifactSnapshot(snapshot, runtime)).rejects.toThrow();
+    await expect(readSnapshot(snapshot)).rejects.toThrow();
   });
 
   it('fails a retain after reclamation claims the reference directory', async () => {
-    const snapshot = await saveArtifactSnapshot(
-      'history',
-      'Page',
-      'https://example.com',
-      'owner',
-      runtime,
-    );
+    const snapshot = await writeSnapshotFixture('history', 'owner');
     await fs.rm(
       path.join(path.dirname(fileURLToPath(snapshot.url!)), 'references'),
       { recursive: true },
@@ -215,41 +129,8 @@ describe('saved Artifact versions', () => {
     ).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
-  it('cleans partial files when writing the snapshot fails', async () => {
-    const write = fs.writeFile.bind(fs);
-    const spy = vi
-      .spyOn(fs, 'writeFile')
-      .mockImplementation(async (...args) => {
-        if (String(args[0]).endsWith('index.html'))
-          throw new Error('disk full');
-        return write(...args);
-      });
-    try {
-      await expect(
-        saveArtifactSnapshot(
-          'history',
-          'Page',
-          'https://example.com',
-          'owner',
-          runtime,
-        ),
-      ).rejects.toThrow('disk full');
-    } finally {
-      spy.mockRestore();
-    }
-    expect(
-      await fs.readdir(path.join(runtime, 'artifacts', 'snapshots')),
-    ).toEqual([]);
-  });
-
   it('rechecks deletion ownership after asynchronous reference lookup', async () => {
-    const snapshot = await saveArtifactSnapshot(
-      'history',
-      'Page',
-      'https://example.com',
-      'owner',
-      runtime,
-    );
+    const snapshot = await writeSnapshotFixture('history', 'owner');
     let lost = false;
     const readdir = fs.readdir.bind(fs);
     const spy = vi.spyOn(fs, 'readdir').mockImplementation(async (...args) => {
@@ -266,19 +147,11 @@ describe('saved Artifact versions', () => {
     } finally {
       spy.mockRestore();
     }
-    await expect(readArtifactSnapshot(snapshot, runtime)).resolves.toBe(
-      'history',
-    );
+    await expect(readSnapshot(snapshot)).resolves.toBe('history');
   });
 
   it('never deletes outside the exact file the descriptor points at', async () => {
-    const snapshot = await saveArtifactSnapshot(
-      'original',
-      'Page',
-      'https://example.com/latest',
-      'owner',
-      runtime,
-    );
+    const snapshot = await writeSnapshotFixture('original', 'owner');
     const id = snapshot.managedId!.slice('preview-'.length);
     for (const override of [
       // Classifier rejects: wrong suffix, wrong metadata, wrong source.
@@ -306,9 +179,7 @@ describe('saved Artifact versions', () => {
         runtime,
         'owner',
       );
-      await expect(readArtifactSnapshot(snapshot, runtime)).resolves.toBe(
-        'original',
-      );
+      await expect(readSnapshot(snapshot)).resolves.toBe('original');
     }
   });
 });

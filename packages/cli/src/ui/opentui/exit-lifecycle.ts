@@ -28,8 +28,6 @@ import { runExitCleanup } from '../../utils/cleanup.js';
 
 /** Exit code for interrupt-style exits (Ctrl+C / Ctrl+D double press). */
 export const EXIT_CODE_INTERRUPT = 130;
-/** Exit code for termination-style exits (SIGTERM semantics). */
-export const EXIT_CODE_TERMINATED = 143;
 
 let exitInProgress = false;
 

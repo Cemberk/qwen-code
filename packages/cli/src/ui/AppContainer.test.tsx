@@ -283,7 +283,6 @@ import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
 import { useGitBranchName } from './hooks/useGitBranchName.js';
 import { useWorktreeSession } from './hooks/useWorktreeSession.js';
 import {
-  useVimMode,
   useVimModeActions,
   useVimModeState,
 } from './contexts/VimModeContext.js';
@@ -362,7 +361,7 @@ describe('AppContainer State Management', () => {
   const mockedUseAutoAcceptIndicator = useAutoAcceptIndicator as Mock;
   const mockedUseGitBranchName = useGitBranchName as Mock;
   const mockedUseWorktreeSession = useWorktreeSession as Mock;
-  const mockedUseVimMode = useVimMode as Mock;
+
   const mockedUseVimModeActions = useVimModeActions as Mock;
   const mockedUseVimModeState = useVimModeState as Mock;
   const mockedUseSessionStats = useSessionStats as Mock;
@@ -512,10 +511,6 @@ describe('AppContainer State Management', () => {
     });
     mockedUseAutoAcceptIndicator.mockReturnValue(false);
     mockedUseGitBranchName.mockReturnValue('main');
-    mockedUseVimMode.mockReturnValue({
-      isVimEnabled: false,
-      toggleVimEnabled: vi.fn(),
-    });
     mockedUseVimModeActions.mockReturnValue({
       toggleVimEnabled: vi.fn(),
       setVimMode: vi.fn(),
@@ -5663,10 +5658,8 @@ describe('AppContainer State Management', () => {
           }
         },
       );
-      const getTitleRecordedCallback = vi.fn(() => titleRecordedCallback);
       vi.spyOn(mockConfig, 'getChatRecordingService').mockReturnValue({
         setTitleRecordedCallback,
-        getTitleRecordedCallback,
       } as unknown as NonNullable<
         ReturnType<Config['getChatRecordingService']>
       >);
@@ -5735,95 +5728,6 @@ describe('AppContainer State Management', () => {
       expect(formatSessionWindowTitle('Bad\x07Title')).toBe('BadTitle');
       unmount();
       expect(titleRecordedCallback).toBeUndefined();
-    });
-
-    it('should chain with existing titleRecordedCallback from Session (ACP notifications)', async () => {
-      const mockSettingsWithTitleEnabled = {
-        ...mockSettings,
-        merged: {
-          ...mockSettings.merged,
-          ui: {
-            ...mockSettings.merged.ui,
-            showStatusInTitle: true,
-            hideWindowTitle: false,
-          },
-        },
-      } as unknown as LoadedSettings;
-
-      const existingCallback = vi.fn();
-      type TitleRecordedCallback = (
-        customTitle: string,
-        source: string,
-        sessionId: string,
-      ) => void;
-      let titleRecordedCallback: TitleRecordedCallback | undefined;
-      const setTitleRecordedCallback = vi.fn(
-        (callback: TitleRecordedCallback | undefined) => {
-          titleRecordedCallback = callback;
-        },
-      );
-      // Simulate Session having already registered an ACP callback
-      const getTitleRecordedCallback = vi.fn(() => existingCallback);
-      vi.spyOn(mockConfig, 'getChatRecordingService').mockReturnValue({
-        setTitleRecordedCallback,
-        getTitleRecordedCallback,
-      } as unknown as NonNullable<
-        ReturnType<Config['getChatRecordingService']>
-      >);
-
-      mockedUseLlmStream.mockReturnValue({
-        streamingState: 'idle',
-        submitQuery: vi.fn(),
-        initError: null,
-        pendingHistoryItems: [],
-        thought: null,
-        cancelOngoingRequest: vi.fn(),
-        retryLastPrompt: vi.fn(),
-        streamingResponseLengthRef: { current: 0 },
-        isReceivingContent: false,
-      });
-
-      const { unmount } = render(
-        <AppContainer
-          config={mockConfig}
-          settings={mockSettingsWithTitleEnabled}
-          version="1.0.0"
-          initializationResult={mockInitResult}
-        />,
-      );
-
-      await act(async () => {
-        await Promise.resolve();
-      });
-
-      // The chained callback should exist
-      expect(titleRecordedCallback).toBeDefined();
-
-      // Invoke the chained callback — it should call both the existing
-      // ACP callback AND the new setSessionName setter
-      const currentSessionId = mockConfig.getSessionId();
-      await act(async () => {
-        titleRecordedCallback!('Test title', 'rename', currentSessionId);
-      });
-
-      // The existing ACP callback was called (preserved by chaining)
-      expect(existingCallback).toHaveBeenCalledWith(
-        'Test title',
-        'rename',
-        currentSessionId,
-      );
-      await act(async () => {
-        titleRecordedCallback!('Stale title', 'auto', 'old-session-id');
-      });
-      expect(existingCallback).toHaveBeenLastCalledWith(
-        'Stale title',
-        'auto',
-        'old-session-id',
-      );
-
-      unmount();
-      // After unmount, the callback should be restored to the original
-      expect(titleRecordedCallback).toBe(existingCallback);
     });
 
     it('should revert to static title when showStatusInTitle toggles from true to false', () => {

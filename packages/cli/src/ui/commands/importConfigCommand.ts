@@ -269,7 +269,7 @@ export const importConfigCommand: SlashCommand = {
     '/import-config --scope project',
   ],
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
   action: async (
     context: CommandContext,
     args: string,
@@ -288,19 +288,6 @@ export const importConfigCommand: SlashCommand = {
         type: 'message',
         messageType: 'error',
         content: `${parsed.error}\n\n${usage()}`,
-      };
-    }
-
-    if (
-      parsed.scope === 'project' &&
-      context.executionPolicy?.allowWorkspaceSettingsWrite === false
-    ) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: t(
-          'Project configuration imports are not available in this session.',
-        ),
       };
     }
 

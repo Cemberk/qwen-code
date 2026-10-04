@@ -33,7 +33,6 @@ import { NotebookEditTool } from './notebook-edit.js';
 import { ReadFileTool } from './read-file.js';
 import { ReadMcpResourceTool } from './read-mcp-resource.js';
 import { RecordArtifactTool } from './record-artifact.js';
-import { RecordSourceTool } from './record-source.js';
 import { ReportFindingsTool } from './report-findings.js';
 import { RequestShutdownTool } from './request-shutdown.js';
 import { RipGrepTool } from './ripGrep.js';
@@ -181,7 +180,6 @@ const DEFERRED: ReadonlyArray<[name: string, build: Build]> = [
   ['monitor', (c) => new MonitorTool(c)],
   ['read_mcp_resource', (c) => new ReadMcpResourceTool(c)],
   ['record_artifact', (c) => new RecordArtifactTool(c)],
-  ['record_source', (c) => new RecordSourceTool(c)],
   ['report_findings', () => new ReportFindingsTool()],
   ['request_shutdown', (c) => new RequestShutdownTool(c)],
   ['send_message', (c) => new SendMessageTool(c)],

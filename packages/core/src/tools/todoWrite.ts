@@ -630,34 +630,6 @@ Todo list modification failed with error: ${errorMessage}. You may need to retry
   }
 }
 
-/**
- * Utility function to read todos for a specific session (useful for session recovery)
- */
-export async function readTodosForSession(
-  sessionId?: string,
-): Promise<TodoItem[]> {
-  return (await readTodoPlanFromFile(sessionId)).todos;
-}
-
-/**
- * Utility function to list all todo files in the todos directory
- */
-export async function listTodoSessions(): Promise<string[]> {
-  try {
-    const todoDir = path.join(Storage.getRuntimeBaseDir(), TODO_SUBDIR);
-    const files = await fs.readdir(todoDir);
-    return files
-      .filter((file: string) => file.endsWith('.json'))
-      .map((file: string) => file.replace('.json', ''));
-  } catch (err) {
-    const error = err as Error & { code?: string };
-    if (!(error instanceof Error) || error.code !== 'ENOENT') {
-      throw err;
-    }
-    return [];
-  }
-}
-
 export class TodoWriteTool extends BaseDeclarativeTool<
   TodoWriteParams,
   ToolResult

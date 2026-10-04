@@ -29,14 +29,9 @@ This guide provides solutions to common issues and debugging tips, including top
   - **Cause:** The local model server isn't running, or it listens on a different port than the configured base URL.
   - **Solution:** Start the server (for example `ollama serve`, the LM Studio local server, `vllm serve <model>` or `llama-server -m <model.gguf>`) and check that the port and the `/v1` path match your base URL. The server must answer directly: Qwen Code doesn't follow HTTP redirects from the model server.
 
-- **Error: `UNABLE_TO_GET_ISSUER_CERT_LOCALLY`, `UNABLE_TO_VERIFY_LEAF_SIGNATURE`, or `unable to get local issuer certificate`**
-  - **Cause:** You may be on a corporate network with a firewall that intercepts and inspects SSL/TLS traffic. This often requires a custom root CA certificate to be trusted by Node.js.
-  - **Solution:** Set the `NODE_EXTRA_CA_CERTS` environment variable to the absolute path of your corporate root CA certificate file.
-    - Example: `export NODE_EXTRA_CA_CERTS=/path/to/your/corporate-ca.crt`
-
 - **Error: `Connection error. (cause: fetch failed)` against a self-signed endpoint**
   - **Cause:** You are pointing Qwen Code at a self-hosted server (for example a local model behind `https://`) whose TLS certificate is self-signed, so Node.js rejects it.
-  - **Solution:** Prefer trusting the certificate via `NODE_EXTRA_CA_CERTS` (above). If that is not practical in a trusted lab/private network, skip verification with the `--insecure` flag (or `QWEN_TLS_INSECURE=1`):
+  - **Solution:** Prefer trusting the certificate by setting `NODE_EXTRA_CA_CERTS` to the absolute path of its CA certificate file. If that is not practical in a trusted lab/private network, skip verification with the `--insecure` flag (or `QWEN_TLS_INSECURE=1`):
     - Example: `qwen --insecure --openai-base-url https://localhost:8443/v1 ...`
     - **Warning:** Disabling verification removes protection against man-in-the-middle attacks. Only use it for endpoints you fully trust.
 
@@ -66,8 +61,8 @@ This guide provides solutions to common issues and debugging tips, including top
   - A: Start Qwen Code with the `--safe-mode` flag to disable all customizations — context files, hooks, extensions, skills, MCP servers, custom subagents (only built-in subagents load), permission rules, settings-sourced approval mode overrides, memory features, and sandbox settings — for the session. Note: the CLI flags `--yolo` and `--approval-mode` still take effect in safe mode. If the problem disappears in safe mode, re-enable your customizations one at a time to find the culprit.
     - Example: `qwen --safe-mode`
     - Alternative: set the environment variable `QWEN_CODE_SAFE_MODE=true` if the CLI cannot accept flags.
-    - Note: unlike the flag, an exported `QWEN_CODE_SAFE_MODE` is inherited by child processes. An editor started from that shell hosts every one of its sessions in safe mode, so those sessions are suppressed too: they write no session record, and other sessions cannot list them. Unset the variable for the editor rather than leaving it exported in the shell that starts it.
-    - Note: "MCP servers" here means servers configured in `settings.json` / project `.mcp.json` — local, ambient state that safe mode is meant to isolate against. MCP servers you explicitly supply for the current invocation (an embedding ACP client's `session/new` `mcpServers`, or `--mcp-config`) are not local/ambient state and are still honored under safe mode.
+    - Note: unlike the flag, an exported `QWEN_CODE_SAFE_MODE` is inherited by child processes, so every `qwen` started from that shell runs in safe mode too: it writes no session record, and other sessions cannot list it. Unset the variable rather than leaving it exported in your shell.
+    - Note: "MCP servers" here means servers configured in `settings.json` / project `.mcp.json` — local, ambient state that safe mode is meant to isolate against. MCP servers you explicitly supply for the current invocation (`--mcp-config`) are not local/ambient state and are still honored under safe mode.
 
 ## Common error messages and solutions
 

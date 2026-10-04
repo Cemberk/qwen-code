@@ -566,9 +566,6 @@ export interface LlmChatSendOptions {
   disableModelFallbacks?: boolean;
 }
 
-/** @deprecated Use `LlmChatSendOptions`; retained until a future major release. */
-export type GeminiChatSendOptions = LlmChatSendOptions;
-
 /**
  * Symbol key under which `sendMessageStream` publishes this send's
  * acceptance snapshot on the caller's request-parts array immediately
@@ -2017,10 +2014,6 @@ function applyRepair(
   return { insertedBefore: 1 };
 }
 
-export interface RepairOrphanedToolUseOptions {
-  preserveCallIds?: ReadonlySet<string>;
-}
-
 /**
  * Forward-walk `history`, planning and applying the repair for each
  * `model[functionCall]` turn in turn. Iteration is index-based and the
@@ -2034,14 +2027,12 @@ export interface RepairOrphanedToolUseOptions {
 export function repairOrphanedToolUseTurns(
   history: Content[],
   reason: string = ORPHAN_TOOL_USE_REPAIR_REASON,
-  options?: RepairOrphanedToolUseOptions,
 ): {
   injected: Array<{ callId: string; name: string }>;
   droppedDuplicates: Array<{ callId: string; name: string }>;
 } {
   const injected: Array<{ callId: string; name: string }> = [];
   const droppedDuplicates: Array<{ callId: string; name: string }> = [];
-  const preserveCallIds = options?.preserveCallIds;
 
   for (let i = 0; i < history.length; i++) {
     if (history[i].role !== 'model') continue;
@@ -2050,11 +2041,6 @@ export function repairOrphanedToolUseTurns(
     if (scan.expected.size === 0) continue;
 
     const plan = planRepair(scan);
-    if (preserveCallIds && preserveCallIds.size > 0) {
-      plan.synthesizeIds = plan.synthesizeIds.filter(
-        ([id]) => !preserveCallIds.has(id),
-      );
-    }
     if (plan.synthesizeIds.length === 0 && plan.removalTargets.length === 0) {
       continue;
     }
@@ -2136,9 +2122,9 @@ export class LlmChat {
 
   /**
    * Per-chat last cached-content token count from usageMetadata. Mirrors
-   * UiTelemetryService for the main session so /context in a `serve`
-   * daemon does not subtract another session's cache from this chat's
-   * total (#12047).
+   * UiTelemetryService for the main session so /context does not subtract
+   * another chat's cache (a subagent's, for one) from this chat's total
+   * (#12047).
    */
   private lastCachedContentTokenCount = 0;
 
@@ -2466,8 +2452,8 @@ export class LlmChat {
 
   /**
    * Most recent cached-content token count reported by the model for *this*
-   * chat. Prefer this over {@link UiTelemetryService} in multi-session
-   * daemons (#12047).
+   * chat. Prefer this over {@link UiTelemetryService} when several chats
+   * share the process (#12047).
    */
   getLastCachedContentTokenCount(targetRouteKey?: string): number {
     this.adoptTokenCountsForRoute(targetRouteKey);
@@ -3292,10 +3278,8 @@ export class LlmChat {
       // Per-send orphan repair (belt-and-suspenders alongside the
       // startChat load-time pass). Runs AFTER user content lands so a
       // user-supplied tool_result closes the pair before we synthesize
-      // anything. An ordinary prompt that races a restore re-hang must
-      // still close the pair — `model[functionCall] → user[text]` is
-      // rejected by Anthropic-compatible providers. Restore itself sends
-      // the real functionResponse, so this pass is a no-op on that path.
+      // anything. `model[functionCall] → user[text]` is rejected by
+      // Anthropic-compatible providers.
       const inlineRepair = repairOrphanedToolUseTurns(
         this.history,
         ORPHAN_TOOL_USE_REPAIR_REASON,
@@ -5315,23 +5299,6 @@ export class LlmChat {
   }
 
   /**
-   * Clears the chat history.
-   */
-  clearHistory(): void {
-    this.history = [];
-    this.completedToolCallIds = [];
-    // Any pending partial-push state points into the now-empty history;
-    // resetting prevents `popPendingPartialAssistantTurn` from splicing whatever
-    // shows up at that index in a future send (defense-in-depth — the
-    // helper also bounds-checks, but a stale marker that happens to
-    // line up with a real model turn could otherwise pop the wrong
-    // entry). The deferred-record stash is dropped for the same reason:
-    // a later flush would append a turn that doesn't match the (now-
-    // empty) live history.
-    this.clearPendingPartialState();
-  }
-
-  /**
    * Adds a new entry to the chat history.
    */
   addHistory(content: Content): void {
@@ -5487,8 +5454,7 @@ export class LlmChat {
     this.clearPendingPartialState();
     this.redactApprovedPlansFromLoadedHistory();
     // Wholesale replacement can drop resident skill bodies (compression,
-    // /restore, session-manager load_history, ACP restoreSessionHistory
-    // all land here). Conservatively clear the tracking so an evicted
+    // /restore, session-manager load_history all land here). Conservatively clear the tracking so an evicted
     // skill never stays stuck behind the dedup guard; a still-resident
     // body costs at most one duplicate injection on the next invoke.
     if (!this.isForkedChat) {
@@ -5593,14 +5559,11 @@ export class LlmChat {
    * Instance wrapper around the free-function {@link repairOrphanedToolUseTurns}.
    * See the canonical note above `ORPHAN_TOOL_USE_REPAIR_REASON`.
    */
-  repairOrphanedToolUseTurns(
-    reason?: string,
-    options?: RepairOrphanedToolUseOptions,
-  ): {
+  repairOrphanedToolUseTurns(reason?: string): {
     injected: Array<{ callId: string; name: string }>;
     droppedDuplicates: Array<{ callId: string; name: string }>;
   } {
-    return repairOrphanedToolUseTurns(this.history, reason, options);
+    return repairOrphanedToolUseTurns(this.history, reason);
   }
 
   setTools(tools: Tool[]): void {

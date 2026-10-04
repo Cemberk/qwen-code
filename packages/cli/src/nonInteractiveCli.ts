@@ -1297,10 +1297,6 @@ export async function runNonInteractive(
               });
               return slashCommandResult.messageType === 'error' ? 1 : 0;
             }
-            case 'stream_messages':
-              throw new FatalInputError(
-                'Stream messages mode is not supported in non-interactive CLI',
-              );
             case 'unsupported': {
               await emitNonInteractiveFinalMessage({
                 message: slashCommandResult.reason,
@@ -3375,8 +3371,7 @@ export async function runNonInteractive(
       }
 
       // Cancel the wall-clock timer so it doesn't fire after a successful
-      // run completes — important for callers (e.g. the `qwen serve`
-      // daemon, SDK) that reuse a single process across many runs.
+      // run completes.
       budgetEnforcer.stop();
       abortController.signal.removeEventListener('abort', stampBudgetAbort);
 

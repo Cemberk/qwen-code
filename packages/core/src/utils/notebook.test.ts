@@ -13,7 +13,6 @@ import {
   inferNotebookJsonFormat,
   isAmbiguousCellId,
   makeCellId,
-  parseCellId,
   parseNotebook,
   readNotebook,
   readNotebookWithMetadata,
@@ -434,13 +433,6 @@ describe('notebook utilities', () => {
     await expect(readNotebookWithMetadata(filePath)).resolves.toMatchObject({
       isTruncated: false,
     });
-  });
-
-  it('should parse cell-N IDs as zero-based indexes', () => {
-    expect(parseCellId('cell-0')).toBe(0);
-    expect(parseCellId('cell-12')).toBe(12);
-    expect(parseCellId('abc-12')).toBeUndefined();
-    expect(parseCellId('cell-nope')).toBeUndefined();
   });
 
   it('should find cells by the same IDs read_file displays', () => {

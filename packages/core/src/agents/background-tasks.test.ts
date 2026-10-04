@@ -34,7 +34,6 @@ import {
   promptIdContext,
   todoWorkChainContext,
 } from '../utils/promptIdContext.js';
-import { runWithInvocationContext } from '../utils/invocation-context.js';
 
 const mockDebugLogger = vi.hoisted(() => ({
   debug: vi.fn(),
@@ -131,11 +130,8 @@ describe('notification emission and agent context (#7156)', () => {
     const registry = new BackgroundTaskRegistry();
     const callback = vi.fn();
     registry.setNotificationCallback(callback);
-    const entry = promptIdContext.run('fallback-turn', () =>
-      runWithInvocationContext(
-        { version: 1, sessionId: 'parent-session', promptId: 'launch-turn' },
-        () => registry.register(makeRegistration('bg-origin')),
-      ),
+    const entry = promptIdContext.run('launch-turn', () =>
+      registry.register(makeRegistration('bg-origin')),
     );
 
     promptIdContext.run('later-turn', () =>
@@ -146,17 +142,6 @@ describe('notification emission and agent context (#7156)', () => {
     expect(callback.mock.calls[0]![2]).toMatchObject({
       sourceTurnId: 'launch-turn',
     });
-  });
-
-  it('captures an automatic execution without an RPC invocation context', () => {
-    const registry = new BackgroundTaskRegistry();
-    const entry = runWithInvocationContext(undefined, () =>
-      promptIdContext.run('automatic-turn', () =>
-        registry.register(makeRegistration('bg-automatic')),
-      ),
-    );
-
-    expect(entry.sourceTurnId).toBe('automatic-turn');
   });
 
   it.each([undefined, 'persisted-origin'])(

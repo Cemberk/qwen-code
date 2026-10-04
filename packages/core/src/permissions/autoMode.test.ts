@@ -12,7 +12,6 @@ import {
   SAFE_TOOL_ALLOWLIST,
   applyAutoModeDecision,
   decorateAutoModeFallbackConfirmation,
-  decorateClassifierUnavailableConfirmation,
   evaluateAutoMode,
   formatClassifierBlockMessage,
   formatClassifierUnavailableFallbackMessage,
@@ -1463,22 +1462,6 @@ describe('classifier unavailable confirmation', () => {
         message: 'Classifier unavailable.',
       },
     });
-  });
-
-  it('keeps the classifier-unavailable decorator compatible', () => {
-    const confirmation = decorateClassifierUnavailableConfirmation(
-      {
-        type: 'info',
-        title: 'Run tool',
-        prompt: 'Run?',
-        onConfirm: vi.fn(),
-      },
-      'Classifier unavailable.',
-    );
-
-    expect(confirmation.autoModeFallback?.reason).toBe(
-      'classifier_unavailable',
-    );
   });
 });
 

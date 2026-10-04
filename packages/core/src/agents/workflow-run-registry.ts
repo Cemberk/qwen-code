@@ -650,12 +650,6 @@ export class WorkflowRunRegistry {
     this.approvalRequestCallback = cb;
   }
 
-  setSnapshotPersistedCallback(
-    cb: WorkflowSnapshotPersistedCallback | undefined,
-  ): void {
-    this.snapshotPersistedCallback = cb;
-  }
-
   /** Called by the runner once a terminal run's snapshot is persisted. */
   notifySnapshotPersisted(runId: string): void {
     if (!this.snapshotPersistedCallback) return;
@@ -848,30 +842,12 @@ export class WorkflowRunRegistry {
   /**
    * Run ids reserved by `reserveStart` and not yet registered. A session
    * reports these as active-work holds: `list()` has no entry for the
-   * starting window, and a daemon that judged the session idle from
-   * `list()` alone would close it and abort the start under the client
+   * starting window, and a host that judged the session idle from
+   * `list()` alone would close it and abort the start under the caller
    * that just asked for it.
    */
   listStartingRunIds(): string[] {
     return [...this.starting.keys()];
-  }
-
-  /**
-   * Cancel a run that has been reserved but not yet registered. Aborts
-   * the reserved controller only — the reservation itself is the
-   * runner's to release, in its start-failure path, exactly as after
-   * `abortAll`. Returns `false` when nothing is starting under `runId`,
-   * so a caller can fall through to the registered-entry route.
-   */
-  cancelStarting(runId: string): boolean {
-    const controller = this.starting.get(runId);
-    if (!controller) return false;
-    try {
-      controller.abort();
-    } catch (error) {
-      debugLogger.error('Failed to abort a starting workflow:', error);
-    }
-    return true;
   }
 
   /**
@@ -978,10 +954,6 @@ export class WorkflowRunRegistry {
     if (state === 'running' && entry.status !== 'paused') return;
     entry.status = state;
     this.emitStatusChange(entry);
-  }
-
-  getHandle(runId: string): WorkflowRunHandle | undefined {
-    return this.handles.get(runId);
   }
 
   releaseHandle(runId: string, handle: WorkflowRunHandle): void {
@@ -1640,34 +1612,6 @@ export class WorkflowRunRegistry {
 
   get(runId: string): WorkflowTask | undefined {
     return this.entries.get(runId);
-  }
-
-  removeTerminal(runId: string): boolean {
-    const entry = this.entries.get(runId);
-    if (
-      !entry ||
-      !isTerminalWorkflowStatus(entry.status) ||
-      this.handles.has(runId)
-    ) {
-      return false;
-    }
-    this.rejectPendingApprovals(runId);
-    this.entries.delete(runId);
-    this.emitStatusChange();
-    return true;
-  }
-
-  setLineage(
-    runId: string,
-    sourceRunId: string,
-    startMode: WorkflowRunStartMode,
-  ): boolean {
-    const entry = this.entries.get(runId);
-    if (!entry) return false;
-    entry.sourceRunId = sourceRunId;
-    entry.startMode = startMode;
-    this.emitStatusChange(entry);
-    return true;
   }
 
   /** All entries (active + terminal, no filter). Iteration order = registration order. */

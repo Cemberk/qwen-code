@@ -355,9 +355,9 @@ describe('CommandService', () => {
     );
     // Both stay reachable in every mode and for the model, under distinct
     // names; the renamed workflow command still runs `gcp:audit` by name.
-    expect(service.getCommandsForMode('acp').map((cmd) => cmd.name)).toEqual(
-      expect.arrayContaining(['gcp:audit', 'gcp.gcp:audit']),
-    );
+    expect(
+      service.getCommandsForMode('non_interactive').map((cmd) => cmd.name),
+    ).toEqual(expect.arrayContaining(['gcp:audit', 'gcp.gcp:audit']));
     expect(service.getModelInvocableCommands().map((cmd) => cmd.name)).toEqual(
       expect.arrayContaining(['gcp:audit', 'gcp.gcp:audit']),
     );

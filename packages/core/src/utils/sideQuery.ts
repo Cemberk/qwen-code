@@ -117,8 +117,6 @@ export interface SideQueryTextResult {
   usage: GenerateContentResponseUsageMetadata | undefined;
 }
 
-export type SideQueryOptions<TResponse> = SideQueryJsonOptions<TResponse>;
-
 function buildDefaultPromptId(purpose?: string): string {
   return purpose ? `side-query:${purpose}` : 'side-query';
 }

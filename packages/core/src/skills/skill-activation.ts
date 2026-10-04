@@ -162,15 +162,7 @@ export class SkillActivationRegistry {
     return this.activated.has(name);
   }
 
-  getActivatedNames(): ReadonlySet<string> {
-    return this.activated;
-  }
-
   get totalCount(): number {
     return this.compiled.length;
-  }
-
-  get activatedCount(): number {
-    return this.activated.size;
   }
 }

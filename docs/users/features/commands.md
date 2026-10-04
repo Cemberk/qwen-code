@@ -206,11 +206,9 @@ The `/btw` command allows you to ask quick side questions without interrupting o
 
 **Supported Execution Modes:**
 
-| Mode                 | Behavior                                     |
-| -------------------- | -------------------------------------------- |
-| Interactive          | Shows above Composer with Markdown rendering |
-| Non-interactive      | Returns text result: `btw> question\nanswer` |
-| ACP (Agent Protocol) | Returns stream_messages async generator      |
+| Mode        | Behavior                                     |
+| ----------- | -------------------------------------------- |
+| Interactive | Shows above Composer with Markdown rendering |
 
 > [!tip]
 >
@@ -266,10 +264,9 @@ The review renders in a bordered box whose header names the resolved reviewer mo
 
 **Supported Execution Modes:**
 
-| Mode                 | Behavior                                            |
-| -------------------- | --------------------------------------------------- |
-| Interactive          | Renders the four-section review in the conversation |
-| ACP (Agent Protocol) | Returns the review as a message result              |
+| Mode        | Behavior                                            |
+| ----------- | --------------------------------------------------- |
+| Interactive | Renders the four-section review in the conversation |
 
 > [!tip]
 >
@@ -703,9 +700,8 @@ run never registers and is not shown.
 A table with columns: NAME, KIND, PID, AGE, DIRECTORY.
 
 KIND says what registered the session — `tui` for someone at a terminal,
-and `headless` for a session another program drives. Several `headless`
-rows can share one PID: a `qwen --acp` process hosts all its sessions in
-one process, and each of them registers separately. It is a self-report, like NAME and DIRECTORY: every field
+and `headless` for a session another program drives. It is a self-report,
+like NAME and DIRECTORY: every field
 here was written by the process it describes, and nothing about what a
 session is allowed to do depends on it.
 

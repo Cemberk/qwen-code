@@ -50,10 +50,6 @@ export function jsonStringPayloadByteLength(
   return bytes;
 }
 
-export function jsonStringJsonByteLength(value: string): number {
-  return JSON_STRING_DELIMITER_BYTES + jsonStringPayloadByteLength(value);
-}
-
 function jsonPayloadWidthBefore(value: string, end: number): number {
   const last = value.charCodeAt(end - 1);
   if (last >= 0xdc00 && last <= 0xdfff && end >= 2) {

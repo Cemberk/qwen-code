@@ -41,9 +41,9 @@ async function diffAction(
     };
   }
 
-  // Interactive mode: open the per-turn diff dialog. Non-interactive / ACP
-  // paths keep the plain-text "working tree vs HEAD" summary so pipes, logs,
-  // and remote transports that don't speak Ink still get legible output.
+  // Interactive mode: open the per-turn diff dialog. The non-interactive path
+  // keeps the plain-text "working tree vs HEAD" summary so pipes and logs that
+  // don't speak Ink still get legible output.
   if (context.executionMode === 'interactive') {
     return { type: 'dialog', dialog: 'diff' };
   }
@@ -179,8 +179,8 @@ export function computeDiffColumnWidths(
 }
 
 /**
- * Plain-text rendering of a `DiffRenderModel`. Used in non-interactive / ACP
- * modes where no Ink renderer is available, and as the source of truth for
+ * Plain-text rendering of a `DiffRenderModel`. Used in non-interactive
+ * mode where no Ink renderer is available, and as the source of truth for
  * the text column layout the Ink component mirrors.
  */
 export function renderDiffModelText(model: DiffRenderModel): string {
@@ -216,8 +216,8 @@ function formatRowsText(rows: DiffRenderRow[]): string[] {
   for (const r of rows) {
     // Escape ANSI sequences AND standalone control bytes in the filename. Git
     // permits raw bytes like `\x1b`, `\n`, `\r`, BEL, BS in tracked / untracked
-    // paths, and the non-interactive (and ACP) text path streams straight to
-    // stdout / logs / transports without going through the interactive
+    // paths, and the non-interactive text path streams straight to
+    // stdout / logs without going through the interactive
     // history's `escapeAnsiCtrlCodes(item)` sanitizer in `HistoryItemDisplay`.
     // Without this hop, a hostile filename could inject color resets, cursor
     // moves, full screen clears, or layout-breaking newlines into CI logs and
@@ -261,6 +261,6 @@ export const diffCommand: SlashCommand = {
     return t('Show working-tree change stats versus HEAD');
   },
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
   action: diffAction,
 };

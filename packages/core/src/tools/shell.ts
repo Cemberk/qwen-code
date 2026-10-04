@@ -896,7 +896,7 @@ function appendForegroundTimeoutWarning(
  *
  * Wording deliberately keeps the dialog mention conditional ("when
  * running interactively") so the LLM doesn't relay misleading guidance
- * to non-TTY users (`-p` headless / ACP / SDK consumers, where no
+ * to non-TTY users (`-p` headless / SDK consumers, where no
  * dialog or footer pill exists). `/tasks` and the on-disk output file
  * work in every mode.
  */
@@ -915,17 +915,6 @@ export function buildLongRunningForegroundHint(elapsedMs: number): string {
     `interactive mode the Background tasks dialog also has a per-entry ` +
     `detail view + live updates.`
   );
-}
-
-/**
- * Detect standalone or leading `sleep N` patterns that should use Monitor
- * instead. Catches `sleep 5`, `sleep 2.5`, `sleep 2s`,
- * `sleep 5 && check`, `sleep 5; check`, `sleep 5 # wait` -- but not sleep
- * inside pipelines, subshells, backgrounded commands, or scripts (those are
- * fine).
- */
-export function detectBlockedSleepPattern(command: string): string | null {
-  return detectBlockedSleepPatternDetails(command)?.description ?? null;
 }
 
 type BlockedSleepPatternDetails = {
@@ -1631,7 +1620,6 @@ export class ShellToolInvocation extends BaseToolInvocation<
       await this.config.getFileSystemService().writeTextFile({
         path: edit.filePath,
         content: edit.newContent,
-        toolWriteOrigin: 'shell_sed_edit',
         _meta: edit.meta,
       });
 
@@ -2302,7 +2290,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
 
     // Liveness heartbeat for silent commands: while no output has arrived
     // for a full interval, emit a small structured ShellProgressData through
-    // the same updateOutput channel so headless consumers (ACP, stream-json)
+    // the same updateOutput channel so headless consumers (stream-json)
     // can distinguish "still running" from a dead execution chain. Display
     // consumers ignore it. Both the idle gate and the reported durations use
     // the monotonic `performance.now()` clock (via `lastOutputPerfTime`,
@@ -2828,8 +2816,8 @@ export class ShellToolInvocation extends BaseToolInvocation<
             const taskkillChild = childProcess.spawn(
               'taskkill',
               ['/pid', String(pid), '/f', '/t'],
-              // The desktop runtime daemon has no console; without this
-              // flag each console-app child allocates a visible window.
+              // Without this flag each console-app child allocates a visible
+              // window when the CLI has no console of its own.
               { windowsHide: true },
             );
             taskkillChild.on('error', () => {
@@ -2858,7 +2846,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
     // a prior session with the same shellId (vanishingly unlikely
     // given the randomBytes), start fresh. Stream errors (ENOSPC mid-
     // stream, permission flip) are logged via 'error' listener; we
-    // never let them crash the daemon.
+    // never let them crash the process.
     let outputStream: fs.WriteStream | null = null;
     try {
       outputStream = fs.createWriteStream(outputPath, { flags: 'w' });
@@ -2979,8 +2967,8 @@ export class ShellToolInvocation extends BaseToolInvocation<
             const taskkillChild = childProcess.spawn(
               'taskkill',
               ['/pid', String(pid), '/f', '/t'],
-              // The desktop runtime daemon has no console; without this
-              // flag each console-app child allocates a visible window.
+              // Without this flag each console-app child allocates a visible
+              // window when the CLI has no console of its own.
               { windowsHide: true },
             );
             // Without an 'error' listener on the spawned ChildProcess,

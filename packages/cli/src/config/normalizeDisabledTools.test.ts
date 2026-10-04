@@ -86,11 +86,7 @@ describe('normalizeDisabledToolList', () => {
 
   describe('boot/restart parity scenarios (BkwQW class — wenshao #4329)', () => {
     it("['Foo', '  Foo  ', '']  → ['Foo'] (the bug that the helper was extracted to prevent)", () => {
-      // Pre-extraction, this scenario was handled at boot (config.ts) but
-      // the MCP restart path (acpAgent.ts) had only typeof-string filter.
-      // After fold-in, both call sites share this helper so a hand-edited
-      // `tools.disabled: ['  Foo  ']` produces Set(['Foo']) at boot AND
-      // after every subsequent MCP restart.
+      // A hand-edited `tools.disabled: ['  Foo  ']` produces Set(['Foo']).
       expect(normalizeDisabledToolList(['Foo', '  Foo  ', ''])).toEqual([
         'Foo',
       ]);

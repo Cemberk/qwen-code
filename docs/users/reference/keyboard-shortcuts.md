@@ -6,7 +6,7 @@ This document lists the available keyboard shortcuts in Qwen Code.
 
 | Shortcut                       | Description                                                                                                                                                                                                                                        |
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Esc`                          | Close dialogs and suggestions. With an empty prompt, cancel an ongoing request; when idle outside IDE mode, press twice to open the rewind selector.                                                                                               |
+| `Esc`                          | Close dialogs and suggestions. With an empty prompt, cancel an ongoing request; when idle, press twice to open the rewind selector.                                                                                                                |
 | `Ctrl+C`                       | Cancel the ongoing request and clear the input. Press twice to exit the application.                                                                                                                                                               |
 | `Ctrl+D`                       | Exit the application if the input is empty. Press twice to confirm.                                                                                                                                                                                |
 | `Ctrl+L`                       | Clear the screen.                                                                                                                                                                                                                                  |
@@ -138,9 +138,3 @@ A **plain single click** on an http(s) OSC 8 hyperlink in the viewport opens it 
 Inside tmux, some terminals translate trackpad or wheel gestures into plain `Up Arrow` and `Down Arrow` sequences before qwen-code sees them. Those bytes are identical to real arrow-key presses, so qwen-code cannot tell whether you meant to scroll the viewport or navigate prompt history.
 
 If trackpad scrolling changes the prompt history in tmux, make sure `ui.useTerminalBuffer` is enabled; then use `Shift+Up` / `Shift+Down`, or the mouse wheel when tmux forwards wheel events to the app (requires `ui.mouseTracking`). If you prefer host scrollback, adjust your tmux mouse bindings for wheel events.
-
-## IDE Integration
-
-| Shortcut | Description                       |
-| -------- | --------------------------------- |
-| `Ctrl+G` | See context CLI received from IDE |

@@ -147,7 +147,6 @@ function createHarness(
   const config = {
     getOutputStyle: () => current,
     getSystemPrompt: () => options.systemPrompt,
-    getExperimentalZedIntegration: () => false,
     getInputFormat: () => undefined,
     isInteractive: () => true,
     getBareMode: () => false,

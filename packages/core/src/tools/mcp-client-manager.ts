@@ -24,10 +24,7 @@ import { createHash } from 'node:crypto';
 import type { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
 import { listDescendantPids, sigtermPids } from './pid-descendants.js';
 import { mcpSessionMetadataKey } from './mcp-session-config.js';
-import {
-  effectiveAppResourceMaxBytes,
-  effectiveAppResourceTimeoutMs,
-} from './mcp-app-resource-limits.js';
+
 import { warnOnUnmatchedEagerToolEntries } from '../permissions/eager-allowlist-coverage.js';
 
 const debugLogger = createDebugLogger('MCP');
@@ -82,12 +79,10 @@ function sortedEntries(
 /**
  * Transport identity of a server config, `${name}::${fp16hex}`. Hashes the
  * fields that shape the spawned transport and its discovered tools
- * (transport, command, args, cwd, env, timeout, app resource limits,
- * version negotiation). Per-session metadata (includeTools, excludeTools,
- * trust, alwaysLoadTools, description, extensionName, discoveryTimeoutMs)
- * is excluded; see `singleSessionConnectedKeyOf`.
- * App resource limits hash at their enforced (clamped/floored/defaulted)
- * values so configs whose effective policy is identical compare equal.
+ * (transport, command, args, cwd, env, timeout, version negotiation).
+ * Per-session metadata (includeTools, excludeTools, trust, alwaysLoadTools,
+ * description, extensionName, discoveryTimeoutMs) is excluded; see
+ * `singleSessionConnectedKeyOf`.
  */
 function connectionIdOf(serverName: string, cfg: MCPServerConfig): string {
   const canonical = {
@@ -97,10 +92,6 @@ function connectionIdOf(serverName: string, cfg: MCPServerConfig): string {
     cwd: cfg.cwd ?? null,
     env: sortedEntries(cfg.env),
     timeout: cfg.timeout ?? null,
-    appResourceMaxBytes: effectiveAppResourceMaxBytes(cfg.appResourceMaxBytes),
-    appResourceTimeoutMs: effectiveAppResourceTimeoutMs(
-      cfg.appResourceTimeoutMs,
-    ),
     automaticVersionNegotiation: cfg.versionNegotiation === 'auto',
   };
   const fingerprint = createHash('sha256')
@@ -489,25 +480,6 @@ export class McpClientManager {
   }
 
   /**
-   * Gets the health monitoring configuration
-   */
-  getHealthConfig(): MCPHealthMonitorConfig {
-    return { ...this.healthConfig };
-  }
-
-  /**
-   * Updates the health monitoring configuration
-   */
-  updateHealthConfig(config: Partial<MCPHealthMonitorConfig>): void {
-    this.healthConfig = { ...this.healthConfig, ...config };
-    // Restart health checks with new configuration
-    this.stopAllHealthChecks();
-    if (this.healthConfig.autoReconnect) {
-      this.startAllHealthChecks();
-    }
-  }
-
-  /**
    * Starts health monitoring for a specific server
    */
   private startHealthCheck(serverName: string): void {
@@ -719,9 +691,7 @@ export class McpClientManager {
       const existingClient = this.clients.get(name);
       if (!existingClient) {
         serversToUpdate.push(name);
-      } else if (
-        existingClient.getStatus() === MCPServerStatus.DISCONNECTED
-      ) {
+      } else if (existingClient.getStatus() === MCPServerStatus.DISCONNECTED) {
         // Disconnected server, try to reconnect
         serversToUpdate.push(name);
       } else {

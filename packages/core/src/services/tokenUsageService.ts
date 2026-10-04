@@ -378,14 +378,6 @@ function summarizeRecords(
   };
 }
 
-export async function recordTokenUsageFromApiResponse(
-  config: Config,
-  event: ApiResponseEvent,
-): Promise<void> {
-  const record = apiResponseEventToTokenUsageRecord(config, event);
-  await jsonl.writeLine(getTokenUsageFilePath(record.localMonth), record);
-}
-
 const lastLoggedTimeByCode = new Map<string, number>();
 const suppressedCountByCode = new Map<string, number>();
 const TOKEN_USAGE_FAILURE_LOG_COOLDOWN_MS = 60_000;
@@ -556,13 +548,4 @@ export function formatTokenUsageSummaryAsJson(
   summary: TokenUsageSummary,
 ): string {
   return `${JSON.stringify(summary, null, 2)}\n`;
-}
-
-export async function exportTokenUsageSummary(
-  options: TokenUsageExportOptions,
-): Promise<string> {
-  const summary = await queryTokenUsage(options);
-  return options.format === 'json'
-    ? formatTokenUsageSummaryAsJson(summary)
-    : `${formatTokenUsageSummaryAsCsv(summary)}\n`;
 }

@@ -32,7 +32,7 @@ describe('ScreenBuffer (Ink frame-controller M0)', () => {
     expect(buffer).toBeDefined();
     expect(buffer!.dimensions.height).toBeGreaterThan(0);
     expect(buffer!.lineText(0)).toBe('hello 中文');
-    expect(buffer!.getCellAt(0, 0)?.value).toBe('h');
+    expect(buffer!.frame?.cells[0]?.[0]?.value).toBe('h');
   });
 
   it('handles wide characters with a leading cell and a spacer', () => {
@@ -42,11 +42,11 @@ describe('ScreenBuffer (Ink frame-controller M0)', () => {
     )!;
 
     // "hello " occupies columns 0-5; the first wide glyph starts at column 6.
-    const wide = buffer.getCellAt(6, 0);
-    expect(wide?.value).toBe('中');
-    expect(wide?.fullWidth).toBe(true);
+    const row = buffer.frame?.cells[0];
+    expect(row?.[6]?.value).toBe('中');
+    expect(row?.[6]?.fullWidth).toBe(true);
     // The trailing half of a wide glyph is an empty spacer cell.
-    expect(buffer.getCellAt(7, 0)?.value).toBe('');
+    expect(row?.[7]?.value).toBe('');
   });
 
   it('highlights the selected range before serialization and clears it', () => {

@@ -20,12 +20,6 @@ import {
   TOOL_OUTPUT_TRUNCATED_PREFIX,
 } from '../tools/truncation.js';
 
-// Re-exported for existing importers (daemon turn-loop guard); the
-// implementation lives in a leaf module so replay detection in
-// toolCallIdUtils can share it without an import cycle through this
-// service's turn.js dependency.
-export { getToolCallRepeatKey };
-
 function getLoopDetectionToolCall<T extends { name: string; args: object }>(
   toolCall: T,
 ): T {
@@ -156,9 +150,8 @@ const SHELL_COMMAND_STAGNATION_THRESHOLD = STAGNATION_THRESHOLD;
 
 // Global tool call duplicate tracking: how many times the same (tool, args)
 // pair must appear across the entire turn (not necessarily consecutively)
-// before it is treated as a loop. Exported so the daemon's turn-loop guard
-// (ACP Session) applies the same stuck-repetition signal as this service.
-export const GLOBAL_DUPLICATE_THRESHOLD = 6;
+// before it is treated as a loop.
+const GLOBAL_DUPLICATE_THRESHOLD = 6;
 
 // Alternating pattern detection: number of complete AB cycles needed to
 // trip the detector (3 cycles = 6 calls: A B A B A B).
@@ -192,9 +185,7 @@ export const DEFAULT_MAX_TOOL_CALLS_PER_TURN = 100;
 const ADAPTIVE_CAP_HARD_MULTIPLIER = 10;
 
 /**
- * Halt predicate of the per-turn tool-call cap, shared with the daemon's
- * turn-loop guard (ACP Session's recordDaemonToolCalls) so both runtimes
- * decide identically and cannot drift. `cap` is the resolved effective cap
+ * Halt predicate of the per-turn tool-call cap. `cap` is the resolved effective cap
  * from getMaxToolCallsPerTurn (Infinity when disabled); `maxKeyRepeat` is
  * the turn's running max count of any single (tool, args) repeat key.
  * Returns true when a turn that has emitted `totalCalls` calls must halt:
@@ -202,7 +193,7 @@ const ADAPTIVE_CAP_HARD_MULTIPLIER = 10;
  * the adaptive default cap only on a stuck-repetition signal or at the
  * hard backstop (see checkTurnToolCallCap).
  */
-export function shouldHaltOnTurnToolCallCap(
+function shouldHaltOnTurnToolCallCap(
   totalCalls: number,
   maxKeyRepeat: number,
   cap: number,
@@ -430,10 +421,6 @@ export class LoopDetectionService {
     return this.lastLoopType;
   }
 
-  getConsecutiveToolCallCount(): number {
-    return this.toolCallRepetitionCount;
-  }
-
   /**
    * Disables loop detection for the current session.
    */
@@ -589,26 +576,6 @@ export class LoopDetectionService {
 
   private getToolCallKey(toolCall: { name: string; args: object }): string {
     return getToolCallRepeatKey(toolCall.name, toolCall.args);
-  }
-
-  /**
-   * Convenience aggregate that runs every tier in order: the always-on
-   * safeties (consecutive-identical guard, shell inspection-command
-   * stagnation guard, and per-turn cap) followed by the opt-in heuristics.
-   * Intended as a single "check everything" entry point for unit tests.
-   * Production code (client.ts) intentionally calls the tiers separately so
-   * the `skipLoopDetection` gate can sit between them — a new guard added here
-   * will NOT take effect in production unless it is also wired into
-   * checkAlwaysOnSafeties or addAndCheckHeuristicLoops.
-   * @param event - The stream event to process
-   * @returns true if any tier detects a loop, false otherwise
-   */
-  addAndCheck(event: ServerLlmStreamEvent): boolean {
-    if (this.checkAlwaysOnSafeties(event)) {
-      return true;
-    }
-
-    return this.addAndCheckHeuristicLoops(event);
   }
 
   addAndCheckHeuristicLoops(event: ServerLlmStreamEvent): boolean {

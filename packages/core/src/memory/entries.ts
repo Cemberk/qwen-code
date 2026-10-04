@@ -168,17 +168,6 @@ export function renderAutoMemoryBody(
   return lines.join('\n');
 }
 
-export function mergeAutoMemoryEntry(
-  current: ManagedAutoMemoryEntry,
-  incoming: ManagedAutoMemoryEntry,
-): ManagedAutoMemoryEntry {
-  return {
-    summary: incoming.summary || current.summary,
-    why: current.why ?? incoming.why,
-    howToApply: current.howToApply ?? incoming.howToApply,
-  };
-}
-
 export function buildAutoMemoryEntrySearchText(
   entry: ManagedAutoMemoryEntry,
 ): string {

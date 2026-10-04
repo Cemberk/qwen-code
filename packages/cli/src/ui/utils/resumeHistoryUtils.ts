@@ -162,7 +162,7 @@ function restoreHistoryItem(raw: unknown): HistoryItemWithoutId | undefined {
 /**
  * INFO divider shown at a detected history gap: an earlier segment of the
  * session was physically lost (storage interruption) and could not be
- * recovered. Mirrors the ACP replay notice so both surfaces read the same.
+ * recovered. Mirrors the `/export` replay notice so both surfaces read the same.
  */
 function createHistoryGapItem(gap: HistoryGap): HistoryItemInfo {
   return {

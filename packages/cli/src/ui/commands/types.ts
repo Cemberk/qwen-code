@@ -12,15 +12,12 @@ import type {
   GoalStateCause,
   Logger,
   SessionListItem,
-  ToolArtifact,
 } from '@qwen-code/qwen-code-core';
 import type {
   HistoryItemWithoutId,
   HistoryItem,
   HistoryItemBtw,
   ConfirmationRequest,
-  ContextCompressionMeta,
-  ContextCompressionNotice,
 } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
@@ -31,13 +28,6 @@ import type {
 } from '../state/extensions.js';
 import type { ExtensionRefreshState } from '../../config/extension-refresh-state.js';
 
-export interface NonInteractiveSlashCommandPolicy {
-  readonly allowSessionReset: boolean;
-  readonly allowWorkspaceSettingsWrite: boolean;
-  readonly persistModelSelection: boolean;
-  readonly blockedBuiltinCommandNames: readonly string[];
-}
-
 // Grouped dependencies for clarity and easier mocking
 export interface CommandContext {
   /**
@@ -45,10 +35,8 @@ export interface CommandContext {
    *
    * - interactive: React/Ink UI mode
    * - non_interactive: non-interactive CLI mode (text/json)
-   * - acp: ACP/Zed integration mode
    */
-  executionMode?: 'interactive' | 'non_interactive' | 'acp';
-  executionPolicy?: NonInteractiveSlashCommandPolicy;
+  executionMode?: ExecutionMode;
   // Invocation properties for when commands are called.
   invocation?: {
     /** The raw, untrimmed input string from the user. */
@@ -152,8 +140,6 @@ export interface MessageActionReturn {
   type: 'message';
   messageType: 'info' | 'warning' | 'error';
   content: string;
-  /** Files already written by the command; advisory metadata for ACP clients. */
-  artifacts?: ToolArtifact[];
 }
 
 export type GoalCommandOperation =
@@ -169,32 +155,6 @@ export interface GoalControlActionReturn {
   operation: GoalCommandOperation;
   response: GoalStateResponse;
   cause?: GoalStateCause;
-}
-
-/**
- * The return type for a command action that streams multiple messages.
- * Used for long-running operations that need to send progress updates.
- */
-export interface StreamMessagesActionReturn {
-  type: 'stream_messages';
-  messages: AsyncGenerator<
-    {
-      messageType: 'info' | 'warning' | 'error';
-      content: string;
-      /**
-       * Machine-readable companion to `content` for consumers that render the
-       * message themselves. Only the compression commands set it.
-       */
-      contextCompression?: ContextCompressionMeta;
-      /**
-       * Same, for the invocation note. A separate key on purpose: the two
-       * frames merge into one block, where a shared key would be overwritten.
-       */
-      contextCompressionNotice?: ContextCompressionNotice;
-    },
-    void,
-    unknown
-  >;
 }
 
 /**
@@ -311,7 +271,6 @@ export interface ConfirmActionReturn {
 export type SlashCommandActionReturn =
   | ToolActionReturn
   | MessageActionReturn
-  | StreamMessagesActionReturn
   | QuitActionReturn
   | OpenDialogActionReturn
   | LoadHistoryActionReturn
@@ -331,13 +290,12 @@ export enum CommandKind {
  * Execution mode for a slash command invocation.
  * - interactive: React/Ink UI mode (terminal)
  * - non_interactive: headless CLI mode (text/JSON output)
- * - acp: ACP/Zed editor integration mode
  */
-export type ExecutionMode = 'interactive' | 'non_interactive' | 'acp';
+export type ExecutionMode = 'interactive' | 'non_interactive';
 
 /**
- * The source of a slash command, used for Help grouping, completion badges,
- * and ACP available-command metadata.
+ * The source of a slash command, used for Help grouping and completion
+ * badges.
  *
  * Distinct from CommandKind: CommandKind drives loader logic (4 values);
  * CommandSource drives display and user mental model (5+ values).
@@ -484,7 +442,7 @@ export interface SlashCommand {
    */
   workflowName?: string;
 
-  /** Parsed skill metadata for skill-backed commands. Used by ACP clients. */
+  /** Parsed skill metadata for skill-backed commands. */
   skillDetail?: {
     name: string;
     // The manifest spelling when `name` carries an owner prefix; carried

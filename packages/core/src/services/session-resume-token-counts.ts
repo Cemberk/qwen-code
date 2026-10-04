@@ -52,30 +52,10 @@ export class ResumeTokenCountsAccumulator {
   }
 }
 
-export function isResumeTokenCountsCandidate(record: ChatRecord): boolean {
-  if (record.type === 'assistant') {
-    const usage = record.usageMetadata;
-    return Boolean(usage?.promptTokenCount ?? usage?.totalTokenCount);
-  }
-  if (record.type !== 'system' || record.subtype !== 'chat_compression') {
-    return false;
-  }
-  const payload = record.systemPayload as
-    | ChatCompressionRecordPayload
-    | undefined;
-  return payload?.info !== undefined;
-}
-
 export function getResumeTokenCounts(conversation: {
   messages: readonly ChatRecord[];
 }): ResumeTokenCounts | undefined {
   const accumulator = new ResumeTokenCountsAccumulator();
   for (const record of conversation.messages) accumulator.add(record);
   return accumulator.finish();
-}
-
-export function getResumePromptTokenCount(conversation: {
-  messages: readonly ChatRecord[];
-}): number | undefined {
-  return getResumeTokenCounts(conversation)?.promptTokenCount;
 }

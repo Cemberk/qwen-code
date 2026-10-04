@@ -31,7 +31,7 @@ const mockCommands: readonly SlashCommand[] = [
     kind: CommandKind.SKILL,
     source: 'bundled-skill',
     sourceLabel: 'Skill',
-    supportedModes: ['interactive', 'non_interactive', 'acp'],
+    supportedModes: ['interactive', 'non_interactive'],
     argumentHint: '[pr-number]',
     modelInvocable: true,
   },

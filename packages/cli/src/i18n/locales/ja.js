@@ -85,8 +85,6 @@ export default {
   'Failed to load skills: {{error}}': 'スキルの読み込みに失敗：{{error}}',
   'Failed to save skills configuration: {{error}}':
     'スキル設定の保存に失敗しました：{{error}}',
-  'All available skills are disabled. Edit ~/.qwen/settings.json or .qwen/settings.json (skills.disabled) to re-enable.':
-    'すべての利用可能なスキルが無効化されています。~/.qwen/settings.json または .qwen/settings.json (skills.disabled) を編集して再有効化してください。',
   'Press esc to close.': 'Esc で閉じる。',
   '{{count}} skills · ': '{{count}} スキル · ',
   '{{matched}} / {{total}} skills · ': '{{matched}} / {{total}} スキル · ',
@@ -1539,8 +1537,6 @@ export default {
     'Arena には最低 2 つのモデルが必要です。--models model1,model2 で指定してください。',
   'Arena started with {{count}} agents on task: "{{task}}"\nModels:\n{{modelList}}':
     'Arena が {{count}} エージェントでタスク "{{task}}" を開始しました\nモデル:\n{{modelList}}',
-  'Arena panes are running in tmux. Attach with: `{{command}}`':
-    'Arena ペインが tmux で実行中です。次のコマンドで接続: `{{command}}`',
   '[{{label}}] failed: {{error}}': '[{{label}}] 失敗: {{error}}',
   'Loading suggestions...': '提案を読み込み中...',
   'Show context window usage breakdown. Use "/context detail" for per-item breakdown.':
@@ -1597,8 +1593,6 @@ export default {
     '"{{name}}" のインストールをキャンセルしました。',
   'Extension "{{name}}" installed successfully and enabled.':
     '拡張機能 "{{name}}" をインストールし、有効化しました。',
-  'The github URL, local path, or marketplace source (marketplace-url:plugin-name) of the extension to install.':
-    'インストールする拡張機能の GitHub URL、ローカルパス、またはマーケットプレイスソース (marketplace-url:plugin-name)。',
   'Acknowledge the security risks of installing an extension and skip the confirmation prompt.':
     '拡張機能インストールのセキュリティリスクを了承し、確認プロンプトをスキップします。',
   'The source argument must be provided.':
@@ -1799,10 +1793,6 @@ export default {
   out: '出力',
   'In/Out': '入力/出力',
   // Update command
-  'Standalone install detected. Please rerun the standalone installer to update:':
-    'スタンドアロンインストールを検出しました。更新するにはスタンドアロンインストーラーを再実行してください:',
-  'Unable to auto-update this standalone installation. Please reinstall from:':
-    'このスタンドアロンインストールを自動更新できません。以下から再インストールしてください：',
 
   // ============================================================================
   // reload-plugins command

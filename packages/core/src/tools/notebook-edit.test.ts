@@ -111,10 +111,6 @@ describe('NotebookEditTool', () => {
       metadata: { language_info: { name: 'python' } },
     });
     seedNotebookRead(filePath);
-    const writeSpy = vi.spyOn(
-      StandardFileSystemService.prototype,
-      'writeTextFile',
-    );
 
     const result = await buildInvocation({
       notebook_path: filePath,
@@ -128,10 +124,6 @@ describe('NotebookEditTool', () => {
     expect(updated.cells[0].execution_count).toBeNull();
     expect(updated.cells[0].outputs).toEqual([]);
     expect(result.llmContent).toContain('replace cell load-data');
-    expect(writeSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ toolWriteOrigin: 'notebook_edit' }),
-    );
-    writeSpy.mockRestore();
 
     const cacheState = fileReadCache.check(fs.statSync(filePath));
     expect(cacheState.state).toBe('fresh');

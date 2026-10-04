@@ -12,22 +12,18 @@ import { DISPLAY_MODE } from '../../backends/types.js';
 import type { AgentSpawnConfig } from '../../backends/types.js';
 
 /** Minimal spawn config for testing. */
-function spawnConfig(agentId: string, agentName?: string): AgentSpawnConfig {
+function spawnConfig(agentId: string, agentName = agentId): AgentSpawnConfig {
   return {
     agentId,
-    command: '',
-    args: [],
     cwd: '/tmp',
-    inProcess: agentName
-      ? {
-          agentName,
-          runtimeConfig: {
-            promptConfig: {},
-            modelConfig: {},
-            runConfig: {},
-          },
-        }
-      : undefined,
+    inProcess: {
+      agentName,
+      runtimeConfig: {
+        promptConfig: {},
+        modelConfig: {},
+        runConfig: {},
+      },
+    },
   };
 }
 
@@ -54,14 +50,6 @@ describe('FakeBackend', () => {
     expect(agent).toBeInstanceOf(FakeAgent);
     expect(agent!.agentName).toBe('Agent 1');
     expect(agent!.getStatus()).toBe(AgentStatus.IDLE);
-  });
-
-  it('uses agentId as name when inProcess config is missing', async () => {
-    const backend = new FakeBackend();
-    await backend.spawnAgent(spawnConfig('agent-1'));
-
-    const agent = backend.getAgent('agent-1');
-    expect(agent!.agentName).toBe('agent-1');
   });
 
   it('throws on duplicate agentId', async () => {
@@ -192,41 +180,5 @@ describe('FakeBackend', () => {
 
     const result = await backend.waitForAll(50);
     expect(result).toBe(false);
-  });
-
-  // ─── writeToAgent ────────────────────────────────────────────
-
-  it('writeToAgent enqueues message on the agent', async () => {
-    const backend = new FakeBackend();
-    await backend.spawnAgent(spawnConfig('a1'));
-
-    const ok = backend.writeToAgent('a1', 'hello');
-    expect(ok).toBe(true);
-    expect(backend.getAgent('a1')!.getReceivedMessages()).toEqual(['hello']);
-  });
-
-  it('writeToAgent returns false for unknown agent', () => {
-    const backend = new FakeBackend();
-    expect(backend.writeToAgent('nope', 'x')).toBe(false);
-  });
-
-  // ─── No-op stubs ─────────────────────────────────────────────
-
-  it('navigation stubs do not throw', async () => {
-    const backend = new FakeBackend();
-    await backend.spawnAgent(spawnConfig('a1'));
-
-    backend.switchTo('a1');
-    backend.switchToNext();
-    backend.switchToPrevious();
-
-    expect(backend.getActiveAgentId()).toBeNull();
-    expect(backend.getActiveSnapshot()).toBeNull();
-    expect(backend.getAgentSnapshot('a1')).toBeNull();
-    expect(backend.getAgentScrollbackLength('a1')).toBe(0);
-    expect(backend.forwardInput('x')).toBe(false);
-    expect(backend.getAttachHint()).toBeNull();
-
-    backend.resizeAll(120, 40); // should not throw
   });
 });

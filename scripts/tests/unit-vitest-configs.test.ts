@@ -52,9 +52,9 @@ describe('unhandled-error exemption on the platform lanes', () => {
 // shared ECS pool, where the identical suite takes ~5x longer depending only on
 // which host it draws (#10490). Five configs were given a raised ceiling there
 // one at a time; the other fifteen were still on vitest's 5s default, so a
-// contended host — not a defect — was enough to fail them. Three tests had
-// already been hand-patched past 5s individually (auto-recall 12s,
-// provider-extension-local 20s/30s, ChannelBase 8s). Those patches stay: a
+// contended host — not a defect — was enough to fail them. Tests that had
+// already been hand-patched past 5s individually (auto-recall 12s) keep
+// those patches: a
 // per-test timeout outranks the config-level field and stays load-bearing off
 // the pool, where the ternary deliberately yields `undefined` (vitest's 5s
 // default), so this pin guards the config-level ceiling only. It sweeps the
@@ -155,7 +155,7 @@ describe('shared-pool test timeout', () => {
   });
 
   it('registers every guarded config in exactly one off-pool arm', () => {
-    // OFF_POOL_DEFAULT and OFF_POOL_PINNED are hand-maintained: dropping a
+    // OFF_POOL_PINNED and FLAT_CEILING_CONFIGS are hand-maintained: dropping a
     // name from either removes its off-pool assertion and nothing else goes
     // red — a ternary flattened to `testTimeout: 60_000` still passes the
     // on-pool floor above. Pin the partition instead: every configModules

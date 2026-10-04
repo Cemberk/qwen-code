@@ -6,7 +6,6 @@
 
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import type { Content } from '@google/genai';
 import type { Storage } from '../config/storage.js';
 import { atomicWriteFile } from '../utils/atomicFileWrite.js';
 import { createDebugLogger, type DebugLogger } from '../utils/debugLogger.js';
@@ -26,49 +25,6 @@ export interface LogEntry {
   message: string;
 }
 
-export interface ModelSwitchEvent {
-  fromModel: string;
-  toModel: string;
-  reason: 'vision_auto_switch' | 'manual' | 'fallback' | 'other';
-  context?: string;
-}
-
-// This regex matches any character that is NOT a letter (a-z, A-Z),
-// a number (0-9), a hyphen (-), an underscore (_), or a dot (.).
-
-/**
- * Encodes a string to be safe for use as a filename.
- *
- * It replaces any characters that are not alphanumeric or one of `_`, `-`, `.`
- * with a URL-like percent-encoding (`%` followed by the 2-digit hex code).
- *
- * @param str The input string to encode.
- * @returns The encoded, filename-safe string.
- */
-export function encodeTagName(str: string): string {
-  return encodeURIComponent(str);
-}
-
-/**
- * Decodes a string that was encoded with the `encode` function.
- *
- * It finds any percent-encoded characters and converts them back to their
- * original representation.
- *
- * @param str The encoded string to decode.
- * @returns The decoded, original string.
- */
-export function decodeTagName(str: string): string {
-  try {
-    return decodeURIComponent(str);
-  } catch (_e) {
-    // Fallback for old, potentially malformed encoding
-    return str.replace(/%([0-9A-F]{2})/g, (_, hex) =>
-      String.fromCharCode(parseInt(hex, 16)),
-    );
-  }
-}
-
 export class Logger {
   private qwenDir: string | undefined;
   private logFilePath: string | undefined;
@@ -81,9 +37,7 @@ export class Logger {
   // `logMessage`, `removeLastUserMessage` and `removeSessionsMessages`
   // chain on this queue; their read → splice/append/filter → writeFile
   // cycle is otherwise non-atomic and a fast cancel + resubmit could make
-  // removeLast clobber the just-appended entry. Checkpoint ops
-  // (saveCheckpoint / deleteCheckpoint / loadCheckpoint) write to
-  // *separate* files and are intentionally not serialized on this queue.
+  // removeLast clobber the just-appended entry.
   private writeQueue: Promise<unknown> = Promise.resolve();
   // Sessions whose removal is decided but whose write has not landed yet. Every op
   // assigns `this.logs` from its OWN disk snapshot, and that snapshot still holds the
@@ -514,15 +468,9 @@ export class Logger {
   }
 
   /**
-   * Purge every log-history row belonging to `sessionId` — used by the
-   * `/delete` flow so a removed session's prompts don't live on in the
-   * project-shared `<tmp>/<project-hash>/logs.json`, and stop resurfacing in
-   * ↑-history via {@link getPreviousUserMessages}.
-   *
-   * ↑-history is deliberately cross-session, so the fix for a deleted session
-   * is to drop its rows — NOT to filter {@link getPreviousUserMessages} by
-   * session id, which would also hide the prompts of sessions that still
-   * exist.
+   * Purges the deleted sessions' prompts from the project-shared `logs.json`
+   * so they no longer surface in ↑-history via
+   * {@link getPreviousUserMessages}.
    *
    * Two-phase semantics mirror {@link removeLastUserMessage}:
    *   1. Synchronous in-memory removal from `this.logs`, so the
@@ -534,23 +482,7 @@ export class Logger {
    *
    * When the disk read or write throws, the optimistic removal is rolled
    * back, so a `false` return never means "gone from memory but still on
-   * disk". Any session id is safe to pass, including this Logger's own:
-   * `_updateLogFile` recomputes the next messageId from disk on every append.
-   *
-   * @returns true when rows were actually removed from the file.
-   */
-  async removeSessionMessages(sessionId: string): Promise<boolean> {
-    return this.removeSessionsMessages([sessionId]);
-  }
-
-  /**
-   * The batch form of {@link removeSessionMessages}, for a multi-session delete.
-   *
-   * One optimistic in-memory removal, one queued op, one file rewrite — not one of
-   * each per id. Per-id calls cost a full read → filter → write of the whole
-   * project-shared `logs.json` each, which the next `logMessage` then waits behind
-   * on the same queue. Per-id calls stay correct, since every adoption goes through
-   * `adoptDiskSnapshot`; the batch only saves the extra rewrites.
+   * disk". One queued op and one file rewrite cover every id.
    *
    * @param sessionIds the sessions to purge; duplicates and unknown ids are harmless
    * @returns true when rows were actually removed from the file
@@ -678,177 +610,6 @@ export class Logger {
         restoreOptimistic();
         return false;
       }
-    }
-  }
-
-  private _checkpointPath(tag: string): string {
-    if (!tag.length) {
-      throw new Error('No checkpoint tag specified.');
-    }
-    if (!this.qwenDir) {
-      throw new Error('Checkpoint file path not set.');
-    }
-    // Encode the tag to handle all special characters safely.
-    const encodedTag = encodeTagName(tag);
-    return path.join(this.qwenDir, `checkpoint-${encodedTag}.json`);
-  }
-
-  private async _getCheckpointPath(tag: string): Promise<string> {
-    // 1. Check for the new encoded path first.
-    const newPath = this._checkpointPath(tag);
-    try {
-      await fs.access(newPath);
-      return newPath; // Found it, use the new path.
-    } catch (error) {
-      const nodeError = error as NodeJS.ErrnoException;
-      if (nodeError.code !== 'ENOENT') {
-        throw error; // A real error occurred, rethrow it.
-      }
-      // It was not found, so we'll check the old path next.
-    }
-
-    // 2. Fallback for backward compatibility: check for the old raw path.
-    const oldPath = path.join(this.qwenDir!, `checkpoint-${tag}.json`);
-    try {
-      await fs.access(oldPath);
-      return oldPath; // Found it, use the old path.
-    } catch (error) {
-      const nodeError = error as NodeJS.ErrnoException;
-      if (nodeError.code !== 'ENOENT') {
-        throw error; // A real error occurred, rethrow it.
-      }
-    }
-
-    // 3. If neither path exists, return the new encoded path as the canonical one.
-    return newPath;
-  }
-
-  async saveCheckpoint(conversation: Content[], tag: string): Promise<void> {
-    if (!this.initialized) {
-      this.debugLogger.error(
-        'Logger not initialized or checkpoint file path not set. Cannot save a checkpoint.',
-      );
-      return;
-    }
-    // Always save with the new encoded path.
-    const path = this._checkpointPath(tag);
-    try {
-      await atomicWriteFile(path, JSON.stringify(conversation, null, 2), {
-        encoding: 'utf-8',
-      });
-    } catch (error) {
-      this.debugLogger.error('Error writing to checkpoint file:', error);
-    }
-  }
-
-  async loadCheckpoint(tag: string): Promise<Content[]> {
-    if (!this.initialized) {
-      this.debugLogger.error(
-        'Logger not initialized or checkpoint file path not set. Cannot load checkpoint.',
-      );
-      return [];
-    }
-
-    const path = await this._getCheckpointPath(tag);
-    try {
-      const fileContent = await fs.readFile(path, 'utf-8');
-      const parsedContent = JSON.parse(fileContent);
-      if (!Array.isArray(parsedContent)) {
-        this.debugLogger.warn(
-          `Checkpoint file at ${path} is not a valid JSON array. Returning empty checkpoint.`,
-        );
-        return [];
-      }
-      return parsedContent as Content[];
-    } catch (error) {
-      const nodeError = error as NodeJS.ErrnoException;
-      if (nodeError.code === 'ENOENT') {
-        // This is okay, it just means the checkpoint doesn't exist in either format.
-        return [];
-      }
-      this.debugLogger.error(
-        `Failed to read or parse checkpoint file ${path}:`,
-        error,
-      );
-      return [];
-    }
-  }
-
-  async deleteCheckpoint(tag: string): Promise<boolean> {
-    if (!this.initialized || !this.qwenDir) {
-      this.debugLogger.error(
-        'Logger not initialized or checkpoint file path not set. Cannot delete checkpoint.',
-      );
-      return false;
-    }
-
-    let deletedSomething = false;
-
-    // 1. Attempt to delete the new encoded path.
-    const newPath = this._checkpointPath(tag);
-    try {
-      await fs.unlink(newPath);
-      deletedSomething = true;
-    } catch (error) {
-      const nodeError = error as NodeJS.ErrnoException;
-      if (nodeError.code !== 'ENOENT') {
-        this.debugLogger.error(
-          `Failed to delete checkpoint file ${newPath}:`,
-          error,
-        );
-        throw error; // Rethrow unexpected errors
-      }
-      // It's okay if it doesn't exist.
-    }
-
-    // 2. Attempt to delete the old raw path for backward compatibility.
-    const oldPath = path.join(this.qwenDir!, `checkpoint-${tag}.json`);
-    if (newPath !== oldPath) {
-      try {
-        await fs.unlink(oldPath);
-        deletedSomething = true;
-      } catch (error) {
-        const nodeError = error as NodeJS.ErrnoException;
-        if (nodeError.code !== 'ENOENT') {
-          this.debugLogger.error(
-            `Failed to delete checkpoint file ${oldPath}:`,
-            error,
-          );
-          throw error; // Rethrow unexpected errors
-        }
-        // It's okay if it doesn't exist.
-      }
-    }
-
-    return deletedSomething;
-  }
-
-  async checkpointExists(tag: string): Promise<boolean> {
-    if (!this.initialized) {
-      throw new Error(
-        'Logger not initialized. Cannot check for checkpoint existence.',
-      );
-    }
-    let filePath: string | undefined;
-    try {
-      filePath = await this._getCheckpointPath(tag);
-      // We need to check for existence again, because _getCheckpointPath
-      // returns a canonical path even if it doesn't exist yet.
-      await fs.access(filePath);
-      return true;
-    } catch (error) {
-      const nodeError = error as NodeJS.ErrnoException;
-      if (nodeError.code === 'ENOENT') {
-        return false; // It truly doesn't exist in either format.
-      }
-      // A different error occurred.
-      this.debugLogger.error(
-        `Failed to check checkpoint existence for ${
-          filePath ?? `path for tag "${tag}"`
-        }:`,
-        error,
-      );
-      throw error;
     }
   }
 

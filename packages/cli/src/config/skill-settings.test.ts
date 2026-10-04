@@ -9,10 +9,7 @@ import { SettingScope } from './settings.js';
 import {
   buildHigherDisabled,
   computeWorkspaceSkillListUpdates,
-  lookupSkillDisablement,
   resolveSkillSettings,
-  type SkillDisablement,
-  skillToggleBlockForName,
   updateWorkspaceSkillSettingLists,
 } from './skill-settings.js';
 
@@ -273,89 +270,6 @@ describe('computeWorkspaceSkillListUpdates', () => {
   });
 });
 
-describe('lookupSkillDisablement', () => {
-  const hard: SkillDisablement = { reason: 'hard', lockedScope: 'user' };
-  const byAuthored = new Map<string, SkillDisablement>([['pdf', hard]]);
-  const byRegistry = new Map<string, SkillDisablement>([['rust:pdf', hard]]);
-  const prefixed = { name: 'rust:pdf', authoredName: 'pdf' };
-
-  it('finds the entry written under the registry name', () => {
-    expect(lookupSkillDisablement(byRegistry, prefixed)).toBe(hard);
-  });
-
-  it('finds the legacy entry written under the authored name', () => {
-    expect(lookupSkillDisablement(byAuthored, prefixed)).toBe(hard);
-  });
-
-  it('prefers the registry-name entry when both spellings are present', () => {
-    const entries = new Map<string, SkillDisablement>([
-      ['pdf', { reason: 'default' }],
-      ['rust:pdf', hard],
-    ]);
-
-    expect(lookupSkillDisablement(entries, prefixed)).toBe(hard);
-  });
-
-  it('prefers the hard entry even when the registry spelling carries the weaker one', () => {
-    const entries = new Map<string, SkillDisablement>([
-      ['rust:pdf', { reason: 'default' }],
-      ['pdf', hard],
-    ]);
-
-    expect(lookupSkillDisablement(entries, prefixed)).toBe(hard);
-  });
-
-  it('prefers the hard entry carrying lockedScope over an unlocked one', () => {
-    // The registry-spelling hard block carries no attribution; the authored
-    // one names the scope the user has to edit, so wire surfaces must surface
-    // it even though the registry spelling is walked first.
-    const entries = new Map<string, SkillDisablement>([
-      ['rust:pdf', { reason: 'hard' }],
-      ['pdf', hard],
-    ]);
-
-    expect(lookupSkillDisablement(entries, prefixed)).toBe(hard);
-  });
-
-  it('normalizes the skill name it is given', () => {
-    expect(
-      lookupSkillDisablement(byRegistry, {
-        name: ' RUST:Pdf ',
-        authoredName: ' PDF ',
-      }),
-    ).toBe(hard);
-  });
-
-  it('finds the registry-name entry for a skill with no authored spelling', () => {
-    // Registration omits `authoredName` whenever the two spellings coincide, so
-    // the registry name is the only key this lookup can be handed.
-    expect(lookupSkillDisablement(byRegistry, { name: 'rust:pdf' })).toBe(hard);
-  });
-
-  it('does not match another extension skill that shares the authored name', () => {
-    // A restriction on `other:pdf` says nothing about `rust:pdf`: the authored
-    // spelling is shared across extensions, the registry identity is not.
-    expect(
-      lookupSkillDisablement(
-        new Map<string, SkillDisablement>([['other:pdf', hard]]),
-        { name: 'rust:pdf', authoredName: 'pdf' },
-      ),
-    ).toBeUndefined();
-  });
-
-  it('still matches a skill that has one spelling', () => {
-    expect(
-      lookupSkillDisablement(
-        new Map<string, SkillDisablement>([['review', hard]]),
-        { name: 'review' },
-      ),
-    ).toBe(hard);
-    expect(
-      lookupSkillDisablement(byAuthored, { name: 'review', authoredName: '' }),
-    ).toBeUndefined();
-  });
-});
-
 describe('buildHigherDisabled', () => {
   const prefixed = { name: 'demo:pdf', authoredName: 'pdf' };
 
@@ -446,16 +360,15 @@ describe('buildHigherDisabled', () => {
   });
 });
 
-describe('skillToggleBlockForName', () => {
+describe('buildHigherDisabled().blockIn', () => {
   it('uses the resolved authored spelling for a qualified request name', () => {
     expect(
-      skillToggleBlockForName(
+      buildHigherDisabled(
         fakeSettings({
           merged: {},
           workspace: { disabled: ['pdf'] },
         }),
-        { name: 'demo:pdf', authoredName: 'pdf' },
-      ),
+      ).blockIn({ name: 'demo:pdf', authoredName: 'pdf' }),
     ).toEqual({
       reason: 'hard',
       list: 'disabled',
@@ -468,13 +381,12 @@ describe('skillToggleBlockForName', () => {
     // A qualified entry blocks only its own registry identity; a bare
     // request must not inherit aliases it cannot name.
     expect(
-      skillToggleBlockForName(
+      buildHigherDisabled(
         fakeSettings({
           merged: {},
           workspace: { disabled: ['demo:pdf'] },
         }),
-        { name: 'pdf' },
-      ),
+      ).blockIn({ name: 'pdf' }),
     ).toBeNull();
   });
 });

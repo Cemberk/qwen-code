@@ -6,10 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PromptHookRunner } from './promptHookRunner.js';
-import {
-  DEFAULT_PROMPT_HOOK_TIMEOUT_SECONDS,
-  describeHookTimeout,
-} from './hook-timeout.js';
+import { DEFAULT_PROMPT_HOOK_TIMEOUT_SECONDS } from './hook-timeout.js';
 import { HookEventName, HookType } from './types.js';
 import type { PromptHookConfig, HookInput } from './types.js';
 import type { Config } from '../config/config.js';
@@ -746,7 +743,7 @@ describe('PromptHookRunner', () => {
     });
   });
 
-  describe('timeout matches describeHookTimeout', () => {
+  describe('timeout', () => {
     const runUntil = async (
       config: PromptHookConfig,
       pendingMs: number,
@@ -766,9 +763,7 @@ describe('PromptHookRunner', () => {
       return { pendingAfter, outcome: result.outcome };
     };
 
-    it('times out a configured value in seconds at the described delay', async () => {
-      const described = describeHookTimeout(HookType.Prompt, 1);
-      expect(described.timeoutMs).toBe(1000);
+    it('times out a configured value in seconds', async () => {
       vi.useFakeTimers();
       try {
         const run = await runUntil(createMockConfig({ timeout: 1 }), 999);
@@ -778,11 +773,7 @@ describe('PromptHookRunner', () => {
       }
     });
 
-    it('times out an unconfigured hook at the described default', async () => {
-      const described = describeHookTimeout(HookType.Prompt, undefined);
-      expect(described.timeoutMs).toBe(
-        DEFAULT_PROMPT_HOOK_TIMEOUT_SECONDS * 1000,
-      );
+    it('times out an unconfigured hook at the default', async () => {
       vi.useFakeTimers();
       try {
         const run = await runUntil(
@@ -795,13 +786,8 @@ describe('PromptHookRunner', () => {
       }
     });
 
-    it('times out a negative timeout at once, as described', async () => {
+    it('times out a negative timeout at once', async () => {
       // Real timers: Node runs a negative delay after 1 ms.
-      expect(describeHookTimeout(HookType.Prompt, -1)).toEqual({
-        timeoutMs: 1,
-        source: 'unusable',
-        ignoredConfiguredValue: false,
-      });
       mockGenerateContent.mockReturnValue(new Promise(() => {}));
       const started = Date.now();
       const result = await promptRunner.execute(

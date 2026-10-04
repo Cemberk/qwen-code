@@ -44,8 +44,7 @@ import { theme } from '../../semantic-colors.js';
 import { MessageType } from '../../types.js';
 import { MultiSelect, type MultiSelectItem } from '../shared/MultiSelect.js';
 
-// The daemon's toggle routes consult the same lock decision through
-// `skillToggleBlockForName`; the picker's tests pin the labels here.
+// The picker's tests pin the labels here.
 export { buildHigherDisabled };
 
 interface SkillsManagerDialogProps {

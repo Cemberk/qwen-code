@@ -3,8 +3,6 @@
  * Copyright 2025 Qwen Team
  * SPDX-License-Identifier: Apache-2.0
  */
-import { PRIVATE_CONVERSATIONS_RUNTIME_ENV } from '@qwen-code/qwen-code-core/conversationsRuntimeMarker';
-
 import { writeStderrLineSafe } from '../utils/stdioHelpers.js';
 import { PRIVATE_RELAUNCH_ENV_PROVENANCE } from '../utils/env-provenance.js';
 export { PRIVATE_RELAUNCH_ENV_PROVENANCE };
@@ -13,8 +11,6 @@ export const DEFAULT_EXCLUDED_ENV_VARS = ['DEBUG', 'DEBUG_MODE'];
 
 export const ENV_CORRUPTED_PATH = 'QWEN_CODE_SETTINGS_CORRUPTED_PATH';
 export const ENV_WAS_RECOVERED = 'QWEN_CODE_SETTINGS_WAS_RECOVERED';
-export const ENV_ACP_REPEATED_TOOL_FAILURE_GUARD =
-  'QWEN_CODE_ACP_REPEATED_TOOL_FAILURE_GUARD';
 
 // QWEN_HOME and QWEN_RUNTIME_DIR control where global state (settings, OAuth
 // credentials, installation IDs, etc.) is written. A project `.env` must never
@@ -41,10 +37,7 @@ export const PROJECT_ENV_HARDCODED_EXCLUSIONS = [
   'QWEN_CODE_WARNINGS_FILE',
   ENV_CORRUPTED_PATH,
   ENV_WAS_RECOVERED,
-  // This is an operator rollout policy. A project must not be able to promote
-  // itself from the default shadow cohort into warning or enforcement.
-  ENV_ACP_REPEATED_TOOL_FAILURE_GUARD,
-  // Project memory routing is frozen daemon-wide before workspace env files
+  // Project memory routing is frozen process-wide before workspace env files
   // load, so only the operator's launch environment or CLI flag may set it.
   'QWEN_CODE_MEMORY_PROJECT_SCOPE',
   // Workflow execution is an explicit user opt-in. A project must not enable
@@ -116,7 +109,7 @@ export const PROJECT_ENV_HARDCODED_EXCLUSIONS = [
   // attacker directory and GIT_TEMPLATE_DIR plants hooks that run after the
   // next clone/init; GIT_CONFIG_* injects arbitrary config (`core.hooksPath`,
   // `core.fsmonitor`, …) that turns a routine `git commit` into
-  // attacker-code execution as the daemon user — GIT_CONFIG_PARAMETERS
+  // attacker-code execution as the CLI user — GIT_CONFIG_PARAMETERS
   // carries the same injection as one quoted string, so it is blocked with
   // GIT_CONFIG_COUNT and the numbered pairs. core/utils/git-branches.ts
   // scrubs the config-injection subset from the repo's own git invocations,
@@ -216,18 +209,9 @@ export const PROJECT_ENV_HARDCODED_EXCLUSIONS = [
   // `.env` pointing it at an attacker script runs on any browser-launch
   // flow.
   'BROWSER',
-  // QWEN_CLI_ENTRY is the script path spawned ACP session processes run. A
-  // project `.env` or settings.env fixing it would run an attacker-chosen
-  // ACP entrypoint.
-  'QWEN_CLI_ENTRY',
   // DEV selects dev-harness behavior; only the dev harness (scripts/dev.js)
   // stamps it into the launch env, so a project file must not set it.
   'DEV',
-  // The Conversations provenance marker is a private daemon-to-child signal:
-  // a project `.env` or settings.env must never mark an ordinary workspace
-  // child as Conversations-hosted (it would force the writer lease and the
-  // unbound-durable-task skip onto sessions the contract does not cover).
-  PRIVATE_CONVERSATIONS_RUNTIME_ENV,
   PRIVATE_RELAUNCH_ENV_PROVENANCE,
 ];
 
@@ -305,14 +289,12 @@ export function isOperatorOnlyEnvKey(key: string): boolean {
   );
 }
 
-// Launcher→child provenance markers. Unlike the private ACP capability
-// (a random per-spawn nonce), these are fixed constants, so a home-scoped
-// `.env` could forge one — and home-scoped files are deliberately exempt from
-// the hardcoded project exclusions above. No env file at any scope may set
-// them: the legitimate carrier is the spawner's child env. Sandbox markers
-// stay inherited; the CLI captures and deletes the Conversations marker.
+// Launcher→child provenance markers. These are fixed constants, so a
+// home-scoped `.env` could forge one — and home-scoped files are deliberately
+// exempt from the hardcoded project exclusions above. No env file at any
+// scope may set them: the legitimate carrier is the spawner's child env.
+// Sandbox markers stay inherited.
 const PRIVATE_PROVENANCE_ENV_KEYS: ReadonlySet<string> = new Set([
-  PRIVATE_CONVERSATIONS_RUNTIME_ENV.toLowerCase(),
   PRIVATE_RELAUNCH_ENV_PROVENANCE.toLowerCase(),
   'sandbox',
   'sandbox_enforcement',
@@ -329,12 +311,9 @@ export const HOME_ENV_BOOTSTRAP_KEYS = [
   'QWEN_CODE_TRUSTED_FOLDERS_PATH',
 ] as const;
 
-// Loader-affecting variables inherited from the launching shell. A daemon or
-// ACP child needs them only for its own boot (e.g. the dev harness tsx
-// loader); left in process.env they propagate into session subprocesses whose
-// cwd is another workspace and hijack module resolution there. This is the
-// loader subset of RELOAD_EXCLUDED_KEYS (environment.ts), which guards
-// .env/settings.env application — not the inherited launch environment.
+// Loader-affecting variables (code-injection vectors for spawned
+// interpreters). This is the loader subset of RELOAD_EXCLUDED_KEYS
+// (environment.ts), which guards .env/settings.env application.
 //
 // Scope is deliberate: code-injection vectors only — variables that make a
 // spawned interpreter or OS loader execute an attacker-chosen file.
@@ -351,11 +330,8 @@ export const HOME_ENV_BOOTSTRAP_KEYS = [
 // This denylist intentionally does NOT move into core `sanitizeChildEnv`:
 // per-server `mcpServers[].env` and per-hook `hooks[].env` are explicit,
 // trust-gated overrides that must keep working, and a blanket child-env
-// strip would silently null them everywhere. The choke points that need the
-// denylist are config-driven, and each applies it at its own surface:
-// .env/settings.env loading (environment.ts), serve fast-path boot
-// (fast-path-settings.ts), and inherited launch-env scrubbing (daemon and
-// ACP child boot).
+// strip would silently null them everywhere. The choke point that needs the
+// denylist is config-driven: .env/settings.env loading (environment.ts).
 //
 // Known adjacent surface: LSP `.lsp.json` env overrides carry their own
 // narrower denylist (`SECURITY_SENSITIVE_ENV_KEYS` in

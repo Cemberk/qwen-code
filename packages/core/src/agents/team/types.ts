@@ -80,8 +80,6 @@ export interface TeamMember {
   joinedAt: number;
   /** Working directory for this member. */
   cwd: string;
-  /** Tmux pane ID (empty string for in-process). */
-  tmuxPaneId: string;
   /** Backend type used to spawn this member. */
   backendType?: DisplayMode;
   /** false = idle, undefined/true = active. */

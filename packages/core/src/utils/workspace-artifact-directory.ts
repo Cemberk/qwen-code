@@ -43,10 +43,6 @@ export type RecordableWorkspaceWalkResult = {
   skippedUnrecordable: number;
 };
 
-export function isOfficeDocumentExtension(ext: string): boolean {
-  return OFFICE_DOCUMENT_EXTENSIONS.has(ext);
-}
-
 export function shouldSkipDirectoryArtifactName(name: string): boolean {
   return (
     name.startsWith('.') ||

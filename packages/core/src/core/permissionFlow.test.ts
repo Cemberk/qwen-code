@@ -407,7 +407,6 @@ describe('evaluatePermissionFlow with ask_user_question', () => {
       isInteractive: vi.fn().mockReturnValue(interactive),
       getApprovalMode: vi.fn().mockReturnValue(ApprovalMode.DEFAULT),
       getTargetDir: vi.fn().mockReturnValue('/test'),
-      getExperimentalZedIntegration: vi.fn().mockReturnValue(false),
       getInputFormat: vi.fn().mockReturnValue(undefined),
     }) as unknown as Config;
 

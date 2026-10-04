@@ -64,7 +64,7 @@ export const doctorCommand: SlashCommand = {
     return t('Run installation and environment diagnostics');
   },
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
   argumentHint: '[memory|cpu-profile] [--sample] [--snapshot] [--duration]',
   examples: [
     '/doctor',
@@ -255,7 +255,7 @@ export const doctorCommand: SlashCommand = {
         return t('Show current process memory diagnostics');
       },
       kind: CommandKind.BUILT_IN,
-      supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+      supportedModes: ['interactive', 'non_interactive'] as const,
       argumentHint: '[--json] [--sample] [--snapshot]',
       action: memoryDoctorAction,
     },
@@ -265,7 +265,7 @@ export const doctorCommand: SlashCommand = {
         return t('Record a CPU profile for Chrome DevTools analysis');
       },
       kind: CommandKind.BUILT_IN,
-      supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+      supportedModes: ['interactive', 'non_interactive'] as const,
       argumentHint: '[--duration <seconds>]',
       action: cpuProfileDoctorAction,
     },

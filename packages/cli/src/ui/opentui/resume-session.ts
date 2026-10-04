@@ -54,14 +54,6 @@ export function resumeEventsFromSession(
   return transcribe(sessionData, config).events;
 }
 
-/** History-eligible user prompts of one loaded session, replay order. */
-export function resumeUserPromptsFromSession(
-  sessionData: ResumableSession,
-  config?: Config,
-): string[] {
-  return transcribe(sessionData, config).prompts;
-}
-
 /** Neutral resume events for the config's resumed session, if any. */
 export function resumeEventsFromConfig(
   config: Config,
@@ -69,13 +61,4 @@ export function resumeEventsFromConfig(
   const sessionData = config.getResumedSessionData();
   if (!sessionData) return undefined;
   return resumeEventsFromSession(sessionData, config);
-}
-
-/** History-eligible prompts of the config's resumed session, if any. */
-export function resumeUserPromptsFromConfig(
-  config: Config,
-): string[] | undefined {
-  const sessionData = config.getResumedSessionData();
-  if (!sessionData) return undefined;
-  return resumeUserPromptsFromSession(sessionData, config);
 }

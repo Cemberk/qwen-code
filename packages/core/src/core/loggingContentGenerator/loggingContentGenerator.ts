@@ -190,10 +190,6 @@ export class LoggingContentGenerator implements ContentGenerator {
     }
   }
 
-  getWrapped(): ContentGenerator {
-    return this.wrapped;
-  }
-
   private snapshotContextUsage(
     request: GenerateContentParameters,
     isInternal: boolean,

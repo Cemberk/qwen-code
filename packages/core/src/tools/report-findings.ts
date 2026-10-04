@@ -9,12 +9,11 @@
 //
 // A review's findings already exist as data once — the `qwen review findings`
 // artifact — but that file lives on disk, registered after the fact via
-// `record_artifact`. Every client rendering the session live (the terminal UI,
-// the Web Shell transcript, ACP hosts) saw only the prose restatement, which
-// is exactly the transcription surface the artifact exists to close. This tool
-// is the in-band half of the same contract: one call, `{level, findings[]}`,
-// values copied from the artifact, rendered by the host UI as a per-finding
-// list.
+// `record_artifact`. A client rendering the session live (the terminal UI)
+// saw only the prose restatement, which is exactly the transcription
+// surface the artifact exists to close. This tool is the in-band half of the
+// same contract: one call, `{level, findings[]}`, values copied from the
+// artifact, rendered by the host UI as a per-finding list.
 //
 // The second call is the reason the first is trustworthy: after fixes are
 // applied, the reporter calls again with every finding carrying an `outcome`,
@@ -29,12 +28,6 @@ import { BaseDeclarativeTool, BaseToolInvocation, Kind } from './tools.js';
 import { ToolDisplayNames, ToolNames } from './tool-names.js';
 import { hasControlCharacter } from './record-artifact.js';
 
-// These enum spellings have two other deliberate copies: the findings
-// artifact (`packages/cli/src/commands/review/findings.ts`, which re-exports these) and
-// the Web Shell renderer (`CodeReviewArtifactDetail.tsx`, a browser bundle
-// that must not import Node-side packages and fails closed on unknown
-// values). A value added here must be added to the renderer copy in the same
-// change.
 /** The severity ladder, most severe first — this array IS the sort order. */
 export const FINDING_SEVERITIES = [
   'Critical',
@@ -146,7 +139,7 @@ export interface ReportFindingsParams {
   findings: ReportFindingsFindingParams[];
 }
 
-const DESCRIPTION = `Reports code-review findings as typed data so clients (the terminal UI, the Web Shell, ACP hosts) can render a per-finding list. Use it only when an active review flow (such as the bundled review skill) instructs you to report findings with it; otherwise present findings as ordinary text. Call it once per report with the complete list, most severe first — a later call replaces the whole list, it never appends. When the review wrote a findings artifact, copy each field verbatim from it (id, severity, confidence, source, file/line, summary, shortSummary, failureScenario, category, direction, baseline); do not re-derive or re-word values — the artifact is the oracle.
+const DESCRIPTION = `Reports code-review findings as typed data so clients (such as the terminal UI) can render a per-finding list. Use it only when an active review flow (such as the bundled review skill) instructs you to report findings with it; otherwise present findings as ordinary text. Call it once per report with the complete list, most severe first — a later call replaces the whole list, it never appends. When the review wrote a findings artifact, copy each field verbatim from it (id, severity, confidence, source, file/line, summary, shortSummary, failureScenario, category, direction, baseline); do not re-derive or re-word values — the artifact is the oracle.
 
 After fixes are applied — at the review's own fix step, or ANY later time in the session a reported finding's disposition changes — call it again with the same findings, each carrying "outcome" ("fixed", "skipped", or "no_change_needed"; "outcomeNote" for the reason). Client per-finding status trusts only a call that carries outcomes, and a call where some findings carry an outcome and others do not is refused: account for every finding.
 
@@ -357,7 +350,7 @@ export class ReportFindingsTool extends BaseDeclarativeTool<
   //
   // The gate is a contract about the live process, not a persisted one: the
   // tool instance is cached by the registry for the session, but a cold
-  // session resume (--resume, a daemon or process restart) constructs a
+  // session resume (--resume, a process restart) constructs a
   // fresh instance with no active identity. That is the documented limit of
   // the join — after a restart an outcome call is validated on its own
   // terms (all-or-nothing outcomes) instead of against the pre-restart

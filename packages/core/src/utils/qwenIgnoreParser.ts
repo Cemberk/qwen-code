@@ -203,8 +203,4 @@ export class QwenIgnoreParser implements QwenIgnoreFilter {
   getPatterns(): string[] {
     return this.patterns;
   }
-
-  getIgnoreFileNames(): string[] {
-    return this.ignoreFileNames;
-  }
 }

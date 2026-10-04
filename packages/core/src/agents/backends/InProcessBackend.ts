@@ -6,9 +6,8 @@
 
 /**
  * @fileoverview InProcessBackend — Backend implementation that runs agents
- * in the current process using AgentInteractive instead of PTY subprocesses.
+ * in the current process using AgentInteractive.
  *
- * This enables Arena to work without tmux or any external terminal multiplexer.
  */
 
 import path from 'node:path';
@@ -40,16 +39,14 @@ import type {
 } from './types.js';
 import { DISPLAY_MODE } from './types.js';
 import { rebuildToolRegistryOnOverride } from '../../tools/agent/agent.js';
-import type { AnsiOutput } from '../../utils/terminalSerializer.js';
 
 const debugLogger = createDebugLogger('IN_PROCESS_BACKEND');
 
 /**
  * InProcessBackend runs agents in the current Node.js process.
  *
- * Instead of spawning PTY subprocesses, it creates AgentCore + AgentInteractive
- * instances that execute in-process. Screen capture returns null (the UI reads
- * messages directly from AgentInteractive).
+ * It creates AgentCore + AgentInteractive instances that execute in-process;
+ * the UI reads messages directly from AgentInteractive.
  */
 export class InProcessBackend implements Backend {
   readonly type = DISPLAY_MODE.IN_PROCESS;
@@ -76,12 +73,9 @@ export class InProcessBackend implements Backend {
   // Ids whose agent was stopped via stopAgent. The handle stays in
   // `agents` so post-stop readers keep working (ArenaManager resolves
   // transcripts through getAgent after the arena timeout path stops
-  // its agents), but spawn, navigation and input treat these ids as
-  // gone. The mark is cleared when the id is respawned and in
-  // cleanup().
+  // its agents), but spawn treats these ids as gone. The mark is
+  // cleared when the id is respawned and in cleanup().
   private readonly stoppedAgentIds = new Set<string>();
-  private readonly agentOrder: string[] = [];
-  private activeAgentId: string | null = null;
   private exitCallback: AgentExitCallback | null = null;
   private autoApprovalOverrideCount = 0;
   /** Whether cleanup() has been called */
@@ -104,11 +98,6 @@ export class InProcessBackend implements Backend {
       );
     }
     const inProcessConfig = config.inProcess;
-    if (!inProcessConfig) {
-      throw new Error(
-        `InProcessBackend requires inProcess config for agent ${config.agentId}`,
-      );
-    }
 
     if (
       this.agents.has(config.agentId) &&
@@ -201,7 +190,6 @@ export class InProcessBackend implements Backend {
       this.stoppedAgentIds.delete(config.agentId);
     }
     this.agents.set(config.agentId, interactive);
-    this.agentOrder.push(config.agentId);
 
     // Route owned monitor notifications into this agent's message queue.
     // AgentInteractive frames every tool body under the agent identity, so a
@@ -218,11 +206,6 @@ export class InProcessBackend implements Backend {
       .setAgentNotificationCallback(config.agentId, (_displayText, modelText) =>
         interactive.enqueueMessage(modelText),
       );
-
-    // Set first agent as active
-    if (this.activeAgentId === null) {
-      this.activeAgentId = config.agentId;
-    }
 
     try {
       const context = new ContextState();
@@ -256,7 +239,6 @@ export class InProcessBackend implements Backend {
       this.agents.delete(config.agentId);
       this.agentContentGenerators.delete(config.agentId);
       this.agentContentGeneratorErrors.delete(config.agentId);
-      this.removeFromNavigation(config.agentId);
       this.exitCallback?.(config.agentId, 1, null);
     }
   }
@@ -288,7 +270,6 @@ export class InProcessBackend implements Backend {
     // spawn-time completion watcher already reports the exit; firing
     // it again would double-report.
     this.stoppedAgentIds.add(agentId);
-    this.removeFromNavigation(agentId);
   }
 
   stopAll(): void {
@@ -336,8 +317,6 @@ export class InProcessBackend implements Backend {
     this.agentContentGenerators.clear();
     this.agentContentGeneratorErrors.clear();
     this.stoppedAgentIds.clear();
-    this.agentOrder.length = 0;
-    this.activeAgentId = null;
     debugLogger.info('InProcessBackend cleaned up');
   }
 
@@ -369,70 +348,6 @@ export class InProcessBackend implements Backend {
 
     clearTimeout(timerId!);
     return result === 'done';
-  }
-
-  // ─── Navigation ────────────────────────────────────────────
-
-  switchTo(agentId: string): void {
-    if (this.agents.has(agentId) && !this.stoppedAgentIds.has(agentId)) {
-      this.activeAgentId = agentId;
-    }
-  }
-
-  switchToNext(): void {
-    this.activeAgentId = this.navigate(1);
-  }
-
-  switchToPrevious(): void {
-    this.activeAgentId = this.navigate(-1);
-  }
-
-  getActiveAgentId(): string | null {
-    return this.activeAgentId;
-  }
-
-  // ─── Screen Capture (no-op for in-process) ─────────────────
-
-  getActiveSnapshot(): AnsiOutput | null {
-    return null;
-  }
-
-  getAgentSnapshot(
-    _agentId: string,
-    _scrollOffset?: number,
-  ): AnsiOutput | null {
-    return null;
-  }
-
-  getAgentScrollbackLength(_agentId: string): number {
-    return 0;
-  }
-
-  // ─── Input ─────────────────────────────────────────────────
-
-  forwardInput(data: string): boolean {
-    if (!this.activeAgentId) return false;
-    return this.writeToAgent(this.activeAgentId, data);
-  }
-
-  writeToAgent(agentId: string, data: string): boolean {
-    const agent = this.agents.get(agentId);
-    if (!agent || this.stoppedAgentIds.has(agentId)) return false;
-
-    agent.enqueueMessage(data);
-    return true;
-  }
-
-  // ─── Resize (no-op) ───────────────────────────────────────
-
-  resizeAll(_cols: number, _rows: number): void {
-    // No terminals to resize in-process
-  }
-
-  // ─── External Session ──────────────────────────────────────
-
-  getAttachHint(): string | null {
-    return null;
   }
 
   // ─── Extra: Direct Access ──────────────────────────────────
@@ -468,34 +383,6 @@ export class InProcessBackend implements Backend {
   }
 
   // ─── Private ───────────────────────────────────────────────
-
-  private navigate(direction: 1 | -1): string | null {
-    if (this.agentOrder.length === 0) return null;
-    if (!this.activeAgentId) return this.agentOrder[0] ?? null;
-
-    const currentIndex = this.agentOrder.indexOf(this.activeAgentId);
-    if (currentIndex === -1) return this.agentOrder[0] ?? null;
-
-    const nextIndex =
-      (currentIndex + direction + this.agentOrder.length) %
-      this.agentOrder.length;
-    return this.agentOrder[nextIndex] ?? null;
-  }
-
-  /**
-   * Roster bookkeeping shared by every path that removes an agent —
-   * the spawn-start-failure rollback and stopAgent. Kept in one place
-   * so the two teardown paths cannot drift on navigation state.
-   */
-  private removeFromNavigation(agentId: string): void {
-    const index = this.agentOrder.indexOf(agentId);
-    if (index >= 0) {
-      this.agentOrder.splice(index, 1);
-    }
-    if (this.activeAgentId === agentId) {
-      this.activeAgentId = this.agentOrder[0] ?? null;
-    }
-  }
 
   private releaseAgentResources(
     agentId: string,

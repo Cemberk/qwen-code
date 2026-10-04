@@ -61,8 +61,8 @@ export interface ExtendedSystemInfo extends SystemInfo {
 }
 
 // `execFile` (not the shell-spawning `exec`) so a hostile binary on PATH
-// can't inject shell metacharacters. The timeout protects the daemon's
-// event loop from a hung `git` / `npm` (NFS stall, Gatekeeper prompt,
+// can't inject shell metacharacters. The timeout protects the event loop
+// from a hung `git` / `npm` (NFS stall, Gatekeeper prompt,
 // broken install) — `execSync` would have blocked indefinitely.
 const VERSION_PROBE_TIMEOUT_MS = 5_000;
 

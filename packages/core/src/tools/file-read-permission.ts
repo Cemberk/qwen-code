@@ -23,10 +23,6 @@ export function getFileReadDefaultPermission(
   const filePath = realpathNearestExisting(path.resolve(requestedPath));
   const workspaceContext = config.getWorkspaceContext();
 
-  // SYNC: Keep these base roots and the auto-memory check below aligned with
-  // AcpAgent.buildAcpLocalReadRoots' mirrored ReadFileTool group. ACP may
-  // append fallback-only roots after that group.
-  //
   // Roots are canonicalized too: resolving only the candidate would cost an
   // extra prompt whenever a root sits behind a symlink (macOS /var). Safe here
   // because these roots are anchored in the user's home / runtime dir, never

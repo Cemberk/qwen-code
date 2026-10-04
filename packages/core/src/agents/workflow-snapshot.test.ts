@@ -15,7 +15,6 @@ import {
   readWorkflowSnapshot,
   writeWorkflowSnapshot,
   listWorkflowSnapshots,
-  deleteWorkflowSnapshot,
   snapshotArgs,
   snapshotArgsUnavailable,
   MAX_RETAINED_SNAPSHOTS,
@@ -650,104 +649,6 @@ describe('writeWorkflowSnapshot + listWorkflowSnapshots', () => {
     const list = await listWorkflowSnapshots(config);
 
     expect(list.map((s) => s.runId)).toEqual(['wf_good']);
-  });
-
-  it('deletes one saved run and its resume journal', async () => {
-    const config = fakeConfig(projectDir);
-    const runId = 'wf_abcd';
-    await writeWorkflowSnapshot(config, task({ runId }));
-    const journalPath = config.storage.getWorkflowRunJournalPath(runId);
-    await fs.mkdir(path.dirname(journalPath), { recursive: true });
-    await fs.writeFile(journalPath, '{}\n', 'utf8');
-    const inlinePath = config.storage.getInlineWorkflowScriptPath(runId);
-    await fs.mkdir(path.dirname(inlinePath), { recursive: true });
-    await fs.writeFile(inlinePath, 'return 1', 'utf8');
-
-    await expect(deleteWorkflowSnapshot(config, runId)).resolves.toBe(true);
-
-    await expect(
-      fs.access(config.storage.getWorkflowRunSnapshotPath(runId)),
-    ).rejects.toThrow();
-    await expect(fs.access(path.dirname(journalPath))).rejects.toThrow();
-    await expect(fs.access(inlinePath)).rejects.toThrow();
-    await expect(listWorkflowSnapshots(config)).resolves.toEqual([]);
-  });
-
-  it('keeps the snapshot and reports failure when journal deletion fails', async () => {
-    const config = fakeConfig(projectDir);
-    const runId = 'wf_dead';
-    await writeWorkflowSnapshot(config, task({ runId }));
-    const journalPath = config.storage.getWorkflowRunJournalPath(runId);
-    await fs.mkdir(path.dirname(journalPath), { recursive: true });
-    await fs.writeFile(journalPath, '{}\n', 'utf8');
-    const rmSpy = vi
-      .spyOn(fs, 'rm')
-      .mockRejectedValueOnce(
-        Object.assign(new Error('busy'), { code: 'EBUSY' }),
-      );
-
-    await expect(deleteWorkflowSnapshot(config, runId)).resolves.toBe(false);
-    expect(rmSpy).toHaveBeenCalledTimes(1);
-
-    rmSpy.mockRestore();
-    await expect(
-      fs.access(config.storage.getWorkflowRunSnapshotPath(runId)),
-    ).resolves.toBeUndefined();
-    await expect(fs.access(path.dirname(journalPath))).resolves.toBeUndefined();
-  });
-
-  it('keeps the snapshot when inline script deletion fails', async () => {
-    const config = fakeConfig(projectDir);
-    const runId = 'wf_dead';
-    await writeWorkflowSnapshot(config, task({ runId }));
-    const inlinePath = config.storage.getInlineWorkflowScriptPath(runId);
-    await fs.mkdir(path.dirname(inlinePath), { recursive: true });
-    await fs.writeFile(inlinePath, 'return 1', 'utf8');
-    const rmSpy = vi
-      .spyOn(fs, 'rm')
-      .mockResolvedValueOnce(undefined)
-      .mockRejectedValueOnce(
-        Object.assign(new Error('busy'), { code: 'EBUSY' }),
-      );
-
-    await expect(deleteWorkflowSnapshot(config, runId)).resolves.toBe(false);
-
-    rmSpy.mockRestore();
-    await expect(
-      fs.access(config.storage.getWorkflowRunSnapshotPath(runId)),
-    ).resolves.toBeUndefined();
-    await expect(fs.access(inlinePath)).resolves.toBeUndefined();
-  });
-
-  it('rejects traversal-shaped run ids without touching project files', async () => {
-    const config = fakeConfig(projectDir);
-    // Extensionless on purpose: for input '../CANARY' an unguarded recursive
-    // rm targets <projectDir>/CANARY exactly, so bypassing the guard makes
-    // the read-back below fail instead of only the boolean assertion.
-    const canary = path.join(projectDir, 'CANARY');
-    await fs.writeFile(canary, 'keep', 'utf8');
-
-    await expect(deleteWorkflowSnapshot(config, '../CANARY')).resolves.toBe(
-      false,
-    );
-    await expect(deleteWorkflowSnapshot(config, 'wf_bad/path')).resolves.toBe(
-      false,
-    );
-
-    await expect(fs.readFile(canary, 'utf8')).resolves.toBe('keep');
-  });
-
-  it('rejects malformed run ids without deleting another snapshot', async () => {
-    const config = fakeConfig(projectDir);
-    const runId = 'wf_abcd';
-    await writeWorkflowSnapshot(config, task({ runId }));
-    const snapshotPath = config.storage.getWorkflowRunSnapshotPath(runId);
-
-    await expect(deleteWorkflowSnapshot(config, `${runId}.json`)).resolves.toBe(
-      false,
-    );
-
-    await expect(fs.access(snapshotPath)).resolves.toBeUndefined();
   });
 
   it('prunes the oldest beyond MAX_RETAINED_SNAPSHOTS, journal dirs too', async () => {

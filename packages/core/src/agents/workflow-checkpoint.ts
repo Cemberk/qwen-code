@@ -11,8 +11,8 @@
  * A run's snapshot is written when it settles, and the registry that knows
  * about it lives only as long as the process. A run whose process is killed,
  * crashes, or is closed mid-run therefore leaves a journal and nothing else:
- * it is missing from `/workflows`, from an ACP client's task list, and from
- * anything that would tell the user it can be resumed.
+ * it is missing from `/workflows` and from anything that would tell the user
+ * it can be resumed.
  *
  * So every run with a journal also writes `<runId>/checkpoint.json` beside it
  * when it registers, and removes it when it settles. A checkpoint that outlives
@@ -428,26 +428,6 @@ export async function claimInterruptedWorkflowRuns(
   }
   claimed.sort((a, b) => b.snapshot.startTime - a.snapshot.startTime);
   return claimed;
-}
-
-/**
- * {@link claimInterruptedWorkflowRuns} for one run: turn it into a `failed`
- * snapshot if the process running it exited before it settled, and return
- * it; otherwise leave it alone and return `undefined`. For a caller about to
- * act on one run from its history, whose snapshot is otherwise older than
- * the attempt that was interrupted. An id that is not a run id has no
- * checkpoint path, so nothing is read for it.
- */
-export async function claimInterruptedWorkflowRun(
-  config: Config,
-  runId: string,
-  options: { isProcessRunning?: (pid: number) => boolean } = {},
-): Promise<InterruptedWorkflowRun | undefined> {
-  return claimIfInterrupted(
-    config,
-    runId,
-    options.isProcessRunning ?? isProcessRunning,
-  );
 }
 
 async function claimIfInterrupted(

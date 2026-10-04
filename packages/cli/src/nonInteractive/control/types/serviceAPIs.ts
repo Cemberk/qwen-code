@@ -4,17 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Service API Types
- *
- * These interfaces define the public API contract for the ControlService facade.
- * They provide type-safe, domain-grouped access to control plane functionality
- * for internal CLI code (nonInteractiveCli, session managers, etc.).
- */
-
-import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type {
-  MCPServerConfig,
   TeammateApprovalRequestEvent,
   WorkflowApproval,
 } from '@qwen-code/qwen-code-core';
@@ -87,49 +77,4 @@ export interface SystemServiceAPI {
    * @returns Control capabilities object
    */
   getControlCapabilities(): Record<string, unknown>;
-}
-
-/**
- * MCP Service API
- *
- * Provides Model Context Protocol server interaction including
- * lazy client initialization and server discovery.
- */
-export interface McpServiceAPI {
-  /**
-   * Get or create MCP client for a server (lazy initialization)
-   *
-   * Returns an existing client from cache or creates a new connection
-   * if this is the first request for the server. Handles connection
-   * lifecycle and error recovery.
-   *
-   * @param serverName - Name of the MCP server to connect to
-   * @returns Promise resolving to client instance and server configuration
-   * @throws Error if server is not configured or connection fails
-   */
-  getMcpClient(serverName: string): Promise<{
-    client: Client;
-    config: MCPServerConfig;
-  }>;
-
-  /**
-   * List all available MCP servers
-   *
-   * Returns names of both SDK-managed and CLI-managed MCP servers
-   * that are currently configured or connected.
-   *
-   * @returns Array of server names
-   */
-  listServers(): string[];
-}
-
-/**
- * Hook Service API
- *
- * Provides hook callback processing (placeholder for future expansion).
- */
-export interface HookServiceAPI {
-  // Future: Hook-related methods will be added here
-  // For now, hook functionality is handled only via control requests
-  registerHookCallback(callback: unknown): void;
 }

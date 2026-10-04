@@ -12,8 +12,9 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { transcriptToEvents } from './transcript-adapter.js';
-import { MID_TURN_USER_MESSAGE_PREFIX } from '../../utils/midTurnUserMessage.js';
+import { transcribeSession } from './transcript-adapter.js';
+const MID_TURN_USER_MESSAGE_PREFIX =
+  '\n[User message received during tool execution]: ';
 
 function userLine(subtype: string, text: string): string {
   return JSON.stringify({
@@ -24,14 +25,14 @@ function userLine(subtype: string, text: string): string {
   });
 }
 
-describe('transcriptToEvents subtyped user records', () => {
+describe('transcribeSession subtyped user records', () => {
   it('replays a mid_turn_user_message (U-32 steering) as a user event', () => {
-    const events = transcriptToEvents(
+    const events = transcribeSession(
       [
         userLine('mid_turn_user_message', 'STEER_CANARY_ONE'),
         JSON.stringify({ type: 'done' }),
       ].join('\n'),
-    );
+    ).events;
     expect(events).toEqual([
       { type: 'user', text: 'STEER_CANARY_ONE' },
       { type: 'done' },
@@ -51,9 +52,9 @@ describe('transcriptToEvents subtyped user records', () => {
       },
       systemPayload: { displayText: 'steer me @a.ts' },
     });
-    const events = transcriptToEvents(
+    const events = transcribeSession(
       [line, JSON.stringify({ type: 'done' })].join('\n'),
-    );
+    ).events;
     expect(events).toEqual([
       { type: 'user', text: 'steer me @a.ts' },
       { type: 'done' },
@@ -73,9 +74,9 @@ describe('transcriptToEvents subtyped user records', () => {
         attachmentReferences: [{ type: 'image', mimeType: 'image/png' }],
       },
     });
-    const events = transcriptToEvents(
+    const events = transcribeSession(
       [line, JSON.stringify({ type: 'done' })].join('\n'),
-    );
+    ).events;
     expect(events).toEqual([
       { type: 'user', text: '[User message with attachments]' },
       { type: 'done' },
@@ -88,9 +89,9 @@ describe('transcriptToEvents subtyped user records', () => {
       subtype: 'mid_turn_user_message',
       message: { role: 'user', parts: [{ text: 'legacy steer' }] },
     });
-    const events = transcriptToEvents(
+    const events = transcribeSession(
       [line, JSON.stringify({ type: 'done' })].join('\n'),
-    );
+    ).events;
     expect(events).toEqual([
       { type: 'user', text: 'legacy steer' },
       { type: 'done' },
@@ -98,18 +99,18 @@ describe('transcriptToEvents subtyped user records', () => {
   });
 
   it('still skips side-band subtyped user records', () => {
-    const events = transcriptToEvents(
+    const events = transcribeSession(
       [
         userLine('goal_runtime', 'goal tick'),
         userLine('cron', 'scheduled prompt'),
         JSON.stringify({ type: 'done' }),
       ].join('\n'),
-    );
+    ).events;
     expect(events).toEqual([{ type: 'done' }]);
   });
 });
 
-describe('transcriptToEvents resumed tool calls', () => {
+describe('transcribeSession resumed tool calls', () => {
   const call = (id: string, name: string, args: unknown) =>
     JSON.stringify({
       type: 'assistant',
@@ -119,14 +120,14 @@ describe('transcriptToEvents resumed tool calls', () => {
     JSON.stringify({ type: 'tool_result', toolCallResult: { callId: id } });
 
   it("replays the arguments for ink's inline args row", () => {
-    const events = transcriptToEvents(
+    const events = transcribeSession(
       [
         call('c1', 'edit', { file_path: 'a.ts' }),
         result('c1'),
         call('c2', 'list_directory', {}),
         result('c2'),
       ].join('\n'),
-    );
+    ).events;
     // ink's resume placeholder records `args` for the same row, so a resumed
     // session shows what the live one did — and a call without arguments
     // carries no row at all.
@@ -146,7 +147,7 @@ describe('transcriptToEvents resumed tool calls', () => {
   });
 });
 
-describe('transcriptToEvents assistant timestamps (#76)', () => {
+describe('transcribeSession assistant timestamps (#76)', () => {
   const RECORDED = '2026-09-18T07:05:09.000Z';
 
   function assistantLine(
@@ -161,9 +162,9 @@ describe('transcriptToEvents assistant timestamps (#76)', () => {
   }
 
   function replay(line: string) {
-    return transcriptToEvents(
+    return transcribeSession(
       [line, JSON.stringify({ type: 'done' })].join('\n'),
-    );
+    ).events;
   }
 
   it('stamps the first text run of the record, and only that one', () => {

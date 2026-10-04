@@ -125,25 +125,6 @@ export const darkTheme: ColorsTheme = {
   GradientColors: ['#4796E4', '#847ACE', '#C3677F'],
 };
 
-export const ansiTheme: ColorsTheme = {
-  type: 'ansi',
-  Background: 'black',
-  Foreground: 'white',
-  LightBlue: 'blue',
-  AccentBlue: 'blue',
-  AccentPurple: 'magenta',
-  AccentCyan: 'cyan',
-  AccentGreen: 'green',
-  AccentYellow: 'yellow',
-  AccentRed: 'red',
-  AccentYellowDim: 'yellow',
-  AccentRedDim: 'red',
-  DiffAdded: 'green',
-  DiffRemoved: 'red',
-  Comment: 'gray',
-  Gray: 'gray',
-};
-
 export class Theme {
   /**
    * The default foreground color for text when no specific highlight rule applies.

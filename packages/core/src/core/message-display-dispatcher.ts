@@ -24,7 +24,7 @@ import {
  * proceed anyway. Well short of the 60s default command hook timeout
  * (`DEFAULT_COMMAND_HOOK_TIMEOUT_SECONDS` in hooks/hook-timeout.ts)
  * because a slow or hung MessageDisplay hook shouldn't be able to freeze
- * `qwen -p` or an ACP stream loop's `finally` for anywhere near that long.
+ * `qwen -p` for anywhere near that long.
  * The budget is shared across finish() calls (client.ts calls it from an
  * explicit exit site and again from a finally), so this constant is the
  * ceiling itself, not a per-call increment. The hook has already received
@@ -195,8 +195,8 @@ export class MessageDisplayDispatcher {
    * typically a gated debug-file logger (a no-op without an active debug-log
    * session), and these warnings fire exactly when a documented delivery
    * guarantee is at stake — they must reach stderr by default on every
-   * surface (headless, ACP — stdout carries the protocol, stderr is free —
-   * and the TUI, where ink's patchConsole renders them above the app).
+   * surface (headless — stdout carries the output, stderr is free — and the
+   * TUI, where ink's patchConsole renders them above the app).
    */
   private emitWarning(message: string): void {
     // eslint-disable-next-line no-console

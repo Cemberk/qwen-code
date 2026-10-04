@@ -52,7 +52,7 @@ function getActiveSession(): DebugLogSession | null {
   if (contextSession === false) return null;
   if (contextSession) return contextSession;
 
-  // In daemon/ACP mode one process hosts many concurrent sessions. The async
+  // One process can host several concurrent sessions (subagents, arena). The async
   // context already carries the owning session ID via sessionIdContext, so
   // prefer it over the process-wide session set by Config creation. Without
   // this, creating a Config for session B would redirect logs belonging to
@@ -129,7 +129,8 @@ function writeLog(
   const traceCtx = getTraceContext();
   const line = buildLogLine(level, message, tag, traceCtx);
 
-  // In a multi-session daemon the active session can change between writes.
+  // With several sessions in one process the active session can change
+  // between writes.
   // Keep the `latest` alias pointed at the file that is actually receiving
   // logs right now, not just the last Config that was constructed.
   updateLatestDebugLogAlias(sessionId);
@@ -279,7 +280,7 @@ export function runWithoutDebugLogSession<T>(fn: () => T): T {
  *
  * Session resolution order:
  * 1) async-local suppression or session (runWithoutDebugLogSession / runWithDebugLogSession)
- * 2) async-local session ID from the daemon context (sessionIdContext)
+ * 2) async-local session ID (sessionIdContext)
  * 3) process-wide session (setDebugLogSession)
  */
 export function createDebugLogger(tag?: string): DebugLogger {

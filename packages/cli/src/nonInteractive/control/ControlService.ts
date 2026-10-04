@@ -31,8 +31,6 @@ import type { ControlDispatcher } from './ControlDispatcher.js';
 import type {
   PermissionServiceAPI,
   SystemServiceAPI,
-  // McpServiceAPI,
-  // HookServiceAPI,
 } from './types/serviceAPIs.js';
 
 /**
@@ -117,63 +115,6 @@ export class ControlService {
       getControlCapabilities: () => controller.buildControlCapabilities(),
     };
   }
-
-  /**
-   * MCP Domain API
-   *
-   * Handles Model Context Protocol server interactions.
-   * Delegates to the shared MCPController instance.
-   */
-  // get mcp(): McpServiceAPI {
-  //   return {
-  //     /**
-  //      * Get or create MCP client for a server (lazy initialization)
-  //      *
-  //      * Returns existing client or creates new connection.
-  //      *
-  //      * @param serverName - Name of the MCP server
-  //      * @returns Promise with client and config
-  //      */
-  //     getMcpClient: async (serverName: string) => {
-  //       // MCPController has a private method getOrCreateMcpClient
-  //       // We need to expose it via the API
-  //       // For now, throw error as placeholder
-  //       // The actual implementation will be added when we update MCPController
-  //       throw new Error(
-  //         `getMcpClient not yet implemented in ControlService. Server: ${serverName}`,
-  //       );
-  //     },
-  //
-  //     /**
-  //      * List all available MCP servers
-  //      *
-  //      * Returns names of configured/connected MCP servers.
-  //      *
-  //      * @returns Array of server names
-  //      */
-  //     listServers: () => {
-  //       // Get servers from context
-  //       const sdkServers = Array.from(
-  //         this.dispatcher.mcpController['context'].sdkMcpServers,
-  //       );
-  //       const cliServers = Array.from(
-  //         this.dispatcher.mcpController['context'].mcpClients.keys(),
-  //       );
-  //       return [...new Set([...sdkServers, ...cliServers])];
-  //     },
-  //   };
-  // }
-
-  /**
-   * Hook Domain API
-   *
-   * Handles hook callback processing (placeholder for future expansion).
-   * Delegates to the shared HookController instance.
-   */
-  // get hook(): HookServiceAPI {
-  //   // HookController has no public methods yet - controller access reserved for future use
-  //   return {};
-  // }
 
   /**
    * Cleanup all controllers

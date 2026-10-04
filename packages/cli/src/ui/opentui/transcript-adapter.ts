@@ -1,20 +1,3 @@
-/** @jsxImportSource @opentui/react */
-/**
- * @license
- * Copyright 2026 Qwen
- * SPDX-License-Identifier: Apache-2.0
- */
-
-/**
- * Resume-mode adapter: replays a real qwen-code session JSONL
- * (~/.qwen/projects/<dir>/chats/<id>.jsonl) as neutral StreamEvents so the
- * OpenTUI backend renders real conversations without API credentials.
- *
- * Session line shape: { type: 'user'|'assistant'|'system', message: { role, parts:
- * [{ text?, thought?, functionCall?, functionResponse? }] } }.
- */
-
-import { readFileSync } from 'node:fs';
 import {
   extractStructuredResult,
   formatToolArgs,
@@ -43,13 +26,6 @@ export interface TranscribeOptions {
 export interface TranscriptResult {
   events: OpenTuiStreamEvent[];
   prompts: string[];
-}
-
-export function transcriptToEvents(
-  jsonl: string,
-  opts: TranscribeOptions = {},
-): OpenTuiStreamEvent[] {
-  return transcribeSession(jsonl, opts).events;
 }
 
 export function transcribeSession(
@@ -94,7 +70,7 @@ export function transcribeSession(
         .map((p) => p.text as string)
         .join('\n');
       // Ink's resume resolution (resumeHistoryUtils): the parts are the
-      // model-facing content (@-expanded, ACP-prefixed) — the row shows the
+      // model-facing content (@-expanded) — the row shows the
       // typed text, with a placeholder for image-only steers, and only falls
       // back to the parts when the record predates displayText.
       const hasAttachmentReferences =
@@ -197,8 +173,4 @@ export function transcribeSession(
   }
   events.push({ type: 'done' });
   return { events, prompts };
-}
-
-export function loadTranscriptEvents(path: string): OpenTuiStreamEvent[] {
-  return transcriptToEvents(readFileSync(path, 'utf8'));
 }

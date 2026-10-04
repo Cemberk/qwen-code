@@ -39,10 +39,10 @@ describe('directoryCommand', () => {
     (c) => c.name === 'show',
   );
 
-  it('declares acp in supportedModes for parent and subcommands', () => {
-    expect(directoryCommand.supportedModes).toEqual(['interactive', 'acp']);
-    expect(addCommand!.supportedModes).toEqual(['interactive', 'acp']);
-    expect(showCommand!.supportedModes).toEqual(['interactive', 'acp']);
+  it('declares interactive-only supportedModes for parent and subcommands', () => {
+    expect(directoryCommand.supportedModes).toEqual(['interactive']);
+    expect(addCommand!.supportedModes).toEqual(['interactive']);
+    expect(showCommand!.supportedModes).toEqual(['interactive']);
   });
 
   it('add subcommand has argumentHint', () => {

@@ -14,7 +14,6 @@ import {
   getGlobalQwenDirLite,
   getSystemDefaultsPath,
   getSystemSettingsPath,
-  isFullyQualifiedPath,
   passedEnvironment,
   readEnvironmentVariable,
   spawnedEnvironmentView,
@@ -266,24 +265,6 @@ describe('settings locations in a given environment', () => {
     expect(
       getGlobalQwenDirLite({ QWEN_HOME: undefined, qwen_home: other }),
     ).toBe(path.join(os.homedir(), '.qwen'));
-  });
-
-  it.each([
-    ['C:\\qwen', true],
-    ['c:/qwen', true],
-    ['\\\\server\\share\\qwen', true],
-    ['//server/share/qwen', true],
-    ['\\\\?\\C:\\qwen', true],
-    ['\\\\', false],
-    ['\\\\server', false],
-    ['\\qwen', false],
-    ['/qwen', false],
-    ['C:qwen', false],
-    ['qwen', false],
-  ])('on Windows, treats %s as fully qualified: %s', (location, expected) => {
-    runOn('win32');
-
-    expect(isFullyQualifiedPath(location)).toBe(expected);
   });
 
   it('matches names exactly on other platforms', () => {

@@ -1280,7 +1280,7 @@ describe('extension management actions (audit 01 G-4)', () => {
       extensionConfig(manager),
       'ext-a',
     );
-    expect(manager.uninstallExtension).toHaveBeenCalledWith('ext-a', false);
+    expect(manager.uninstallExtension).toHaveBeenCalledWith('ext-a');
     expect(manager.refreshCache).toHaveBeenCalled();
     expect(result).toMatchObject({ changed: true, level: 'success' });
     expect(result.message).toContain('Uninstalled');

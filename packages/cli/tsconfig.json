@@ -14,13 +14,7 @@
       "@qwen-code/qwen-code-core/transcriptRecords": [
         "../core/src/utils/transcript-records.ts"
       ],
-      "@qwen-code/qwen-code-core/telemetryConstants": [
-        "../core/src/telemetry/constants.ts"
-      ],
       "@qwen-code/qwen-code-core/goalWire": ["../core/src/goals/goal-wire.ts"],
-      "@qwen-code/qwen-code-core/noFollowOpen": [
-        "../core/src/utils/no-follow-open.ts"
-      ],
       "@qwen-code/qwen-code-core/storage": ["../core/src/config/storage.ts"],
       "@qwen-code/qwen-code-core/atomicFileWrite": [
         "../core/src/utils/atomicFileWrite.ts"
@@ -30,15 +24,6 @@
       ],
       "@qwen-code/qwen-code-core/envVarResolver": [
         "../core/src/utils/envVarResolver.ts"
-      ],
-      "@qwen-code/qwen-code-core/toolWriteOrigin": [
-        "../core/src/services/tool-write-origin.ts"
-      ],
-      "@qwen-code/qwen-code-core/memoryScopes": [
-        "../core/src/memory/scopes.ts"
-      ],
-      "@qwen-code/qwen-code-core/conversationsRuntimeMarker": [
-        "../core/src/utils/conversations-runtime-marker.ts"
       ],
       "@qwen-code/qwen-code-core/*": ["../core/src/*"]
     }

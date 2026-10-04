@@ -45,7 +45,7 @@ describe('RemoteInputWatcher', () => {
       JSON.stringify({ type: 'submit', text: 'hello' }) + '\n',
     );
 
-    await watcher.checkForNewInput();
+    await watcher['readNewLines']();
     expect(submitted).toEqual(['hello']);
   });
 
@@ -63,7 +63,7 @@ describe('RemoteInputWatcher', () => {
       }) + '\n',
     );
 
-    await watcher.checkForNewInput();
+    await watcher['readNewLines']();
     expect(handler).toHaveBeenCalledWith('req-7', true);
   });
 
@@ -84,7 +84,7 @@ describe('RemoteInputWatcher', () => {
     );
 
     // Trigger read — command will be queued then submitted, but TUI rejects (busy)
-    await watcher.checkForNewInput();
+    await watcher['readNewLines']();
     // processQueue runs async; give it a tick
     await new Promise((r) => setTimeout(r, 50));
     expect(accepted).toEqual([]);
@@ -110,7 +110,7 @@ describe('RemoteInputWatcher', () => {
       JSON.stringify({ type: 'submit', text: 'after-bad-line' }) + '\n',
     );
 
-    await watcher.checkForNewInput();
+    await watcher['readNewLines']();
     expect(submitted).toEqual(['after-bad-line']);
   });
 
@@ -122,11 +122,11 @@ describe('RemoteInputWatcher', () => {
     });
 
     fs.appendFileSync(inputFile, '{"type":"submit","text":"spl');
-    await watcher.checkForNewInput();
+    await watcher['readNewLines']();
     expect(submitted).toEqual([]);
 
     fs.appendFileSync(inputFile, 'it"}\n');
-    await watcher.checkForNewInput();
+    await watcher['readNewLines']();
 
     expect(submitted).toEqual(['split']);
   });
@@ -142,11 +142,11 @@ describe('RemoteInputWatcher', () => {
       inputFile,
       '{"type":"submit","text":"first"}\n{"type":"submit","text":"sec',
     );
-    await watcher.checkForNewInput();
+    await watcher['readNewLines']();
     expect(submitted).toEqual(['first']);
 
     fs.appendFileSync(inputFile, 'ond"}\n');
-    await watcher.checkForNewInput();
+    await watcher['readNewLines']();
 
     expect(submitted).toEqual(['first', 'second']);
   });
@@ -160,11 +160,11 @@ describe('RemoteInputWatcher', () => {
       inputFile,
       '{"type":"confirmation_response","request_id":"req-7"',
     );
-    await watcher.checkForNewInput();
+    await watcher['readNewLines']();
     expect(handler).not.toHaveBeenCalled();
 
     fs.appendFileSync(inputFile, ',"allowed":true}\n');
-    await watcher.checkForNewInput();
+    await watcher['readNewLines']();
 
     expect(handler).toHaveBeenCalledWith('req-7', true);
   });
@@ -180,7 +180,7 @@ describe('RemoteInputWatcher', () => {
       inputFile,
       JSON.stringify({ type: 'submit', text: 'before-truncate' }) + '\n',
     );
-    await watcher.checkForNewInput();
+    await watcher['readNewLines']();
     const consumedSize = fs.statSync(inputFile).size;
 
     const afterTruncate = 'after-truncate-with-a-longer-command';
@@ -189,7 +189,7 @@ describe('RemoteInputWatcher', () => {
       JSON.stringify({ type: 'submit', text: afterTruncate }) + '\n',
     );
     expect(fs.statSync(inputFile).size).toBeGreaterThan(consumedSize);
-    await watcher.checkForNewInput();
+    await watcher['readNewLines']();
 
     expect(submitted).toEqual(['before-truncate', afterTruncate]);
   });
@@ -211,7 +211,7 @@ describe('RemoteInputWatcher', () => {
       JSON.stringify({ type: 'submit', text: beforeTruncate }) + '\n',
     );
     fs.utimesSync(inputFile, fixedMtime, fixedMtime);
-    await watcher.checkForNewInput();
+    await watcher['readNewLines']();
     const consumedSize = fs.statSync(inputFile).size;
 
     fs.writeFileSync(
@@ -220,7 +220,7 @@ describe('RemoteInputWatcher', () => {
     );
     fs.utimesSync(inputFile, fixedMtime, fixedMtime);
     expect(fs.statSync(inputFile).size).toBe(consumedSize);
-    await watcher.checkForNewInput();
+    await watcher['readNewLines']();
 
     expect(submitted).toEqual([beforeTruncate, afterTruncate]);
   });
@@ -238,8 +238,8 @@ describe('RemoteInputWatcher', () => {
       JSON.stringify({ type: 'submit', text: 'too-late' }) + '\n',
     );
 
-    // checkForNewInput should be a no-op after shutdown (active=false)
-    await watcher.checkForNewInput();
+    // readNewLines should be a no-op after shutdown (active=false)
+    await watcher['readNewLines']();
     expect(submitted).toEqual([]);
   });
 });

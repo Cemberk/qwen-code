@@ -55,17 +55,11 @@ export async function relaunchAppInChildProcess(
     ...additionalScriptArgs,
     ...scriptArgs,
   ];
-  const createChildEnv = (): NodeJS.ProcessEnv => {
-    const env: NodeJS.ProcessEnv = {
-      ...process.env,
-      ...options?.childEnv,
-      QWEN_CODE_NO_RELAUNCH: 'true',
-    };
-    if (env['QWEN_CODE_SCRUB_ELECTRON_RUN_AS_NODE'] === '1') {
-      env['ELECTRON_RUN_AS_NODE'] = '1';
-    }
-    return env;
-  };
+  const createChildEnv = (): NodeJS.ProcessEnv => ({
+    ...process.env,
+    ...options?.childEnv,
+    QWEN_CODE_NO_RELAUNCH: 'true',
+  });
 
   // `afterSpawn` runs once `createChildEnv()` has already snapshotted the
   // environment, so it only ever scrubbed the *parent's* copy for the next

@@ -81,7 +81,7 @@ describe('OpenTuiSlashGateway', () => {
     // The gateway stays rejected — '/help' never falls through to the model.
     const second = await gateway.dispatch('/help');
     expect(second.kind).toBe('rejected');
-    expect(gateway.getInitError()).toBe('loader exploded');
+    expect(gateway['initError']).toBe('loader exploded');
   });
 
   it('prevents concurrent command submission', async () => {
@@ -98,7 +98,7 @@ describe('OpenTuiSlashGateway', () => {
 
     const first = gateway.dispatch('/first');
     await flush(); // let the in-flight dispatch reach its busy section
-    expect(gateway.isBusy()).toBe(true);
+    expect(gateway['busy']).toBe(true);
 
     const second = await gateway.dispatch('/second');
     expect(second).toEqual({
@@ -109,7 +109,7 @@ describe('OpenTuiSlashGateway', () => {
 
     release();
     await first;
-    expect(gateway.isBusy()).toBe(false);
+    expect(gateway['busy']).toBe(false);
 
     // The gate reopens once the command finishes.
     const third = await gateway.dispatch('/third');
@@ -127,7 +127,7 @@ describe('OpenTuiSlashGateway', () => {
     gateway.attach(dispatcher);
 
     await expect(gateway.dispatch('/boom')).rejects.toThrow('command exploded');
-    expect(gateway.isBusy()).toBe(false);
+    expect(gateway['busy']).toBe(false);
 
     const next = await gateway.dispatch('/after');
     expect(next.kind).toBe('dispatched');

@@ -20,11 +20,8 @@ import type { InitializationResult } from '../core/initializer.js';
 
 const registerSession = vi.hoisted(() => vi.fn());
 
-/**
- * What `registerSession` reports for the interactive UI: the record
- * landed, in the one shared slot a single-session process owns.
- */
-const REGISTERED = { registered: true, slot: 'shared' };
+/** What `registerSession` reports when the record landed. */
+const REGISTERED = { registered: true };
 const registerCleanup = vi.hoisted(() => vi.fn());
 const inkRender = vi.hoisted(() => vi.fn());
 
@@ -173,14 +170,10 @@ describe('startInteractiveUI session registration', () => {
 
     await start(config);
 
-    // `kind` is stated rather than left to the default: this is the one
-    // registrant a listing describes as someone sitting at a terminal,
-    // and it is the only place that claim is made.
     expect(registerSession).toHaveBeenCalledWith({
       sessionId: 'session-123',
       cwd: '/work/app',
       qwenVersion: '9.9.9',
-      kind: 'tui',
     });
     expect(config.trackSessionRegistration).toHaveBeenCalledTimes(1);
     await expect(

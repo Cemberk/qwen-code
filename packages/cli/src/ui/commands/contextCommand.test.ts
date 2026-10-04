@@ -79,7 +79,6 @@ function makeMockConfig(contextWindowSize = 32_000): Config {
     },
     getChatCompression: vi.fn().mockReturnValue(undefined),
     getAutoCompactThreshold: vi.fn(),
-    getExperimentalZedIntegration: vi.fn().mockReturnValue(false),
     isInteractive: vi.fn().mockReturnValue(true),
     getWorkingDir: vi.fn().mockReturnValue(process.cwd()),
   } as unknown as Config;
@@ -119,7 +118,6 @@ describe('collectContextData (contextCommand)', () => {
       },
       getChatCompression: vi.fn().mockReturnValue(undefined),
       getAutoCompactThreshold: vi.fn(),
-      getExperimentalZedIntegration: vi.fn().mockReturnValue(false),
       isInteractive: vi.fn().mockReturnValue(true),
       getWorkingDir: vi.fn().mockReturnValue(process.cwd()),
     } as unknown as Config;
@@ -217,8 +215,7 @@ describe('collectContextData (contextCommand)', () => {
     expect(data.totalTokens).toBe(65_267);
     expect(data.breakdown.cachedTokens).toBe(0);
     // A session with no cache hit must not grow a `Cached prefix 0 tokens`
-    // row under `Used` in the text renderer (forwarded to ACP clients as
-    // `formattedText`). `totalTokens` is nonzero here, which is what makes
+    // row under `Used` in the text renderer. `totalTokens` is nonzero here, which is what makes
     // this witness the `> 0` guard rather than the `hasTokenCount` gate.
     expect(formatContextUsageText(data)).not.toContain('Cached prefix');
   });
@@ -1460,7 +1457,6 @@ describe('collectContextData (contextCommand)', () => {
       getDisabledSkillNames: vi.fn().mockReturnValue(new Set()),
       getChatCompression: vi.fn().mockReturnValue(undefined),
       getAutoCompactThreshold: vi.fn(),
-      getExperimentalZedIntegration: vi.fn().mockReturnValue(false),
       isInteractive: vi.fn().mockReturnValue(true),
       getWorkingDir: vi.fn().mockReturnValue(process.cwd()),
     } as unknown as Config;
@@ -1511,7 +1507,6 @@ describe('collectContextData (contextCommand)', () => {
       getDisabledSkillNames: vi.fn().mockReturnValue(new Set()),
       getChatCompression: vi.fn().mockReturnValue(undefined),
       getAutoCompactThreshold: vi.fn(),
-      getExperimentalZedIntegration: vi.fn().mockReturnValue(false),
       isInteractive: vi.fn().mockReturnValue(true),
       getWorkingDir: vi.fn().mockReturnValue(process.cwd()),
     } as unknown as Config;
@@ -1545,7 +1540,7 @@ describe('collectContextData (contextCommand)', () => {
 
   it('shortens home-dir memory marker paths to ~ in the breakdown', async () => {
     // Memory markers store paths relative to the session working directory,
-    // which in ACP/daemon-served sessions differs from process.cwd(); global
+    // which may differ from process.cwd(); global
     // files must render as `~/...` instead of `../../..` chains.
     const workingDir = path.join(os.tmpdir(), 'context-session-dir');
     const globalFile = path.join(os.homedir(), '.qwen', 'QWEN.md');

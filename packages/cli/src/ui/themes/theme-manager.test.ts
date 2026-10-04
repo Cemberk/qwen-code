@@ -71,8 +71,7 @@ describe('ThemeManager', () => {
 
   it('should load valid custom themes', () => {
     themeManager.loadCustomThemes({ MyCustomTheme: validCustomTheme });
-    expect(themeManager.getCustomThemeNames()).toContain('MyCustomTheme');
-    expect(themeManager.isCustomTheme('MyCustomTheme')).toBe(true);
+    expect([...themeManager['customThemes'].keys()]).toContain('MyCustomTheme');
   });
 
   it('should set and get the active theme', () => {

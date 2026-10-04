@@ -428,19 +428,6 @@ export function OpenTuiResumeDialog({
   );
 }
 
-export function OpenTuiBranchDialog({ onClose }: P) {
-  useEsc(onClose);
-  return (
-    <Shell title="Branch" onClose={onClose}>
-      <box flexDirection="column" marginTop={1}>
-        <text fg={C.dim}>
-          {'Creates a fork of the current session to explore a new path.'}
-        </text>
-      </box>
-    </Shell>
-  );
-}
-
 /**
  * The real hooks switch is the top-level `disableAllHooks` setting (default
  * false = enabled); `hooks` is an event-name → hook-arrays map with no

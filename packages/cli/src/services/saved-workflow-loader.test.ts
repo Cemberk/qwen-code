@@ -304,32 +304,32 @@ describe('SavedWorkflowLoader', () => {
       expect(cmd.modelInvocable).toBeUndefined();
     });
 
-    // The Skill tool and the headless and ACP command paths all build a
-    // non-interactive context, and none of them can run a tool dispatch.
-    it.each(['non_interactive', 'acp'] as const)(
-      'asks the model to run the workflow by name in %s mode',
-      async (executionMode) => {
-        const cmd = await load(audit());
-        expect(
-          await cmd.action!({ executionMode } as CommandContext, ''),
-        ).toEqual({
-          type: 'submit_prompt',
-          content: [
-            'Run the "gcp:audit" workflow.',
-            'Audits the project',
-            'When the user asks for a dependency audit',
-            'Invoke: Workflow({ name: "gcp:audit" })',
-          ].join('\n\n'),
-        });
-      },
-    );
+    // The Skill tool and the headless command path both build a
+    // non-interactive context, and neither can run a tool dispatch.
+    it('asks the model to run the workflow by name in non_interactive mode', async () => {
+      const cmd = await load(audit());
+      expect(
+        await cmd.action!(
+          { executionMode: 'non_interactive' } as CommandContext,
+          '',
+        ),
+      ).toEqual({
+        type: 'submit_prompt',
+        content: [
+          'Run the "gcp:audit" workflow.',
+          'Audits the project',
+          'When the user asks for a dependency audit',
+          'Invoke: Workflow({ name: "gcp:audit" })',
+        ].join('\n\n'),
+      });
+    });
 
     it('passes JSON args as a value and other text as a string', async () => {
       const cmd = await load(audit());
       const run = async (args: string) =>
         (
           (await cmd.action!(
-            { executionMode: 'acp' } as CommandContext,
+            { executionMode: 'non_interactive' } as CommandContext,
             args,
           )) as { content: string }
         ).content;

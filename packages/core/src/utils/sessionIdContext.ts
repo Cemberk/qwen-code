@@ -12,12 +12,12 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  * `QWEN_CODE_SESSION_ID` historically lived only in `process.env`, which is
  * a single process-global slot. That is fine for the interactive CLI (one
  * session per process, switched via `Config.startNewSession()`), but breaks
- * in daemon mode where one process hosts many concurrent sessions: only the
+ * when one process hosts several concurrent sessions: only the
  * first `Config` ever claims the env slot (see `sessionEnvClaimed` in
  * config.ts), so shells spawned by every later session would read a stale
  * session ID.
  *
- * Daemon-style hosts should wrap each session's execution entry points in
+ * Multi-session hosts should wrap each session's execution entry points in
  * `sessionIdContext.run(sessionId, ...)`. `getShellContextEnvVars()` prefers
  * this context over `process.env`, falling back to the env var so the
  * single-session CLI behavior is unchanged.
@@ -33,7 +33,7 @@ export const sessionIdContext = new AsyncLocalStorage<string>();
  * worktree). So it is passed down through the environment.
  *
  * A single process-global slot would be wrong for the same reason a single
- * session-id slot is: in daemon mode one process serves many sessions, the slot
+ * session-id slot is: when one process serves several sessions, the slot
  * holds whichever booted first, and every later session would hand its
  * subprocesses another session's directory. Keyed on the session, it is right for
  * all of them.
@@ -54,8 +54,8 @@ export function getSessionProjectDir(sessionId: string): string | undefined {
 /**
  * Drop a session's entry when it ends.
  *
- * The map would otherwise grow one entry per session for the life of a daemon
- * process. A session's own dispose path calls this; a single-session CLI never
+ * The map would otherwise grow one entry per session for the life of a
+ * long-running process. A session's own dispose path calls this; a single-session CLI never
  * needs to, since the process is the session.
  */
 export function unregisterSessionProjectDir(sessionId: string): void {
@@ -72,8 +72,8 @@ export function unregisterSessionProjectDir(sessionId: string): void {
  * the environment.
  *
  * Keyed on the session for the same reason the project dir is: a single
- * process-global slot holds whichever session booted first, and in daemon mode
- * every later session would then hand its subprocesses another session's model
+ * process-global slot holds whichever session booted first, and with several
+ * sessions in one process every later session would then hand its subprocesses another session's model
  * — a confidently-wrong id, worse than an absent one.
  */
 const modelBySession = new Map<string, string>();
@@ -111,7 +111,7 @@ export function getSessionModelIdentity(sessionId: string): string | undefined {
 /**
  * Drop a session's entry when it ends, for the same reason as
  * {@link unregisterSessionProjectDir}: the map would otherwise grow one entry
- * per session for the life of a daemon process.
+ * per session for the life of a long-running process.
  */
 export function unregisterSessionModel(sessionId: string): void {
   modelBySession.delete(sessionId);

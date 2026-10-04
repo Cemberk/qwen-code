@@ -279,12 +279,6 @@ export function buildDeferredToolsReminder(
   );
 }
 
-export function buildAddedMcpToolsReminder(
-  deferredTools: DeferredToolSummary[],
-): string | null {
-  return buildChangedMcpToolsReminder(deferredTools, []);
-}
-
 export function buildChangedMcpToolsReminder(
   addedTools: DeferredToolSummary[],
   removedToolNames: string[],
@@ -430,19 +424,6 @@ export async function buildAvailableSkillsReminder(
     reminder: wrapSystemReminder(body),
     renderedEntries: trimmed,
   };
-}
-
-/**
- * Builds the per-turn "newly available skills/commands" delta reminder. Used by
- * the client to announce skills enabled mid-session (e.g. via /skills) and MCP
- * prompts added after startup — WITHOUT mutating the cached prefix (it is a tail
- * `<system-reminder>` only). The companion to `buildAddedMcpToolsReminder` for
- * skills. Returns null when there is nothing new to announce.
- */
-export function buildAddedSkillsReminder(
-  entries: AvailableSkillEntry[],
-): string | null {
-  return buildChangedSkillsReminder(entries, []);
 }
 
 export function buildChangedSkillsReminder(

@@ -23,8 +23,6 @@ describe('exec context output budget', () => {
       model: 'test',
       sandbox: undefined,
       debugMode: false,
-      userMemory: '',
-      memoryFileCount: 0,
       approvalMode: ApprovalMode.YOLO,
       codeModeOnly: true,
       disableAllHooks: true,

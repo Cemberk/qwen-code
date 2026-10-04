@@ -76,8 +76,8 @@ export function getMemoryBaseDir(): string {
 }
 
 // Memoize by projectRoot, project scope, and the runtime-specific base dir.
-// The base dir is part of the key because in daemon mode different sessions can
-// share one projectRoot yet write to different output dirs.
+// The base dir is part of the key because sessions in one process can share
+// one projectRoot yet write to different output dirs.
 const _autoMemoryRootCache = new Map<string, string>();
 
 // Memoized on projectRoot alone: the team root resolves via findGitRoot, which

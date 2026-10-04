@@ -251,7 +251,7 @@ export const configCommand: SlashCommand = {
   },
   argumentHint: '<key>[=<value>] or --help',
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
 
   action: async (
     context: CommandContext,

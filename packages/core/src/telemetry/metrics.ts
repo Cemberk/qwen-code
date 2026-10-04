@@ -5,7 +5,7 @@
  */
 
 import type { Attributes, Meter, Counter, Histogram } from '@opentelemetry/api';
-import { diag, metrics, ValueType } from '@opentelemetry/api';
+import { metrics, ValueType } from '@opentelemetry/api';
 import { SERVICE_NAME, EVENT_CHAT_COMPRESSION } from './constants.js';
 import type { Config } from '../config/config.js';
 import type { TelemetryRuntimeConfig } from './runtime-config.js';
@@ -23,14 +23,12 @@ import type { ToolExecutionStatus } from '../core/turn.js';
 
 const TOOL_CALL_COUNT = `${SERVICE_NAME}.tool.call.count`;
 const TOOL_EXECUTION_COUNT = `${SERVICE_NAME}.tool.execution.count`;
-export const REPEATED_TOOL_FAILURE_GUARD_COUNT = `${SERVICE_NAME}.repeated_tool_failure_guard.count`;
 const TOOL_CALL_LATENCY = `${SERVICE_NAME}.tool.call.latency`;
 const API_REQUEST_COUNT = `${SERVICE_NAME}.api.request.count`;
 const API_REQUEST_LATENCY = `${SERVICE_NAME}.api.request.latency`;
 const TOKEN_USAGE = `${SERVICE_NAME}.token.usage`;
 const SESSION_COUNT = `${SERVICE_NAME}.session.count`;
 const FILE_OPERATION_COUNT = `${SERVICE_NAME}.file.operation.count`;
-const INVALID_CHUNK_COUNT = `${SERVICE_NAME}.chat.invalid_chunk.count`;
 const CONTENT_RETRY_COUNT = `${SERVICE_NAME}.chat.content_retry.count`;
 const CONTENT_RETRY_FAILURE_COUNT = `${SERVICE_NAME}.chat.content_retry_failure.count`;
 // Phase 4b — Counts HTTP-status retries emitted by `retryWithBackoff` at LLM
@@ -65,18 +63,9 @@ const ARENA_AGENT_DURATION = `${SERVICE_NAME}.arena.agent.duration`;
 const ARENA_AGENT_TOKENS = `${SERVICE_NAME}.arena.agent.tokens`;
 const ARENA_RESULT_SELECTED = `${SERVICE_NAME}.arena.result.selected`;
 
-// Performance Monitoring Metrics
-const STARTUP_TIME = `${SERVICE_NAME}.startup.duration`;
 const MEMORY_USAGE = `${SERVICE_NAME}.memory.usage`;
 const CPU_USAGE = `${SERVICE_NAME}.cpu.usage`;
-const TOOL_QUEUE_DEPTH = `${SERVICE_NAME}.tool.queue.depth`;
-const TOOL_EXECUTION_BREAKDOWN = `${SERVICE_NAME}.tool.execution.breakdown`;
-const TOKEN_EFFICIENCY = `${SERVICE_NAME}.token.efficiency`;
 const API_REQUEST_BREAKDOWN = `${SERVICE_NAME}.api.request.breakdown`;
-const PERFORMANCE_SCORE = `${SERVICE_NAME}.performance.score`;
-const REGRESSION_DETECTION = `${SERVICE_NAME}.performance.regression`;
-const REGRESSION_PERCENTAGE_CHANGE = `${SERVICE_NAME}.performance.regression.percentage_change`;
-const BASELINE_COMPARISON = `${SERVICE_NAME}.performance.baseline.comparison`;
 
 // Auto-Memory Metrics
 const MEMORY_EXTRACT_COUNT = `${SERVICE_NAME}.memory.extract.count`;
@@ -85,9 +74,6 @@ const MEMORY_DREAM_COUNT = `${SERVICE_NAME}.memory.dream.count`;
 const MEMORY_DREAM_DURATION = `${SERVICE_NAME}.memory.dream.duration`;
 const MEMORY_RECALL_COUNT = `${SERVICE_NAME}.memory.recall.count`;
 const MEMORY_RECALL_DURATION = `${SERVICE_NAME}.memory.recall.duration`;
-const CHANNEL_MEMORY_RECALL_COUNT = `${SERVICE_NAME}.channel.memory.recall.count`;
-const CHANNEL_MEMORY_RECALL_DURATION = `${SERVICE_NAME}.channel.memory.recall.duration`;
-const CHANNEL_MEMORY_RECALL_SELECTED_COUNT = `${SERVICE_NAME}.channel.memory.recall.selected_count`;
 const MEMORY_RECALL_DELIVERY_COUNT = `${SERVICE_NAME}.memory.recall.delivery.count`;
 const MEMORY_RECALL_DELIVERY_LATENCY = `${SERVICE_NAME}.memory.recall.delivery.latency`;
 
@@ -130,42 +116,6 @@ const COUNTER_DEFINITIONS = {
       tool_type: 'native' | 'mcp';
     },
   },
-  [REPEATED_TOOL_FAILURE_GUARD_COUNT]: {
-    description:
-      'Counts privacy-safe repeated tool execution failure guard transitions.',
-    valueType: ValueType.INT,
-    assign: (c: Counter) => (repeatedToolFailureGuardCounter = c),
-    attributes: {} as {
-      route: 'acp_foreground';
-      mode: 'shadow' | 'warn' | 'enforce';
-      phase_before: 'idle' | 'tracking' | 'warned' | 'latched';
-      phase_after: 'idle' | 'tracking' | 'warned' | 'latched';
-      decision:
-        | 'reset'
-        | 'tracked'
-        | 'would_warn'
-        | 'warned'
-        | 'would_stop'
-        | 'stopped';
-      failure_count_bucket: '0' | '1-2' | '3-4' | '5-7' | '8+';
-      batch_count_bucket: '0' | '1' | '2' | '3+';
-      reset_reason?:
-        | 'success'
-        | 'cancelled'
-        | 'not_started'
-        | 'post_execution_failure'
-        | 'unknown'
-        | 'mixed'
-        | 'incomplete'
-        | 'external_input'
-        | 'queued_prompt'
-        | 'unreliable_input'
-        | 'contract_violation';
-      terminal_status?: 'error';
-      execution_status?: 'error';
-      tool_type?: 'native' | 'mcp';
-    },
-  },
   [API_REQUEST_COUNT]: {
     description: 'Counts API requests, tagged by model and status.',
     valueType: ValueType.INT,
@@ -202,12 +152,6 @@ const COUNTER_DEFINITIONS = {
       extension?: string;
       programming_language?: string;
     },
-  },
-  [INVALID_CHUNK_COUNT]: {
-    description: 'Counts invalid chunks received from a stream.',
-    valueType: ValueType.INT,
-    assign: (c: Counter) => (invalidChunkCounter = c),
-    attributes: {} as Record<string, never>,
   },
   [CONTENT_RETRY_COUNT]: {
     description: 'Counts retries due to content errors (e.g., empty stream).',
@@ -314,32 +258,7 @@ const HISTOGRAM_DEFINITIONS = {
   },
 } as const;
 
-const PERFORMANCE_COUNTER_DEFINITIONS = {
-  [REGRESSION_DETECTION]: {
-    description: 'Performance regression detection events.',
-    valueType: ValueType.INT,
-    assign: (c: Counter) => (regressionDetectionCounter = c),
-    attributes: {} as {
-      metric: string;
-      severity: 'low' | 'medium' | 'high';
-      current_value: number;
-      baseline_value: number;
-    },
-  },
-} as const;
-
 const PERFORMANCE_HISTOGRAM_DEFINITIONS = {
-  [STARTUP_TIME]: {
-    description:
-      'CLI startup time in milliseconds, broken down by initialization phase.',
-    unit: 'ms',
-    valueType: ValueType.DOUBLE,
-    assign: (h: Histogram) => (startupTimeHistogram = h),
-    attributes: {} as {
-      phase: string;
-      details?: Record<string, string | number | boolean>;
-    },
-  },
   [MEMORY_USAGE]: {
     description: 'Memory usage in bytes.',
     unit: 'bytes',
@@ -359,35 +278,6 @@ const PERFORMANCE_HISTOGRAM_DEFINITIONS = {
       component?: string;
     },
   },
-  [TOOL_QUEUE_DEPTH]: {
-    description: 'Number of tools in execution queue.',
-    unit: 'count',
-    valueType: ValueType.INT,
-    assign: (h: Histogram) => (toolQueueDepthGauge = h),
-    attributes: {} as Record<string, never>,
-  },
-  [TOOL_EXECUTION_BREAKDOWN]: {
-    description: 'Tool execution time breakdown by phase in milliseconds.',
-    unit: 'ms',
-    valueType: ValueType.INT,
-    assign: (h: Histogram) => (toolExecutionBreakdownHistogram = h),
-    attributes: {} as {
-      function_name: string;
-      phase: ToolExecutionPhase;
-    },
-  },
-  [TOKEN_EFFICIENCY]: {
-    description:
-      'Token efficiency metrics (tokens per operation, cache hit rate, etc.).',
-    unit: 'ratio',
-    valueType: ValueType.DOUBLE,
-    assign: (h: Histogram) => (tokenEfficiencyHistogram = h),
-    attributes: {} as {
-      model: string;
-      metric: string;
-      context?: string;
-    },
-  },
   [API_REQUEST_BREAKDOWN]: {
     description: 'API request time breakdown by phase in milliseconds.',
     unit: 'ms',
@@ -398,47 +288,10 @@ const PERFORMANCE_HISTOGRAM_DEFINITIONS = {
       phase: ApiRequestPhase;
     },
   },
-  [PERFORMANCE_SCORE]: {
-    description: 'Composite performance score (0-100).',
-    unit: 'score',
-    valueType: ValueType.DOUBLE,
-    assign: (h: Histogram) => (performanceScoreGauge = h),
-    attributes: {} as {
-      category: string;
-      baseline?: number;
-    },
-  },
-  [REGRESSION_PERCENTAGE_CHANGE]: {
-    description:
-      'Percentage change compared to baseline for detected regressions.',
-    unit: 'percent',
-    valueType: ValueType.DOUBLE,
-    assign: (h: Histogram) => (regressionPercentageChangeHistogram = h),
-    attributes: {} as {
-      metric: string;
-      severity: 'low' | 'medium' | 'high';
-      current_value: number;
-      baseline_value: number;
-    },
-  },
-  [BASELINE_COMPARISON]: {
-    description:
-      'Performance comparison to established baseline (percentage change).',
-    unit: 'percent',
-    valueType: ValueType.DOUBLE,
-    assign: (h: Histogram) => (baselineComparisonHistogram = h),
-    attributes: {} as {
-      metric: string;
-      category: string;
-      current_value: number;
-      baseline_value: number;
-    },
-  },
 } as const;
 
 type AllMetricDefs = typeof COUNTER_DEFINITIONS &
   typeof HISTOGRAM_DEFINITIONS &
-  typeof PERFORMANCE_COUNTER_DEFINITIONS &
   typeof PERFORMANCE_HISTOGRAM_DEFINITIONS;
 
 export type MetricDefinitions = {
@@ -453,27 +306,11 @@ export enum FileOperation {
   UPDATE = 'update',
 }
 
-export enum PerformanceMetricType {
-  STARTUP = 'startup',
-  MEMORY = 'memory',
-  CPU = 'cpu',
-  TOOL_EXECUTION = 'tool_execution',
-  API_REQUEST = 'api_request',
-  TOKEN_EFFICIENCY = 'token_efficiency',
-}
-
 export enum MemoryMetricType {
   HEAP_USED = 'heap_used',
   HEAP_TOTAL = 'heap_total',
   EXTERNAL = 'external',
   RSS = 'rss',
-}
-
-export enum ToolExecutionPhase {
-  VALIDATION = 'validation',
-  PREPARATION = 'preparation',
-  EXECUTION = 'execution',
-  RESULT_PROCESSING = 'result_processing',
 }
 
 export enum ApiRequestPhase {
@@ -486,7 +323,6 @@ export enum ApiRequestPhase {
 let cliMeter: Meter | undefined;
 let toolCallCounter: Counter | undefined;
 let toolExecutionCounter: Counter | undefined;
-let repeatedToolFailureGuardCounter: Counter | undefined;
 let toolCallLatencyHistogram: Histogram | undefined;
 let apiRequestCounter: Counter | undefined;
 let apiRequestLatencyHistogram: Histogram | undefined;
@@ -494,7 +330,6 @@ let tokenUsageCounter: Counter | undefined;
 let sessionCounter: Counter | undefined;
 let fileOperationCounter: Counter | undefined;
 let chatCompressionCounter: Counter | undefined;
-let invalidChunkCounter: Counter | undefined;
 let contentRetryCounter: Counter | undefined;
 let contentRetryFailureCounter: Counter | undefined;
 let apiRetryCounter: Counter | undefined;
@@ -504,18 +339,9 @@ let goalTokensUsedHistogram: Histogram | undefined;
 let goalTurnCountHistogram: Histogram | undefined;
 let modelSlashCommandCallCounter: Counter | undefined;
 
-// Performance Monitoring Metrics
-let startupTimeHistogram: Histogram | undefined;
 let memoryUsageGauge: Histogram | undefined; // Using Histogram until ObservableGauge is available
 let cpuUsageGauge: Histogram | undefined;
-let toolQueueDepthGauge: Histogram | undefined;
-let toolExecutionBreakdownHistogram: Histogram | undefined;
-let tokenEfficiencyHistogram: Histogram | undefined;
 let apiRequestBreakdownHistogram: Histogram | undefined;
-let performanceScoreGauge: Histogram | undefined;
-let regressionDetectionCounter: Counter | undefined;
-let regressionPercentageChangeHistogram: Histogram | undefined;
-let baselineComparisonHistogram: Histogram | undefined;
 // Arena Metrics
 let arenaSessionCounter: Counter | undefined;
 let arenaSessionDurationHistogram: Histogram | undefined;
@@ -531,9 +357,6 @@ let memoryDreamCounter: Counter | undefined;
 let memoryDreamDurationHistogram: Histogram | undefined;
 let memoryRecallCounter: Counter | undefined;
 let memoryRecallDurationHistogram: Histogram | undefined;
-let channelMemoryRecallCounter: Counter | undefined;
-let channelMemoryRecallDurationHistogram: Histogram | undefined;
-let channelMemoryRecallSelectedCountHistogram: Histogram | undefined;
 let memoryRecallDeliveryCounter: Counter | undefined;
 let memoryRecallDeliveryLatencyHistogram: Histogram | undefined;
 
@@ -647,32 +470,6 @@ export function initializeMetrics(config: TelemetryRuntimeConfig): void {
       valueType: ValueType.INT,
     },
   );
-  channelMemoryRecallCounter = meter.createCounter(
-    CHANNEL_MEMORY_RECALL_COUNT,
-    {
-      description:
-        'Counts channel memory recall attempts by cache path and bounded result.',
-      valueType: ValueType.INT,
-    },
-  );
-  channelMemoryRecallDurationHistogram = meter.createHistogram(
-    CHANNEL_MEMORY_RECALL_DURATION,
-    {
-      description: 'Duration of channel memory recall attempts.',
-      unit: 'ms',
-      valueType: ValueType.DOUBLE,
-      advice: {
-        explicitBucketBoundaries: [0.1, 0.5, 1, 2, 5, 10, 25, 50, 100, 250],
-      },
-    },
-  );
-  channelMemoryRecallSelectedCountHistogram = meter.createHistogram(
-    CHANNEL_MEMORY_RECALL_SELECTED_COUNT,
-    {
-      description: 'Number of channel memory entries selected per attempt.',
-      valueType: ValueType.INT,
-    },
-  );
   memoryRecallDeliveryCounter = meter.createCounter(
     MEMORY_RECALL_DELIVERY_COUNT,
     {
@@ -769,13 +566,6 @@ export function recordToolExecutionMetrics(
   });
 }
 
-export function recordRepeatedToolFailureGuardMetrics(
-  attributes: MetricDefinitions[typeof REPEATED_TOOL_FAILURE_GUARD_COUNT]['attributes'],
-): void {
-  if (!repeatedToolFailureGuardCounter || !isMetricsInitialized) return;
-  repeatedToolFailureGuardCounter.add(1, attributes);
-}
-
 export function recordTokenUsageMetrics(
   config: Config,
   tokenCount: number,
@@ -846,16 +636,6 @@ export function recordFileOperationMetric(
   });
 }
 
-// --- New Metric Recording Functions ---
-
-/**
- * Records a metric for when an invalid chunk is received from a stream.
- */
-export function recordInvalidChunk(config: Config): void {
-  if (!invalidChunkCounter || !isMetricsInitialized) return;
-  invalidChunkCounter.add(1, baseMetricDefinition.getCommonAttributes(config));
-}
-
 /**
  * Records a metric for when a retry is triggered due to a content error.
  */
@@ -918,33 +698,11 @@ export function initializePerformanceMonitoring(
 
   if (!isPerformanceMonitoringEnabled) return;
 
-  Object.entries(PERFORMANCE_COUNTER_DEFINITIONS).forEach(
-    ([name, { description, valueType, assign }]) => {
-      assign(meter.createCounter(name, { description, valueType }));
-    },
-  );
-
   Object.entries(PERFORMANCE_HISTOGRAM_DEFINITIONS).forEach(
     ([name, { description, unit, valueType, assign }]) => {
       assign(meter.createHistogram(name, { description, unit, valueType }));
     },
   );
-}
-
-export function recordStartupPerformance(
-  config: Config,
-  durationMs: number,
-  attributes: MetricDefinitions[typeof STARTUP_TIME]['attributes'],
-): void {
-  if (!startupTimeHistogram || !isPerformanceMonitoringEnabled) return;
-
-  const metricAttributes: Attributes = {
-    ...baseMetricDefinition.getCommonAttributes(config),
-    phase: attributes.phase,
-    ...attributes.details,
-  };
-
-  startupTimeHistogram.record(durationMs, metricAttributes);
 }
 
 export function recordMemoryUsage(
@@ -977,47 +735,6 @@ export function recordCpuUsage(
   cpuUsageGauge.record(percentage, metricAttributes);
 }
 
-export function recordToolQueueDepth(config: Config, queueDepth: number): void {
-  if (!toolQueueDepthGauge || !isPerformanceMonitoringEnabled) return;
-
-  const attributes: Attributes = {
-    ...baseMetricDefinition.getCommonAttributes(config),
-  };
-
-  toolQueueDepthGauge.record(queueDepth, attributes);
-}
-
-export function recordToolExecutionBreakdown(
-  config: Config,
-  durationMs: number,
-  attributes: MetricDefinitions[typeof TOOL_EXECUTION_BREAKDOWN]['attributes'],
-): void {
-  if (!toolExecutionBreakdownHistogram || !isPerformanceMonitoringEnabled)
-    return;
-
-  const metricAttributes: Attributes = {
-    ...baseMetricDefinition.getCommonAttributes(config),
-    ...attributes,
-  };
-
-  toolExecutionBreakdownHistogram.record(durationMs, metricAttributes);
-}
-
-export function recordTokenEfficiency(
-  config: Config,
-  value: number,
-  attributes: MetricDefinitions[typeof TOKEN_EFFICIENCY]['attributes'],
-): void {
-  if (!tokenEfficiencyHistogram || !isPerformanceMonitoringEnabled) return;
-
-  const metricAttributes: Attributes = {
-    ...baseMetricDefinition.getCommonAttributes(config),
-    ...attributes,
-  };
-
-  tokenEfficiencyHistogram.record(value, metricAttributes);
-}
-
 export function recordApiRequestBreakdown(
   config: Config,
   durationMs: number,
@@ -1031,69 +748,6 @@ export function recordApiRequestBreakdown(
   };
 
   apiRequestBreakdownHistogram.record(durationMs, metricAttributes);
-}
-
-export function recordPerformanceScore(
-  config: Config,
-  score: number,
-  attributes: MetricDefinitions[typeof PERFORMANCE_SCORE]['attributes'],
-): void {
-  if (!performanceScoreGauge || !isPerformanceMonitoringEnabled) return;
-
-  const metricAttributes: Attributes = {
-    ...baseMetricDefinition.getCommonAttributes(config),
-    ...attributes,
-  };
-
-  performanceScoreGauge.record(score, metricAttributes);
-}
-
-export function recordPerformanceRegression(
-  config: Config,
-  attributes: MetricDefinitions[typeof REGRESSION_DETECTION]['attributes'],
-): void {
-  if (!regressionDetectionCounter || !isPerformanceMonitoringEnabled) return;
-
-  const metricAttributes: Attributes = {
-    ...baseMetricDefinition.getCommonAttributes(config),
-    ...attributes,
-  };
-
-  regressionDetectionCounter.add(1, metricAttributes);
-
-  if (attributes.baseline_value !== 0 && regressionPercentageChangeHistogram) {
-    const percentageChange =
-      ((attributes.current_value - attributes.baseline_value) /
-        attributes.baseline_value) *
-      100;
-    regressionPercentageChangeHistogram.record(
-      percentageChange,
-      metricAttributes,
-    );
-  }
-}
-
-export function recordBaselineComparison(
-  config: Config,
-  attributes: MetricDefinitions[typeof BASELINE_COMPARISON]['attributes'],
-): void {
-  if (!baselineComparisonHistogram || !isPerformanceMonitoringEnabled) return;
-
-  if (attributes.baseline_value === 0) {
-    diag.warn('Baseline value is zero, skipping comparison.');
-    return;
-  }
-  const percentageChange =
-    ((attributes.current_value - attributes.baseline_value) /
-      attributes.baseline_value) *
-    100;
-
-  const metricAttributes: Attributes = {
-    ...baseMetricDefinition.getCommonAttributes(config),
-    ...attributes,
-  };
-
-  baselineComparisonHistogram.record(percentageChange, metricAttributes);
 }
 
 // Utility function to check if performance monitoring is enabled
@@ -1270,28 +924,6 @@ export function recordMemoryRecallMetrics(
     ...common,
     strategy: attrs.strategy,
   });
-}
-
-export function recordChannelMemoryRecallMetrics(observation: {
-  durationMs: number;
-  cache: 'hit' | 'miss' | 'bypass';
-  result: 'selected' | 'empty' | 'stale' | 'read_error' | 'revision_unstable';
-  selectedCount: number;
-}): void {
-  if (!isMetricsInitialized) return;
-  const attributes = {
-    cache: observation.cache,
-    result: observation.result,
-  };
-  channelMemoryRecallCounter?.add(1, attributes);
-  channelMemoryRecallDurationHistogram?.record(
-    observation.durationMs,
-    attributes,
-  );
-  channelMemoryRecallSelectedCountHistogram?.record(
-    observation.selectedCount,
-    attributes,
-  );
 }
 
 export function recordMemoryRecallDeliveryMetrics(

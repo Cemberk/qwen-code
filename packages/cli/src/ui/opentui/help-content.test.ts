@@ -16,14 +16,12 @@ import { CommandKind } from '../commands/types.js';
 import {
   HELP_COMMAND_LIST_VISIBLE_LINES,
   HELP_COMMANDS_TAB_CHROME_ROWS,
-  HELP_DOCS_URL,
   HELP_KEY_COL_WIDTH,
   HELP_LAYOUT_FIXED_ROWS,
   HELP_LAYOUT_RESERVED_ROWS,
   buildHelpCommandsLines,
   computeHelpBodyRows,
   computeHelpWidthLayout,
-  formatHelpText,
   getHelpShortcuts,
   groupHelpCommands,
   helpCommandWindowRows,
@@ -168,21 +166,6 @@ describe('overlay row budget (80x24 bounded rows, footer kept visible)', () => {
         HELP_LAYOUT_RESERVED_ROWS;
       expect(total).toBeLessThanOrEqual(height);
     }
-  });
-});
-
-describe('formatHelpText (full /help output)', () => {
-  it('renders tabs, shortcuts, commands and the docs footer', () => {
-    const text = formatHelpText(commands);
-    expect(text).toContain('Qwen Code');
-    expect(text).toContain('Built-in Commands (3)');
-    expect(text).toContain('/alpha <arg>');
-    expect(text).toContain('/zeta');
-    expect(text).not.toContain('/secret');
-    expect(text).toContain('Browse custom, skill, plugin, and MCP commands:');
-    expect(text).toContain('/mycommand [User]');
-    expect(text).toContain(`For more help: ${HELP_DOCS_URL}`);
-    expect(text).toContain('Tab/Shift+Tab to switch tabs  ·  Esc to cancel');
   });
 });
 

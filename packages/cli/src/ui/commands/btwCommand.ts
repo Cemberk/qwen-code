@@ -73,7 +73,7 @@ export const btwCommand: SlashCommand = {
     );
   },
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'acp'] as const,
+  supportedModes: ['interactive'] as const,
   action: async (
     context: CommandContext,
     args: string,
@@ -118,26 +118,8 @@ export const btwCommand: SlashCommand = {
       };
     }
 
-    const executionMode = context.executionMode ?? 'interactive';
-    if (executionMode !== 'interactive') {
-      try {
-        const answer = await askBtw(
-          context,
-          question,
-          context.abortSignal ?? new AbortController().signal,
-        );
-        return { type: 'message', messageType: 'info', content: answer };
-      } catch (error) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: formatBtwError(error),
-        };
-      }
-    }
-
-    // Interactive mode: use dedicated btwItem state for the fixed bottom area.
-    // This does NOT occupy pendingItem, so the main conversation is never blocked.
+    // Use dedicated btwItem state for the fixed bottom area. This does NOT
+    // occupy pendingItem, so the main conversation is never blocked.
     // Cancel any previous in-flight btw before starting a new one.
     ui.cancelBtw();
 

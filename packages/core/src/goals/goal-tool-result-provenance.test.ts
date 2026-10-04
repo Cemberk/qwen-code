@@ -6,11 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { ToolNames } from '../tools/tool-names.js';
-import { goalTurnContext } from './goal-turn-context.js';
-import {
-  ambientGoalToolResultProvenance,
-  goalToolResultProvenance,
-} from './goal-tool-result-provenance.js';
+import { goalToolResultProvenance } from './goal-tool-result-provenance.js';
 
 const permit = { goalId: 'g-1', revision: 2, turnId: 't-1' };
 
@@ -97,41 +93,5 @@ describe('goalToolResultProvenance', () => {
 
   it('leaves a tool call made outside a Goal turn unstamped', () => {
     expect(goalToolResultProvenance({ name: 'read_file' })).toBeUndefined();
-  });
-});
-
-describe('ambientGoalToolResultProvenance', () => {
-  it('reads the permit from the surrounding Goal turn', () => {
-    const options = goalTurnContext.run(permit, () =>
-      ambientGoalToolResultProvenance('run_shell_command'),
-    );
-    expect(options).toEqual({ goalContext: permit });
-  });
-
-  it('applies the same bookkeeping rule inside a turn', () => {
-    const options = goalTurnContext.run(permit, () =>
-      ambientGoalToolResultProvenance(ToolNames.GET_GOAL),
-    );
-    expect(options).toEqual({
-      goalContext: permit,
-      provenance: 'goal_runtime',
-    });
-  });
-
-  it('applies the bookkeeping rule to a bridged Goal tool', () => {
-    const options = goalTurnContext.run(permit, () =>
-      ambientGoalToolResultProvenance(ToolNames.TOOL_CALL, {
-        name: ToolNames.GET_GOAL,
-        arguments: {},
-      }),
-    );
-    expect(options).toEqual({
-      goalContext: permit,
-      provenance: 'goal_runtime',
-    });
-  });
-
-  it('stamps nothing outside a Goal turn', () => {
-    expect(ambientGoalToolResultProvenance('read_file')).toBeUndefined();
   });
 });

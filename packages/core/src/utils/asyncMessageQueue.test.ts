@@ -56,14 +56,6 @@ describe('AsyncMessageQueue', () => {
     expect(queue.size).toBe(1);
   });
 
-  it('should report isDrained correctly', () => {
-    const queue = new AsyncMessageQueue<string>();
-    expect(queue.isDrained).toBe(false);
-
-    queue.drain();
-    expect(queue.isDrained).toBe(true);
-  });
-
   it('should handle multiple sequential enqueue-dequeue cycles', () => {
     const queue = new AsyncMessageQueue<number>();
 

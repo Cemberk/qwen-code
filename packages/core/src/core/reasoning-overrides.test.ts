@@ -44,6 +44,16 @@ const model = (
   capabilities: { reasoning: { ...declaration, defaultEffort } },
 });
 
+// Stage the reasoning table a modelProviders reload captures: swap in the
+// reloaded registry rows and run the capture `reloadModelProvidersConfig`
+// performs after rebuilding the registry.
+function stageReload(config: Config, rows: AvailableModel[]): void {
+  Object.assign(config, { getAllConfiguredModels: () => rows });
+  (
+    config as unknown as { captureLatestReasoning(): string | undefined }
+  ).captureLatestReasoning();
+}
+
 function snapshotConfig(
   rows: AvailableModel[],
   marker: string | null = route.baseUrl!,
@@ -172,25 +182,6 @@ describe('reasoning declarations', () => {
       ).toMatchObject({ profile, disableField, toggleOnly });
     },
   );
-});
-
-describe('prompt reasoning snapshots', () => {
-  it('retains staged reasoning across unmatched route edits and tolerates malformed entries', () => {
-    const { config, generation } = snapshotConfig([model()]);
-    config.stageReasoningOverrides({ openai: [model('alias', 'high')] });
-    config.stageReasoningOverrides({ openai: [null] } as unknown as Parameters<
-      Config['stageReasoningOverrides']
-    >[0]);
-    config.applyReasoningOverrides();
-    expect(resolveReasoningForModel(config, generation)).toMatchObject({
-      defaultEffort: 'high',
-    });
-    config.stageReasoningOverrides({
-      openai: [{ id: 'alias', baseUrl: route.baseUrl }],
-    });
-    config.applyReasoningOverrides();
-    expect(resolveReasoningForModel(config, generation)).toBeUndefined();
-  });
 
   it('refreshes cached side-model views only on adoption while existing views retain their table', async () => {
     const { config, generation } = snapshotConfig([
@@ -200,7 +191,7 @@ describe('prompt reasoning snapshots', () => {
     const client = new BaseLlmClient({} as ContentGenerator, config);
     Object.assign(config, { baseLlmClient: client });
     const first = await client.resolveForModel('child', { failClosed: true });
-    config.stageReasoningOverrides({ openai: [model('child', 'high')] });
+    stageReload(config, [model(), model('child', 'high')]);
     config.applyReasoningOverrides();
     const second = await client.resolveForModel('child', { failClosed: true });
     expect(
@@ -220,19 +211,15 @@ describe('prompt reasoning snapshots', () => {
   });
 
   it.each([
-    [false, false, 'high'],
-    [true, false, 'medium'],
-    [false, true, 'medium'],
+    [false, 'high'],
+    [true, 'medium'],
   ] as const)(
     'owns promotion only for a primary user prompt (concurrent=%s)',
-    async (isConcurrentSideQuery, refused, expected) => {
+    async (isConcurrentSideQuery, expected) => {
       const { config, generation } = snapshotConfig([model()]);
-      config.stageReasoningOverrides({ openai: [model('alias', 'high')] });
-      const cutoff = new Error('post-admission cutoff');
+      stageReload(config, [model('alias', 'high')]);
+      const cutoff = new Error('post-promotion cutoff');
       Object.assign(config, {
-        assertCanStartTurn: () => {
-          if (refused) throw cutoff;
-        },
         getTelemetryIncludeSensitiveSpanAttributes: () => false,
       });
       const client = Object.create(LlmClient.prototype) as LlmClient;
@@ -255,7 +242,9 @@ describe('prompt reasoning snapshots', () => {
       });
     },
   );
+});
 
+describe('prompt reasoning snapshots', () => {
   it.each([undefined, route.baseUrl])(
     'preserves the inherited implicit route with endpoint %s',
     (baseUrl) => {

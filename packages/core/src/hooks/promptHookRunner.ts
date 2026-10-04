@@ -477,10 +477,3 @@ export class PromptHookRunner {
     };
   }
 }
-
-/**
- * Factory function to create PromptHookRunner
- */
-export function createPromptHookRunner(config: Config): PromptHookRunner {
-  return new PromptHookRunner(config);
-}

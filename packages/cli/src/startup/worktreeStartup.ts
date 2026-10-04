@@ -326,7 +326,7 @@ export async function setupStartupWorktree(
 /**
  * Result of the post-`loadCliConfig` sidecar persist step. Callers use the
  * boolean fields to decide whether to surface an INFO line in TUI / a
- * `<system-reminder>` in headless / a `pendingWorktreeNotice` in ACP.
+ * `<system-reminder>` in headless.
  */
 export interface PersistStartupWorktreeResult {
   /** True when a pre-existing sidecar was found and overridden. */
@@ -479,9 +479,7 @@ export async function persistStartupWorktreeSidecar(
 /**
  * Builds the one-shot context message that gets injected into the model on
  * the first user prompt (TUI: INFO history item + reminder prefix; headless:
- * `<system-reminder>` prefix + JSON event; ACP currently exits before
- * reaching this code path — see the `--worktree` × `--acp` mutex check
- * in `llm.tsx`).
+ * `<system-reminder>` prefix + JSON event).
  *
  * Mirrors `restoreWorktreeContext`'s contextMessage shape so resumed-with-
  * worktree and started-with-worktree sessions read identically to the model.

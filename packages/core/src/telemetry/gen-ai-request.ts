@@ -13,8 +13,6 @@ import {
   type Span,
 } from '@opentelemetry/api';
 import {
-  extractAnthropicContent,
-  extractLlmContent,
   extractOpenAiContent,
   GenAiOutputAccumulator,
   stringifyGenAiJson,
@@ -92,15 +90,6 @@ function assignNumber(
   if (number !== undefined) attributes[key] = number;
 }
 
-function assignInteger(
-  attributes: Attributes,
-  key: string,
-  value: unknown,
-): void {
-  const integer = safeInteger(value);
-  if (integer !== undefined) attributes[key] = integer;
-}
-
 function assignStopSequences(
   attributes: Attributes,
   value: unknown,
@@ -142,67 +131,6 @@ export function extractOpenAiRequestAttributes(request: object): Attributes {
   return attributes;
 }
 
-export function extractAnthropicRequestAttributes(request: object): Attributes {
-  const record = request as RequestRecord;
-  const attributes: Attributes = {};
-  assignInteger(
-    attributes,
-    'gen_ai.request.max_tokens',
-    ownValue(record, 'max_tokens'),
-  );
-  assignNumber(
-    attributes,
-    'gen_ai.request.temperature',
-    ownValue(record, 'temperature'),
-  );
-  assignNumber(attributes, 'gen_ai.request.top_p', ownValue(record, 'top_p'));
-  assignStopSequences(attributes, ownValue(record, 'stop_sequences'), false);
-  return attributes;
-}
-
-export function extractLlmRequestAttributes(request: object): Attributes {
-  const record = request as RequestRecord;
-  const config = ownValue(record, 'config');
-  if (typeof config !== 'object' || config === null) return {};
-  const configRecord = config as RequestRecord;
-  const attributes: Attributes = {};
-  const choiceCount = safeInteger(ownValue(configRecord, 'candidateCount'));
-  if (choiceCount !== undefined && choiceCount !== 1) {
-    attributes['gen_ai.request.choice.count'] = choiceCount;
-  }
-  assignInteger(
-    attributes,
-    'gen_ai.request.max_tokens',
-    ownValue(configRecord, 'maxOutputTokens'),
-  );
-  assignNumber(
-    attributes,
-    'gen_ai.request.temperature',
-    ownValue(configRecord, 'temperature'),
-  );
-  assignNumber(
-    attributes,
-    'gen_ai.request.top_p',
-    ownValue(configRecord, 'topP'),
-  );
-  assignNumber(
-    attributes,
-    'gen_ai.request.frequency_penalty',
-    ownValue(configRecord, 'frequencyPenalty'),
-  );
-  assignNumber(
-    attributes,
-    'gen_ai.request.presence_penalty',
-    ownValue(configRecord, 'presencePenalty'),
-  );
-  assignStopSequences(
-    attributes,
-    ownValue(configRecord, 'stopSequences'),
-    false,
-  );
-  return attributes;
-}
-
 export class GenAiExchangeController {
   private requestConsumed = false;
   private generation = 0;
@@ -240,11 +168,7 @@ export class GenAiExchangeController {
             'gen_ai.input.messages',
             content.inputMessages,
           );
-          this.assignJsonAttribute(
-            attributes,
-            'gen_ai.system_instructions',
-            content.systemInstructions,
-          );
+
           this.assignJsonAttribute(
             attributes,
             'gen_ai.tool.definitions',
@@ -263,22 +187,6 @@ export class GenAiExchangeController {
     }
 
     return { controller: this, generation };
-  }
-
-  beginFollowingRequest(
-    handle: GenAiAttemptHandle,
-    request: object,
-    extractRequest: (request: object) => Attributes,
-    extractContent: (request: object) => GenAiContentAttributes,
-  ): GenAiAttemptHandle | undefined {
-    if (
-      handle.controller !== this ||
-      handle.generation !== this.generation ||
-      this.finalized
-    ) {
-      return undefined;
-    }
-    return this.beginRequest(request, extractRequest, extractContent);
   }
 
   record(
@@ -412,19 +320,6 @@ export function createGenAiExchange(
   }
 }
 
-/**
- * @deprecated Use createGenAiExchange so response attempts can be finalized.
- */
-export function createGenAiRequestObserverContext(
-  parent: Context,
-  span: Span,
-): Context {
-  return createGenAiExchange(parent, span, {
-    captureContent: false,
-    sensitiveAttributeMaxLength: 1,
-  }).context;
-}
-
 function activeController(
   requestContext?: Context,
 ): GenAiExchangeController | undefined {
@@ -444,17 +339,8 @@ function reportRequest(
   extractRequest: (request: object) => Attributes,
   extractContent: (request: object) => GenAiContentAttributes,
   requestContext?: Context,
-  previousAttempt?: GenAiAttemptHandle,
 ): GenAiAttemptHandle | undefined {
   try {
-    if (previousAttempt) {
-      return previousAttempt.controller.beginFollowingRequest(
-        previousAttempt,
-        request,
-        extractRequest,
-        extractContent,
-      );
-    }
     return activeController(requestContext)?.beginRequest(
       request,
       extractRequest,
@@ -477,44 +363,6 @@ export function reportOpenAiRequest(
   );
 }
 
-export function reportAnthropicRequest(
-  request: object,
-  requestContext?: Context,
-): GenAiAttemptHandle | undefined {
-  return reportRequest(
-    request,
-    extractAnthropicRequestAttributes,
-    extractAnthropicContent,
-    requestContext,
-  );
-}
-
-export function reportAnthropicFollowingRequest(
-  request: object,
-  previousAttempt: GenAiAttemptHandle | undefined,
-): GenAiAttemptHandle | undefined {
-  if (!previousAttempt) return undefined;
-  return reportRequest(
-    request,
-    extractAnthropicRequestAttributes,
-    extractAnthropicContent,
-    undefined,
-    previousAttempt,
-  );
-}
-
-export function reportLlmRequest(
-  request: object,
-  requestContext?: Context,
-): GenAiAttemptHandle | undefined {
-  return reportRequest(
-    request,
-    extractLlmRequestAttributes,
-    extractLlmContent,
-    requestContext,
-  );
-}
-
 export function reportOpenAiResponse(
   handle: GenAiAttemptHandle | undefined,
   response: object,
@@ -531,38 +379,4 @@ export function reportOpenAiChunk(
   handle?.controller.record(handle, (output) =>
     output.recordOpenAiChunk(chunk),
   );
-}
-
-export function reportAnthropicResponse(
-  handle: GenAiAttemptHandle | undefined,
-  response: object,
-): void {
-  handle?.controller.record(handle, (output) =>
-    output.recordAnthropicResponse(response),
-  );
-}
-
-export function reportAnthropicEvent(
-  handle: GenAiAttemptHandle | undefined,
-  event: object,
-): void {
-  handle?.controller.record(handle, (output) =>
-    output.recordAnthropicEvent(event),
-  );
-}
-
-export function reportLlmResponse(
-  handle: GenAiAttemptHandle | undefined,
-  response: object,
-): void {
-  handle?.controller.record(handle, (output) =>
-    output.recordLlmResponse(response),
-  );
-}
-
-export function reportLlmChunk(
-  handle: GenAiAttemptHandle | undefined,
-  chunk: object,
-): void {
-  handle?.controller.record(handle, (output) => output.recordLlmChunk(chunk));
 }

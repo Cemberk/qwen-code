@@ -34,7 +34,6 @@ describe('configCommand', () => {
     expect(configCommand.supportedModes).toEqual([
       'interactive',
       'non_interactive',
-      'acp',
     ]);
   });
 

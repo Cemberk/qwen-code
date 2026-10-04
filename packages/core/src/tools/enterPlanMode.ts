@@ -96,7 +96,7 @@ class EnterPlanModeToolInvocation extends BaseToolInvocation<
     // execution; silently switching to the read-only Plan mode surprises
     // them and then blocks the reads/writes they expected to proceed
     // (#5970). This tool is ALSO the only door into plan mode in
-    // headless/ACP sessions — `/plan` is `interactive`-only and there is no
+    // headless/stream-json sessions — `/plan` is `interactive`-only and there is no
     // Shift+Tab there — so a blanket YOLO guard would make a genuine,
     // explicit user request unreachable in those sessions. `userRequested`
     // lets the model tell the two apart: only gate the no-op when the
@@ -118,16 +118,15 @@ class EnterPlanModeToolInvocation extends BaseToolInvocation<
       };
     }
 
-    // In headless (non-interactive) mode without ACP support, the gate
+    // In headless (non-interactive) mode without a stream-json host, the gate
     // exit paths require user interaction that cannot be fulfilled.
-    const isAcpMode =
-      this.config.getExperimentalZedIntegration?.() ||
-      this.config.getInputFormat?.() === InputFormat.STREAM_JSON;
-
-    if (!this.config.isInteractive() && !isAcpMode) {
+    if (
+      !this.config.isInteractive() &&
+      this.config.getInputFormat?.() !== InputFormat.STREAM_JSON
+    ) {
       return {
         llmContent:
-          'Cannot enter plan mode in non-interactive mode without ACP support. The gate exit paths require user interaction.',
+          'Cannot enter plan mode in non-interactive mode. The gate exit paths require user interaction.',
         returnDisplay: 'Plan mode unavailable in non-interactive mode.',
       };
     }

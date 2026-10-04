@@ -14,9 +14,6 @@ import { pathToFileURL } from 'node:url';
 import { StaticInsightGenerator } from '../../services/insight/generators/StaticInsightGenerator.js';
 import {
   createDebugLogger,
-  encodeInsightErrorMessage,
-  encodeInsightProgressMessage,
-  encodeInsightReadyMessage,
   openBrowserSecurely,
   Storage,
 } from '@qwen-code/qwen-code-core';
@@ -31,7 +28,7 @@ export const insightCommand: SlashCommand = {
     );
   },
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
   action: async (context: CommandContext) => {
     try {
       context.ui.setDebugMessage(t('Generating insights...'));
@@ -76,109 +73,6 @@ export const insightCommand: SlashCommand = {
             }),
           };
         }
-      }
-
-      if (context.executionMode === 'acp') {
-        const pendingMessages: Array<{
-          messageType: 'info' | 'error';
-          content: string;
-        }> = [];
-        let isComplete = false;
-        let resume: (() => void) | null = null;
-
-        const flushResume = () => {
-          const resolve = resume;
-          if (!resolve) {
-            return;
-          }
-          resume = null;
-          resolve();
-        };
-
-        const pushMessage = (message: {
-          messageType: 'info' | 'error';
-          content: string;
-        }) => {
-          pendingMessages.push(message);
-          flushResume();
-        };
-
-        const streamMessages = async function* (): AsyncGenerator<
-          { messageType: 'info' | 'error'; content: string },
-          void,
-          unknown
-        > {
-          while (!isComplete || pendingMessages.length > 0) {
-            if (pendingMessages.length === 0) {
-              await new Promise<void>((resolve) => {
-                resume = resolve;
-              });
-            }
-
-            while (pendingMessages.length > 0) {
-              const message = pendingMessages.shift();
-              if (message) {
-                yield message;
-              }
-            }
-          }
-        };
-
-        void (async () => {
-          try {
-            pushMessage({
-              messageType: 'info',
-              content: t('This may take a couple minutes. Sit tight!'),
-            });
-            pushMessage({
-              messageType: 'info',
-              content: encodeInsightProgressMessage(
-                t('Starting insight generation...'),
-                0,
-              ),
-            });
-
-            const outputPath = await insightGenerator.generateStaticInsight(
-              projectsDir,
-              (stage, progress, detail) => {
-                pushMessage({
-                  messageType: 'info',
-                  content: encodeInsightProgressMessage(
-                    stage,
-                    progress,
-                    detail,
-                  ),
-                });
-              },
-            );
-
-            pushMessage({
-              messageType: 'info',
-              content: encodeInsightReadyMessage(outputPath),
-            });
-          } catch (error) {
-            const errorText = (error as Error).message;
-            pushMessage({
-              messageType: 'info',
-              content: encodeInsightErrorMessage(errorText),
-            });
-            pushMessage({
-              messageType: 'error',
-              content: t('Failed to generate insights: {{error}}', {
-                error: errorText,
-              }),
-            });
-            logger.error('Insight generation error:', error);
-          } finally {
-            isComplete = true;
-            flushResume();
-          }
-        })();
-
-        return {
-          type: 'stream_messages',
-          messages: streamMessages(),
-        };
       }
 
       const updateProgress = (

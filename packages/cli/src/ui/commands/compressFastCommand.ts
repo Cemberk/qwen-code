@@ -24,7 +24,7 @@ export const compressFastCommand: SlashCommand = {
     );
   },
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
   action: async (context) => {
     const { ui } = context;
     const executionMode = context.executionMode ?? 'interactive';
@@ -69,57 +69,6 @@ export const compressFastCommand: SlashCommand = {
     }
 
     const doCompress = async () => await llmClient.tryCompressChatFast();
-
-    if (executionMode === 'acp') {
-      const messages = async function* () {
-        try {
-          yield {
-            messageType: 'info' as const,
-            content: 'Compressing context (fast)...',
-            contextCompression: { phase: 'progress' as const },
-          };
-          const compressed = await doCompress();
-          if (
-            !compressed ||
-            compressed.compressionStatus === CompressionStatus.NOOP
-          ) {
-            yield {
-              messageType: 'info' as const,
-              content: t('No compression needed.'),
-              // Terminal phase, so the client replaces its "compressing" row
-              // instead of leaving it to be merged into this frame's text.
-              contextCompression: { phase: 'noop' as const },
-            };
-            return;
-          }
-          yield {
-            messageType: 'info' as const,
-            content: `Context compressed (${formatTokenCount(compressed.originalTokenCount, compressed.originalTokenCountIsEstimated)} -> ${formatTokenCount(compressed.newTokenCount, compressed.newTokenCountIsEstimated)}).`,
-            contextCompression: {
-              phase: 'done' as const,
-              originalTokenCount: compressed.originalTokenCount,
-              newTokenCount: compressed.newTokenCount,
-              // An omitted flag travels as `false`, which is how the daemon's
-              // own banner reads it (`isEstimated ? '~' : ''`). Core is more
-              // conservative about an omitted flag (`?? true`, #9309).
-              originalTokenCountIsEstimated:
-                compressed.originalTokenCountIsEstimated ?? false,
-              newTokenCountIsEstimated:
-                compressed.newTokenCountIsEstimated ?? false,
-            },
-          };
-        } catch (e) {
-          yield {
-            messageType: 'error' as const,
-            content: t('Failed to compress chat history: {{error}}', {
-              error: e instanceof Error ? e.message : String(e),
-            }),
-          };
-        }
-      };
-
-      return { type: 'stream_messages', messages: messages() };
-    }
 
     try {
       if (executionMode === 'interactive') {

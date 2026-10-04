@@ -1385,38 +1385,6 @@ export class PermissionManager {
     }
   }
 
-  /**
-   * Add a session-level deny rule (in-memory, cleared when the session ends).
-   */
-  addSessionDenyRule(raw: string): void {
-    if (raw && raw.trim()) {
-      const rule = parseRule(raw);
-      if (rule.invalid) {
-        debugLogger.warn(
-          `Ignoring malformed deny rule (unbalanced parentheses): ${rule.raw}`,
-        );
-        return;
-      }
-      this.sessionRules.deny.push(rule);
-    }
-  }
-
-  /**
-   * Add a session-level ask rule (in-memory, cleared when the session ends).
-   */
-  addSessionAskRule(raw: string): void {
-    if (raw && raw.trim()) {
-      const rule = parseRule(raw);
-      if (rule.invalid) {
-        debugLogger.warn(
-          `Ignoring malformed ask rule (unbalanced parentheses): ${rule.raw}`,
-        );
-        return;
-      }
-      this.sessionRules.ask.push(rule);
-    }
-  }
-
   // ---------------------------------------------------------------------------
   // Persistent rule management
   // ---------------------------------------------------------------------------
@@ -1483,35 +1451,6 @@ export class PermissionManager {
       return true;
     }
     return false;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Default mode
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Return the current default approval mode from config.
-   * This is used by the UI layer when `evaluate()` returns 'default' to
-   * determine the actual behavior (ask vs allow).
-   */
-  getDefaultMode(): string {
-    return this.config.getApprovalMode?.() ?? 'default';
-  }
-
-  /**
-   * Update the persistent deny rules (called after migrating settings).
-   * Replaces the persistent deny rule set entirely.
-   */
-  updatePersistentRules(ruleSet: Partial<PermissionRuleSet>): void {
-    if (ruleSet.allow !== undefined) {
-      this.persistentRules.allow = ruleSet.allow;
-    }
-    if (ruleSet.ask !== undefined) {
-      this.persistentRules.ask = ruleSet.ask;
-    }
-    if (ruleSet.deny !== undefined) {
-      this.persistentRules.deny = ruleSet.deny;
-    }
   }
 
   // ---------------------------------------------------------------------------

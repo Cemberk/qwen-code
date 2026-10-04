@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { SessionSourceService } from '../services/session-sources.js';
-
 import {
   captureReasoningSnapshot,
   validateReasoningCapabilities,
@@ -40,7 +38,6 @@ import {
 } from '../services/visionBridge/vision-bridge-service.js';
 import type { AnyToolInvocation } from '../tools/tools.js';
 import type { ArenaManager } from '../agents/arena/ArenaManager.js';
-import { ArenaAgentClient } from '../agents/arena/ArenaAgentClient.js';
 import type { TeamManager } from '../agents/team/TeamManager.js';
 import type { TeamContext } from '../agents/team/types.js';
 
@@ -52,7 +49,6 @@ import type { OutputStyleDefinition } from '../core/output-styles.js';
 import {
   type AuthType,
   createContentGenerator,
-  resetPreloadedContentGenerator,
   resolveContentGeneratorConfigWithSources,
 } from '../core/contentGenerator.js';
 import { tokenLimit } from '../core/tokenLimits.js';
@@ -91,7 +87,6 @@ import {
   getMCPServerStatus,
   type SendSdkMcpMessage,
 } from '../tools/mcp-client.js';
-import { setMemoryFilename } from '../utils/memory-constants.js';
 import { canUseRipgrep } from '../utils/ripgrepUtils.js';
 import { recordStartupEvent } from '../utils/startupEventSink.js';
 import { ToolRegistry, type ToolFactory } from '../tools/tool-registry.js';
@@ -209,7 +204,7 @@ import type { PendingGoalProposal } from '../goals/goal-tools.js';
 import type { GoalRecoveryRecord } from '../goals/goal-persistence.js';
 import { GOAL_DEFAULT_TOKEN_BUDGET } from '../goals/goal-protocol.js';
 import { createGoalVerifier } from '../goals/goal-verifier.js';
-import type { ToolInvocationGuard } from '../core/tool-invocation-guard.js';
+
 import type {
   ExecutionSandboxPolicy,
   ResolvedExecutionSandboxPolicy,
@@ -262,8 +257,6 @@ import {
 import {
   deriveSessionName,
   patchSessionRecord,
-  SHARED_RECORD_SLOT,
-  type SessionRecordSlot,
   type SessionRegistration,
   unregisterSession,
 } from '../services/session-registry.js';
@@ -272,17 +265,8 @@ import {
   SessionService,
   type ResumedSessionData,
 } from '../services/sessionService.js';
-import type {
-  SessionRestoreProjection,
-  SessionRuntimeResumeState,
-} from '../services/session-transcript-reader.js';
-import {
-  SessionTranscriptChangedError,
-  SessionWriterError,
-  SessionWriterLease,
-  SessionWriterLostError,
-  SessionWriterUnavailableError,
-} from '../services/session-writer-lease.js';
+
+import { SessionWriterUnavailableError } from '../services/session-writer-errors.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { loadServerHierarchicalMemory } from '../memory/memoryDiscovery.js';
 import {
@@ -412,27 +396,12 @@ export {
 /**
  * Thrown by `Config.setApprovalMode` when the requested mode would grant
  * privileged tool autonomy in a folder the user has not marked as trusted.
- *
- * Why: the daemon mutation route at `POST /session/:id/approval-mode` needs
- * to recognize this specific class of rejection and translate it into a
- * structured `errorKind: 'auth_env_error'` rather than a generic 500.
- * Using a named subclass lets the bridge match by `err.name` without
- * depending on the message text (which would drift across i18n).
  */
 export class TrustGateError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'TrustGateError';
   }
-}
-
-/**
- * Information about an approval mode including display name and description.
- */
-export interface ApprovalModeInfo {
-  id: ApprovalMode;
-  name: string;
-  description: string;
 }
 
 type ManualPlanExitNoticeEventKind = 'clear' | 'manual-exit';
@@ -450,38 +419,6 @@ export interface ManualPlanExitNotice {
   version: number;
   currentMode: ApprovalMode;
 }
-
-/**
- * Detailed information about each approval mode.
- * Used for UI display and protocol responses.
- */
-export const APPROVAL_MODE_INFO: Record<ApprovalMode, ApprovalModeInfo> = {
-  [ApprovalMode.PLAN]: {
-    id: ApprovalMode.PLAN,
-    name: 'Plan',
-    description: 'Analyze only, do not modify files or execute commands',
-  },
-  [ApprovalMode.DEFAULT]: {
-    id: ApprovalMode.DEFAULT,
-    name: 'Default',
-    description: 'Require approval for file edits or shell commands',
-  },
-  [ApprovalMode.AUTO_EDIT]: {
-    id: ApprovalMode.AUTO_EDIT,
-    name: 'Auto Edit',
-    description: 'Automatically approve file edits',
-  },
-  [ApprovalMode.AUTO]: {
-    id: ApprovalMode.AUTO,
-    name: 'Auto',
-    description: 'LLM classifier auto-approves safe actions, blocks risky ones',
-  },
-  [ApprovalMode.YOLO]: {
-    id: ApprovalMode.YOLO,
-    name: 'YOLO',
-    description: 'Automatically approve all tools',
-  },
-};
 
 /**
  * Settings for the AUTO approval mode classifier.
@@ -759,7 +696,7 @@ export interface AgentsCollabSettings {
    * Useful when a model has a lower concurrency capacity than the rest.
    */
   maxParallelAgentsByModel?: Record<string, number>;
-  /** Display mode for multi-agent sessions ('in-process' | 'tmux' | 'iterm2') */
+  /** Display mode for multi-agent sessions; only 'in-process' is supported. */
   displayMode?: string;
   /** Arena-specific settings */
   arena?: {
@@ -802,20 +739,10 @@ export type ModelProposedGoalsMode = 'alwaysAsk' | 'disabled';
 export interface ConfigParameters {
   agentExecutionBackend?: 'container';
   executionEnvironmentFactory?: ExecutionEnvironmentFactory;
-  executionEnvironment?: ExecutionEnvironment;
   sessionId?: string;
   sessionData?: ResumedSessionData;
-  sessionRestoreProjection?: SessionRestoreProjection;
-  sessionRestoreProjectionSource?: () => Promise<
-    SessionRestoreProjection | undefined
-  >;
   sandbox?: SandboxConfig;
   targetDir: string;
-  /**
-   * Internal host-only bootstrap mode for a managed workspace whose exact
-   * directory is bound after session registration. It is not a user setting.
-   */
-  provisionalWorkspace?: boolean;
   debugMode: boolean;
   includePartialMessages?: boolean;
   question?: string;
@@ -873,10 +800,8 @@ export interface ConfigParameters {
    * `permissions.deny` (which keeps the tool registered and rejects
    * invocation), tools listed here are not registered at all and never
    * appear in `/tools`, `getAllTools()`, or function-call discovery.
-   * Sourced from `settings.tools.disabled` and the daemon mutation route
-   * `POST /workspace/tools/:name/enable {enabled:false}`. Active sessions retain already-registered tools — the disabled
-   * set is consulted at register time, so toggling takes effect on the
-   * next ACP child spawn or `ToolRegistry.refresh()`.
+   * Sourced from `settings.tools.disabled`; the set is consulted at register
+   * time.
    */
   disabledTools?: string[];
   /**
@@ -920,11 +845,7 @@ export interface ConfigParameters {
     /** Settings consumed by the AUTO approval mode classifier. */
     autoMode?: AutoModeSettings;
   };
-  /**
-   * Optional host policy evaluated with final tool arguments immediately
-   * before execution. A configured guard fails closed.
-   */
-  toolInvocationGuard?: ToolInvocationGuard;
+
   /** Internal trusted-host integration; never loaded from workspace settings. */
   shellExecutionSandbox?: Readonly<ShellExecutionSandboxPolicy>;
   toolDiscoveryCommand?: string;
@@ -932,7 +853,7 @@ export interface ConfigParameters {
   mcpServerCommand?: string;
   mcpServers?: Record<string, MCPServerConfig>;
   /**
-   * Session-injected (ACP/IDE) + `--mcp-config` servers that sit above the
+   * `--mcp-config` servers that sit above the
    * settings layer and `.mcp.json` and are never gated (#4615). Retained so the
    * hot-reload subscriber (sub-task 3) can re-assemble the effective map the
    * same way boot did. See `assembleMcpServers`.
@@ -941,13 +862,7 @@ export interface ConfigParameters {
   lsp?: {
     enabled?: boolean;
   };
-  lspClient?: LspClient;
-  userMemory?: string;
-  memoryFileCount?: number;
-  /** @deprecated Use `memoryFileCount`; retained until a future major release. */
-  geminiMdFileCount?: number;
   approvalMode?: ApprovalMode;
-  contextFileName?: string | string[];
   accessibility?: AccessibilitySettings;
   showResponseTokensPerSecond?: boolean;
   telemetry?: TelemetrySettings;
@@ -1025,14 +940,6 @@ export interface ConfigParameters {
   maxToolCalls?: number;
   clearContextOnIdle?: ClearContextOnIdleSettings;
   sessionTokenLimit?: number;
-  experimentalZedIntegration?: boolean;
-  /**
-   * When true, daemon `session/load` and `session/resume` re-hang a trailing
-   * unanswered `ask_user_question` instead of synthesizing a failed tool
-   * result. Default false. CLI: `--restore-ask-user-question`.
-   */
-  restoreAskUserQuestion?: boolean;
-  sessionWriterLeaseEnabled?: boolean;
   cronEnabled?: boolean;
   /**
    * Days a recurring cron job lives before auto-expiring. `0` disables
@@ -1049,7 +956,7 @@ export interface ConfigParameters {
   todoWriteEnabled?: boolean;
   agentTeamEnabled?: boolean;
   workflowsEnabled?: boolean;
-  /** Enable the opt-in ACP/Web Shell Session Workflow gate. */
+  /** Enable the opt-in Session Workflow gate. */
   sessionWorkflowEnabled?: boolean;
   /** Consent gate for the propose_goal tool; see ProposeGoalTool. */
   modelProposedGoals?: ModelProposedGoalsMode;
@@ -1075,7 +982,7 @@ export interface ConfigParameters {
    */
   workflowNameOnly?: boolean;
   emitToolUseSummaries?: boolean;
-  listExtensions?: boolean;
+
   overrideExtensions?: string[];
   /** Locale code for resolving localizable extension fields (e.g., 'en', 'zh'). */
   locale?: string;
@@ -1103,7 +1010,6 @@ export interface ConfigParameters {
    */
   pendingMcpServers?: string[];
   noBrowser?: boolean;
-  folderTrustFeature?: boolean;
   folderTrust?: boolean;
   authType?: AuthType;
   generationConfig?: Partial<ContentGeneratorConfig>;
@@ -1156,8 +1062,6 @@ export interface ConfigParameters {
   outputFormat?: OutputFormat;
   skipStartupContext?: boolean;
   bareMode?: boolean;
-  sdkMode?: boolean;
-  sessionSubagents?: SubagentConfig[];
   /**
    * File descriptor number for structured JSON event output (dual output mode).
    * When set, Qwen Code outputs structured JSON events to this fd while
@@ -1294,21 +1198,13 @@ export interface ConfigParameters {
    * These hooks are always loaded regardless of folder trust status.
    */
   userHooks?: Record<string, unknown>;
-  /**
-   * Project-level hooks configuration (from workspace settings).
-   * These hooks are only loaded in trusted folders.
-   * When undefined or the folder is untrusted, project hooks are skipped.
-   */
-  projectHooks?: Record<string, unknown>;
 
   /**
-   * Legacy merged hooks, read only when none of `systemHooks`, `userHooks`
-   * and `projectHooks` is supplied (a Config built straight from merged
-   * settings). It carries no scope, so it never counts as system hooks.
+   * Legacy merged hooks, read only when neither `systemHooks` nor
+   * `userHooks` is supplied (a Config built straight from merged settings).
+   * It carries no scope, so it never counts as system hooks.
    */
   hooks?: Record<string, unknown>;
-  /** Glob patterns to exclude from .qwen/rules/ loading. */
-  contextRuleExcludes?: string[];
   /** Warnings generated during configuration resolution */
   warnings?: string[];
   /**
@@ -1811,58 +1707,17 @@ function readMemoryPressureRatioEnv(envName: string, fallback: number): number {
  * Options for Config.initialize()
  */
 export interface ConfigInitializeOptions {
-  /** Cancels request-scoped initialization without becoming a session signal. */
-  signal?: AbortSignal;
   /**
    * Callback for sending MCP messages to SDK servers via control plane.
    * Required for SDK MCP server support in SDK mode.
    */
   sendSdkMcpMessage?: SendSdkMcpMessage;
   /**
-   * Skip LLM client chat initialization. Useful for bootstrap paths that
-   * need config services (hooks, tools, MCP) before a real session exists.
-   */
-  skipLlmInitialization?: boolean;
-  /** @deprecated Use `skipLlmInitialization`; retained until a future major release. */
-  skipGeminiInitialization?: boolean;
-  /**
-   * skip MCP
-   * discovery entirely (both inline tool-registry-time discovery AND
+   * Skip MCP discovery entirely (both inline tool-registry-time discovery AND
    * the post-`createToolRegistry` background `startMcpDiscoveryInBackground`).
-   * The ACP bootstrap config uses this to AVOID spawning MCP servers
-   * that no session uses: every stdio MCP server would otherwise be
-   * spawned twice — once by the bootstrap and once by each session's
-   * own discovery. The bootstrap's MCP clients were never actually used to serve a
-   * session (each session builds its own per-session Config and runs
-   * its own discovery), so skipping at the bootstrap layer is safe
-   * AND closes the 2N subprocess leak.
+   * `qwen mcp reconnect` runs its own targeted per-server discovery instead.
    */
   skipMcpDiscovery?: boolean;
-  /**
-   * Skip hook system and hook MessageBus initialization. Read-only replay
-   * helpers use this to avoid loading or subscribing user/workspace hooks.
-   */
-  skipHooks?: boolean;
-  /**
-   * Skip SkillManager creation and file watching. Read-only replay helpers do
-   * not need skill discovery and must not start long-lived watchers.
-   */
-  skipSkillManager?: boolean;
-  /**
-   * Force file checkpointing off for read-only replay helpers, even when the
-   * Config was constructed with checkpointing enabled.
-   */
-  skipFileCheckpointing?: boolean;
-  /**
-   * Warm the tool registry in best-effort (non-strict) mode. Read-only replay
-   * Configs set this so a tool whose constructor requires a subsystem this
-   * Config deliberately skipped (e.g. `SkillTool` needs the `SkillManager` that
-   * `skipSkillManager` omits) is logged and skipped instead of aborting
-   * `initialize()`. Replay only needs optional tool_call metadata, and
-   * `ToolCallEmitter` already falls back to the recorded tool name when a tool
-   * is absent from the registry.
-   */
-  lenientToolWarmup?: boolean;
 }
 
 const DEFAULT_BARE_CORE_TOOLS = [
@@ -1915,9 +1770,9 @@ function resolveSensitiveSpanAttributeMaxLength(
  * deployments). `normalizeRecurringMaxAge` owns the `0 → Infinity`
  * (no expiry) contract shared with the CronScheduler constructor.
  * Negative or unparseable values fall back to the 7-day default with a
- * console warning — debug file logging is usually off in the daemon
- * deployments this knob targets, and the misconfiguration would
- * otherwise surface only as "jobs stopped firing after 7 days".
+ * console warning — debug file logging is usually off, and the
+ * misconfiguration would otherwise surface only as "jobs stopped firing
+ * after 7 days".
  */
 function resolveCronRecurringMaxAgeDays(setting: number | undefined): number {
   const env = process.env['QWEN_CODE_CRON_MAX_AGE_DAYS'];
@@ -1925,7 +1780,7 @@ function resolveCronRecurringMaxAgeDays(setting: number | undefined): number {
   const raw = fromEnv ? Number(env) : setting;
   if (raw === undefined || !Number.isFinite(raw) || raw < 0) {
     if (raw !== undefined) {
-      // eslint-disable-next-line no-console -- operator-facing misconfiguration breadcrumb; debug file logging is usually off in daemon deployments
+      // eslint-disable-next-line no-console -- operator-facing misconfiguration breadcrumb; debug file logging is usually off
       console.warn(
         (fromEnv
           ? `QWEN_CODE_CRON_MAX_AGE_DAYS="${env}" is invalid`
@@ -1938,8 +1793,6 @@ function resolveCronRecurringMaxAgeDays(setting: number | undefined): number {
   }
   return normalizeRecurringMaxAge(raw, DEFAULT_RECURRING_MAX_AGE_DAYS);
 }
-
-class SessionWriterShutdownError extends SessionWriterUnavailableError {}
 
 function containsErrorByIdentity(error: unknown, candidate: unknown): boolean {
   return (
@@ -2266,40 +2119,18 @@ export class Config {
     | Readonly<ResolvedExecutionSandboxPolicy>
     | undefined;
   private sessionId: string;
-  private sessionSourceType?: string;
-  private sessionSourceId?: string;
+
   private sessionData?: ResumedSessionData;
-  private pendingSessionRestoreProjection?: SessionRestoreProjection;
-  private sessionRestoreRuntime?: SessionRuntimeResumeState;
-  private readonly sessionRestoreProjectionSource?: () => Promise<
-    SessionRestoreProjection | undefined
-  >;
-  private restoredFileHistory = false;
-  private goalRestoreActivation?: () => Promise<void>;
-  private rejectGoalRestoreActivation?: (reason?: unknown) => void;
   private readonly sessionRuntimeBaseDir: string;
-  private readonly provisionalWorkspace: boolean;
-  private provisionalWorkspaceActivated = false;
-  private provisionalWorkspaceActivation?: Promise<void>;
+
   private sessionProjectDirRegistered = false;
-  private pendingSessionWriterLease?: SessionWriterLease;
-  private pendingSessionWriterRelease:
-    | { lease: SessionWriterLease; promise: Promise<void> }
-    | undefined;
-  private sessionWriterReclaimPolicy: 'local' | 'never' = 'local';
-  private sessionWriterTakeoverPolicy: 'never' | 'certified' = 'never';
-  private sessionWriterShutdownRequested = false;
-  private sessionWriterHandoffRequested = false;
-  private sessionWriterActivationPromise: Promise<void> | undefined;
   private sessionWriterClosePromise: Promise<void> | undefined;
   /**
    * One-shot notice produced by `setupStartupWorktree` (Phase D-1) when the
    * CLI was launched with `--worktree`. The active entry point (TUI XOR
    * headless) reads it via {@link consumePendingStartupWorktreeNotice} on
    * the model's first prompt and skips Phase C's `restoreWorktreeContext`
-   * for that turn — startup wins over the resumed-session sidecar. ACP is
-   * gated out earlier in `llm.tsx` (mutex with `--worktree`) so it
-   * never reaches this slot.
+   * for that turn — startup wins over the resumed-session sidecar.
    *
    * @invariant At most one consumer per process. If a future entry path
    * sets this slot without ever consuming, the string persists until
@@ -2328,7 +2159,7 @@ export class Config {
   private extensionManager!: ExtensionManager;
   private skillManager: SkillManager | null = null;
   private permissionManager: PermissionManager | null = null;
-  private readonly toolInvocationGuard: ToolInvocationGuard | undefined;
+
   private modelInvocableCommandsProvider:
     | (() => ReadonlyArray<{ name: string; description: string }>)
     | null = null;
@@ -2344,7 +2175,7 @@ export class Config {
   private pendingInlineAnnouncedSkillKeys = new Set<string>();
   private fileSystemService: FileSystemService;
   private contentGeneratorConfig!: ContentGeneratorConfig;
-  private contentGeneratorConfigSources: ContentGeneratorConfigSources = {};
+
   private contentGenerator!: ContentGenerator;
   private readonly initialAuthType?: AuthType;
   private initialResolvedAuthType?: AuthType;
@@ -2381,15 +2212,7 @@ export class Config {
     | null;
   private readonly disabledSkillLevels: ReadonlySet<SkillLevel>;
   private readonly customSkillDirs: readonly string[];
-  //   `disabledTools` is set at construction
-  // time but can be re-synced by the daemon mutation surface
-  // (`setWorkspaceToolEnabled` propagates through ACP) so a subsequent
-  // `discoverMcpToolsForServer` sees the latest disabled set instead
-  // of the bootstrap snapshot. Stays `ReadonlySet` for callers; the
-  // setter swaps the reference rather than mutating in place so any
-  // captured reference (e.g. by ToolRegistry mid-iteration) remains
-  // self-consistent.
-  private disabledTools: ReadonlySet<string>;
+  private readonly disabledTools: ReadonlySet<string>;
   private readonly visibleTools: ReadonlySet<string>;
   private readonly eagerTools: readonly string[] | undefined;
   private readonly toolSearchThreshold: number;
@@ -2414,7 +2237,7 @@ export class Config {
   private readonly topTierMcpServers:
     | Record<string, MCPServerConfig>
     | undefined;
-  private readonly runtimeMcpServers = new Map<string, MCPServerConfig>();
+
   private readonly lspEnabled: boolean;
   private lspClient?: LspClient;
   private lspInitializationError?: string;
@@ -2449,7 +2272,6 @@ export class Config {
    * stable prefix; consumers match it via `startsWith` and fail open to the
    * single-block layout when it doesn't match the request's system text.
    */
-  private staticSystemPrefix: string | undefined;
 
   /**
    * Tool names declared to the model when this session's system prompt was
@@ -2472,7 +2294,7 @@ export class Config {
   private memoryFileCount: number;
   private loadedContextFilePaths: string[] = [];
   private conditionalRulesRegistry: ConditionalRulesRegistry | undefined;
-  private readonly contextRuleExcludes: string[];
+  private readonly contextRuleExcludes: string[] = [];
   private approvalMode: ApprovalMode;
   private prePlanMode?: ApprovalMode;
   private planExecutionMode?: ApprovalMode;
@@ -2512,19 +2334,6 @@ export class Config {
   /** A `propose_goal` approval waiting for its turn to end; see PendingGoalProposal. */
   private pendingGoalProposal: PendingGoalProposal | undefined;
   private goalProposalApprovalController: AbortController | undefined;
-  /**
-   * A Goal restore held back because the session writer is not accepting
-   * writes yet. Settled by {@link startPendingGoalRestore} once the
-   * recorder has its lease, or by {@link settlePendingGoalRestore} when the
-   * writer never arrives.
-   */
-  private pendingGoalRestore:
-    | {
-        readonly runtime: GoalRuntime;
-        readonly resolve: (runtime: GoalRuntime) => void;
-        readonly reject: (error: unknown) => void;
-      }
-    | undefined;
   private goalTurnHost: GoalTurnHost | undefined;
   private goalTurnHostUnbind: (() => void) | undefined;
   private goalTurnHostGeneration = 0;
@@ -2539,7 +2348,7 @@ export class Config {
   private readonly explicitIncludeDirectories: string[];
   private outputLanguageFilePath?: string;
   private readonly noBrowser: boolean;
-  private readonly folderTrustFeature: boolean;
+
   private readonly folderTrust: boolean;
 
   private readonly maxSessionTurns: number;
@@ -2551,31 +2360,13 @@ export class Config {
   private readonly maxToolCalls: number;
   private readonly clearContextOnIdle: ClearContextOnIdleSettings;
   private readonly sessionTokenLimit: number;
-  private readonly listExtensions: boolean;
+
   private readonly overrideExtensions?: string[];
 
   private readonly cliVersion?: string;
   private runtimeStatusEnabled = false;
   private sessionRegistryActive = false;
   private sessionRegistered = false;
-  /**
-   * Which of this process's registry records belongs to this session.
-   *
-   * A process hosting one session owns the shared `<pid>.json`; one
-   * hosting several owns a minted record per session, and every patch and
-   * the final removal have to name the right one or they would rewrite a
-   * sibling's record. Learned from the registration itself.
-   */
-  private sessionRegistrySlot: SessionRecordSlot = SHARED_RECORD_SLOT;
-  private readonly experimentalZedIntegration: boolean = false;
-  private readonly restoreAskUserQuestion: boolean = false;
-  /**
-   * startChat orphan-repair preserve. Defaults to `restoreAskUserQuestion`.
-   * A load/resume that will not re-hang (no client, fork) turns this off so
-   * LLM history is repaired in lockstep with replay finalization.
-   */
-  private preserveRestorableAskUserQuestion = false;
-  private readonly sessionWriterLeaseEnabled: boolean = false;
   private readonly cronEnabled: boolean = true;
   /** Recurring cron max age in days, resolved once at construction
    * (the setting declares `requiresRestart`); `Infinity` = no expiry. */
@@ -2584,7 +2375,7 @@ export class Config {
   private readonly todoWriteEnabled: boolean = false;
   private readonly agentTeamEnabled: boolean = false;
   private readonly artifactEnabled: boolean = true;
-  private artifactSnapshotsEnabled = false;
+
   private readonly artifactAutoOpen: boolean = true;
   private workflowsEnabled: boolean | undefined;
   private readonly sessionWorkflowEnabled: boolean;
@@ -2592,13 +2383,12 @@ export class Config {
   private sessionWorkflowPlanRevision?: SessionWorkflowPlanRevision;
   private readonly agentExecutionBackend?: 'container';
   private readonly executionEnvironmentFactory?: ExecutionEnvironmentFactory;
-  private readonly executionEnvironment?: ExecutionEnvironment;
+
   private executionEnvironments?: Set<Promise<ExecutionEnvironment>>;
   private readonly executionShutdown = new AbortController();
   private executionCleanupPromise?: Promise<void>;
   private readonly modelProposedGoals: ModelProposedGoalsMode;
-  private goalProposalHostSupported = false;
-  private goalProposalTurnKey: string | undefined;
+
   private readonly skipWorkflowUsageWarning: boolean = false;
   private workflowSizeGuideline: WorkflowSizeGuideline | undefined;
   private readonly workflowNameOnly: boolean;
@@ -2620,7 +2410,6 @@ export class Config {
   private arenaManagerChangeCallback:
     | ((manager: ArenaManager | null) => void)
     | null = null;
-  private readonly arenaAgentClient: ArenaAgentClient | null;
   private teamManager: TeamManager | null = null;
   private teamManagerChangeCallbacks = new Set<
     (manager: TeamManager | null) => void
@@ -2699,9 +2488,7 @@ export class Config {
   private systemHooks?: Record<string, unknown>;
   /** User-level hooks (always loaded regardless of trust) */
   private userHooks?: Record<string, unknown>;
-  /** Project-level hooks (only loaded in trusted folders) */
-  private projectHooks?: Record<string, unknown>;
-  /** @deprecated Legacy merged hooks field - use userHooks/projectHooks instead */
+  /** @deprecated Legacy merged hooks field - use systemHooks/userHooks instead */
   private hooks?: Record<string, unknown>;
   private hookSystem?: HookSystem;
   private messageBus?: MessageBus;
@@ -2718,12 +2505,6 @@ export class Config {
   private readonly settingsWatcher?: { stopWatching(): void };
 
   constructor(params: ConfigParameters) {
-    this.executionEnvironment = params.executionEnvironment;
-    if (params.executionEnvironment) {
-      this.executionEnvironments = new Set([
-        Promise.resolve(params.executionEnvironment),
-      ]);
-    }
     this.agentExecutionBackend = params.agentExecutionBackend;
     const executionFactory = params.executionEnvironmentFactory;
     this.executionEnvironmentFactory = executionFactory
@@ -2739,7 +2520,6 @@ export class Config {
       this.sessionRuntimeBaseDir,
       Storage.getGlobalQwenDir(),
     );
-    this.provisionalWorkspace = params.provisionalWorkspace === true;
     this.sessionId = params.sessionId ?? randomUUID();
     // Only set the global env marker once per process lifetime, so
     // throwaway Config instances (e.g. telemetry-only) don't clobber
@@ -2752,10 +2532,6 @@ export class Config {
       sessionEnvClaimed = true;
     }
     this.sessionData = params.sessionData;
-    this.sessionRestoreProjectionSource = params.sessionRestoreProjectionSource;
-    this.setSessionRestoreProjection(params.sessionRestoreProjection);
-    // Daemon Configs use sessionIdContext and must not replace the
-    // single-session CLI fallback with whichever session was created last.
     if (sessionIdContext.getStore() === undefined) {
       setDebugLogSession(this);
     }
@@ -2819,14 +2595,14 @@ export class Config {
     this.permissionsAsk = params.permissions?.ask || [];
     this.permissionsDeny = params.permissions?.deny || [];
     this.permissionsAutoMode = params.permissions?.autoMode ?? {};
-    this.toolInvocationGuard = params.toolInvocationGuard;
+
     this.toolDiscoveryCommand = params.toolDiscoveryCommand;
     this.toolCallCommand = params.toolCallCommand;
     this.mcpServerCommand = params.mcpServerCommand;
     this.mcpServers = params.mcpServers;
     this.topTierMcpServers = params.topTierMcpServers;
     this.lspEnabled = params.lsp?.enabled ?? false;
-    this.lspClient = params.lspClient;
+
     this.allowedMcpServers = params.allowedMcpServers;
     this.cliAllowedMcpServerNames = params.cliAllowedMcpServerNames;
     this.excludedMcpServers = params.excludedMcpServers;
@@ -2836,12 +2612,10 @@ export class Config {
     this.mcpToolIdleTimeoutMs =
       params.mcpToolIdleTimeoutMs ??
       (Number.isFinite(parsedEnv) && parsedEnv >= 0 ? parsedEnv : 300000); // 5 minutes default
-    this.sessionSubagents = params.sessionSubagents ?? [];
-    this.sdkMode = params.sdkMode ?? false;
-    this.userMemory = params.userMemory ?? '';
-    this.memoryFileCount =
-      params.memoryFileCount ?? params.geminiMdFileCount ?? 0;
-    this.contextRuleExcludes = params.contextRuleExcludes ?? [];
+    this.sessionSubagents = [];
+    this.sdkMode = false;
+    this.userMemory = '';
+    this.memoryFileCount = 0;
     this.approvalMode = params.approvalMode ?? ApprovalMode.DEFAULT;
     this.accessibility = params.accessibility ?? {};
     this.showResponseTokensPerSecond =
@@ -2876,8 +2650,7 @@ export class Config {
       enableFuzzySearch: params.fileFiltering?.enableFuzzySearch ?? true,
     };
     this.fileCheckpointingEnabled =
-      params.fileCheckpointingEnabled ??
-      (!params.sdkMode && (params.interactive ?? false));
+      params.fileCheckpointingEnabled ?? params.interactive ?? false;
     this.cwd = params.cwd ?? process.cwd();
     this.fileDiscoveryService = params.fileDiscoveryService ?? null;
     this.maxSessionTurns = validateMaxSessionTurns(params.maxSessionTurns);
@@ -2928,13 +2701,6 @@ export class Config {
           : DEFAULT_TOOL_RESULTS_TOTAL_CHARS_THRESHOLD),
     };
     this.sessionTokenLimit = params.sessionTokenLimit ?? -1;
-    this.experimentalZedIntegration =
-      params.experimentalZedIntegration ?? false;
-    this.restoreAskUserQuestion = params.restoreAskUserQuestion === true;
-    this.preserveRestorableAskUserQuestion = this.restoreAskUserQuestion;
-    this.sessionWriterLeaseEnabled =
-      this.experimentalZedIntegration === true &&
-      params.sessionWriterLeaseEnabled === true;
     this.cronEnabled = params.cronEnabled ?? true;
     this.cronRecurringMaxAgeDays = resolveCronRecurringMaxAgeDays(
       params.cronRecurringMaxAgeDays,
@@ -2961,10 +2727,10 @@ export class Config {
       process.env['QWEN_CODE_WORKFLOW_NAME_ONLY'] === '1';
     this.workflowRunRegistry.setNameOnly(this.workflowNameOnly);
     this.emitToolUseSummaries = params.emitToolUseSummaries ?? true;
-    this.listExtensions = params.listExtensions ?? false;
+
     this.overrideExtensions = params.overrideExtensions;
     this.noBrowser = params.noBrowser ?? false;
-    this.folderTrustFeature = params.folderTrustFeature ?? false;
+
     this.folderTrust = params.folderTrust ?? false;
     this.modelProvidersConfig = params.modelProvidersConfig;
     this.cliVersion = params.cliVersion;
@@ -3063,11 +2829,8 @@ export class Config {
     // a PR worktree — cannot recompute it from `process.cwd()`; it would land on
     // a directory that never existed.
     //
-    // Registered per session, not claimed in one process-global slot. In daemon
-    // mode one process serves many sessions: a single slot would hold whichever
-    // booted first, and every later session would hand its subprocesses another
-    // session's directory. The env var is still set for the single-session CLI,
-    // where it is the only consumer and there is nothing to collide with.
+    // Registered per session, not claimed in one process-global slot. The env
+    // var is still set for the single-session CLI.
     if (!projectDirEnvClaimed && process.env) {
       process.env['QWEN_CODE_PROJECT_DIR'] = this.storage.getProjectDir();
       projectDirEnvClaimed = true;
@@ -3075,7 +2838,6 @@ export class Config {
     this.inputFormat = params.inputFormat ?? InputFormat.TEXT;
     this.fileExclusions = new FileExclusions(this);
     this.eventEmitter = params.eventEmitter;
-    this.arenaAgentClient = ArenaAgentClient.create();
     this.agentsSettings = params.agents ?? {};
     this.backgroundTaskRegistry = new BackgroundTaskRegistry({
       ...(this.agentsSettings.maxParallelAgents !== undefined
@@ -3092,9 +2854,6 @@ export class Config {
         : {}),
     });
     this.worktreeSettings = params.worktree ?? {};
-    if (params.contextFileName) {
-      setMemoryFilename(params.contextFileName);
-    }
 
     // Create ModelsConfig for centralized model management
     // Prefer params.authType over generationConfig.authType because:
@@ -3117,8 +2876,7 @@ export class Config {
 
     // Publish the active model id for shell subprocesses. Every Config
     // publishes its own session's model — publishModelEnv registers it per
-    // session, like the project dir above, so daemon-mode subprocesses read
-    // theirs, not the first session's. The process-global slot is claimed
+    // session, like the project dir above. The process-global slot is claimed
     // first-writer-wins, as QWEN_CODE_SESSION_ID is, so a throwaway Config
     // never clobbers the live session's global value. Done here rather than
     // alongside the session ID because the value comes from the ModelsConfig
@@ -3147,17 +2905,7 @@ export class Config {
     this.chatRecordingService = this.chatRecordingEnabled
       ? this.createChatRecordingService()
       : undefined;
-    if (
-      !this.sessionRestoreProjectionSource ||
-      this.sessionRestoreRuntime ||
-      !this.sessionWriterLeaseEnabled
-    ) {
-      this.initializeGoalRuntime(
-        this.sessionRestoreRuntime?.goalRecords ??
-          this.sessionData?.conversation.messages,
-        this.sessionRestoreRuntime,
-      );
-    }
+    this.initializeGoalRuntime(this.sessionData?.conversation.messages);
     this.extensionManager = new ExtensionManager({
       workspaceDir: this.targetDir,
       enabledExtensionOverrides: this.overrideExtensions,
@@ -3214,11 +2962,9 @@ export class Config {
     this.stopHookBlockingCap = resolveStopHookBlockingCap(
       params.stopHookBlockingCap,
     );
-    // Store system, user and project hooks separately for proper source
-    // attribution
+    // Store system and user hooks separately for proper source attribution
     this.systemHooks = params.systemHooks;
     this.userHooks = params.userHooks;
-    this.projectHooks = params.projectHooks;
     // Legacy: merged hooks, read only if no per-scope hooks are provided
     this.hooks = params.hooks;
     this.settingsWatcher = params.settingsWatcher;
@@ -3233,15 +2979,6 @@ export class Config {
    * @param options Optional initialization options including sendSdkMcpMessage callback
    */
   async initialize(options?: ConfigInitializeOptions): Promise<void> {
-    if (this.executionEnvironment) {
-      options = {
-        ...options,
-        skipHooks: true,
-        skipMcpDiscovery: true,
-        skipSkillManager: true,
-        skipFileCheckpointing: true,
-      };
-    }
     if (isDerivedConfig(this)) {
       throw new Error('Derived Configs cannot be initialized');
     }
@@ -3253,7 +2990,6 @@ export class Config {
       if (!this.initializationSettled) {
         // A joining caller's options cannot be honored, so an already-aborted
         // signal must fail fast instead of blocking on the foreign flight.
-        options?.signal?.throwIfAborted();
         this.debugLogger.debug(
           'Config.initialize() called while initialization is in flight; joining the existing run',
         );
@@ -3265,7 +3001,6 @@ export class Config {
     if (this.shutdownRequested) {
       throw Error('Config is shutting down');
     }
-    options?.signal?.throwIfAborted();
     this.initialized = true;
     const initialization = this.initializeOnce(options);
     this.initializationPromise = initialization;
@@ -3277,34 +3012,6 @@ export class Config {
     }
   }
 
-  /**
-   * Completes the cwd-sensitive half of a host-managed provisional bootstrap.
-   * Calls are one-flight and a failed activation stays failed; callers must
-   * discard the partially activated session instead of retrying individual
-   * initialization steps.
-   */
-  async activateProvisionalWorkspace(): Promise<void> {
-    if (!this.provisionalWorkspace || this.provisionalWorkspaceActivated) {
-      return;
-    }
-    if (this.provisionalWorkspaceActivation) {
-      return this.provisionalWorkspaceActivation;
-    }
-    const activation = (async () => {
-      this.getFileService();
-      await this.llmClient.initialize();
-      await this.toolRegistry.warmAll({ strict: true });
-      logStartSession(this, new StartSessionEvent(this));
-      this.provisionalWorkspaceActivated = true;
-    })();
-    this.provisionalWorkspaceActivation = activation;
-    return activation;
-  }
-
-  isProvisionalWorkspace(): boolean {
-    return this.provisionalWorkspace;
-  }
-
   private async initializeOnce(
     options?: ConfigInitializeOptions,
   ): Promise<void> {
@@ -3312,23 +3019,11 @@ export class Config {
       if (this.shellExecutionSandbox)
         this.shellExecutionSandbox = await probeShellSandbox(
           this.shellExecutionSandbox,
-          options?.signal,
         );
-      const activation = this.activateChatRecording();
-      this.sessionWriterActivationPromise = activation;
-      try {
-        await activation;
-      } finally {
-        if (this.sessionWriterActivationPromise === activation) {
-          this.sessionWriterActivationPromise = undefined;
-        }
-      }
-      options?.signal?.throwIfAborted();
       registerSessionProjectDir(this.sessionId, this.storage.getProjectDir());
       this.sessionProjectDirRegistered = true;
       await this.initializeInternal(options);
     } catch (error) {
-      this.clearSessionRestoreProjection();
       if (this.sessionProjectDirRegistered) {
         unregisterSessionProjectDir(this.sessionId);
         this.sessionProjectDirRegistered = false;
@@ -3336,16 +3031,6 @@ export class Config {
       try {
         await this.closeSessionWriter();
       } catch (closeError) {
-        if (
-          options?.signal?.aborted &&
-          containsErrorByIdentity(error, options.signal.reason)
-        ) {
-          this.debugLogger.warn(
-            'Chat recording close failed after initialization was aborted:',
-            closeError,
-          );
-          options.signal.throwIfAborted();
-        }
         if (containsErrorByIdentity(error, closeError)) {
           throw error;
         }
@@ -3364,18 +3049,12 @@ export class Config {
     options?: ConfigInitializeOptions,
   ): Promise<void> {
     this.debugLogger.info('Config initialization started');
-    options?.signal?.throwIfAborted();
-    if (options?.skipFileCheckpointing === true || this.shellExecutionSandbox) {
+    if (this.shellExecutionSandbox) {
       this.fileCheckpointingEnabled = false;
       this.fileHistoryService = undefined;
     }
 
-    // A managed provisional Config is still rooted at the shared ownership
-    // directory here. Its first cwd-sensitive service is created only after
-    // the daemon binds the exact private child.
-    if (!this.provisionalWorkspace) {
-      this.getFileService();
-    }
+    this.getFileService();
     this.promptRegistry = new PromptRegistry();
     this.resourceRegistry = new ResourceRegistry();
     this.extensionManager.setConfig(this);
@@ -3386,14 +3065,12 @@ export class Config {
         );
     recordStartupEvent('config_initialize_extensions_initial_start');
     if (
-      !this.executionEnvironment &&
       !this.shellExecutionSandbox &&
       !this.isSafeMode() &&
       !this.getBareMode()
     ) {
       await this.extensionManager.refreshCache();
     } else if (
-      !this.executionEnvironment &&
       !this.shellExecutionSandbox &&
       !this.isSafeMode() &&
       explicitExtensionNames.length > 0
@@ -3403,12 +3080,11 @@ export class Config {
       });
     }
     recordStartupEvent('config_initialize_extensions_initial_end');
-    options?.signal?.throwIfAborted();
     this.debugLogger.debug('Extension manager initialized');
 
     // Bare mode and read-only replay helpers skip all hook loading and execution.
     recordStartupEvent('config_initialize_hooks_start');
-    if (!options?.skipHooks && !this.getDisableAllHooks()) {
+    if (!this.getDisableAllHooks()) {
       this.hookSystem = new HookSystem(this);
       await this.hookSystem.initialize();
       this.debugLogger.debug('Hook system initialized');
@@ -3733,86 +3409,71 @@ export class Config {
       this.debugLogger.debug('Hook system disabled, skipping initialization');
     }
     recordStartupEvent('config_initialize_hooks_end');
-    options?.signal?.throwIfAborted();
 
     this.subagentManager = new SubagentManager(this);
     recordStartupEvent('config_initialize_skills_start');
-    if (!options?.skipSkillManager) {
-      if (
-        !this.provisionalWorkspace &&
-        this.getAutoSkillEnabled() &&
-        this.isTrustedFolder()
-      ) {
-        try {
-          const curatorResult = await maybeRunAutoSkillCurator(
-            this.getProjectRoot(),
-          );
-          if (curatorResult.status === 'ran') {
-            this.debugLogger.debug(
-              `Auto-skill curator checked ${curatorResult.result.checked} skill(s) and archived ${curatorResult.result.archived.length}.`,
-            );
-          }
-        } catch (error) {
-          this.debugLogger.warn(
-            `Auto-skill curator skipped: ${error instanceof Error ? error.message : String(error)}`,
+    if (this.getAutoSkillEnabled() && this.isTrustedFolder()) {
+      try {
+        const curatorResult = await maybeRunAutoSkillCurator(
+          this.getProjectRoot(),
+        );
+        if (curatorResult.status === 'ran') {
+          this.debugLogger.debug(
+            `Auto-skill curator checked ${curatorResult.result.checked} skill(s) and archived ${curatorResult.result.archived.length}.`,
           );
         }
+      } catch (error) {
+        this.debugLogger.warn(
+          `Auto-skill curator skipped: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
-      this.skillManager = new SkillManager(this);
-      if (
-        this.shellExecutionSandbox ||
-        this.getBareMode() ||
-        this.isSafeMode()
-      ) {
-        await this.skillManager.refreshCache();
-      } else {
-        await this.skillManager.startWatching();
-      }
-      this.debugLogger.debug('Skill manager initialized');
-      if (this.skillSettingsListsProvider) {
-        try {
-          const lists = this.skillSettingsListsProvider();
-          const skills = await this.skillManager.listSkills();
-          const extensionIdByName = new Map(
-            this.getExtensions().map((extension) => [
-              extension.name,
-              extension.id,
-            ]),
-          );
-          const defaultOffNames = new Set<string>();
-          for (const skill of skills) {
-            const extensionId = skill.extensionName
-              ? extensionIdByName.get(skill.extensionName)
-              : undefined;
-            if (skill.level !== 'extension' || !extensionId) continue;
-            const state = this.extensionManager.getExtensionSkillState(
-              extensionId,
-              authoredSkillName(skill),
-            );
-            if (state.defaultEnabled === false && !state.workspaceEnabled) {
-              defaultOffNames.add(skill.name.trim().toLowerCase());
-            }
-          }
-          this.warnings.push(
-            ...bareEnabledGrantWarnings(lists, skills, defaultOffNames),
-            ...bareDisablementBlocksQualifiedGrantWarnings(
-              lists,
-              this.getDisabledSkillNames(),
-              skills,
-            ),
-          );
-        } catch (error) {
-          this.debugLogger.warn(
-            `Skill settings migration warning skipped: ${getErrorMessage(error)}`,
-          );
-        }
-      }
+    }
+    this.skillManager = new SkillManager(this);
+    if (this.shellExecutionSandbox || this.getBareMode() || this.isSafeMode()) {
+      await this.skillManager.refreshCache();
     } else {
-      this.skillManager = null;
-      this.debugLogger.debug('Skill manager skipped');
+      await this.skillManager.startWatching();
+    }
+    this.debugLogger.debug('Skill manager initialized');
+    if (this.skillSettingsListsProvider) {
+      try {
+        const lists = this.skillSettingsListsProvider();
+        const skills = await this.skillManager.listSkills();
+        const extensionIdByName = new Map(
+          this.getExtensions().map((extension) => [
+            extension.name,
+            extension.id,
+          ]),
+        );
+        const defaultOffNames = new Set<string>();
+        for (const skill of skills) {
+          const extensionId = skill.extensionName
+            ? extensionIdByName.get(skill.extensionName)
+            : undefined;
+          if (skill.level !== 'extension' || !extensionId) continue;
+          const state = this.extensionManager.getExtensionSkillState(
+            extensionId,
+            authoredSkillName(skill),
+          );
+          if (state.defaultEnabled === false && !state.workspaceEnabled) {
+            defaultOffNames.add(skill.name.trim().toLowerCase());
+          }
+        }
+        this.warnings.push(
+          ...bareEnabledGrantWarnings(lists, skills, defaultOffNames),
+          ...bareDisablementBlocksQualifiedGrantWarnings(
+            lists,
+            this.getDisabledSkillNames(),
+            skills,
+          ),
+        );
+      } catch (error) {
+        this.debugLogger.warn(
+          `Skill settings migration warning skipped: ${getErrorMessage(error)}`,
+        );
+      }
     }
     recordStartupEvent('config_initialize_skills_end');
-    options?.signal?.throwIfAborted();
 
     this.memoryPressureConfig = loadMemoryPressureConfig();
     this.memoryPressureMonitor = new MemoryPressureMonitor(
@@ -3831,7 +3492,6 @@ export class Config {
 
     recordStartupEvent('config_initialize_extensions_final_start');
     if (
-      !this.executionEnvironment &&
       !this.shellExecutionSandbox &&
       !this.getBareMode() &&
       !this.isSafeMode()
@@ -3839,15 +3499,11 @@ export class Config {
       await this.extensionManager.refreshCache();
     }
     recordStartupEvent('config_initialize_extensions_final_end');
-    options?.signal?.throwIfAborted();
 
-    if (!this.provisionalWorkspace) {
-      recordStartupEvent('config_initialize_hierarchical_memory_start');
-      await this.refreshHierarchicalMemory('session_start', options?.signal);
-      recordStartupEvent('config_initialize_hierarchical_memory_end');
-      this.debugLogger.debug('Hierarchical memory loaded');
-    }
-    options?.signal?.throwIfAborted();
+    recordStartupEvent('config_initialize_hierarchical_memory_start');
+    await this.refreshHierarchicalMemory('session_start');
+    recordStartupEvent('config_initialize_hierarchical_memory_end');
+    this.debugLogger.debug('Hierarchical memory loaded');
 
     // Progressive MCP availability: skip MCP discovery in the synchronous
     // tool-registry construction path and kick it off in the background
@@ -3859,13 +3515,12 @@ export class Config {
     const legacyBlockingMcp =
       process.env['QWEN_CODE_LEGACY_MCP_BLOCKING'] === '1';
     // Also force the inline-discovery skip when the caller opts
-    // out of MCP entirely (ACP bootstrap path) — otherwise the legacy
+    // out of MCP entirely (`qwen mcp reconnect`) — otherwise the legacy
     // blocking mode would still spawn MCP servers via the tool-registry
     // construction path.
     const skipInlineMcpDiscovery =
       this.getBareMode() ||
       this.isSafeMode() ||
-      this.provisionalWorkspace ||
       !legacyBlockingMcp ||
       options?.skipMcpDiscovery === true;
 
@@ -3874,7 +3529,6 @@ export class Config {
       options?.sendSdkMcpMessage,
       skipInlineMcpDiscovery ? { skipDiscovery: true } : undefined,
     );
-    options?.signal?.throwIfAborted();
     recordStartupEvent('config_initialize_tool_registry_end');
     recordStartupEvent('tool_registry_created', {
       toolCount: this.toolRegistry.getAllToolNames().length,
@@ -3884,32 +3538,17 @@ export class Config {
       `Tool registry initialized with ${this.toolRegistry.getAllToolNames().length} tools`,
     );
 
-    if (
-      !(options?.skipLlmInitialization ?? options?.skipGeminiInitialization) &&
-      !this.provisionalWorkspace
-    ) {
-      await this.llmClient.initialize(undefined, options?.signal);
-      this.debugLogger.info('LLM client initialized');
-    } else {
-      this.debugLogger.info('LLM client initialization skipped');
-    }
+    await this.llmClient.initialize();
+    this.debugLogger.info('LLM client initialized');
 
     // Detect and capture runtime model snapshot (from CLI/ENV/credentials)
     this.modelsConfig.detectAndCaptureRuntimeModel();
 
     // Warm all lazy tool factories so telemetry can access tool metadata synchronously.
-    // Strict by default so a broken built-in tool surfaces immediately at startup;
-    // read-only replay Configs pass `lenientToolWarmup` so a tool that cannot be
-    // constructed under their deliberately-skipped subsystems (e.g. SkillTool without
-    // a SkillManager) is logged and skipped instead of aborting initialize().
-    if (!this.provisionalWorkspace) {
-      recordStartupEvent('config_initialize_tool_warmup_start');
-      await this.toolRegistry.warmAll({
-        strict: options?.lenientToolWarmup !== true,
-      });
-      options?.signal?.throwIfAborted();
-      recordStartupEvent('config_initialize_tool_warmup_end');
-    }
+    // Strict so a broken built-in tool surfaces immediately at startup.
+    recordStartupEvent('config_initialize_tool_warmup_start');
+    await this.toolRegistry.warmAll({ strict: true });
+    recordStartupEvent('config_initialize_tool_warmup_end');
 
     // Fire-and-forget MCP discovery. Each server's tools land in the
     // registry as it becomes ready; the cli's AppContainer debounces
@@ -3917,9 +3556,8 @@ export class Config {
     // shortly after each server settles. See `AppContainer.tsx`'s
     // `mcp-client-update` subscriber.
     //
-    // Also gated on `!options?.skipMcpDiscovery` — the ACP
-    // bootstrap path passes `skipMcpDiscovery: true` so the bootstrap
-    // config doesn't spawn MCP servers no session uses.
+    // Also gated on `!options?.skipMcpDiscovery` — `qwen mcp reconnect`
+    // passes `skipMcpDiscovery: true` and runs its own per-server discovery.
     //
     // Safe/bare mode still skip discovery when there's nothing to discover
     // (the common case: no top-tier servers supplied) — this block predates
@@ -3939,16 +3577,12 @@ export class Config {
       !this.shellExecutionSandbox &&
       skipInlineMcpDiscovery &&
       (!(this.getBareMode() || this.isSafeMode()) || hasMcpServers) &&
-      !this.provisionalWorkspace &&
       !options?.skipMcpDiscovery
     ) {
       this.startMcpDiscoveryInBackground();
     }
 
-    if (!this.provisionalWorkspace) {
-      options?.signal?.throwIfAborted();
-      logStartSession(this, new StartSessionEvent(this));
-    }
+    logStartSession(this, new StartSessionEvent(this));
     this.debugLogger.info('Config initialization completed');
 
     // Fire-and-forget sweep of stale ephemeral worktrees left behind by
@@ -3968,11 +3602,7 @@ export class Config {
     // directly would cause launches from a monorepo subdirectory to
     // scan `<subdir>/.qwen/worktrees/` — which never exists — and the
     // sweep would silently be a no-op forever.
-    if (
-      !this.shellExecutionSandbox &&
-      !this.getBareMode() &&
-      !this.provisionalWorkspace
-    ) {
+    if (!this.shellExecutionSandbox && !this.getBareMode()) {
       void (async () => {
         try {
           // Resolve the repo top-level FIRST. The previous code bailed
@@ -4022,149 +3652,6 @@ export class Config {
           );
         }
       })();
-    }
-  }
-
-  private async activateChatRecording(): Promise<void> {
-    if (!this.chatRecordingEnabled || !this.sessionWriterLeaseEnabled) {
-      return;
-    }
-    if (this.sessionWriterShutdownRequested) {
-      throw new SessionWriterShutdownError();
-    }
-    const recorder = this.chatRecordingService;
-    if (!recorder) throw new SessionWriterUnavailableError();
-    let lease: SessionWriterLease | undefined;
-    try {
-      lease = await SessionWriterLease.acquire({
-        runtimeBaseDir: this.sessionRuntimeBaseDir,
-        sessionId: this.sessionId,
-        transcriptPath: this.getTranscriptPath(),
-        processKind: 'acp',
-        qwenVersion: this.cliVersion ?? null,
-        reclaimPolicy: this.sessionWriterReclaimPolicy,
-        takeoverPolicy: this.sessionWriterTakeoverPolicy,
-        onOwnershipAcquired: (acquiredLease) => {
-          lease = acquiredLease;
-          this.pendingSessionWriterLease = acquiredLease;
-          if (this.sessionWriterShutdownRequested) {
-            this.startPendingSessionWriterRelease(acquiredLease);
-          }
-        },
-      });
-      if (this.sessionWriterShutdownRequested) {
-        throw new SessionWriterShutdownError();
-      }
-      const location = await this.getSessionService().getSessionLocation(
-        this.sessionId,
-      );
-      if (this.sessionWriterShutdownRequested) {
-        throw new SessionWriterShutdownError();
-      }
-      if (location === 'archived') {
-        throw new SessionTranscriptChangedError();
-      }
-      let authoritative: ResumedSessionData | undefined;
-      let projection: SessionRestoreProjection | undefined;
-      if (this.sessionRestoreProjectionSource) {
-        projection = await this.sessionRestoreProjectionSource();
-        this.setSessionRestoreProjection(projection);
-      } else if (this.sessionData || lease.transcriptExistedAtAcquire) {
-        authoritative = await this.getSessionService().loadSession(
-          this.sessionId,
-        );
-        if (!authoritative) throw new SessionWriterUnavailableError();
-      } else if (location !== undefined) {
-        throw new SessionTranscriptChangedError();
-      }
-      const persistedTitleInfo = authoritative
-        ? this.getSessionService().getSessionTitleInfo(this.sessionId)
-        : undefined;
-      await lease.assertOwnedAndUnchanged();
-      if (this.sessionWriterShutdownRequested) {
-        throw new SessionWriterShutdownError();
-      }
-      this.sessionData = authoritative;
-      recorder.activate(
-        lease,
-        authoritative,
-        persistedTitleInfo,
-        projection?.runtime.recording,
-      );
-      if (this.sessionRestoreProjectionSource) {
-        this.initializeGoalRuntime(
-          projection?.runtime.goalRecords,
-          projection?.runtime,
-        );
-      }
-      this.pendingSessionWriterLease = undefined;
-      lease = undefined;
-      // The recorder can take writes now, so the restore the constructor
-      // held back can finally run — against `authoritative`, which is
-      // fresher than what the constructor had. Not awaited: activation
-      // latency is unchanged, and `getGoalRuntimeReady()` is what waits.
-      this.startPendingGoalRestore();
-    } catch (error) {
-      let failure: unknown = error;
-      const ownedLease = lease ?? this.pendingSessionWriterLease;
-      let releaseFailureAlreadyReported = false;
-      if (
-        !(failure instanceof SessionWriterError) &&
-        failure &&
-        typeof failure === 'object' &&
-        typeof (failure as NodeJS.ErrnoException).code === 'string'
-      ) {
-        failure = new SessionWriterUnavailableError({ cause: failure });
-      }
-      try {
-        await this.startPendingSessionWriterRelease(ownedLease);
-        if (
-          this.pendingSessionWriterLease === ownedLease &&
-          (ownedLease?.isReleased ?? true) &&
-          !ownedLease?.isReleaseDurabilityPending
-        ) {
-          this.pendingSessionWriterLease = undefined;
-        }
-        if (
-          this.sessionWriterShutdownRequested &&
-          failure instanceof SessionWriterLostError &&
-          ownedLease?.isReleased
-        ) {
-          failure = new SessionWriterShutdownError();
-        }
-      } catch (releaseError) {
-        if (
-          releaseError instanceof SessionWriterLostError ||
-          (ownedLease?.isReleased && !ownedLease.isReleaseDurabilityPending)
-        ) {
-          this.pendingSessionWriterLease = undefined;
-        } else {
-          releaseFailureAlreadyReported = containsErrorByIdentity(
-            failure,
-            releaseError,
-          );
-          if (!releaseFailureAlreadyReported) {
-            failure = new SessionWriterUnavailableError({
-              cause: new AggregateError(
-                [failure, releaseError],
-                'Session writer lease release failed during activation cleanup',
-              ),
-            });
-          }
-        }
-      } finally {
-        if (
-          !releaseFailureAlreadyReported &&
-          this.pendingSessionWriterRelease?.lease === ownedLease
-        ) {
-          this.pendingSessionWriterRelease = undefined;
-        }
-      }
-      // The writer never became available, so the deferred restore can never
-      // run. Fail it with the activation error instead of leaving every
-      // `getGoalRuntimeReady()` caller pending forever.
-      this.settlePendingGoalRestore(failure);
-      throw failure;
     }
   }
 
@@ -4226,7 +3713,7 @@ export class Config {
         // runs (no AppContainer).
         // Without this, `chat.tools` would be frozen at the built-in-only
         // snapshot taken inside `llmClient.initialize()` → `startChat()`,
-        // and `runNonInteractive` / stream-json / ACP would silently lose
+        // and `runNonInteractive` / stream-json would silently lose
         // progressive MCP tools — a regression vs the legacy synchronous path.
         try {
           await this.llmClient?.setTools();
@@ -4246,7 +3733,7 @@ export class Config {
   /**
    * Resolves when background MCP discovery has settled (all servers ready,
    * failed, or timed out). Non-interactive code paths (`runNonInteractive`,
-   * stream-json, ACP) MUST await this before invoking the model so the
+   * stream-json) MUST await this before invoking the model so the
    * first model request sees the same tool surface the legacy
    * synchronous-MCP path produced.
    *
@@ -4311,7 +3798,6 @@ export class Config {
     loadReason: Exclude<InstructionLoadReason, 'include'> = 'refresh',
     signal?: AbortSignal,
   ): Promise<void> {
-    if (this.executionEnvironment) return;
     // Safe mode: skip all context file loading (QWEN.md, AGENTS.md, rules)
     if (this.isSafeMode()) {
       this.setUserMemory('');
@@ -4611,38 +4097,6 @@ export class Config {
     ));
   }
 
-  stageReasoningOverrides(
-    providers: ModelProvidersConfig | undefined,
-  ): string | undefined {
-    const previous =
-      this.latestReasoningSnapshot ?? this.getReasoningSnapshot();
-    const models = this.getAllConfiguredModels().map((model) => {
-      const prior = previous.find(
-        (row) =>
-          row.id === model.id &&
-          row.authType === model.authType &&
-          row.registryBaseUrl === model.registryBaseUrl,
-      );
-      const entries = providers?.[model.authType];
-      const configured = (Array.isArray(entries) ? entries : []).find(
-        (entry) =>
-          entry?.id === model.id && entry.baseUrl === model.registryBaseUrl,
-      );
-      return {
-        ...model,
-        capabilities: {
-          ...model.capabilities,
-          reasoning: configured
-            ? configured.capabilities?.reasoning
-            : prior
-              ? prior.reasoning
-              : model.capabilities?.reasoning,
-        },
-      };
-    });
-    return this.captureLatestReasoning(models);
-  }
-
   private captureLatestReasoning(
     models = this.getAllConfiguredModels(),
   ): string | undefined {
@@ -4734,7 +4188,7 @@ export class Config {
     const modelId = this.modelsConfig.getModel();
     this.modelsConfig.syncAfterAuthRefresh(authMethod, modelId);
 
-    const { config, sources } = resolveContentGeneratorConfigWithSources(
+    const { config } = resolveContentGeneratorConfigWithSources(
       this,
       authMethod,
       this.modelsConfig.getGenerationConfig(),
@@ -4756,7 +4210,7 @@ export class Config {
     );
     // Only assign to instance properties after successful initialization
     this.contentGeneratorConfig = newContentGeneratorConfig;
-    this.contentGeneratorConfigSources = sources;
+
     // Auth flows call refreshAuth directly — no model-change notification
     // fires — and the resolved model can differ from the pre-auth one.
     this.publishModelEnv();
@@ -4815,78 +4269,6 @@ export class Config {
     return this.sessionId;
   }
 
-  getSessionRestoreRuntime(): SessionRuntimeResumeState | undefined {
-    return this.sessionRestoreRuntime;
-  }
-
-  consumeSessionRestoreProjection(): SessionRestoreProjection | undefined {
-    const projection = this.pendingSessionRestoreProjection;
-    this.pendingSessionRestoreProjection = undefined;
-    return projection;
-  }
-
-  hydrateSessionRestoreFileHistory(): void {
-    if (this.restoredFileHistory) return;
-    const snapshots = this.sessionRestoreRuntime?.fileHistorySnapshots;
-    if (!snapshots?.length) return;
-    const service = this.getFileHistoryService();
-    if (!service.isEnabled()) return;
-    service.restoreFromSnapshots(snapshots);
-    this.restoredFileHistory = true;
-  }
-
-  finalizeSessionRestore(): void {
-    const runtime = this.sessionRestoreRuntime;
-    if (!runtime) return;
-    this.sessionRestoreRuntime = undefined;
-
-    const activateGoal = this.goalRestoreActivation;
-    this.goalRestoreActivation = undefined;
-    this.rejectGoalRestoreActivation = undefined;
-    if (activateGoal) {
-      try {
-        void activateGoal().catch((error) => {
-          this.debugLogger.error(
-            `Session restore goal activation failed: ${error}`,
-          );
-        });
-      } catch (error) {
-        this.debugLogger.error(
-          `Session restore goal activation failed: ${error}`,
-        );
-      }
-    }
-
-    if (this.restoredFileHistory && this.fileHistoryService) {
-      try {
-        void this.fileHistoryService
-          .validateRestoredSnapshots()
-          .catch((error) => {
-            this.debugLogger.error(
-              `FileHistory: validateRestoredSnapshots failed: ${error}`,
-            );
-          });
-      } catch (error) {
-        this.debugLogger.error(
-          `FileHistory: validateRestoredSnapshots failed: ${error}`,
-        );
-      }
-    }
-  }
-
-  setSessionSource(sourceType: string, sourceId?: string): void {
-    this.sessionSourceType = sourceType;
-    this.sessionSourceId = sourceId;
-  }
-
-  getSessionSourceType(): string | undefined {
-    return this.sessionSourceType;
-  }
-
-  getSessionSourceId(): string | undefined {
-    return this.sessionSourceId;
-  }
-
   /**
    * Returns warnings generated during configuration resolution.
    * These warnings are collected from model configuration resolution
@@ -4926,9 +4308,6 @@ export class Config {
   ): string {
     if (isDerivedConfig(this)) {
       throw new Error('Derived Configs cannot start new sessions');
-    }
-    if (this.chatRecordingService?.hasWriteOwnership()) {
-      throw new SessionWriterUnavailableError();
     }
     if (Object.hasOwn(this, 'goalRuntime')) {
       this.goalTurnHostUnbind?.();
@@ -4983,11 +4362,8 @@ export class Config {
       // Config must mutate this one, not shadow it with an own property.
       this.advisorUsage.calls = 0;
     }
-    this.clearSessionRestoreProjection();
     this.pendingRecoveredAgentsNotice = null;
     this.clearActiveTodoReminders();
-    // ACP session rotation runs inside sessionIdContext; only the
-    // single-session CLI owns the process-wide fallback.
     if (sessionIdContext.getStore() === undefined) {
       setDebugLogSession(this);
     }
@@ -4999,7 +4375,7 @@ export class Config {
     this.chatRecordingService = this.chatRecordingEnabled
       ? this.createChatRecordingService()
       : undefined;
-    this.sessionSourceService = this.sessionSourceServiceFactory?.();
+
     this.initializeGoalRuntime(this.sessionData?.conversation.messages);
     // The file-read cache is session-scoped: its `file_unchanged`
     // placeholder relies on the model having seen the prior full read
@@ -5090,11 +4466,10 @@ export class Config {
     failureWarning: string,
   ): void {
     this.queueSessionRegistryWrite(async () => {
-      const slot = this.sessionRegistrySlot;
-      let applied = await patchSessionRecord(patch, slot);
+      let applied = await patchSessionRecord(patch);
       for (let attempt = 0; attempt < 2 && !applied; attempt += 1) {
         await delay(250);
-        applied = await patchSessionRecord(patch, slot);
+        applied = await patchSessionRecord(patch);
       }
       if (!applied) {
         this.debugLogger.warn(failureWarning);
@@ -5126,11 +4501,7 @@ export class Config {
         // Keep registration independent from an earlier best-effort write.
       })
       .then(async () => {
-        // The slot is taken whether or not the write landed: it names the
-        // record this session would own, and every later patch is queued
-        // behind this step, so none of them can run against the wrong one.
         const outcome = await registration;
-        this.sessionRegistrySlot = outcome.slot;
         this.sessionRegistered = outcome.registered;
         if (!this.sessionRegistered) this.sessionRegistryActive = false;
       })
@@ -5150,7 +4521,7 @@ export class Config {
       .then(async () => {
         if (!this.sessionRegistered) return;
         this.sessionRegistered = false;
-        await unregisterSession(this.sessionRegistrySlot);
+        await unregisterSession();
       })
       .catch(() => {
         // ignored: registry cleanup must not disrupt process teardown.
@@ -5229,13 +4600,10 @@ export class Config {
         // folder this session left. Unlike the /clear path, `name`
         // follows: it is derived from the directory's basename, which is
         // exactly what changed here.
-        await patchSessionRecord(
-          {
-            cwd: workDir,
-            name: deriveSessionName(workDir, sessionId),
-          },
-          this.sessionRegistrySlot,
-        );
+        await patchSessionRecord({
+          cwd: workDir,
+          name: deriveSessionName(workDir, sessionId),
+        });
       });
     }
     await this.flushRuntimeStatusWrites();
@@ -5263,18 +4631,6 @@ export class Config {
     );
   }
 
-  getContentGeneratorConfigSources(): ContentGeneratorConfigSources {
-    // If contentGeneratorConfigSources is empty (before initializeAuth),
-    // get sources from ModelsConfig
-    if (
-      Object.keys(this.contentGeneratorConfigSources).length === 0 &&
-      this.modelsConfig
-    ) {
-      return this.modelsConfig.getGenerationConfigSources();
-    }
-    return this.contentGeneratorConfigSources;
-  }
-
   getModel(): string {
     return (
       this.getContentGeneratorConfig()?.model || this.modelsConfig.getModel()
@@ -5290,8 +4646,8 @@ export class Config {
    * rather than the content generator config.
    *
    * Unlike {@link getAuthType}, this is usable before `refreshAuth` has run —
-   * the tool registry is built during `initialize()`, which happens first (the
-   * ACP bridge calls `initialize()` and only later `refreshAuth`). Callers that
+   * the tool registry is built during `initialize()`, which can run before
+   * `refreshAuth`. Callers that
    * need the selected model's provider entry at registry-build time must use
    * this.
    */
@@ -5360,9 +4716,7 @@ export class Config {
   // has no other authoritative source: settings files miss /model switches and
   // describe the wrong home under QWEN_HOME isolation. Published per session —
   // every Config writes its OWN session's model, keyed on sessionId exactly
-  // like the project dir, so in daemon mode each session's subprocesses read
-  // theirs, not the first session's (a process-global slot alone would hold
-  // whichever session booted first). The process-global slot is the
+  // like the project dir. The process-global slot is the
   // single-session CLI fallback, gated on the claiming instance so a throwaway
   // Config never clobbers the live session's value there.
   private publishModelEnv(): void {
@@ -5370,11 +4724,7 @@ export class Config {
       return;
     }
     const model = this.getModel();
-    // Both registered per session: the identity is what /review's same-model
-    // gate compares, and in daemon mode one process-global slot holds
-    // whichever session booted first — handing a later session that value
-    // would qualify its model with ANOTHER session's provider, which passes
-    // gates the bare id would have failed.
+    // Both registered per session, keyed on the session id.
     registerSessionModel(this.sessionId, model, this.resolvedModelIdentity());
     if (this.ownsModelEnvSlot) {
       process.env['QWEN_CODE_MODEL'] = model;
@@ -5889,33 +5239,6 @@ export class Config {
     return this.maxSessionTurns;
   }
 
-  /**
-   * The autonomous spend window armed on each new Goal, as the runtime's
-   * `tokenBudgetGrant`: a positive integer, or `Infinity` when the operator
-   * set `goalTokenBudget` to `0` or `-1` (Goals then run unbounded).
-   */
-  getGoalTokenBudgetGrant(): number {
-    return this.goalTokenBudgetGrant;
-  }
-
-  /**
-   * The Goal-turn window armed on each new Goal, as the runtime's
-   * `turnBudgetGrant`: a positive integer, or `Infinity` when no ceiling is
-   * configured (the default).
-   */
-  getGoalTurnBudgetGrant(): number {
-    return this.goalTurnBudgetGrant;
-  }
-
-  /**
-   * The active-time window armed on each new Goal, in milliseconds, as the
-   * runtime's `activeTimeBudgetGrantMs`: a positive number, or `Infinity`
-   * when no ceiling is configured (the default).
-   */
-  getGoalActiveTimeBudgetGrantMs(): number {
-    return this.goalActiveTimeBudgetGrantMs;
-  }
-
   getMaxSubagentDepth(): number {
     return this.maxSubagentDepth;
   }
@@ -5965,7 +5288,6 @@ export class Config {
       `${this.sessionId}.jsonl`,
       `${this.sessionId}.runtime.json`,
       `${this.sessionId}.worktree.json`,
-      `${this.sessionId}.pr.json`,
     ].map((fileName) => ({
       from: path.join(oldChatsDir, fileName),
       to: path.join(newChatsDir, fileName),
@@ -6036,7 +5358,6 @@ export class Config {
     oldStorage: Storage,
     newStorage: Storage,
     oldDir: string,
-    opts?: { skipProcessChdir?: boolean },
   ): Promise<void> {
     try {
       this.chatRecordingService?.finalize();
@@ -6051,15 +5372,13 @@ export class Config {
     try {
       this.moveCurrentSessionArtifacts(oldStorage, newStorage);
     } catch (error) {
-      if (!opts?.skipProcessChdir) {
-        try {
-          process.chdir(oldDir);
-        } catch (rollbackError) {
-          this.debugLogger.warn(
-            'Failed to roll back working directory after session artifact migration failed',
-            rollbackError,
-          );
-        }
+      try {
+        process.chdir(oldDir);
+      } catch (rollbackError) {
+        this.debugLogger.warn(
+          'Failed to roll back working directory after session artifact migration failed',
+          rollbackError,
+        );
       }
       throw error;
     }
@@ -6068,7 +5387,6 @@ export class Config {
   async relocateWorkingDirectory(
     newDir: string,
     expectedCanonicalDir?: string,
-    opts?: { skipProcessChdir?: boolean; skipArtifactMigration?: boolean },
   ): Promise<{
     memoryRefreshError?: unknown;
     mcpRefreshError?: unknown;
@@ -6079,15 +5397,7 @@ export class Config {
     if (isDerivedConfig(this)) {
       throw new Error('Derived Configs cannot relocate working directories');
     }
-    if (
-      !opts?.skipArtifactMigration &&
-      this.chatRecordingService?.hasWriteOwnership()
-    ) {
-      throw new SessionWriterUnavailableError();
-    }
-    const oldDir = opts?.skipProcessChdir
-      ? this.cwd
-      : fs.realpathSync(process.cwd());
+    const oldDir = fs.realpathSync(process.cwd());
     const targetPath = path.resolve(newDir);
     const expected = expectedCanonicalDir ?? fs.realpathSync(targetPath);
     if (!fs.statSync(targetPath).isDirectory()) {
@@ -6098,44 +5408,24 @@ export class Config {
       this.explicitIncludeDirectories,
     );
 
-    if (!opts?.skipProcessChdir) {
-      process.chdir(targetPath);
-      const actualCwd = fs.realpathSync(process.cwd());
-      if (actualCwd !== expected) {
-        process.chdir(oldDir);
-        throw new Error(
-          `Changed directory to ${actualCwd}, expected ${expected}.`,
-        );
-      }
-    } else {
-      // ACP path: validate realpath matches expected without calling
-      // process.chdir — guards against TOCTOU swaps between the trust
-      // check and the config state update.
-      const actualCanonical = fs.realpathSync(targetPath);
-      if (actualCanonical !== expected) {
-        throw new Error(
-          `Realpath mismatch: resolved ${actualCanonical}, expected ${expected}.`,
-        );
-      }
+    process.chdir(targetPath);
+    const actualCwd = fs.realpathSync(process.cwd());
+    if (actualCwd !== expected) {
+      process.chdir(oldDir);
+      throw new Error(
+        `Changed directory to ${actualCwd}, expected ${expected}.`,
+      );
     }
 
     const oldStorage = this.storage;
-    if (!opts?.skipArtifactMigration) {
-      const newStorage = new Storage(expected, this.sessionRuntimeBaseDir);
-      await this.prepareSessionArtifactMigration(
-        oldStorage,
-        newStorage,
-        oldDir,
-        opts,
-      );
-      this.storage = newStorage;
-      this.chatRecordingService?.resetStoragePaths();
-    }
+    const newStorage = new Storage(expected, this.sessionRuntimeBaseDir);
+    await this.prepareSessionArtifactMigration(oldStorage, newStorage, oldDir);
+    this.storage = newStorage;
+    this.chatRecordingService?.resetStoragePaths();
 
     this.backgroundTaskRegistry.disposeResidentAgents();
     this.targetDir = expected;
     this.cwd = expected;
-    resetPreloadedContentGenerator(this.contentGenerator);
     await this.refreshCurrentRuntimeStatus(expected);
     this.workspaceContext.applyRootDirectories(workspaceDirectories);
     this.fileDiscoveryService = null;
@@ -6185,7 +5475,7 @@ export class Config {
   /**
    * Reads and clears the pending startup-worktree notice. Returns `null`
    * when nothing is stashed (the common case). Each entry point (TUI /
-   * headless / ACP) calls this on the model's first prompt; a non-null
+   * headless) calls this on the model's first prompt; a non-null
    * return means the entry point should NOT additionally call
    * `restoreWorktreeContext()` for that prompt — startup overrides resume.
    */
@@ -6216,11 +5506,7 @@ export class Config {
    * This method is idempotent and safe to call multiple times.
    * It handles the case where initialization was not completed.
    */
-  async shutdown(options?: {
-    shutdownTelemetry?: boolean;
-    skipSessionWriter?: boolean;
-    strictResourceCleanup?: boolean;
-  }): Promise<void> {
+  async shutdown(): Promise<void> {
     // Derived Configs share parent resources; any replacement resource a profile
     // installs is owned and cleaned up by that profile.
     if (isDerivedConfig(this)) return;
@@ -6229,20 +5515,15 @@ export class Config {
     this.settingsWatcher?.stopWatching();
     const closeWriter = () =>
       this.closeSessionWriter().catch((error) => {
-        this.debugLogger.error(
-          'Failed to release session writer lease:',
-          error,
-        );
+        this.debugLogger.error('Failed to close chat recording:', error);
       });
     const earlyWriterClose =
-      !options?.skipSessionWriter &&
-      this.initializationPromise !== undefined &&
-      !this.initializationSucceeded
+      this.initializationPromise !== undefined && !this.initializationSucceeded
         ? closeWriter()
         : undefined;
 
     try {
-      if (!options?.skipSessionWriter && !earlyWriterClose) {
+      if (!earlyWriterClose) {
         try {
           this.chatRecordingService?.finalize();
           await this.chatRecordingService?.flush();
@@ -6252,31 +5533,21 @@ export class Config {
       }
 
       try {
-        await this.shutdownResources(options?.strictResourceCleanup === true);
-      } catch (error) {
-        if (options?.strictResourceCleanup) throw error;
+        await this.shutdownResources();
+      } catch {
+        // Best-effort — don't block shutdown
       }
     } finally {
-      if (!options?.skipSessionWriter) {
-        await (earlyWriterClose ?? closeWriter());
-      }
+      await (earlyWriterClose ?? closeWriter());
       this.chatRecordingFailureListeners.clear();
-      if (options?.shutdownTelemetry !== false && isTelemetrySdkInitialized()) {
+      if (isTelemetrySdkInitialized()) {
         await shutdownTelemetry();
       }
     }
   }
 
-  private async shutdownResources(
-    waitForInitialization: boolean,
-  ): Promise<void> {
-    if (waitForInitialization) {
-      try {
-        await this.initializationPromise;
-      } catch {
-        // Partial initialization still needs resource cleanup.
-      }
-    } else if (this.initializationPromise && !this.initializationSettled) {
+  private async shutdownResources(): Promise<void> {
+    if (this.initializationPromise && !this.initializationSettled) {
       this.scheduleResourceShutdownAfterInitialization();
       return;
     }
@@ -6323,35 +5594,19 @@ export class Config {
     let resourceError: unknown;
     try {
       this.memoryManager.cancelMigrations();
-      this.clearSessionRestoreProjection();
       // Drop this session's project-dir registry entry. It is registered during
-      // initialization, so it is released here whenever that step completed —
-      // in daemon mode, where one process serves many sessions, an unreleased
-      // entry per session is a leak that grows for the life of the process.
+      // initialization, so it is released here whenever that step completed.
       if (this.sessionProjectDirRegistered) {
         unregisterSessionProjectDir(this.sessionId);
         this.sessionProjectDirRegistered = false;
       }
       // Drop this session's model registry entry. It is registered at
-      // construction (publishModelEnv), so it is released on every shutdown —
-      // same daemon-mode leak rationale as the project dir above.
+      // construction (publishModelEnv), so it is released on every shutdown.
       unregisterSessionModel(this.sessionId);
 
       if (Object.hasOwn(this, 'goalRuntime')) {
-        this.rejectGoalRestoreActivation?.(
-          new GoalPersistenceUnavailableError('Goal runtime disposed'),
-        );
-        this.goalRestoreActivation = undefined;
-        this.rejectGoalRestoreActivation = undefined;
         this.goalTurnHostUnbind?.();
         this.goalTurnHostUnbind = undefined;
-        // Shutting down before the writer arrived: nothing will ever run
-        // the deferred restore, so settle it rather than strand awaiters.
-        this.settlePendingGoalRestore(
-          new GoalPersistenceUnavailableError(
-            'Config shut down before the session writer became available',
-          ),
-        );
         this.goalRuntime?.dispose();
       }
 
@@ -6420,10 +5675,6 @@ export class Config {
       (part): part is string => Boolean(part?.trim()),
     );
     return parts.length > 0 ? parts.join('\n\n') : undefined;
-  }
-
-  setLiveAppendSystemPrompt(prompt: string | undefined): void {
-    this.liveAppendSystemPrompt = prompt;
   }
 
   getOutputStyle(): OutputStyleDefinition | undefined {
@@ -6551,11 +5802,6 @@ export class Config {
     return this.disabledSkillNamesProvider?.() ?? EMPTY_DISABLED_SKILL_NAMES;
   }
 
-  /** True when a startup migration-warning provider was attached. */
-  hasSkillSettingsListsProvider(): boolean {
-    return this.skillSettingsListsProvider !== null;
-  }
-
   isSkillEnabled(skill: {
     name: string;
     authoredName?: string;
@@ -6625,22 +5871,9 @@ export class Config {
    * ToolRegistry. Consulted by `ToolRegistry.registerTool` and
    * `ToolRegistry.registerFactory` to skip registration.
    *
-   * Mutability semantics: the snapshot is
-   * mutable via `setDisabledTools()` so the daemon's
-   * `setWorkspaceToolEnabled` route can re-sync the set after a
-   * `tools.disabled` settings write — without that sync, the
-   * documented "toggle + restart" workflow would re-register the
-   * just-disabled MCP tool against the bootstrap snapshot.
+   * `ToolRegistry` consults the set at registration time only.
    *
-   * Already-registered tools are NOT retroactively unregistered:
-   * `ToolRegistry` consults the set at registration time only, so a
-   * mid-session disable only takes effect on the next `registerTool`
-   * call (next ACP child spawn, MCP rediscover, etc.). This matches
-   * the documented "toggling does not unregister live tools"
-   * contract.
-   *
-   * See `disabledTools` in ConfigParameters and `setDisabledTools`
-   * for the runtime sync entry point.
+   * See `disabledTools` in ConfigParameters.
    */
   getDisabledTools(): ReadonlySet<string> {
     return this.disabledTools;
@@ -6675,24 +5908,6 @@ export class Config {
     return this.toolMode;
   }
 
-  /**
-   * Replace the in-process `disabledTools`
-   * snapshot with a fresh set sourced from the workspace settings.
-   * Intended for the `qwen serve` mutation surface
-   * (`setWorkspaceToolEnabled` → ACP `qwen/control/...` → here): the
-   * settings file is the source of truth, and this setter keeps the
-   * in-memory Config in sync so a subsequent MCP rediscovery / next
-   * tool registration honors the just-toggled value.
-   *
-   * Already-registered tools are NOT retroactively unregistered
-   * `ToolRegistry` consults the set at registration time only, which
-   * matches the documented "toggling does not unregister live tools"
-   * contract.
-   */
-  setDisabledTools(disabled: ReadonlySet<string>): void {
-    this.disabledTools = new Set(disabled);
-  }
-
   getToolCallCommand(): string | undefined {
     return this.toolCallCommand;
   }
@@ -6702,11 +5917,8 @@ export class Config {
   }
 
   /**
-   * T2.8: return the raw settings-layer MCP servers map (without the
-   * runtime overlay or extension contributions). Used by
-   * `McpClientManager.addRuntimeMcpServer` to detect shadow-over-
-   * settings (a runtime entry whose name collides with a pre-existing
-   * settings entry).
+   * The raw settings-layer MCP servers map (without extension
+   * contributions).
    */
   getSettingsMcpServers(): Record<string, MCPServerConfig> | undefined {
     return this.mcpServers;
@@ -6744,20 +5956,15 @@ export class Config {
       );
     }
 
-    // T2.8 — runtime layer wins over settings + extensions (shadow semantics)
-    for (const [name, cfg] of this.runtimeMcpServers) {
-      mcpServers[name] = cfg;
-    }
-
     return mcpServers;
   }
 
   getMcpServers(): Record<string, MCPServerConfig> | undefined {
-    if (this.executionEnvironment || this.shellExecutionSandbox) return {};
+    if (this.shellExecutionSandbox) return {};
     // Safe mode distrusts LOCAL/ambient state (settings.json, extensions,
     // project `.mcp.json`) — not the caller's own explicit, per-invocation
-    // request. `topTierMcpServers` (ACP `session/new`'s `mcpServers` field,
-    // `--mcp-config`) is that explicit request, so it survives safe mode;
+    // request. `topTierMcpServers` (`--mcp-config`) is that explicit
+    // request, so it survives safe mode;
     // everything `getMergedMcpServers()` would otherwise fold in does not.
     // Still runs through the `allowedMcpServers` filter below like any other
     // source — safe mode isn't an exemption from a session's own
@@ -6853,9 +6060,8 @@ export class Config {
   /**
    * Replace the settings-layer MCP server map at runtime (hot-reload).
    * Unlike {@link addMcpServers}, this bypasses the `initialized` guard and
-   * REPLACES (not merges) so removals take effect. The runtime overlay
-   * ({@link addRuntimeMcpServer}) and extension contributions are unaffected —
-   * {@link getMcpServers} still layers them on top. See sub-task 3.
+   * REPLACES (not merges) so removals take effect. Extension contributions
+   * are unaffected — {@link getMcpServers} still layers them on top.
    */
   setMcpServers(servers: Record<string, MCPServerConfig> | undefined): void {
     if (this.shellExecutionSandbox && Object.keys(servers ?? {}).length)
@@ -6871,10 +6077,6 @@ export class Config {
    */
   setAllowedMcpServers(allowed: string[] | undefined): void {
     this.allowedMcpServers = allowed;
-  }
-
-  getAllowedMcpServers(): string[] | undefined {
-    return this.allowedMcpServers;
   }
 
   /**
@@ -7067,51 +6269,9 @@ export class Config {
     await runReconcile;
   }
 
-  /**
-   * Add a runtime-only MCP server. Unlike `addMcpServers`, this does NOT
-   * touch `this.mcpServers` (settings layer) and does not enforce the
-   * `initialized` guard — the whole point is post-init mutation from the
-   * daemon surface. `getMcpServers()` will overlay these entries on top
-   * of the settings layer (Task 5).
-   */
-  addRuntimeMcpServer(name: string, config: MCPServerConfig): void {
-    if (this.shellExecutionSandbox)
-      throw new Error('Tool execution sandbox does not support MCP servers.');
-    this.runtimeMcpServers.set(name, config);
-  }
-
-  /**
-   * Snapshot the runtime-only MCP servers added via `addRuntimeMcpServer`.
-   * Returns a shallow copy so callers can't mutate the private map.
-   *
-   * Reverse tool channel (issue #5626): a per-session Config built by
-   * `newSessionConfig` is independent from the bootstrap/workspace Config and
-   * never re-reads runtime additions (they live outside the settings layer
-   * `loadCliConfig` reloads). The daemon uses this getter to propagate the
-   * bootstrap Config's runtime MCP servers into a freshly created session
-   * Config so a session created AFTER a client MCP server was registered still
-   * discovers the client-hosted tools. Empty when nothing was runtime-added,
-   * so the inheritance step is a no-op in the common case.
-   */
-  getRuntimeMcpServers(): Record<string, MCPServerConfig> {
-    return Object.fromEntries(this.runtimeMcpServers);
-  }
-
-  /**
-   * Remove a runtime-only MCP server previously added via
-   * `addRuntimeMcpServer`. Returns `true` if the entry existed and was
-   * removed, `false` otherwise.
-   */
-  removeRuntimeMcpServer(name: string): boolean {
-    return this.runtimeMcpServers.delete(name);
-  }
-
   isLspEnabled(): boolean {
     return (
-      this.lspEnabled &&
-      !this.shellExecutionSandbox &&
-      !this.getBareMode() &&
-      !this.provisionalWorkspace
+      this.lspEnabled && !this.shellExecutionSandbox && !this.getBareMode()
     );
   }
 
@@ -7211,10 +6371,6 @@ export class Config {
     }
   }
 
-  getSessionSubagents(): SubagentConfig[] {
-    return this.sessionSubagents;
-  }
-
   setSessionSubagents(subagents: SubagentConfig[]): void {
     if (this.initialized) {
       throw new Error('Cannot modify sessionSubagents after initialization');
@@ -7232,14 +6388,6 @@ export class Config {
 
   getUserMemory(): string {
     return this.userMemory;
-  }
-
-  getStaticSystemPrefix(): string | undefined {
-    return this.staticSystemPrefix;
-  }
-
-  setStaticSystemPrefix(prefix: string | undefined): void {
-    this.staticSystemPrefix = prefix;
   }
 
   /**
@@ -7387,11 +6535,6 @@ export class Config {
     this.memoryFileCount = count;
   }
 
-  /** @deprecated Use `getMemoryFileCount`; retained until a future major release. */
-  getGeminiMdFileCount(): number {
-    return this.getMemoryFileCount();
-  }
-
   /** @deprecated Use `setMemoryFileCount`; retained until a future major release. */
   setGeminiMdFileCount(count: number): void {
     this.setMemoryFileCount(count);
@@ -7425,10 +6568,6 @@ export class Config {
     cb: ((manager: ArenaManager | null) => void) | null,
   ): void {
     this.arenaManagerChangeCallback = cb;
-  }
-
-  getArenaAgentClient(): ArenaAgentClient | null {
-    return this.arenaAgentClient;
   }
 
   getAgentsSettings(): AgentsCollabSettings {
@@ -7567,36 +6706,6 @@ export class Config {
       : undefined;
   }
 
-  setPlanMode(enabled: boolean, executionMode: ApprovalMode): void {
-    if (isDerivedConfig(this)) {
-      throw new Error('Derived Configs cannot change plan workflow mode');
-    }
-    if (executionMode === ApprovalMode.PLAN) {
-      throw new Error('Plan is not an execution approval mode');
-    }
-    if (!this.isTrustedFolder() && executionMode !== ApprovalMode.DEFAULT) {
-      throw new TrustGateError(
-        'Cannot enable privileged approval modes in an untrusted folder.',
-      );
-    }
-    const previousMode = this.approvalMode;
-    const previousExecutionMode = this.planExecutionMode;
-    if (enabled) this.planExecutionMode = executionMode;
-    try {
-      this.setApprovalMode(enabled ? ApprovalMode.PLAN : executionMode);
-    } catch (error) {
-      this.planExecutionMode = previousExecutionMode;
-      throw error;
-    }
-    if (
-      enabled &&
-      previousMode === ApprovalMode.PLAN &&
-      previousExecutionMode !== executionMode
-    ) {
-      this.notifyApprovalModeChangeListeners();
-    }
-  }
-
   getApprovalModeRevision(): number {
     return this.approvalModeRevision;
   }
@@ -7639,7 +6748,7 @@ export class Config {
        * root Session Config may stamp the session-global workflow revision;
        * derived agent configs still clear their local plan-exit notice.
        * Every other PLAN → non-PLAN transition (Shift+Tab, /approval-mode,
-       * /plan, ACP setSessionMode, confirm-and-switch) is a manual exit the
+       * /plan, confirm-and-switch) is a manual exit the
        * model was never told about, and queues a one-shot system reminder.
        */
       fromApprovedPlanExit?: boolean;
@@ -7784,12 +6893,6 @@ export class Config {
     ) {
       cursor.seenVersion = Math.max(0, version - 1);
     }
-  }
-
-  consumePendingManualPlanExitNotice(): boolean {
-    return (
-      Config.prototype.takePendingManualPlanExitNotice.call(this) !== undefined
-    );
   }
 
   /**
@@ -7954,28 +7057,6 @@ export class Config {
         // Ignore rollback errors; the containment check already failed.
       }
       throw err;
-    }
-  }
-
-  /**
-   * Loads the plan for the current session, or returns undefined if none exists.
-   */
-  loadPlan(): string | undefined {
-    this.assertPlansDirWithinTargetDir();
-    const filePath = this.getPlanFilePath();
-    this.assertPlanFilePathWithinTargetDir(filePath);
-    try {
-      return fs.readFileSync(filePath, 'utf-8');
-    } catch (error: unknown) {
-      if (
-        typeof error === 'object' &&
-        error !== null &&
-        'code' in error &&
-        (error as NodeJS.ErrnoException).code === 'ENOENT'
-      ) {
-        return undefined;
-      }
-      throw error;
     }
   }
 
@@ -8308,30 +7389,15 @@ export class Config {
   isArtifactEnabled(): boolean {
     if (this.shellExecutionSandbox) return false;
     // Publishing writes outside the project and opens a browser, so it is
-    // limited to interactive or managed preview sessions, excluding SDK use.
-    // Managed previews render in Web Shell instead of opening a host browser.
+    // limited to interactive sessions, excluding SDK use.
     // QWEN_CODE_DISABLE_ARTIFACT
     // hard-disables both artifact tools; QWEN_CODE_ENABLE_ARTIFACT remains as
     // a compatibility override for old configs that explicitly disabled them.
     if (process.env['QWEN_CODE_DISABLE_ARTIFACT'] === '1') return false;
     if (this.sdkMode) return false;
-    if (!this.interactive && !this.isArtifactSnapshotsEnabled()) return false;
+    if (!this.interactive) return false;
     if (process.env['QWEN_CODE_ENABLE_ARTIFACT'] === '1') return true;
     return this.artifactEnabled;
-  }
-
-  private sessionSourceService?: SessionSourceService;
-  private sessionSourceServiceFactory?: () => SessionSourceService;
-
-  setSessionSourceServiceFactory(factory: () => SessionSourceService): void {
-    this.sessionSourceServiceFactory = factory;
-    this.sessionSourceService = factory();
-  }
-
-  getSessionSourceService(): SessionSourceService | undefined {
-    return Object.hasOwn(this, 'sessionSourceService')
-      ? this.sessionSourceService
-      : undefined;
   }
 
   isRecordArtifactEnabled(): boolean {
@@ -8341,32 +7407,18 @@ export class Config {
     return this.artifactEnabled;
   }
 
-  isArtifactSnapshotsEnabled(): boolean {
-    return this.artifactSnapshotsEnabled && this.chatRecordingEnabled;
-  }
-
-  setArtifactSnapshotsEnabled(enabled: boolean): void {
-    this.artifactSnapshotsEnabled = enabled;
-  }
-
   shouldAutoOpenArtifact(): boolean {
-    if (this.isArtifactSnapshotsEnabled()) return false;
     if (process.env['QWEN_ARTIFACT_NO_AUTO_OPEN'] === '1') return false;
     return this.artifactAutoOpen && !this.isBrowserLaunchSuppressed();
   }
 
   isWorkflowsEnabled(): boolean {
     if (this.shellExecutionSandbox) return false;
-    if (this.provisionalWorkspace) return false;
     // Workflows are opt-in via settings or env.
     // P1 also honors a kill switch: QWEN_CODE_DISABLE_WORKFLOWS=1 forces off
     if (process.env['QWEN_CODE_DISABLE_WORKFLOWS'] === '1') return false;
     if (process.env['QWEN_CODE_ENABLE_WORKFLOWS'] === '1') return true;
     return this.workflowsEnabled ?? false;
-  }
-
-  setWorkflowsEnabled(enabled: boolean | undefined): void {
-    this.workflowsEnabled = enabled;
   }
 
   /**
@@ -8389,13 +7441,6 @@ export class Config {
     );
   }
 
-  setSessionWorkflowEnabledProvider(provider?: () => boolean): void {
-    this.sessionWorkflowEnabledProvider = provider;
-    if (!this.isSessionWorkflowEnabled()) {
-      this.sessionWorkflowPlanRevision = undefined;
-    }
-  }
-
   getAgentExecutionBackend(): 'container' | undefined {
     return this.agentExecutionBackend;
   }
@@ -8407,7 +7452,7 @@ export class Config {
   }
 
   getExecutionEnvironment(): ExecutionEnvironment | undefined {
-    return this.executionEnvironment;
+    return undefined;
   }
 
   shutdownExecutionEnvironments(): Promise<void> {
@@ -8553,25 +7598,8 @@ export class Config {
     return this.modelProposedGoals;
   }
 
-  setGoalProposalHostSupported(supported: boolean): void {
-    this.goalProposalHostSupported = supported;
-  }
-
-  getGoalProposalHostSupported(): boolean {
-    return this.goalProposalHostSupported;
-  }
-
-  setGoalProposalTurnKey(turnKey: string | undefined): boolean {
-    if (this.goalProposalTurnKey === turnKey) return false;
-    this.goalProposalTurnKey = turnKey;
-    return true;
-  }
-
   isGoalProposalAvailable(): boolean {
-    return (
-      resolveInteractionMode(this) === 'interactive' ||
-      (this.goalProposalHostSupported && this.goalProposalTurnKey !== undefined)
-    );
+    return resolveInteractionMode(this) === 'interactive';
   }
 
   hasPendingGoalProposal(): boolean {
@@ -8630,8 +7658,8 @@ export class Config {
   /**
    * Whether the model may run only named workflows: its Workflow calls with an
    * inline `script` or a `scriptPath` are refused, and a script cannot nest
-   * `workflow({scriptPath})`. Runs the host starts itself (ACP `run-saved`,
-   * `run-script`, retry, rerun) are not the model's and are not restricted.
+   * `workflow({scriptPath})`. Runs the host starts itself (retry, rerun) are
+   * not the model's and are not restricted.
    * Fixed for the life of the session.
    */
   isWorkflowNameOnly(): boolean {
@@ -8676,9 +7704,6 @@ export class Config {
   getFileFilteringRespectGitIgnore(): boolean {
     return this.fileFiltering.respectGitIgnore;
   }
-  getFileFilteringRespectQwenIgnore(): boolean {
-    return this.fileFiltering.respectQwenIgnore;
-  }
 
   getFileFilteringOptions(): FileFilteringOptions {
     return {
@@ -8705,15 +7730,6 @@ export class Config {
 
   getFileCheckpointingEnabled(): boolean {
     return !this.shellExecutionSandbox && this.fileCheckpointingEnabled;
-  }
-
-  enableFileCheckpointing(): void {
-    if (this.shellExecutionSandbox)
-      throw new Error(
-        'File checkpointing is unavailable with tools.executionSandbox.',
-      );
-    this.fileCheckpointingEnabled = true;
-    this.fileHistoryService = undefined;
   }
 
   getFileHistoryService(): FileHistoryService {
@@ -8783,31 +7799,6 @@ export class Config {
     ];
   }
 
-  getExperimentalZedIntegration(): boolean {
-    return this.experimentalZedIntegration;
-  }
-
-  getRestoreAskUserQuestion(): boolean {
-    return this.restoreAskUserQuestion;
-  }
-
-  getPreserveRestorableAskUserQuestion(): boolean {
-    return this.preserveRestorableAskUserQuestion;
-  }
-
-  /** Load/resume declined the re-hang: repair LLM history like flag-off. */
-  suppressRestorableAskUserQuestionPreservation(): void {
-    this.preserveRestorableAskUserQuestion = false;
-  }
-
-  isSessionWriterLeaseEnabled(): boolean {
-    return this.sessionWriterLeaseEnabled;
-  }
-
-  getListExtensions(): boolean {
-    return this.listExtensions;
-  }
-
   getExtensionManager(): ExtensionManager {
     return this.extensionManager;
   }
@@ -8861,7 +7852,7 @@ export class Config {
    */
   getTeamMemoryEnabled(): boolean {
     if (this.shellExecutionSandbox) return false;
-    if (this.getBareMode() || this.provisionalWorkspace) {
+    if (this.getBareMode()) {
       return false;
     }
     const override = process.env['QWEN_CODE_MEMORY_TEAM'];
@@ -8914,12 +7905,7 @@ export class Config {
 
   getAutoSkillEnabled(): boolean {
     if (this.shellExecutionSandbox) return false;
-    return (
-      this.enableAutoSkill &&
-      !this.getBareMode() &&
-      !this.isSafeMode() &&
-      !this.provisionalWorkspace
-    );
+    return this.enableAutoSkill && !this.getBareMode() && !this.isSafeMode();
   }
 
   /**
@@ -8979,40 +7965,6 @@ export class Config {
     return this.messageBus;
   }
 
-  /**
-   * Set the message bus instance.
-   * This is called by the CLI layer to inject the MessageBus. The caller must
-   * install the bus's HOOK_EXECUTION_REQUEST subscription BEFORE calling this,
-   * because observers registered with {@link onMessageBusChange} are notified
-   * here and may use the bus right away.
-   */
-  setMessageBus(messageBus: MessageBus): void {
-    if (this.messageBus === messageBus) {
-      return;
-    }
-    this.messageBus = messageBus;
-    this.announceMessageBus(messageBus);
-  }
-
-  /**
-   * Observes the hook MessageBus. The listener is called immediately when a
-   * bus already exists, and again whenever a different bus replaces it.
-   *
-   * A bus is only ever announced AFTER its HOOK_EXECUTION_REQUEST subscription
-   * is installed, so "I have a bus" always implies "this bus can run hooks".
-   * Returns a disposer; a throwing listener is logged and ignored, because a
-   * progress observer must never break hook initialization.
-   */
-  onMessageBusChange(listener: (bus: MessageBus) => void): () => void {
-    this.messageBusListeners.add(listener);
-    if (this.messageBus) {
-      this.notifyMessageBusListener(listener, this.messageBus);
-    }
-    return () => {
-      this.messageBusListeners.delete(listener);
-    };
-  }
-
   private notifyMessageBusListener(
     listener: (bus: MessageBus) => void,
     bus: MessageBus,
@@ -9052,8 +8004,7 @@ export class Config {
       return undefined;
     }
     // The legacy merged `hooks` stands in only when no scope was supplied.
-    const hooks =
-      this.projectHooks ?? (this.hasScopedHooks() ? undefined : this.hooks);
+    const hooks = this.hasScopedHooks() ? undefined : this.hooks;
     return hooks as { [K in HookEventName]?: HookDefinition[] } | undefined;
   }
 
@@ -9094,11 +8045,7 @@ export class Config {
    * duplicate key includes the source, so each copy would register again.
    */
   private hasScopedHooks(): boolean {
-    return (
-      this.systemHooks !== undefined ||
-      this.userHooks !== undefined ||
-      this.projectHooks !== undefined
-    );
+    return this.systemHooks !== undefined || this.userHooks !== undefined;
   }
 
   /**
@@ -9112,12 +8059,10 @@ export class Config {
   setHooksFromSettings(hooks: {
     systemHooks?: Record<string, unknown>;
     userHooks?: Record<string, unknown>;
-    projectHooks?: Record<string, unknown>;
     hooks?: Record<string, unknown>;
   }): void {
     this.systemHooks = hooks.systemHooks;
     this.userHooks = hooks.userHooks;
-    this.projectHooks = hooks.projectHooks;
     this.hooks = hooks.hooks;
   }
 
@@ -9140,47 +8085,12 @@ export class Config {
     return this.getExtensions().filter((e) => e.isActive);
   }
 
-  getBlockedMcpServers(): Array<{ name: string; extensionName: string }> {
-    const mcpServers = { ...(this.mcpServers || {}) };
-    const extensions = this.getActiveExtensions();
-    for (const extension of extensions) {
-      Object.entries(extension.config.mcpServers || {}).forEach(
-        ([key, server]) => {
-          if (mcpServers[key]) return;
-          mcpServers[key] = {
-            ...server,
-            extensionName: extension.config.name,
-          };
-        },
-      );
-    }
-    const blockedMcpServers: Array<{ name: string; extensionName: string }> =
-      [];
-
-    if (this.allowedMcpServers) {
-      Object.entries(mcpServers).forEach(([key, server]) => {
-        const isAllowed = matchesAnyServerPattern(key, this.allowedMcpServers);
-        if (!isAllowed) {
-          blockedMcpServers.push({
-            name: key,
-            extensionName: server.extensionName || '',
-          });
-        }
-      });
-    }
-    return blockedMcpServers;
-  }
-
   getNoBrowser(): boolean {
     return this.noBrowser;
   }
 
   isBrowserLaunchSuppressed(): boolean {
     return this.getNoBrowser() || !shouldAttemptBrowserLaunch();
-  }
-
-  getFolderTrustFeature(): boolean {
-    return this.folderTrustFeature;
   }
 
   /**
@@ -9250,18 +8160,6 @@ export class Config {
    */
   getFileSystemService(): FileSystemService {
     return this.fileSystemService;
-  }
-
-  /**
-   * Set a custom FileSystemService
-   */
-  setFileSystemService(fileSystemService: FileSystemService): void {
-    if (this.shellExecutionSandbox) {
-      throw new Error(
-        'Internal sandbox does not support delegated filesystem services.',
-      );
-    }
-    this.fileSystemService = fileSystemService;
   }
 
   getChatCompression(): ChatCompressionSettings | undefined {
@@ -9463,26 +8361,6 @@ export class Config {
     return this.goalRuntimeReady.then(() => runtime);
   }
 
-  async getGoalRuntimePrepared(): Promise<GoalRuntime> {
-    const runtime = this.getGoalRuntime();
-    if (!this.sessionRestoreRuntime) return this.getGoalRuntimeReady();
-    return runtime.getPreparedRestore().then(() => runtime);
-  }
-
-  async rebaseGoalRuntimeFromActiveTranscript(): Promise<void> {
-    const runtime = this.getGoalRuntime();
-    const recordingService = this.chatRecordingService;
-    if (!recordingService) {
-      throw new GoalPersistenceUnavailableError();
-    }
-    const records = await recordingService.readActiveTranscriptChain();
-    this.goalTurnHostUnbind?.();
-    this.goalTurnHostUnbind = undefined;
-    runtime.dispose();
-    this.initializeGoalRuntime(records);
-    await this.goalRuntimeReady;
-  }
-
   bindGoalTurnHost(host: GoalTurnHost): () => void {
     if (!Object.hasOwn(this, 'goalRuntime')) {
       throw new GoalPersistenceUnavailableError();
@@ -9514,34 +8392,14 @@ export class Config {
   }
 
   private createChatRecordingService(): ChatRecordingService {
-    return new ChatRecordingService(
-      this,
-      (event) => {
-        this.notifyChatRecordingFailure(event);
-      },
-      this.sessionWriterLeaseEnabled,
-      this.sessionRestoreRuntime?.recording,
-    );
+    return new ChatRecordingService(this, (event) => {
+      this.notifyChatRecordingFailure(event);
+    });
   }
 
-  private initializeGoalRuntime(
-    records?: readonly GoalRecoveryRecord[],
-    restoreRuntime?: SessionRuntimeResumeState,
-  ): void {
-    this.rejectGoalRestoreActivation?.(
-      new GoalPersistenceUnavailableError('Goal runtime replaced'),
-    );
-    this.goalRestoreActivation = undefined;
-    this.rejectGoalRestoreActivation = undefined;
+  private initializeGoalRuntime(records?: readonly GoalRecoveryRecord[]): void {
     this.goalTurnHostUnbind?.();
     this.goalTurnHostUnbind = undefined;
-    // A runtime built here supersedes any restore still waiting on the
-    // writer: its records belong to the outgoing session.
-    this.settlePendingGoalRestore(
-      new GoalPersistenceUnavailableError(
-        'Goal runtime was replaced before the session writer became available',
-      ),
-    );
     // An approval belongs to the session that produced it.
     this.goalProposalApprovalController?.abort();
     this.goalProposalApprovalController = undefined;
@@ -9582,105 +8440,8 @@ export class Config {
     if (this.goalTurnHost) {
       this.goalTurnHostUnbind = runtime.bindHost(this.goalTurnHost);
     }
-    // Under a session-writer lease the recorder starts `inactive` and
-    // rejects every write until `activateChatRecording()` hands it the
-    // lease. A restore itself writes nothing, but it is not only a read:
-    // activation replaces `sessionData` with the transcript loaded under
-    // the lease, so a restore run now would work from the constructor's
-    // possibly stale records, and a restored active Goal resumes its turn,
-    // whose first transition would hit that guard. Wait for the writer.
-    if (restoreRuntime) {
-      const preparation = runtime.prepareRestore(records ?? []);
-      let resolveActivation!: () => void;
-      let rejectActivation!: (reason?: unknown) => void;
-      const activation = new Promise<void>((resolve, reject) => {
-        resolveActivation = resolve;
-        rejectActivation = reject;
-      });
-      this.rejectGoalRestoreActivation = rejectActivation;
-      this.goalRestoreActivation = () => {
-        const started = runtime.activateRestoredWork();
-        void started.then(resolveActivation, rejectActivation);
-        return started;
-      };
-      this.goalRuntimeReady = Promise.all([preparation, activation]).then(
-        () => runtime,
-      );
-    } else if (
-      this.sessionWriterLeaseEnabled &&
-      !recorder.hasWriteOwnership()
-    ) {
-      const ready = new Promise<GoalRuntime>((resolve, reject) => {
-        this.pendingGoalRestore = { runtime, resolve, reject };
-      });
-      this.goalRuntimeReady = ready;
-    } else {
-      this.goalRuntimeReady = runtime
-        .restore(records ?? [])
-        .then(() => runtime);
-    }
+    this.goalRuntimeReady = runtime.restore(records ?? []).then(() => runtime);
     void this.goalRuntimeReady.catch(() => undefined);
-  }
-
-  /**
-   * Run the restore that {@link initializeGoalRuntime} deferred because the
-   * session writer was not yet accepting writes.
-   *
-   * Called once `activateChatRecording()` has handed the recorder its lease.
-   * Deliberately re-reads the records from `sessionData`: activation
-   * replaces it with the authoritative transcript loaded under the lease, so
-   * the deferred restore sees newer records than the constructor did.
-   */
-  private startPendingGoalRestore(): void {
-    const pending = this.pendingGoalRestore;
-    if (!pending) return;
-    this.pendingGoalRestore = undefined;
-    if (pending.runtime !== this.goalRuntime) {
-      pending.reject(
-        new GoalPersistenceUnavailableError(
-          'Goal runtime was replaced before the session writer became available',
-        ),
-      );
-      return;
-    }
-    void pending.runtime
-      .restore(this.sessionData?.conversation.messages ?? [])
-      .then(
-        () => pending.resolve(pending.runtime),
-        (error: unknown) => pending.reject(error),
-      );
-  }
-
-  /**
-   * Fail a deferred restore that can never run — the writer never became
-   * available, or the runtime it belonged to was replaced. Without this the
-   * promise behind {@link getGoalRuntimeReady} would stay pending forever
-   * and every awaiting caller would hang rather than see the failure.
-   */
-  private settlePendingGoalRestore(error: unknown): void {
-    const pending = this.pendingGoalRestore;
-    if (!pending) return;
-    this.pendingGoalRestore = undefined;
-    pending.reject(error);
-  }
-
-  private setSessionRestoreProjection(
-    projection: SessionRestoreProjection | undefined,
-  ): void {
-    this.pendingSessionRestoreProjection = projection;
-    this.sessionRestoreRuntime = projection?.runtime;
-    this.restoredFileHistory = false;
-  }
-
-  private clearSessionRestoreProjection(): void {
-    this.pendingSessionRestoreProjection = undefined;
-    this.sessionRestoreRuntime = undefined;
-    this.restoredFileHistory = false;
-    this.rejectGoalRestoreActivation?.(
-      new GoalPersistenceUnavailableError('Session restore was abandoned'),
-    );
-    this.goalRestoreActivation = undefined;
-    this.rejectGoalRestoreActivation = undefined;
   }
 
   private notifyChatRecordingFailure(event: ChatRecordingFailureEvent): void {
@@ -9716,56 +8477,13 @@ export class Config {
     return path.join(projectDir, 'chats', safeFilename);
   }
 
-  async assertCanStartTurn(): Promise<void> {
-    if (isDerivedConfig(this)) return;
-    if (this.chatRecordingService?.hasWriteOwnership()) {
-      await this.chatRecordingService.assertCanStartTurn();
-    }
-  }
-
-  hasSessionWriteOwnership(): boolean {
-    if (isDerivedConfig(this)) return false;
-    return (
-      (this.pendingSessionWriterLease !== undefined &&
-        !this.pendingSessionWriterLease.isReleased) ||
-      this.chatRecordingService?.hasWriteOwnership() === true
-    );
-  }
-
-  setSessionWriterReclaimPolicy(policy: 'local' | 'never'): void {
+  closeSessionWriter(): Promise<void> {
     if (isDerivedConfig(this)) {
       throw new SessionWriterUnavailableError();
     }
-    if (this.initialized) {
-      throw new SessionWriterUnavailableError();
-    }
-    this.sessionWriterReclaimPolicy = policy;
-  }
-
-  setSessionWriterTakeoverPolicy(policy: 'never' | 'certified'): void {
-    if (isDerivedConfig(this)) {
-      throw new SessionWriterUnavailableError();
-    }
-    if (this.initialized) {
-      throw new SessionWriterUnavailableError();
-    }
-    this.sessionWriterTakeoverPolicy = policy;
-  }
-
-  closeSessionWriter(options?: { handoff?: boolean }): Promise<void> {
-    if (isDerivedConfig(this)) {
-      throw new SessionWriterUnavailableError();
-    }
-    if (options?.handoff && this.sessionWriterTakeoverPolicy === 'certified') {
-      this.sessionWriterHandoffRequested = true;
-    }
-    this.sessionWriterShutdownRequested = true;
-    this.chatRecordingService?.beginClose({
-      handoff: this.sessionWriterHandoffRequested,
-    });
-    this.startPendingSessionWriterRelease();
+    this.chatRecordingService?.beginClose();
     if (this.sessionWriterClosePromise) return this.sessionWriterClosePromise;
-    const pending = this.closeSessionWriterOnce();
+    const pending = Promise.resolve(this.chatRecordingService?.close());
     this.sessionWriterClosePromise = pending;
     void pending.catch(() => {
       if (this.sessionWriterClosePromise === pending) {
@@ -9773,74 +8491,6 @@ export class Config {
       }
     });
     return pending;
-  }
-
-  private async closeSessionWriterOnce(): Promise<void> {
-    const failures: unknown[] = [];
-    const activation = this.sessionWriterActivationPromise;
-    try {
-      await activation;
-    } catch (error) {
-      if (!(error instanceof SessionWriterShutdownError)) {
-        failures.push(error);
-      }
-    }
-    try {
-      await this.chatRecordingService?.close({
-        handoff: this.sessionWriterHandoffRequested,
-      });
-    } catch (error) {
-      failures.push(error);
-    }
-    const pendingLease = activation
-      ? undefined
-      : this.pendingSessionWriterLease;
-    if (pendingLease) {
-      try {
-        await this.startPendingSessionWriterRelease(pendingLease);
-        if (
-          this.pendingSessionWriterLease === pendingLease &&
-          pendingLease.isReleased &&
-          !pendingLease.isReleaseDurabilityPending
-        ) {
-          this.pendingSessionWriterLease = undefined;
-        }
-      } catch (error) {
-        if (
-          error instanceof SessionWriterLostError ||
-          (pendingLease.isReleased && !pendingLease.isReleaseDurabilityPending)
-        ) {
-          this.pendingSessionWriterLease = undefined;
-        }
-        failures.push(error);
-      } finally {
-        if (this.pendingSessionWriterRelease?.lease === pendingLease) {
-          this.pendingSessionWriterRelease = undefined;
-        }
-      }
-    }
-    if (failures.length === 1) {
-      throw failures[0];
-    }
-    if (failures.length > 1) {
-      throw new AggregateError(failures, 'Session writer shutdown failed');
-    }
-  }
-
-  private startPendingSessionWriterRelease(
-    lease = this.pendingSessionWriterLease,
-  ): Promise<void> | undefined {
-    if (!lease) return undefined;
-    const existing = this.pendingSessionWriterRelease;
-    if (existing?.lease === lease) return existing.promise;
-    const promise = lease.release();
-    this.pendingSessionWriterRelease = { lease, promise };
-    void promise.catch(() => undefined);
-    return promise;
-  }
-
-  getSessionRuntimeBaseDir(): string {
-    return this.sessionRuntimeBaseDir;
   }
 
   /**
@@ -10085,10 +8735,6 @@ export class Config {
     return this.permissionManager;
   }
 
-  getToolInvocationGuard(): ToolInvocationGuard | undefined {
-    return this.toolInvocationGuard;
-  }
-
   getShellExecutionSandbox():
     | Readonly<ShellExecutionSandboxPolicy>
     | undefined {
@@ -10178,47 +8824,6 @@ export class Config {
     await registry.ensureTool(ToolNames.ADVISOR);
   }
 
-  async registerSessionSourceTool(
-    registry: ToolRegistry = this.toolRegistry,
-  ): Promise<void> {
-    if (
-      !this.getSessionSourceService() ||
-      this.sdkMode ||
-      this.getBareMode() ||
-      this.isSafeMode() ||
-      registry.getAllToolNames().includes(ToolNames.RECORD_SOURCE)
-    ) {
-      return;
-    }
-    let status: ToolRegistrationStatus = 'registered';
-    try {
-      const permissionManager = this.getPermissionManager();
-      status = permissionManager
-        ? await permissionManager.getToolRegistrationStatus(
-            ToolNames.RECORD_SOURCE,
-          )
-        : 'registered';
-    } catch (error) {
-      this.debugLogger.warn(
-        `Failed to check permissions for tool "${ToolNames.RECORD_SOURCE}", skipping registration:`,
-        error,
-      );
-      return;
-    }
-    const factory: ToolFactory = async () => {
-      const { RecordSourceTool } = await import('../tools/record-source.js');
-      return new RecordSourceTool(this);
-    };
-    if (status === 'deferred') {
-      registry.registerPermissionDeferredFactory(
-        ToolNames.RECORD_SOURCE,
-        factory,
-      );
-    } else if (status === 'registered') {
-      registry.registerFactory(ToolNames.RECORD_SOURCE, factory);
-    }
-  }
-
   async createToolRegistry(
     sendSdkMcpMessage?: SendSdkMcpMessage,
     options?: { skipDiscovery?: boolean; forSubAgent?: boolean },
@@ -10278,8 +8883,7 @@ export class Config {
       // keep the text hand-off (`/goal set …`) that /goal-draft prints.
       if (
         this.getModelProposedGoals() !== 'disabled' &&
-        (resolveInteractionMode(this) === 'interactive' ||
-          this.goalProposalHostSupported)
+        resolveInteractionMode(this) === 'interactive'
       ) {
         await registerLazy(ToolNames.PROPOSE_GOAL, async () => {
           const { ProposeGoalTool } = await import('../goals/goal-tools.js');
@@ -10332,11 +8936,6 @@ export class Config {
         const { ToolSearchTool } = await import('../tools/tool-search.js');
         return new ToolSearchTool(this);
       });
-      if (this.executionEnvironment && !options?.forSubAgent) {
-        await registerStructuredOutputIfRequested();
-        await registerGoalWorkerTools();
-        if (!this.getBareMode()) await registerHostSessionTools();
-      }
       return registry;
     }
 
@@ -10593,9 +9192,6 @@ export class Config {
         );
         return new ArtifactTool(this);
       });
-    }
-    if (!options?.forSubAgent) {
-      await this.registerSessionSourceTool(registry);
     }
     if (this.isRecordArtifactEnabled()) {
       await registerLazy(ToolNames.RECORD_ARTIFACT, async () => {

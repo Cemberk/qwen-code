@@ -52,9 +52,6 @@ export function admitShellSandbox(
     );
   }
   if (
-    params.provisionalWorkspace ||
-    params.sdkMode ||
-    params.experimentalZedIntegration ||
     params.sandbox ||
     params.overrideExtensions?.some(
       (name) => name.trim() !== '' && name.trim().toLowerCase() !== 'none',
@@ -65,13 +62,11 @@ export function admitShellSandbox(
     params.toolDiscoveryCommand ||
     params.toolCallCommand ||
     params.lsp?.enabled ||
-    params.lspClient ||
     params.agentExecutionBackend !== undefined ||
-    params.executionEnvironment !== undefined ||
     params.executionEnvironmentFactory !== undefined
   ) {
     throw new Error(
-      'Tool execution sandbox does not support SDK/ACP sessions, provisional workspaces, extensions, MCP, discovery, LSP, agent execution environments, or a whole-CLI sandbox.',
+      'Tool execution sandbox does not support extensions, MCP, discovery, LSP, agent execution environments, or a whole-CLI sandbox.',
     );
   }
   if (

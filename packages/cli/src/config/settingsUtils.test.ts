@@ -6,17 +6,14 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  // Schema utilities
   getSettingDefinition,
   requiresRestart,
   getDefaultValue,
-  getRestartRequiredSettings,
   getEffectiveValue,
   getAllSettingKeys,
   getDialogSettingKeys,
   WORKSPACE_RESTRICTED_SETTING_KEYS,
   WORKSPACE_TIGHTEN_ONLY_SETTINGS,
-  // Business logic utilities
   TEST_ONLY,
   settingExistsInScope,
   setPendingSettingValue,
@@ -327,14 +324,6 @@ describe('SettingsUtils', () => {
 
       it('should return undefined for invalid settings', () => {
         expect(getDefaultValue('invalidSetting')).toBeUndefined();
-      });
-    });
-
-    describe('getRestartRequiredSettings', () => {
-      it('should return all settings that require restart', () => {
-        const restartSettings = getRestartRequiredSettings();
-        expect(restartSettings).toContain('mcpServers');
-        expect(restartSettings).toContain('ui.requiresRestart');
       });
     });
 

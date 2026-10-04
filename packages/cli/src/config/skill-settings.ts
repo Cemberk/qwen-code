@@ -94,53 +94,6 @@ export function resolveSkillSettings(
   };
 }
 
-/**
- * Finds the settings entry a surface should blame for a skill, in a map keyed
- * by settings-entry name.
- *
- * A restriction blocks a skill under either spelling — `name` is the registry
- * identity and carries the extension prefix, `authoredName` is what an existing
- * entry may hold from before that prefix existed — so a lookup that keys on one
- * of them silently reports "nothing blocks this". The wrong reason, or no
- * reason, on a row the config has already gated: the picker then offers a
- * toggle that appears to do nothing. `skillRestrictionNames` already returns
- * both spellings normalized and registry-first, so there is nothing to
- * re-normalize here and the registry-name entry wins a tie.
- */
-export function lookupSkillSetting<T>(
-  entries: ReadonlyMap<string, T>,
-  skill: { name: string; authoredName?: string },
-): T | undefined {
-  for (const name of skillRestrictionNames(skill)) {
-    const found = entries.get(name);
-    if (found !== undefined) return found;
-  }
-  return undefined;
-}
-
-export function lookupSkillDisablement(
-  disablements: ReadonlyMap<string, SkillDisablement>,
-  skill: { name: string; authoredName?: string },
-): SkillDisablement | undefined {
-  // A hard block beats a default one whichever spelling carries it; the
-  // registry-first walk would otherwise report the weaker entry in
-  // mixed-spelling states. Among hard entries, one carrying lockedScope
-  // names the scope the user has to edit, so it wins over an unlocked
-  // hard entry either spelling holds.
-  let fallback: SkillDisablement | undefined;
-  let hard: SkillDisablement | undefined;
-  for (const name of skillRestrictionNames(skill)) {
-    const found = disablements.get(name);
-    if (found?.reason === 'hard') {
-      if (found.lockedScope) return found;
-      hard ??= found;
-      continue;
-    }
-    fallback ??= found;
-  }
-  return hard ?? fallback;
-}
-
 export interface SkillToggleBlock {
   reason: 'hard' | 'default';
   list: 'disabled' | 'defaultDisabled';
@@ -282,13 +235,6 @@ export function buildHigherDisabled(settings: LoadedSettings): {
       return `skills.${block.list} '${block.entry}' (${block.scope})`;
     },
   };
-}
-
-export function skillToggleBlockForName(
-  settings: LoadedSettings,
-  skill: { name: string; authoredName?: string },
-): SkillToggleBlock | null {
-  return buildHigherDisabled(settings).blockIn(skill);
 }
 
 function updateTarget(

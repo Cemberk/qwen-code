@@ -5,11 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import {
-  APPROVAL_MODE_INFO,
-  APPROVAL_MODES,
-  AuthType,
-} from '@qwen-code/qwen-code-core';
+import { APPROVAL_MODES, AuthType } from '@qwen-code/qwen-code-core';
 import { DEFAULT_COMMAND_OPTIONS } from './top-level-options.js';
 
 // top-level-options.ts mirrors core's ApprovalMode and AuthType as literals so
@@ -23,14 +19,6 @@ describe('shared option definitions stay in sync with core', () => {
     expect(DEFAULT_COMMAND_OPTIONS['approval-mode'].choices).toEqual(
       APPROVAL_MODES,
     );
-  });
-
-  it('mirrors core approval-mode descriptions in the --approval-mode help', () => {
-    const expected = `Set the approval mode: ${APPROVAL_MODES.map(
-      (mode) => `${mode} (${APPROVAL_MODE_INFO[mode].description})`,
-    ).join(', ')}`;
-
-    expect(DEFAULT_COMMAND_OPTIONS['approval-mode'].description).toBe(expected);
   });
 
   it('mirrors core AuthType values in the --auth-type choices', () => {

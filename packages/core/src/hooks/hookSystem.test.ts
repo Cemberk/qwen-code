@@ -151,14 +151,6 @@ describe('HookSystem', () => {
     });
   });
 
-  describe('getEventHandler', () => {
-    it('should return the hook event handler', () => {
-      const eventHandler = hookSystem.getEventHandler();
-
-      expect(eventHandler).toBe(mockHookEventHandler);
-    });
-  });
-
   describe('getRegistry', () => {
     it('should return the hook registry', () => {
       const registry = hookSystem.getRegistry();

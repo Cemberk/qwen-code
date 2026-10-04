@@ -7,7 +7,6 @@
 import React from 'react';
 import { Text } from 'ink';
 import { theme } from '../semantic-colors.js';
-import stringWidth from 'string-width';
 import { createDebugLogger } from '@qwen-code/qwen-code-core';
 import { renderInlineLatex } from './latexRenderer.js';
 import {
@@ -289,58 +288,3 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({
 };
 
 export const RenderInline = React.memo(RenderInlineInternal);
-
-/**
- * Utility function to get the plain text length of a string with markdown formatting
- * This is useful for calculating column widths in tables
- */
-export const getPlainTextLength = (
-  text: string,
-  enableInlineMath = false,
-): number => {
-  let normalizedText = '';
-  let lastIndex = 0;
-
-  for (const token of mergeInlineMathMatches(
-    text,
-    INLINE_MARKDOWN_REGEX,
-    enableInlineMath,
-  )) {
-    const index =
-      token.kind === 'math' ? token.span.index : (token.match.index ?? 0);
-    const prose = text.slice(lastIndex, index);
-    normalizedText +=
-      token.kind === 'math'
-        ? unescapeMarkdownBeforeMath(prose)
-        : unescapeMarkdownDollars(prose);
-
-    if (token.kind === 'math') {
-      normalizedText += renderInlineLatex(
-        unescapeMarkdownDollars(token.span.content),
-      );
-      lastIndex = index + token.span.raw.length;
-      continue;
-    }
-
-    const match = token.match;
-    const fullMatch = match[0];
-    const codeMatch = fullMatch.match(/^(`+)(.+?)\1$/s);
-
-    if (codeMatch?.[2]) {
-      normalizedText += codeMatch[2];
-    } else {
-      normalizedText += unescapeMarkdownDollars(fullMatch);
-    }
-    lastIndex = index + fullMatch.length;
-  }
-  normalizedText += unescapeMarkdownDollars(text.slice(lastIndex));
-
-  const cleanText = normalizedText
-    .replace(/\*\*(.*?)\*\*/g, '$1')
-    .replace(/\*(.*?)\*/g, '$1')
-    .replace(/_(.*?)_/g, '$1')
-    .replace(/~~(.*?)~~/g, '$1')
-    .replace(/<u>(.*?)<\/u>/g, '$1')
-    .replace(/.*\[(.*?)\]\(.*\)/g, '$1');
-  return stringWidth(cleanText);
-};

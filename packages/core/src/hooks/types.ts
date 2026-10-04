@@ -239,8 +239,6 @@ export type HookDecision = 'ask' | 'block' | 'deny' | 'approve' | 'allow';
  */
 export interface HookInput {
   session_id: string;
-  source_type?: string;
-  source_id?: string;
   transcript_path: string;
   cwd: string;
   hook_event_name: string;
@@ -478,13 +476,6 @@ export class DefaultHookOutput implements HookOutput {
     }
     return { blocked: false, reason: '' };
   }
-
-  /**
-   * Check if context clearing was requested by hook.
-   */
-  shouldClearContext(): boolean {
-    return false;
-  }
 }
 
 /**
@@ -633,16 +624,6 @@ export class StopHookOutput extends DefaultHookOutput {
     super(data);
     this.stopReason = data.stopReason;
   }
-
-  /**
-   * Get the stop reason if provided
-   */
-  getStopReason(): string | undefined {
-    if (!this.stopReason) {
-      return undefined;
-    }
-    return `Stop hook feedback:\n${this.stopReason}`;
-  }
 }
 
 /**
@@ -713,43 +694,11 @@ export class PermissionRequestHookOutput extends DefaultHookOutput {
   }
 
   /**
-   * Check if the permission was denied
-   */
-  isPermissionDenied(): boolean {
-    const decision = this.getPermissionDecision();
-    return decision?.behavior === 'deny';
-  }
-
-  /**
-   * Get the deny message if permission was denied
-   */
-  getDenyMessage(): string | undefined {
-    const decision = this.getPermissionDecision();
-    return decision?.message;
-  }
-
-  /**
    * Check if execution should be interrupted after denial
    */
   shouldInterrupt(): boolean {
     const decision = this.getPermissionDecision();
     return decision?.interrupt === true;
-  }
-
-  /**
-   * Get updated tool input if permission was allowed with modifications
-   */
-  getUpdatedToolInput(): Record<string, unknown> | undefined {
-    const decision = this.getPermissionDecision();
-    return decision?.updatedInput;
-  }
-
-  /**
-   * Get updated permissions if permission was allowed with permission updates
-   */
-  getUpdatedPermissions(): PermissionSuggestion[] | undefined {
-    const decision = this.getPermissionDecision();
-    return decision?.updatedPermissions;
   }
 }
 
@@ -762,17 +711,6 @@ export interface PreToolUseInput extends HookInput {
   tool_input: Record<string, unknown>;
   tool_use_id: string; // Unique identifier for this tool use instance (internal format, e.g., toolu_xxx)
   tool_call_id?: string; // Original API call ID from the LLM provider (e.g., call_xxx for OpenAI/Qwen)
-}
-
-/**
- * PreToolUse hook output
- */
-export interface PreToolUseOutput extends HookOutput {
-  hookSpecificOutput: {
-    hookEventName: 'PreToolUse';
-    permissionDecision: 'allow' | 'deny' | 'ask';
-    permissionDecisionReason: string;
-  };
 }
 
 /**
@@ -789,19 +727,6 @@ export interface PostToolUseInput extends HookInput {
 }
 
 /**
- * PostToolUse hook output
- */
-export interface PostToolUseOutput extends HookOutput {
-  decision: HookDecision;
-  reason: string;
-  hookSpecificOutput?: {
-    hookEventName: 'PostToolUse';
-    additionalContext?: string;
-    artifacts?: ToolArtifact[];
-  };
-}
-
-/**
  * PostToolUseFailure hook input
  * Fired when a tool execution fails
  */
@@ -814,18 +739,6 @@ export interface PostToolUseFailureInput extends HookInput {
   error: string; // Error message describing the failure
   is_interrupt?: boolean; // Whether the failure was caused by user interruption
   duration_ms?: number; // Tool execution time in milliseconds, when execution started
-}
-
-/**
- * PostToolUseFailure hook output
- * Supports all three hook types: command, prompt, and agent
- */
-export interface PostToolUseFailureOutput extends HookOutput {
-  hookSpecificOutput?: {
-    hookEventName: 'PostToolUseFailure';
-    additionalContext?: string;
-    artifacts?: ToolArtifact[];
-  };
 }
 
 /**
@@ -855,32 +768,11 @@ export interface PostToolBatchInput extends HookInput {
 }
 
 /**
- * PostToolBatch hook output
- */
-export interface PostToolBatchOutput extends HookOutput {
-  hookSpecificOutput?: {
-    hookEventName: 'PostToolBatch';
-    additionalContext?: string;
-    artifacts?: ToolArtifact[];
-  };
-}
-
-/**
  * UserPromptSubmit hook input
  */
 export interface UserPromptSubmitInput extends HookInput {
   prompt: string;
   submitted_prompt?: string;
-}
-
-/**
- * UserPromptSubmit hook output
- */
-export interface UserPromptSubmitOutput extends HookOutput {
-  hookSpecificOutput?: {
-    hookEventName: 'UserPromptSubmit';
-    additionalContext?: string;
-  };
 }
 
 /**
@@ -893,16 +785,6 @@ export interface UserPromptExpansionInput extends HookInput {
   command_name: string;
   command_args: string;
   prompt: string;
-}
-
-/**
- * UserPromptExpansion hook output
- */
-export interface UserPromptExpansionOutput extends HookOutput {
-  hookSpecificOutput?: {
-    hookEventName: 'UserPromptExpansion';
-    additionalContext?: string;
-  };
 }
 
 /**
@@ -922,16 +804,6 @@ export interface NotificationInput extends HookInput {
   message: string;
   title?: string;
   notification_type: NotificationType;
-}
-
-/**
- * Notification hook output
- */
-export interface NotificationOutput extends HookOutput {
-  hookSpecificOutput?: {
-    hookEventName: 'Notification';
-    additionalContext?: string;
-  };
 }
 
 /**
@@ -978,16 +850,6 @@ export interface StopInput extends HookInput, Partial<ContextUsageData> {
 }
 
 /**
- * Stop hook output
- */
-export interface StopOutput extends HookOutput {
-  hookSpecificOutput?: {
-    hookEventName: 'Stop';
-    additionalContext?: string;
-  };
-}
-
-/**
  * MessageDisplay hook input
  *
  * Fires repeatedly as the assistant's reply streams (before `Stop`, which fires
@@ -1002,18 +864,6 @@ export interface MessageDisplayInput extends HookInput {
   message_id: string;
   displayed_text: string;
   is_final: boolean;
-}
-
-/**
- * MessageDisplay hook output
- *
- * Fire-and-forget, no control effects (no blocking/permission semantics) —
- * purely observational, like `Notification`/`PostCompact`.
- */
-export interface MessageDisplayOutput extends HookOutput {
-  hookSpecificOutput?: {
-    hookEventName: 'MessageDisplay';
-  };
 }
 
 /**
@@ -1046,16 +896,6 @@ export interface SessionStartInput extends HookInput {
 }
 
 /**
- * SessionStart hook output
- */
-export interface SessionStartOutput extends HookOutput {
-  hookSpecificOutput?: {
-    hookEventName: 'SessionStart';
-    additionalContext?: string;
-  };
-}
-
-/**
  * SessionEnd reason types
  */
 export enum SessionEndReason {
@@ -1071,16 +911,6 @@ export enum SessionEndReason {
  */
 export interface SessionEndInput extends HookInput {
   reason: SessionEndReason;
-}
-
-/**
- * SessionEnd hook output
- */
-export interface SessionEndOutput extends HookOutput {
-  hookSpecificOutput?: {
-    hookEventName: 'SessionEnd';
-    additionalContext?: string;
-  };
 }
 
 /**
@@ -1107,16 +937,6 @@ export interface PreCompactInput extends HookInput {
 }
 
 /**
- * PreCompress hook output
- */
-export interface PreCompactOutput extends HookOutput {
-  hookSpecificOutput?: {
-    hookEventName: 'PreCompact';
-    additionalContext: string;
-  };
-}
-
-/**
  * PostCompact trigger types
  */
 export enum PostCompactTrigger {
@@ -1131,19 +951,6 @@ export enum PostCompactTrigger {
 export interface PostCompactInput extends HookInput {
   trigger: PostCompactTrigger;
   compact_summary: string;
-}
-
-/**
- * PostCompact hook output
- * Note: PostCompact is not in the official decision mode supported events list,
- * so hookSpecificOutput / additionalContext do not produce any control effects
- */
-export interface PostCompactOutput extends HookOutput {
-  // All returned JSON is ignored for control purposes
-  hookSpecificOutput?: {
-    hookEventName: 'PostCompact';
-    additionalContext?: string;
-  };
 }
 
 export enum AgentType {
@@ -1164,16 +971,6 @@ export interface SubagentStartInput extends HookInput {
 }
 
 /**
- * SubagentStart hook output
- */
-export interface SubagentStartOutput extends HookOutput {
-  hookSpecificOutput?: {
-    hookEventName: 'SubagentStart';
-    additionalContext?: string;
-  };
-}
-
-/**
  * SubagentStop hook input
  * Fired when a subagent has finished responding
  */
@@ -1186,17 +983,6 @@ export interface SubagentStopInput extends HookInput {
   last_assistant_message: string;
   background_tasks: BackgroundTaskInfo[];
   crons: CronJobInfo[];
-}
-
-/**
- * SubagentStop hook output
- * Supports all three hook types: command, prompt, and agent
- */
-export interface SubagentStopOutput extends HookOutput {
-  hookSpecificOutput?: {
-    hookEventName: 'SubagentStop';
-    additionalContext?: string;
-  };
 }
 
 /**
@@ -1224,13 +1010,6 @@ export interface StopFailureInput extends HookInput {
 }
 
 /**
- * StopFailure hook output
- * Fire-and-forget: hook output and exit codes are ignored
- * This type alias is used instead of an empty interface to satisfy ESLint rules
- */
-export type StopFailureOutput = HookOutput;
-
-/**
  * Todo item status types
  */
 export type TodoStatus = 'pending' | 'in_progress' | 'completed';
@@ -1250,16 +1029,6 @@ export interface TodoCreatedInput extends HookInput {
 }
 
 /**
- * TodoCreated hook output
- */
-export interface TodoCreatedOutput extends HookOutput {
-  hookSpecificOutput?: {
-    hookEventName: 'TodoCreated';
-    additionalContext?: string;
-  };
-}
-
-/**
  * TodoCompleted hook input
  * Fired when a todo item's status changes to 'completed'
  */
@@ -1271,16 +1040,6 @@ export interface TodoCompletedInput extends HookInput {
   all_todos: TodoItem[];
   /** Execution phase: validation (no side effects) or postWrite (side effects allowed) */
   phase: HookPhase;
-}
-
-/**
- * TodoCompleted hook output
- */
-export interface TodoCompletedOutput extends HookOutput {
-  hookSpecificOutput?: {
-    hookEventName: 'TodoCompleted';
-    additionalContext?: string;
-  };
 }
 
 /**

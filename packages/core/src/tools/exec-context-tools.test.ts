@@ -30,8 +30,6 @@ function setup(
     model: 'test',
     sandbox: undefined,
     debugMode: false,
-    userMemory: '',
-    memoryFileCount: 0,
     approvalMode: ApprovalMode.DEFAULT,
     codeModeOnly: true,
   });

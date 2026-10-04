@@ -36,10 +36,6 @@ import {
 } from './html.js';
 import { artifactIdFromPath, type ArtifactPublisher } from './publisher.js';
 import { LocalPublisher } from './local-publisher.js';
-import {
-  deleteArtifactSnapshot,
-  saveArtifactSnapshot,
-} from './artifact-snapshots.js';
 
 /** Opens a URL in the browser. Injectable so tests don't launch a browser. */
 export type UrlOpener = (
@@ -63,7 +59,7 @@ Workflow:
 - Responsive: relative units, flex/grid, max-width:100% on media; wide content (tables, diagrams, code) scrolls inside its own overflow-x:auto container.
 - Set a concise \`title\` — it names the browser tab.
 
-To update an artifact, call Artifact again with the SAME file path: it redeploys to the same URL. In Web Shell, each publication also saves a separate local HTML version for the conversation's historical preview. Use Artifact to deliver a saved webpage version; recording a live development URL alone cannot preserve its content. A different path creates a separate Artifact.
+To update an artifact, call Artifact again with the SAME file path: it redeploys to the same URL. Use Artifact to deliver a saved webpage version; recording a live development URL alone cannot preserve its content. A different path creates a separate Artifact.
 
 Set artifact.autoOpen=false in settings.json, or QWEN_ARTIFACT_NO_AUTO_OPEN=1, to publish without launching a browser.`;
 
@@ -253,39 +249,7 @@ class ArtifactToolInvocation extends BaseToolInvocation<
         },
       },
     ];
-    const saveVersion = this.config.isArtifactSnapshotsEnabled();
-    if (saveVersion) {
-      try {
-        const sessionId = this.config.getSessionId();
-        const runtimeBaseDir = this.config.storage.getRuntimeBaseDir();
-        const snapshot = await saveArtifactSnapshot(
-          html,
-          title,
-          url,
-          sessionId,
-          runtimeBaseDir,
-        );
-        if (signal.aborted) {
-          await deleteArtifactSnapshot(snapshot, runtimeBaseDir, sessionId);
-          const message = `Published artifact "${title}" to ${url}, but its historical version was discarded because the request was cancelled.`;
-          return {
-            llmContent: message,
-            returnDisplay: message,
-            resultFilePaths: filePath ? [filePath] : undefined,
-          };
-        }
-        artifacts.push(snapshot);
-      } catch (err) {
-        const message = `Published artifact "${title}" to ${url}, but its historical version could not be saved: ${getErrorMessage(err)}`;
-        return {
-          llmContent: message,
-          returnDisplay: message,
-          artifacts,
-          resultFilePaths: filePath ? [filePath] : undefined,
-        };
-      }
-    }
-    const llmContent = `Published artifact "${title}" to ${url}${saveVersion ? ' and saved a separate local HTML version for this turn' : ''}. Open this URL to view the latest interactive page. Re-run Artifact with the same file path to update it${saveVersion ? '; earlier saved versions remain unchanged' : ''}.`;
+    const llmContent = `Published artifact "${title}" to ${url}. Open this URL to view the latest interactive page. Re-run Artifact with the same file path to update it.`;
     return {
       llmContent,
       returnDisplay: `Published artifact **${title}**\n\n${url}`,

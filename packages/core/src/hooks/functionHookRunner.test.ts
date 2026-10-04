@@ -6,10 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FunctionHookRunner } from './functionHookRunner.js';
-import {
-  DEFAULT_FUNCTION_HOOK_TIMEOUT_MS,
-  describeHookTimeout,
-} from './hook-timeout.js';
+import { DEFAULT_FUNCTION_HOOK_TIMEOUT_MS } from './hook-timeout.js';
 import { HookEventName, HookType } from './types.js';
 import type { FunctionHookConfig, HookInput, HookOutput } from './types.js';
 
@@ -522,7 +519,7 @@ describe('FunctionHookRunner', () => {
     });
   });
 
-  describe('timeout matches describeHookTimeout', () => {
+  describe('timeout', () => {
     const neverSettles = () => vi.fn(() => new Promise<never>(() => {}));
 
     const runUntil = async (
@@ -543,9 +540,7 @@ describe('FunctionHookRunner', () => {
       return { pendingAfter, outcome: result.outcome };
     };
 
-    it('times out a configured value in milliseconds at the described delay', async () => {
-      const described = describeHookTimeout(HookType.Function, 60);
-      expect(described.timeoutMs).toBe(60);
+    it('times out a configured value in milliseconds', async () => {
       vi.useFakeTimers();
       try {
         const run = await runUntil(
@@ -558,9 +553,7 @@ describe('FunctionHookRunner', () => {
       }
     });
 
-    it('times out an unconfigured hook at the described default', async () => {
-      const described = describeHookTimeout(HookType.Function, undefined);
-      expect(described.timeoutMs).toBe(DEFAULT_FUNCTION_HOOK_TIMEOUT_MS);
+    it('times out an unconfigured hook at the default', async () => {
       vi.useFakeTimers();
       try {
         const run = await runUntil(
@@ -573,13 +566,8 @@ describe('FunctionHookRunner', () => {
       }
     });
 
-    it('times out a zero timeout at once, as described', async () => {
+    it('times out a zero timeout at once', async () => {
       // Real timers: Node runs a 0 ms timer after 1 ms, fake timers do not.
-      expect(describeHookTimeout(HookType.Function, 0)).toEqual({
-        timeoutMs: 1,
-        source: 'unusable',
-        ignoredConfiguredValue: false,
-      });
       const started = Date.now();
       const result = await functionRunner.execute(
         createMockConfig(neverSettles(), { timeout: 0 }),

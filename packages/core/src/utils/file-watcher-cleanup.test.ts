@@ -35,46 +35,6 @@ describe('file watcher cleanup', () => {
     await closed;
   });
 
-  it('detaches events without entering a native close during macOS exit', async () => {
-    const { closeFileWatcher, prepareFileWatchersForProcessExit } =
-      await import('./file-watcher-cleanup.js');
-    const onChange = vi.fn();
-    const onError = vi.fn();
-    const watcher = Object.assign(new EventEmitter(), {
-      close: vi.fn(() => {
-        throw new Error('Native close must not run during process exit');
-      }),
-    });
-    watcher.on('all', onChange).on('change', onChange).on('error', onError);
-
-    prepareFileWatchersForProcessExit();
-    prepareFileWatchersForProcessExit();
-    await closeFileWatcher(watcher);
-    watcher.emit('all', 'change', 'settings.json');
-    watcher.emit('change', 'rename', 'tasks.json');
-    const error = new Error('Late watch error');
-    watcher.emit('error', error);
-
-    expect(watcher.close).not.toHaveBeenCalled();
-    expect(onChange).not.toHaveBeenCalled();
-    expect(onError).toHaveBeenCalledWith(error);
-  });
-
-  it.each(['linux', 'win32'])(
-    'still closes watchers on %s exit',
-    async (os) => {
-      Object.defineProperty(process, 'platform', { value: os });
-      const { closeFileWatcher, prepareFileWatchersForProcessExit } =
-        await import('./file-watcher-cleanup.js');
-      const watcher = Object.assign(new EventEmitter(), {
-        close: vi.fn(),
-      });
-      prepareFileWatchersForProcessExit();
-      await closeFileWatcher(watcher);
-      expect(watcher.close).toHaveBeenCalledOnce();
-    },
-  );
-
   it('preserves normal close failures and accepts an uninitialized watcher', async () => {
     const { closeFileWatcher } = await import('./file-watcher-cleanup.js');
     await expect(closeFileWatcher(undefined)).resolves.toBeUndefined();

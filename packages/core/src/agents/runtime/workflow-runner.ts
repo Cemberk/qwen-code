@@ -558,9 +558,7 @@ export class WorkflowRunner {
         isBackgrounded: runInBackground,
         notifyOnCompletion: options.notifyOnCompletion,
         resumeInBackground:
-          runInBackground &&
-          config.isInteractive?.() === true &&
-          config.getExperimentalZedIntegration?.() !== true,
+          runInBackground && config.isInteractive?.() === true,
       };
       // A resume's checkpoint is not best-effort. `retry` from history
       // refuses a run whose checkpoint is still on disk, reading it as a

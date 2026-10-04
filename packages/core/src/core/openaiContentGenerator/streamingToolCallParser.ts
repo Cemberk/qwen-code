@@ -527,25 +527,6 @@ export class StreamingToolCallParser {
   }
 
   /**
-   * Resets the parser state for a specific tool call index
-   *
-   * @param index - The tool call index to reset
-   */
-  resetIndex(index: number): void {
-    this.buffers.set(index, '');
-    this.depths.set(index, 0);
-    this.inStrings.set(index, false);
-    this.escapes.set(index, false);
-    this.toolCallMeta.set(index, {});
-    this.namelessToolCallIndices.delete(index);
-    for (const [providerIndex, actualIndex] of this.pendingIndexRemaps) {
-      if (providerIndex === index || actualIndex === index) {
-        this.pendingIndexRemaps.delete(providerIndex);
-      }
-    }
-  }
-
-  /**
    * Resets the entire parser state for processing a new stream
    *
    * Clears all accumulated buffers, parsing states, metadata, and counters.

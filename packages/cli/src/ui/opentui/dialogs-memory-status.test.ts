@@ -22,7 +22,7 @@ vi.mock('@opentui/core', () => ({
 
 import {
   getAllGeminiMdFilenames,
-  setGeminiMdFilename,
+  setMemoryFilename,
 } from '@qwen-code/qwen-code-core';
 import {
   resolvePreferredMemoryFile,
@@ -74,13 +74,13 @@ describe('resolvePreferredMemoryFile', () => {
   });
 
   it('honors overridden configured filenames', () => {
-    setGeminiMdFilename(['CUSTOM.md']);
+    setMemoryFilename(['CUSTOM.md']);
     try {
       fs.writeFileSync(path.join(dir, 'CUSTOM.md'), '# custom');
       expect(resolvePreferredMemoryFile(dir)).toBe(path.join(dir, 'CUSTOM.md'));
     } finally {
       // Restore the default list for other tests.
-      setGeminiMdFilename(['QWEN.md', 'AGENTS.md']);
+      setMemoryFilename(['QWEN.md', 'AGENTS.md']);
     }
   });
 });

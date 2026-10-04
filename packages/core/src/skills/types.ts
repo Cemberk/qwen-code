@@ -165,12 +165,6 @@ export interface SkillConfig {
 }
 
 /**
- * Runtime configuration for a skill when it's being actively used.
- * Extends SkillConfig with additional runtime-specific fields.
- */
-export type SkillRuntimeConfig = SkillConfig;
-
-/**
  * Parse the `model` field from skill frontmatter.
  * Returns `undefined` for omitted, empty, or "inherit" values.
  */

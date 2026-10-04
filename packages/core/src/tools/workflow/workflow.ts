@@ -267,10 +267,7 @@ class WorkflowToolInvocation extends BaseToolInvocation<
   private notifyOnCompletion = false;
 
   setCompletionNotificationEnabled(enabled: boolean): void {
-    this.notifyOnCompletion =
-      enabled &&
-      this.config.isInteractive?.() === true &&
-      this.config.getExperimentalZedIntegration?.() !== true;
+    this.notifyOnCompletion = enabled && this.config.isInteractive?.() === true;
   }
 
   /**
@@ -1829,29 +1826,6 @@ export class WorkflowTool extends BaseDeclarativeTool<
     return super.build(params);
   }
 
-  buildSessionOwnedBackground(
-    params: Omit<WorkflowParams, 'run_in_background'>,
-    workflowName?: string,
-  ): ToolInvocation<WorkflowParams, WorkflowToolResult> {
-    const validationError = this.validateToolParams(params);
-    if (validationError) {
-      throw new Error(validationError);
-    }
-    if (!this.config.getWorkflowRunRegistry().hasCompletionCallback()) {
-      throw new Error(
-        'WorkflowTool: session-owned background runs require an active workflow completion channel.',
-      );
-    }
-    return new WorkflowToolInvocation(
-      this.config,
-      this.toolOptions,
-      { ...params, run_in_background: true },
-      buildWorkflowAuthoringHint(this.authoringSurface),
-      workflowName,
-      /* sessionOwned */ true,
-    );
-  }
-
   protected override validateToolParamValues(
     params: WorkflowParams,
   ): string | null {
@@ -1888,10 +1862,7 @@ export class WorkflowTool extends BaseDeclarativeTool<
       return 'WorkflowTool: `resumeFromRunId` must match the generated id format `wf_<hex>`.';
     }
     if (params.run_in_background === true) {
-      if (
-        !this.config.isInteractive() ||
-        this.config.getExperimentalZedIntegration?.() === true
-      ) {
+      if (!this.config.isInteractive()) {
         return 'WorkflowTool: `run_in_background` is available only in the interactive TUI.';
       }
       if (!this.config.getWorkflowRunRegistry().hasCompletionCallback()) {

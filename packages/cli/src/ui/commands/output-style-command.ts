@@ -34,7 +34,7 @@ export const outputStyleCommand: SlashCommand = {
   // picker with nothing auto-selected.
   argumentHint: '[Concise|Proactive|Explanatory|Learning|<custom>|default]',
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
   action: async (
     context: CommandContext,
     actionArgs: string,
@@ -60,7 +60,7 @@ export const outputStyleCommand: SlashCommand = {
 
     const args = context.invocation?.args?.trim() || actionArgs.trim();
 
-    // No argument: open the interactive picker, or (non-interactive/ACP)
+    // No argument: open the interactive picker, or (non-interactive)
     // report the current style and the available options.
     if (!args && context.executionMode === 'interactive') {
       return { type: 'dialog', dialog: 'output-style' };
@@ -110,10 +110,7 @@ export const outputStyleCommand: SlashCommand = {
       return {
         type: 'message',
         messageType: 'info',
-        content: await applyOutputStyleSelection(config, settings, style, {
-          allowWorkspaceSettingsWrite:
-            context.executionPolicy?.allowWorkspaceSettingsWrite,
-        }),
+        content: await applyOutputStyleSelection(config, settings, style),
       };
     } catch (error) {
       return {

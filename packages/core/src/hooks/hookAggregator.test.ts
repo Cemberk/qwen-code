@@ -331,7 +331,7 @@ describe('HookAggregator', () => {
         HookEventName.PermissionRequest,
         result.finalOutput ?? {},
       ) as PermissionRequestHookOutput;
-      expect(hookOutput.isPermissionDenied()).toBe(true);
+      expect(hookOutput.getPermissionDecision()?.behavior).toBe('deny');
     });
 
     it('should concatenate messages', () => {
@@ -365,7 +365,7 @@ describe('HookAggregator', () => {
         HookEventName.PermissionRequest,
         result.finalOutput ?? {},
       ) as PermissionRequestHookOutput;
-      expect(hookOutput.getDenyMessage()).toBe('msg1\nmsg2');
+      expect(hookOutput.getPermissionDecision()?.message).toBe('msg1\nmsg2');
     });
 
     it('should use last updatedInput', () => {
@@ -399,7 +399,9 @@ describe('HookAggregator', () => {
         HookEventName.PermissionRequest,
         result.finalOutput ?? {},
       ) as PermissionRequestHookOutput;
-      expect(hookOutput.getUpdatedToolInput()).toEqual({ arg: '2' });
+      expect(hookOutput.getPermissionDecision()?.updatedInput).toEqual({
+        arg: '2',
+      });
     });
 
     it('should concatenate updatedPermissions', () => {
@@ -439,7 +441,7 @@ describe('HookAggregator', () => {
         HookEventName.PermissionRequest,
         result.finalOutput ?? {},
       ) as PermissionRequestHookOutput;
-      expect(hookOutput.getUpdatedPermissions()).toEqual([
+      expect(hookOutput.getPermissionDecision()?.updatedPermissions).toEqual([
         { type: 'read' },
         { type: 'write' },
       ]);
@@ -520,9 +522,13 @@ describe('HookAggregator', () => {
         result.finalOutput ?? {},
       ) as PermissionRequestHookOutput;
 
-      expect(hookOutput.isPermissionDenied()).toBe(true);
-      expect(hookOutput.getUpdatedToolInput()).toEqual({ arg: '2' });
-      expect(hookOutput.getDenyMessage()).toBe('first msg\nsecond msg');
+      expect(hookOutput.getPermissionDecision()?.behavior).toBe('deny');
+      expect(hookOutput.getPermissionDecision()?.updatedInput).toEqual({
+        arg: '2',
+      });
+      expect(hookOutput.getPermissionDecision()?.message).toBe(
+        'first msg\nsecond msg',
+      );
     });
   });
 

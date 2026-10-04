@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { lightTheme, darkTheme, ansiTheme } from './theme.js';
+import { lightTheme, darkTheme } from './theme.js';
 
 export interface SemanticColors {
   text: {
@@ -103,38 +103,5 @@ export const darkSemanticColors: SemanticColors = {
     warning: darkTheme.AccentYellow,
     errorDim: darkTheme.AccentRedDim,
     warningDim: darkTheme.AccentYellowDim,
-  },
-};
-
-export const ansiSemanticColors: SemanticColors = {
-  text: {
-    primary: ansiTheme.Foreground,
-    secondary: ansiTheme.Gray,
-    link: ansiTheme.AccentBlue,
-    accent: ansiTheme.AccentPurple,
-    code: ansiTheme.LightBlue,
-  },
-  background: {
-    primary: ansiTheme.Background,
-    diff: {
-      added: ansiTheme.DiffAdded,
-      removed: ansiTheme.DiffRemoved,
-    },
-  },
-  border: {
-    default: ansiTheme.Gray,
-    focused: ansiTheme.AccentBlue,
-  },
-  ui: {
-    comment: ansiTheme.Comment,
-    symbol: ansiTheme.Gray,
-    gradient: ansiTheme.GradientColors,
-  },
-  status: {
-    error: ansiTheme.AccentRed,
-    success: ansiTheme.AccentGreen,
-    warning: ansiTheme.AccentYellow,
-    errorDim: ansiTheme.AccentRedDim,
-    warningDim: ansiTheme.AccentYellowDim,
   },
 };

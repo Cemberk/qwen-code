@@ -111,7 +111,7 @@ function getInboxLock(inboxPath: string): Mutex {
  * Evict the in-process inbox locks for a team. The lock map keys on
  * absolute inbox path and would otherwise retain a `Mutex` for every
  * inbox the process ever touched — a slow leak across many team
- * create/delete cycles in a long-lived daemon. All of a team's inbox
+ * create/delete cycles in a long-lived process. All of a team's inbox
  * paths sit directly under its inboxes dir, so match on the parent.
  *
  * Best-effort: a teammate's late `writeMessage` racing team teardown
@@ -259,21 +259,6 @@ export async function consumeUnread(
     await atomicWriteJSON(inboxPath, updated);
     return matching;
   });
-}
-
-/**
- * Clear an agent's entire inbox (delete the file).
- */
-export async function clearInbox(
-  teamName: string,
-  agentName: string,
-): Promise<void> {
-  const inboxPath = getInboxPath(teamName, agentName);
-  try {
-    await fs.unlink(inboxPath);
-  } catch (err) {
-    if (!isNodeError(err) || err.code !== 'ENOENT') throw err;
-  }
 }
 
 /**

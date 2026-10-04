@@ -190,15 +190,15 @@ describe('subpath exports entries are probed', () => {
 
   it('flags a missing subpath dist file even when the . entry exists', () => {
     root = buildFixtureRoot();
-    const bridgeDir = path.join(root, 'packages/web-templates');
+    const templatesDir = path.join(root, 'packages/web-templates');
     writeFileSync(
-      path.join(bridgeDir, 'package.json'),
+      path.join(templatesDir, 'package.json'),
       JSON.stringify({
         name: 'fake-web-templates',
         exports: {
           '.': { import: './dist/index.js' },
-          './sessionRestoreTimeout': {
-            import: './dist/session-restore-timeout.js',
+          './status': {
+            import: './dist/status.js',
           },
         },
       }),
@@ -206,14 +206,14 @@ describe('subpath exports entries are probed', () => {
     // dist/index.js exists; the subpath target does not.
     const missing = findMissingPrerequisites('packages/cli', root);
     expect(missing).toHaveLength(1);
-    expect(missing[0]).toContain('session-restore-timeout.js');
+    expect(missing[0]).toContain('status.js');
   });
 
   it('does not probe dist targets the consumer aliases to source', () => {
     root = buildFixtureRoot();
-    const bridgeDir = path.join(root, 'packages/web-templates');
+    const templatesDir = path.join(root, 'packages/web-templates');
     writeFileSync(
-      path.join(bridgeDir, 'package.json'),
+      path.join(templatesDir, 'package.json'),
       JSON.stringify({
         name: 'fake-web-templates',
         exports: {
@@ -252,14 +252,14 @@ describe('subpath exports entries are probed', () => {
     writeFileSync(
       configPath,
       [
-        "alias: { '@qwen-code/web-templates/status': 'x', '@qwen-code/sdk/daemon': 'y' }",
+        "alias: { '@qwen-code/web-templates/status': 'x', '@qwen-code/qwen-code-core/goalWire': 'y' }",
         "// '@qwen-code/web-templates/commented': 'x'",
         "/* '@qwen-code/web-templates/blocked': 'x' */",
       ].join('\n'),
     );
     const aliases = aliasedSpecifiers(configPath);
     expect(aliases.has('@qwen-code/web-templates/status')).toBe(true);
-    expect(aliases.has('@qwen-code/sdk/daemon')).toBe(true);
+    expect(aliases.has('@qwen-code/qwen-code-core/goalWire')).toBe(true);
     expect(aliases.has('@qwen-code/web-templates/commented')).toBe(false);
     expect(aliases.has('@qwen-code/web-templates/blocked')).toBe(false);
     // A missing config yields an empty set rather than throwing.

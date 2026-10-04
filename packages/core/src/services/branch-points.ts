@@ -203,21 +203,6 @@ export function collectPendingBranchToolCalls(
   return pendingCalls;
 }
 
-export function resolveCompletedTurnBranchCandidateFromRecords(input: {
-  records: readonly BranchPointRecord[];
-  startExclusiveRecordUuid: string | null;
-  pendingCallsAtStart: readonly BranchToolCallIdentity[];
-}): BranchCandidate | undefined {
-  if (input.records.length === 0) return undefined;
-  return resolveCompletedTurnBranchCandidateInRange({
-    activeChain: input.records,
-    startIndex: -1,
-    endIndex: input.records.length - 1,
-    startExclusiveRecordUuid: input.startExclusiveRecordUuid,
-    pendingCallsAtStart: input.pendingCallsAtStart,
-  });
-}
-
 export function parseBranchCheckpointPayload(
   value: ChatRecord['systemPayload'],
 ): BranchCheckpointRecordPayloadV1 | undefined {

@@ -293,16 +293,6 @@ export interface HookRegistration {
   callback_id: string;
 }
 
-/**
- * Hook callback result placeholder for future implementation
- */
-export interface HookCallbackResult {
-  shouldSkip?: boolean;
-  shouldInterrupt?: boolean;
-  suppressOutput?: boolean;
-  message?: string;
-}
-
 export interface CLIControlInterruptRequest {
   subtype: 'interrupt';
 }
@@ -345,8 +335,6 @@ export interface CLIMcpServerConfig {
   cwd?: string;
   timeout?: number;
   versionNegotiation?: 'auto' | 'legacy';
-  appResourceMaxBytes?: number;
-  appResourceTimeoutMs?: number;
   trust?: boolean;
   description?: string;
   includeTools?: string[];
@@ -454,15 +442,6 @@ export interface CLIControlRequest {
   type: 'control_request';
   request_id: string;
   request: ControlRequestPayload;
-}
-
-/**
- * Permission approval result
- */
-export interface PermissionApproval {
-  allowed: boolean;
-  reason?: string;
-  modifiedInput?: unknown;
 }
 
 export interface ControlResponse {
@@ -588,24 +567,4 @@ export function isControlCancel(msg: any): msg is ControlCancelRequest {
     msg.type === 'control_cancel_request' &&
     'request_id' in msg
   );
-}
-
-/**
- * Content block type guards
- */
-
-export function isTextBlock(block: any): block is TextBlock {
-  return block && typeof block === 'object' && block.type === 'text';
-}
-
-export function isThinkingBlock(block: any): block is ThinkingBlock {
-  return block && typeof block === 'object' && block.type === 'thinking';
-}
-
-export function isToolUseBlock(block: any): block is ToolUseBlock {
-  return block && typeof block === 'object' && block.type === 'tool_use';
-}
-
-export function isToolResultBlock(block: any): block is ToolResultBlock {
-  return block && typeof block === 'object' && block.type === 'tool_result';
 }

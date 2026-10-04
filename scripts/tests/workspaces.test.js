@@ -29,8 +29,8 @@ describe('workspace helpers', () => {
     for (const packagePath of [
       'packages/cli/package.json',
       'packages/core/package.json',
-      'packages/desktop/package.json',
-      'packages/channels/base/package.json',
+      'packages/excluded/package.json',
+      'packages/apps/base/package.json',
     ]) {
       writeFile(root, packagePath, '{}\n');
     }
@@ -38,11 +38,11 @@ describe('workspace helpers', () => {
     expect(
       getWorkspacePackageJsonPaths(root, [
         'packages/*',
-        'packages/channels/base',
-        '!packages/desktop',
+        'packages/apps/base',
+        '!packages/excluded',
       ]),
     ).toEqual([
-      'packages/channels/base/package.json',
+      'packages/apps/base/package.json',
       'packages/cli/package.json',
       'packages/core/package.json',
     ]);
@@ -55,8 +55,8 @@ describe('workspace helpers', () => {
     for (const packagePath of [
       'packages/cli/package.json',
       'packages/core/package.json',
-      'packages/desktop/package.json',
-      'packages/channels/base/package.json',
+      'packages/excluded/package.json',
+      'packages/apps/base/package.json',
     ]) {
       writeFile(root, packagePath, '{}\n');
     }
@@ -64,11 +64,11 @@ describe('workspace helpers', () => {
     expect(
       getWorkspacePackageJsonPaths(root, [
         'packages\\*',
-        'packages\\channels\\base',
-        '!packages\\desktop',
+        'packages\\apps\\base',
+        '!packages\\excluded',
       ]),
     ).toEqual([
-      'packages/channels/base/package.json',
+      'packages/apps/base/package.json',
       'packages/cli/package.json',
       'packages/core/package.json',
     ]);
@@ -82,13 +82,13 @@ describe('workspace helpers', () => {
       root,
       'package.json',
       '{"workspaces": ["integrations/*", "packages/*", ' +
-        '"packages/channels/nested-ci", "packages/channels/nested-no-ci"]}\n',
+        '"packages/apps/nested-ci", "packages/apps/nested-no-ci"]}\n',
     );
     // Both repo layouts are witness-bearing: the flat integrations/* layout
-    // and the nested packages/channels/* layout. The nested members need
+    // and the nested packages/apps/* layout. The nested members need
     // explicit root-list entries because packages/* does not match nested
     // directories — exactly why a filter mutation that drops the subtree
-    // (say `!path.startsWith('packages/channels/')`) would stay invisible
+    // (say `!path.startsWith('packages/apps/')`) would stay invisible
     // to every consumer that derives its set from the selector. This
     // exact-set pin is what catches it.
     writeFile(
@@ -103,18 +103,18 @@ describe('workspace helpers', () => {
     );
     writeFile(
       root,
-      'packages/channels/nested-ci/package.json',
+      'packages/apps/nested-ci/package.json',
       '{"scripts": {"test:ci": "vitest run"}}\n',
     );
     writeFile(
       root,
-      'packages/channels/nested-no-ci/package.json',
+      'packages/apps/nested-no-ci/package.json',
       '{"scripts": {"test": "vitest run"}}\n',
     );
 
     expect(getTestCiWorkspacePackageJsonPaths(root)).toEqual([
       'integrations/with-ci/package.json',
-      'packages/channels/nested-ci/package.json',
+      'packages/apps/nested-ci/package.json',
     ]);
   });
 

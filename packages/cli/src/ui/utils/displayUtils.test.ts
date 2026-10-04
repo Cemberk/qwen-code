@@ -11,8 +11,6 @@ import {
   TOOL_SUCCESS_RATE_MEDIUM,
   USER_AGREEMENT_RATE_HIGH,
   USER_AGREEMENT_RATE_MEDIUM,
-  CACHE_EFFICIENCY_HIGH,
-  CACHE_EFFICIENCY_MEDIUM,
 } from './displayUtils.js';
 import { theme } from '../semantic-colors.js';
 
@@ -76,8 +74,6 @@ describe('displayUtils', () => {
       expect(TOOL_SUCCESS_RATE_MEDIUM).toBe(85);
       expect(USER_AGREEMENT_RATE_HIGH).toBe(75);
       expect(USER_AGREEMENT_RATE_MEDIUM).toBe(45);
-      expect(CACHE_EFFICIENCY_HIGH).toBe(40);
-      expect(CACHE_EFFICIENCY_MEDIUM).toBe(15);
     });
   });
 });

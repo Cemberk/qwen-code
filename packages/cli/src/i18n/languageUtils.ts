@@ -260,8 +260,7 @@ export function updateOutputLanguageFile(
  * default on the config so subsequent reads are consistent.
  *
  * This encapsulates the get-path → write → register-fallback sequence
- * that was previously duplicated across acpAgent, languageCommand, and
- * SettingsDialog.
+ * shared by languageCommand and SettingsDialog.
  */
 export function writeOutputLanguageAndRegisterPath(
   settingValue: string,

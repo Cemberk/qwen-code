@@ -26,9 +26,6 @@ import {
 } from './types.js';
 import { t } from '../../i18n/index.js';
 
-// Mirrored by GOAL_CLEAR_KEYWORDS in
-// packages/web-shell/client/utils/goalCondition.ts, whose test reads this
-// literal and fails on drift.
 const CLEAR_KEYWORDS = new Set([
   'clear',
   'stop',
@@ -96,7 +93,7 @@ export const goalCommand: SlashCommand = {
   argumentHint:
     '[<objective> | set <objective> | edit <objective> | pause | resume | clear]',
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
   action: async (
     context: CommandContext,
     args: string,

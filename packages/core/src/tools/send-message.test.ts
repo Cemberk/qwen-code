@@ -221,17 +221,13 @@ describe('SendMessageTool — team mode', () => {
       }),
     );
 
-    const result = await tool.validateBuildAndExecute(
-      {
+    expect(() =>
+      tool.build({
         to: 'alice',
         task_id: 'agent-1',
         message: 'ambiguous destination',
-      },
-      new AbortController().signal,
-    );
-
-    expect(result.error?.type).toBe(ToolErrorType.INVALID_TOOL_PARAMS);
-    expect(result.llmContent).toContain('Only one of "to" or "task_id"');
+      }),
+    ).toThrow('Only one of "to" or "task_id"');
     expect(registry.get('agent-1')!.pendingMessages).toEqual([]);
     expect(sendMessage).not.toHaveBeenCalled();
   });
@@ -271,10 +267,9 @@ describe('SendMessageTool — background-task mode', () => {
       outputFile: '/tmp/test.jsonl',
     });
 
-    const result = await tool.validateBuildAndExecute(
-      { task_id: 'agent-1', message: 'do more work' },
-      new AbortController().signal,
-    );
+    const result = await tool
+      .build({ task_id: 'agent-1', message: 'do more work' })
+      .execute(new AbortController().signal);
 
     expect(result.error).toBeUndefined();
     expect(result.llmContent).toContain('Message queued');
@@ -298,14 +293,12 @@ describe('SendMessageTool — background-task mode', () => {
       outputFile: '/tmp/test.jsonl',
     });
 
-    await tool.validateBuildAndExecute(
-      { task_id: 'agent-1', message: 'first' },
-      new AbortController().signal,
-    );
-    await tool.validateBuildAndExecute(
-      { task_id: 'agent-1', message: 'second' },
-      new AbortController().signal,
-    );
+    await tool
+      .build({ task_id: 'agent-1', message: 'first' })
+      .execute(new AbortController().signal);
+    await tool
+      .build({ task_id: 'agent-1', message: 'second' })
+      .execute(new AbortController().signal);
 
     expect(registry.get('agent-1')!.pendingMessages).toEqual([
       'first',
@@ -326,10 +319,9 @@ describe('SendMessageTool — background-task mode', () => {
     registry.beginFinishing('agent-1');
     reviveCompletedBackgroundAgent.mockResolvedValue(registry.get('agent-1'));
 
-    const resultPromise = tool.validateBuildAndExecute(
-      { task_id: 'agent-1', message: 'late correction' },
-      new AbortController().signal,
-    );
+    const resultPromise = tool
+      .build({ task_id: 'agent-1', message: 'late correction' })
+      .execute(new AbortController().signal);
     await Promise.resolve();
 
     expect(registry.get('agent-1')!.pendingMessages).toEqual([]);
@@ -347,10 +339,9 @@ describe('SendMessageTool — background-task mode', () => {
   });
 
   it('returns error for non-existent task', async () => {
-    const result = await tool.validateBuildAndExecute(
-      { task_id: 'nope', message: 'hello' },
-      new AbortController().signal,
-    );
+    const result = await tool
+      .build({ task_id: 'nope', message: 'hello' })
+      .execute(new AbortController().signal);
 
     expect(result.error?.type).toBe(ToolErrorType.SEND_MESSAGE_NOT_FOUND);
     expect(result.error?.message).toBe('Task not found: nope');
@@ -364,10 +355,9 @@ describe('SendMessageTool — background-task mode', () => {
     const noTeamTool = new SendMessageTool(
       makeTeamConfig({ registry, teamManager: null }),
     );
-    const result = await noTeamTool.validateBuildAndExecute(
-      { task_id: 'nope', message: 'hello' },
-      new AbortController().signal,
-    );
+    const result = await noTeamTool
+      .build({ task_id: 'nope', message: 'hello' })
+      .execute(new AbortController().signal);
 
     expect(result.error?.type).toBe(ToolErrorType.SEND_MESSAGE_NOT_FOUND);
     expect(result.llmContent).toContain('No background task found');
@@ -377,10 +367,9 @@ describe('SendMessageTool — background-task mode', () => {
   });
 
   it('suggests the teammate destination for a matching task ID', async () => {
-    const result = await tool.validateBuildAndExecute(
-      { task_id: 'QA Reviewer', message: 'hello' },
-      new AbortController().signal,
-    );
+    const result = await tool
+      .build({ task_id: 'QA Reviewer', message: 'hello' })
+      .execute(new AbortController().signal);
 
     expect(result.error?.type).toBe(ToolErrorType.SEND_MESSAGE_NOT_FOUND);
     expect(result.error?.message).toContain(
@@ -404,10 +393,9 @@ describe('SendMessageTool — background-task mode', () => {
     });
     registry.fail('agent-1', 'boom');
 
-    const result = await tool.validateBuildAndExecute(
-      { task_id: 'agent-1', message: 'hello' },
-      new AbortController().signal,
-    );
+    const result = await tool
+      .build({ task_id: 'agent-1', message: 'hello' })
+      .execute(new AbortController().signal);
 
     expect(result.error?.type).toBe(ToolErrorType.SEND_MESSAGE_NOT_RUNNING);
     expect(result.llmContent).toContain('not running');
@@ -430,10 +418,9 @@ describe('SendMessageTool — background-task mode', () => {
     });
     registry.cancel('agent-1');
 
-    const result = await tool.validateBuildAndExecute(
-      { task_id: 'agent-1', message: 'too late' },
-      new AbortController().signal,
-    );
+    const result = await tool
+      .build({ task_id: 'agent-1', message: 'too late' })
+      .execute(new AbortController().signal);
 
     expect(result.error?.type).toBe(ToolErrorType.SEND_MESSAGE_NOT_RUNNING);
     expect(registry.get('agent-1')!.pendingMessages).toEqual([]);
@@ -451,10 +438,9 @@ describe('SendMessageTool — background-task mode', () => {
     });
     resumeBackgroundAgent.mockResolvedValue(registry.get('agent-1'));
 
-    const result = await tool.validateBuildAndExecute(
-      { task_id: 'agent-1', message: 'pick up from the TODO list' },
-      new AbortController().signal,
-    );
+    const result = await tool
+      .build({ task_id: 'agent-1', message: 'pick up from the TODO list' })
+      .execute(new AbortController().signal);
 
     expect(resumeBackgroundAgent).toHaveBeenCalledWith(
       'agent-1',
@@ -481,10 +467,9 @@ describe('SendMessageTool — background-task mode', () => {
       dispose: vi.fn(),
     });
 
-    const result = await tool.validateBuildAndExecute(
-      { task_id: 'agent-1', message: 'now refactor the helper' },
-      new AbortController().signal,
-    );
+    const result = await tool
+      .build({ task_id: 'agent-1', message: 'now refactor the helper' })
+      .execute(new AbortController().signal);
 
     expect(continueResident).toHaveBeenCalledWith('now refactor the helper');
     expect(reviveCompletedBackgroundAgent).not.toHaveBeenCalled();
@@ -507,10 +492,9 @@ describe('SendMessageTool — background-task mode', () => {
     });
     reviveCompletedBackgroundAgent.mockResolvedValue(registry.get('agent-1'));
 
-    const result = await tool.validateBuildAndExecute(
-      { task_id: 'agent-1', message: 'now refactor the helper' },
-      new AbortController().signal,
-    );
+    const result = await tool
+      .build({ task_id: 'agent-1', message: 'now refactor the helper' })
+      .execute(new AbortController().signal);
 
     expect(reviveCompletedBackgroundAgent).toHaveBeenCalledWith(
       'agent-1',
@@ -535,10 +519,9 @@ describe('SendMessageTool — background-task mode', () => {
     });
     reviveCompletedBackgroundAgent.mockResolvedValue(undefined);
 
-    const result = await tool.validateBuildAndExecute(
-      { task_id: 'agent-1', message: 'try again' },
-      new AbortController().signal,
-    );
+    const result = await tool
+      .build({ task_id: 'agent-1', message: 'try again' })
+      .execute(new AbortController().signal);
 
     expect(result.error?.type).toBe(ToolErrorType.SEND_MESSAGE_NOT_RUNNING);
     expect(result.llmContent).toContain('could not be revived');
@@ -557,10 +540,9 @@ describe('SendMessageTool — background-task mode', () => {
       resumeBlockedReason: 'Background task transcript is missing.',
     });
 
-    const result = await tool.validateBuildAndExecute(
-      { task_id: 'agent-1', message: 'try again' },
-      new AbortController().signal,
-    );
+    const result = await tool
+      .build({ task_id: 'agent-1', message: 'try again' })
+      .execute(new AbortController().signal);
 
     expect(result.error?.type).toBe(ToolErrorType.SEND_MESSAGE_NOT_RUNNING);
     expect(result.llmContent).toContain(
@@ -581,10 +563,9 @@ describe('SendMessageTool — background-task mode', () => {
       outputFile: '/tmp/test.jsonl',
     });
 
-    const result = await tool.validateBuildAndExecute(
-      { task_id: 'agent-1', message: 'focus on login' },
-      new AbortController().signal,
-    );
+    const result = await tool
+      .build({ task_id: 'agent-1', message: 'focus on login' })
+      .execute(new AbortController().signal);
 
     expect(result.returnDisplay).toContain('Search for auth code');
   });
@@ -616,10 +597,9 @@ describe('SendMessageTool — destination validation (#10073)', () => {
     } as unknown as Config;
     const tool = new SendMessageTool(config);
 
-    const result = await tool.validateBuildAndExecute(
-      { task_id: 'QA Reviewer', message: 'hello' },
-      new AbortController().signal,
-    );
+    const result = await tool
+      .build({ task_id: 'QA Reviewer', message: 'hello' })
+      .execute(new AbortController().signal);
 
     expect(result.error?.type).toBe(ToolErrorType.SEND_MESSAGE_NOT_FOUND);
     // The scheduler builds the model-facing error response from
@@ -642,10 +622,9 @@ describe('SendMessageTool — destination validation (#10073)', () => {
     } as unknown as Config;
     const tool = new SendMessageTool(config);
 
-    const result = await tool.validateBuildAndExecute(
-      { task_id: 'definitely-not-a-teammate', message: 'hello' },
-      new AbortController().signal,
-    );
+    const result = await tool
+      .build({ task_id: 'definitely-not-a-teammate', message: 'hello' })
+      .execute(new AbortController().signal);
 
     expect(result.error?.type).toBe(ToolErrorType.SEND_MESSAGE_NOT_FOUND);
     expect(result.error?.message).not.toContain('use `to:');
@@ -661,10 +640,9 @@ describe('SendMessageTool — destination validation (#10073)', () => {
     } as unknown as Config;
     const tool = new SendMessageTool(config);
 
-    const result = await tool.validateBuildAndExecute(
-      { task_id: 'Leader', message: 'hello' },
-      new AbortController().signal,
-    );
+    const result = await tool
+      .build({ task_id: 'Leader', message: 'hello' })
+      .execute(new AbortController().signal);
 
     expect(result.error?.type).toBe(ToolErrorType.SEND_MESSAGE_NOT_FOUND);
     expect(result.error?.message).toContain('instead of `task_id`');
@@ -680,10 +658,9 @@ describe('SendMessageTool — destination validation (#10073)', () => {
     } as unknown as Config;
     const tool = new SendMessageTool(config);
 
-    const result = await tool.validateBuildAndExecute(
-      { task_id: 'Leader!', message: 'hello' },
-      new AbortController().signal,
-    );
+    const result = await tool
+      .build({ task_id: 'Leader!', message: 'hello' })
+      .execute(new AbortController().signal);
 
     expect(result.error?.type).toBe(ToolErrorType.SEND_MESSAGE_NOT_FOUND);
     expect(result.error?.message).not.toContain('use `to:');
@@ -702,10 +679,9 @@ describe('SendMessageTool — destination validation (#10073)', () => {
     } as unknown as Config;
     const tool = new SendMessageTool(config);
 
-    const result = await tool.validateBuildAndExecute(
-      { task_id: 'leader@test-team', message: 'hello' },
-      new AbortController().signal,
-    );
+    const result = await tool
+      .build({ task_id: 'leader@test-team', message: 'hello' })
+      .execute(new AbortController().signal);
 
     expect(result.error?.type).toBe(ToolErrorType.SEND_MESSAGE_NOT_FOUND);
     expect(result.error?.message).toContain('instead of `task_id`');

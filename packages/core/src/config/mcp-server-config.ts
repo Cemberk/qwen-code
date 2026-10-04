@@ -133,8 +133,6 @@ export class MCPServerConfig {
     readonly alwaysLoadTools?: boolean,
     readonly agentPluginV1?: boolean,
     readonly versionNegotiation?: 'auto' | 'legacy',
-    readonly appResourceMaxBytes?: number,
-    readonly appResourceTimeoutMs?: number,
   ) {}
 }
 

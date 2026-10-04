@@ -210,45 +210,15 @@ describe('compressCommand', () => {
     });
   });
 
-  it('should yield an ACP error for compression failure statuses', async () => {
-    const failedResult: ChatCompressionInfo = {
-      originalTokenCount: 100000,
-      newTokenCount: 100000,
-      compressionStatus: CompressionStatus.COMPRESSION_FAILED_API_ERROR,
-    };
-    mockTryCompressChat.mockResolvedValue(failedResult);
-    const ctx = createMockCommandContext({
-      executionMode: 'acp',
-      services: context.services,
-    });
-
-    const result = await compressCommand.action!(ctx, '');
-    expect(result?.type).toBe('stream_messages');
-
-    const messages = [];
-    if (result?.type === 'stream_messages') {
-      for await (const message of result.messages) {
-        messages.push(message);
-      }
-    }
-
-    expect(messages).toEqual([
-      {
-        messageType: 'info',
-        content: 'Compressing context...',
-        contextCompression: { phase: 'progress' },
-      },
-      {
-        messageType: 'error',
-        content: 'Could not compress chat history due to an API error.',
-      },
-    ]);
-  });
-
-  it('carries the ACP truncation notice on its own key', async () => {
+  it('prefixes the truncation notice to the non-interactive result', async () => {
+    mockTryCompressChat.mockResolvedValue({
+      originalTokenCount: 200,
+      newTokenCount: 100,
+      compressionStatus: CompressionStatus.COMPRESSED,
+    } satisfies ChatCompressionInfo);
     const long = 'x'.repeat(3000);
     const ctx = createMockCommandContext({
-      executionMode: 'acp',
+      executionMode: 'non_interactive',
       services: {
         config: {
           getLlmClient: () =>
@@ -261,26 +231,12 @@ describe('compressCommand', () => {
     });
 
     const result = await compressCommand.action!(ctx, '');
-    const messages = [];
-    if (result?.type === 'stream_messages') {
-      for await (const message of result.messages) {
-        messages.push(message);
-      }
-    }
 
-    // The notice keeps the daemon's sentence for text-only hosts, and carries
-    // the payload on its own key: the result frame merges into the same block
-    // and would overwrite a shared one.
-    expect(messages[0]).toEqual({
+    expect(result).toEqual({
+      type: 'message',
       messageType: 'info',
-      content: expect.stringContaining('truncated'),
-      contextCompressionNotice: {
-        phase: 'notice',
-        instructionsLimit: 2000,
-      },
-    });
-    expect(messages[1]).toMatchObject({
-      contextCompression: { phase: 'progress' },
+      content:
+        'Compression instructions were truncated to 2000 characters. Context compressed (200 -> 100).',
     });
   });
 
@@ -316,61 +272,7 @@ describe('compressCommand', () => {
     });
   });
 
-  it('should mark estimated counts in the ACP stream_messages branch', async () => {
-    // Asymmetric flags mirror the real post-/compress-fast scenario and catch
-    // a swapped flag-argument mutation at the ACP formatTokenCount site.
-    mockTryCompressChat.mockResolvedValue({
-      originalTokenCount: 200,
-      newTokenCount: 100,
-      originalTokenCountIsEstimated: true,
-      newTokenCountIsEstimated: false,
-      compressionStatus: CompressionStatus.COMPRESSED,
-    } satisfies ChatCompressionInfo);
-
-    const ctx = createMockCommandContext({
-      executionMode: 'acp',
-      services: {
-        config: {
-          getLlmClient: () =>
-            ({
-              tryCompressChat: mockTryCompressChat,
-            }) as unknown as LlmClient,
-        },
-      },
-    });
-
-    const result = await compressCommand.action!(ctx, '');
-
-    expect(result?.type).toBe('stream_messages');
-    const messages = [];
-    if (result?.type === 'stream_messages') {
-      for await (const message of result.messages) {
-        messages.push(message);
-      }
-    }
-    expect(messages).toEqual([
-      {
-        messageType: 'info',
-        content: 'Compressing context...',
-        contextCompression: { phase: 'progress' },
-      },
-      {
-        messageType: 'info',
-        content: 'Context compressed (~200 -> 100).',
-        contextCompression: {
-          phase: 'done',
-          originalTokenCount: 200,
-          newTokenCount: 100,
-          originalTokenCountIsEstimated: true,
-          newTokenCountIsEstimated: false,
-        },
-      },
-    ]);
-  });
-
-  it('should carry a compaction warning on the ACP result payload', async () => {
-    // A host that renders the result in its own language reads the warning from
-    // this payload, so one that rode only the English sentence would be lost.
+  it('should append a compaction warning to the non-interactive message', async () => {
     mockTryCompressChat.mockResolvedValue({
       originalTokenCount: 200,
       newTokenCount: 100,
@@ -379,7 +281,7 @@ describe('compressCommand', () => {
     } satisfies ChatCompressionInfo);
 
     const ctx = createMockCommandContext({
-      executionMode: 'acp',
+      executionMode: 'non_interactive',
       services: {
         config: {
           getLlmClient: () =>
@@ -392,33 +294,12 @@ describe('compressCommand', () => {
 
     const result = await compressCommand.action!(ctx, '');
 
-    expect(result?.type).toBe('stream_messages');
-    const messages = [];
-    if (result?.type === 'stream_messages') {
-      for await (const message of result.messages) {
-        messages.push(message);
-      }
-    }
-    expect(messages).toEqual([
-      {
-        messageType: 'info',
-        content: 'Compressing context...',
-        contextCompression: { phase: 'progress' },
-      },
-      {
-        messageType: 'info',
-        content:
-          'Context compressed (200 -> 100).\n⚠️ Compaction model "small" context window too small',
-        contextCompression: {
-          phase: 'done',
-          originalTokenCount: 200,
-          newTokenCount: 100,
-          originalTokenCountIsEstimated: false,
-          newTokenCountIsEstimated: false,
-          warning: 'Compaction model "small" context window too small',
-        },
-      },
-    ]);
+    expect(result).toEqual({
+      type: 'message',
+      messageType: 'info',
+      content:
+        'Context compressed (200 -> 100).\n⚠️ Compaction model "small" context window too small',
+    });
   });
 
   it('should add an error message if tryCompressChat throws', async () => {

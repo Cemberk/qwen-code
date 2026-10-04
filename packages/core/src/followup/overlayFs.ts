@@ -33,11 +33,6 @@ export class OverlayFs {
     );
   }
 
-  /** Get the overlay directory path */
-  getOverlayDir(): string {
-    return this.overlayDir;
-  }
-
   /**
    * Resolve a read path: return overlay path if the file was previously written,
    * otherwise return the real path.
@@ -81,13 +76,6 @@ export class OverlayFs {
 
     this.writtenFiles.set(rel, overlayPath);
     return overlayPath;
-  }
-
-  /**
-   * Get all files that were written to the overlay.
-   */
-  getWrittenFiles(): Map<string, string> {
-    return new Map(this.writtenFiles);
   }
 
   /**

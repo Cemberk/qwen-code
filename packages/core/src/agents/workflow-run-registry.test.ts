@@ -124,24 +124,6 @@ describe('WorkflowRunRegistry', () => {
     expect(competingResult).toEqual({ acquired: true, value: 'competing' });
   });
 
-  it('records rerun lineage and notifies status observers', () => {
-    const r = new WorkflowRunRegistry();
-    const onStatusChange = vi.fn();
-    r.setStatusChangeCallback(onStatusChange);
-    r.register(reg('wf_rerun'));
-    onStatusChange.mockClear();
-
-    expect(r.setLineage('wf_rerun', 'wf_source', 'rerun')).toBe(true);
-    expect(r.get('wf_rerun')).toMatchObject({
-      sourceRunId: 'wf_source',
-      startMode: 'rerun',
-    });
-    expect(onStatusChange).toHaveBeenCalledWith(
-      expect.objectContaining({ runId: 'wf_rerun' }),
-    );
-    expect(r.setLineage('wf_missing', 'wf_source', 'rerun')).toBe(false);
-  });
-
   it('binds a pending approval to the dispatch that owns its event channel', () => {
     const r = new WorkflowRunRegistry();
     r.register(reg('wf_dispatch_approval'));
@@ -1078,32 +1060,6 @@ describe('WorkflowRunRegistry', () => {
     expect(entry.notified).toBe(false);
   });
 
-  it('removes only terminal entries without live handles', () => {
-    const r = new WorkflowRunRegistry();
-    const running = r.register(reg('wf_running'));
-    const terminal = r.register(reg('wf_terminal'));
-    const held = r.register(reg('wf_held'));
-    const handle = {
-      runId: held.runId,
-      abort: vi.fn(),
-    } as unknown as WorkflowRunHandle;
-    r.attachHandle(handle);
-    r.fail(terminal.runId, 'failed', 2_000);
-    r.fail(held.runId, 'failed', 2_000);
-    const callback = vi.fn();
-    r.setStatusChangeCallback(callback);
-
-    expect(r.removeTerminal(running.runId)).toBe(false);
-    expect(r.removeTerminal(held.runId)).toBe(false);
-    expect(r.removeTerminal(terminal.runId)).toBe(true);
-
-    expect(r.get(running.runId)).toBe(running);
-    expect(r.get(held.runId)).toBe(held);
-    expect(r.get(terminal.runId)).toBeUndefined();
-    expect(callback).toHaveBeenCalledOnce();
-    expect(callback).toHaveBeenCalledWith(undefined);
-  });
-
   it('rejects a duplicate run id until its owner handle is released', () => {
     const r = new WorkflowRunRegistry();
     const runId = 'wf_collision';
@@ -1190,26 +1146,6 @@ describe('WorkflowRunRegistry', () => {
 
     expect(controller.signal.aborted).toBe(true);
     expect(r.isStarting('wf_starting')).toBe(true);
-    r.releaseStart('wf_starting', controller);
-    expect(r.hasRunningEntries()).toBe(false);
-  });
-
-  it('cancelStarting aborts a reserved start and leaves the release to the runner', () => {
-    const r = new WorkflowRunRegistry();
-    const controller = new AbortController();
-
-    expect(r.cancelStarting('wf_absent')).toBe(false);
-
-    r.reserveStart('wf_starting', () => controller);
-    expect(r.cancelStarting('wf_starting')).toBe(true);
-    expect(controller.signal.aborted).toBe(true);
-    // Same contract as abortAll: the reservation stays until the runner's
-    // start-failure path releases it, so a competing start cannot slip in
-    // between the abort and that release.
-    expect(r.isStarting('wf_starting')).toBe(true);
-    expect(() =>
-      r.reserveStart('wf_starting', () => new AbortController()),
-    ).toThrow(/already starting/);
     r.releaseStart('wf_starting', controller);
     expect(r.hasRunningEntries()).toBe(false);
   });

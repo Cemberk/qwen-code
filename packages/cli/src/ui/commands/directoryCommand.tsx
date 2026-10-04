@@ -121,7 +121,7 @@ export const directoryCommand: SlashCommand = {
     return t('Manage workspace directories');
   },
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'acp'] as const,
+  supportedModes: ['interactive'] as const,
   action: async () => ({
     type: 'message' as const,
     messageType: 'info' as const,
@@ -136,7 +136,7 @@ export const directoryCommand: SlashCommand = {
         );
       },
       kind: CommandKind.BUILT_IN,
-      supportedModes: ['interactive', 'acp'] as const,
+      supportedModes: ['interactive'] as const,
       argumentHint: '<path>[,<path>,...]',
       completion: async (_context: CommandContext, partialArg: string) =>
         getDirPathCompletions(partialArg),
@@ -341,7 +341,7 @@ export const directoryCommand: SlashCommand = {
         return t('Show all directories in the workspace');
       },
       kind: CommandKind.BUILT_IN,
-      supportedModes: ['interactive', 'acp'] as const,
+      supportedModes: ['interactive'] as const,
       action: async (context: CommandContext) => {
         const { config } = context.services;
         if (!config) {

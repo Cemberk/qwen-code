@@ -65,7 +65,7 @@ export interface PendingAction {
  */
 /**
  * Maximum number of session messages forwarded to the classifier as
- * context. Exported so the scheduler / ACP session paths can request
+ * context. Exported so the scheduler paths can request
  * exactly this slice via `getHistoryTail(MAX_TRANSCRIPT_MESSAGES)`
  * rather than hardcoding `40` — keeping the constant single-sourced
  * means tuning the window doesn't require lockstep edits across

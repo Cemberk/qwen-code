@@ -72,7 +72,7 @@ describe('start_sandbox', () => {
       { command: 'docker', image: 'example.com/qwen-code:latest' },
       [],
       undefined,
-      [process.execPath, '/path/to/cli.js', '--acp'],
+      [process.execPath, '/path/to/cli.js', '--debug'],
     );
 
     await vi.waitFor(() => expect(spawnMock).toHaveBeenCalledTimes(2));
@@ -119,7 +119,7 @@ describe('start_sandbox', () => {
       { command: 'docker', image: `sha256:${'a'.repeat(64)}` },
       [],
       undefined,
-      [process.execPath, '/path/to/cli.js', '--acp'],
+      [process.execPath, '/path/to/cli.js', '--debug'],
     );
 
     await vi.waitFor(() => expect(spawnMock).toHaveBeenCalledTimes(2));
@@ -359,37 +359,6 @@ describe('resolveSeatbeltProfileFile', () => {
       ),
     );
   });
-
-  it.each([
-    ['managed ACP', '1', true],
-    ['ordinary', undefined, false],
-  ])(
-    'handles Electron Node mode for a %s seatbelt re-exec',
-    async (_name, marker, expected) => {
-      vi.stubEnv('QWEN_CODE_SCRUB_ELECTRON_RUN_AS_NODE', marker ?? '');
-      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
-      vi.spyOn(fs, 'mkdirSync').mockReturnValue(undefined);
-      vi.spyOn(fs, 'realpathSync').mockImplementation(
-        (filePath) => String(filePath) || '/tmp',
-      );
-      execSyncMock.mockReturnValue(Buffer.from('/tmp/cache\n'));
-
-      const child = new EventEmitter();
-      spawnMock.mockReturnValue(child);
-      const result = start_sandbox(
-        { command: 'sandbox-exec', image: '' },
-        [],
-        undefined,
-        [process.execPath, '/path/to/cli.js', '--acp'],
-      );
-
-      const args = spawnMock.mock.calls[0]?.[1] as string[];
-      expect(args.at(-1)?.includes('ELECTRON_RUN_AS_NODE=1')).toBe(expected);
-
-      child.emit('close', 0);
-      await expect(result).resolves.toBe(0);
-    },
-  );
 });
 
 describe('getSandboxPassthroughEnvArgs', () => {

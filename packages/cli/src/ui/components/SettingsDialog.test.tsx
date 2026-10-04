@@ -121,12 +121,6 @@ vi.mock('../contexts/VimModeContext.js', async () => {
       toggleVimEnabled: mockToggleVimEnabled,
       setVimMode: mockSetVimMode,
     }),
-    useVimMode: () => ({
-      vimEnabled: false,
-      vimMode: 'INSERT' as const,
-      toggleVimEnabled: mockToggleVimEnabled,
-      setVimMode: mockSetVimMode,
-    }),
   };
 });
 

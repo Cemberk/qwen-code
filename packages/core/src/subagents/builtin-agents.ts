@@ -300,12 +300,4 @@ Guidelines:
       (agent) => agent.name.toLowerCase() === lowerName,
     );
   }
-
-  /**
-   * Gets the names of all built-in agents.
-   * @returns Array of built-in agent names
-   */
-  static getBuiltinAgentNames(): string[] {
-    return this.BUILTIN_AGENTS.map((agent) => agent.name);
-  }
 }

@@ -112,7 +112,6 @@ function makeHarness(opts: {
     getWorkspaceContext: () => ({ isPathWithinWorkspace: () => false }),
     isInteractive: () => opts.interactive,
     getInputFormat: () => opts.inputFormat,
-    getExperimentalZedIntegration: () => false,
     getSdkMode: () => opts.sdkMode ?? false,
   } as unknown as Config;
 
@@ -189,8 +188,8 @@ describe('ask_user_question through CoreToolScheduler', () => {
 
     expect(h.seenStatuses()).not.toContain('awaiting_approval');
     expect(h.modelVisible()).toBe(
-      'Cannot ask user questions in non-interactive mode without ACP support. ' +
-        'Please run in interactive mode or enable ACP mode to use this tool.',
+      'Cannot ask user questions in non-interactive mode. ' +
+        'Please run in interactive mode to use this tool.',
     );
   });
 });

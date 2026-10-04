@@ -138,16 +138,6 @@ export function serializeNotebook(
   return format.trailingNewline ? `${serialized}\n` : serialized;
 }
 
-export function parseCellId(cellId: string): number | undefined {
-  const match = cellId.match(/^cell-(\d+)$/);
-  if (!match?.[1]) {
-    return undefined;
-  }
-
-  const index = Number.parseInt(match[1], 10);
-  return Number.isNaN(index) ? undefined : index;
-}
-
 export function getCellDisplayId(cell: NotebookCell, index: number): string {
   return typeof cell.id === 'string' && cell.id.length > 0
     ? cell.id

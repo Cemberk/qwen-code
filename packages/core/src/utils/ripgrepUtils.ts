@@ -81,12 +81,10 @@ type RipgrepProcessError = Error & {
 
 const cachedSelections = new Map<boolean, RipgrepSelection>();
 let cachedHealth: RipgrepHealth | null = null;
-let macSigningAttempted = false;
 
 export function _resetRipgrepUtilsCachesForTest(): void {
   cachedSelections.clear();
   cachedHealth = null;
-  macSigningAttempted = false;
 }
 
 function wslTimeout(): number {
@@ -289,35 +287,6 @@ export async function ensureRipgrepHealthy(
       `${selection.command} is not a working ripgrep binary (exit ${probeCode}): ${probeOutput.trim() || '(no output)'}`,
     );
   }
-}
-
-export async function ensureMacBinarySigned(
-  selection: RipgrepSelection,
-): Promise<void> {
-  if (process.platform !== 'darwin') return;
-  if (macSigningAttempted) return;
-  macSigningAttempted = true;
-
-  if (selection.mode !== 'builtin') return;
-  const binaryPath = selection.command;
-
-  const inspect = await execCommand('codesign', ['-vv', '-d', binaryPath], {
-    preserveOutputOnError: false,
-  });
-  const alreadySigned =
-    inspect.stdout
-      ?.split('\n')
-      .some((line) => line.includes('linker-signed')) ?? false;
-  if (!alreadySigned) return;
-
-  await execCommand('codesign', [
-    '--sign',
-    '-',
-    '--force',
-    '--preserve-metadata=entitlements,requirements,flags,runtime',
-    binaryPath,
-  ]);
-  await execCommand('xattr', ['-d', 'com.apple.quarantine', binaryPath]);
 }
 
 /**

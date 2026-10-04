@@ -118,8 +118,6 @@ export interface ModelMetrics extends ModelMetricsCore {
 
 export interface SessionMetrics {
   models: Record<string, ModelMetrics>;
-  /** Provider-normalized model totals exposed by the daemon stats route. */
-  statsModels?: Record<string, ModelMetricsCore>;
   generation?: GenerationMetrics;
   /**
    * Per-instance subagent metadata (invocation id → business name + agent
@@ -198,12 +196,6 @@ const cloneSessionMetrics = (metrics: SessionMetrics): SessionMetrics => {
     clone.sourceMetrics = Object.assign(
       Object.create(null) as NonNullable<SessionMetrics['sourceMetrics']>,
       clone.sourceMetrics,
-    );
-  }
-  if (clone.statsModels) {
-    clone.statsModels = Object.assign(
-      Object.create(null) as NonNullable<SessionMetrics['statsModels']>,
-      clone.statsModels,
     );
   }
   return clone;
@@ -582,9 +574,6 @@ export class UiTelemetryService extends EventEmitter {
     sessionId?: string,
   ): void {
     const modelMetrics = this.#getOrCreateModelMetrics(metrics, event.model);
-    const statsModelMetrics = sessionId
-      ? this.#getOrCreateStatsModelMetrics(metrics, event.model)
-      : undefined;
     const sourceMetrics = this.#getOrCreateSourceMetrics(
       modelMetrics,
       event.subagent_name ?? MAIN_SOURCE,
@@ -612,13 +601,6 @@ export class UiTelemetryService extends EventEmitter {
     };
     accumulate(modelMetrics, event.input_token_count, event.total_token_count);
     accumulate(sourceMetrics, event.input_token_count, event.total_token_count);
-    if (statsModelMetrics) {
-      accumulate(
-        statsModelMetrics,
-        normalizedPromptTokens,
-        normalizedTotalTokens,
-      );
-    }
     if (invocationMetrics) {
       accumulate(
         invocationMetrics,
@@ -661,9 +643,6 @@ export class UiTelemetryService extends EventEmitter {
     sessionId?: string,
   ): void {
     const modelMetrics = this.#getOrCreateModelMetrics(metrics, event.model);
-    const statsModelMetrics = sessionId
-      ? this.#getOrCreateStatsModelMetrics(metrics, event.model)
-      : undefined;
     const sourceMetrics = this.#getOrCreateSourceMetrics(
       modelMetrics,
       event.subagent_name ?? MAIN_SOURCE,
@@ -673,7 +652,6 @@ export class UiTelemetryService extends EventEmitter {
       : undefined;
     const buckets = [
       modelMetrics,
-      ...(statsModelMetrics ? [statsModelMetrics] : []),
       sourceMetrics,
       ...(invocationMetrics ? [invocationMetrics] : []),
     ];
@@ -817,17 +795,6 @@ export class UiTelemetryService extends EventEmitter {
       metrics.models[modelName] = createInitialModelMetrics();
     }
     return metrics.models[modelName];
-  }
-
-  #getOrCreateStatsModelMetrics(
-    metrics: SessionMetrics,
-    modelName: string,
-  ): ModelMetricsCore {
-    const statsModels = (metrics.statsModels ??= Object.create(null) as Record<
-      string,
-      ModelMetricsCore
-    >);
-    return (statsModels[modelName] ??= createInitialModelMetricsCore());
   }
 
   #getOrCreateSourceMetrics(

@@ -10,7 +10,6 @@ import type {
   AnsiOutputDisplay,
   FileDiff,
   FindingsResultDisplay,
-  McpAppResultDisplay,
   McpToolProgressData,
   PlanResultDisplay,
   ReportedFinding,
@@ -567,60 +566,6 @@ function isTaskListResultDisplay(
   );
 }
 
-function isMcpAppResultDisplay(
-  resultDisplay: unknown,
-): resultDisplay is McpAppResultDisplay {
-  return (
-    typeof resultDisplay === 'object' &&
-    resultDisplay !== null &&
-    'type' in resultDisplay &&
-    resultDisplay.type === 'mcp_app'
-  );
-}
-
-function compactMcpAppResultDisplay(
-  display: McpAppResultDisplay,
-  purpose: CompactionPurpose,
-): McpAppResultDisplay {
-  // A transcript recorded by a non-interactive (daemon) runtime is replayed by
-  // the Web Shell, which mounts the sandboxed iframe only when `html` is
-  // non-empty and never re-fetches the `ui://` resource
-  // (packages/web-shell/client/components/messages/McpApp.tsx). Wiping the
-  // payload for the recording purpose made every daemon-recorded MCP App fall
-  // back to plain text on replay (#10369). Interactive TUI sessions are not
-  // covered here: coreToolScheduler history-compacts the display before handing
-  // it to the recorder, so those transcripts still carry blanks.
-  //
-  // `html` is retained whole: the producer rejects any resource over
-  // the configured App limit (default 1 MiB, tools/mcp-tool.ts), and a document
-  // truncated mid-markup would not render either, so `''` -- which degrades to
-  // `fallbackText` -- is the only useful over-budget value.
-  //
-  // `toolResult` has no producer bound (it carries `content[].data` base64 and
-  // `structuredContent` verbatim) and is only handed to the mounted app through
-  // `bridge.sendToolResult`, so an over-budget payload is dropped whole here
-  // rather than persisted: the record is the single copy resume, replay and the
-  // renderer all read. Terminal history only ever renders `fallbackText`, so it
-  // keeps dropping both fields.
-  const retainAppPayload = purpose === 'recording';
-  const retainedToolResult =
-    retainAppPayload &&
-    (JSON.stringify(display.toolResult) ?? '').length <=
-      MAX_RETAINED_TOOL_RESULT_DISPLAY_CHARS
-      ? display.toolResult
-      : {};
-  return {
-    ...display,
-    html: retainAppPayload ? display.html : '',
-    toolResult: retainedToolResult,
-    fallbackText: compactString(
-      display.fallbackText,
-      purpose,
-      MAX_RETAINED_TOOL_RESULT_DISPLAY_CHARS,
-    ),
-  };
-}
-
 function compactTaskListResultDisplay(
   display: TaskListResultDisplay,
   purpose: CompactionPurpose,
@@ -727,10 +672,6 @@ function compactToolResultDisplay<T extends ToolResultDisplay | undefined>(
 
   if (isTaskListResultDisplay(resultDisplay)) {
     return compactTaskListResultDisplay(resultDisplay, purpose) as T;
-  }
-
-  if (isMcpAppResultDisplay(resultDisplay)) {
-    return compactMcpAppResultDisplay(resultDisplay, purpose) as T;
   }
 
   return resultDisplay;

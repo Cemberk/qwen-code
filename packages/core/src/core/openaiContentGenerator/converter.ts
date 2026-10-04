@@ -221,15 +221,6 @@ function normalizeStreamingTextDelta(
   return rawDelta;
 }
 
-/**
- * Tool call accumulator for streaming responses
- */
-export interface ToolCallAccumulator {
-  id?: string;
-  name?: string;
-  arguments: string;
-}
-
 type OpenAIContentPartVideoUrl = {
   type: 'video_url';
   video_url: {

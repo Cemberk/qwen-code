@@ -451,11 +451,10 @@ describe('computeDiffColumnWidths', () => {
 });
 
 describe('diffCommand registration', () => {
-  it('declares all execution modes so it works in non-interactive and ACP', () => {
+  it('declares all execution modes so it works in non-interactive mode', () => {
     expect(diffCommand.supportedModes).toEqual([
       'interactive',
       'non_interactive',
-      'acp',
     ]);
   });
 });
@@ -464,8 +463,8 @@ describe('renderDiffModelText filename sanitization', () => {
   // Regression for the non-interactive ANSI-injection vector: the
   // interactive path runs the full HistoryItem through
   // `escapeAnsiCtrlCodes(item)` in `HistoryItemDisplay`, but text output
-  // (non-interactive / ACP) was streaming `r.filename` straight into
-  // stdout / logs / transports without that hop. A hostile filename like
+  // (non-interactive) was streaming `r.filename` straight into
+  // stdout / logs without that hop. A hostile filename like
   // `evil\x1b[31m.txt` could therefore inject color resets, cursor moves,
   // or full screen clears into CI logs. The renderer now pipes filenames
   // through `escapeAnsiCtrlCodes` at the text boundary.
@@ -526,7 +525,7 @@ describe('renderDiffModelText filename sanitization', () => {
     // Filenames git permits but that aren't part of an ANSI escape sequence:
     // raw newline, carriage return, backspace, BEL, and DEL. Each one would
     // otherwise reorder, overwrite, or beep its way through the rendered
-    // diff in the non-interactive / ACP path.
+    // diff in the non-interactive path.
     const newline = 'bad\nINJECTED.txt';
     const cr = 'bad\roverwrite.txt';
     const bs = 'noisy\x08\x08\x08gone.txt';

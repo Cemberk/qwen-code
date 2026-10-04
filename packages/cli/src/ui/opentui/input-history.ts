@@ -63,9 +63,4 @@ export class InputHistory {
     this.index = -1;
     this.originalQuery = '';
   }
-
-  /** Whether a history entry is currently shown in the buffer. */
-  get isNavigating(): boolean {
-    return this.index !== -1;
-  }
 }

@@ -7,9 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import { ROOT_CONTEXT, type Attributes, type Span } from '@opentelemetry/api';
 import {
-  createGenAiRequestObserverContext,
-  extractAnthropicRequestAttributes,
-  extractLlmRequestAttributes,
+  createGenAiExchange,
   extractOpenAiRequestAttributes,
   reportOpenAiRequest,
 } from './gen-ai-request.js';
@@ -123,63 +121,15 @@ describe('GenAI request attribute extraction', () => {
     });
     expect(extractOpenAiRequestAttributes({ stop: ['one', 2] })).toEqual({});
   });
-
-  it('extracts Anthropic fields without unsupported penalties', () => {
-    expect(
-      extractAnthropicRequestAttributes({
-        max_tokens: 0,
-        temperature: -0.1,
-        top_p: 1,
-        stop_sequences: ['done'],
-        frequency_penalty: 0.2,
-        presence_penalty: 0.3,
-      }),
-    ).toEqual({
-      'gen_ai.request.max_tokens': 0,
-      'gen_ai.request.temperature': -0.1,
-      'gen_ai.request.top_p': 1,
-      'gen_ai.request.stop_sequences': ['done'],
-    });
-  });
-
-  it('extracts fields from the final Gemini config', () => {
-    expect(
-      extractLlmRequestAttributes({
-        candidateCount: 99,
-        config: {
-          candidateCount: 2,
-          maxOutputTokens: -1,
-          temperature: 1,
-          topP: 0.95,
-          frequencyPenalty: 0,
-          presencePenalty: -0.2,
-          stopSequences: [],
-        },
-      }),
-    ).toEqual({
-      'gen_ai.request.choice.count': 2,
-      'gen_ai.request.max_tokens': -1,
-      'gen_ai.request.temperature': 1,
-      'gen_ai.request.top_p': 0.95,
-      'gen_ai.request.frequency_penalty': 0,
-      'gen_ai.request.presence_penalty': -0.2,
-      'gen_ai.request.stop_sequences': [],
-    });
-  });
-
-  it('omits invalid Gemini config shapes', () => {
-    expect(extractLlmRequestAttributes({ config: null })).toEqual({});
-    expect(extractLlmRequestAttributes({ config: 'invalid' })).toEqual({});
-  });
 });
 
 describe('GenAI request observer', () => {
   it('records only the first request snapshot', () => {
     const { span, attributes } = createSpan();
-    const requestContext = createGenAiRequestObserverContext(
-      ROOT_CONTEXT,
-      span,
-    );
+    const requestContext = createGenAiExchange(ROOT_CONTEXT, span, {
+      captureContent: false,
+      sensitiveAttributeMaxLength: 1,
+    }).context;
 
     reportOpenAiRequest({}, requestContext);
     reportOpenAiRequest({ temperature: 0.5 }, requestContext);
@@ -189,10 +139,10 @@ describe('GenAI request observer', () => {
 
   it('consumes the first snapshot when extraction fails', () => {
     const { span, attributes } = createSpan();
-    const requestContext = createGenAiRequestObserverContext(
-      ROOT_CONTEXT,
-      span,
-    );
+    const requestContext = createGenAiExchange(ROOT_CONTEXT, span, {
+      captureContent: false,
+      sensitiveAttributeMaxLength: 1,
+    }).context;
     const brokenRequest = new Proxy(
       {},
       {
@@ -211,14 +161,14 @@ describe('GenAI request observer', () => {
   it('keeps concurrent observer contexts isolated', () => {
     const first = createSpan();
     const second = createSpan();
-    const firstContext = createGenAiRequestObserverContext(
-      ROOT_CONTEXT,
-      first.span,
-    );
-    const secondContext = createGenAiRequestObserverContext(
-      ROOT_CONTEXT,
-      second.span,
-    );
+    const firstContext = createGenAiExchange(ROOT_CONTEXT, first.span, {
+      captureContent: false,
+      sensitiveAttributeMaxLength: 1,
+    }).context;
+    const secondContext = createGenAiExchange(ROOT_CONTEXT, second.span, {
+      captureContent: false,
+      sensitiveAttributeMaxLength: 1,
+    }).context;
 
     reportOpenAiRequest({ temperature: 0.1 }, firstContext);
     reportOpenAiRequest({ temperature: 0.9 }, secondContext);
@@ -233,10 +183,10 @@ describe('GenAI request observer', () => {
 
   it('does not install an observer for a non-recording span', () => {
     const { span, attributes } = createSpan({ recording: false });
-    const requestContext = createGenAiRequestObserverContext(
-      ROOT_CONTEXT,
-      span,
-    );
+    const requestContext = createGenAiExchange(ROOT_CONTEXT, span, {
+      captureContent: false,
+      sensitiveAttributeMaxLength: 1,
+    }).context;
     reportOpenAiRequest({ temperature: 0.5 }, requestContext);
     expect(attributes).toEqual({});
   });
@@ -248,8 +198,12 @@ describe('GenAI request observer', () => {
         throw new Error('setValue failed');
       },
     } as unknown as typeof ROOT_CONTEXT;
-    expect(() =>
-      createGenAiRequestObserverContext(brokenParent, span),
+    expect(
+      () =>
+        createGenAiExchange(brokenParent, span, {
+          captureContent: false,
+          sensitiveAttributeMaxLength: 1,
+        }).context,
     ).not.toThrow();
 
     const brokenReporterContext = {
@@ -264,10 +218,10 @@ describe('GenAI request observer', () => {
 
   it('does not let span failures escape', () => {
     const { span } = createSpan({ throws: true });
-    const requestContext = createGenAiRequestObserverContext(
-      ROOT_CONTEXT,
-      span,
-    );
+    const requestContext = createGenAiExchange(ROOT_CONTEXT, span, {
+      captureContent: false,
+      sensitiveAttributeMaxLength: 1,
+    }).context;
     expect(() =>
       reportOpenAiRequest({ temperature: 0.5 }, requestContext),
     ).not.toThrow();

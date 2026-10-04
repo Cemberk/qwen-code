@@ -6,10 +6,7 @@
 
 import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  extractAtPathCommands,
-  handleAtCommand,
-} from './atCommandProcessor.js';
+import { handleAtCommand } from './atCommandProcessor.js';
 import type { Config } from '@qwen-code/qwen-code-core';
 import {
   FileDiscoveryService,
@@ -23,16 +20,6 @@ import { ToolCallStatus } from '../types.js';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import * as fsPromises from 'node:fs/promises';
 import * as path from 'node:path';
-
-describe('extractAtPathCommands', () => {
-  it('extracts only non-empty @path commands', () => {
-    expect(extractAtPathCommands('')).toEqual([]);
-    expect(extractAtPathCommands('@')).toEqual([]);
-    expect(extractAtPathCommands('hello')).toEqual([]);
-    expect(extractAtPathCommands('@foo')).toEqual(['foo']);
-    expect(extractAtPathCommands('@foo @bar')).toEqual(['foo', 'bar']);
-  });
-});
 
 describe('handleAtCommand', () => {
   let testRootDir: string;

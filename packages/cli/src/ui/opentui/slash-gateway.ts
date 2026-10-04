@@ -120,15 +120,6 @@ export class OpenTuiSlashGateway {
     return this.dispatcher.takesAsSlashCommand(text.trim());
   }
 
-  /** True while a dispatched command is still running. */
-  isBusy(): boolean {
-    return this.busy;
-  }
-
-  getInitError(): string | null {
-    return this.initError;
-  }
-
   /** Esc route: cancel the running command (parity of dispatcher.cancel). */
   cancel(): void {
     this.dispatcher?.cancel();

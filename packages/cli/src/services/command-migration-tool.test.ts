@@ -11,7 +11,6 @@ import os from 'node:os';
 import {
   detectTomlCommands,
   migrateTomlCommands,
-  generateMigrationPrompt,
 } from './command-migration-tool.js';
 import {
   parseMarkdownCommand,
@@ -245,41 +244,6 @@ description = "false"`;
       expect(result.success).toBe(true);
       expect(result.convertedFiles).toHaveLength(0);
       expect(result.failedFiles).toHaveLength(0);
-    });
-  });
-
-  describe('generateMigrationPrompt', () => {
-    it('should generate prompt for few files', () => {
-      const files = ['cmd1.toml', 'cmd2.toml'];
-
-      const prompt = generateMigrationPrompt(files);
-
-      expect(prompt).toContain('Found 2 command file(s)');
-      expect(prompt).toContain('cmd1.toml');
-      expect(prompt).toContain('cmd2.toml');
-      expect(prompt).toContain('qwen-code migrate-commands');
-    });
-
-    it('should truncate file list for many files', () => {
-      const files = Array.from({ length: 10 }, (_, i) => `cmd${i}.toml`);
-
-      const prompt = generateMigrationPrompt(files);
-
-      expect(prompt).toContain('Found 10 command file(s)');
-      expect(prompt).toContain('... and 7 more');
-    });
-
-    it('should return empty string for no files', () => {
-      const prompt = generateMigrationPrompt([]);
-
-      expect(prompt).toBe('');
-    });
-
-    it('should use singular form for single file', () => {
-      const prompt = generateMigrationPrompt(['single.toml']);
-
-      expect(prompt).toContain('Found 1 command file');
-      // Don't check for plural since "files" appears in other parts of the message
     });
   });
 });

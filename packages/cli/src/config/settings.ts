@@ -76,13 +76,11 @@ export {
   getHomeEnvFallbackVars,
   loadEnvironment,
   preResolveHomeEnvOverrides,
-  reloadEnvironment,
   resetEnvironmentTrackingForTesting,
   resetHomeEnvBootstrapForTesting,
   SETTINGS_DIRECTORY_NAME,
 } from './environment.js';
 export { getSystemDefaultsPath, getSystemSettingsPath };
-export type { EnvReloadResult } from './environment.js';
 
 const debugLogger = createDebugLogger('SETTINGS');
 
@@ -119,85 +117,6 @@ export function getUserSettingsDir(): string {
 export const SETTINGS_VERSION = 4;
 export const SETTINGS_VERSION_KEY = '$version';
 
-/**
- * Migrate legacy tool permission settings (tools.core / tools.allowed / tools.exclude)
- * to the new permissions.allow / permissions.ask / permissions.deny format.
- *
- * Conversion rules:
- *   tools.allowed  → permissions.allow (bypass confirmation)
- *   tools.exclude  → permissions.deny  (block tools)
- *   tools.core     → permissions.allow (only listed tools enabled)
- *                    + permissions.deny with a wildcard deny-all if needed
- *
- * DELIBERATELY UNWIRED — nothing calls this, and settings.md documents the
- * legacy keys as "not automatically migrated; still honoured at startup".
- * Do not wire it up as written: the `tools.core` → `permissions.allow` arm
- * below encodes exactly the conflation #10075 was reported for and #10098
- * removed. `permissions.allow` is pure auto-approval and cannot restrict
- * registration, so that arm would delete a user's `tools.core` allowlist
- * and silently replace it with a no-op. A real migration maps `tools.core`
- * to `tools.eager` (defer unlisted tools) or `permissions.deny` (remove
- * them) — see the migration table in
- * docs/users/configuration/settings.md.
- *
- * Returns the updated settings object, or null if no migration is needed.
- */
-export function migrateLegacyPermissions(
-  settings: Record<string, unknown>,
-): Record<string, unknown> | null {
-  const tools = settings['tools'] as Record<string, unknown> | undefined;
-  if (!tools) return null;
-
-  const hasLegacy =
-    Array.isArray(tools['core']) ||
-    Array.isArray(tools['allowed']) ||
-    Array.isArray(tools['exclude']);
-
-  if (!hasLegacy) return null;
-
-  const result = structuredClone(settings) as Record<string, unknown>;
-  const resultTools = result['tools'] as Record<string, unknown>;
-  const permissions = (result['permissions'] as Record<string, unknown>) ?? {};
-  result['permissions'] = permissions;
-
-  const mergeInto = (key: string, items: string[]) => {
-    const existing = Array.isArray(permissions[key])
-      ? (permissions[key] as string[])
-      : [];
-    const merged = Array.from(new Set([...existing, ...items]));
-    permissions[key] = merged;
-  };
-
-  // tools.allowed → permissions.allow
-  if (Array.isArray(resultTools['allowed'])) {
-    mergeInto('allow', resultTools['allowed'] as string[]);
-    delete resultTools['allowed'];
-  }
-
-  // tools.exclude → permissions.deny
-  if (Array.isArray(resultTools['exclude'])) {
-    mergeInto('deny', resultTools['exclude'] as string[]);
-    delete resultTools['exclude'];
-  }
-
-  // tools.core → permissions.allow (explicit enables)
-  // IMPORTANT: tools.core has whitelist semantics: "only these tools can run".
-  // To preserve this, we also add deny rules for all tools NOT in the list.
-  // A wildcard deny-all followed by specific allows achieves this because
-  // allow rules take precedence over the catch-all deny in the evaluation order:
-  //   deny = [everything not listed], allow = [listed tools]
-  // However, since our priority is deny > allow, we cannot use a blanket deny.
-  // Instead we just migrate to allow (auto-approve) and let the coreTools
-  // semantics continue to work through the Config.getCoreTools() path until
-  // the old API is fully removed.
-  if (Array.isArray(resultTools['core'])) {
-    mergeInto('allow', resultTools['core'] as string[]);
-    delete resultTools['core'];
-  }
-
-  return result;
-}
-
 export type { DnsResolutionOrder } from './settingsSchema.js';
 
 export enum SettingScope {
@@ -205,10 +124,6 @@ export enum SettingScope {
   Workspace = 'Workspace',
   System = 'System',
   SystemDefaults = 'SystemDefaults',
-}
-
-export interface CheckpointingSettings {
-  enabled?: boolean;
 }
 
 export interface AccessibilitySettings {
@@ -964,40 +879,6 @@ export function loadSettings(
       ? consumeCorruptionEnvVars
       : { consumeCorruptionEnvVars };
   return readSettingsLayers(workspaceDir, opts);
-}
-
-/**
- * Reads every settings layer with the merge, migration, trust and variable
- * rules of `loadSettings`, but writes nothing: no migration, version
- * normalization, backup, corruption recovery or environment change. A layer
- * that cannot be read whole, is not a JSON object or carries a version this
- * build cannot migrate throws, where `loadSettings` repairs, skips or accepts
- * some of these. `environment` locates the user and system files and is the
- * only source for `${VAR}` placeholders; without one, nothing is read. It is
- * read as a spawned session host receives it, and one that the host would not
- * receive as it is throws.
- */
-export function readSettingsSnapshot(
-  workspaceDir: string,
-  options: {
-    environment: Readonly<NodeJS.ProcessEnv>;
-    workspaceTrusted: boolean;
-  },
-): LoadedSettings {
-  const { environment } = options;
-  if (typeof environment !== 'object' || environment === null) {
-    throw new TypeError('A settings snapshot needs an environment.');
-  }
-  return readSettingsLayers(
-    workspaceDir,
-    {
-      consumeCorruptionEnvVars: false,
-      skipLoadEnvironment: true,
-      skipWorkspaceSettings: !options.workspaceTrusted,
-      workspaceTrusted: options.workspaceTrusted,
-    },
-    { environment },
-  );
 }
 
 /**

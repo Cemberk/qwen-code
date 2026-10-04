@@ -20,14 +20,17 @@ vi.mock('@opentui/core', () => ({
 }));
 
 import {
-  createSyntaxStyle,
   getActiveOpenTuiTheme,
-  getBuiltInOpenTuiThemes,
-  getOpenTuiTheme,
   HLJS_TO_SYNTAX_TOKEN,
+  openTuiThemeFromInkTheme,
 } from './theme-parity.js';
 import { themeManager } from '../themes/theme-manager.js';
 import { QwenDark } from '../themes/qwen-dark.js';
+
+const getOpenTuiTheme = (name: string) => {
+  const theme = themeManager.getTheme(name);
+  return theme ? openTuiThemeFromInkTheme(theme) : undefined;
+};
 
 const PALETTE_KEYS = [
   'text',
@@ -39,49 +42,6 @@ const PALETTE_KEYS = [
   'purple',
   'hover',
 ] as const;
-
-describe('getBuiltInOpenTuiThemes', () => {
-  it('maps all 15 selectable ink themes', () => {
-    const builtIns = getBuiltInOpenTuiThemes();
-    const expected = themeManager
-      .getAvailableThemes()
-      .filter((theme) => !theme.isCustom);
-    expect(builtIns).toHaveLength(expected.length);
-    expect(builtIns.map((theme) => theme.name)).toEqual(
-      expected.map((theme) => theme.name),
-    );
-  });
-
-  it('produces a full palette and syntax map for every built-in theme', () => {
-    for (const definition of getBuiltInOpenTuiThemes()) {
-      for (const key of PALETTE_KEYS) {
-        expect(
-          typeof definition.palette[key],
-          `${definition.name}.${key}`,
-        ).toBe('string');
-      }
-      expect(definition.syntaxStyles['emphasis']).toMatchObject({
-        italic: true,
-      });
-      expect(definition.syntaxStyles['strong']).toMatchObject({ bold: true });
-      expect(definition.type).toMatch(/^(dark|light|ansi)$/);
-    }
-  });
-
-  it('includes the Qwen pair and the ANSI themes', () => {
-    const names = getBuiltInOpenTuiThemes().map((theme) => theme.name);
-    for (const expected of [
-      'Qwen Dark',
-      'Qwen Light',
-      'Dracula',
-      'ANSI',
-      'ANSI Light',
-      'GitHub Light',
-    ]) {
-      expect(names).toContain(expected);
-    }
-  });
-});
 
 describe('palette parity (semantic tokens → opentui palette)', () => {
   it('maps Qwen Dark through its semantic tokens with the hljs default text', () => {
@@ -206,7 +166,9 @@ describe('syntax style parity (hljs map → opentui tokens)', () => {
     const known = new Set(HLJS_TO_SYNTAX_TOKEN.map(([, token]) => token));
     known.add('emphasis');
     known.add('strong');
-    for (const definition of getBuiltInOpenTuiThemes()) {
+    for (const display of themeManager.getAvailableThemes()) {
+      if (display.isCustom) continue;
+      const definition = getOpenTuiTheme(display.name)!;
       for (const token of Object.keys(definition.syntaxStyles)) {
         expect(
           known,
@@ -214,12 +176,6 @@ describe('syntax style parity (hljs map → opentui tokens)', () => {
         ).toContain(token);
       }
     }
-  });
-});
-
-describe('getOpenTuiTheme / unknown themes', () => {
-  it('returns undefined for unknown theme names', () => {
-    expect(getOpenTuiTheme('does-not-exist')).toBeUndefined();
   });
 });
 
@@ -241,15 +197,5 @@ describe('getActiveOpenTuiTheme (NO_COLOR parity)', () => {
       if (previous === undefined) delete process.env['NO_COLOR'];
       else process.env['NO_COLOR'] = previous;
     }
-  });
-});
-
-describe('createSyntaxStyle', () => {
-  it('builds the opentui SyntaxStyle from the mapped styles', () => {
-    const definition = getOpenTuiTheme('Dracula')!;
-    const style = createSyntaxStyle(definition) as unknown as {
-      styles: Record<string, unknown>;
-    };
-    expect(style.styles).toBe(definition.syntaxStyles);
   });
 });

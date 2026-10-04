@@ -202,9 +202,6 @@ vi.mock('../../telemetry/index.js', () => {
         }
       },
     ),
-    addSystemPromptAttributes: vi.fn(),
-    addToolSchemaAttributes: vi.fn(),
-    addModelOutputAttributes: vi.fn(),
     isTelemetrySdkInitialized,
     areSensitiveSpanAttributesEnabled: vi.fn(
       (config: Pick<Config, 'getTelemetryIncludeSensitiveSpanAttributes'>) =>

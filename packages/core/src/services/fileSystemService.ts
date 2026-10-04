@@ -11,20 +11,10 @@ import * as path from 'node:path';
 import { globSync } from 'glob';
 import { atomicWriteFile } from '../utils/atomicFileWrite.js';
 import { readFileWithLineAndLimit } from '../utils/fileUtils.js';
-import {
-  readTextCursorWindowFromHandle,
-  readTextRangeFromHandle,
-  type ReadTextCursorWindowResult,
-} from '../utils/read-text-range.js';
+import { readTextRangeFromHandle } from '../utils/read-text-range.js';
 import { isUtf8CompatibleEncoding } from '../utils/encoding.js';
 import { loadIconvLite, type IconvLite } from '../utils/load-iconv-lite.js';
 import { getSystemEncoding } from '../utils/systemEncoding.js';
-import type {
-  ReadTextFileRequest,
-  WriteTextFileRequest,
-  WriteTextFileResponse,
-} from '@agentclientprotocol/sdk';
-import type { ToolWriteOrigin } from './tool-write-origin.js';
 
 export type LineEnding = 'crlf' | 'lf';
 
@@ -37,34 +27,30 @@ export type ReadTextFileResponse = {
     originalLineCountExact?: boolean;
     lineEnding?: LineEnding;
     truncatedByBytes?: boolean;
-    /** Byte offset to resume from; absent once the read reached EOF. */
-    nextByteOffset?: number;
   };
 };
 
-export type CoreReadTextFileRequest = Omit<
-  ReadTextFileRequest,
-  'sessionId' | 'line'
-> & {
-  /**
-   * Core-local callers use 0-based line offsets. ACP protocol boundaries remain
-   * 1-based and convert explicitly before remote calls.
-   */
+type FileRequestMeta = { [key: string]: unknown } | null;
+
+export type CoreReadTextFileRequest = {
+  path: string;
+  /** 0-based line offset. */
   line?: number | null;
+  limit?: number | null;
+  _meta?: FileRequestMeta;
   maxOutputBytes?: number;
   signal?: AbortSignal;
   stats?: Stats;
 };
 
-export type CoreWriteTextFileRequest = Omit<
-  WriteTextFileRequest,
-  'sessionId'
-> & {
-  /**
-   * Internal core provenance for a final built-in tool write. This is not part
-   * of any tool schema and is serialized only at the ACP boundary.
-   */
-  toolWriteOrigin?: ToolWriteOrigin;
+export type CoreWriteTextFileRequest = {
+  path: string;
+  content: string;
+  _meta?: FileRequestMeta;
+};
+
+export type WriteTextFileResponse = {
+  _meta?: FileRequestMeta;
 };
 
 /**
@@ -93,21 +79,6 @@ export interface CoreReadTextFileHandleRequest {
   limit?: number;
   maxOutputBytes: number;
   maxScanBytes: number;
-  signal?: AbortSignal;
-}
-
-/**
- * Byte-cursor read used by filesystem security boundaries to page text without
- * re-scanning from byte 0. Same borrowed-descriptor contract as
- * {@link CoreReadTextFileHandleRequest}.
- */
-export interface CoreReadTextCursorRequest {
-  fileHandle: FileHandle;
-  startOffset: number;
-  fileSize: number;
-  limit?: number;
-  maxOutputBytes: number;
-  maxSnapBytes: number;
   signal?: AbortSignal;
 }
 
@@ -146,26 +117,6 @@ export interface FileSystemService {
    * @returns An array of absolute paths to the found files.
    */
   findFiles(fileName: string, searchPaths: readonly string[]): string[];
-}
-
-/**
- * Options for writing text files
- */
-export interface WriteTextFileOptions {
-  /**
-   * Whether to write the file with UTF-8 BOM.
-   * If true, EF BB BF will be prepended to the content.
-   * @default false
-   */
-  bom?: boolean;
-
-  /**
-   * The encoding to use when writing the file.
-   * If specified and not UTF-8 compatible, iconv-lite will be used to encode.
-   * This is used to preserve the original encoding of non-UTF-8 files (e.g. GBK, Big5).
-   * @default undefined (writes as UTF-8)
-   */
-  encoding?: string;
 }
 
 /**
@@ -418,44 +369,6 @@ export class StandardFileSystemService implements FileSystemService {
     return toReadTextFileResponse(range);
   }
 
-  async readTextCursorFromHandle(
-    params: CoreReadTextCursorRequest,
-  ): Promise<ReadTextCursorWindowResult> {
-    if (!isPositiveSafeInteger(params.maxOutputBytes)) {
-      throw new RangeError(
-        `cursor reads require a positive finite maxOutputBytes, got ${params.maxOutputBytes}`,
-      );
-    }
-    if (!isPositiveSafeInteger(params.maxSnapBytes)) {
-      throw new RangeError(
-        `cursor reads require a positive finite maxSnapBytes, got ${params.maxSnapBytes}`,
-      );
-    }
-    if (
-      !Number.isSafeInteger(params.startOffset) ||
-      params.startOffset < 0 ||
-      !Number.isSafeInteger(params.fileSize) ||
-      params.fileSize < 0
-    ) {
-      throw new RangeError(
-        `cursor reads require non-negative integer startOffset and fileSize, got ${params.startOffset}/${params.fileSize}`,
-      );
-    }
-    if (params.limit !== undefined && !isPositiveSafeInteger(params.limit)) {
-      throw new RangeError(
-        `cursor reads require a positive integer limit, got ${params.limit}`,
-      );
-    }
-    return readTextCursorWindowFromHandle(params.fileHandle, {
-      startOffset: params.startOffset,
-      fileSize: params.fileSize,
-      maxOutputBytes: params.maxOutputBytes,
-      maxSnapBytes: params.maxSnapBytes,
-      ...(params.limit !== undefined ? { limit: params.limit } : {}),
-      ...(params.signal !== undefined ? { signal: params.signal } : {}),
-    });
-  }
-
   async writeTextFile(
     params: CoreWriteTextFileRequest,
   ): Promise<WriteTextFileResponse> {
@@ -514,7 +427,6 @@ function toReadTextFileResponse(readResult: {
   originalLineCountExact?: boolean;
   lineEnding?: LineEnding;
   truncatedByBytes?: boolean;
-  nextByteOffset?: number;
 }): ReadTextFileResponse {
   const detectedLineEnding =
     readResult.lineEnding ?? detectLineEnding(readResult.content);
@@ -528,9 +440,6 @@ function toReadTextFileResponse(readResult: {
       lineEnding: detectedLineEnding,
       ...(readResult.truncatedByBytes !== undefined
         ? { truncatedByBytes: readResult.truncatedByBytes }
-        : {}),
-      ...(readResult.nextByteOffset !== undefined
-        ? { nextByteOffset: readResult.nextByteOffset }
         : {}),
     },
   };

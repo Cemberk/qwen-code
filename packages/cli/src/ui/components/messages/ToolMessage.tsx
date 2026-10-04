@@ -312,20 +312,6 @@ const useResultDisplayRenderer = (
       typeof resultDisplay === 'object' &&
       resultDisplay !== null &&
       'type' in resultDisplay &&
-      resultDisplay.type === 'mcp_app' &&
-      'fallbackText' in resultDisplay &&
-      typeof resultDisplay.fallbackText === 'string'
-    ) {
-      return {
-        type: 'string',
-        data: resultDisplay.fallbackText,
-      };
-    }
-
-    if (
-      typeof resultDisplay === 'object' &&
-      resultDisplay !== null &&
-      'type' in resultDisplay &&
       (resultDisplay.type === 'ask_user_question_answers' ||
         resultDisplay.type === 'shell_result') &&
       'text' in resultDisplay &&

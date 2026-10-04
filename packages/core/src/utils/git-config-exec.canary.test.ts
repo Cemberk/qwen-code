@@ -28,7 +28,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getRecentGitStatus } from './gitUtils.js';
-import { getGitWorkingTreeStatus } from './gitDiff.js';
+import { fetchGitDiff } from './gitDiff.js';
 import { isGitIgnored } from './git-ignore.js';
 import {
   GitWorktreeService,
@@ -210,16 +210,15 @@ describe('a planted git program reaches no automatic git call', () => {
   );
 
   itWherePlantRuns(
-    'the working-tree status behind the daemon routes does not run it',
+    'the working-tree diff does not run it',
     async () => {
       const { repo, fired } = planted();
       // Every git call in `gitDiff` goes through one `runGit`, so guarding it
       // there covers the index-refreshing ones — `status`, `ls-files`, `diff`,
       // `diff-tree` — along with any call site added later.
-      const status = await getGitWorkingTreeStatus(repo);
+      const diff = await fetchGitDiff(repo);
       expect(fired()).toBe(false);
-      expect(status?.branch).toBe('main');
-      expect(status?.unstaged).toBe(1);
+      expect(diff).not.toBeNull();
     },
     PLANT_TIMEOUT_MS,
   );

@@ -14,12 +14,14 @@ import {
 import { describe, expect, it, vi } from 'vitest';
 import type { Config, MCPServerConfig } from '../config/config.js';
 import type { WorkspaceContext } from '../utils/workspaceContext.js';
+import type { PromptRegistry } from '../prompts/prompt-registry.js';
+import type { ToolRegistry } from './tool-registry.js';
 import {
-  getMcpAppResourceUri,
   isMcpToolVisibleToModel,
-  connectToMcpServer,
+  McpClient,
+  type SendSdkMcpMessage,
   createMcpClient,
-  discoverTools,
+  discoverToolsWithMetadata,
   invokeMcpPrompt,
   listMcpPrompts,
   listMcpResources,
@@ -37,6 +39,10 @@ import {
   type SendMcpMessageCallback,
 } from './sdk-control-client-transport.js';
 
+const discoverTools = async (
+  ...args: Parameters<typeof discoverToolsWithMetadata>
+) => (await discoverToolsWithMetadata(...args)).tools;
+
 type RequestMessage = JSONRPCRequest;
 
 function response(
@@ -49,8 +55,26 @@ function response(
 function workspaceContext(): WorkspaceContext {
   return {
     getDirectories: vi.fn().mockReturnValue([]),
-    onDirectoriesChanged: vi.fn().mockReturnValue(vi.fn()),
   } as unknown as WorkspaceContext;
+}
+
+async function connectToMcpServer(
+  serverName: string,
+  config: MCPServerConfig,
+  sendSdkMcpMessage?: SendSdkMcpMessage,
+) {
+  const mcp = new McpClient(
+    serverName,
+    config,
+    {} as ToolRegistry,
+    {} as PromptRegistry,
+    workspaceContext(),
+    false,
+    sendSdkMcpMessage,
+  );
+  await mcp.connect();
+  return (mcp as unknown as { client: ReturnType<typeof createMcpClient> })
+    .client;
 }
 
 async function connectNegotiatingControl(
@@ -148,7 +172,7 @@ describe('configured MCP SDK v2 negotiation', () => {
     } as MCPServerConfig;
 
     const client = await runWithTimeout(
-      connectToMcpServer('slow-legacy', config, false, workspaceContext()),
+      connectToMcpServer('slow-legacy', config),
       discoveryTimeoutFor(config),
       'slow legacy negotiation',
     );
@@ -182,7 +206,6 @@ describe('configured MCP SDK v2 negotiation', () => {
                 name: 'echo',
                 description: 'Echo input',
                 inputSchema: { type: 'object' },
-                _meta: { ui: { resourceUri: 'ui://demo/dashboard' } },
               },
             ],
             ttlMs: 60_000,
@@ -238,7 +261,7 @@ describe('configured MCP SDK v2 negotiation', () => {
         client,
         {} as Config,
       );
-      expect(discoveredTool?.appResourceUri).toBe('ui://demo/dashboard');
+      expect(discoveredTool?.serverToolName).toBe('echo');
       await expect(
         client.callTool({ name: 'echo', arguments: { text: 'hello' } }),
       ).resolves.toMatchObject({
@@ -282,15 +305,6 @@ describe('configured MCP SDK v2 negotiation', () => {
           [CLIENT_CAPABILITIES_META_KEY]: expect.any(Object),
         });
       }
-      expect(
-        requests[0]?.params?._meta?.[CLIENT_CAPABILITIES_META_KEY],
-      ).toMatchObject({
-        extensions: {
-          'io.modelcontextprotocol/ui': {
-            mimeTypes: ['text/html;profile=mcp-app'],
-          },
-        },
-      });
     } finally {
       await client.close();
     }
@@ -446,17 +460,6 @@ describe('configured MCP SDK v2 negotiation', () => {
         requests.find((request) => request.method === 'tools/list')?.params
           ?._meta,
       ).toBeUndefined();
-      expect(
-        requests.find((request) => request.method === 'initialize')?.params?.[
-          'capabilities'
-        ],
-      ).toMatchObject({
-        extensions: {
-          'io.modelcontextprotocol/ui': {
-            mimeTypes: ['text/html;profile=mcp-app'],
-          },
-        },
-      });
     } finally {
       await client.close();
     }
@@ -485,8 +488,6 @@ describe('configured MCP SDK v2 negotiation', () => {
     const client = await connectToMcpServer(
       'sdk-legacy',
       { type: 'sdk' } as MCPServerConfig,
-      false,
-      workspaceContext(),
       send,
     );
 
@@ -498,25 +499,7 @@ describe('configured MCP SDK v2 negotiation', () => {
     }
   });
 
-  it('accepts nested and legacy MCP Apps tool metadata', () => {
-    expect(
-      getMcpAppResourceUri({
-        _meta: { ui: { resourceUri: 'ui://demo/dashboard' } },
-      }),
-    ).toBe('ui://demo/dashboard');
-    expect(
-      getMcpAppResourceUri({
-        _meta: { 'ui/resourceUri': 'ui://demo/legacy' },
-      }),
-    ).toBe('ui://demo/legacy');
-    expect(
-      getMcpAppResourceUri({
-        _meta: { ui: { resourceUri: 'https://example.com/app' } },
-      }),
-    ).toBeUndefined();
-  });
-
-  it('hides MCP App tools whose visibility does not include model', () => {
+  it('hides tools whose visibility does not include model', () => {
     expect(isMcpToolVisibleToModel({})).toBe(true);
     expect(
       isMcpToolVisibleToModel({

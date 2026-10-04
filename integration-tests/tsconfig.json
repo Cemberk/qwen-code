@@ -26,7 +26,7 @@
     // `@qwen-code/qwen-code-core/*` wildcard below covers every specifier
     // whose source file sits at the matching path under `packages/core/src/`.
     // Explicit entries remain necessary only where the specifier does not name
-    // its file — `noFollowOpen` lives at `utils/no-follow-open.ts`, and the
+    // its file — `shellResult` lives at `utils/shell-result.ts`, and the
     // wildcard would map it to a file that does not exist. Do not delete those
     // entries: since core's exports map gained a `./*` catch-all they would
     // still resolve, silently, against dist declarations rather than failing.
@@ -47,20 +47,8 @@
       "@qwen-code/qwen-code-core/shellResult": [
         "../packages/core/src/utils/shell-result.ts"
       ],
-      "@qwen-code/qwen-code-core/telemetryConstants": [
-        "../packages/core/src/telemetry/constants.ts"
-      ],
-      "@qwen-code/qwen-code-core/noFollowOpen": [
-        "../packages/core/src/utils/no-follow-open.ts"
-      ],
-      "@qwen-code/qwen-code-core/toolWriteOrigin": [
-        "../packages/core/src/services/tool-write-origin.ts"
-      ],
       "@qwen-code/qwen-code-core/envVarResolver": [
         "../packages/core/src/utils/envVarResolver.ts"
-      ],
-      "@qwen-code/qwen-code-core/conversationsRuntimeMarker": [
-        "../packages/core/src/utils/conversations-runtime-marker.ts"
       ],
       "@qwen-code/qwen-code-core/storage": [
         "../packages/core/src/config/storage.ts"
@@ -74,12 +62,6 @@
       "@qwen-code/qwen-code-core/*": ["../packages/core/src/*"],
       "@qwen-code/qwen-code-core/goalWire": [
         "../packages/core/src/goals/goal-wire.ts"
-      ],
-      "@qwen-code/qwen-code-core/memoryScopes": [
-        "../packages/core/src/memory/scopes.ts"
-      ],
-      "@qwen-code/qwen-code-core/userPromptSubmitContext": [
-        "../packages/core/src/hooks/user-prompt-submit-context.ts"
       ],
       // cli's insight TemplateRenderer.ts imports web-templates; without an
       // entry it resolves through the exports map to dist, leaving the

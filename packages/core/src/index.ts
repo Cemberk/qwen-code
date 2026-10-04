@@ -80,7 +80,6 @@ export {
 } from './core/plan-mode-entry-policy.js';
 export * from './core/llm-chat.js';
 export * from './core/inlineMediaLimit.js';
-export * from './core/insightProtocol.js';
 export * from './core/logger.js';
 export * from './core/message-display-dispatcher.js';
 export * from './core/nonInteractiveToolExecutor.js';
@@ -89,11 +88,9 @@ export * from './core/output-styles.js';
 export * from './core/output-style-files.js';
 export * from './core/session-recovery.js';
 export { buildSessionHistoryFromConversation } from './services/session-api-history.js';
-export * from './core/ask-user-question-restore.js';
 export * from './core/tokenLimits.js';
 export * from './core/tool-call-preparation.js';
 export * from './core/toolCallIdUtils.js';
-export * from './core/tool-invocation-guard.js';
 export * from './core/turn.js';
 export * from './core/turn-interruption.js';
 
@@ -118,9 +115,7 @@ export * from './tools/mcp-tool.js';
 export * from './tools/read-file.js';
 export * from './tools/ripGrep.js';
 export * from './tools/sdk-control-client-transport.js';
-export * from './tools/client-mcp-registrar.js';
 export * from './tools/modifiable-tool.js';
-export type { ManagedToolV2Client } from './tools/managed-tool-runtime.js';
 
 // Selective re-exports of types/utilities from tool files (avoids loading full tool modules)
 export {
@@ -189,23 +184,12 @@ export type {
   TodoWriteParams,
 } from './tools/todoWrite.js';
 export type { WriteFileTool, WriteFileToolParams } from './tools/write-file.js';
-// Exported for the cross-package contract test in packages/cli (see the
-// function's own doc comment) — the daemon's file-read route must resolve the
-// workspacePath this produces.
-export {
-  buildRecordArtifactReminder,
-  buildWorkspaceArtifactMetadata,
-} from './tools/write-file.js';
-export {
-  resolveBoundWorkspaceRoot,
-  toCanonicalWorkspaceArtifactPath,
-} from './utils/workspace-artifact-path.js';
+
 export {
   MAX_DIRECTORY_ARTIFACT_DEPTH,
   MAX_DIRECTORY_ARTIFACT_FILES,
   OFFICE_DOCUMENT_EXTENSIONS,
   collectRecordableWorkspaceFiles,
-  isOfficeDocumentExtension,
   pathHasSkippedDirectoryComponent,
   shouldSkipDirectoryArtifactName,
   stripWorktreeArtifactPrefix,
@@ -216,7 +200,6 @@ export type {
 } from './tools/artifact/artifact-tool.js';
 export {
   deleteArtifactSnapshot,
-  readArtifactSnapshot,
   retainArtifactSnapshot,
 } from './tools/artifact/artifact-snapshots.js';
 export {
@@ -292,10 +275,9 @@ export {
 export { isClearedMediaPlaceholder } from './services/microcompaction/microcompact.js';
 export {
   isApiUserPrompt,
-  findApiRewindCutPoint,
-  countApiUserPrompts,
   type ApiUserPromptOptions,
 } from './services/api-user-prompt.js';
+
 export * from './services/chatRecordingService.js';
 export * from './services/branch-points.js';
 export * from './services/cronScheduler.js';
@@ -303,17 +285,14 @@ export type {
   CronTaskDelivery,
   DurableCronTask,
   CronTaskRun,
-  CronRunSessionOutcome,
 } from './services/cronTasksFile.js';
 export {
   readCronTasks,
-  cronTaskSessionDeletionId,
   updateCronTasks,
   removeCronTasks,
   getCronFilePath,
   generateCronTaskId,
   appendCronRun,
-  annotateCronRunSession,
   taskHasLegacyCondition,
   MAX_TASK_RUNS,
   MAX_CRON_TASK_ROUTING_ID_LENGTH,
@@ -325,25 +304,17 @@ export * from './services/fileDiscoveryService.js';
 export * from './services/fileHistoryService.js';
 export * from './services/fileReadCache.js';
 export * from './services/fileSystemService.js';
-export * from './services/tool-write-origin.js';
 export {
-  CursorNotAtLineBoundaryError,
   LargeNonUtf8TextError,
   TextScanBudgetExceededError,
 } from './utils/read-text-range.js';
 export type { ReadTextRangeResult } from './utils/read-text-range.js';
 export { isUtf8CompatibleEncoding } from './utils/encoding.js';
 export * from './services/gitWorktreeService.js';
-export {
-  DEFAULT_MAX_TOOL_CALLS_PER_TURN,
-  GLOBAL_DUPLICATE_THRESHOLD,
-  getToolCallRepeatKey,
-  shouldHaltOnTurnToolCallCap,
-} from './services/loopDetectionService.js';
+export { DEFAULT_MAX_TOOL_CALLS_PER_TURN } from './services/loopDetectionService.js';
 export * from './services/visionBridge/vision-bridge-service.js';
 export * from './services/visionBridge/tool-result-vision-bridge.js';
 export * from './services/visionBridge/image-part-utils.js';
-export * from './services/visionBridge/image-capability.js';
 export * from './services/sessionRecap.js';
 export * from './services/session-artifact-persistence.js';
 export * from './services/session-reference-service.js';
@@ -353,45 +324,7 @@ export {
   collectSessionTurnState,
   computeInitialTurnFromHistory,
 } from './services/session-turn-state.js';
-export * from './services/session-writer-lease.js';
-export {
-  decodeSessionTranscriptCursor,
-  decodeSessionTranscriptSnapshot,
-  encodeSessionTranscriptCursor,
-  encodeSessionTranscriptSnapshot,
-  findBoundaryAtOrBefore,
-  InvalidSessionTranscriptCursorError,
-  InvalidSessionTranscriptTurnAnchorError,
-  isReplayTurnStartType,
-  SESSION_TRANSCRIPT_CURSOR_VERSION,
-  SESSION_TRANSCRIPT_DEFAULT_LIMIT,
-  SESSION_TRANSCRIPT_MAX_EXPANDED_PAGE_BYTES,
-  SESSION_TRANSCRIPT_MAX_INDEX_BYTES,
-  SESSION_TRANSCRIPT_MAX_LIMIT,
-  SESSION_TRANSCRIPT_MAX_PAGE_BYTES,
-  SESSION_TRANSCRIPT_TURN_INDEX_VERSION,
-  SessionTranscriptCursorCodec,
-  SessionTranscriptReader,
-  SessionTranscriptPageTooLargeError,
-  SessionTranscriptSnapshotUnavailableError,
-  SessionTranscriptTooLargeError,
-} from './services/session-transcript-reader.js';
-export type {
-  SelectiveSessionRestoreOptions,
-  SessionLiveRestoreProjection,
-  SessionRestoreProjection,
-  SessionRestoreReplayPage,
-  SessionRestoreReplaySelection,
-  SessionRuntimeResumeState,
-  SessionTranscriptCursorState,
-  SessionTranscriptNavigationTurn,
-  SessionTranscriptNavigationTurnKind,
-  SessionTranscriptReadPageOptions,
-  SessionTranscriptReadTurnIndexOptions,
-  SessionTranscriptRecordPage,
-  SessionTranscriptSnapshotState,
-  SessionTranscriptTurnIndexPage,
-} from './services/session-transcript-reader.js';
+export * from './services/session-writer-errors.js';
 export * from './utils/conversation-chain.js';
 export * from './utils/transcript-records.js';
 export * from './services/sessionTitle.js';
@@ -399,12 +332,10 @@ export * from './services/sleepInhibitor.js';
 // Named exports keep @internal test helpers out of the barrel.
 export {
   apiResponseEventToTokenUsageRecord,
-  exportTokenUsageSummary,
   formatTokenUsageSummaryAsCsv,
   formatTokenUsageSummaryAsJson,
   getTokenUsageFilePath,
   queryTokenUsage,
-  recordTokenUsageFromApiResponse,
   recordTokenUsageFromApiResponseBestEffort,
 } from './services/tokenUsageService.js';
 export type {
@@ -418,7 +349,6 @@ export type {
   TokenUsageTotals,
 } from './services/tokenUsageService.js';
 export * from './services/worktreeSessionService.js';
-export * from './services/session-pr-service.js';
 export {
   stripTerminalControlSequences,
   stripDisplayControlChars,
@@ -497,9 +427,7 @@ export * from './memory/remember.js';
 export * from './memory/refresh.js';
 export * from './memory/dream.js';
 export * from './memory/learn-skill-agent.js';
-// Issue : write helper for hierarchical context files,
-// re-exported so the `qwen serve` daemon can mutate workspace memory
-// via `POST /workspace/memory` without depending on internal paths.
+// Write helper for hierarchical context files.
 
 // ============================================================================
 // LSP Support
@@ -529,7 +457,6 @@ export * from './telemetry/index.js';
 export {
   logAuth,
   logLoopDetected,
-  logRepeatedToolFailureGuard,
   logModelSlashCommand,
   logPromptSuggestion,
   logSpeculation,
@@ -541,7 +468,6 @@ export {
   AuthEvent,
   LoopDetectedEvent,
   LoopType,
-  RepeatedToolFailureGuardEvent,
   ModelSlashCommandEvent,
   PromptSuggestionEvent,
   SpeculationEvent,
@@ -557,7 +483,6 @@ export {
 export * from './extension/index.js';
 export * from './prompts/mcp-prompts.js';
 export * from './skills/index.js';
-export * from './skills/bundled/loop/loop-task-file.js';
 export * from './skills/bundled/loop/loop-tick-resolver.js';
 export * from './subagents/index.js';
 export * from './agents/index.js';
@@ -601,8 +526,6 @@ export * from './utils/git-ignore.js';
 export * from './utils/gitIgnoreParser.js';
 export * from './utils/gitUtils.js';
 export * from './utils/ignorePatterns.js';
-export * from './utils/invocation-context.js';
-export * from './utils/conversations-runtime-marker.js';
 export {
   DEFAULT_QWEN_CUSTOM_IGNORE_FILE_NAMES,
   QwenIgnoreParser,
@@ -634,7 +557,6 @@ export * from './utils/quotaErrorDetection.js';
 export * from './utils/rateLimit.js';
 export * from './tools/readManyFiles.js';
 export * from './utils/request-tokenizer/supportedImageFormats.js';
-export { TextTokenizer } from './utils/request-tokenizer/textTokenizer.js';
 export * from './utils/retry.js';
 export * from './utils/ripgrepUtils.js';
 export {
@@ -724,22 +646,14 @@ export {
   formatStopHookBlockingCapWarning,
 } from './hooks/stopHookCap.js';
 export type { StopFailureErrorType } from './hooks/types.js';
-export {
-  HOOK_EVENT_DISPLAY,
-  hookEventDisplay,
-} from './hooks/hook-event-display.js';
+export { HOOK_EVENT_DISPLAY } from './hooks/hook-event-display.js';
 export type { HookEventDisplayMeta } from './hooks/hook-event-display.js';
 export {
   DEFAULT_COMMAND_HOOK_TIMEOUT_SECONDS,
   DEFAULT_PROMPT_HOOK_TIMEOUT_SECONDS,
   DEFAULT_FUNCTION_HOOK_TIMEOUT_MS,
-  describeHookTimeout,
   isLegacyMillisecondHookTimeout,
   resolveCommandHookTimeoutMs,
-} from './hooks/hook-timeout.js';
-export type {
-  HookTimeoutDescription,
-  HookTimeoutSource,
 } from './hooks/hook-timeout.js';
 export { buildContextUsage } from './hooks/context-usage.js';
 export {
@@ -783,6 +697,3 @@ export {
   type StartupEventSink,
   type StartupEventAttrs,
 } from './utils/startupEventSink.js';
-
-export * from './services/session-sources.js';
-export { RecordSourceTool } from './tools/record-source.js';

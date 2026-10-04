@@ -30,25 +30,6 @@ type WithoutConfirmationCallback<T> = T extends unknown
 export type AgentConfirmationDetails =
   WithoutConfirmationCallback<ToolCallConfirmationDetails>;
 
-// ─── Event Types ────────────────────────────────────────────
-
-export type AgentEvent =
-  | 'start'
-  | 'round_start'
-  | 'round_end'
-  | 'round_text'
-  | 'stream_text'
-  | 'tool_call'
-  | 'tool_result'
-  | 'tool_responses_finalized'
-  | 'tool_output_update'
-  | 'tool_waiting_approval'
-  | 'usage_metadata'
-  | 'external_message'
-  | 'finish'
-  | 'error'
-  | 'status_change';
-
 export enum AgentEventType {
   START = 'start',
   ROUND_START = 'round_start',

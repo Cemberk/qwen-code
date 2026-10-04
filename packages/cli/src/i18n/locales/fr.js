@@ -120,8 +120,6 @@ export default {
     'Échec du chargement des compétences : {{error}}',
   'Failed to save skills configuration: {{error}}':
     "Échec de l'enregistrement de la configuration des compétences : {{error}}",
-  'All available skills are disabled. Edit ~/.qwen/settings.json or .qwen/settings.json (skills.disabled) to re-enable.':
-    'Toutes les compétences disponibles sont désactivées. Modifiez ~/.qwen/settings.json ou .qwen/settings.json (skills.disabled) pour les réactiver.',
   'Press esc to close.': 'Appuyez sur Échap pour fermer.',
   '{{count}} skills · ': '{{count}} compétences · ',
   '{{matched}} / {{total}} skills · ': '{{matched}} / {{total}} compétences · ',
@@ -633,8 +631,6 @@ export default {
     'Vous installez une extension depuis {{originSource}}. Certaines fonctionnalités peuvent ne pas fonctionner parfaitement avec Qwen Code.',
   'Extension "{{name}}" installed successfully and enabled.':
     'Extension "{{name}}" installée et activée avec succès.',
-  'The github URL, local path, or marketplace source (marketplace-url:plugin-name) of the extension to install.':
-    "L'URL GitHub, le chemin local ou la source marketplace (marketplace-url:nom-plugin) de l'extension à installer.",
   'Acknowledge the security risks of installing an extension and skip the confirmation prompt.':
     "Reconnaître les risques de sécurité liés à l'installation d'une extension et ignorer la confirmation.",
   'The source argument must be provided.':
@@ -1926,8 +1922,6 @@ export default {
     'Arena nécessite au moins 2 modèles. Utilisez --models model1,model2 pour les spécifier.',
   'Arena started with {{count}} agents on task: "{{task}}"\nModels:\n{{modelList}}':
     'Arena démarrée avec {{count}} agents sur la tâche : "{{task}}"\nModèles :\n{{modelList}}',
-  'Arena panes are running in tmux. Attach with: `{{command}}`':
-    "Les panneaux Arena sont en cours d'exécution dans tmux. Attachez avec : `{{command}}`",
   '[{{label}}] failed: {{error}}': '[{{label}}] a échoué : {{error}}',
   'Loading suggestions...': 'Chargement des suggestions...',
   'Open the memory manager.': 'Ouvrir le gestionnaire de mémoire.',
@@ -2030,10 +2024,6 @@ export default {
   out: 'sort.',
   'In/Out': 'Ent/Sort',
   // Update command
-  'Standalone install detected. Please rerun the standalone installer to update:':
-    'Installation autonome détectée. Veuillez relancer l’installateur autonome pour mettre à jour :',
-  'Unable to auto-update this standalone installation. Please reinstall from:':
-    'Impossible de mettre à jour automatiquement cette installation autonome. Veuillez réinstaller depuis :',
 
   // ============================================================================
   // reload-plugins command

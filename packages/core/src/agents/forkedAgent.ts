@@ -95,7 +95,7 @@ export interface CacheSafeParams {
   version: number;
   /**
    * The session that saved these params. The slot is a process-global, so
-   * in a multi-session daemon it can hold another session's params; readers
+   * it can hold another session's params; readers
    * must match this against their own session id before trusting it, or a
    * forked query could be built from a different session's transcript
    * (cross-session content leak) (#9233).

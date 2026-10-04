@@ -193,49 +193,6 @@ async function installAction(context: CommandContext, args: string) {
   return undefined;
 }
 
-export async function completeExtensions(
-  context: CommandContext,
-  partialArg: string,
-) {
-  let extensions = context.services.config?.getExtensions() ?? [];
-
-  if (context.invocation?.name === 'enable') {
-    extensions = extensions.filter((ext) => !ext.isActive);
-  }
-  if (
-    context.invocation?.name === 'disable' ||
-    context.invocation?.name === 'restart'
-  ) {
-    extensions = extensions.filter((ext) => ext.isActive);
-  }
-  const extensionNames = extensions.map((ext) => ext.name);
-  const suggestions = extensionNames.filter((name) =>
-    name.startsWith(partialArg),
-  );
-
-  if (
-    context.invocation?.name !== 'uninstall' &&
-    context.invocation?.name !== 'detail'
-  ) {
-    if ('--all'.startsWith(partialArg) || 'all'.startsWith(partialArg)) {
-      suggestions.unshift('--all');
-    }
-  }
-
-  return suggestions;
-}
-
-export async function completeExtensionsAndScopes(
-  context: CommandContext,
-  partialArg: string,
-) {
-  const completions = await completeExtensions(context, partialArg);
-  return completions.flatMap((s) => [
-    `${s} --scope user`,
-    `${s} --scope workspace`,
-  ]);
-}
-
 const manageExtensionsCommand: SlashCommand = {
   name: 'manage',
   get description() {
@@ -252,7 +209,7 @@ const listExtensionsCommand: SlashCommand = {
     return t('List installed extensions');
   },
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
   action: listTextAction,
 };
 
@@ -272,7 +229,7 @@ export const extensionsCommand: SlashCommand = {
     return t('Manage extensions');
   },
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
   subCommands: [listExtensionsCommand, manageExtensionsCommand, installCommand],
   action: async (context, args) => {
     const executionMode = context.executionMode ?? 'interactive';

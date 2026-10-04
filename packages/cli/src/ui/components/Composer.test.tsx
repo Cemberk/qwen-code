@@ -24,12 +24,6 @@ vi.mock('../contexts/VimModeContext.js', () => ({
     toggleVimEnabled: vi.fn(),
     setVimMode: vi.fn(),
   })),
-  useVimMode: vi.fn(() => ({
-    vimEnabled: false,
-    vimMode: 'NORMAL',
-    toggleVimEnabled: vi.fn(),
-    setVimMode: vi.fn(),
-  })),
 }));
 import { ApprovalMode } from '@qwen-code/qwen-code-core';
 import { StreamingState } from '../types.js';
@@ -61,7 +55,6 @@ vi.mock('./LoadingIndicator.js', () => ({
     </Text>
   ),
 }));
-
 
 vi.mock('./AutoAcceptIndicator.js', () => ({
   AutoAcceptIndicator: () => <Text>AutoAcceptIndicator</Text>,

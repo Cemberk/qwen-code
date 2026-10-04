@@ -36,7 +36,7 @@ export function resolveBoundWorkspaceRoot(targetDir: string): string {
 
 /**
  * Convert an absolute file path into the root-relative posix workspacePath
- * that the daemon store and `GET /file` understand. Returns null when the
+ * recorded for workspace artifacts. Returns null when the
  * file is outside the bound workspace root (including the root itself).
  *
  * This helper does not apply write_file's extension whitelist. Callers that

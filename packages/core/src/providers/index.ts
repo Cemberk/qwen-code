@@ -32,7 +32,6 @@ export {
   CUSTOM_API_KEY_ENV_PREFIX,
   customProvider,
   findProviderByCredentials,
-  findProviderById,
   generateCustomEnvKey,
 } from './all-providers.js';
 

@@ -9,7 +9,6 @@ import {
   REASONING_EFFORT_TIERS,
   getGptReasoningCapabilities,
   isReasoningEffortPlaceholder,
-  clampReasoningEffort,
   reasoningEffortsForCapability,
   type Config,
   type ContentGeneratorConfig,
@@ -20,9 +19,6 @@ import {
   getEffectiveReasoning,
   type ReasoningProfile,
 } from '@qwen-code/qwen-code-core/core/reasoning-overrides.js';
-import type { SessionConfigOption } from '@agentclientprotocol/sdk';
-import type { LoadedSettings } from '../config/settings.js';
-import { ACP_ROUTE_ID_PREFIX } from './acpModelUtils.js';
 
 export type ModelReasoningConfiguration = (
   | {
@@ -82,56 +78,7 @@ const MODEL_CONFIGURATIONS: Readonly<
   },
 };
 
-export const REASONING_EFFORT_DEFAULT = 'default';
-export const REASONING_EFFORT_NONE = 'none';
-
-export type ReasoningSelection =
-  | ReasoningEffort
-  | typeof REASONING_EFFORT_NONE
-  | typeof REASONING_EFFORT_DEFAULT;
-
-export const PERSIST_REASONING_SELECTION_META_KEY =
-  'qwenCode/persistReasoningSelection';
-export const REASONING_SELECTION_PERSISTED_META_KEY =
-  'qwenCode/reasoningSelectionPersisted';
-
-export const REASONING_EFFORT_NAMES: Record<ReasoningEffort, string> = {
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  xhigh: 'Extra high',
-  max: 'Max',
-};
-
-export type ModelReasoningConfigState = {
-  enabled?: boolean;
-  effort?: ReasoningEffort;
-  thinkingMandatory?: boolean;
-  enableValue?: typeof REASONING_EFFORT_DEFAULT;
-  canEnable?: false;
-};
-
-export function getDefaultReasoningConfig(
-  config: Config,
-  settings: LoadedSettings,
-): ContentGeneratorConfig['reasoning'] {
-  // Runtime snapshots already include the persisted selection, not its defaults.
-  const authType = config.getAuthType?.();
-  const model =
-    authType && !config.getActiveRuntimeModelSnapshot?.()
-      ? config.getResolvedModelConfig?.(
-          authType,
-          config.getModel(),
-          config.getCurrentModelRegistryBaseUrl?.() ?? undefined,
-        )
-      : undefined;
-  if (model) return model.generationConfig.reasoning;
-  return (
-    settings.merged.model?.generationConfig as
-      | Partial<ContentGeneratorConfig>
-      | undefined
-  )?.reasoning;
-}
+const REASONING_EFFORT_NONE = 'none';
 
 export function getGptReasoningOverrideState(
   generation: ContentGeneratorConfig,
@@ -243,47 +190,6 @@ export function getGptReasoningOverrideState(
   };
 }
 
-export function resolvePersistedReasoningConfigState(
-  modelId: string | undefined,
-  value: unknown,
-  thinkingMandatory = false,
-  reasoning?: ModelReasoningConfiguration,
-): ModelReasoningConfigState {
-  const gptReasoning = getGptReasoningCapabilities(modelId);
-  thinkingMandatory ||=
-    getModelConfiguration(modelId, reasoning)?.reasoning?.canDisable === false;
-  let selection = parseReasoningSelection(value);
-  if (
-    ((reasoning?.profile && !reasoning.toggleOnly) ||
-      (gptReasoning && !parseModelReasoningCapabilities(reasoning))) &&
-    selection &&
-    selection !== REASONING_EFFORT_NONE &&
-    selection !== REASONING_EFFORT_DEFAULT
-  ) {
-    selection = clampReasoningEffort(
-      selection,
-      reasoning && !reasoning.toggleOnly
-        ? reasoning.efforts
-        : gptReasoning!.efforts,
-    );
-  }
-  if (
-    !selection ||
-    selection === REASONING_EFFORT_DEFAULT ||
-    !isReasoningSelectionSupported(
-      modelId,
-      selection,
-      thinkingMandatory,
-      reasoning,
-    )
-  ) {
-    return { thinkingMandatory };
-  }
-  return selection === REASONING_EFFORT_NONE
-    ? { enabled: false, thinkingMandatory }
-    : { enabled: true, effort: selection, thinkingMandatory };
-}
-
 export function getModelConfiguration(
   modelId: string | undefined,
   reasoning?: ModelReasoningConfiguration,
@@ -321,11 +227,7 @@ export function getConfiguredModelReasoning(
   modelId = config.getModel?.(),
   fallbackToManifest = true,
 ): ModelReasoningConfiguration | undefined {
-  if (
-    !modelId ||
-    config.getActiveRuntimeModelSnapshot?.() ||
-    config.getModel?.().startsWith(ACP_ROUTE_ID_PREFIX)
-  ) {
+  if (!modelId || config.getActiveRuntimeModelSnapshot?.()) {
     return undefined;
   }
   const active = config.getContentGeneratorConfig?.();
@@ -351,285 +253,6 @@ export function getReasoningEffortsForConfig(
   // site keeps its own capability lookup and delegates only the rule.
   return reasoningEffortsForCapability(
     getConfiguredModelReasoning(config, modelId, false),
-  );
-}
-
-export function parseReasoningSelection(
-  value: unknown,
-): ReasoningSelection | undefined {
-  if (value === REASONING_EFFORT_NONE || value === REASONING_EFFORT_DEFAULT) {
-    return value;
-  }
-  return REASONING_EFFORT_TIERS.find((tier) => tier === value);
-}
-
-export function isReasoningSelectionSupported(
-  modelId: string | undefined,
-  selection: ReasoningSelection,
-  thinkingMandatory = false,
-  configuredReasoning?: ModelReasoningConfiguration,
-): boolean {
-  if (!modelId) return false;
-  const reasoning = getModelConfiguration(
-    modelId,
-    configuredReasoning,
-  )?.reasoning;
-  if (!reasoning?.thinking) {
-    const normalized = modelId.toLowerCase();
-    if (normalized.startsWith('qwen')) return false;
-  }
-  if (selection === REASONING_EFFORT_DEFAULT) return true;
-  if (selection === REASONING_EFFORT_NONE) {
-    return reasoning?.canDisable !== false && !thinkingMandatory;
-  }
-  return reasoning?.thinking
-    ? !reasoning.toggleOnly && reasoning.efforts?.includes(selection) === true
-    : REASONING_EFFORT_TIERS.includes(selection);
-}
-
-export function clearReasoningRequestOverrides(
-  generation: ContentGeneratorConfig,
-): void {
-  if (
-    getGptReasoningCapabilities(generation.model) ||
-    getGptReasoningOverrideState(
-      generation,
-      resolveReasoningForModel(undefined, generation),
-    )?.blocksTierChange
-  )
-    return;
-  for (const source of ['extra_body', 'samplingParams'] as const) {
-    const layer = generation[source];
-    if (!layer) continue;
-    const next = { ...layer };
-    delete next['enable_thinking'];
-    delete next['reasoning_effort'];
-    delete next['thinking_budget'];
-    generation[source] = next;
-  }
-}
-
-export function applyReasoningSelection(
-  config: Config,
-  selection: ReasoningSelection,
-  defaultReasoning?: ContentGeneratorConfig['reasoning'],
-): void {
-  const apply = (
-    generation: Partial<ContentGeneratorConfig> | undefined,
-  ): void => {
-    if (!generation) return;
-    if (selection === REASONING_EFFORT_NONE) {
-      generation.reasoning = false;
-      return;
-    }
-    if (selection === REASONING_EFFORT_DEFAULT) {
-      if (defaultReasoning !== undefined) {
-        generation.reasoning = defaultReasoning
-          ? { ...defaultReasoning }
-          : false;
-        return;
-      }
-      if (!generation.reasoning) {
-        generation.reasoning = undefined;
-        return;
-      }
-      const next = { ...generation.reasoning };
-      delete next.effort;
-      generation.reasoning = Object.keys(next).length > 0 ? next : undefined;
-      return;
-    }
-    generation.reasoning = {
-      ...(generation.reasoning || defaultReasoning || {}),
-      effort: selection,
-    };
-  };
-
-  const live = config.getContentGeneratorConfig?.();
-  apply(live);
-  const modelsConfig = config.getModelsConfig?.();
-  const rebuildable = modelsConfig?.getGenerationConfig?.();
-  if (rebuildable !== live) apply(rebuildable);
-}
-
-export function buildModelReasoningConfigOption(
-  modelId: string | undefined,
-  state: ModelReasoningConfigState = {},
-  configuredReasoning?: ModelReasoningConfiguration,
-): SessionConfigOption | undefined {
-  const reasoning = getModelConfiguration(
-    modelId,
-    configuredReasoning,
-  )?.reasoning;
-  if (!reasoning?.thinking) return undefined;
-  const canDisable =
-    reasoning.canDisable !== false && state.thinkingMandatory !== true;
-  const enabled =
-    state.enabled ??
-    (state.effort !== undefined ||
-      reasoning.toggleOnly ||
-      reasoning.defaultEnabled !== false);
-  const effort =
-    state.effort &&
-    !reasoning.toggleOnly &&
-    (configuredReasoning?.profile ||
-      (getGptReasoningCapabilities(modelId) &&
-        !parseModelReasoningCapabilities(configuredReasoning)))
-      ? clampReasoningEffort(state.effort, reasoning.efforts)
-      : state.effort;
-  const currentValue =
-    !enabled && canDisable
-      ? REASONING_EFFORT_NONE
-      : reasoning.toggleOnly
-        ? REASONING_EFFORT_DEFAULT
-        : (reasoning.efforts.find((candidate) => candidate === effort) ??
-          reasoning.defaultEffort ??
-          REASONING_EFFORT_DEFAULT);
-
-  return {
-    id: 'reasoning_effort',
-    name: 'Reasoning effort',
-    description: `Thinking and reasoning effort for ${modelId}`,
-    category: 'thought_level',
-    type: 'select',
-    currentValue,
-    options: [
-      ...(canDisable
-        ? [
-            {
-              value: REASONING_EFFORT_NONE,
-              name: 'Thinking off',
-              description: 'Disable thinking for this session',
-            },
-          ]
-        : []),
-      ...(reasoning.toggleOnly
-        ? [
-            {
-              value: REASONING_EFFORT_DEFAULT,
-              name: 'Thinking on',
-              description: 'Use the model or provider thinking default',
-            },
-          ]
-        : [
-            ...(reasoning.defaultEffort
-              ? []
-              : [
-                  {
-                    value: REASONING_EFFORT_DEFAULT,
-                    name: 'Default',
-                    description: 'Use the model or provider default',
-                  },
-                ]),
-            ...reasoning.efforts.map((effort) => ({
-              value: effort,
-              name: REASONING_EFFORT_NAMES[effort],
-              description: 'Apply this effort to the next request',
-            })),
-          ]),
-    ],
-    _meta: {
-      'qwenCode/reasoning': reasoning.toggleOnly
-        ? {
-            toggleOnly: true,
-            ...(state.canEnable === false ? { canEnable: false } : {}),
-            ...(canDisable ? {} : { thinkingMandatory: true }),
-          }
-        : {
-            ...(state.enableValue ? { enableValue: state.enableValue } : {}),
-            ...(state.canEnable === false ? { canEnable: false } : {}),
-            ...(reasoning.defaultEffort
-              ? { defaultEffort: reasoning.defaultEffort }
-              : {}),
-            ...(canDisable ? {} : { thinkingMandatory: true }),
-          },
-    },
-  };
-}
-
-export function buildModelReasoningConfigPreview(
-  modelId: string | undefined,
-  state: ModelReasoningConfigState = {},
-  configuredReasoning?: ModelReasoningConfiguration,
-  generation?: ContentGeneratorConfig,
-): SessionConfigOption[] | undefined {
-  const reasoning = getModelConfiguration(
-    modelId,
-    configuredReasoning,
-  )?.reasoning;
-  if (!reasoning?.thinking) return undefined;
-  const effectiveReasoning =
-    state.enabled === false
-      ? false
-      : state.enabled === true
-        ? { effort: state.effort }
-        : generation?.reasoning;
-  const override =
-    generation &&
-    getGptReasoningOverrideState(
-      {
-        ...generation,
-        reasoning: effectiveReasoning,
-      },
-      configuredReasoning,
-    );
-  if (
-    configuredReasoning?.profile &&
-    override?.enabled &&
-    override.useDefaultEffort
-  ) {
-    return undefined;
-  }
-  const enableOverride =
-    generation &&
-    getGptReasoningOverrideState(
-      { ...generation, reasoning: undefined },
-      configuredReasoning,
-    );
-  const option = buildModelReasoningConfigOption(
-    modelId,
-    {
-      ...state,
-      ...(override
-        ? {
-            enabled: override.enabled,
-            effort: override.useDefaultEffort ? undefined : override.effort,
-          }
-        : {}),
-      ...(enableOverride?.blocksTierChange
-        ? {
-            ...(effectiveReasoning === false ? { enabled: false } : {}),
-            ...(enableOverride.enabled && generation?.reasoning !== false
-              ? { enableValue: REASONING_EFFORT_DEFAULT }
-              : { canEnable: false as const }),
-          }
-        : {}),
-    },
-    configuredReasoning,
-  );
-  return option ? [option] : undefined;
-}
-
-export function buildModelReasoningRoutePreview(
-  generation: ContentGeneratorConfig,
-  reasoning: ModelReasoningConfiguration | undefined,
-  selection: unknown,
-  opaqueRoute = false,
-): SessionConfigOption[] | undefined {
-  if (opaqueRoute && !reasoning?.profile) return undefined;
-  return buildModelReasoningConfigPreview(
-    generation.model,
-    {
-      enabled: generation.reasoning === false ? false : undefined,
-      effort: generation.reasoning ? generation.reasoning.effort : undefined,
-      ...resolvePersistedReasoningConfigState(
-        generation.model,
-        selection,
-        generation.thinkingMandatory === true,
-        reasoning,
-      ),
-    },
-    reasoning,
-    generation,
   );
 }
 

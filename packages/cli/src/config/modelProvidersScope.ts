@@ -38,13 +38,3 @@ export function getPersistScopeForModelSelection(
 ): SettingScope {
   return getModelProvidersOwnerScope(settings) ?? SettingScope.User;
 }
-
-/**
- * The writable scopes that contribute to the effective (merged) config, highest
- * precedence first. Workspace is only writable/honored when trusted.
- */
-export function getWritableScopes(settings: LoadedSettings): SettingScope[] {
-  return settings.isTrusted
-    ? [SettingScope.Workspace, SettingScope.User]
-    : [SettingScope.User];
-}

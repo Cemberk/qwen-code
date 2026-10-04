@@ -74,7 +74,7 @@ Tests must be run from within the specific package directory, not the project
 root.
 
 **Fresh clone or new worktree:** `packages/cli` unit tests import workspace
-packages (`@qwen-code/acp-bridge`, `@qwen-code/web-templates`, ...) through
+packages (`@qwen-code/web-templates`) through
 their built `dist/` output, and
 `packages/core` tests import the package's own entry
 (`@qwen-code/qwen-code-core`), which also resolves into `dist/`. A plain

@@ -97,7 +97,7 @@ export const customProvider: ProviderConfig = {
   envKey: generateCustomEnvKey,
   supportsModelDiscovery: true,
   showAdvancedConfig: true,
-  // Detect existing entries by our env-key namespace for UI/ACP flows; installs
+  // Detect existing entries by our env-key namespace for UI flows; installs
   // merge by id+baseUrl so /auth can add another model without deleting models
   // from other endpoints or different models on the same endpoint.
   ownsModel: (model) =>

@@ -183,6 +183,14 @@ const EMPTY_LOADED_JOURNAL: JournalLoadResult = {
   replay: { results: new Map(), started: new Map(), failed: new Set() },
 };
 
+// The registry aborts a reserved start only on shutdown (`abortAll`); abort
+// one reservation directly so a test can land the cancel at a chosen point.
+function abortStarting(registry: WorkflowRunRegistry, runId: string): boolean {
+  const controller = registry['starting'].get(runId);
+  controller?.abort();
+  return controller !== undefined;
+}
+
 describe('WorkflowRunner', () => {
   beforeEach(() => {
     createProductionDispatchMock.mockReset();
@@ -820,7 +828,7 @@ describe('WorkflowRunner', () => {
     );
     const runId = registry.listStartingRunIds()[0]!;
     await vi.waitFor(() => expect(releasePersist).toBeDefined());
-    expect(registry.cancelStarting(runId)).toBe(true);
+    expect(abortStarting(registry, runId)).toBe(true);
     releasePersist!();
 
     await expect(start).rejects.toBeInstanceOf(WorkflowStartCancelledError);
@@ -870,7 +878,7 @@ describe('WorkflowRunner', () => {
       dispatch: async () => 'unused',
     });
     await vi.waitFor(() => expect(releasePersist).toBeDefined());
-    expect(registry.cancelStarting(initial.runId)).toBe(true);
+    expect(abortStarting(registry, initial.runId)).toBe(true);
     releasePersist!();
 
     await expect(resume).rejects.toBeInstanceOf(WorkflowStartCancelledError);
@@ -927,7 +935,7 @@ describe('WorkflowRunner', () => {
       dispatch: async () => 'unused',
     });
     await vi.waitFor(() => expect(releasePersist).toBeDefined());
-    expect(registry.cancelStarting(initial.runId)).toBe(true);
+    expect(abortStarting(registry, initial.runId)).toBe(true);
     releasePersist!();
 
     await expect(resume).rejects.toBeInstanceOf(WorkflowStartCancelledError);
@@ -938,17 +946,15 @@ describe('WorkflowRunner', () => {
   });
 
   it.each([
-    [true, true, false, true],
-    [true, false, false, false],
-    [true, true, true, false],
-    [false, true, false, false],
+    [true, true, true],
+    [true, false, false],
+    [false, true, false],
   ])(
-    'records resumeInBackground for background=%s interactive=%s zed=%s',
-    async (background, interactive, zed, expected) => {
+    'records resumeInBackground for background=%s interactive=%s',
+    async (background, interactive, expected) => {
       const { config, registry } = configWithRegistry();
       Object.assign(config, {
         isInteractive: () => interactive,
-        getExperimentalZedIntegration: () => zed,
       });
 
       const handle = await WorkflowRunner.start({
@@ -1072,7 +1078,7 @@ describe('WorkflowRunner', () => {
         }),
     });
 
-    expect(registry.getHandle(handle.runId)).toBe(handle);
+    expect(registry['handles'].get(handle.runId)).toBe(handle);
     expect(registry.get(handle.runId)?.status).toBe('running');
 
     await vi.waitFor(() => expect(resolveDispatch).toBeDefined());
@@ -1083,7 +1089,7 @@ describe('WorkflowRunner', () => {
     expect(first).toBe(second);
     expect(first.ok).toBe(true);
     expect(registry.get(handle.runId)?.status).toBe('completed');
-    expect(registry.getHandle(handle.runId)).toBeUndefined();
+    expect(registry['handles'].get(handle.runId)).toBeUndefined();
     expect(writeWorkflowSnapshotMock).toHaveBeenCalledOnce();
     expect(logWorkflowRunMock).toHaveBeenCalledOnce();
     expect(observed.terminalStatuses).toEqual(['completed']);
@@ -1323,7 +1329,7 @@ describe('WorkflowRunner', () => {
         expect(settled).toBe(false);
         expect(isWorkflowRunPersistenceActive(config, handle.runId)).toBe(true);
         if (withRegistry) {
-          expect(registry.getHandle(handle.runId)).toBe(handle);
+          expect(registry['handles'].get(handle.runId)).toBe(handle);
           await vi.waitFor(async () => {
             expect(
               await readWorkflowCheckpoint(config, handle.runId),
@@ -1335,7 +1341,7 @@ describe('WorkflowRunner', () => {
         await handle.completion;
       }
       expect(isWorkflowRunPersistenceActive(config, handle.runId)).toBe(false);
-      expect(registry.getHandle(handle.runId)).toBeUndefined();
+      expect(registry['handles'].get(handle.runId)).toBeUndefined();
       expect(
         await readWorkflowCheckpoint(config, handle.runId),
       ).toBeUndefined();
@@ -2109,7 +2115,7 @@ describe('WorkflowRunner', () => {
           ) => {
             const outcome = await actual.writeWorkflowCheckpoint(...args);
             // The file is on disk; the cancel arrives before `register`.
-            expect(registry.cancelStarting(first.runId)).toBe(true);
+            expect(abortStarting(registry, first.runId)).toBe(true);
             wrote = true;
             return outcome;
           },
@@ -2241,7 +2247,7 @@ describe('WorkflowRunner', () => {
           dispatch: replacementDispatch,
         }),
       ).rejects.toThrow(/is still running/);
-      expect(registry.getHandle(runId)).toBe(original);
+      expect(registry['handles'].get(runId)).toBe(original);
       expect(replacementDispatch).not.toHaveBeenCalled();
       expect(getEventListeners(replacementCaller.signal, 'abort')).toHaveLength(
         0,
@@ -2366,13 +2372,13 @@ describe('WorkflowRunner', () => {
       expect(abortSpy).toHaveBeenCalledOnce();
       expect(observed.abortCount()).toBe(1);
       expect(registry.get(handle.runId)?.status).toBe('cancelled');
-      expect(registry.getHandle(handle.runId)).toBe(handle);
+      expect(registry['handles'].get(handle.runId)).toBe(handle);
 
       rejectDispatch?.(new Error('aborted'));
       const result = await handle.completion;
       expect(result.ok).toBe(false);
       expect(registry.get(handle.runId)?.status).toBe('cancelled');
-      expect(registry.getHandle(handle.runId)).toBeUndefined();
+      expect(registry['handles'].get(handle.runId)).toBeUndefined();
     }
 
     expect(writeWorkflowSnapshotMock).toHaveBeenCalledTimes(2);

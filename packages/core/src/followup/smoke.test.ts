@@ -7,10 +7,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  shouldFilterSuggestion,
-  getFilterReason,
-} from './suggestionGenerator.js';
+import { getFilterReason } from './suggestionGenerator.js';
 import { OverlayFs } from './overlayFs.js';
 import { evaluateToolCall, rewritePathArgs } from './speculationToolGate.js';
 import {
@@ -28,35 +25,6 @@ import { randomUUID } from 'node:crypto';
 
 describe('SMOKE TESTS — E2E Verification', () => {
   describe('Smoke 1: Filter against realistic LLM outputs', () => {
-    const good = [
-      'commit this',
-      'run the tests',
-      'try it out',
-      'push it',
-      'yes',
-      '/commit',
-      'create a PR',
-      'run nicely formatted tests',
-      'fix the greatest issue',
-    ];
-    const bad = [
-      'done',
-      'looks good',
-      'Let me check that',
-      'nothing found',
-      '(silence)',
-      'thanks for the help',
-      "I'll run the tests",
-    ];
-
-    it.each(good)('allows: "%s"', (s) => {
-      expect(shouldFilterSuggestion(s)).toBe(false);
-    });
-
-    it.each(bad)('filters: "%s"', (s) => {
-      expect(shouldFilterSuggestion(s)).toBe(true);
-    });
-
     it('getFilterReason returns named reasons', () => {
       expect(getFilterReason('done')).toBe('done');
       expect(getFilterReason('nothing found')).toBe('meta_text');

@@ -119,16 +119,6 @@ export class RemoteInputWatcher {
     debugLogger.debug(`RemoteInput: watching ${this.filePath}`);
   }
 
-  /**
-   * Manually trigger a check for new input. Returns a promise that resolves
-   * once any new lines have been read and processed. In production the
-   * `watchFile` poll calls this automatically; tests can call it directly
-   * to avoid depending on filesystem-polling timing.
-   */
-  checkForNewInput(): Promise<void> {
-    return this.readNewLines();
-  }
-
   private readNewLines(): Promise<void> {
     if (!this.active || this.reading) return Promise.resolve();
 

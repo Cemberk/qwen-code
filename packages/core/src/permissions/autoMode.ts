@@ -124,8 +124,7 @@ const SHELL_LIKE_TOOL_NAMES: ReadonlySet<string> = new Set<string>([
 /**
  * Predicate for whether the AUTO mode L5 branch should run for a given call.
  * Centralizes the rule "only when the session is in AUTO and the tool isn't
- * one that always needs direct user attention". Used by both the CLI
- * scheduler and the ACP Session path so they stay in sync.
+ * one that always needs direct user attention". Used by the scheduler.
  */
 export function shouldRunAutoModeForCall(
   approvalMode: ApprovalMode,
@@ -568,8 +567,8 @@ export function prepareAutoModeFallback(
 }
 
 /**
- * Apply an AUTO decision and denial-tracking update. Shared by the scheduler
- * and ACP paths; callers still handle their integration-specific responses.
+ * Apply an AUTO decision and denial-tracking update. Callers still handle
+ * their integration-specific responses.
  */
 export function applyAutoModeDecision(
   decision: AutoModeDecision,
@@ -740,19 +739,8 @@ export function decorateAutoModeFallbackConfirmation(
   } as ToolCallConfirmationDetails;
 }
 
-export function decorateClassifierUnavailableConfirmation(
-  confirmation: ToolCallConfirmationDetails,
-  message: string,
-): ToolCallConfirmationDetails {
-  return decorateAutoModeFallbackConfirmation(
-    confirmation,
-    'classifier_unavailable',
-    message,
-  );
-}
-
 /**
- * Build the tool-error message the scheduler / ACP session returns when the
+ * Build the tool-error message the scheduler returns when the
  * classifier supplies a policy block. Keeping it here gives both paths the
  * same denial guidance.
  *
@@ -828,8 +816,8 @@ export async function evaluateAutoMode(
     // shell runs in the session's target dir, which is also where
     // `ShellToolInvocation` registers session commits. Passing `undefined`
     // through lands on `process.cwd()` inside `isAmendOfSessionCommit`'s
-    // `git rev-parse` — in a process hosting several sessions (ACP, daemon)
-    // or several worktrees that is a different repo, so one repo's registry
+    // `git rev-parse` — in a process hosting several worktrees that is a
+    // different repo, so one repo's registry
     // could exempt an amend happening in another.
     const destructiveResult = isDestructiveCommand(
       command,

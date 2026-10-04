@@ -5,11 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  deriveTraceId,
-  randomSpanId,
-  randomHexString,
-} from './trace-id-utils.js';
+import { deriveTraceId, randomSpanId } from './trace-id-utils.js';
 
 describe('deriveTraceId', () => {
   it('returns a 32-char hex string', () => {
@@ -37,21 +33,5 @@ describe('randomSpanId', () => {
 
   it('returns different values on each call', () => {
     expect(randomSpanId()).not.toBe(randomSpanId());
-  });
-});
-
-describe('randomHexString', () => {
-  it('returns a string of the requested length', () => {
-    expect(randomHexString(32)).toHaveLength(32);
-    expect(randomHexString(16)).toHaveLength(16);
-  });
-
-  it('handles odd lengths correctly', () => {
-    expect(randomHexString(15)).toHaveLength(15);
-    expect(randomHexString(7)).toHaveLength(7);
-  });
-
-  it('returns only hex characters', () => {
-    expect(randomHexString(32)).toMatch(/^[0-9a-f]+$/);
   });
 });

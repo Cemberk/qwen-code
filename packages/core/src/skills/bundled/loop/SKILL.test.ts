@@ -97,15 +97,6 @@ describe('bundled loop skill', () => {
     expect(body).toContain('call CronDelete for every job returned');
   });
 
-  it('documents loop.md task-file mode and the two sentinels', () => {
-    const { body } = loadLoopSkill();
-
-    expect(body).toContain('## loop.md task-file mode');
-    expect(body).toContain('.qwen/loop.md');
-    expect(body).toContain('`<<loop.md-dynamic>>`');
-    expect(body).toContain('`<<loop.md>>`');
-  });
-
   it('documents autonomous mode and routes a bare /loop to it', () => {
     const { body } = loadLoopSkill();
 

@@ -32,9 +32,8 @@ export const OUTPUT_STYLES_DIR_NAME = 'output-styles';
 
 /**
  * A style file larger than this is skipped: it is a prompt, not a document.
- * The bound matches `LOOP_TASK_FILE_MAX_BYTES`, the house bound for file text
- * injected into the system prompt — a style file this size already costs
- * roughly 6k tokens on every request in the session.
+ * A style file this size already costs roughly 6k tokens on every request in
+ * the session.
  */
 const MAX_OUTPUT_STYLE_FILE_BYTES = 25_000;
 const MAX_OUTPUT_STYLE_NAME_LENGTH = 64;
@@ -254,8 +253,7 @@ function deriveDescription(body: string): string {
  * A style file's body goes into the system prompt verbatim, so a link is an
  * exfiltration vector: `.qwen/output-styles/notes.md -> ~/.aws/credentials`
  * is committable, survives `git clone`, and needs no user action beyond
- * starting the CLI. This mirrors `readLoopTaskFile`, which guards the
- * identical sink.
+ * starting the CLI.
  *
  * A project file must not be a link at all -- the repo author does not own
  * the machine's files, and a link naming one is never something they need.

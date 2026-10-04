@@ -16,9 +16,7 @@ import {
   createDebugLogger,
   isSubpath,
   SessionService,
-  type ToolArtifact,
 } from '@qwen-code/qwen-code-core';
-import { toCanonicalWorkspaceArtifactPath } from '@qwen-code/qwen-code-core/utils/workspace-artifact-path.js';
 import {
   collectSessionData,
   normalizeSessionData,
@@ -33,7 +31,6 @@ import { t } from '../../i18n/index.js';
 type ExportFormat = {
   extension: string;
   displayName: string;
-  mimeType: string;
   format: (sessionData: ExportSessionData) => string;
 };
 
@@ -378,30 +375,10 @@ async function exportSessionAction(
       format: exportFormat.displayName,
       filepath: target.filepath,
     });
-    const workspacePath =
-      context.executionMode === 'acp'
-        ? toCanonicalWorkspaceArtifactPath(
-            target.filepath,
-            config.getTargetDir(),
-          )
-        : null;
-    const artifacts: ToolArtifact[] = workspacePath
-      ? [
-          {
-            kind: 'file',
-            storage: 'workspace',
-            title: path.basename(target.filepath),
-            workspacePath,
-            mimeType: exportFormat.mimeType,
-            sizeBytes: Buffer.byteLength(content, 'utf-8'),
-          },
-        ]
-      : [];
     return {
       type: 'message',
       messageType: 'info',
       content: `Session exported to ${exportFormat.displayName}: ${target.displayPath}`,
-      ...(artifacts.length > 0 ? { artifacts } : {}),
     };
   } catch (error) {
     debugLogger.debug('Session export failed:', {
@@ -429,7 +406,6 @@ async function exportMarkdownAction(
   return exportSessionAction(context, args, {
     extension: 'md',
     displayName: 'markdown',
-    mimeType: 'text/markdown; charset=utf-8',
     format: toMarkdown,
   });
 }
@@ -444,7 +420,6 @@ async function exportJsonAction(
   return exportSessionAction(context, args, {
     extension: 'json',
     displayName: 'JSON',
-    mimeType: 'application/json; charset=utf-8',
     format: toJson,
   });
 }
@@ -459,7 +434,6 @@ async function exportJsonlAction(
   return exportSessionAction(context, args, {
     extension: 'jsonl',
     displayName: 'JSONL',
-    mimeType: 'application/jsonl; charset=utf-8',
     format: toJsonl,
   });
 }
@@ -474,7 +448,7 @@ export const exportCommand: SlashCommand = {
   },
   argumentHint: '[md|json|jsonl] [path]',
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
   action: exportMarkdownAction,
   subCommands: [
     {
@@ -483,7 +457,7 @@ export const exportCommand: SlashCommand = {
         return t('Export session to markdown format');
       },
       kind: CommandKind.BUILT_IN,
-      supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+      supportedModes: ['interactive', 'non_interactive'] as const,
       action: exportMarkdownAction,
     },
     {
@@ -492,7 +466,7 @@ export const exportCommand: SlashCommand = {
         return t('Export session to JSON format');
       },
       kind: CommandKind.BUILT_IN,
-      supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+      supportedModes: ['interactive', 'non_interactive'] as const,
       action: exportJsonAction,
     },
     {
@@ -501,7 +475,7 @@ export const exportCommand: SlashCommand = {
         return t('Export session to JSONL format (one message per line)');
       },
       kind: CommandKind.BUILT_IN,
-      supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+      supportedModes: ['interactive', 'non_interactive'] as const,
       action: exportJsonlAction,
     },
   ],

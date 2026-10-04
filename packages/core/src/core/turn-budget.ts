@@ -127,8 +127,8 @@ const INLINE_CODE = /`[^`\n]*`/g;
 
 /**
  * The user's own words in a request: every text part joined, with harness
- * reminders, expanded `@` references (files and MCP resources, which ACP may
- * place before the prompt rather than after it) and code removed. Whatever is
+ * reminders, expanded `@` references (files and MCP resources, which may sit
+ * before the prompt rather than after it) and code removed. Whatever is
  * removed is replaced by a space so the text on either side stays separated.
  */
 export function extractTurnBudgetDirectiveText(request: PartListUnion): string {

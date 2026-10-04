@@ -11,8 +11,7 @@ In assistant responses, text and images keep their original order. Tool rows
 show the result text followed by images for successful, failed, and cancelled
 results.
 
-Other output surfaces, including headless and ACP, do not render image
-parts.
+Headless output does not render image parts.
 
 ## Terminal Support
 

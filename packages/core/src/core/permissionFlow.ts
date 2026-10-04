@@ -7,8 +7,7 @@
 /**
  * Shared permission flow (L3→L4) for tool execution.
  *
- * Used by both `CoreToolScheduler` (CLI mode) and `Session` (ACP mode)
- * to ensure consistent permission evaluation.
+ * Used by `CoreToolScheduler` for permission evaluation.
  *
  * L3: Tool's intrinsic default permission
  * L4: PermissionManager rule override

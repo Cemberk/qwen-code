@@ -176,7 +176,7 @@ describe('UiTelemetryService', () => {
   });
 
   describe('API Response Event Processing', () => {
-    it('applies cached-input fallback per session event without changing global metrics', () => {
+    it('applies cached-input fallback per invocation event without changing model metrics', () => {
       const sessionId = 'session-mixed-cache';
       const addResponse = (input: number, cached: number, total: number) =>
         service.addEvent(
@@ -189,6 +189,7 @@ describe('UiTelemetryService', () => {
             total_token_count: total,
             cached_content_token_count: cached,
             thoughts_token_count: 0,
+            subagent_id: 'id-1',
           } as ApiResponseEvent & {
             'event.name': typeof EVENT_API_RESPONSE;
           },
@@ -202,7 +203,7 @@ describe('UiTelemetryService', () => {
         service.getMetricsForSession(sessionId).models['qwen'].tokens.prompt,
       ).toBe(100);
       expect(
-        service.getMetricsForSession(sessionId).statsModels?.['qwen'].tokens
+        service.getMetricsForSession(sessionId).sourceMetrics?.['id-1'].tokens
           .prompt,
       ).toBe(300);
       expect(service.getMetrics().models['qwen'].tokens.prompt).toBe(100);
@@ -676,7 +677,6 @@ describe('UiTelemetryService', () => {
       expect(metrics.sourceMetrics?.['constructor'].tokens.prompt).toBe(2);
       expect(Object.getPrototypeOf(metrics.sourceMetrics)).toBeNull();
       expect(Object.getPrototypeOf(metrics.sourceMeta)).toBeNull();
-      expect(Object.getPrototypeOf(metrics.statsModels)).toBeNull();
     });
 
     it('restores legacy invocation ids from session-scoped prompt ids', () => {
@@ -853,10 +853,6 @@ describe('UiTelemetryService', () => {
           ].tokens.total,
         ).toBe(0);
         expect(
-          service.getMetricsForSession(sessionId).statsModels?.['glm-5'].tokens
-            .total,
-        ).toBe(expected);
-        expect(
           service.getMetricsForSession(sessionId).sourceMetrics?.['id-1'].tokens
             .total,
         ).toBe(expected);
@@ -876,14 +872,15 @@ describe('UiTelemetryService', () => {
           cached_content_token_count: 0,
           thoughts_token_count: 2,
           auth_type: 'openai',
+          subagent_id: 'id-1',
         } as ApiResponseEvent & { 'event.name': typeof EVENT_API_RESPONSE },
         sessionId,
       );
 
       expect(service.getMetrics().models['openai-model'].tokens.total).toBe(0);
       expect(
-        service.getMetricsForSession(sessionId).statsModels?.['openai-model']
-          .tokens.total,
+        service.getMetricsForSession(sessionId).sourceMetrics?.['id-1'].tokens
+          .total,
       ).toBe(50);
     });
 

@@ -208,10 +208,7 @@ export function useBranchCommand(
         //    title write leaves the parent active and the catch path removes
         //    the incomplete fork.
         // A base that is empty, whitespace-only, or exactly a legacy
-        // `(Branch)`/`(Branch N)` token falls back to the first prompt here,
-        // while the daemon route falls back to the session-id prefix; no
-        // picker name survives either way, so each client keeps its own
-        // degradation.
+        // `(Branch)`/`(Branch N)` token falls back to the first prompt here.
         const baseName =
           name ??
           (sourceCustomTitle

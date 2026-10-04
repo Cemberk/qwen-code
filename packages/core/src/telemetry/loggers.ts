@@ -17,10 +17,8 @@ import {
   EVENT_API_RESPONSE,
   EVENT_CLI_CONFIG,
   EVENT_TOOL_CALL,
-  EVENT_REPEATED_TOOL_FAILURE_GUARD,
   EVENT_USER_PROMPT,
   EVENT_USER_RETRY,
-  EVENT_FLASH_FALLBACK,
   EVENT_NEXT_SPEAKER_CHECK,
   SERVICE_NAME,
   EVENT_SLASH_COMMAND,
@@ -36,8 +34,6 @@ import {
   EVENT_MODEL_SLASH_COMMAND,
   EVENT_SUBAGENT_EXECUTION,
   EVENT_GOAL_STATE,
-  EVENT_MALFORMED_JSON_RESPONSE,
-  EVENT_INVALID_CHUNK,
   EVENT_AUTH,
   EVENT_SKILL_LAUNCH,
   EVENT_ARENA_SESSION_STARTED,
@@ -65,14 +61,12 @@ import {
   recordContentRetryFailure,
   recordApiRetry,
   recordFileOperationMetric,
-  recordInvalidChunk,
   recordModelSlashCommand,
   recordSubagentExecutionMetrics,
   recordGoalStateMetrics,
   recordTokenUsageMetrics,
   recordToolCallMetrics,
   recordToolExecutionMetrics,
-  recordRepeatedToolFailureGuardMetrics,
   recordArenaSessionStartedMetrics,
   recordArenaAgentCompletedMetrics,
   recordArenaSessionEndedMetrics,
@@ -92,10 +86,8 @@ import type {
   ToolCallEvent,
   UserPromptEvent,
   UserRetryEvent,
-  FlashFallbackEvent,
   NextSpeakerCheckEvent,
   LoopDetectedEvent,
-  RepeatedToolFailureGuardEvent,
   SlashCommandEvent,
   ConversationFinishedEvent,
   KittySequenceOverflowEvent,
@@ -110,8 +102,6 @@ import type {
   ModelSlashCommandEvent,
   SubagentExecutionEvent,
   GoalStateEvent,
-  MalformedJsonResponseEvent,
-  InvalidChunkEvent,
   AuthEvent,
   SkillLaunchEvent,
   ArenaSessionStartedEvent,
@@ -132,7 +122,7 @@ import type {
 } from './types.js';
 import type { UiEvent, UiSubagentIdentity } from './uiTelemetry.js';
 import { uiTelemetryService } from './uiTelemetry.js';
-import { apiActivityTracker } from './api-activity-tracker.js';
+
 import { recordTokenUsageFromApiResponseBestEffort } from '../services/tokenUsageService.js';
 import { isChatRecordingSuppressed } from '../utils/chat-recording-suppression-context.js';
 import { ToolErrorType } from '../tools/tool-error.js';
@@ -434,27 +424,6 @@ export function logApiRequest(
   logger.emit(logRecord);
 }
 
-export function logFlashFallback(
-  config: Config,
-  event: FlashFallbackEvent,
-): void {
-  if (!isTelemetrySdkInitialized()) return;
-
-  const attributes: LogAttributes = {
-    ...getCommonAttributes(config),
-    ...event,
-    'event.name': EVENT_FLASH_FALLBACK,
-    'event.timestamp': new Date().toISOString(),
-  };
-
-  const logger = logs.getLogger(SERVICE_NAME);
-  const logRecord: LogRecord = {
-    body: `Switching to flash as Fallback.`,
-    attributes,
-  };
-  logger.emit(logRecord);
-}
-
 export function logRipgrepFallback(
   config: Config,
   event: RipgrepFallbackEvent,
@@ -518,9 +487,6 @@ export function logApiError(
     'event.timestamp': new Date().toISOString(),
   } as UiEvent;
   uiTelemetryService.addEvent(uiEvent, config.getSessionId());
-  // Feed the daemon-status model-API-health charts: one model API error per
-  // failed attempt, drained per live model round by the ACP MessageEmitter.
-  apiActivityTracker.recordError();
   if (!isInternalPromptId(event.prompt_id)) {
     recordUiTelemetryEventToChat(config, uiEvent);
   }
@@ -669,46 +635,6 @@ export function logLoopDetected(
   logger.emit(logRecord);
 }
 
-export function logRepeatedToolFailureGuard(
-  event: RepeatedToolFailureGuardEvent,
-): void {
-  // Deployment cohort and service version come from the OpenTelemetry
-  // Resource, which is attached to both the logger and meter providers.
-  runToolTelemetrySink(() => {
-    if (isTelemetrySdkInitialized()) {
-      const logger = logs.getLogger(SERVICE_NAME);
-      logger.emit({
-        body: `Repeated tool failure guard decision: ${event.decision}.`,
-        attributes: {
-          ...event,
-          'event.name': EVENT_REPEATED_TOOL_FAILURE_GUARD,
-        },
-      });
-    }
-  });
-  runToolTelemetrySink(() => {
-    recordRepeatedToolFailureGuardMetrics({
-      route: event.route,
-      mode: event.mode,
-      phase_before: event.phase_before,
-      phase_after: event.phase_after,
-      decision: event.decision,
-      failure_count_bucket: event.failure_count_bucket,
-      batch_count_bucket: event.batch_count_bucket,
-      ...(event.reset_reason !== undefined
-        ? { reset_reason: event.reset_reason }
-        : {}),
-      ...(event.terminal_status !== undefined
-        ? { terminal_status: event.terminal_status }
-        : {}),
-      ...(event.execution_status !== undefined
-        ? { execution_status: event.execution_status }
-        : {}),
-      ...(event.tool_type !== undefined ? { tool_type: event.tool_type } : {}),
-    });
-  });
-}
-
 export function logNextSpeakerCheck(
   config: Config,
   event: NextSpeakerCheckEvent,
@@ -809,51 +735,6 @@ export function logKittySequenceOverflow(
   logger.emit(logRecord);
 }
 
-export function logMalformedJsonResponse(
-  config: Config,
-  event: MalformedJsonResponseEvent,
-): void {
-  if (!isTelemetrySdkInitialized()) return;
-
-  const attributes: LogAttributes = {
-    ...getCommonAttributes(config),
-    ...event,
-    'event.name': EVENT_MALFORMED_JSON_RESPONSE,
-  };
-
-  const logger = logs.getLogger(SERVICE_NAME);
-  const logRecord: LogRecord = {
-    body: `Malformed JSON response from ${event.model}.`,
-    attributes,
-  };
-  logger.emit(logRecord);
-}
-
-export function logInvalidChunk(
-  config: Config,
-  event: InvalidChunkEvent,
-): void {
-  if (!isTelemetrySdkInitialized()) return;
-
-  const attributes: LogAttributes = {
-    ...getCommonAttributes(config),
-    'event.name': EVENT_INVALID_CHUNK,
-    'event.timestamp': event['event.timestamp'],
-  };
-
-  if (event.error_message) {
-    attributes['error.message'] = event.error_message;
-  }
-
-  const logger = logs.getLogger(SERVICE_NAME);
-  const logRecord: LogRecord = {
-    body: `Invalid chunk received from stream.`,
-    attributes,
-  };
-  logger.emit(logRecord);
-  recordInvalidChunk(config);
-}
-
 export function logContentRetry(
   config: Config,
   event: ContentRetryEvent,
@@ -919,15 +800,11 @@ export function logContentRetryFailure(
  * at an LLM call site (via the `onRetry` callback opt-in). Distinct from
  * `logContentRetry`, which is fired by `llmChat`'s content-recovery loop.
  *
- * Fan-out (sink 0 fires first, before the SDK guard, so retries are counted
- * even with telemetry off; sinks 1–2 match the `logContentRetry` shape):
- *   0. `apiActivityTracker` increment — daemon-status model-API-health charts
- *      (drained per live model round by the ACP MessageEmitter).
+ * Fan-out (matching the `logContentRetry` shape):
  *   1. OTel log signal via `logger.emit()`.
  *   2. `recordApiRetry` Counter increment for per-model retry-rate dashboards.
  */
 export function logApiRetry(config: Config, event: ApiRetryEvent): void {
-  apiActivityTracker.recordRetry(); // sink 0 — see fan-out above
   if (!isTelemetrySdkInitialized()) return;
 
   const attributes: LogAttributes = {

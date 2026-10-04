@@ -27,12 +27,9 @@ import {
   EVENT_API_REQUEST,
   EVENT_API_RESPONSE,
   EVENT_CLI_CONFIG,
-  EVENT_FLASH_FALLBACK,
   EVENT_GOAL_STATE,
   EVENT_TOOL_CALL,
-  EVENT_REPEATED_TOOL_FAILURE_GUARD,
   EVENT_USER_PROMPT,
-  EVENT_MALFORMED_JSON_RESPONSE,
   EVENT_FILE_OPERATION,
   EVENT_RIPGREP_FALLBACK,
   EVENT_RIPGREP_RUNTIME_RECOVERY,
@@ -55,11 +52,8 @@ import {
   logUserPrompt,
   logToolCall,
   logLoopDetected,
-  logRepeatedToolFailureGuard,
-  logFlashFallback,
   logGoalState,
   logChatCompression,
-  logMalformedJsonResponse,
   logFileOperation,
   logRipgrepFallback,
   logRipgrepRuntimeRecovery,
@@ -76,14 +70,13 @@ import {
   normalizeToolCallEvent,
 } from './loggers.js';
 import * as metrics from './metrics.js';
-import { apiActivityTracker } from './api-activity-tracker.js';
+
 import * as sdk from './sdk.js';
 import * as tokenUsageService from '../services/tokenUsageService.js';
 import { ToolCallDecision } from './tool-call-decision.js';
 import {
   ApiRequestEvent,
   ApiResponseEvent,
-  FlashFallbackEvent,
   makeGoalStateEvent,
   StartSessionEvent,
   ToolCallEvent,
@@ -91,7 +84,6 @@ import {
   RipgrepFallbackEvent,
   RipgrepRuntimeRecoveryEvent,
   SkillLaunchEvent,
-  MalformedJsonResponseEvent,
   makeChatCompressionEvent,
   FileOperationEvent,
   ToolOutputTruncatedEvent,
@@ -104,7 +96,6 @@ import {
   MemoryRecallModeTransitionEvent,
   LoopDetectedEvent,
   LoopType,
-  RepeatedToolFailureGuardEvent,
   WorkflowRunEvent,
 } from './types.js';
 import { FileOperation } from './metrics.js';
@@ -520,88 +511,6 @@ describe('loggers', () => {
           'session.id': 'suppressed-session',
         },
       });
-    });
-  });
-
-  describe('logRepeatedToolFailureGuard', () => {
-    it('emits a data-minimized transition log and low-cardinality metric', () => {
-      vi.spyOn(
-        metrics,
-        'recordRepeatedToolFailureGuardMetrics',
-      ).mockImplementation(() => undefined);
-      const event = new RepeatedToolFailureGuardEvent({
-        prompt_id: 'prompt-id',
-        route: 'acp_foreground',
-        mode: 'shadow',
-        phase_before: 'tracking',
-        phase_after: 'warned',
-        decision: 'would_warn',
-        failure_count_bucket: '8+',
-        batch_count_bucket: '2',
-        candidate_ordinal: 1,
-        terminal_status: 'error',
-        execution_status: 'error',
-        execution_error_type: ToolErrorType.EXECUTION_TIMEOUT,
-        tool_type: 'mcp',
-      });
-
-      logRepeatedToolFailureGuard(event);
-
-      expect(mockLogger.emit).toHaveBeenCalledWith({
-        body: 'Repeated tool failure guard decision: would_warn.',
-        attributes: {
-          ...event,
-          'event.name': EVENT_REPEATED_TOOL_FAILURE_GUARD,
-        },
-      });
-      expect(
-        metrics.recordRepeatedToolFailureGuardMetrics,
-      ).toHaveBeenCalledWith({
-        route: 'acp_foreground',
-        mode: 'shadow',
-        phase_before: 'tracking',
-        phase_after: 'warned',
-        decision: 'would_warn',
-        failure_count_bucket: '8+',
-        batch_count_bucket: '2',
-        terminal_status: 'error',
-        execution_status: 'error',
-        tool_type: 'mcp',
-      });
-      const serialized = JSON.stringify(mockLogger.emit.mock.calls.at(-1));
-      expect(serialized).not.toMatch(
-        /session.id|user.id|policyToolName|function_args|result|error_message|server_name/,
-      );
-    });
-
-    it('isolates transition log and metric sink failures', () => {
-      const event = new RepeatedToolFailureGuardEvent({
-        prompt_id: 'prompt-id',
-        route: 'acp_foreground',
-        mode: 'enforce',
-        phase_before: 'warned',
-        phase_after: 'latched',
-        decision: 'stopped',
-        failure_count_bucket: '8+',
-        batch_count_bucket: '3+',
-        candidate_ordinal: 1,
-      });
-      vi.spyOn(
-        metrics,
-        'recordRepeatedToolFailureGuardMetrics',
-      ).mockImplementationOnce(() => {
-        throw new Error('metric unavailable');
-      });
-      mockLogger.emit.mockImplementationOnce(() => {
-        throw new Error('log unavailable');
-      });
-
-      expect(() => logRepeatedToolFailureGuard(event)).not.toThrow();
-      expect(event).not.toHaveProperty('reset_reason');
-      expect(event).not.toHaveProperty('terminal_status');
-      expect(event).not.toHaveProperty('execution_status');
-      expect(event).not.toHaveProperty('execution_error_type');
-      expect(event).not.toHaveProperty('tool_type');
     });
   });
 
@@ -1022,33 +931,6 @@ describe('loggers', () => {
 
       expect(mockRecordUiTelemetryEvent).toHaveBeenCalled();
     });
-
-    it('increments the api-activity error counter for the daemon health chart', () => {
-      apiActivityTracker.drain(); // isolate from other cases (global singleton)
-      const event = new ApiErrorEvent({
-        model: 'test-model',
-        durationMs: 100,
-        promptId: 'user_query',
-        errorMessage: 'boom',
-      });
-      logApiError(makeFakeConfig({ sessionId: 'test-session-id' }), event);
-      expect(apiActivityTracker.peek()).toEqual({ errors: 1, retries: 0 });
-    });
-
-    it('counts the error even when the OTel SDK is not initialized', () => {
-      vi.spyOn(sdk, 'isTelemetrySdkInitialized').mockReturnValue(false);
-      apiActivityTracker.drain();
-      const event = new ApiErrorEvent({
-        model: 'test-model',
-        durationMs: 100,
-        promptId: 'user_query',
-        errorMessage: 'boom',
-      });
-      logApiError(makeFakeConfig({ sessionId: 's' }), event);
-      // The daemon health chart is independent of OTel export state — the
-      // counter is bumped before the SDK guard, mirroring logApiRetry.
-      expect(apiActivityTracker.peek().errors).toBe(1);
-    });
   });
 
   describe('logApiRequest', () => {
@@ -1110,28 +992,6 @@ describe('loggers', () => {
           }),
         }),
       );
-    });
-  });
-
-  describe('logFlashFallback', () => {
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-    } as unknown as Config;
-
-    it('should log flash fallback event', () => {
-      const event = new FlashFallbackEvent(AuthType.USE_OPENAI);
-
-      logFlashFallback(mockConfig, event);
-
-      expect(mockLogger.emit).toHaveBeenCalledWith({
-        body: 'Switching to flash as Fallback.',
-        attributes: {
-          'session.id': 'test-session-id',
-          'event.name': EVENT_FLASH_FALLBACK,
-          'event.timestamp': '2025-01-01T00:00:00.000Z',
-          auth_type: 'openai',
-        },
-      });
     });
   });
 
@@ -2292,25 +2152,6 @@ describe('loggers', () => {
     );
   });
 
-  describe('logMalformedJsonResponse', () => {
-    it('logs the event to OTEL', () => {
-      const mockConfig = makeFakeConfig({ sessionId: 'test-session-id' });
-      const event = new MalformedJsonResponseEvent('test-model');
-
-      logMalformedJsonResponse(mockConfig, event);
-
-      expect(mockLogger.emit).toHaveBeenCalledWith({
-        body: 'Malformed JSON response from test-model.',
-        attributes: {
-          'session.id': 'test-session-id',
-          'event.name': EVENT_MALFORMED_JSON_RESPONSE,
-          'event.timestamp': '2025-01-01T00:00:00.000Z',
-          model: 'test-model',
-        },
-      });
-    });
-  });
-
   describe('logFileOperation', () => {
     const mockConfig = {
       getSessionId: () => 'test-session-id',
@@ -2471,21 +2312,6 @@ describe('loggers', () => {
 
       expect(mockLogger.emit).not.toHaveBeenCalled();
       expect(metrics.recordApiRetry).not.toHaveBeenCalled();
-    });
-
-    it('increments the api-activity retry counter for the daemon health chart', () => {
-      apiActivityTracker.drain(); // isolate from other cases (global singleton)
-      const mockConfig = makeFakeConfig({ sessionId: 'test-session-id' });
-      logApiRetry(mockConfig, buildEvent());
-      expect(apiActivityTracker.peek()).toEqual({ errors: 0, retries: 1 });
-    });
-
-    it('counts the retry even when the OTel SDK is not initialized', () => {
-      vi.spyOn(sdk, 'isTelemetrySdkInitialized').mockReturnValue(false);
-      apiActivityTracker.drain();
-      logApiRetry(makeFakeConfig({ sessionId: 's' }), buildEvent());
-      // The daemon health chart is independent of OTel export state.
-      expect(apiActivityTracker.peek().retries).toBe(1);
     });
   });
 });

@@ -139,10 +139,6 @@ describe('QwenIgnoreParser', () => {
     it('should use configured custom ignore files instead of defaults', () => {
       const parser = new QwenIgnoreParser(projectRoot, ['.cursorignore']);
 
-      expect(parser.getIgnoreFileNames()).toEqual([
-        '.qwenignore',
-        '.cursorignore',
-      ]);
       expect(parser.getPatterns()).toEqual(['cursor-secret.txt']);
       expect(parser.isIgnored('cursor-secret.txt')).toBe(true);
       expect(parser.getIgnoreFileNameForPath('cursor-secret.txt')).toBe(

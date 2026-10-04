@@ -24,10 +24,7 @@ import {
 } from './shared-env-keys.js';
 import { publishPendingCompileCache } from './compile-cache.js';
 import { writeStderrLineSafe } from '../utils/stdioHelpers.js';
-import {
-  captureEnvironmentBeforeLoad,
-  resetEnvironmentSnapshotForTesting,
-} from './environment-snapshot.js';
+
 export {
   DEFAULT_EXCLUDED_ENV_VARS,
   ENV_CORRUPTED_PATH,
@@ -39,10 +36,7 @@ export const SETTINGS_DIRECTORY_NAME = QWEN_DIR;
 
 const RELOAD_EXCLUDED_KEYS = new Set([
   ...PROJECT_ENV_HARDCODED_EXCLUSIONS,
-  // The daemon auth token: the full loader never takes it from
-  // settings.env, and a mid-session .env edit must not rotate it. (The
-  // serve fast path consults only the hardcoded tier, so its documented
-  // workspace-settings.env token feature is unaffected.)
+  // A server auth token other builds read: never take it from settings.env.
   'QWEN_SERVER_TOKEN',
   // Loader-class keys are rejected by the isLoaderEnvKey guard before this
   // Set is consulted, so they are not spread here. These three keep their
@@ -167,9 +161,6 @@ export function getRelaunchEnvProvenance(): Record<string, string> {
   };
 }
 
-const lastReloadSnapshot = new Map<string, string>();
-let lastReloadSnapshotSeeded = false;
-
 /**
  * Returns the set of normalized .env file paths that count as user-level.
  *
@@ -259,15 +250,12 @@ export function resetHomeEnvBootstrapForTesting(): void {
 /** Test-only: reset environment reload provenance between tests. */
 export function resetEnvironmentTrackingForTesting(): void {
   resetLoaderKeyRejectionReportingForTesting();
-  resetEnvironmentSnapshotForTesting();
   dotEnvSourcedKeys.clear();
   settingsEnvSourcedKeys.clear();
   inheritedDotEnvKeys.clear();
   inheritedSettingsEnvKeys.clear();
   requestTimeEnvKeys.clear();
   delete process.env[PRIVATE_RELAUNCH_ENV_PROVENANCE];
-  lastReloadSnapshot.clear();
-  lastReloadSnapshotSeeded = false;
 }
 
 /**
@@ -370,16 +358,11 @@ export function getHomeEnvFallbackVars(
  * is keyed on the workspace path, so it cannot match a directory above it).
  * An ancestor carrying its own explicit `DO_NOT_TRUST` rule still blocks its
  * own .env.
- *
- * Exported so `settings-cache.ts` can re-run the exact same discovery when
- * validating its fingerprint; keep the discovery semantics in this single
- * implementation.
  */
-export function findEnvFiles(
+function findEnvFiles(
   settings: Settings,
   startDir: string,
   userLevelPaths: Set<string> = getUserLevelEnvPaths(),
-  workspaceTrusted?: boolean,
 ): string[] {
   const homeDir = os.homedir();
   let realStartDir = path.resolve(startDir);
@@ -399,7 +382,6 @@ export function findEnvFiles(
   // would return `undefined` for every directory above a TRUST_FOLDER rule and
   // silently drop values the user's explicit decision was meant to keep.
   const workspaceIsTrusted =
-    workspaceTrusted ??
     isWorkspaceTrusted(settings, undefined, realStartDir).isTrusted === true;
 
   const canUseEnvFile = (filePath: string): boolean => {
@@ -539,20 +521,15 @@ function canApplyParsedEnvKey(
   envFile: ParsedEnvFile,
   key: string,
   excludedVars: readonly string[],
-  options: { readonly reload?: boolean } = {},
 ): boolean {
   if (!Object.hasOwn(envFile.parsedEnv, key)) return false;
   // Loader-affecting keys are rejected on every .env application path — the
-  // initial load included — not just reloads. The daemon process hosts every
-  // workspace, so an initial load writing them into process.env would
-  // repopulate the slots scrubInheritedLoaderEnv() emptied and reopen the
-  // #8653 cross-workspace vector.
+  // initial load included — not just reloads (#8653).
   if (isLoaderEnvKey(key)) return false;
   // Launcher→child provenance markers are fixed constants, so unlike the
   // hardcoded project tier they are rejected at every scope — a home `.env`
-  // must not be able to forge sandbox or Conversations runtime state either.
+  // must not be able to forge sandbox or relaunch state either.
   if (isPrivateProvenanceEnvKey(key)) return false;
-  if (options.reload && isReloadExcludedKey(key)) return false;
   if (
     !envFile.isHomeScopedEnvFile &&
     (isHardcodedProjectEnvExclusion(key) || isOperatorOnlyEnvKey(key))
@@ -560,29 +537,6 @@ function canApplyParsedEnvKey(
     return false;
   }
   return envFile.isQwenScopedEnvFile || !excludedVars.includes(key);
-}
-
-export interface RuntimeEnvironmentSnapshot {
-  readonly effectiveEnv: Readonly<NodeJS.ProcessEnv>;
-  readonly overlayKeys: readonly string[];
-  readonly envFilePaths: readonly string[];
-  readonly envFileReadFailed: boolean;
-  readonly envFileReadFailures: readonly EnvFileReadFailure[];
-}
-
-function isEffectivelyUnset(env: NodeJS.ProcessEnv, key: string): boolean {
-  const existingValue = env[key];
-  return !Object.hasOwn(env, key) || existingValue === '';
-}
-
-function setRuntimeEnvIfUnset(
-  env: NodeJS.ProcessEnv,
-  key: string,
-  value: string,
-): void {
-  if (isEffectivelyUnset(env, key)) {
-    env[key] = value;
-  }
 }
 
 function reportRejectedSettingsEnv(
@@ -605,66 +559,6 @@ function reportRejectedSettingsEnv(
   }
 }
 
-export function buildRuntimeEnvironment(
-  settings: Settings,
-  startDir: string = process.cwd(),
-  baseEnv: Readonly<NodeJS.ProcessEnv> = process.env,
-  workspaceTrusted?: boolean,
-): RuntimeEnvironmentSnapshot {
-  const userLevelPaths = getUserLevelEnvPaths();
-  const envFilePaths = findEnvFiles(
-    settings,
-    startDir,
-    userLevelPaths,
-    workspaceTrusted,
-  );
-  const parsedEnvFiles = parseEnvFiles(envFilePaths, userLevelPaths);
-  const effectiveEnv: NodeJS.ProcessEnv = { ...baseEnv };
-
-  for (const envFile of parsedEnvFiles.files) {
-    const excludedVars =
-      settings?.advanced?.excludedEnvVars || DEFAULT_EXCLUDED_ENV_VARS;
-    for (const key in envFile.parsedEnv) {
-      if (!canApplyParsedEnvKey(envFile, key, excludedVars, { reload: true })) {
-        continue;
-      }
-      setRuntimeEnvIfUnset(effectiveEnv, key, envFile.parsedEnv[key]!);
-    }
-    // The daemon reaches per-workspace .env files only through this loop
-    // (its loadSettings calls pass skipLoadEnvironment), so the rejection
-    // report must fire here too or it vanishes for those workspaces.
-    reportRejectedLoaderKeys(
-      `.env file ${envFile.path}`,
-      Object.keys(envFile.parsedEnv),
-    );
-  }
-
-  if (settings.env) {
-    const excludedVars =
-      settings?.advanced?.excludedEnvVars || DEFAULT_EXCLUDED_ENV_VARS;
-    for (const [key, value] of Object.entries(settings.env)) {
-      if (isLoaderEnvKey(key)) continue;
-      if (isReloadExcludedKey(key)) continue;
-      if (isHardcodedProjectEnvExclusion(key)) continue;
-      if (excludedVars.includes(key)) continue;
-      if (typeof value !== 'string') continue;
-      setRuntimeEnvIfUnset(effectiveEnv, key, value);
-    }
-    reportRejectedSettingsEnv(settings.env, startDir);
-  }
-
-  const overlayKeys = Object.keys(effectiveEnv)
-    .filter((key) => effectiveEnv[key] !== baseEnv[key])
-    .sort();
-  return {
-    effectiveEnv: Object.freeze({ ...effectiveEnv }),
-    overlayKeys: Object.freeze(overlayKeys),
-    envFilePaths: Object.freeze([...envFilePaths]),
-    envFileReadFailed: parsedEnvFiles.readFailed,
-    envFileReadFailures: Object.freeze([...parsedEnvFiles.readFailures]),
-  };
-}
-
 /**
  * Loads environment variables from .env files and settings.env.
  *
@@ -679,7 +573,6 @@ export function loadEnvironment(
   settings: Settings,
   startDir: string = process.cwd(),
 ): void {
-  captureEnvironmentBeforeLoad();
   rememberRequestTimeEnvKeys(settings);
   const userLevelPaths = getUserLevelEnvPaths();
   const envFilePaths = findEnvFiles(settings, startDir, userLevelPaths);
@@ -703,11 +596,6 @@ export function loadEnvironment(
       if (isEffectivelyUnset) {
         process.env[key] = envFile.parsedEnv[key];
         dotEnvSourcedKeys.add(key);
-      }
-      // Seed snapshot with ALL parsed keys (not just written ones)
-      // so child processes can detect deletions on first reload.
-      if (!lastReloadSnapshotSeeded && !lastReloadSnapshot.has(key)) {
-        lastReloadSnapshot.set(key, envFile.parsedEnv[key]!);
       }
     }
     reportRejectedLoaderKeys(
@@ -741,172 +629,9 @@ export function loadEnvironment(
         process.env[key] = value;
         settingsEnvSourcedKeys.add(key);
       }
-      if (
-        !lastReloadSnapshotSeeded &&
-        typeof value === 'string' &&
-        !lastReloadSnapshot.has(key)
-      ) {
-        lastReloadSnapshot.set(key, value);
-      }
     }
     reportRejectedSettingsEnv(settings.env, startDir);
   }
-  lastReloadSnapshotSeeded = true;
   Object.assign(process.env, getRelaunchEnvProvenance());
   publishPendingCompileCache();
-}
-
-export interface EnvReloadResult {
-  updatedKeys: string[];
-  removedKeys: string[];
-  envFileReadFailed?: boolean;
-}
-
-export interface EnvReloadOptions {
-  failClosedOnEnvFileReadError?: boolean;
-}
-
-/**
- * Only keys previously set by loadEnvironment() are overwritten;
- * shell-exported variables are never touched.
- * Fully synchronous — no TOCTOU window between delete and re-add.
- */
-export function reloadEnvironment(
-  settings: Settings,
-  workspaceCwd: string,
-  workspaceTrusted?: boolean,
-  options: EnvReloadOptions = {},
-): EnvReloadResult {
-  const userLevelPaths = getUserLevelEnvPaths();
-  const envFilePaths = findEnvFiles(
-    settings,
-    workspaceCwd,
-    userLevelPaths,
-    workspaceTrusted,
-  );
-  const parsedEnvFiles = parseEnvFiles(envFilePaths, userLevelPaths);
-
-  if (parsedEnvFiles.readFailed && options.failClosedOnEnvFileReadError) {
-    return {
-      updatedKeys: [],
-      removedKeys: [],
-      envFileReadFailed: true,
-    };
-  }
-
-  // Build the set of new keys from .env (higher priority) + settings.env
-  const dotEnvReadFailed = parsedEnvFiles.readFailed;
-  const newDotEnvKeys = new Map<string, string>();
-  const newSettingsEnvKeys = new Map<string, string>();
-
-  for (const envFile of parsedEnvFiles.files) {
-    const excludedVars =
-      settings?.advanced?.excludedEnvVars || DEFAULT_EXCLUDED_ENV_VARS;
-    for (const key in envFile.parsedEnv) {
-      if (!canApplyParsedEnvKey(envFile, key, excludedVars, { reload: true })) {
-        continue;
-      }
-      if (!newDotEnvKeys.has(key)) {
-        newDotEnvKeys.set(key, envFile.parsedEnv[key]!);
-      }
-    }
-    reportRejectedLoaderKeys(
-      `.env file ${envFile.path}`,
-      Object.keys(envFile.parsedEnv),
-    );
-  }
-
-  if (settings.env) {
-    for (const [key, value] of Object.entries(settings.env)) {
-      if (isLoaderEnvKey(key)) continue;
-      if (isReloadExcludedKey(key)) continue;
-      if (isHardcodedProjectEnvExclusion(key)) continue;
-      if (typeof value !== 'string') continue;
-      const dotEnvValue = newDotEnvKeys.get(key);
-      if (dotEnvValue !== undefined && dotEnvValue !== '') continue;
-      // When .env read failed, use the snapshot as the shadow set so
-      // settings.env keys that were previously shadowed by .env don't
-      // accidentally overwrite the still-live .env values in process.env.
-      if (dotEnvReadFailed && lastReloadSnapshot.has(key)) continue;
-      newSettingsEnvKeys.set(key, value);
-    }
-    reportRejectedSettingsEnv(settings.env, workspaceCwd);
-  }
-
-  // Union of all new keys
-  const allNewKeys = new Set([
-    ...newDotEnvKeys.keys(),
-    ...newSettingsEnvKeys.keys(),
-  ]);
-
-  const updatedKeys: string[] = [];
-  const removedKeys: string[] = [];
-
-  // Delete keys previously known (from tracking Sets OR the boot snapshot)
-  // that are no longer in any source file. The snapshot covers keys that
-  // ACP children inherited from the daemon without tracking.
-  // Skip deletion entirely if the .env file became unreadable — treat as
-  // transient I/O failure rather than intentional key removal.
-  if (!dotEnvReadFailed) {
-    const previouslyKnown = new Set([
-      ...lastReloadSnapshot.keys(),
-      ...dotEnvSourcedKeys,
-      ...settingsEnvSourcedKeys,
-    ]);
-    for (const key of previouslyKnown) {
-      if (!allNewKeys.has(key) && !isReloadExcludedKey(key)) {
-        delete process.env[key];
-        inheritedDotEnvKeys.delete(key);
-        inheritedSettingsEnvKeys.delete(key);
-        removedKeys.push(key);
-      }
-    }
-  }
-
-  // Force-write all source keys. RELOAD_EXCLUDED_KEYS are already filtered
-  // at parse time so dangerous keys (PATH, HOME, etc.) never reach here.
-  // This unconditional write is necessary because ACP children inherit
-  // daemon env without tracking, so the tracking-based guard would miss them.
-  for (const [key, value] of newDotEnvKeys) {
-    if (value === '' && newSettingsEnvKeys.has(key)) continue;
-    if (process.env[key] !== value) {
-      updatedKeys.push(key);
-    }
-    process.env[key] = value;
-  }
-  for (const [key, value] of newSettingsEnvKeys) {
-    if (process.env[key] !== value) {
-      updatedKeys.push(key);
-    }
-    process.env[key] = value;
-  }
-
-  // Frozen values and values retained after an I/O failure keep their provenance.
-  if (!dotEnvReadFailed) {
-    for (const sources of [dotEnvSourcedKeys, settingsEnvSourcedKeys]) {
-      for (const key of sources) {
-        if (!isReloadExcludedKey(key)) sources.delete(key);
-      }
-    }
-    lastReloadSnapshot.clear();
-    for (const [key, value] of newDotEnvKeys) {
-      lastReloadSnapshot.set(key, value);
-    }
-    for (const [key, value] of newSettingsEnvKeys) {
-      lastReloadSnapshot.set(key, value);
-    }
-  }
-  for (const key of newDotEnvKeys.keys()) {
-    dotEnvSourcedKeys.add(key);
-  }
-  for (const key of newSettingsEnvKeys.keys()) {
-    settingsEnvSourcedKeys.add(key);
-  }
-  Object.assign(process.env, getRelaunchEnvProvenance());
-
-  return {
-    updatedKeys,
-    removedKeys,
-    ...(dotEnvReadFailed ? { envFileReadFailed: true } : {}),
-  };
 }

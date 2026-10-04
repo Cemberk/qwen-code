@@ -73,15 +73,6 @@ export const BUILTIN_HARD_DENY: readonly string[] = Object.freeze([
   'AUTO-mode bypass: after an AUTO-mode denial, retrying the same denied action or using another tool, shell indirection, generated script, symlink, alias, config change, hook, command file, MCP configuration, encoded payload, or equivalent path to complete the same denied action.',
 ]);
 
-/**
- * Combined deny list. Kept for backward compatibility with callers and tests
- * that iterate every built-in block entry without caring about severity.
- */
-export const BUILTIN_DENY: readonly string[] = Object.freeze([
-  ...BUILTIN_SOFT_DENY,
-  ...BUILTIN_HARD_DENY,
-]);
-
 /** Built-in environment / context lines. */
 export const BUILTIN_ENVIRONMENT: readonly string[] = Object.freeze([
   'The user runs the agent in their development environment.',

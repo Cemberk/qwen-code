@@ -134,34 +134,20 @@ export function formatSupportedModes(command: SlashCommand): string {
   const modes = getEffectiveSupportedModes(command);
   const hasInteractive = modes.includes('interactive');
   const hasNonInteractive = modes.includes('non_interactive');
-  const hasAcp = modes.includes('acp');
 
-  if (hasInteractive && hasNonInteractive && hasAcp) {
+  if (hasInteractive && hasNonInteractive) {
     return '[all]';
   }
 
-  if (!hasInteractive && hasNonInteractive && hasAcp) {
+  if (hasNonInteractive) {
     return '[headless]';
   }
 
-  if (hasInteractive && !hasNonInteractive && !hasAcp) {
+  if (hasInteractive) {
     return '[interactive]';
   }
 
-  return modes
-    .map((mode) => {
-      switch (mode) {
-        case 'interactive':
-          return '[i]';
-        case 'non_interactive':
-          return '[ni]';
-        case 'acp':
-          return '[acp]';
-        default:
-          return `[${mode}]`;
-      }
-    })
-    .join(' ');
+  return '';
 }
 
 export function getCommandDisplayName(

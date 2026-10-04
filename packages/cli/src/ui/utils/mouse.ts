@@ -22,8 +22,7 @@ export const X11_EVENT_PREFIX = `${ESC}[M`;
  * Upper bound on an SGR mouse sequence's length while still incomplete. SGR
  * sequences (`\x1b[<btn;col;rowM`) are short; once a buffer exceeds this
  * without a terminator it is treated as garbage and abandoned so it doesn't
- * swallow real input. Shared by isIncompleteMouseSequence and the SGR
- * reassembly buffer in KeypressContext.
+ * swallow real input. Used by the SGR reassembly buffer in KeypressContext.
  */
 export const MAX_SGR_MOUSE_SEQUENCE_LENGTH = 50;
 
@@ -164,37 +163,6 @@ export function parseMouseEvent(
   buffer: string,
 ): { event: MouseEvent; length: number } | null {
   return parseSGRMouseEvent(buffer) || parseX11MouseEvent(buffer);
-}
-
-function couldBeMouseSequence(buffer: string): boolean {
-  if (buffer.length === 0) return true;
-  if (
-    SGR_EVENT_PREFIX.startsWith(buffer) ||
-    buffer.startsWith(SGR_EVENT_PREFIX)
-  )
-    return true;
-  if (
-    X11_EVENT_PREFIX.startsWith(buffer) ||
-    buffer.startsWith(X11_EVENT_PREFIX)
-  )
-    return true;
-  return false;
-}
-
-export function isIncompleteMouseSequence(buffer: string): boolean {
-  if (!couldBeMouseSequence(buffer)) return false;
-  if (parseMouseEvent(buffer)) return false;
-  if (buffer.startsWith(X11_EVENT_PREFIX)) {
-    return buffer.length < X11_EVENT_PREFIX.length + 3;
-  }
-  if (buffer.startsWith(SGR_EVENT_PREFIX)) {
-    // SGR ends with 'm' or 'M'. Cap the length to fail garbage early.
-    return (
-      !/[mM]/.test(buffer) && buffer.length < MAX_SGR_MOUSE_SEQUENCE_LENGTH
-    );
-  }
-  // Prefix of the prefix (e.g. "ESC" or "ESC [")
-  return true;
 }
 
 /**

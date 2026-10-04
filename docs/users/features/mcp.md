@@ -169,7 +169,7 @@ one frame (~16 ms) of each server completing its discover handshake.
   flight. Sending a prompt before MCP finishes simply means the model
   sees the tools that are ready _at that moment_; subsequent prompts see
   more tools as servers come online.
-- **Non-interactive mode** (`--prompt`, stream-json, ACP): the cli still
+- **Non-interactive mode** (`--prompt`, stream-json): the cli still
   waits for MCP discovery to settle before sending the first prompt, so
   scripted / piped invocations see the same complete tool set the
   legacy synchronous behavior produced.
@@ -332,53 +332,6 @@ Optional:
 | `trust`              | boolean<br>(default: false)                   | When `true`, bypasses tool call confirmations for this server in a trusted workspace (default: `false`)                                                                                                                                                           |
 | `includeTools`       | array                                         | List of tool names to include from this MCP server. When specified, only the tools listed here will be available from this server (allowlist behavior). If not specified, all tools from the server are enabled by default.                                       |
 | `excludeTools`       | array                                         | List of tool names to exclude from this MCP server. Tools listed here will not be available to the model, even if they are exposed by the server.<br>Note: `excludeTools` takes precedence over `includeTools` - if a tool is in both lists, it will be excluded. |
-
-### MCP App resource limits
-
-MCP Apps can return bundled HTML larger than the default 1 MiB or take longer
-than the default 10 seconds to load. Configure only the server that needs more
-headroom in `settings.json`:
-
-```json
-{
-  "mcpServers": {
-    "apps": {
-      "command": "node",
-      "args": ["./apps-server.js"],
-      "appResourceMaxBytes": 4194304,
-      "appResourceTimeoutMs": 120000
-    }
-  }
-}
-```
-
-These settings do not enable additional App bridge capabilities or guarantee
-that every App is compatible.
-
-- `appResourceMaxBytes`: maximum decoded HTML size in UTF-8 bytes. Defaults to
-  1,048,576 (1 MiB); clamped to 1–4,194,304 bytes (4 MiB).
-- `appResourceTimeoutMs`: resource-read deadline, independent of tool execution
-  when explicitly set; clamped to 100–120,000 ms. Without an override, the
-  deadline remains the smaller of the general `timeout` and 10,000 ms.
-- Finite values are rounded down and clamped. Nonnumeric or nonfinite values
-  fall back to defaults. Cancellation remains effective at any configured limit.
-
-A limit failure preserves the successful tool result and displays a warning
-with the applicable configuration key. Larger HTML stays outside model context,
-while increasing retained transcript and replay size. The size check happens
-**after** the SDK reads the response; it does not cap network transfer or peak
-memory. These two limit settings do not change the sandbox or CSP.
-
-Terminal and headless sessions do not mount App HTML; they render the
-fallback text instead, so these keys change only the warning text, the fetch
-cost and latency, and the retained transcript size.
-
-Set these keys in the same source that declares the server. Configuration
-sources replace whole server objects by precedence rather than merging fields,
-so a same-named entry added in another file shadows the original server
-instead of adjusting its limits.
-
-<a id="qwen-mcp-cli"></a>
 
 ### Manage MCP servers with `qwen mcp`
 

@@ -47,7 +47,7 @@ export const approvalModeCommand: SlashCommand = {
     const mode = parseApprovalModeArg(args);
 
     // If no argument provided, open dialog in interactive mode;
-    // in non-interactive/ACP, return current state instead
+    // in non-interactive, return current state instead
     if (!args.trim()) {
       return {
         type: 'dialog',

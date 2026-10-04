@@ -31,7 +31,6 @@ const EXPORT_PROBES = new Map([
   ['@qwen-code/qwen-code-core/config/storage.js', 'Storage'],
   ['@qwen-code/qwen-code-core/utils/debugLogger.js', 'createDebugLogger'],
   ['@qwen-code/qwen-code-core/utils/errors.js', 'getErrorMessage'],
-  ['@qwen-code/qwen-code-core/noFollowOpen', 'openSyncNoFollow'],
 ]);
 const specifiers = new Set(EXPORT_PROBES.keys());
 const scannedSources = [path.join(root, 'packages', 'cli', 'src')];

@@ -6,8 +6,8 @@
 
 import { t } from '../../i18n/index.js';
 
-// Re-exported from core so the CLI UI, the shell/diagnostics paths in core
-// and the serve daemon all render a byte count identically.
+// Re-exported from core so the CLI UI and the shell/diagnostics paths in core
+// render a byte count identically.
 export { formatMemoryUsage } from '@qwen-code/qwen-code-core';
 
 /**

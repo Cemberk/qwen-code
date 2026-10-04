@@ -105,8 +105,7 @@ function parseMemoryFiles(
     const filePath = match[1]!;
     const content = match[2]!;
     // Marker paths are relative to the session working directory (where
-    // memory discovery ran, which may differ from process.cwd() in
-    // ACP/daemon-served sessions); shorten home-dir files to `~/...` so
+    // memory discovery ran, which may differ from process.cwd()); shorten home-dir files to `~/...` so
     // global memory files don't render as `../../..` chains.
     const absolutePath = path.resolve(workingDir, filePath);
     const owner = extensionOwners.get(absolutePath);
@@ -369,12 +368,9 @@ export async function collectContextData(
   const contextWindowSize =
     contentGeneratorConfig.contextWindowSize ?? DEFAULT_TOKEN_LIMIT;
 
-  // Prefer the per-session chat's API-reported count. `uiTelemetryService` is
-  // a process-global singleton shared by every session in a `serve` daemon, so
-  // reading it here reports whichever session most recently completed a turn
-  // (#5763). The active chat carries the correct per-session value; fall back
-  // to the global singleton only when no chat exists yet (first /context,
-  // --continue resume before any send).
+  // Prefer the per-session chat's API-reported count (#5763); fall back to the
+  // global `uiTelemetryService` singleton only when no chat exists yet (first
+  // /context, --continue resume before any send).
   const llmClient = config.getLlmClient?.();
   const activeChat = llmClient?.isInitialized?.()
     ? llmClient.getChat()
@@ -382,9 +378,8 @@ export async function collectContextData(
   const apiTotalTokens = activeChat
     ? activeChat.getLastPromptTokenCount()
     : uiTelemetryService.getLastPromptTokenCount();
-  // Same per-session preference as the total (#5763 / #12047): the global
-  // singleton reports whichever session last completed a turn in a `serve`
-  // daemon. Fall back only when no chat exists yet.
+  // Same per-session preference as the total (#5763 / #12047). Fall back only
+  // when no chat exists yet.
   const apiCachedTokens =
     activeChat?.getLastCachedContentTokenCount?.() ??
     uiTelemetryService.getLastCachedContentTokenCount();
@@ -1014,7 +1009,7 @@ export const contextCommand: SlashCommand = {
     );
   },
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
   action: async (context: CommandContext, args?: string) => {
     const normalizedArgs = args?.trim().toLowerCase();
     const showDetails = normalizedArgs === 'detail' || normalizedArgs === '-d';
@@ -1057,7 +1052,7 @@ export const contextCommand: SlashCommand = {
         return t('Show per-item context usage breakdown.');
       },
       kind: CommandKind.BUILT_IN,
-      supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+      supportedModes: ['interactive', 'non_interactive'] as const,
       action: async (context: CommandContext) => {
         // Delegate to main action with 'detail' arg to show detailed view
         await contextCommand.action!(context, 'detail');

@@ -189,7 +189,6 @@ describe('modelCommand', () => {
   it('should switch a chat model directly in interactive mode', async () => {
     const setValue = vi.fn();
     const switchModel = vi.fn().mockResolvedValue(undefined);
-    const recordSessionModel = vi.fn().mockResolvedValue(true);
     mockContext = createMockCommandContext({
       invocation: { raw: '/model qwen-max', name: 'model', args: 'qwen-max' },
       services: {
@@ -205,9 +204,6 @@ describe('modelCommand', () => {
             },
           ]),
           switchModel,
-          getChatRecordingService: vi.fn().mockReturnValue({
-            recordSessionModel,
-          }),
         },
         settings: createMockSettings(setValue),
       },
@@ -238,130 +234,6 @@ describe('modelCommand', () => {
       messageType: 'info',
       content: 'Model: qwen-max',
     });
-    expect(recordSessionModel).not.toHaveBeenCalled();
-  });
-
-  it('records the session model in ACP mode after switching', async () => {
-    const setValue = vi.fn();
-    let currentModel = 'old-model';
-    const switchModel = vi.fn().mockImplementation(async () => {
-      currentModel = 'qwen-max';
-    });
-    const recordSessionModel = vi.fn().mockResolvedValue(true);
-    mockContext = createMockCommandContext({
-      executionMode: 'acp',
-      invocation: { raw: '/model qwen-max', name: 'model', args: 'qwen-max' },
-      services: {
-        config: {
-          getContentGeneratorConfig: vi.fn().mockReturnValue({
-            model: 'qwen-max',
-            authType: AuthType.USE_OPENAI,
-          }),
-          getAvailableModelsForAuthType: vi
-            .fn()
-            .mockReturnValue([{ id: 'qwen-max', label: 'Qwen Max' }]),
-          switchModel,
-          getModel: vi.fn(() => currentModel),
-          getAuthType: vi.fn().mockReturnValue(AuthType.USE_OPENAI),
-          getActiveRuntimeModelSnapshot: vi.fn().mockReturnValue(undefined),
-          getCurrentModelRegistryBaseUrl: vi.fn().mockReturnValue(undefined),
-          getChatRecordingService: vi.fn().mockReturnValue({
-            recordSessionModel,
-          }),
-        },
-        settings: createMockSettings(setValue),
-      },
-    });
-
-    await modelCommand.action!(mockContext, 'qwen-max');
-
-    expect(switchModel.mock.invocationCallOrder[0]).toBeLessThan(
-      recordSessionModel.mock.invocationCallOrder[0],
-    );
-    expect(recordSessionModel).toHaveBeenCalledWith({
-      modelId: 'qwen-max',
-      authType: AuthType.USE_OPENAI,
-    });
-  });
-
-  it('switches the standalone session model without persisting defaults', async () => {
-    const setValue = vi.fn();
-    const switchModel = vi.fn().mockResolvedValue(undefined);
-    mockContext = createMockCommandContext({
-      executionMode: 'acp',
-      executionPolicy: {
-        allowSessionReset: false,
-        allowWorkspaceSettingsWrite: false,
-        persistModelSelection: false,
-        blockedBuiltinCommandNames: [],
-      },
-      invocation: { raw: '/model qwen-max', name: 'model', args: 'qwen-max' },
-      services: {
-        config: {
-          getContentGeneratorConfig: vi.fn().mockReturnValue({
-            model: 'qwen-plus',
-            authType: AuthType.USE_OPENAI,
-          }),
-          getAvailableModelsForAuthType: vi
-            .fn()
-            .mockReturnValue([{ id: 'qwen-max', label: 'Qwen Max' }]),
-          switchModel,
-          getModel: vi.fn().mockReturnValue('qwen-max'),
-          getAuthType: vi.fn().mockReturnValue(AuthType.USE_OPENAI),
-          getActiveRuntimeModelSnapshot: vi.fn().mockReturnValue(undefined),
-          getCurrentModelRegistryBaseUrl: vi.fn().mockReturnValue(undefined),
-          getChatRecordingService: vi.fn().mockReturnValue({
-            recordSessionModel: vi.fn().mockResolvedValue(true),
-          }),
-        },
-        settings: createMockSettings(setValue),
-      },
-    });
-
-    await modelCommand.action!(mockContext, 'qwen-max');
-
-    expect(switchModel).toHaveBeenCalledWith(
-      AuthType.USE_OPENAI,
-      'qwen-max',
-      undefined,
-    );
-    expect(setValue).not.toHaveBeenCalled();
-  });
-
-  it('rejects standalone model scope and auxiliary selectors before mutation', async () => {
-    const setValue = vi.fn();
-    const switchModel = vi.fn();
-    const setFastModel = vi.fn();
-    mockContext = createMockCommandContext({
-      executionMode: 'acp',
-      executionPolicy: {
-        allowSessionReset: false,
-        allowWorkspaceSettingsWrite: false,
-        persistModelSelection: false,
-        blockedBuiltinCommandNames: [],
-      },
-      services: {
-        config: {
-          getContentGeneratorConfig: vi.fn().mockReturnValue({
-            model: 'qwen-plus',
-            authType: AuthType.USE_OPENAI,
-          }),
-          switchModel,
-          setFastModel,
-        },
-        settings: createMockSettings(setValue),
-      },
-    });
-
-    await expect(
-      modelCommand.action!(mockContext, '--project qwen-max'),
-    ).resolves.toMatchObject({ type: 'message', messageType: 'error' });
-    await expect(
-      modelCommand.action!(mockContext, '--fast qwen-flash'),
-    ).resolves.toMatchObject({ type: 'message', messageType: 'error' });
-    expect(switchModel).not.toHaveBeenCalled();
-    expect(setFastModel).not.toHaveBeenCalled();
-    expect(setValue).not.toHaveBeenCalled();
   });
 
   it('runs a trailing prompt on the given model inline without switching or persisting', async () => {
@@ -518,39 +390,6 @@ describe('modelCommand', () => {
       content: 'hello there',
       modelOverride: 'shared-id',
     });
-  });
-
-  it('rejects an inline prompt in ACP mode (no per-turn override pipeline)', async () => {
-    const switchModel = vi.fn();
-    mockContext = createMockCommandContext({
-      executionMode: 'acp',
-      invocation: {
-        raw: '/model qwen-max explain this',
-        name: 'model',
-        args: 'qwen-max explain this',
-      },
-      services: {
-        config: {
-          getContentGeneratorConfig: vi.fn().mockReturnValue({
-            model: 'qwen-plus',
-            authType: AuthType.USE_OPENAI,
-          }),
-          switchModel,
-          getAvailableModelsForAuthType: vi
-            .fn()
-            .mockReturnValue([{ id: 'qwen-max', label: 'Qwen Max' }]),
-        },
-        settings: createMockSettings(vi.fn()),
-      },
-    });
-
-    const result = await modelCommand.action!(
-      mockContext,
-      'qwen-max explain this',
-    );
-
-    expect(switchModel).not.toHaveBeenCalled();
-    expect(result).toMatchObject({ type: 'message', messageType: 'error' });
   });
 
   it('should not persist the model when direct model validation fails', async () => {

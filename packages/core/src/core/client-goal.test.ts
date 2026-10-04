@@ -227,7 +227,6 @@ function setupGoalClient() {
     ),
   } as unknown as GoalRuntime;
   const config = {
-    assertCanStartTurn: vi.fn(async () => undefined),
     getGoalRuntimeReady: vi.fn(async () => runtime),
     getGoalRuntime: vi.fn(() => runtime),
     getChatRecordingService: vi.fn(() => recorder),
@@ -235,7 +234,6 @@ function setupGoalClient() {
     getMessageBus: vi.fn(() => undefined),
     getMaxSessionTurns: vi.fn(() => 1),
     getSessionTokenLimit: vi.fn(() => 0),
-    getArenaAgentClient: vi.fn(() => null),
     getModel: vi.fn(() => 'test-model'),
     getSkipNextSpeakerCheck: vi.fn(() => false),
     getSkipLoopDetection: vi.fn(() => false),
@@ -263,10 +261,8 @@ function setupGoalClient() {
       toolResultsNumToKeep: 5,
     })),
     getApprovalMode: vi.fn(() => ApprovalMode.DEFAULT),
-    getGoalProposalHostSupported: vi.fn(() => false),
     getSystemPrompt: vi.fn(() => undefined),
     getOutputStyle: vi.fn(() => undefined),
-    getExperimentalZedIntegration: vi.fn(() => false),
     isInteractive: vi.fn(() => true),
     getSdkMode: vi.fn(() => false),
     getArenaManager: vi.fn(() => null),
@@ -331,40 +327,6 @@ describe('LlmClient Goal admission', () => {
     expect(runtime.dispatch).toHaveBeenCalledWith({
       action: 'create',
       objective: 'ship it',
-    });
-  });
-
-  it('leaves a host-owned approved proposal for Session settlement', async () => {
-    const { client, config, runtime } = setupGoalClient();
-    vi.mocked(config.getGoalProposalHostSupported).mockReturnValue(true);
-    const store = pendingGoalProposalStore({
-      objective: 'ship it',
-      turnKey: 'host-owned-key',
-      reviewedGoal: null,
-    });
-    const loadGoalRuntime = vi.fn(async () => runtime);
-    Object.assign(config, { takePendingGoalProposal: store.take });
-
-    await client['settlePendingGoalProposal'](
-      true,
-      new AbortController().signal,
-      loadGoalRuntime,
-      'host-owned-key',
-      vi.fn(),
-    );
-
-    expect(store.get()).toEqual({
-      objective: 'ship it',
-      turnKey: 'host-owned-key',
-      reviewedGoal: null,
-    });
-    expect(store.take).not.toHaveBeenCalled();
-    expect(loadGoalRuntime).not.toHaveBeenCalled();
-    expect(runtime.dispatch).not.toHaveBeenCalled();
-    expect(store.take('host-owned-key')).toEqual({
-      objective: 'ship it',
-      turnKey: 'host-owned-key',
-      reviewedGoal: null,
     });
   });
 

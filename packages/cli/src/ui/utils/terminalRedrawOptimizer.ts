@@ -117,16 +117,6 @@ function optimizeMultilineEraseLinesWithCount(output: string): {
   return { output: optimizedOutput, optimizedSequenceCount };
 }
 
-/**
- * Ink clears dynamic output via ansi-escapes.eraseLines(), which emits a
- * clear-line + cursor-up pair for every previous line. That can make terminal
- * scrollback bounce during frequent streaming renders. Collapse the repeated
- * upward cursor movement while still clearing only the same old frame lines.
- */
-export function optimizeMultilineEraseLines(output: string): string {
-  return optimizeMultilineEraseLinesWithCount(output).output;
-}
-
 export function installTerminalRedrawOptimizer(
   stdout: NodeJS.WriteStream,
   // Injectable for tests; production callers omit it and it resolves to

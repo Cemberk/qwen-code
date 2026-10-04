@@ -14,7 +14,7 @@ export const forgetCommand: SlashCommand = {
     return t('Remove matching entries from managed auto-memory.');
   },
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'acp'] as const,
+  supportedModes: ['interactive'] as const,
   argumentHint: '<memory text to remove>',
   action: async (context, args) => {
     const query = args.trim();

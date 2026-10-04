@@ -10,10 +10,7 @@ export type {
   DisplayMode,
   AgentSpawnConfig,
   AgentExitCallback,
-  TmuxBackendOptions,
   InProcessSpawnConfig,
 } from './types.js';
-export { TmuxBackend } from './TmuxBackend.js';
-export { ITermBackend } from './ITermBackend.js';
 export { InProcessBackend } from './InProcessBackend.js';
 export { detectBackend, type DetectBackendResult } from './detect.js';

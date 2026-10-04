@@ -4,11 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { trace, isSpanContextValid, INVALID_TRACEID } from '@opentelemetry/api';
+import { trace, isSpanContextValid } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
 import { getSessionContext } from './session-context.js';
-
-export const ZERO_TRACE_ID = INVALID_TRACEID;
 
 export interface TraceContext {
   traceId: string;
@@ -49,9 +47,4 @@ export function getSessionRootTraceContext(): TraceContext | null {
 
 export function getTraceContext(): TraceContext | null {
   return getActiveSpanTraceContext() ?? getSessionRootTraceContext();
-}
-
-export function formatTraceparent(ctx: TraceContext): string {
-  const flags = (ctx.traceFlags & 0xff).toString(16).padStart(2, '0');
-  return `00-${ctx.traceId}-${ctx.spanId}-${flags}`;
 }

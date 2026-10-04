@@ -166,43 +166,6 @@ export function assignTeammateColor(
 }
 
 /**
- * Clear all teammate colors from a team file's members.
- * Returns a new members array (does not mutate).
- */
-export function clearTeammateColors(
-  members: readonly TeamMember[],
-): TeamMember[] {
-  return members.map((m) => {
-    const { color: _, ...rest } = m;
-    return rest as TeamMember;
-  });
-}
-
-// ─── Member helpers ─────────────────────────────────────────
-
-/**
- * Set a member's `isActive` flag.
- * Returns a new members array (does not mutate).
- */
-export function setMemberActive(
-  members: readonly TeamMember[],
-  agentId: string,
-  isActive: boolean,
-): TeamMember[] {
-  return members.map((m) => (m.agentId === agentId ? { ...m, isActive } : m));
-}
-
-/**
- * Find a member by agent ID.
- */
-export function findMemberById(
-  members: readonly TeamMember[],
-  agentId: string,
-): TeamMember | undefined {
-  return members.find((m) => m.agentId === agentId);
-}
-
-/**
  * Find a member by name. Stored member names are already sanitized
  * (see {@link sanitizeName}), so the lookup name is sanitized too —
  * `"QA Tester"` matches the stored `"qa-tester"`.
@@ -405,21 +368,5 @@ export async function deleteTeamDirs(teamName: string): Promise<void> {
         .map((e) => (e instanceof Error ? e.message : String(e)))
         .join('; ')}`,
     );
-  }
-}
-
-/**
- * List all team names (directory names under ~/.qwen/teams/).
- * Returns an empty array if the teams directory doesn't exist.
- */
-export async function listTeamNames(): Promise<string[]> {
-  const teamsRoot = getTeamsRootDir();
-  try {
-    const entries = await fs.readdir(teamsRoot, {
-      withFileTypes: true,
-    });
-    return entries.filter((e) => e.isDirectory()).map((e) => e.name);
-  } catch {
-    return [];
   }
 }

@@ -10,16 +10,10 @@ import type { Config } from '../config/config.js';
 import {
   addAgentInputMessageAttributes,
   addAgentOutputMessageAttributes,
-  addModelOutputAttributes,
-  addSystemPromptAttributes,
   addToolArgumentsAttributes,
   addToolCallResultAttributes,
-  addToolInputAttributes,
-  addToolResultAttributes,
-  addToolSchemaAttributes,
   addUserPromptAttributes,
   AgentOutputMessageCapture,
-  clearDetailedSpanState,
   truncateContent,
 } from './detailed-span-attributes.js';
 import { DEFAULT_SENSITIVE_SPAN_ATTRIBUTE_MAX_LENGTH } from './constants.js';
@@ -351,44 +345,6 @@ describe('detailed span attributes', () => {
     expect(target.attrs).toEqual({});
   });
 
-  it('writes compatibility helpers only to standard GenAI keys', () => {
-    const target = span();
-    addSystemPromptAttributes(config(), target, 'system');
-    addToolSchemaAttributes(config(), target, [
-      { type: 'function', name: 'read' },
-    ]);
-    addModelOutputAttributes(config(), target, 'answer', 'stop');
-    addToolInputAttributes(config(), target, 'read', '{"path":"a"}');
-    addToolResultAttributes(config(), target, 'read', '{"output":"ok"}');
-
-    expect(
-      JSON.parse(target.attrs['gen_ai.system_instructions'] as string),
-    ).toEqual([{ type: 'text', content: 'system' }]);
-    expect(
-      JSON.parse(target.attrs['gen_ai.tool.definitions'] as string),
-    ).toEqual([{ type: 'function', name: 'read' }]);
-    expect(
-      JSON.parse(target.attrs['gen_ai.output.messages'] as string),
-    ).toEqual([
-      {
-        role: 'assistant',
-        parts: [{ type: 'text', content: 'answer' }],
-        finish_reason: 'stop',
-      },
-    ]);
-    expect(target.attrs['gen_ai.tool.call.arguments']).toBe('{"path":"a"}');
-    expect(target.attrs['gen_ai.tool.call.result']).toBe('{"output":"ok"}');
-    expect(Object.keys(target.attrs)).not.toEqual(
-      expect.arrayContaining([
-        'system_prompt',
-        'tools',
-        'response.model_output',
-        'tool_input',
-        'tool_result',
-      ]),
-    );
-  });
-
   it('retains an explicit finish reason across later incomplete chunks', () => {
     const target = span();
     const capture = new AgentOutputMessageCapture(config());
@@ -402,12 +358,6 @@ describe('detailed span attributes', () => {
     expect(
       JSON.parse(target.attrs['gen_ai.output.messages'] as string),
     ).toMatchObject([{ finish_reason: 'stop' }]);
-  });
-
-  it('does not synthesize output without a finish reason', () => {
-    const target = span();
-    addModelOutputAttributes(config(), target, 'answer');
-    expect(target.attrs['gen_ai.output.messages']).toBeUndefined();
   });
 
   it('requires object roots for tool arguments and results', () => {
@@ -473,9 +423,5 @@ describe('detailed span attributes', () => {
     mockState.sdkInitialized = false;
     addToolCallResultAttributes(config(), target, { secret: true });
     expect(target.attrs).toEqual({});
-  });
-
-  it('keeps the old state reset export as a no-op', () => {
-    expect(() => clearDetailedSpanState()).not.toThrow();
   });
 });

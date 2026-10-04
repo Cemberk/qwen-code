@@ -9,9 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  buildRuntimeEnvironment,
   loadEnvironment,
-  reloadEnvironment,
   resetEnvironmentTrackingForTesting,
 } from './environment.js';
 import type { Settings } from './settingsSchema.js';
@@ -84,24 +82,13 @@ describe('sandbox runtime markers', () => {
     'home:.qwen/.env',
     'settings.env',
   ]) {
-    it(`rejects file-sourced markers from ${source} on every application path`, () => {
+    it(`rejects file-sourced markers from ${source} on load`, () => {
       const settings = installFixture(source);
       loadEnvironment(settings, workspace);
       for (const key of markerKeys)
         expect.soft(process.env[key], `initial load ${key}`).toBeUndefined();
       expect
         .soft(process.env['BOUNDARY_REGRESSION_VALUE'])
-        .toBe('ordinary-value');
-      reloadEnvironment(settings, workspace, true);
-      for (const key of markerKeys)
-        expect.soft(process.env[key], `reload ${key}`).toBeUndefined();
-      const snapshot = buildRuntimeEnvironment(settings, workspace, {}, true);
-      for (const key of markerKeys)
-        expect
-          .soft(snapshot.effectiveEnv[key], `snapshot ${key}`)
-          .toBeUndefined();
-      expect
-        .soft(snapshot.effectiveEnv['BOUNDARY_REGRESSION_VALUE'])
         .toBe('ordinary-value');
     });
 
@@ -110,20 +97,8 @@ describe('sandbox runtime markers', () => {
       vi.stubEnv('SANDBOX', 'bwrap');
       vi.stubEnv('SANDBOX_ENFORCEMENT', 'full');
       loadEnvironment(settings, workspace);
-      reloadEnvironment(settings, workspace, true);
       expect(process.env['SANDBOX']).toBe('bwrap');
       expect(process.env['SANDBOX_ENFORCEMENT']).toBe('full');
-      const snapshot = buildRuntimeEnvironment(
-        settings,
-        workspace,
-        {
-          SANDBOX: 'bwrap',
-          SANDBOX_ENFORCEMENT: 'full',
-        },
-        true,
-      );
-      expect(snapshot.effectiveEnv['SANDBOX']).toBe('bwrap');
-      expect(snapshot.effectiveEnv['SANDBOX_ENFORCEMENT']).toBe('full');
     });
   }
 });

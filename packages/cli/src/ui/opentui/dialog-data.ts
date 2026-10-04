@@ -1068,7 +1068,7 @@ export async function applyExtensionUninstall(
   const manager = config?.getExtensionManager?.();
   if (!manager) return extensionUnavailable();
   try {
-    const result = await manager.uninstallExtension(name, false);
+    const result = await manager.uninstallExtension(name);
     await manager.refreshCache();
     const warnings = result.warnings ?? [];
     return {

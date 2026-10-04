@@ -1409,12 +1409,6 @@ export const useLlmStream = (
     }
     auxiliaryAbortRefsRef.current.clear();
 
-    // Report cancellation to arena status reporter (if in arena mode).
-    // This is needed because cancellation during tool execution won't
-    // flow through sendMessageStream where the inline reportCancelled()
-    // lives — tools get cancelled and handleCompletedTools returns early.
-    config.getArenaAgentClient()?.reportCancelled();
-
     // Log API cancellation
     const prompt_id = config.getSessionId() + '########' + getPromptCount();
     const cancellationEvent = new ApiCancelEvent(
@@ -4862,7 +4856,7 @@ export const useLlmStream = (
         // anything in a terminal state (success | error | cancelled),
         // but cancelled means the tool never actually ran end-to-end —
         // the `allToolsCancelled` branch below would have surfaced
-        // them via `addHistory + reportCancelled` rather than the
+        // them via `addHistory` rather than the
         // completed-call metric, and the metric should match. Without
         // this filter, a deduped + cancelled tool would inflate
         // `toolCallCount` for a call that never produced a result
@@ -5476,9 +5470,6 @@ export const useLlmStream = (
             role: 'user',
             parts: responsesToSend,
           });
-
-          // Report cancellation to arena (safety net — cancelOngoingRequest
-          config.getArenaAgentClient()?.reportCancelled();
         }
 
         const callIdsToMarkAsSubmitted = llmTools.map(
@@ -6235,7 +6226,7 @@ export const useLlmStream = (
   // through the notification drain reach a chat client whose startChat() has
   // not yet run — producing "Chat not initialized" on every fresh launch
   // that has pending durable work (#5022). This matches the ordering the
-  // ACP (Session.ts) and headless (nonInteractiveCli.ts) paths already use.
+  // headless (nonInteractiveCli.ts) path already uses.
   useEffect(() => {
     if (!isConfigInitialized) return;
     if (!config.isCronEnabled()) return;
@@ -6244,7 +6235,7 @@ export const useLlmStream = (
     let stopped = false;
     // Await enableDurable before start so overdue fires buffer into
     // pendingFires (onFire is still null) and flush through start()'s
-    // buffer-drain — matching the ACP and headless startup order.
+    // buffer-drain — matching the headless startup order.
     void (async () => {
       try {
         // Enable durable (file-backed) cron support (loads tasks from the

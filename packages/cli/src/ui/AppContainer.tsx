@@ -925,8 +925,7 @@ export const AppContainer = (props: AppContainerProps) => {
    * One-shot worktree restore reminder for the TUI path. Set during
    * `--resume` when the persisted sidecar names a live worktree, then
    * consumed and cleared by `handleFinalSubmit` on the user's first
-   * prompt — same shape as ACP `Session.pendingWorktreeNotice` and
-   * headless's `<system-reminder>` prefix. Without this, the resumed
+   * prompt — same shape as headless's `<system-reminder>` prefix. Without this, the resumed
    * model would see an INFO history item in the TUI but never receive
    * the reminder in the next API request, leaving it free to edit the
    * parent checkout. (PR #4174 review #3259975249.)
@@ -1148,8 +1147,8 @@ export const AppContainer = (props: AppContainerProps) => {
           setSessionName(title);
         }
 
-        // Restore worktree context (shared logic — headless and ACP use
-        // the same helper). Stale sidecars get cleaned up; live ones
+        // Restore worktree context (shared logic — headless uses the same
+        // helper). Stale sidecars get cleaned up; live ones
         // produce an INFO message the model sees on the next turn.
         // Skipped when Phase D-1 already injected a --worktree startup
         // notice above (startup wins over resume on the same prompt).
@@ -1297,8 +1296,8 @@ export const AppContainer = (props: AppContainerProps) => {
       }, MCP_BATCH_FLUSH_MS);
     };
 
-    // Match the non-interactive entry points (`llm.tsx`, `session.ts`,
-    // `acpAgent.ts`) which warn to stderr when MCP discovery completes with
+    // Match the non-interactive entry points (`llm.tsx`, `session.ts`)
+    // which warn to stderr when MCP discovery completes with
     // failed servers. The interactive path can't use stderr (it would
     // collide with Ink's rendered output), so we route through
     // `debugLogger.warn` so it shows up under `QWEN_CODE_DEBUG=1` and in
@@ -1689,11 +1688,8 @@ export const AppContainer = (props: AppContainerProps) => {
     const chatRecordingService = config.getChatRecordingService();
     if (!chatRecordingService?.setTitleRecordedCallback) return;
 
-    // Chain with existing callback (e.g., Session's ACP notification)
-    const existingCallback = chatRecordingService.getTitleRecordedCallback();
     chatRecordingService.setTitleRecordedCallback(
-      (customTitle, source, sessionId) => {
-        existingCallback?.(customTitle, source, sessionId);
+      (customTitle, _source, sessionId) => {
         if (sessionId === config.getSessionId()) {
           setSessionName(customTitle);
         }
@@ -1701,8 +1697,7 @@ export const AppContainer = (props: AppContainerProps) => {
     );
 
     return () => {
-      // Restore original callback on unmount
-      chatRecordingService.setTitleRecordedCallback(existingCallback);
+      chatRecordingService.setTitleRecordedCallback(undefined);
     };
   }, [config]);
 

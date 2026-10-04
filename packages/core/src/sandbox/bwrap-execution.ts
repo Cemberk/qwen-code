@@ -17,13 +17,9 @@ import {
   sandboxAsset,
   type ExecutionSandboxPolicy,
   type SandboxExecutionHandle,
-  type SandboxExecutionResult,
 } from './sandbox-execution.js';
 
 export { sandboxAsset } from './sandbox-execution.js';
-export type BwrapPolicy = ExecutionSandboxPolicy;
-export type BwrapExecutionHandle = SandboxExecutionHandle;
-export type BwrapExecutionResult = SandboxExecutionResult;
 
 export async function executeBwrap(
   policy: ExecutionSandboxPolicy,

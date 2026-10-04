@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { SessionUpdate } from '@agentclientprotocol/sdk';
-import { LOAD_REPLAY_META_KEY } from '../session-replay/replay-meta.js';
 import {
   observeToolResultBoundary,
   type ToolResultBoundaryArtifact,
@@ -19,97 +17,7 @@ interface ProjectedToolResult {
   sessionId: string;
 }
 
-const acpUpdateArtifacts = new WeakMap<object, ToolResultBoundaryArtifact>();
-const projectedAcpUpdates = new WeakMap<object, ProjectedToolResult>();
 const projectedHeadlessMessages = new WeakMap<object, ProjectedToolResult>();
-
-export function associateAcpToolResultArtifact(
-  update: SessionUpdate,
-  artifact: ToolResultBoundaryArtifact,
-): void {
-  if (isObject(update)) acpUpdateArtifacts.set(update, artifact);
-}
-
-export function observeAcpToolResultProjection(
-  input: SessionUpdate,
-  output: SessionUpdate,
-  sessionId: string,
-  wireUpdate: SessionUpdate = output,
-): void {
-  try {
-    if (isObject(wireUpdate) && projectedAcpUpdates.has(wireUpdate)) return;
-    const mutated = input !== output;
-    const artifact = acpUpdateArtifacts.get(input) ?? {
-      state: 'undecided',
-      kinds: [],
-    };
-    const common = { sessionId, toolCallId: toolCallId(input) };
-    const inputEligible = observeToolResultBoundary({
-      stage: 'acp_projection_input',
-      ...common,
-      mutated,
-      artifacts: [artifact],
-      values: () => acpToolResultValues(input),
-    });
-    const outputEligible = observeToolResultBoundary({
-      stage: 'acp_projection_output',
-      ...common,
-      mutated,
-      artifacts: [artifact],
-      values: () => acpToolResultValues(output),
-    });
-    if ((inputEligible || outputEligible) && isObject(wireUpdate)) {
-      projectedAcpUpdates.set(wireUpdate, { mutated, artifact, sessionId });
-    }
-  } catch {
-    // Diagnostics must not affect projection or delivery.
-  }
-}
-
-export function observeAcpToolResultWire(
-  message: unknown,
-  payloadUtf8Bytes: number,
-): void {
-  try {
-    const record = asRecord(message);
-    if (!record) return;
-    const updates = acpWireUpdates(record).flatMap((update) => {
-      const projection = projectedAcpUpdates.get(update);
-      return projection ? [{ update, projection }] : [];
-    });
-    if (updates.length === 0) return;
-    const params = asRecord(record['params']);
-    const projectionSessionIds = new Set(
-      updates.map(({ projection }) => projection.sessionId),
-    );
-    const toolCallIds = updates.flatMap(({ update }) => {
-      const id = toolCallId(update);
-      return id === undefined ? [] : [id];
-    });
-    observeToolResultBoundary({
-      stage: 'acp_wire',
-      sessionId:
-        typeof params?.['sessionId'] === 'string'
-          ? params['sessionId']
-          : projectionSessionIds.size === 1
-            ? projectionSessionIds.values().next().value
-            : undefined,
-      toolCallId:
-        updates.length === 1 ? toolCallId(updates[0].update) : undefined,
-      ...(updates.length > 1 ? { toolCallIds } : {}),
-      wireUtf8Bytes: payloadUtf8Bytes + 1,
-      mutated: updates.some(({ projection }) => projection.mutated),
-      artifacts: updates.map(({ projection }) => projection.artifact),
-      values: () =>
-        updates.flatMap(({ update }) =>
-          acpToolResultValues(update as unknown as SessionUpdate),
-        ),
-    });
-    for (const { update } of updates) projectedAcpUpdates.delete(update);
-  } catch {
-    // Diagnostics must not affect the writer hook.
-  }
-}
 
 export function observeHeadlessToolResultProjection(
   message: CLIMessage,
@@ -227,51 +135,6 @@ export function observeHeadlessJsonToolResultWire(
   }
 }
 
-function acpToolResultValues(update: SessionUpdate): ToolResultBoundaryValue[] {
-  const record = update as unknown as Record<string, unknown>;
-  if (record['sessionUpdate'] !== 'tool_call_update') return [];
-  const values: ToolResultBoundaryValue[] = [];
-  const content = record['content'];
-  if (Array.isArray(content)) {
-    for (const block of content) {
-      const text = asRecord(asRecord(block)?.['content'])?.['text'];
-      if (typeof text === 'string') {
-        values.push({ representation: 'acp_content', value: text });
-      }
-    }
-  }
-  if (typeof record['rawOutput'] === 'string') {
-    values.push({
-      representation: 'acp_raw_output',
-      value: record['rawOutput'],
-    });
-  }
-  return values;
-}
-
-function toolCallId(value: unknown): string | undefined {
-  const id = asRecord(value)?.['toolCallId'];
-  return typeof id === 'string' ? id : undefined;
-}
-
-function acpWireUpdates(message: Record<string, unknown>): object[] {
-  if (message['method'] === 'session/update') {
-    const update = asRecord(asRecord(message['params'])?.['update']);
-    return update ? [update] : [];
-  }
-  const result = asRecord(message['result']);
-  const replay = asRecord(asRecord(result?.['_meta'])?.[LOAD_REPLAY_META_KEY]);
-  const candidates = replay?.['updates'] ?? result?.['updates'];
-  if (Array.isArray(candidates)) return candidates.filter(isObject);
-  const events = result?.['events'];
-  return Array.isArray(events)
-    ? events.flatMap((event) => {
-        const update = asRecord(event)?.['data'];
-        return isObject(update) ? [update] : [];
-      })
-    : [];
-}
-
 function headlessToolResults(message: CLIMessage): ToolResultBlock[] {
   if (message.type !== 'user' || !Array.isArray(message.message.content)) {
     return [];
@@ -287,12 +150,4 @@ function toolResultValues(
   return typeof toolResult.content === 'string'
     ? [{ representation: 'headless_content', value: toolResult.content }]
     : [];
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return isObject(value) ? (value as Record<string, unknown>) : undefined;
-}
-
-function isObject(value: unknown): value is object {
-  return typeof value === 'object' && value !== null;
 }

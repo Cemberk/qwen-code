@@ -18,9 +18,7 @@ import {
   registerSession,
   resetRegisteredRecordPathForTest,
   unregisterSession,
-  SESSION_KINDS,
   SESSION_REGISTRY_SCHEMA_VERSION,
-  readOwnSessionRecord,
 } from './session-registry.js';
 import {
   readLocalBootId,
@@ -229,7 +227,7 @@ describe('describeSessionKind', () => {
   });
 
   it('passes every other kind through, known or not', () => {
-    for (const kind of SESSION_KINDS) {
+    for (const kind of ['tui', 'headless', 'serve', 'external']) {
       expect(describeSessionKind(kind)).toBe(kind);
     }
     // A build that knows more kinds than this one is describing itself
@@ -277,52 +275,9 @@ describe('registerSession', () => {
     expect(raw['pidNs']).toBe(readPidNamespaceId());
   });
 
-  it('records what kind of session registered, defaulting to tui', async () => {
-    await registerSession({ sessionId: 's1', cwd: '/w/app', kind: 'serve' });
-    expect((await listLiveSessions())[0]?.kind).toBe('serve');
-
-    await unregisterSession();
-    resetRegisteredRecordPathForTest();
-    // The default is not cosmetic: every caller that omits the field is an
-    // interactive terminal, and a listing that showed them as unknown
-    // would read as a bug in the common case.
+  it('records the interactive terminal as the kind of session', async () => {
     await registerSession({ sessionId: 's1', cwd: '/w/app' });
     expect((await listLiveSessions())[0]?.kind).toBe('tui');
-  });
-
-  it('records an explicit name in place of the derived one', async () => {
-    await registerSession({
-      sessionId: 's1',
-      cwd: '/w/app',
-      kind: 'external',
-      name: 'live',
-    });
-    expect((await listLiveSessions())[0]?.name).toBe('live');
-  });
-
-  it('flattens and bounds an explicit name, and falls back when it empties', async () => {
-    await registerSession({
-      sessionId: 's1',
-      cwd: '/w/app',
-      // A name reaches a fixed-width table and a peer listing, so it gets
-      // what a peer-supplied label gets rather than being trusted whole.
-      name: `voice bridge\n${'x'.repeat(80)}`,
-    });
-    const flattened = (await listLiveSessions())[0]?.name ?? '';
-    expect(flattened).not.toContain('\n');
-    expect(Array.from(flattened)).toHaveLength(40);
-    expect(flattened.endsWith('…')).toBe(true);
-
-    await unregisterSession();
-    resetRegisteredRecordPathForTest();
-    // Nothing left to address the session by: the derived name is a
-    // working handle, and an empty one would be unaddressable.
-    await registerSession({
-      sessionId: 's1',
-      cwd: '/w/app',
-      name: '\u0000\u0007',
-    });
-    expect((await listLiveSessions())[0]?.name).toMatch(/^app-[0-9a-f]{2}$/);
   });
 
   it('records an explicit null qwenVersion when it is omitted', async () => {
@@ -671,189 +626,7 @@ describe('registerSession', () => {
   });
 });
 
-describe('registerSession — one process, several records', () => {
-  it('writes a record of its own per session, keyed by a minted slot', async () => {
-    const first = await registerSession({
-      sessionId: 'a',
-      cwd: '/w/one',
-      kind: 'serve',
-      slot: 'own',
-    });
-    const second = await registerSession({
-      sessionId: 'b',
-      cwd: '/w/two',
-      kind: 'serve',
-      slot: 'own',
-    });
-
-    expect(first.registered && second.registered).toBe(true);
-    expect(first.slot).not.toBe(second.slot);
-    expect(first.slot).toMatch(/^[0-9a-f]{8}$/);
-    // Named by the writer's PID like every other record, so the sweep and
-    // the namespace guards judge them exactly as they judge a shared one.
-    const files = (await fs.readdir(getSessionRegistryDir())).sort();
-    expect(files).toEqual(
-      [
-        `${process.pid}-${first.slot}.json`,
-        `${process.pid}-${second.slot}.json`,
-      ].sort(),
-    );
-
-    const live = await listLiveSessions();
-    expect(live.map((record) => record.sessionId).sort()).toEqual(['a', 'b']);
-    expect(live.every((record) => record.pid === process.pid)).toBe(true);
-  });
-
-  it('patches and removes one slot without touching its siblings', async () => {
-    const first = await registerSession({
-      sessionId: 'a',
-      cwd: '/w/one',
-      slot: 'own',
-    });
-    const second = await registerSession({
-      sessionId: 'b',
-      cwd: '/w/two',
-      slot: 'own',
-    });
-
-    expect(await patchSessionRecord({ cwd: '/w/patched' }, first.slot)).toBe(
-      true,
-    );
-    const afterPatch = await listLiveSessions();
-    expect(afterPatch.find((record) => record.sessionId === 'a')?.cwd).toBe(
-      '/w/patched',
-    );
-    // The sibling is a separate file: a patch that resolved the path by
-    // PID alone would have rewritten whichever record it found first.
-    expect(afterPatch.find((record) => record.sessionId === 'b')?.cwd).toBe(
-      '/w/two',
-    );
-
-    await unregisterSession(second.slot);
-    const afterRemove = await listLiveSessions();
-    expect(afterRemove.map((record) => record.sessionId)).toEqual(['a']);
-  });
-
-  it('reads back the record of the slot it is asked for', async () => {
-    const first = await registerSession({
-      sessionId: 'a',
-      cwd: '/w/one',
-      slot: 'own',
-    });
-    const second = await registerSession({
-      sessionId: 'b',
-      cwd: '/w/two',
-      slot: 'own',
-    });
-
-    expect((await readOwnSessionRecord(first.slot))?.sessionId).toBe('a');
-    expect((await readOwnSessionRecord(second.slot))?.sessionId).toBe('b');
-    // A slot this process never registered names no record, and must not
-    // fall back to the PID-keyed path — that record belongs to whatever
-    // else is running under this PID, not to the caller.
-    expect(await readOwnSessionRecord('deadbeef')).toBeNull();
-    expect(await patchSessionRecord({ sessionId: 'x' }, 'deadbeef')).toBe(
-      false,
-    );
-    await expect(unregisterSession('deadbeef')).resolves.toBeUndefined();
-    expect((await listLiveSessions()).length).toBe(2);
-  });
-
-  it('never resolves an unknown slot onto a live shared record', async () => {
-    // The interesting arm of the rule above: with a shared record present
-    // at this PID's path, a stale or unknown minted slot must still name
-    // nothing. Falling back would let one session read, rewrite and
-    // finally unlink a record belonging to whatever else runs under this
-    // PID — the case the three assertions above cannot see, because they
-    // run with no shared record on disk at all.
-    await registerSession({ sessionId: 'plain', cwd: '/w/plain' });
-    const before = await listLiveSessions();
-    expect(before.map((record) => record.sessionId)).toEqual(['plain']);
-
-    expect(await readOwnSessionRecord('deadbeef')).toBeNull();
-    expect(await patchSessionRecord({ sessionId: 'stolen' }, 'deadbeef')).toBe(
-      false,
-    );
-    await unregisterSession('deadbeef');
-
-    const after = await listLiveSessions();
-    expect(after.map((record) => record.sessionId)).toEqual(['plain']);
-  });
-
-  it('keeps a minted record at its own filename when the session id is swapped', async () => {
-    // The invariant the whole design rests on: a `/clear` or a session
-    // load swaps the id underneath, and the record follows by patch. A
-    // filename derived from the id — or renamed on a patch — would
-    // strand every reader holding the old name.
-    const own = await registerSession({
-      sessionId: 'before',
-      cwd: '/w/hosted',
-      slot: 'own',
-    });
-    const fileName = `${process.pid}-${own.slot}.json`;
-    expect(await fs.readdir(getSessionRegistryDir())).toEqual([fileName]);
-
-    expect(await patchSessionRecord({ sessionId: 'after' }, own.slot)).toBe(
-      true,
-    );
-
-    expect(await fs.readdir(getSessionRegistryDir())).toEqual([fileName]);
-    expect((await readOwnSessionRecord(own.slot))?.sessionId).toBe('after');
-    expect((await listLiveSessions())[0]?.sessionId).toBe('after');
-  });
-
-  it('keeps the path of a record whose removal could not read it', async () => {
-    // A minted path cannot be derived a second time, so forgetting it on
-    // a transient read failure would leave a record this process can
-    // never name again — advertising a session that is gone until the
-    // PID dies. Every other exit has established the path is not ours.
-    const own = await registerSession({
-      sessionId: 'hosted',
-      cwd: '/w/hosted',
-      slot: 'own',
-    });
-    const failing = vi
-      .spyOn(fs, 'stat')
-      .mockRejectedValueOnce(
-        Object.assign(new Error('EIO'), { code: 'EIO' }) as never,
-      );
-    await unregisterSession(own.slot);
-    failing.mockRestore();
-    // Still there, and still addressable: the capture survived.
-    expect((await listLiveSessions()).map((r) => r.sessionId)).toEqual([
-      'hosted',
-    ]);
-
-    await unregisterSession(own.slot);
-    expect(await listLiveSessions()).toEqual([]);
-  });
-
-  it('leaves the shared record alone, and is left alone by it', async () => {
-    const own = await registerSession({
-      sessionId: 'hosted',
-      cwd: '/w/hosted',
-      slot: 'own',
-    });
-    const plain = await registerSession({
-      sessionId: 'plain',
-      cwd: '/w/plain',
-    });
-    // Asserted, not assumed: any of registration's refusal branches
-    // hitting this call would leave the half of this test its name comes
-    // from checking nothing at all.
-    expect(plain.registered).toBe(true);
-    expect((await fs.readdir(getSessionRegistryDir())).sort()).toEqual(
-      [`${process.pid}.json`, `${process.pid}-${own.slot}.json`].sort(),
-    );
-
-    await unregisterSession();
-    const live = await listLiveSessions();
-    expect(live.map((record) => record.sessionId)).toEqual(['hosted']);
-    expect(live[0]?.name).toBe(deriveSessionName('/w/hosted', 'hosted'));
-    await unregisterSession(own.slot);
-    expect(await listLiveSessions()).toEqual([]);
-  });
-
+describe('listLiveSessions — per-session records from other builds', () => {
   it('sweeps a minted record whose process is gone, and its temp files', async () => {
     // Same reaping the shared name gets: the filename says which PID to
     // check, and a suffix does not change that answer.
@@ -1731,68 +1504,5 @@ describe('listLiveSessions', () => {
 
     const live = await listLiveSessions();
     expect(live.map((r) => r.sessionId)).toEqual(['s-parent', 's-self']);
-  });
-});
-
-describe('readOwnSessionRecord', () => {
-  it('is null before this process registers', async () => {
-    expect(await readOwnSessionRecord()).toBeNull();
-  });
-
-  it("returns this process's record, including a patched cwd", async () => {
-    await registerSession({ sessionId: 's1', cwd: '/w/app' });
-    await patchSessionRecord({ cwd: '/w/moved' });
-    expect(await readOwnSessionRecord()).toMatchObject({
-      pid: process.pid,
-      sessionId: 's1',
-      cwd: '/w/moved',
-    });
-  });
-
-  it("is null for a foreign record sitting at this pid's path", async () => {
-    // Same guard patchSessionRecord applies: a record whose pid does not
-    // match this process is not ours to read back, whatever its filename.
-    await registerSession({ sessionId: 's0', cwd: '/w/app' });
-    await writeRaw(
-      `${process.pid}.json`,
-      liveBody({ pid: process.pid + 1, sessionId: 'theirs' }),
-    );
-    expect(await readOwnSessionRecord()).toBeNull();
-  });
-
-  it.runIf(process.platform === 'linux')(
-    'is null for a stale record left by a dead previous incarnation of this PID',
-    async () => {
-      const bootId = readLocalBootId();
-      expect(bootId).not.toBeNull();
-      await registerSession({ sessionId: 's0', cwd: '/w/app' });
-      await writeRaw(
-        `${process.pid}.json`,
-        liveBody({ procStart: `${bootId}:1`, sessionId: 'incarnation-a' }),
-      );
-      expect(await readOwnSessionRecord()).toBeNull();
-    },
-  );
-
-  it.runIf(process.platform === 'linux')(
-    "is null when this process's own start token is unreadable",
-    async () => {
-      await registerSession({ sessionId: 's0', cwd: '/w/app' });
-      vi.spyOn(processLiveness, 'readProcStartToken').mockReturnValue(null);
-      expect(await readOwnSessionRecord()).toBeNull();
-    },
-  );
-
-  it('still reads a record written without a start token', async () => {
-    await registerSession({ sessionId: 's0', cwd: '/w/app' });
-    await writeRaw(`${process.pid}.json`, liveBody({ sessionId: 'tokenless' }));
-    expect(await readOwnSessionRecord()).toMatchObject({
-      sessionId: 'tokenless',
-    });
-  });
-
-  it('never throws when the home directory is unavailable', async () => {
-    __setMockGlobalDir(null);
-    await expect(readOwnSessionRecord()).resolves.toBeNull();
   });
 });

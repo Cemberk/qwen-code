@@ -82,7 +82,6 @@ details.
 native span attributes carry standard OpenTelemetry GenAI JSON:
 
 - Main-agent and LLM input messages (`gen_ai.input.messages`)
-- System instructions (`gen_ai.system_instructions`)
 - Tool definitions (`gen_ai.tool.definitions`)
 - Main-agent and LLM output messages (`gen_ai.output.messages`)
 - Final executed tool arguments (`gen_ai.tool.call.arguments`)
@@ -266,7 +265,7 @@ and logs still carry `session.id`.
 When telemetry is enabled, Qwen Code registers `UndiciInstrumentation`
 which creates a client-side HTTP span for every outbound `fetch()`
 request originated by the process — including the `openai` SDK used for
-model requests and the MCP StreamableHTTP client. The span
+model requests. The span
 lets you see network latency (TTFB / response body transfer) separately
 from upstream model processing time, which the existing
 `api.generateContent` span alone can't distinguish.
@@ -565,7 +564,7 @@ A resumed Goal can contribute multiple stop observations, each containing its li
 
 ### Spans
 
-Distributed tracing spans form a tree rooted at `qwen-code.interaction`. In the CLI, each interaction is a trace root with its own `traceId`; ACP paths may inherit an inbound parent context. Cross-prompt correlation uses the `session.id` attribute.
+Distributed tracing spans form a tree rooted at `qwen-code.interaction`. In the CLI, each interaction is a trace root with its own `traceId`. Cross-prompt correlation uses the `session.id` attribute.
 
 Session lifecycle is also exported through the OpenTelemetry General Session
 semantic conventions. When the OTel logs pipeline is enabled, Qwen Code emits
@@ -601,7 +600,7 @@ spans continue to use `gen_ai.conversation.id` for the same owning session ID.
   - **Attributes**: `session.id`, `gen_ai.tool.name` (optional), `tool.call_id` (optional), `duration_ms`, `success`, `error`, `execution_status` ("success"/"error"/"cancelled"), `error_type`, `error.type`
 
 - `qwen-code.tool.blocked_on_user`: Time a tool spends waiting on user approval.
-  - **Attributes**: `session.id`, `tool.name`, `tool.call_id`, `duration_ms`, `decision` ("proceed_once"/"proceed_always"/"cancel"/"aborted"/"auto_approved"/"error"), `source` ("cli"/"ide"/"hook"/"auto"/"system")
+  - **Attributes**: `session.id`, `tool.name`, `tool.call_id`, `duration_ms`, `decision` ("proceed_once"/"proceed_always"/"cancel"/"aborted"/"auto_approved"/"error"), `source` ("cli"/"hook"/"auto"/"system")
 
 - `qwen-code.hook`: Wraps each pre/post-tool-use hook fire site.
   - **Attributes**: `session.id`, `hook_event` ("PreToolUse"/"PostToolUse"/"PostToolUseFailure"/"PostToolBatch"), `tool.name`, `tool.use_id` (optional), `is_interrupt` (boolean, optional), `duration_ms`, `success`, `should_proceed` (optional), `should_stop` (optional), `block_type` (optional), `error` (optional)
@@ -611,23 +610,9 @@ spans continue to use `gen_ai.conversation.id` for the same owning session ID.
 
 Successful and cancelled GenAI spans leave `SpanStatus` as `UNSET`. Failures set `ERROR`, a bounded status description, and low-cardinality `error.type`.
 
-#### GenAI field migration and ARMS recognition
+#### GenAI field migration
 
 LLM spans now use standard `gen_ai.request.*`, `gen_ai.response.*`, and `gen_ai.usage.*` fields without exact-equivalent private aliases. Request sampling attributes are written only under their standard names; no bare `temperature`, `top_p`, `max_tokens`, penalty, choice-count, or stop-sequence aliases are emitted. Tool spans similarly use `gen_ai.tool.name` without `tool.name`; blocked-on-user and hook spans keep `tool.name` because they are not GenAI Tool spans. The invalid aliases `gen_ai.usage.cached_tokens`, `gen_ai.server.time_to_first_token`, and `gen_ai.usage.reasoning_tokens` are no longer emitted. Use `gen_ai.usage.cache_read.input_tokens` for provider-reported cache reads and `gen_ai.response.time_to_first_chunk` for standard streaming latency. The private `ttft_ms` Span attribute remains available for first-user-visible-output latency and continues driving `/stats`, `sampling_ms`, and output-token throughput; `gen_ai.response.time_to_first_chunk` is an independent standard attribute measuring first normalized chunk latency. The full version-pinned contract and deferred fields are documented in [GenAI and ARMS field alignment](../../design/gen-ai-arms-field-alignment.md).
-
-To make ARMS recognize exported spans as a GenAI application, configure its resource feature explicitly:
-
-```json
-{
-  "telemetry": {
-    "resourceAttributes": {
-      "acs.arms.service.feature": "genai_app"
-    }
-  }
-}
-```
-
-Qwen Code does not inject this ARMS-specific resource attribute or `gen_ai.span.kind`. ARMS can infer LLM, Tool, and Agent roles from `gen_ai.operation.name`.
 
 #### Resource Metrics
 

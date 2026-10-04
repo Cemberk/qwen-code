@@ -9,7 +9,6 @@ import type {
   HookOutput,
   PendingAsyncHook,
   AsyncHookOutputMessage,
-  PendingAsyncOutput,
 } from './types.js';
 
 const debugLogger = createDebugLogger('ASYNC_HOOK_REGISTRY');
@@ -73,16 +72,6 @@ export class AsyncHookRegistry {
     this.timeoutCheckTimer = setInterval(() => {
       this.checkTimeouts();
     }, interval);
-  }
-
-  /**
-   * Stop automatic timeout checking
-   */
-  stopTimeoutChecker(): void {
-    if (this.timeoutCheckTimer) {
-      clearInterval(this.timeoutCheckTimer);
-      this.timeoutCheckTimer = undefined;
-    }
   }
 
   /**
@@ -237,54 +226,6 @@ export class AsyncHookRegistry {
     this.pendingHooks.delete(hookId);
 
     debugLogger.debug(`Async hook timed out: ${hookId} (${hook.hookName})`);
-  }
-
-  /**
-   * Get all pending hooks
-   */
-  getPendingHooks(): PendingAsyncHook[] {
-    return Array.from(this.pendingHooks.values());
-  }
-
-  /**
-   * Get pending hooks for a specific session
-   */
-  getPendingHooksForSession(sessionId: string): PendingAsyncHook[] {
-    return Array.from(this.pendingHooks.values()).filter(
-      (hook) => hook.sessionId === sessionId,
-    );
-  }
-
-  /**
-   * Get and clear pending output for delivery to the next turn
-   */
-  getPendingOutput(): PendingAsyncOutput {
-    const output: PendingAsyncOutput = {
-      messages: [...this.completedOutputs],
-      contexts: [...this.completedContexts],
-    };
-
-    // Clear after retrieval
-    this.completedOutputs.length = 0;
-    this.completedContexts.length = 0;
-
-    return output;
-  }
-
-  /**
-   * Check if there are any pending outputs
-   */
-  hasPendingOutput(): boolean {
-    return (
-      this.completedOutputs.length > 0 || this.completedContexts.length > 0
-    );
-  }
-
-  /**
-   * Check if there are any running hooks
-   */
-  hasRunningHooks(): boolean {
-    return this.pendingHooks.size > 0;
   }
 
   /**

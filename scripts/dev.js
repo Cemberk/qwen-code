@@ -208,7 +208,7 @@ child.on('close', (code, signal) => {
     // Ignore cleanup errors
   }
   // A signal-killed child reports `code === null`, and `code ?? 0` read that as
-  // success. This launcher is a QWEN_CODE_CLI entry now: a review gate command
+  // success. This launcher is a QWEN_CODE_CLI entry now: a subprocess command
   // OOM-killed mid-run must not come back green. Re-raise the signal the way
   // cli-entry.js does, so the caller sees the same death; fall back to a
   // non-zero exit if the signal cannot be re-raised.

@@ -12,7 +12,6 @@ export {
 export {
   initializeTelemetry,
   shutdownTelemetry,
-  forceFlushMetrics,
   refreshSessionContext,
   isTelemetrySdkInitialized,
 } from './sdk.js';
@@ -23,12 +22,10 @@ export {
   logUserPrompt,
   logUserRetry,
   logToolCall,
-  logRepeatedToolFailureGuard,
   logApiRequest,
   logApiError,
   logApiCancel,
   logApiResponse,
-  logFlashFallback,
   logGoalState,
   logSlashCommand,
   logConversationFinishedEvent,
@@ -67,7 +64,6 @@ export {
   ApiErrorEvent,
   ApiResponseEvent,
   ApiCancelEvent,
-  FlashFallbackEvent,
   StartSessionEvent,
   ToolCallEvent,
   ConversationFinishedEvent,
@@ -88,7 +84,6 @@ export {
   MemorySearchEvent,
   MemoryMigrationEvent,
   MemoryRecallModeTransitionEvent,
-  RepeatedToolFailureGuardEvent,
 } from './types.js';
 export {
   makeSlashCommandEvent,
@@ -107,59 +102,38 @@ export type {
   ArenaSessionEndedStatus,
   ArenaAgentCompletedStatus,
 } from './types.js';
-export type { TelemetryEvent } from './types.js';
 export { SpanStatusCode, ValueType } from '@opentelemetry/api';
 export { SemanticAttributes } from '@opentelemetry/semantic-conventions';
 export * from './uiTelemetry.js';
-export * from './api-activity-tracker.js';
 export {
-  // Core metrics functions
   recordToolCallMetrics,
   recordToolExecutionMetrics,
-  recordRepeatedToolFailureGuardMetrics,
   recordTokenUsageMetrics,
   recordApiResponseMetrics,
   recordApiErrorMetrics,
   recordFileOperationMetric,
-  recordInvalidChunk,
   recordContentRetry,
   recordContentRetryFailure,
   recordApiRetry,
-  // Performance monitoring functions
-  recordStartupPerformance,
   recordMemoryUsage,
   recordCpuUsage,
-  recordToolQueueDepth,
-  recordToolExecutionBreakdown,
-  recordTokenEfficiency,
   recordApiRequestBreakdown,
-  recordPerformanceScore,
-  recordPerformanceRegression,
-  recordBaselineComparison,
   isPerformanceMonitoringActive,
-  // Arena metrics functions
   recordArenaSessionStartedMetrics,
   recordArenaAgentCompletedMetrics,
   recordArenaSessionEndedMetrics,
   recordGoalStateMetrics,
-  // Auto-Memory metrics functions
   recordMemoryExtractMetrics,
   recordMemoryDreamMetrics,
   recordMemoryRecallMetrics,
-  recordChannelMemoryRecallMetrics,
   recordMemoryRecallDeliveryMetrics,
-  // Performance monitoring types
-  PerformanceMetricType,
   MemoryMetricType,
-  ToolExecutionPhase,
   ApiRequestPhase,
   FileOperation,
 } from './metrics.js';
 export {
   startInteractionSpan,
   endInteractionSpan,
-  withInteractionSpan,
-  startLLMRequestSpan,
   endLLMRequestSpan,
   startToolSpan,
   endToolSpan,
@@ -181,7 +155,6 @@ export type {
   StartInteractionOptions,
   StartLLMRequestSpanOptions,
   EndInteractionOptions,
-  InteractionSpanResultStatus,
   LLMRequestMetadata,
   ToolSpanMetadata,
   ToolBlockedDecision,
@@ -195,38 +168,16 @@ export type {
   SubagentSpanMetadata,
 } from './session-tracing.js';
 export type { TelemetryRuntimeConfig } from './runtime-config.js';
-export {
-  DAEMON_TRACEPARENT_META_KEY,
-  DAEMON_TRACESTATE_META_KEY,
-  addDaemonRequestAttribute,
-  extractDaemonTraceContext,
-  withDaemonSpan,
-  type DaemonBridgeTelemetryMetrics,
-} from './daemon-tracing.js';
-export {
-  startEventLoopLagMonitor,
-  type EventLoopLagMonitor,
-  type EventLoopLagMonitorOptions,
-  type EventLoopLagSnapshot,
-} from './event-loop-lag.js';
-export {
-  registerDaemonEventLoopLagGauge,
-  registerAcpEventLoopLagGauge,
-} from './event-loop-lag-metrics.js';
+
 export {
   addAgentInputMessageAttributes,
   addAgentOutputMessageAttributes,
   AgentOutputMessageCapture,
   addUserPromptAttributes,
-  addSystemPromptAttributes,
-  addToolSchemaAttributes,
-  addModelOutputAttributes,
-  addToolInputAttributes,
-  addToolResultAttributes,
   addToolArgumentsAttributes,
   addToolCallResultAttributes,
   areSensitiveSpanAttributesEnabled,
   truncateContent,
 } from './detailed-span-attributes.js';
-export { getTraceContext, formatTraceparent } from './trace-context.js';
+export { getTraceContext } from './trace-context.js';
 export type { TraceContext } from './trace-context.js';

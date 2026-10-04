@@ -288,7 +288,6 @@ describe('StreamingToolCallParser', () => {
       parser.addChunk(0, '', 'call_1');
       expect(parser.hasNamelessToolCall()).toBe(true);
 
-      parser.resetIndex(0);
       parser.addChunk(0, '{"path":"a.ts"}');
       expect(parser.hasNamelessToolCall()).toBe(true);
     });
@@ -853,29 +852,6 @@ describe('StreamingToolCallParser', () => {
   });
 
   describe('Index management and reset functionality', () => {
-    it('should reset individual index correctly', () => {
-      // Set up some state at index 0
-      parser.addChunk(0, '{"partial":', 'call_1', 'function1');
-      expect(parser.getBuffer(0)).toBe('{"partial":');
-      expect(parser.getState(0).depth).toBe(1);
-      expect(parser.getToolCallMeta(0)).toEqual({
-        id: 'call_1',
-        name: 'function1',
-      });
-
-      // Reset the index
-      parser.resetIndex(0);
-
-      // Verify everything is cleared
-      expect(parser.getBuffer(0)).toBe('');
-      expect(parser.getState(0)).toEqual({
-        depth: 0,
-        inString: false,
-        escape: false,
-      });
-      expect(parser.getToolCallMeta(0)).toEqual({});
-    });
-
     it('should find next available index when all lower indices are occupied', () => {
       // Fill up indices 0, 1, 2 with complete tool calls
       parser.addChunk(0, '{"param0": "value0"}', 'call_0', 'function0');

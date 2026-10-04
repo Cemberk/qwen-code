@@ -19,17 +19,17 @@ const debugLogger = createDebugLogger('USAGE_HISTORY');
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 /**
  * Trailing window used by {@link loadUsageHistoryWithLive} when merging
- * non-persisted (daemon / Web Shell / in-progress) sessions into the history.
+ * non-persisted (headless / in-progress) sessions into the history.
  *
  * Sized to cover the largest summary/daily range the usage-dashboard exposes
  * (month = 30 days) plus margin, so the hero totals, breakdown tiles, and the
  * per-day line/bar charts are exact. Crucially it is NOT sized for the full
  * heatmap span (~12 months): persisted `usage_record.jsonl` records of any age
  * are always unioned in, so the heatmap keeps its full history, but a *never-
- * persisted* daemon session older than this window is not replayed — that cell
+ * persisted* session older than this window is not replayed — that cell
  * undercounts slightly. That cosmetic gap is a deliberate trade for load
  * latency: replaying a full year of transcripts costs ~13s here vs. ~1.7s for
- * this window (heavy Web Shell users accumulate thousands of unpersisted
+ * this window (heavy headless users accumulate thousands of unpersisted
  * transcripts). Widen only alongside a cheaper scan.
  */
 const LIVE_REBUILD_WINDOW_DAYS = 35;
@@ -336,17 +336,6 @@ export function commitUsageBeforeTranscriptDeletion(
   }
 }
 
-/**
- * Salvages a session's usage before transcript deletion (#7384). Never throws,
- * and skips sessions that already have a persisted authoritative summary.
- */
-export async function persistUsageBeforeTranscriptDeletion(
-  transcriptPath: string,
-): Promise<boolean> {
-  const prepared = await prepareUsageBeforeTranscriptDeletion(transcriptPath);
-  return prepared ? commitUsageBeforeTranscriptDeletion(prepared) : false;
-}
-
 interface RebuildFromSessionJsonlOptions {
   /**
    * Session to exclude from the one-time persistence migration (the caller's
@@ -430,8 +419,8 @@ async function rebuildFromSessionJsonl(
         }
         // Only regular files are readable transcripts: a FIFO (or any other
         // special file) passing the name filter would block open() forever
-        // and wedge the whole rebuild — the daemon's usage dashboard serves
-        // from this path.
+        // and wedge the whole rebuild — the usage dashboard serves from
+        // this path.
         if (!stats.isFile()) {
           debugLogger.debug(
             `rebuildFromSessionJsonl: skipping non-regular entry ${filePath}`,
@@ -469,7 +458,7 @@ async function rebuildFromSessionJsonl(
   }
 
   // Persist rebuilt records as a one-time migration so later reads are fast.
-  // Read-only callers (e.g. the daemon dashboard, which serves a GET) pass
+  // Read-only callers (e.g. the usage dashboard) pass
   // `persist: false` so opening the dashboard never writes to `~/.qwen`.
   if (persist && results.length > 0) {
     const usagePath = getUsageHistoryPath();
@@ -522,16 +511,15 @@ export async function loadUsageHistory(
 
 /**
  * Load the durable usage history **and** merge in sessions that were never
- * written to `usage_record.jsonl` — notably daemon / Web Shell sessions (only
- * the TUI `/clear` path persists usage) and any still-in-progress session.
+ * written to `usage_record.jsonl` — notably headless sessions (only the TUI
+ * `/clear` path persists usage) and any still-in-progress session.
  *
  * Unlike {@link loadUsageHistory}, which returns the persisted file verbatim
  * whenever it is non-empty (and so silently omits everything not yet
  * persisted), this replays recent transcripts for sessions the persisted file
  * does not already cover and unions the two. Persisted records win on any
  * sessionId conflict — they are the authoritative final snapshot. This is what
- * the daemon usage-dashboard reads so its totals reflect live Web Shell
- * activity. Read-only: never writes `usage_record.jsonl`.
+ * the usage dashboard reads so its totals reflect live activity. Read-only: never writes `usage_record.jsonl`.
  *
  * The transcript scan is bounded to a trailing window (mtime-based) so an
  * established history does not pay a full cross-project replay on every load.
@@ -559,7 +547,7 @@ export async function loadUsageHistoryWithLive(options?: {
   // The trailing window bounds an *incremental* live merge on top of persisted
   // history: old days come from the persisted file, so only recent transcripts
   // need replaying. When there is no persisted base (fresh machine, or a user
-  // who only ever ran Web Shell so `/clear` never persisted), nothing else
+  // who only ever ran headless so `/clear` never persisted), nothing else
   // covers older history — replay it all (unbounded) rather than silently
   // truncating the dashboard, matching the pre-existing empty-file behavior.
   const sinceMs =

@@ -113,8 +113,8 @@ export async function generatePromptSuggestion(
     const cacheSafe = options?.enableCacheSharing
       ? getCacheSafeParams(sessionId)
       : null;
-    // The cache-safe slot is a process-global: in a multi-session daemon it
-    // can hold ANOTHER session's transcript + systemInstruction. Only use it
+    // The cache-safe slot is a process-global: with several sessions in one
+    // process it can hold ANOTHER session's transcript + systemInstruction. Only use it
     // when it belongs to THIS session; otherwise fall back to the
     // session-safe base-LLM path (#9233).
     const modelOverride = options?.model;
@@ -377,12 +377,4 @@ export function getFilterReason(suggestion: string): string | null {
   }
 
   return null;
-}
-
-/**
- * Returns true if the suggestion should be filtered out.
- * Convenience wrapper around getFilterReason for tests and simple checks.
- */
-export function shouldFilterSuggestion(suggestion: string): boolean {
-  return getFilterReason(suggestion) !== null;
 }

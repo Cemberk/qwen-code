@@ -5,9 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DurableCronTask } from './cronTasksFile.js';
 import {
   addCronTask,
-  annotateCronRunSession,
   appendCronRun,
-  cronTaskSessionDeletionId,
   generateCronTaskId,
   getCronFilePath,
   MAX_CRON_TASK_ROUTING_ID_LENGTH,
@@ -422,53 +420,6 @@ describe('cronTasksFile', () => {
     });
   });
 
-  describe('annotateCronRunSession', () => {
-    const task = makeTask({
-      runs: [
-        { at: 1, kind: 'scheduled', sessionId: 'controller' },
-        { at: 2, kind: 'scheduled' },
-      ],
-    });
-
-    it('stamps the fresh session onto the run fired at that minute', () => {
-      const next = annotateCronRunSession(task, 2, { sessionId: 'child-1' });
-      expect(next.runs).toEqual([
-        { at: 1, kind: 'scheduled', sessionId: 'controller' },
-        { at: 2, kind: 'scheduled', sessionId: 'child-1' },
-      ]);
-      // Pure — the stored task and its runs are untouched.
-      expect(task.runs![1]).toEqual({ at: 2, kind: 'scheduled' });
-    });
-
-    it('records a failed dispatch with the session that ran it instead', () => {
-      const failed = annotateCronRunSession(task, 1, {
-        sessionId: 'controller',
-        dispatchFailed: true,
-      });
-      expect(failed.runs![0]).toEqual({
-        at: 1,
-        kind: 'scheduled',
-        sessionId: 'controller',
-        sessionDispatchFailed: true,
-      });
-      // A later success clears the marker and replaces the session.
-      const recovered = annotateCronRunSession(failed, 1, {
-        sessionId: 'child-2',
-      });
-      expect(recovered.runs![0]).toEqual({
-        at: 1,
-        kind: 'scheduled',
-        sessionId: 'child-2',
-      });
-    });
-
-    it('returns the task unchanged when no run matches', () => {
-      expect(annotateCronRunSession(task, 3, { sessionId: 'x' })).toBe(task);
-      const bare = makeTask();
-      expect(annotateCronRunSession(bare, 1, { sessionId: 'x' })).toBe(bare);
-    });
-  });
-
   describe('writeCronTasks', () => {
     it('creates the tasks dir if missing', async () => {
       await writeCronTasks(tmpDir, [makeTask()]);
@@ -588,146 +539,7 @@ describe('cronTasksFile', () => {
     });
   });
 
-  it('canonicalizes UUID deletion keys while keeping legacy and Arena IDs distinct', () => {
-    const uuid = 'ABCDEF12-3456-4789-ABCD-123456789ABC';
-    expect(cronTaskSessionDeletionId(uuid)).toBe(
-      `session:${uuid.toLowerCase()}`,
-    );
-    expect(cronTaskSessionDeletionId('legacy-A')).not.toBe(
-      cronTaskSessionDeletionId('legacy-a'),
-    );
-    expect(cronTaskSessionDeletionId(`${uuid}-agent-A`)).toBe(
-      `session:${uuid}-agent-A`,
-    );
-  });
-
   describe('updateCronTasks', () => {
-    it('bounds deletion generations without reusing an evicted generation', async () => {
-      const statePath = `${getCronFilePath(tmpDir)}.deletions`;
-      await writeCronTasks(tmpDir, []);
-      await fs.mkdir(path.dirname(statePath), { recursive: true });
-      await fs.writeFile(
-        statePath,
-        JSON.stringify({
-          version: 2,
-          watermark: 1,
-          entries: Array.from({ length: 10_000 }, (_, index) => [
-            `old-${index}`,
-            1,
-          ]),
-        }),
-      );
-
-      expect(await removeCronTasks(tmpDir, ['newest'])).toBe(0);
-      let state = JSON.parse(await fs.readFile(statePath, 'utf8')) as {
-        watermark: number;
-        entries: Array<[string, number]>;
-      };
-      expect(state.entries).toHaveLength(10_000);
-      expect(state.entries.at(-1)).toEqual(['newest', 2]);
-      expect(state.entries.some(([id]) => id === 'old-0')).toBe(false);
-
-      expect(await removeCronTasks(tmpDir, ['old-0'])).toBe(0);
-      state = JSON.parse(await fs.readFile(statePath, 'utf8')) as typeof state;
-      expect(state.entries).toHaveLength(10_000);
-      expect(state.entries.at(-1)).toEqual(['old-0', 3]);
-      expect(state.watermark).toBe(3);
-    });
-
-    it('rebuilds a corrupt deletion sidecar instead of failing the update', async () => {
-      // The tick's fire/removal persist rides on this path, so a torn sidecar
-      // (the atomic write's in-place fallback can leave one after a crash)
-      // must not veto the tasks write — the removal would be lost and the
-      // one-shot would wedge as a zombie. The state is treated as unknown and
-      // rebuilt from empty; a pre-corruption generation an in-flight restore
-      // observed can no longer match, so the restore declines safely.
-      const statePath = `${getCronFilePath(tmpDir)}.deletions`;
-      await writeCronTasks(tmpDir, [makeTask({ id: 'task-1' })]);
-      await fs.mkdir(path.dirname(statePath), { recursive: true });
-      await fs.writeFile(
-        statePath,
-        JSON.stringify({ version: 1, entries: [] }),
-      );
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      try {
-        expect(await removeCronTasks(tmpDir, ['task-1'])).toBe(1);
-        expect(warn).toHaveBeenCalledWith(
-          expect.stringContaining('.deletions'),
-        );
-      } finally {
-        warn.mockRestore();
-      }
-
-      expect(await readCronTasks(tmpDir)).toEqual([]);
-      const state = JSON.parse(await fs.readFile(statePath, 'utf8')) as {
-        version: number;
-        watermark: number;
-        entries: Array<[string, number]>;
-      };
-      expect(state).toEqual({
-        version: 2,
-        watermark: 1,
-        entries: [['task-1', 1]],
-      });
-    });
-
-    it('skips the deletion observation when the sidecar is unreadable', async () => {
-      // "Unknown" must not be fabricated into "never deleted" (generation 0):
-      // with no observation recorded, a consumer declines to restore.
-      const statePath = `${getCronFilePath(tmpDir)}.deletions`;
-      await writeCronTasks(tmpDir, [makeTask({ id: 'task-1' })]);
-      await fs.mkdir(path.dirname(statePath), { recursive: true });
-      await fs.writeFile(statePath, '{torn');
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      try {
-        const onDeletionGenerations = vi.fn();
-        await updateCronTasks(tmpDir, (tasks) => tasks, {
-          observeDeletionIds: ['task-1'],
-          onDeletionGenerations,
-        });
-
-        expect(onDeletionGenerations).not.toHaveBeenCalled();
-        // The tasks file itself is untouched and still readable.
-        expect(await readCronTasks(tmpDir)).toHaveLength(1);
-      } finally {
-        warn.mockRestore();
-      }
-    });
-
-    it('shares deletion generations across module instances', async () => {
-      const taskId = 'cross-process-delete';
-      await writeCronTasks(tmpDir, [makeTask({ id: taskId })]);
-      let beforeDelete: number | undefined;
-      await updateCronTasks(tmpDir, (tasks) => tasks, {
-        observeDeletionIds: [taskId],
-        onDeletionGenerations: (generations) => {
-          beforeDelete = generations.get(taskId);
-        },
-      });
-
-      vi.resetModules();
-      const { Storage: otherStorage } = await import('../config/storage.js');
-      otherStorage.setRuntimeBaseDir(tmpDir);
-      try {
-        const otherProcess = await import('./cronTasksFile.js');
-        expect(await otherProcess.removeCronTasks(tmpDir, [taskId])).toBe(1);
-      } finally {
-        otherStorage.setRuntimeBaseDir(null);
-      }
-
-      let afterDelete: number | undefined;
-      await updateCronTasks(tmpDir, (tasks) => tasks, {
-        observeDeletionIds: [taskId],
-        onDeletionGenerations: (generations) => {
-          afterDelete = generations.get(taskId);
-        },
-      });
-      expect(beforeDelete).toBe(0);
-      expect(afterDelete).toBe(1);
-    });
-
     it('applies the mutation in a single read-modify-write', async () => {
       await writeCronTasks(tmpDir, [
         makeTask({ id: 'a' }),

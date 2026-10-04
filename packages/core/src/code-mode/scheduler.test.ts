@@ -638,7 +638,9 @@ describe('CodeModeOnly scheduler dispatch', () => {
           output: { decision: 'allow' },
         })),
     };
-    config.setMessageBus(messageBus as unknown as MessageBus);
+    vi.spyOn(config, 'getMessageBus').mockReturnValue(
+      messageBus as unknown as MessageBus,
+    );
     const registry = new ToolRegistry(config);
     vi.spyOn(config, 'getToolRegistry').mockReturnValue(registry);
     registry.registerTool(new ExecTool(config));

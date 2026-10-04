@@ -205,7 +205,6 @@ describe('LlmChat', async () => {
       takePendingManualPlanExitNotice: vi.fn().mockReturnValue(undefined),
       restorePendingManualPlanExitNotice: vi.fn(),
       getFileReadCache: vi.fn().mockReturnValue({ clear: vi.fn() }),
-      getRestoreAskUserQuestion: vi.fn().mockReturnValue(false),
     } as unknown as Config;
 
     // Disable 429 simulation for tests
@@ -1346,8 +1345,7 @@ describe('LlmChat', async () => {
       );
     });
 
-    it('still synthesizes when restore is on and the user sends ordinary text', async () => {
-      vi.mocked(mockConfig.getRestoreAskUserQuestion).mockReturnValue(true);
+    it('synthesizes a dangling ask_user_question when the user sends ordinary text', async () => {
       chat.setHistory([
         { role: 'user', parts: [{ text: 'pick one' }] },
         {
@@ -8051,7 +8049,7 @@ describe('LlmChat', async () => {
       );
       expect(chat.getCompletedToolCallIds()).toEqual([]);
       chat.setHistory([structuredClone(result)], ['ended']);
-      chat.clearHistory();
+      chat.setHistory([]);
       chat.addHistory(structuredClone(result));
       expect(chat.getCompletedToolCallIds()).toEqual([]);
       expect(chat.getHistoryForRecovery()).toEqual([result]);
@@ -17065,23 +17063,6 @@ describe('LlmChat', async () => {
       };
     }
 
-    it('clearHistory() clears the partial-push markers', () => {
-      chat.setHistory([
-        { role: 'user', parts: [{ text: 'kick off' }] },
-        {
-          role: 'model',
-          parts: [{ functionCall: { id: 'x', name: 't', args: {} } }],
-        },
-      ]);
-      plantMarkers(chat);
-      expect(markers(chat).idx).toBe(0);
-
-      chat.clearHistory();
-
-      expect(markers(chat).idx).toBeNull();
-      expect(markers(chat).record).toBeNull();
-    });
-
     it('addHistory() clears the partial-push markers (violation path)', () => {
       // addHistory is documented to be called between sends, NOT
       // mid-send. Calling it with markers active is a violation —
@@ -17277,31 +17258,6 @@ describe('LlmChat', async () => {
       expect((fr?.response as { error?: string })?.error).toMatch(
         /interrupted/i,
       );
-    });
-
-    it('preserves selected call ids instead of synthesizing a response', () => {
-      chat.setHistory([
-        { role: 'user', parts: [{ text: 'ask' }] },
-        {
-          role: 'model',
-          parts: [
-            {
-              functionCall: {
-                id: 'call_auq',
-                name: 'ask_user_question',
-                args: {},
-              },
-            },
-          ],
-        },
-      ]);
-
-      const result = chat.repairOrphanedToolUseTurns(undefined, {
-        preserveCallIds: new Set(['call_auq']),
-      });
-
-      expect(result.injected).toEqual([]);
-      expect(chat.getHistory()).toHaveLength(2);
     });
 
     it('hoists synthetic functionResponse to the front of an existing user turn (Race A)', () => {

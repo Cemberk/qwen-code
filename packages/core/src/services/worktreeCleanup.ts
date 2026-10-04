@@ -59,7 +59,7 @@ function isEphemeralSlug(slug: string): boolean {
  * - Skips entries newer than {@link STALE_WORKTREE_CUTOFF_MS} (default 30 days).
  * - Skips entries with any uncommitted work — tracked, untracked, or
  *   git-ignored content — via the shared {@link worktreeHasWork}
- *   predicate the daemon reaper also uses (#12758); only disposable
+ *   predicate (#12758); only disposable
  *   build output, symlinks (their targets live outside the checkout)
  *   and the session marker stay exempt.
  * - Skips entries with commits not reachable from the upstream remote.

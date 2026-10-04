@@ -115,8 +115,6 @@ export default {
     'Falha ao carregar habilidades: {{error}}',
   'Failed to save skills configuration: {{error}}':
     'Falha ao salvar a configuração de habilidades: {{error}}',
-  'All available skills are disabled. Edit ~/.qwen/settings.json or .qwen/settings.json (skills.disabled) to re-enable.':
-    'Todas as habilidades disponíveis estão desativadas. Edite ~/.qwen/settings.json ou .qwen/settings.json (skills.disabled) para reativá-las.',
   'Press esc to close.': 'Pressione Esc para fechar.',
   '{{count}} skills · ': '{{count}} habilidades · ',
   '{{matched}} / {{total}} skills · ': '{{matched}} / {{total}} habilidades · ',
@@ -572,8 +570,6 @@ export default {
     'Você está instalando uma extensão de {{originSource}}. Alguns recursos podem não funcionar perfeitamente com o Qwen Code.',
   'Extension "{{name}}" installed successfully and enabled.':
     'Extensão "{{name}}" instalada com sucesso e ativada.',
-  'The github URL, local path, or marketplace source (marketplace-url:plugin-name) of the extension to install.':
-    'A URL do github, caminho local ou fonte do marketplace (marketplace-url:plugin-name) da extensão para instalar.',
   'Acknowledge the security risks of installing an extension and skip the confirmation prompt.':
     'Reconhecer os riscos de segurança de instalar uma extensão e pular o prompt de confirmação.',
   'The source argument must be provided.':
@@ -1909,8 +1905,6 @@ export default {
     'Arena requer pelo menos 2 modelos. Use --models model1,model2 para especificar.',
   'Arena started with {{count}} agents on task: "{{task}}"\nModels:\n{{modelList}}':
     'Arena iniciada com {{count}} agentes na tarefa: "{{task}}"\nModelos:\n{{modelList}}',
-  'Arena panes are running in tmux. Attach with: `{{command}}`':
-    'Os painéis Arena estão em execução no tmux. Anexar com: `{{command}}`',
   '[{{label}}] failed: {{error}}': '[{{label}}] falhou: {{error}}',
   'Loading suggestions...': 'Carregando sugestões...',
   'Show context window usage breakdown. Use "/context detail" for per-item breakdown.':
@@ -2015,10 +2009,6 @@ export default {
   out: 'saída',
   'In/Out': 'Ent/Saída',
   // Update command
-  'Standalone install detected. Please rerun the standalone installer to update:':
-    'Instalação standalone detectada. Execute novamente o instalador standalone para atualizar:',
-  'Unable to auto-update this standalone installation. Please reinstall from:':
-    'Não foi possível atualizar automaticamente esta instalação independente. Reinstale de:',
 
   // ============================================================================
   // reload-plugins command

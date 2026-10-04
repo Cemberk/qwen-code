@@ -10,7 +10,6 @@ import type {
   PartListUnion,
   GenerateContentResponse,
   FunctionCall,
-  FunctionDeclaration,
   GenerateContentResponseUsageMetadata,
 } from '@google/genai';
 import { FinishReason } from './genai-compat.js';
@@ -18,7 +17,6 @@ import type {
   ToolCallConfirmationDetails,
   ToolArtifact,
   ToolResultBoundaryArtifact,
-  ToolResult,
   ToolResultDisplay,
 } from '../tools/tools.js';
 import { ToolErrorType } from '../tools/tool-error.js';
@@ -46,17 +44,6 @@ import { getProviderToolCallId } from './toolCallIdUtils.js';
 
 const ERROR_REPORT_HISTORY_TAIL_COUNT = 8;
 const ERROR_REPORT_TEXT_PREVIEW_CHARS = 200;
-
-// Define a structure for tools passed to the server
-export interface ServerTool {
-  name: string;
-  schema: FunctionDeclaration;
-  // The execute method signature might differ slightly or be wrapped
-  execute(
-    params: Record<string, unknown>,
-    signal?: AbortSignal,
-  ): Promise<ToolResult>;
-}
 
 export enum LlmEventType {
   Content = 'content',
@@ -131,12 +118,6 @@ export interface LlmFinishedEventValue {
  * `{ kind: 'model' }` (the least-privileged origin).
  */
 export type ToolExecutionOrigin = { kind: 'model' } | { kind: 'client' };
-
-/** @deprecated Use `LlmErrorEventValue`; retained until a future major release. */
-export type GeminiErrorEventValue = LlmErrorEventValue;
-
-/** @deprecated Use `LlmFinishedEventValue`; retained until a future major release. */
-export type GeminiFinishedEventValue = LlmFinishedEventValue;
 
 export interface ToolCallRequestInfo {
   callId: string;
@@ -562,50 +543,6 @@ export type ServerLlmStreamEvent =
   | ServerLlmSessionTokenLimitExceededEvent
   | ServerLlmRetryEvent;
 
-/** @deprecated Use `ServerLlmRetryEvent`; retained until a future major release. */
-export type ServerGeminiRetryEvent = ServerLlmRetryEvent;
-/** @deprecated Use `ServerLlmModelFallbackEvent`; retained until a future major release. */
-export type ServerGeminiModelFallbackEvent = ServerLlmModelFallbackEvent;
-/** @deprecated Use `ServerLlmContentPart`; retained until a future major release. */
-export type ServerGeminiContentPart = ServerLlmContentPart;
-/** @deprecated Use `ServerLlmContentEvent`; retained until a future major release. */
-export type ServerGeminiContentEvent = ServerLlmContentEvent;
-/** @deprecated Use `ServerLlmThoughtEvent`; retained until a future major release. */
-export type ServerGeminiThoughtEvent = ServerLlmThoughtEvent;
-/** @deprecated Use `ServerLlmToolCallRequestEvent`; retained until a future major release. */
-export type ServerGeminiToolCallRequestEvent = ServerLlmToolCallRequestEvent;
-/** @deprecated Use `ServerLlmToolCallResponseEvent`; retained until a future major release. */
-export type ServerGeminiToolCallResponseEvent = ServerLlmToolCallResponseEvent;
-/** @deprecated Use `ServerLlmToolCallConfirmationEvent`; retained until a future major release. */
-export type ServerGeminiToolCallConfirmationEvent =
-  ServerLlmToolCallConfirmationEvent;
-/** @deprecated Use `ServerLlmUserCancelledEvent`; retained until a future major release. */
-export type ServerGeminiUserCancelledEvent = ServerLlmUserCancelledEvent;
-/** @deprecated Use `ServerLlmErrorEvent`; retained until a future major release. */
-export type ServerGeminiErrorEvent = ServerLlmErrorEvent;
-/** @deprecated Use `ServerLlmChatCompressedEvent`; retained until a future major release. */
-export type ServerGeminiChatCompressedEvent = ServerLlmChatCompressedEvent;
-/** @deprecated Use `ServerLlmMaxSessionTurnsEvent`; retained until a future major release. */
-export type ServerGeminiMaxSessionTurnsEvent = ServerLlmMaxSessionTurnsEvent;
-/** @deprecated Use `ServerLlmSessionTokenLimitExceededEvent`; retained until a future major release. */
-export type ServerGeminiSessionTokenLimitExceededEvent =
-  ServerLlmSessionTokenLimitExceededEvent;
-/** @deprecated Use `ServerLlmFinishedEvent`; retained until a future major release. */
-export type ServerGeminiFinishedEvent = ServerLlmFinishedEvent;
-/** @deprecated Use `ServerLlmLoopDetectedEvent`; retained until a future major release. */
-export type ServerGeminiLoopDetectedEvent = ServerLlmLoopDetectedEvent;
-/** @deprecated Use `ServerLlmCitationEvent`; retained until a future major release. */
-export type ServerGeminiCitationEvent = ServerLlmCitationEvent;
-/** @deprecated Use `ServerLlmHookSystemMessageEvent`; retained until a future major release. */
-export type ServerGeminiHookSystemMessageEvent =
-  ServerLlmHookSystemMessageEvent;
-/** @deprecated Use `ServerLlmUserPromptSubmitBlockedEvent`; retained until a future major release. */
-export type ServerGeminiUserPromptSubmitBlockedEvent =
-  ServerLlmUserPromptSubmitBlockedEvent;
-/** @deprecated Use `ServerLlmStopHookLoopEvent`; retained until a future major release. */
-export type ServerGeminiStopHookLoopEvent = ServerLlmStopHookLoopEvent;
-/** @deprecated Use `ServerLlmGoalStateEvent`; retained until a future major release. */
-export type ServerGeminiGoalStateEvent = ServerLlmGoalStateEvent;
 /** @deprecated Use `ServerLlmStreamEvent`; retained until a future major release. */
 export type ServerGeminiStreamEvent = ServerLlmStreamEvent;
 

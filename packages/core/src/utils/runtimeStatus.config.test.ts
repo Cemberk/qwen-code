@@ -188,8 +188,6 @@ describe('Config.startNewSession session-registry patch', () => {
       qwenVersion: '0.0.0-test',
     });
     expect(registration.registered).toBe(true);
-    // The real outcome rather than a stand-in: it carries the slot the
-    // record was written under, which is what the patch below has to name.
     config.trackSessionRegistration(Promise.resolve(registration));
 
     const [before] = await listLiveSessions();
@@ -227,8 +225,6 @@ describe('Config.startNewSession session-registry patch', () => {
       qwenVersion: '0.0.0-test',
     });
     expect(registration.registered).toBe(true);
-    // The real outcome rather than a stand-in: it carries the slot the
-    // record was written under, which is what the patch below has to name.
     config.trackSessionRegistration(Promise.resolve(registration));
 
     config.startNewSession(sessionB);

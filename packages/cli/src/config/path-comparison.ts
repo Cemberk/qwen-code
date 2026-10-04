@@ -26,13 +26,3 @@ export function getPathComparisonVariants(rawPath: string): Set<string> {
   }
   return variants;
 }
-
-export function arePathsEquivalent(left: string, right: string): boolean {
-  const rightVariants = getPathComparisonVariants(right);
-  for (const leftVariant of getPathComparisonVariants(left)) {
-    if (rightVariants.has(leftVariant)) {
-      return true;
-    }
-  }
-  return false;
-}

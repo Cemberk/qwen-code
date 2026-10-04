@@ -241,23 +241,6 @@ class ThemeManager {
   }
 
   /**
-   * Gets a list of custom theme names.
-   * @returns Array of custom theme names.
-   */
-  getCustomThemeNames(): string[] {
-    return Array.from(this.customThemes.keys());
-  }
-
-  /**
-   * Checks if a theme name is a custom theme.
-   * @param themeName The theme name to check.
-   * @returns True if the theme is custom.
-   */
-  isCustomTheme(themeName: string): boolean {
-    return this.customThemes.has(themeName);
-  }
-
-  /**
    * Returns a list of available theme names.
    */
   getAvailableThemes(): ThemeDisplay[] {

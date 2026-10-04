@@ -235,9 +235,6 @@ describe('runtime shell policy admission', () => {
   );
 
   it.each<Partial<ConfigParameters>>([
-    { provisionalWorkspace: true },
-    { sdkMode: true },
-    { experimentalZedIntegration: true },
     { overrideExtensions: ['extension'] },
     { mcpServers: { x: { command: 'node' } } },
     { topTierMcpServers: { x: { command: 'node' } } },
@@ -247,11 +244,6 @@ describe('runtime shell policy admission', () => {
     { lsp: { enabled: true } },
     { sandbox: { command: 'docker' } },
     { agentExecutionBackend: 'container' },
-    {
-      executionEnvironment: {} as NonNullable<
-        ConfigParameters['executionEnvironment']
-      >,
-    },
     { executionEnvironmentFactory: vi.fn() },
   ])('rejects unsupported startup inputs %j', (overrides) => {
     expect(() => admit({ ...params, ...overrides }, root)).toThrow(

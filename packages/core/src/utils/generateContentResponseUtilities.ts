@@ -9,7 +9,6 @@ import type {
   Part,
   FunctionCall,
 } from '@google/genai';
-import { getResponseText } from './partUtils.js';
 
 export function getResponseTextFromParts(parts: Part[]): string | undefined {
   if (!parts) {
@@ -191,40 +190,4 @@ export function getFunctionCallsFromPartsAsJson(
     return undefined;
   }
   return JSON.stringify(functionCalls, null, 2);
-}
-
-export function getStructuredResponse(
-  response: GenerateContentResponse,
-): string | undefined {
-  const textContent = getResponseText(response);
-  const functionCallsJson = getFunctionCallsAsJson(response);
-
-  if (textContent && functionCallsJson) {
-    return `${textContent}\n${functionCallsJson}`;
-  }
-  if (textContent) {
-    return textContent;
-  }
-  if (functionCallsJson) {
-    return functionCallsJson;
-  }
-  return undefined;
-}
-
-export function getStructuredResponseFromParts(
-  parts: Part[],
-): string | undefined {
-  const textContent = getResponseTextFromParts(parts);
-  const functionCallsJson = getFunctionCallsFromPartsAsJson(parts);
-
-  if (textContent && functionCallsJson) {
-    return `${textContent}\n${functionCallsJson}`;
-  }
-  if (textContent) {
-    return textContent;
-  }
-  if (functionCallsJson) {
-    return functionCallsJson;
-  }
-  return undefined;
 }

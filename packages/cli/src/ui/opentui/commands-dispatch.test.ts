@@ -1060,24 +1060,6 @@ describe('result mapping (all SlashCommandActionReturn kinds)', () => {
     expect(alwaysHost.sessionShellAllowlist.has('ls')).toBe(true);
   });
 
-  it('stream_messages is rejected in interactive mode', async () => {
-    const commands = [
-      stub({
-        name: 'compress',
-        action: () => ({
-          type: 'stream_messages',
-          messages: (async function* () {})(),
-        }),
-      }),
-    ];
-    const { outcome, host } = await dispatch('/compress', commands);
-    expect(outcome).toEqual({ kind: 'handled' });
-    expect(host.items.at(-1)).toMatchObject({
-      type: 'error',
-      text: 'stream_messages result type is not supported in interactive mode',
-    });
-  });
-
   it('thrown actions produce the error text as an item', async () => {
     const commands = [
       stub({

@@ -265,13 +265,7 @@ describe.skipIf(process.platform === 'win32')(
             expect(await readdir(join(temporary, 'git-mask'))).toEqual([]);
           }
           unavailable = false;
-          await expect(
-            owner.shutdown({
-              shutdownTelemetry: false,
-              skipSessionWriter: true,
-              strictResourceCleanup: true,
-            }),
-          ).resolves.toBeUndefined();
+          await expect(owner.shutdown()).resolves.toBeUndefined();
           expect(removals).toBe(failShutdown ? 3 : 2);
           await expect(lstat(entry)).rejects.toMatchObject({ code: 'ENOENT' });
           await expect(lstat(temporary)).rejects.toMatchObject({

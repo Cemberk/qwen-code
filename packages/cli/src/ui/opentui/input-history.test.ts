@@ -55,7 +55,7 @@ describe('opentui InputHistory (useInputHistory parity)', () => {
     expect(history.navigateUp('')).toBe('b');
     expect(history.navigateUp('b')).toBe('a');
     history.reset();
-    expect(history.isNavigating).toBe(false);
+    expect(history['index']).toBe(-1);
     expect(history.navigateUp('')).toBe('b');
   });
 

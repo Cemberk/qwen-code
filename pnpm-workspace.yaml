@@ -50,12 +50,9 @@ overrides:
   # workspace package does not declare itself resolves to it — the copy npm
   # hoists. Without it pnpm fills such a peer with the highest locked zod
   # (4.4.3). It also covers the override below, which predates it.
-  # packages/acp-bridge declares no zod, so pnpm is free to satisfy the SDK's
-  # `^3.25.0 || ^4.0.0` peer with the highest locked zod, where npm served it
-  # 3.25.76. The split is not cosmetic: the SDK imports `zod` and `zod/v4` from
-  # different modules, so under zod 4 its own `instanceof z.ZodError` test
-  # stops matching and a malformed request answers -32602 instead of -32603.
-  # Pin it so every ACP consumer keeps the behaviour the tests verify.
+  # The ACP SDK is now used for types only (session replay for /export); its
+  # `^3.25.0 || ^4.0.0` zod peer stays pinned to the version it always
+  # resolved to.
   '@agentclientprotocol/sdk>zod': '3.25.76'
 
 allowBuilds:

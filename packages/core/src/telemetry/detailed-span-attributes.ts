@@ -9,7 +9,7 @@ import type { Config } from '../config/config.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
 import { isTelemetrySdkInitialized } from './sdk.js';
 import { DEFAULT_SENSITIVE_SPAN_ATTRIBUTE_MAX_LENGTH } from './constants.js';
-import { extractLlmContent, stringifyGenAiJson } from './gen-ai-content.js';
+import { stringifyGenAiJson } from './gen-ai-content.js';
 
 const SHORT_TRUNCATION_SUFFIX = '...[TRUNCATED]';
 const debugLogger = createDebugLogger('GEN_AI_CONTENT');
@@ -267,107 +267,6 @@ export function addUserPromptAttributes(
   });
 }
 
-/**
- * @deprecated Provider-final requests are captured by the GenAI exchange.
- */
-export function addSystemPromptAttributes(
-  config: Config,
-  span: Span,
-  systemInstruction: unknown,
-): void {
-  if (!areSensitiveSpanAttributesEnabled(config)) return;
-  const parts = extractLlmContent({
-    config: { systemInstruction },
-  }).systemInstructions;
-  if (parts !== undefined) {
-    writeJsonAttribute(config, span, 'gen_ai.system_instructions', parts);
-  }
-}
-
-/**
- * @deprecated Provider-final requests are captured by the GenAI exchange.
- */
-export function addToolSchemaAttributes(
-  config: Config,
-  span: Span,
-  tools: unknown[] | undefined,
-): void {
-  if (!areSensitiveSpanAttributesEnabled(config) || tools === undefined) return;
-  const providerTools = tools.every(
-    (tool) =>
-      typeof tool === 'object' &&
-      tool !== null &&
-      Object.hasOwn(tool, 'functionDeclarations'),
-  )
-    ? tools
-    : [{ functionDeclarations: tools }];
-  const definitions = extractLlmContent({
-    config: { tools: providerTools },
-  }).toolDefinitions;
-  if (definitions !== undefined) {
-    writeJsonAttribute(config, span, 'gen_ai.tool.definitions', definitions);
-  }
-}
-
-/**
- * @deprecated Provider responses are captured by the GenAI exchange.
- * This compatibility helper writes nothing without an explicit finish reason.
- */
-export function addModelOutputAttributes(
-  config: Config,
-  span: Span,
-  responseText: string | undefined,
-  originalLengthOrFinishReason?: number | string,
-  finishReason?: string,
-): void {
-  if (!areSensitiveSpanAttributesEnabled(config) || responseText === undefined)
-    return;
-  const reason =
-    typeof originalLengthOrFinishReason === 'string'
-      ? originalLengthOrFinishReason
-      : finishReason;
-  if (!reason) return;
-  addAgentOutputMessageAttributes(config, span, responseText, reason);
-}
-
-/**
- * @deprecated Use addToolArgumentsAttributes with the final invocation params.
- * Only JSON object strings produce a standard arguments attribute.
- */
-export function addToolInputAttributes(
-  config: Config,
-  span: Span,
-  _toolName: string,
-  toolInput: string,
-): void {
-  let value: unknown;
-  try {
-    value = JSON.parse(toolInput);
-  } catch {
-    return;
-  }
-  addToolArgumentsAttributes(config, span, value);
-}
-
-/**
- * @deprecated Use addToolCallResultAttributes with the final FunctionResponse.
- * Only JSON object strings produce a standard result attribute.
- */
-export function addToolResultAttributes(
-  config: Config,
-  span: Span,
-  _toolName: string,
-  toolResult: string,
-): void {
-  let value: unknown;
-  try {
-    value = JSON.parse(toolResult);
-  } catch {
-    return;
-  }
-  addToolCallResultAttributes(config, span, value);
-}
-
 export function addToolArgumentsAttributes(
   config: Config,
   span: Span,
@@ -390,13 +289,6 @@ export function addToolCallResultAttributes(
 ): void {
   if (!areSensitiveSpanAttributesEnabled(config)) return;
   writeJsonAttribute(config, span, 'gen_ai.tool.call.result', result, true);
-}
-
-/**
- * @deprecated Sensitive GenAI attributes no longer use process-global state.
- */
-export function clearDetailedSpanState(): void {
-  // Compatibility no-op.
 }
 
 function writeJsonAttribute(

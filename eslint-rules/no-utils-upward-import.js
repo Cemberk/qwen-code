@@ -9,9 +9,8 @@ import path from 'node:path';
 /**
  * `packages/cli/src/utils/` is the leaf layer that every other directory
  * imports. It must not import back up into a domain directory (`config/`,
- * `ui/`, `i18n/`, `nonInteractive/`, `commands/`, `serve/`,
- * `acp-integration/`, ...): that is the dependency-direction invariant
- * tracked in #9146.
+ * `ui/`, `i18n/`, `nonInteractive/`, `commands/`, ...): that is the
+ * dependency-direction invariant tracked in #9146.
  *
  * The only permitted "upward" references are the type-only constructs that
  * are genuinely erased at compile time: statement-level `import type`,

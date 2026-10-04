@@ -20,9 +20,7 @@ function formatApprovalModeError(value: string): Error {
 /**
  * Normalizes an approval-mode spelling exactly the way boot accepts it:
  * trimmed, lowercased, with the legacy `auto_edit`/`autoedit` aliases mapped
- * to AUTO_EDIT. Throws for values boot would reject. Shared with the ACP
- * daemon's reload convergence and the Managed compatibility evaluation, so both
- * agree with boot for every accepted spelling.
+ * to AUTO_EDIT. Throws for values boot would reject.
  */
 export function parseApprovalModeValue(value: string): ApprovalMode {
   const normalized = value.trim().toLowerCase();

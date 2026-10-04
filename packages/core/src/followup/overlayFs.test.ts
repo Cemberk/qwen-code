@@ -60,7 +60,7 @@ describe('OverlayFs', () => {
       // Overlay directory should be created but file may not exist yet
       // (the tool will write to it)
       expect(overlayPath).toContain('new-file.ts');
-      expect(overlay.getWrittenFiles().has('new-file.ts')).toBe(true);
+      expect(new Map(overlay['writtenFiles']).has('new-file.ts')).toBe(true);
     });
 
     it('throws for paths outside cwd', async () => {
@@ -159,7 +159,7 @@ describe('OverlayFs', () => {
       await writeFile(realFile, 'content');
       await overlay.redirectWrite(realFile);
 
-      const overlayDir = overlay.getOverlayDir();
+      const overlayDir = overlay['overlayDir'];
       expect(existsSync(overlayDir)).toBe(true);
 
       await overlay.cleanup();
@@ -171,23 +171,6 @@ describe('OverlayFs', () => {
       await overlay.cleanup();
       // Should not throw on double cleanup
       await expect(overlay.cleanup()).resolves.not.toThrow();
-    });
-  });
-
-  describe('getWrittenFiles', () => {
-    it('returns a copy of written files map', async () => {
-      const realFile = join(testDir, 'file.ts');
-      await writeFile(realFile, 'content');
-      await overlay.redirectWrite(realFile);
-
-      const files = overlay.getWrittenFiles();
-
-      expect(files.size).toBe(1);
-      expect(files.has('file.ts')).toBe(true);
-
-      // Modifying returned map should not affect internal state
-      files.clear();
-      expect(overlay.getWrittenFiles().size).toBe(1);
     });
   });
 });

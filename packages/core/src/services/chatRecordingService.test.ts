@@ -18,31 +18,19 @@ import {
 import { runWithAgentContext } from '../agents/runtime/agent-context.js';
 import {
   ChatRecordingService,
-  isTurnResultRecordPayload,
-  normalizeTurnResultError,
-  TURN_RESULT_ERROR_CODE_MAX_CHARS,
-  TURN_RESULT_IDENTIFIER_MAX_CHARS,
-  TURN_RESULT_ERROR_MESSAGE_MAX_CHARS,
   type ChatRecord,
   type AtCommandRecordPayload,
-  type TurnResultRecordPayload,
 } from './chatRecordingService.js';
 import { MAX_RETAINED_TOOL_RESULT_DISPLAY_CHARS } from '../utils/toolResultDisplayCompaction.js';
 import * as jsonl from '../utils/jsonl-utils.js';
 import { computeInitialTurnFromHistory } from './session-turn-state.js';
 import type { Part } from '@google/genai';
-import type { FileDiff, McpAppResultDisplay } from '../tools/tools.js';
+import type { FileDiff } from '../tools/tools.js';
 import {
   deserializeSnapshots,
   serializeSnapshot,
   type FileHistorySnapshot,
 } from './fileHistoryService.js';
-import {
-  SessionWriterLostError,
-  SessionTranscriptChangedError,
-  SessionWriterUnavailableError,
-  type SessionWriterLease,
-} from './session-writer-lease.js';
 import type {
   GoalStateRecordPayloadV2,
   GoalTurnPermit,
@@ -52,32 +40,6 @@ import {
   type ShellResultDisplay,
 } from '../utils/shell-result.js';
 import type { ToolResultBoundaryObservation } from '../tools/tool-result-boundary-diagnostics.js';
-
-function branchTestRecord(
-  uuid: string,
-  parentUuid: string | null,
-  type: ChatRecord['type'],
-  parts: Part[],
-): ChatRecord {
-  return {
-    uuid,
-    parentUuid,
-    sessionId: 'test-session-id',
-    timestamp: '2026-08-10T00:00:00.000Z',
-    type,
-    provenance:
-      type === 'user'
-        ? 'real_user'
-        : type === 'assistant'
-          ? 'assistant_output'
-          : type === 'tool_result'
-            ? 'tool_result'
-            : 'system',
-    cwd: '/test/project/root',
-    version: '1.0.0',
-    message: { role: type === 'assistant' ? 'model' : 'user', parts },
-  };
-}
 
 vi.mock('node:path');
 vi.mock('node:child_process');
@@ -107,7 +69,6 @@ vi.mock(
 describe('ChatRecordingService', () => {
   let chatRecordingService: ChatRecordingService;
   let mockConfig: Config;
-  let mockLease: SessionWriterLease;
 
   let uuidCounter = 0;
 
@@ -162,36 +123,8 @@ describe('ChatRecordingService', () => {
     // when flushed.
     vi.mocked(jsonl.writeLine).mockResolvedValue(undefined);
 
-    mockLease = {
-      sessionId: 'test-session-id',
-      ownerId: 'test-owner-id',
-      appendJsonLine: vi.fn((record: unknown) =>
-        jsonl.writeLine('/test/session.jsonl', record),
-      ),
-      assertOwnedAndUnchanged: vi.fn().mockResolvedValue(undefined),
-      release: vi.fn().mockResolvedValue(undefined),
-      sealForHandoff: vi.fn().mockResolvedValue(undefined),
-    } as unknown as SessionWriterLease;
-    chatRecordingService = activateRecording(
-      new ChatRecordingService(mockConfig),
-    );
+    chatRecordingService = new ChatRecordingService(mockConfig);
   });
-
-  function activateRecording(
-    service: ChatRecordingService,
-  ): ChatRecordingService {
-    const resumed = mockConfig.getResumedSessionData();
-    service.activate(
-      mockLease,
-      resumed && !resumed.conversation
-        ? {
-            conversation: { messages: [] },
-            lastCompletedUuid: resumed.lastCompletedUuid,
-          }
-        : resumed,
-    );
-    return service;
-  }
 
   afterEach(() => {
     vi.restoreAllMocks();
@@ -238,33 +171,6 @@ describe('ChatRecordingService', () => {
       },
     );
 
-    it('records task completion as session metadata without model content', async () => {
-      const payload = {
-        displayText: 'A separate background task completed',
-        backgroundTask: {
-          taskId: 'other-agent',
-          status: 'completed',
-          kind: 'agent' as const,
-          sourceTurnId: 'earlier-turn',
-        },
-      };
-      backgroundTurnContext.run(
-        { sessionId: 'test-session-id', turn, active: true },
-        () => chatRecordingService.recordBackgroundTaskCompleted(payload),
-      );
-      await chatRecordingService.flush();
-
-      const persisted = vi.mocked(jsonl.writeLine).mock
-        .calls[0][1] as ChatRecord;
-      expect(persisted).toMatchObject({
-        type: 'system',
-        subtype: 'background_task_completed',
-        systemPayload: payload,
-      });
-      expect(persisted.message).toBeUndefined();
-      expect(persisted.backgroundTurn).toBeUndefined();
-    });
-
     it('does not tag a callback inherited from a completed automatic execution', async () => {
       const context = { sessionId: 'test-session-id', turn, active: true };
       let resume!: () => void;
@@ -308,38 +214,17 @@ describe('ChatRecordingService', () => {
       expect(record.daemonPromptId).toBeUndefined();
     });
 
-    it('persists the daemon prompt identity before any turn result', async () => {
-      chatRecordingService.recordUserMessage(
-        [{ text: 'same prompt' }],
-        undefined,
-        undefined,
-        'daemon-prompt-1',
-      );
-      await chatRecordingService.flush();
-
-      expect(jsonl.writeLine).toHaveBeenCalledTimes(1);
-      expect(vi.mocked(jsonl.writeLine).mock.calls[0][1]).toMatchObject({
-        type: 'user',
-        daemonPromptId: 'daemon-prompt-1',
-        message: { role: 'user', parts: [{ text: 'same prompt' }] },
-      });
-    });
-
     it.each(['42', '9007199254740992'])(
-      'keeps daemon IDs ending in ########%s out of CLI turn recovery',
+      'keeps legacy daemon IDs ending in ########%s out of CLI turn recovery',
       async (turn) => {
         const daemonPromptId = `test-session-id########${turn}`;
-        chatRecordingService.recordUserMessage(
-          [{ text: 'same prompt' }],
-          undefined,
-          undefined,
-          daemonPromptId,
-        );
+        chatRecordingService.recordUserMessage([{ text: 'same prompt' }]);
         await chatRecordingService.flush();
 
-        const record = vi.mocked(jsonl.writeLine).mock
-          .calls[0][1] as ChatRecord;
-        expect(record.daemonPromptId).toBe(daemonPromptId);
+        const record = {
+          ...(vi.mocked(jsonl.writeLine).mock.calls[0][1] as ChatRecord),
+          daemonPromptId,
+        };
         expect(record).not.toHaveProperty('promptId');
         expect(computeInitialTurnFromHistory([record], 'test-session-id')).toBe(
           1,
@@ -399,46 +284,14 @@ describe('ChatRecordingService', () => {
       });
     });
 
-    it('blocks later turns after a generic durable write failure', async () => {
+    it('stops later writes after a generic durable write failure', async () => {
       const failure = new Error('disk full');
-      vi.mocked(mockLease.appendJsonLine).mockRejectedValueOnce(failure);
+      vi.mocked(jsonl.writeLine).mockRejectedValueOnce(failure);
 
       chatRecordingService.recordUserMessage([{ text: 'not durable' }]);
       await expect(chatRecordingService.flush()).rejects.toBe(failure);
-      await expect(
-        chatRecordingService.assertCanStartTurn(),
-      ).rejects.toMatchObject({
-        name: 'SessionWriterUnavailableError',
-        cause: failure,
-      } satisfies Partial<SessionWriterUnavailableError>);
       chatRecordingService.recordUserMessage([{ text: 'must be blocked' }]);
-      expect(mockLease.appendJsonLine).toHaveBeenCalledTimes(1);
-    });
-
-    it('orders new appends after an authoritative read barrier', async () => {
-      let releaseRead!: () => void;
-      let markReadStarted!: () => void;
-      const readStarted = new Promise<void>((resolve) => {
-        markReadStarted = resolve;
-      });
-      const readGate = new Promise<void>((resolve) => {
-        releaseRead = resolve;
-      });
-      const snapshot = chatRecordingService.runWithWriteBarrier(async () => {
-        markReadStarted();
-        await readGate;
-        return 'snapshot';
-      });
-      await readStarted;
-
-      chatRecordingService.recordUserMessage([{ text: 'after snapshot' }]);
-      expect(mockLease.appendJsonLine).not.toHaveBeenCalled();
-      releaseRead();
-
-      await expect(snapshot).resolves.toBe('snapshot');
-      await chatRecordingService.flush();
-      expect(mockLease.appendJsonLine).toHaveBeenCalledOnce();
-      expect(mockLease.assertOwnedAndUnchanged).toHaveBeenCalledTimes(2);
+      expect(jsonl.writeLine).toHaveBeenCalledTimes(1);
     });
 
     it('should chain messages correctly with parentUuid', async () => {
@@ -488,91 +341,6 @@ describe('ChatRecordingService', () => {
         parts: modelFacingParts,
       });
       expect(record.systemPayload).toEqual({ displayText: 'save logs' });
-    });
-
-    it('writes original resource links on an attachment-only user record', async () => {
-      const resourceLinks = [
-        {
-          type: 'resource_link' as const,
-          uri: 'transit://resource-a',
-          name: 'notes.md',
-          mimeType: 'text/markdown',
-          size: 0,
-          description: 'Original reference',
-          annotations: { audience: ['user' as const], priority: 0.5 },
-          _meta: { preview: { version: 1 } },
-        },
-      ];
-      chatRecordingService.recordUserMessage(
-        '',
-        undefined,
-        { displayText: '', hookContext: '', resourceLinks },
-        'resource-prompt',
-      );
-      await chatRecordingService.flush();
-
-      const record = vi.mocked(jsonl.writeLine).mock.calls[0][1] as ChatRecord;
-      expect(record.type).toBe('user');
-      expect(record.daemonPromptId).toBe('resource-prompt');
-      expect(record.systemPayload).toEqual({
-        displayText: '',
-        hookContext: '',
-        resourceLinks,
-      });
-    });
-
-    it('records mid-turn attachment references without inline bytes', async () => {
-      const attachmentReferences = [
-        {
-          type: 'image' as const,
-          attachmentId: 'image.png',
-          mimeType: 'image/png',
-          size: 3,
-        },
-      ];
-
-      chatRecordingService.recordMidTurnUserMessage(
-        [{ text: 'inspect image' }],
-        'inspect image',
-        undefined,
-        attachmentReferences,
-      );
-      await chatRecordingService.flush();
-
-      const record = vi.mocked(jsonl.writeLine).mock.calls[0][1] as ChatRecord;
-      expect(record.message).toEqual({
-        role: 'user',
-        parts: [{ text: 'inspect image' }],
-      });
-      expect(record.systemPayload).toEqual({
-        displayText: 'inspect image',
-        attachmentReferences,
-      });
-    });
-
-    it('records attachment references when the mid-turn display text is empty', async () => {
-      const attachmentReferences = [
-        {
-          type: 'image' as const,
-          attachmentId: 'image.png',
-          mimeType: 'image/png',
-          size: 3,
-        },
-      ];
-
-      chatRecordingService.recordMidTurnUserMessage(
-        [{ text: '[User message received during tool execution]: ' }],
-        '',
-        undefined,
-        attachmentReferences,
-      );
-      await chatRecordingService.flush();
-
-      const record = vi.mocked(jsonl.writeLine).mock.calls[0][1] as ChatRecord;
-      expect(record.systemPayload).toEqual({
-        displayText: '',
-        attachmentReferences,
-      });
     });
 
     it('records defensive Goal context on real user messages', async () => {
@@ -660,407 +428,6 @@ describe('ChatRecordingService', () => {
           },
         },
       });
-    });
-  });
-
-  describe('recordBranchCheckpointTransaction', () => {
-    it('durably records a checkpoint for a completed text turn', async () => {
-      const cursor = chatRecordingService.getBranchCheckpointCursor();
-      chatRecordingService.recordUserMessage([{ text: 'hello' }]);
-      chatRecordingService.recordAssistantTurn({
-        model: 'gemini-pro',
-        message: [{ text: 'hi' }],
-      });
-      await chatRecordingService.recordCustomTitle('Title', 'manual');
-
-      const point =
-        await chatRecordingService.recordBranchCheckpointTransaction({
-          cursor,
-          stopReason: 'end_turn',
-        });
-
-      expect(point).toEqual({
-        startExclusiveRecordUuid: null,
-        endInclusiveRecordUuid: '00000000-0000-0000-0000-000000000003',
-        assistantRecordUuid: '00000000-0000-0000-0000-000000000002',
-        checkpointUuid: '00000000-0000-0000-0000-000000000004',
-      });
-      const checkpoint = vi
-        .mocked(mockLease.appendJsonLine)
-        .mock.calls.at(-1)?.[0] as ChatRecord;
-      expect(checkpoint).toMatchObject({
-        uuid: point?.checkpointUuid,
-        parentUuid: point?.endInclusiveRecordUuid,
-        subtype: 'branch_checkpoint',
-        systemPayload: {
-          v: 1,
-          startExclusiveRecordUuid: null,
-          assistantRecordUuid: point?.assistantRecordUuid,
-        },
-      });
-      expect(checkpoint.systemPayload).not.toHaveProperty('promptId');
-      expect(mockConfig.getSessionService).not.toHaveBeenCalled();
-    });
-
-    it('validates successive turns from in-memory cursors without reloading history', async () => {
-      const firstCursor = chatRecordingService.getBranchCheckpointCursor();
-      chatRecordingService.recordUserMessage([{ text: 'first' }]);
-      chatRecordingService.recordAssistantTurn({
-        model: 'gemini-pro',
-        message: [{ text: 'first answer' }],
-      });
-      const first =
-        await chatRecordingService.recordBranchCheckpointTransaction({
-          cursor: firstCursor,
-          stopReason: 'end_turn',
-        });
-
-      const secondCursor = chatRecordingService.getBranchCheckpointCursor();
-      chatRecordingService.recordUserMessage([{ text: 'second' }]);
-      chatRecordingService.recordAssistantTurn({
-        model: 'gemini-pro',
-        message: [{ text: 'second answer' }],
-      });
-      const second =
-        await chatRecordingService.recordBranchCheckpointTransaction({
-          cursor: secondCursor,
-          stopReason: 'end_turn',
-        });
-
-      expect(first).toBeDefined();
-      expect(second).toBeDefined();
-      expect(second?.startExclusiveRecordUuid).toBe(first?.checkpointUuid);
-      expect(mockConfig.getSessionService).not.toHaveBeenCalled();
-    });
-
-    it('orders metadata arriving during validation after the checkpoint', async () => {
-      const cursor = chatRecordingService.getBranchCheckpointCursor();
-      chatRecordingService.recordUserMessage([{ text: 'hello' }]);
-      chatRecordingService.recordAssistantTurn({
-        model: 'gemini-pro',
-        message: [{ text: 'hi' }],
-      });
-
-      const checkpoint = chatRecordingService.recordBranchCheckpointTransaction(
-        {
-          cursor,
-          stopReason: 'end_turn',
-        },
-      );
-      const title = chatRecordingService.recordCustomTitle('Title', 'manual');
-      const point = await checkpoint;
-      await title;
-
-      const records = vi
-        .mocked(mockLease.appendJsonLine)
-        .mock.calls.map((call) => call[0] as ChatRecord);
-      expect(records.map((record) => record.subtype)).toEqual([
-        undefined,
-        undefined,
-        'branch_checkpoint',
-        'custom_title',
-      ]);
-      expect(records.at(-1)?.parentUuid).toBe(point?.checkpointUuid);
-    });
-
-    it('keeps a buffered side artifact out of the active branch tail', async () => {
-      const cursor = chatRecordingService.getBranchCheckpointCursor();
-      chatRecordingService.recordUserMessage([{ text: 'hello' }]);
-      chatRecordingService.recordAssistantTurn({
-        model: 'gemini-pro',
-        message: [{ text: 'hi' }],
-      });
-
-      const checkpoint = chatRecordingService.recordBranchCheckpointTransaction(
-        { cursor, stopReason: 'end_turn' },
-      );
-      const artifact = chatRecordingService.recordSessionArtifactEvent({
-        v: 2,
-        sessionId: 'test-session-id',
-        sequence: 1,
-        recordedAt: '2026-08-10T00:00:00.000Z',
-        changes: [],
-      });
-      const point = await checkpoint;
-      await artifact;
-
-      const records = vi
-        .mocked(mockLease.appendJsonLine)
-        .mock.calls.map((call) => call[0] as ChatRecord);
-      expect(records.map((record) => record.subtype)).toEqual([
-        undefined,
-        undefined,
-        'branch_checkpoint',
-        'session_artifact_event',
-      ]);
-      expect(records.at(-1)?.parentUuid).toBe(point?.checkpointUuid);
-      expect(chatRecordingService.getBranchCheckpointCursor()).toMatchObject({
-        recordId: point?.checkpointUuid,
-        activeRecordCount: 3,
-      });
-    });
-
-    it('restores pending tool state before checkpointing a continued turn', async () => {
-      const restored = [
-        branchTestRecord('user-1', null, 'user', [{ text: 'first' }]),
-        branchTestRecord('assistant-tool-1', 'user-1', 'assistant', [
-          { functionCall: { id: 'call-1', name: 'read_file', args: {} } },
-        ]),
-        branchTestRecord('tool-1', 'assistant-tool-1', 'tool_result', [
-          {
-            functionResponse: {
-              id: 'call-1',
-              name: 'read_file',
-              response: { output: 'ok' },
-            },
-          },
-        ]),
-        branchTestRecord('assistant-1', 'tool-1', 'assistant', [
-          { text: 'first done' },
-        ]),
-        branchTestRecord('user-2', 'assistant-1', 'user', [{ text: 'second' }]),
-        branchTestRecord('assistant-tool-2', 'user-2', 'assistant', [
-          { functionCall: { id: 'call-2', name: 'shell', args: {} } },
-        ]),
-      ];
-      chatRecordingService.rebuildTurnBoundaries(restored);
-      const cursor = chatRecordingService.getBranchCheckpointCursor();
-
-      chatRecordingService.recordToolResult([
-        {
-          functionResponse: {
-            id: 'call-2',
-            name: 'shell',
-            response: { output: 'ok' },
-          },
-        },
-      ]);
-      chatRecordingService.recordAssistantTurn({
-        model: 'gemini-pro',
-        message: [{ text: 'second done' }],
-      });
-
-      await expect(
-        chatRecordingService.recordBranchCheckpointTransaction({
-          cursor,
-          stopReason: 'end_turn',
-        }),
-      ).resolves.toMatchObject({
-        startExclusiveRecordUuid: 'assistant-tool-2',
-        assistantRecordUuid: '00000000-0000-0000-0000-000000000002',
-      });
-    });
-
-    it('tracks tool calls incrementally across a checkpoint cursor', async () => {
-      chatRecordingService.recordUserMessage([{ text: 'question' }]);
-      chatRecordingService.recordAssistantTurn({
-        model: 'gemini-pro',
-        message: [
-          { functionCall: { id: 'call-1', name: 'read_file', args: {} } },
-        ],
-      });
-      const cursor = chatRecordingService.getBranchCheckpointCursor();
-
-      chatRecordingService.recordToolResult([
-        {
-          functionResponse: {
-            id: 'call-1',
-            name: 'read_file',
-            response: { output: 'ok' },
-          },
-        },
-      ]);
-      chatRecordingService.recordAssistantTurn({
-        model: 'gemini-pro',
-        message: [{ text: 'done' }],
-      });
-
-      await expect(
-        chatRecordingService.recordBranchCheckpointTransaction({
-          cursor,
-          stopReason: 'end_turn',
-        }),
-      ).resolves.toMatchObject({
-        startExclusiveRecordUuid: cursor.recordId,
-        assistantRecordUuid: '00000000-0000-0000-0000-000000000004',
-      });
-    });
-
-    it('rejects a completed turn with a dangling tool call', async () => {
-      const cursor = chatRecordingService.getBranchCheckpointCursor();
-      chatRecordingService.recordUserMessage([{ text: 'question' }]);
-      chatRecordingService.recordAssistantTurn({
-        model: 'gemini-pro',
-        message: [
-          { functionCall: { id: 'call-1', name: 'read_file', args: {} } },
-        ],
-      });
-
-      await expect(
-        chatRecordingService.recordBranchCheckpointTransaction({
-          cursor,
-          stopReason: 'end_turn',
-        }),
-      ).resolves.toBeUndefined();
-    });
-
-    it.each([{ recordId: 'stale-record' }, { activeRecordCount: 99 }])(
-      'rejects a stale checkpoint cursor: %o',
-      async (cursorOverride) => {
-        const cursor = chatRecordingService.getBranchCheckpointCursor();
-        chatRecordingService.recordUserMessage([{ text: 'hello' }]);
-        chatRecordingService.recordAssistantTurn({
-          model: 'gemini-pro',
-          message: [{ text: 'hi' }],
-        });
-
-        await expect(
-          chatRecordingService.recordBranchCheckpointTransaction({
-            cursor: { ...cursor, ...cursorOverride },
-            stopReason: 'end_turn',
-          }),
-        ).rejects.toThrow(
-          'Transcript changed while recording branch checkpoint',
-        );
-      },
-    );
-
-    it('releases buffered appends with a continuous chain when no candidate exists', async () => {
-      const cursor = chatRecordingService.getBranchCheckpointCursor();
-      chatRecordingService.recordUserMessage([{ text: 'no assistant yet' }]);
-      const checkpoint = chatRecordingService.recordBranchCheckpointTransaction(
-        {
-          cursor,
-          stopReason: 'end_turn',
-        },
-      );
-      const title = chatRecordingService.recordCustomTitle('Title', 'manual');
-      chatRecordingService.recordUserMessage([{ text: 'next turn' }]);
-
-      await expect(checkpoint).resolves.toBeUndefined();
-      await expect(title).resolves.toBe(true);
-      await chatRecordingService.flush();
-
-      const records = vi
-        .mocked(mockLease.appendJsonLine)
-        .mock.calls.map((call) => call[0] as ChatRecord);
-      expect(records.map((record) => record.subtype)).toEqual([
-        undefined,
-        'custom_title',
-        undefined,
-      ]);
-      expect(records[1]?.parentUuid).toBe(records[0]?.uuid);
-      expect(records[2]?.parentUuid).toBe(records[1]?.uuid);
-      expect(chatRecordingService.getTranscriptCursor().recordId).toBe(
-        records[2]?.uuid,
-      );
-    });
-
-    it.each(['cancelled', 'max_tokens'])(
-      'does not record a checkpoint for a %s turn',
-      async (stopReason) => {
-        chatRecordingService.recordUserMessage([{ text: 'hello' }]);
-        chatRecordingService.recordAssistantTurn({
-          model: 'gemini-pro',
-          message: [{ text: 'partial' }],
-        });
-        await chatRecordingService.flush();
-        const writesBeforeCheckpoint = vi.mocked(mockLease.appendJsonLine).mock
-          .calls.length;
-
-        await expect(
-          chatRecordingService.recordBranchCheckpointTransaction({
-            cursor: chatRecordingService.getBranchCheckpointCursor(),
-            stopReason,
-          }),
-        ).resolves.toBeUndefined();
-        expect(vi.mocked(mockLease.appendJsonLine)).toHaveBeenCalledTimes(
-          writesBeforeCheckpoint,
-        );
-      },
-    );
-
-    it('settles buffered appends without stalling when the checkpoint write fails', async () => {
-      const writeError = new Error('disk full');
-      const cursor = chatRecordingService.getBranchCheckpointCursor();
-      chatRecordingService.recordUserMessage([{ text: 'hello' }]);
-      chatRecordingService.recordAssistantTurn({
-        model: 'gemini-pro',
-        message: [{ text: 'hi' }],
-      });
-
-      // Fail only the checkpoint append; the turn's records still write.
-      vi.mocked(mockLease.appendJsonLine).mockImplementation(
-        async (record: unknown) => {
-          if ((record as ChatRecord).subtype === 'branch_checkpoint') {
-            throw writeError;
-          }
-          return jsonl.writeLine('/test/session.jsonl', record);
-        },
-      );
-
-      const checkpoint = chatRecordingService.recordBranchCheckpointTransaction(
-        {
-          cursor,
-          stopReason: 'end_turn',
-        },
-      );
-      // Buffered behind the topology fence while validation is in flight:
-      // one strict append and one fire-and-forget append.
-      const title = chatRecordingService.recordCustomTitle('Title', 'manual');
-      chatRecordingService.recordUserMessage([{ text: 'next turn' }]);
-
-      await expect(checkpoint).rejects.toBe(writeError);
-      // The buffered strict append settles (rejected with the write
-      // failure, surfaced as `false`) instead of hanging on the fence.
-      await expect(title).resolves.toBe(false);
-
-      const records = vi
-        .mocked(mockLease.appendJsonLine)
-        .mock.calls.map((call) => call[0] as ChatRecord);
-      const checkpointRecord = records.find(
-        (record) => record.subtype === 'branch_checkpoint',
-      );
-      expect(checkpointRecord).toBeDefined();
-      // Nothing was appended after the failed checkpoint: the buffered
-      // records were dropped, so no child references the failed
-      // checkpoint and the recorder is not wedged behind the fence.
-      expect(records.at(-1)).toBe(checkpointRecord);
-      expect(
-        records.some((record) => record.parentUuid === checkpointRecord?.uuid),
-      ).toBe(false);
-
-      // The fence is released: a fresh transaction attempt fails with the
-      // write failure, not with 'topology transaction already active'.
-      await expect(
-        chatRecordingService.recordBranchCheckpointTransaction({
-          cursor: chatRecordingService.getBranchCheckpointCursor(),
-          stopReason: 'end_turn',
-        }),
-      ).rejects.toBe(writeError);
-    });
-
-    it('rejects a concurrent recordBranchCheckpointTransaction', async () => {
-      const cursor = chatRecordingService.getBranchCheckpointCursor();
-      chatRecordingService.recordUserMessage([{ text: 'hello' }]);
-      chatRecordingService.recordAssistantTurn({
-        model: 'gemini-pro',
-        message: [{ text: 'hi' }],
-      });
-
-      const first = chatRecordingService.recordBranchCheckpointTransaction({
-        cursor,
-        stopReason: 'end_turn',
-      });
-
-      await expect(
-        chatRecordingService.recordBranchCheckpointTransaction({
-          cursor,
-          stopReason: 'end_turn',
-        }),
-      ).rejects.toThrow('Transcript topology transaction already active');
-
-      await first;
     });
   });
 
@@ -1240,141 +607,79 @@ describe('ChatRecordingService', () => {
     });
   });
 
-  describe('recordNotificationStrict', () => {
-    it('resolves only after the notification is durably appended', async () => {
-      const pending = chatRecordingService.recordNotificationStrict(
-        [{ text: '<task-notification />' }],
-        'Worker completed.',
-        {
-          taskId: 'worker-1',
-          status: 'completed',
-          kind: 'agent',
-        },
-      );
-
-      await expect(pending).resolves.toBeUndefined();
-      const record = vi.mocked(jsonl.writeLine).mock.calls[0][1] as ChatRecord;
-      expect(record).toMatchObject({
-        type: 'user',
-        subtype: 'notification',
-        systemPayload: {
-          displayText: 'Worker completed.',
-          backgroundTask: {
-            taskId: 'worker-1',
-            status: 'completed',
-            kind: 'agent',
-          },
-        },
-      });
-    });
-
-    it('rejects instead of acknowledging an inactive recorder', async () => {
-      const inactive = new ChatRecordingService(mockConfig);
-
-      await expect(
-        inactive.recordNotificationStrict(
-          [{ text: '<task-notification />' }],
-          'Worker completed.',
-          {
-            taskId: 'worker-1',
-            status: 'completed',
-            kind: 'agent',
-          },
-        ),
-      ).rejects.toMatchObject({ name: 'SessionWriterUnavailableError' });
-      expect(jsonl.writeLine).not.toHaveBeenCalled();
-    });
-
-    it('restores session model bindings for duplicate suppression', async () => {
-      const service = new ChatRecordingService(mockConfig, undefined, false, {
-        lastCompletedUuid: 'projected-leaf',
-        turnParentUuids: [null],
-        sessionModel: {
-          modelId: 'qwen3-coder-plus',
-          authType: 'openai',
-        },
-      });
-      vi.mocked(jsonl.writeLine).mockClear();
-      await expect(
-        service.recordSessionModel({
-          modelId: 'qwen3-coder-plus',
-          authType: 'openai',
-        }),
-      ).resolves.toBe(true);
-      expect(jsonl.writeLine).not.toHaveBeenCalled();
-    });
-
-    it('restores session model bindings from a full-record replay', async () => {
-      vi.mocked(mockConfig.getResumedSessionData).mockReturnValue({
-        conversation: {
-          messages: [
-            {
-              uuid: 'model-1',
-              parentUuid: null,
-              sessionId: 'test-session-id',
-              timestamp: '2026-06-27T00:00:00.000Z',
-              type: 'system',
-              subtype: 'session_model',
-              cwd: '/test/project/root',
-              version: '1.0.0',
-              systemPayload: {
-                modelId: 'qwen3-coder-plus',
-                authType: 'openai',
-              },
-            },
-          ],
-        },
-        lastCompletedUuid: 'model-1',
-      } as unknown as ReturnType<Config['getResumedSessionData']>);
-      const service = new ChatRecordingService(mockConfig, undefined, false);
-      vi.mocked(jsonl.writeLine).mockClear();
-      await expect(
-        service.recordSessionModel({
-          modelId: 'qwen3-coder-plus',
-          authType: 'openai',
-        }),
-      ).resolves.toBe(true);
-      expect(jsonl.writeLine).not.toHaveBeenCalled();
-    });
-
-    it('skips a non-string session_model payload during full-record replay', async () => {
-      vi.mocked(mockConfig.getResumedSessionData).mockReturnValue({
-        conversation: {
-          messages: [
-            {
-              uuid: 'model-1',
-              parentUuid: null,
-              sessionId: 'test-session-id',
-              timestamp: '2026-06-27T00:00:00.000Z',
-              type: 'system',
-              subtype: 'session_model',
-              cwd: '/test/project/root',
-              version: '1.0.0',
-              systemPayload: {
-                modelId: 42,
-                authType: 'openai',
-              },
-            },
-          ],
-        },
-        lastCompletedUuid: 'model-1',
-      } as unknown as ReturnType<Config['getResumedSessionData']>);
-      expect(
-        () => new ChatRecordingService(mockConfig, undefined, false),
-      ).not.toThrow();
-      const service = new ChatRecordingService(mockConfig, undefined, false);
-      vi.mocked(jsonl.writeLine).mockClear();
-      await expect(
-        service.recordSessionModel({
-          modelId: 'qwen3-coder-plus',
-          authType: 'openai',
-        }),
-      ).resolves.toBe(true);
-      expect(jsonl.writeLine).toHaveBeenCalledOnce();
-    });
-  });
-
   describe('rewindRecording', () => {
+    it('re-anchors restored session model and approval records onto the rewind branch', async () => {
+      // Transcripts written by earlier releases can carry last-wins
+      // session_model / session_approval_mode records; a rewind must keep
+      // them on the active branch so a later resume still sees them.
+      const base = {
+        sessionId: 'test-session-id',
+        timestamp: '2026-08-31T00:00:00.000Z',
+        cwd: '/test/project/root',
+        version: '1.0.0',
+      };
+      vi.mocked(mockConfig.getResumedSessionData).mockReturnValue({
+        conversation: {
+          messages: [
+            {
+              ...base,
+              uuid: 'user-1',
+              parentUuid: null,
+              type: 'user',
+              message: { role: 'user', parts: [{ text: 'first' }] },
+            },
+            {
+              ...base,
+              uuid: 'model-1',
+              parentUuid: 'user-1',
+              type: 'system',
+              subtype: 'session_model',
+              systemPayload: {
+                modelId: 'qwen3-coder-flash',
+                authType: 'openai',
+              },
+            },
+            {
+              ...base,
+              uuid: 'approval-1',
+              parentUuid: 'model-1',
+              type: 'system',
+              subtype: 'session_approval_mode',
+              systemPayload: { mode: ApprovalMode.YOLO },
+            },
+            {
+              ...base,
+              uuid: 'user-2',
+              parentUuid: 'approval-1',
+              type: 'user',
+              message: { role: 'user', parts: [{ text: 'second' }] },
+            },
+          ],
+        },
+        lastCompletedUuid: 'user-2',
+      } as unknown as ReturnType<Config['getResumedSessionData']>);
+      const service = new ChatRecordingService(mockConfig);
+
+      service.rewindRecording(1, { truncatedCount: 1 });
+      await service.flush();
+
+      const written = vi
+        .mocked(jsonl.writeLine)
+        .mock.calls.map((call) => call[1] as ChatRecord);
+      expect(written.map((record) => record.subtype)).toEqual([
+        'rewind',
+        'session_model',
+        'session_approval_mode',
+      ]);
+      expect(written[0]?.parentUuid).toBe('approval-1');
+      expect(written[1]?.parentUuid).toBe(written[0]?.uuid);
+      expect(written[1]?.systemPayload).toEqual({
+        modelId: 'qwen3-coder-flash',
+        authType: 'openai',
+      });
+      expect(written[2]?.systemPayload).toEqual({ mode: ApprovalMode.YOLO });
+    });
+
     it('drops display projections from rewound user turns', async () => {
       chatRecordingService.recordUserMessage(
         [{ text: 'hidden A' }],
@@ -1443,9 +748,7 @@ describe('ChatRecordingService', () => {
       vi.mocked(mockConfig.getResumedSessionData).mockReturnValue({
         lastCompletedUuid: 'assistant-1',
       } as unknown as ReturnType<Config['getResumedSessionData']>);
-      chatRecordingService = activateRecording(
-        new ChatRecordingService(mockConfig),
-      );
+      chatRecordingService = new ChatRecordingService(mockConfig);
 
       chatRecordingService.rebuildTurnBoundaries([
         {
@@ -1576,357 +879,37 @@ describe('ChatRecordingService', () => {
     });
   });
 
-  describe('recordUserTextElements', () => {
-    it('records user text elements as a strict system payload', async () => {
-      const payload = {
-        content: 'hello',
-        textElements: [{ text: 'hello', start: 0, end: 5 }],
-      };
+  describe('session identity pinning', () => {
+    it('keeps late writes on the pinned pre-rotation session', async () => {
+      const outgoing = new ChatRecordingService(mockConfig);
+      outgoing.pinSessionIdentity('test-session-id');
+      vi.mocked(mockConfig.getSessionId).mockReturnValue('rotated-session-id');
 
-      await chatRecordingService.recordUserTextElements(payload);
-
-      expect(jsonl.writeLine).toHaveBeenCalledTimes(1);
-      const record = vi.mocked(jsonl.writeLine).mock.calls[0][1] as ChatRecord;
-      expect(record.type).toBe('system');
-      expect(record.subtype).toBe('user_text_elements');
-      expect(record.systemPayload).toEqual(payload);
-    });
-  });
-
-  describe('recordGoalTurnEnd', () => {
-    it('waits for the durable system record and copies the Goal permit', async () => {
-      let resolveWrite!: () => void;
-      vi.mocked(jsonl.writeLine).mockImplementationOnce(
-        () =>
-          new Promise<void>((resolve) => {
-            resolveWrite = resolve;
-          }),
-      );
-      const permit = { goalId: 'goal', revision: 1, turnId: 'turn' };
-      const pending = chatRecordingService.recordGoalTurnEnd('finish', permit);
-      permit.turnId = 'changed';
-      let settled = false;
-      void pending.then(() => {
-        settled = true;
-      });
-      await Promise.resolve();
-      expect(settled).toBe(false);
-      resolveWrite();
-      await pending;
-      const record = vi.mocked(jsonl.writeLine).mock.calls[0]![1] as ChatRecord;
-      expect(record).toMatchObject({
-        type: 'system',
-        subtype: 'goal_turn_end',
-        goalContext: { goalId: 'goal', revision: 1, turnId: 'turn' },
-        systemPayload: { toolCallId: 'finish' },
-      });
-      expect(record.message).toBeUndefined();
-    });
-
-    it('rejects a failed append instead of reporting a persisted boundary', async () => {
-      vi.mocked(jsonl.writeLine).mockRejectedValueOnce(new Error('disk full'));
-      await expect(
-        chatRecordingService.recordGoalTurnEnd('finish', {
-          goalId: 'goal',
-          revision: 1,
-          turnId: 'turn',
-        }),
-      ).rejects.toThrow('disk full');
-    });
-  });
-
-  describe('recordTurnResult', () => {
-    it('normalizes hostile and oversized error fields without throwing', () => {
-      const hostile = Object.create(null, {
-        message: { get: () => 'm'.repeat(5_000) },
-        code: {
-          get: () => 'c'.repeat(500),
-        },
-      });
-
-      expect(normalizeTurnResultError(hostile)).toEqual({
-        message: 'm'.repeat(TURN_RESULT_ERROR_MESSAGE_MAX_CHARS),
-        messageTruncated: true,
-        code: 'c'.repeat(TURN_RESULT_ERROR_CODE_MAX_CHARS),
-        codeTruncated: true,
-      });
-      expect(
-        normalizeTurnResultError(
-          Object.create(null, {
-            message: {
-              get: () => {
-                throw new Error('getter exploded');
-              },
-            },
-            toString: {
-              value: () => {
-                throw new Error('conversion exploded');
-              },
-            },
-          }),
-        ),
-      ).toEqual({ message: 'Unknown error' });
-    });
-
-    it('preserves the RPC code of session writer errors', () => {
-      expect(normalizeTurnResultError(new SessionWriterLostError())).toEqual(
-        expect.objectContaining({ code: '-32021' }),
-      );
-    });
-
-    it('validates the bounded turn_result transcript contract', () => {
-      expect(
-        isTurnResultRecordPayload({
-          promptId: 'prompt-1',
-          state: 'completed',
-          endedAt: 2_000,
-          resultText: 'bounded prefix',
-          resultTruncated: true,
-          resultCode: 'RESULT_TEXT_TRUNCATED',
-        }),
-      ).toBe(true);
-      expect(
-        isTurnResultRecordPayload({
-          promptId: 'prompt-1',
-          state: 'completed',
-          endedAt: 2_000,
-          resultCode: 'RESULT_TEXT_TRUNCATED',
-        }),
-      ).toBe(false);
-    });
-
-    it.each([
-      [undefined, true],
-      [1_500, true],
-      [NaN, false],
-      [Infinity, false],
-      ['1500', false],
-    ])('validates cancellation timestamp %s', (cancelledAt, valid) => {
-      expect(
-        isTurnResultRecordPayload({
-          promptId: 'prompt-1',
-          state: 'cancelled',
-          startedAt: 1_000,
-          cancelledAt,
-          endedAt: 2_000,
-        }),
-      ).toBe(valid);
-    });
-
-    it('caps promptId, stopReason, and originatorClientId in turn_result payloads', () => {
-      const oversized = 'x'.repeat(TURN_RESULT_IDENTIFIER_MAX_CHARS + 1);
-      expect(
-        isTurnResultRecordPayload({
-          promptId: oversized,
-          state: 'completed',
-          endedAt: 2_000,
-        }),
-      ).toBe(false);
-      expect(
-        isTurnResultRecordPayload({
-          promptId: 'prompt-1',
-          state: 'completed',
-          endedAt: 2_000,
-          stopReason: oversized,
-        }),
-      ).toBe(false);
-      expect(
-        isTurnResultRecordPayload({
-          promptId: 'prompt-1',
-          state: 'completed',
-          endedAt: 2_000,
-          originatorClientId: oversized,
-        }),
-      ).toBe(false);
-      const bounded = 'y'.repeat(TURN_RESULT_IDENTIFIER_MAX_CHARS);
-      expect(
-        isTurnResultRecordPayload({
-          promptId: bounded,
-          state: 'completed',
-          endedAt: 2_000,
-          stopReason: bounded,
-          originatorClientId: bounded,
-        }),
-      ).toBe(true);
-    });
-
-    it('rejects empty error message and code in turn_result payloads', () => {
-      expect(
-        isTurnResultRecordPayload({
-          promptId: 'prompt-1',
-          state: 'error',
-          endedAt: 2_000,
-          error: { message: '' },
-        }),
-      ).toBe(false);
-      expect(
-        isTurnResultRecordPayload({
-          promptId: 'prompt-1',
-          state: 'error',
-          endedAt: 2_000,
-          error: { message: 'boom', code: '' },
-        }),
-      ).toBe(false);
-      expect(
-        isTurnResultRecordPayload({
-          promptId: 'prompt-1',
-          state: 'error',
-          endedAt: 2_000,
-          error: { message: 'boom' },
-        }),
-      ).toBe(true);
-    });
-
-    it('records a settled turn outcome as a system payload', async () => {
-      const payload: TurnResultRecordPayload = {
-        promptId: 'prompt-1',
-        state: 'completed',
-        stopReason: 'end_turn',
-        startedAt: 1000,
-        endedAt: 2000,
-        promptText: 'hello',
-        resultText: 'world',
-        originatorClientId: 'client-1',
-      };
-
-      chatRecordingService.recordTurnResult(payload);
-      await chatRecordingService.flush();
+      outgoing.recordUserMessage([{ text: 'late' }]);
+      await outgoing.flush();
 
       expect(jsonl.writeLine).toHaveBeenCalledTimes(1);
-      const record = vi.mocked(jsonl.writeLine).mock.calls[0][1] as ChatRecord;
-      expect(record.type).toBe('system');
-      expect(record.subtype).toBe('turn_result');
-      expect(record.systemPayload).toEqual(payload);
+      const [filePath, record] = vi.mocked(jsonl.writeLine).mock.calls[0] as [
+        string,
+        ChatRecord,
+      ];
+      expect(filePath).toContain('test-session-id.jsonl');
+      expect(record.sessionId).toBe('test-session-id');
     });
 
-    it('refuses to append payloads the bounded contract rejects', async () => {
-      chatRecordingService.recordTurnResult({
-        promptId: 'prompt-1',
-        state: 'error',
-        endedAt: 2_000,
-      });
-      chatRecordingService.recordTurnResult({
-        promptId: 'prompt-2',
-        state: 'completed',
-        endedAt: 2_000,
-        error: { message: 'stray' },
-      });
-      await chatRecordingService.flush();
+    it('resolves the shared Config session id at write time when not pinned', async () => {
+      const outgoing = new ChatRecordingService(mockConfig);
+      vi.mocked(mockConfig.getSessionId).mockReturnValue('rotated-session-id');
 
-      const records = vi
-        .mocked(jsonl.writeLine)
-        .mock.calls.map((call) => call[1] as ChatRecord);
-      expect(
-        records.filter((record) => record.subtype === 'turn_result'),
-      ).toHaveLength(0);
-    });
+      outgoing.recordUserMessage([{ text: 'late' }]);
+      await outgoing.flush();
 
-    it('keeps turn_result records on the active transcript chain', async () => {
-      chatRecordingService.recordUserMessage([{ text: 'before result' }]);
-      chatRecordingService.recordTurnResult({
-        promptId: 'prompt-1',
-        state: 'completed',
-        endedAt: 2_000,
-      });
-      await chatRecordingService.recordSessionArtifactEvent({
-        v: 2,
-        sessionId: 'test-session-id',
-        sequence: 1,
-        recordedAt: '2026-08-14T00:00:00.000Z',
-        changes: [],
-      });
-      chatRecordingService.recordUserMessage([{ text: 'after result' }]);
-      await chatRecordingService.flush();
-
-      const records = vi
-        .mocked(jsonl.writeLine)
-        .mock.calls.map((call) => call[1] as ChatRecord);
-      const before = records[0]!;
-      const turnResult = records[1]!;
-      const artifact = records[2]!;
-      const after = records[3]!;
-      expect(turnResult.subtype).toBe('turn_result');
-      expect(turnResult.parentUuid).toBe(before.uuid);
-      expect(artifact.parentUuid).toBe(turnResult.uuid);
-      expect(after.parentUuid).toBe(turnResult.uuid);
-    });
-
-    it('is best-effort when recording is inactive', () => {
-      const inactive = new ChatRecordingService(mockConfig);
-      expect(() =>
-        inactive.recordTurnResult({
-          promptId: 'prompt-1',
-          state: 'cancelled',
-          startedAt: 1000,
-          endedAt: 1500,
-        }),
-      ).not.toThrow();
-      expect(jsonl.writeLine).not.toHaveBeenCalled();
-    });
-
-    describe('session identity pinning', () => {
-      it('keeps late turn_result writes on the pinned pre-rotation session', async () => {
-        const outgoing = new ChatRecordingService(mockConfig, undefined, false);
-        outgoing.pinSessionIdentity('test-session-id');
-        vi.mocked(mockConfig.getSessionId).mockReturnValue(
-          'rotated-session-id',
-        );
-
-        outgoing.recordTurnResult({
-          promptId: 'prompt-1',
-          state: 'completed',
-          endedAt: 2_000,
-        });
-        await outgoing.flush();
-
-        expect(jsonl.writeLine).toHaveBeenCalledTimes(1);
-        const [filePath, record] = vi.mocked(jsonl.writeLine).mock.calls[0] as [
-          string,
-          ChatRecord,
-        ];
-        expect(filePath).toContain('test-session-id.jsonl');
-        expect(record.sessionId).toBe('test-session-id');
-      });
-
-      it('resolves the shared Config session id at write time when not pinned', async () => {
-        const outgoing = new ChatRecordingService(mockConfig, undefined, false);
-        vi.mocked(mockConfig.getSessionId).mockReturnValue(
-          'rotated-session-id',
-        );
-
-        outgoing.recordTurnResult({
-          promptId: 'prompt-1',
-          state: 'completed',
-          endedAt: 2_000,
-        });
-        await outgoing.flush();
-
-        const [filePath, record] = vi.mocked(jsonl.writeLine).mock.calls[0] as [
-          string,
-          ChatRecord,
-        ];
-        expect(filePath).toContain('rotated-session-id.jsonl');
-        expect(record.sessionId).toBe('rotated-session-id');
-      });
-
-      it('never overrides a lease binding that owns the session identity', async () => {
-        chatRecordingService.pinSessionIdentity('pinned-session-id');
-        vi.mocked(mockConfig.getSessionId).mockReturnValue(
-          'rotated-session-id',
-        );
-
-        chatRecordingService.recordTurnResult({
-          promptId: 'prompt-1',
-          state: 'completed',
-          endedAt: 2_000,
-        });
-        await chatRecordingService.flush();
-
-        const record = vi
-          .mocked(jsonl.writeLine)
-          .mock.calls.at(-1)![1] as ChatRecord;
-        expect(record.sessionId).toBe('test-session-id');
-      });
+      const [filePath, record] = vi.mocked(jsonl.writeLine).mock.calls[0] as [
+        string,
+        ChatRecord,
+      ];
+      expect(filePath).toContain('rotated-session-id.jsonl');
+      expect(record.sessionId).toBe('rotated-session-id');
     });
   });
 
@@ -2267,37 +1250,6 @@ describe('ChatRecordingService', () => {
     });
   });
 
-  describe('recordRealtimeConversation', () => {
-    it('durably records direct Realtime dialogue as non-model history', async () => {
-      await chatRecordingService.recordRealtimeConversation(
-        [
-          { role: 'user', text: '你好' },
-          { role: 'assistant', text: '你好！' },
-        ],
-        'qwen3.5-omni-plus-realtime',
-      );
-
-      const records = vi
-        .mocked(jsonl.writeLine)
-        .mock.calls.map((call) => call[1] as ChatRecord);
-      expect(records).toHaveLength(2);
-      expect(records[0]).toMatchObject({
-        type: 'user',
-        subtype: 'realtime_message',
-        provenance: 'real_user',
-        message: { role: 'user', parts: [{ text: '你好' }] },
-      });
-      expect(records[1]).toMatchObject({
-        type: 'assistant',
-        subtype: 'realtime_message',
-        provenance: 'assistant_output',
-        model: 'qwen3.5-omni-plus-realtime',
-        message: { role: 'model', parts: [{ text: '你好！' }] },
-      });
-      expect(records[1]?.parentUuid).toBe(records[0]?.uuid);
-    });
-  });
-
   describe('recordToolResult', () => {
     it('should record tool result with Parts', async () => {
       // First record a user and assistant message to set up the chain
@@ -2538,53 +1490,6 @@ describe('ChatRecordingService', () => {
       expect(resultDisplay).toContain('-tail');
       expect(resultDisplay).toContain('truncated for saved session preview');
       expect(resultDisplay).not.toContain('CLI history display');
-    });
-
-    // https://github.com/QwenLM/qwen-code/issues/10369 - the Web Shell mounts
-    // the sandboxed iframe only when the recorded `html` is non-empty, and it
-    // never re-fetches the `ui://` resource. Recording an empty `html` makes
-    // every replayed MCP App fall back to plain text permanently.
-    it('keeps MCP App html and toolResult in the recorded transcript', async () => {
-      const toolResultParts: Part[] = [
-        {
-          functionResponse: {
-            id: 'call-1',
-            name: 'mcp__demo__dashboard',
-            response: { output: 'Dashboard ready' },
-          },
-        },
-      ];
-      const html = '<main id="dashboard">MCP_APP_HTML_MARKER</main>';
-      const toolResult = {
-        content: [{ type: 'text', text: 'Dashboard ready' }],
-      };
-      const metadata = {
-        callId: 'call-1',
-        status: 'success',
-        responseParts: toolResultParts,
-        resultDisplay: {
-          type: 'mcp_app',
-          serverName: 'demo',
-          resourceUri: 'ui://demo/dashboard',
-          html,
-          toolResult,
-          toolArguments: { region: 'APAC' },
-          fallbackText: 'Dashboard ready',
-        },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any;
-
-      chatRecordingService.recordToolResult(toolResultParts, metadata);
-      await chatRecordingService.flush();
-
-      const record = vi.mocked(jsonl.writeLine).mock.calls[0][1] as ChatRecord;
-      const recorded = record.toolCallResult
-        ?.resultDisplay as McpAppResultDisplay;
-
-      expect(recorded.type).toBe('mcp_app');
-      expect(recorded.html).toBe(html);
-      expect(recorded.toolResult).toEqual(toolResult);
-      expect(recorded.fallbackText).toBe('Dashboard ready');
     });
 
     it('records promptId on tool results when provided', async () => {
@@ -2870,9 +1775,7 @@ describe('ChatRecordingService', () => {
       chatRecordingService.recordUserMessage([{ text: 'first' }]);
       await expect(chatRecordingService.flush()).rejects.toThrow('disk full');
 
-      const nextRecordingService = activateRecording(
-        new ChatRecordingService(mockConfig),
-      );
+      const nextRecordingService = new ChatRecordingService(mockConfig);
       nextRecordingService.recordUserMessage([{ text: 'new session' }]);
       await expect(nextRecordingService.flush()).resolves.toBeUndefined();
 
@@ -2901,9 +1804,7 @@ describe('ChatRecordingService', () => {
         }),
       );
       const listener = vi.fn();
-      const service = activateRecording(
-        new ChatRecordingService(mockConfig, listener),
-      );
+      const service = new ChatRecordingService(mockConfig, listener);
 
       service.recordUserMessage([{ text: 'first' }]);
       service.recordUserMessage([{ text: 'queued descendant' }]);
@@ -2929,15 +1830,11 @@ describe('ChatRecordingService', () => {
         .mockRejectedValueOnce(new Error('first failure'))
         .mockRejectedValueOnce(new Error('second failure'));
 
-      const first = activateRecording(
-        new ChatRecordingService(mockConfig, firstListener),
-      );
+      const first = new ChatRecordingService(mockConfig, firstListener);
       first.recordUserMessage([{ text: 'first' }]);
       await expect(first.flush()).rejects.toThrow('first failure');
 
-      const second = activateRecording(
-        new ChatRecordingService(mockConfig, secondListener),
-      );
+      const second = new ChatRecordingService(mockConfig, secondListener);
       second.recordUserMessage([{ text: 'second' }]);
       await expect(second.flush()).rejects.toThrow('second failure');
 
@@ -2950,11 +1847,9 @@ describe('ChatRecordingService', () => {
       const handler = (error: unknown) => unhandled.push(error);
       process.on('unhandledRejection', handler);
       try {
-        const syncFailure = activateRecording(
-          new ChatRecordingService(mockConfig, () => {
-            throw new Error('listener threw');
-          }),
-        );
+        const syncFailure = new ChatRecordingService(mockConfig, () => {
+          throw new Error('listener threw');
+        });
         vi.mocked(jsonl.writeLine).mockRejectedValueOnce(
           new Error('sync observer write failure'),
         );
@@ -2963,11 +1858,9 @@ describe('ChatRecordingService', () => {
           'sync observer write failure',
         );
 
-        const asyncFailure = activateRecording(
-          new ChatRecordingService(mockConfig, async () => {
-            throw new Error('listener rejected');
-          }),
-        );
+        const asyncFailure = new ChatRecordingService(mockConfig, async () => {
+          throw new Error('listener rejected');
+        });
         vi.mocked(jsonl.writeLine).mockRejectedValueOnce(
           new Error('async observer write failure'),
         );
@@ -2983,605 +1876,124 @@ describe('ChatRecordingService', () => {
     });
   });
 
-  describe('recordSessionModel', () => {
-    it('appends a session_model record and skips identical payloads', async () => {
-      vi.mocked(jsonl.writeLine).mockClear();
-      await expect(
-        chatRecordingService.recordSessionModel({
-          modelId: 'qwen3-coder-plus',
-          authType: 'openai',
-        }),
-      ).resolves.toBe(true);
-      expect(jsonl.writeLine).toHaveBeenCalledOnce();
-      const record = vi.mocked(jsonl.writeLine).mock.calls[0][1] as ChatRecord;
-      expect(record).toMatchObject({
-        type: 'system',
-        subtype: 'session_model',
-        systemPayload: {
-          modelId: 'qwen3-coder-plus',
-          authType: 'openai',
-        },
-      });
-
-      vi.mocked(jsonl.writeLine).mockClear();
-      await expect(
-        chatRecordingService.recordSessionModel({
-          modelId: 'qwen3-coder-plus',
-          authType: 'openai',
-        }),
-      ).resolves.toBe(true);
-      expect(jsonl.writeLine).not.toHaveBeenCalled();
-    });
-
-    it('writes a new record when the model changes', async () => {
-      await chatRecordingService.recordSessionModel({
-        modelId: 'qwen3-coder-plus',
-        authType: 'openai',
-      });
-      vi.mocked(jsonl.writeLine).mockClear();
-      await expect(
-        chatRecordingService.recordSessionModel({
-          modelId: 'qwen3-coder-flash',
-          authType: 'openai',
-        }),
-      ).resolves.toBe(true);
-      expect(jsonl.writeLine).toHaveBeenCalledOnce();
-    });
-
-    it('canonicalizes a runtime-prefixed modelId before writing', async () => {
-      vi.mocked(jsonl.writeLine).mockClear();
-      await expect(
-        chatRecordingService.recordSessionModel({
-          modelId: '$runtime|openai|custom-runtime',
-          authType: 'openai',
-          isRuntime: true,
-        }),
-      ).resolves.toBe(true);
-      const record = vi.mocked(jsonl.writeLine).mock.calls[0][1] as ChatRecord;
-      expect(record.systemPayload).toEqual({
-        modelId: 'custom-runtime',
-        authType: 'openai',
-        isRuntime: true,
-      });
-
-      vi.mocked(jsonl.writeLine).mockClear();
-      await expect(
-        chatRecordingService.recordSessionModel({
-          modelId: '$runtime|openai|custom-runtime',
-          authType: 'openai',
-          isRuntime: true,
-        }),
-      ).resolves.toBe(true);
-      expect(jsonl.writeLine).not.toHaveBeenCalled();
-    });
-
-    it('re-anchors the live session model onto the rewind branch', async () => {
-      chatRecordingService.recordUserMessage([{ text: 'first' }]);
-      await chatRecordingService.recordSessionModel({
-        modelId: 'qwen3-coder-plus',
-        authType: 'openai',
-      });
-      chatRecordingService.recordUserMessage([{ text: 'second' }]);
-      await chatRecordingService.recordSessionModel({
-        modelId: 'qwen3-coder-flash',
-        authType: 'openai',
-      });
-      vi.mocked(jsonl.writeLine).mockClear();
-
-      chatRecordingService.rewindRecording(1, { truncatedCount: 1 });
-      await chatRecordingService.flush();
-
-      const written = vi
-        .mocked(jsonl.writeLine)
-        .mock.calls.map((call) => call[1] as ChatRecord);
-      expect(written.map((record) => record.subtype)).toEqual([
-        'rewind',
-        'session_model',
-      ]);
-      expect(written[1]?.parentUuid).toBe(written[0]?.uuid);
-      expect(written[1]?.systemPayload).toEqual({
-        modelId: 'qwen3-coder-flash',
-        authType: 'openai',
-      });
-
-      vi.mocked(jsonl.writeLine).mockClear();
-      await expect(
-        chatRecordingService.recordSessionModel({
-          modelId: 'qwen3-coder-flash',
-          authType: 'openai',
-        }),
-      ).resolves.toBe(true);
-      expect(jsonl.writeLine).not.toHaveBeenCalled();
-    });
-
-    it('writes a second record when only the isRuntime flag differs', async () => {
-      await chatRecordingService.recordSessionModel({
-        modelId: 'qwen3-coder-plus',
-        authType: 'openai',
-      });
-      vi.mocked(jsonl.writeLine).mockClear();
-      await expect(
-        chatRecordingService.recordSessionModel({
-          modelId: 'qwen3-coder-plus',
-          authType: 'openai',
-          isRuntime: true,
-        }),
-      ).resolves.toBe(true);
-      expect(jsonl.writeLine).toHaveBeenCalledOnce();
-      const record = vi.mocked(jsonl.writeLine).mock.calls[0][1] as ChatRecord;
-      expect(record.systemPayload).toEqual({
-        modelId: 'qwen3-coder-plus',
-        authType: 'openai',
-        isRuntime: true,
-      });
-    });
-
-    it('writes a new record when only the baseUrl differs', async () => {
-      await chatRecordingService.recordSessionModel({
-        modelId: 'qwen3-coder-plus',
-        authType: 'openai',
-        baseUrl: 'https://a.example/v1',
-      });
-      vi.mocked(jsonl.writeLine).mockClear();
-      await expect(
-        chatRecordingService.recordSessionModel({
-          modelId: 'qwen3-coder-plus',
-          authType: 'openai',
-          baseUrl: 'https://b.example/v1',
-        }),
-      ).resolves.toBe(true);
-      expect(jsonl.writeLine).toHaveBeenCalledOnce();
-    });
-
-    it('skips a payload identical on the isRuntime and baseUrl dimensions', async () => {
-      await chatRecordingService.recordSessionModel({
-        modelId: 'qwen3-coder-plus',
-        authType: 'openai',
-        baseUrl: 'https://a.example/v1',
-        isRuntime: true,
-      });
-      vi.mocked(jsonl.writeLine).mockClear();
-      await expect(
-        chatRecordingService.recordSessionModel({
-          modelId: 'qwen3-coder-plus',
-          authType: 'openai',
-          baseUrl: 'https://a.example/v1',
-          isRuntime: true,
-        }),
-      ).resolves.toBe(true);
-      expect(jsonl.writeLine).not.toHaveBeenCalled();
-    });
-
-    it('re-anchors the pending new binding when a rewind lands mid-write', async () => {
-      chatRecordingService.recordUserMessage([{ text: 'first' }]);
-      await chatRecordingService.recordSessionModel({
-        modelId: 'qwen3-coder-plus',
-        authType: 'openai',
-      });
-      chatRecordingService.recordUserMessage([{ text: 'second' }]);
-
-      // Hold the next session_model write at the IO layer so the rewind
-      // lands inside the pending-write window.
-      vi.mocked(jsonl.writeLine).mockClear();
-      let releaseWrite: (() => void) | undefined;
-      vi.mocked(jsonl.writeLine).mockImplementationOnce(
-        () =>
-          new Promise<void>((resolve) => {
-            releaseWrite = resolve;
-          }),
-      );
-      const pendingSwitch = chatRecordingService.recordSessionModel({
-        modelId: 'qwen3-coder-flash',
-        authType: 'openai',
-      });
-      await vi.waitFor(() => {
-        expect(vi.mocked(jsonl.writeLine).mock.calls.length).toBe(1);
-      });
-
-      chatRecordingService.rewindRecording(1, { truncatedCount: 1 });
-      releaseWrite?.();
-      await pendingSwitch;
-      await chatRecordingService.flush();
-
-      const written = vi
-        .mocked(jsonl.writeLine)
-        .mock.calls.map((call) => call[1] as ChatRecord);
-      const rewindIndex = written.findIndex(
-        (record) => record.subtype === 'rewind',
-      );
-      expect(rewindIndex).toBeGreaterThanOrEqual(0);
-      const reAppended = written[rewindIndex + 1];
-      expect(reAppended?.subtype).toBe('session_model');
-      expect(reAppended?.parentUuid).toBe(written[rewindIndex]?.uuid);
-      expect(reAppended?.systemPayload).toEqual({
-        modelId: 'qwen3-coder-flash',
-        authType: 'openai',
-      });
-    });
-  });
-
-  describe('recordSessionApprovalMode', () => {
-    it('appends normalized approval state and skips identical payloads', async () => {
-      vi.mocked(jsonl.writeLine).mockClear();
-      await expect(
-        chatRecordingService.recordSessionApprovalMode({
-          mode: ApprovalMode.PLAN,
-        }),
-      ).resolves.toBe(true);
-
-      const record = vi.mocked(jsonl.writeLine).mock.calls[0][1] as ChatRecord;
-      expect(record).toMatchObject({
-        type: 'system',
-        subtype: 'session_approval_mode',
-        systemPayload: {
-          mode: ApprovalMode.PLAN,
-          prePlanMode: ApprovalMode.DEFAULT,
-        },
-      });
-
-      vi.mocked(jsonl.writeLine).mockClear();
-      await expect(
-        chatRecordingService.recordSessionApprovalMode({
-          mode: ApprovalMode.PLAN,
-          prePlanMode: ApprovalMode.DEFAULT,
-        }),
-      ).resolves.toBe(true);
-      expect(jsonl.writeLine).not.toHaveBeenCalled();
-
-      await expect(
-        chatRecordingService.recordSessionApprovalMode({
-          mode: ApprovalMode.PLAN,
-          prePlanMode: ApprovalMode.DEFAULT,
-          planExecutionMode: ApprovalMode.YOLO,
-        }),
-      ).resolves.toBe(true);
-      expect(jsonl.writeLine).toHaveBeenCalledOnce();
-      expect(
-        (vi.mocked(jsonl.writeLine).mock.calls[0][1] as ChatRecord)
-          .systemPayload,
-      ).toEqual({
-        mode: ApprovalMode.PLAN,
-        prePlanMode: ApprovalMode.DEFAULT,
-        planExecutionMode: ApprovalMode.YOLO,
-      });
-    });
-
-    it('restores projected approval state for duplicate suppression', async () => {
-      const service = new ChatRecordingService(mockConfig, undefined, false, {
-        lastCompletedUuid: 'projected-leaf',
-        turnParentUuids: [null],
-        sessionApprovalMode: { mode: ApprovalMode.YOLO },
-      });
-      vi.mocked(jsonl.writeLine).mockClear();
-
-      await expect(
-        service.recordSessionApprovalMode({ mode: ApprovalMode.YOLO }),
-      ).resolves.toBe(true);
-      expect(jsonl.writeLine).not.toHaveBeenCalled();
-    });
-
-    it('restores approval state from a full-record replay', async () => {
+  describe('legacy recorder', () => {
+    it('restores session model bindings from a full-record replay', async () => {
       vi.mocked(mockConfig.getResumedSessionData).mockReturnValue({
         conversation: {
           messages: [
             {
-              uuid: 'approval-1',
+              uuid: 'model-1',
               parentUuid: null,
               sessionId: 'test-session-id',
-              timestamp: '2026-08-31T00:00:00.000Z',
+              timestamp: '2026-06-27T00:00:00.000Z',
               type: 'system',
-              subtype: 'session_approval_mode',
+              subtype: 'session_model',
               cwd: '/test/project/root',
               version: '1.0.0',
-              systemPayload: { mode: ApprovalMode.YOLO },
+              systemPayload: {
+                modelId: 'qwen3-coder-plus',
+                authType: 'openai',
+              },
             },
           ],
         },
-        lastCompletedUuid: 'approval-1',
+        lastCompletedUuid: 'model-1',
       } as unknown as ReturnType<Config['getResumedSessionData']>);
-      const service = new ChatRecordingService(mockConfig, undefined, false);
-      vi.mocked(jsonl.writeLine).mockClear();
-
-      await expect(
-        service.recordSessionApprovalMode({ mode: ApprovalMode.YOLO }),
-      ).resolves.toBe(true);
-      expect(jsonl.writeLine).not.toHaveBeenCalled();
+      const service = new ChatRecordingService(mockConfig);
+      expect(service['currentSessionModel']).toEqual({
+        modelId: 'qwen3-coder-plus',
+        authType: 'openai',
+      });
     });
 
-    it('re-anchors the supplied live approval state onto the rewind branch', async () => {
-      chatRecordingService.recordUserMessage([{ text: 'first' }]);
-      await chatRecordingService.recordSessionApprovalMode({
-        mode: ApprovalMode.YOLO,
-      });
-      chatRecordingService.recordUserMessage([{ text: 'second' }]);
-      await chatRecordingService.flush();
-      vi.mocked(jsonl.writeLine).mockClear();
+    it('skips a non-string session_model payload during full-record replay', async () => {
+      vi.mocked(mockConfig.getResumedSessionData).mockReturnValue({
+        conversation: {
+          messages: [
+            {
+              uuid: 'model-1',
+              parentUuid: null,
+              sessionId: 'test-session-id',
+              timestamp: '2026-06-27T00:00:00.000Z',
+              type: 'system',
+              subtype: 'session_model',
+              cwd: '/test/project/root',
+              version: '1.0.0',
+              systemPayload: {
+                modelId: 42,
+                authType: 'openai',
+              },
+            },
+          ],
+        },
+        lastCompletedUuid: 'model-1',
+      } as unknown as ReturnType<Config['getResumedSessionData']>);
+      expect(() => new ChatRecordingService(mockConfig)).not.toThrow();
+      const service = new ChatRecordingService(mockConfig);
+      expect(service['currentSessionModel']).toBeUndefined();
+    });
 
-      chatRecordingService.rewindRecording(
-        1,
-        { truncatedCount: 1 },
-        undefined,
-        { mode: ApprovalMode.DEFAULT },
-      );
-      await chatRecordingService.flush();
+    // Only transcripts written by earlier releases carry a session_source
+    // record; a resumed recorder keeps re-anchoring it near the tail.
+    function resumeWithSessionSource(): void {
+      vi.mocked(mockConfig.getResumedSessionData).mockReturnValue({
+        conversation: {
+          messages: [
+            {
+              uuid: 'source-1',
+              parentUuid: null,
+              sessionId: 'test-session-id',
+              timestamp: '2026-06-27T00:00:00.000Z',
+              type: 'system',
+              subtype: 'session_source',
+              cwd: '/test/project/root',
+              version: '1.0.0',
+              systemPayload: {
+                sourceType: 'channel',
+                sourceId: 'channel-main',
+              },
+            },
+          ],
+        },
+        lastCompletedUuid: 'source-1',
+      } as unknown as ReturnType<Config['getResumedSessionData']>);
+    }
 
-      const written = vi
+    const writtenSourceRecords = () =>
+      vi
         .mocked(jsonl.writeLine)
-        .mock.calls.map((call) => call[1] as ChatRecord);
-      expect(written.map((record) => record.subtype)).toEqual([
-        'rewind',
-        'session_approval_mode',
-      ]);
-      expect(written[1]?.parentUuid).toBe(written[0]?.uuid);
-      expect(written[1]?.systemPayload).toEqual({
-        mode: ApprovalMode.DEFAULT,
-      });
-    });
-
-    it('re-anchors a pending approval change when rewind lands mid-write', async () => {
-      chatRecordingService.recordUserMessage([{ text: 'first' }]);
-      await chatRecordingService.recordSessionApprovalMode({
-        mode: ApprovalMode.DEFAULT,
-      });
-      chatRecordingService.recordUserMessage([{ text: 'second' }]);
-      await chatRecordingService.flush();
-
-      vi.mocked(jsonl.writeLine).mockClear();
-      let releaseWrite: (() => void) | undefined;
-      vi.mocked(jsonl.writeLine).mockImplementationOnce(
-        () =>
-          new Promise<void>((resolve) => {
-            releaseWrite = resolve;
-          }),
-      );
-      const pendingChange = chatRecordingService.recordSessionApprovalMode({
-        mode: ApprovalMode.YOLO,
-      });
-      await vi.waitFor(() => {
-        expect(vi.mocked(jsonl.writeLine).mock.calls.length).toBe(1);
-      });
-
-      chatRecordingService.rewindRecording(1, { truncatedCount: 1 });
-      releaseWrite?.();
-      await pendingChange;
-      await chatRecordingService.flush();
-
-      const written = vi
-        .mocked(jsonl.writeLine)
-        .mock.calls.map((call) => call[1] as ChatRecord);
-      const rewindIndex = written.findIndex(
-        (record) => record.subtype === 'rewind',
-      );
-      expect(written[rewindIndex + 1]).toMatchObject({
-        subtype: 'session_approval_mode',
-        systemPayload: { mode: ApprovalMode.YOLO },
-      });
-    });
-
-    it('retries an identical approval state after a synchronous failure', async () => {
-      const writeFileSpy = vi.spyOn(fs, 'writeFileSync');
-      writeFileSpy.mockImplementationOnce(() => {
-        throw Object.assign(new Error('ENOSPC'), { code: 'ENOSPC' });
-      });
-      const service = new ChatRecordingService(mockConfig, undefined, false);
-
-      await expect(
-        service.recordSessionApprovalMode({ mode: ApprovalMode.YOLO }),
-      ).resolves.toBe(false);
-      expect(jsonl.writeLine).not.toHaveBeenCalled();
-
-      await expect(
-        service.recordSessionApprovalMode({ mode: ApprovalMode.YOLO }),
-      ).resolves.toBe(true);
-      expect(jsonl.writeLine).toHaveBeenCalledOnce();
-    });
-
-    it('does not suppress a later mode after a failed write races a newer one', async () => {
-      const service = new ChatRecordingService(mockConfig, undefined, false, {
-        lastCompletedUuid: 'projected-leaf',
-        turnParentUuids: [null],
-        sessionApprovalMode: { mode: ApprovalMode.DEFAULT },
-      });
-      vi.spyOn(fs, 'writeFileSync').mockImplementationOnce(() => {
-        throw Object.assign(new Error('ENOSPC'), { code: 'ENOSPC' });
-      });
-
-      const failed = service.recordSessionApprovalMode({
-        mode: ApprovalMode.YOLO,
-      });
-      const later = service.recordSessionApprovalMode({
-        mode: ApprovalMode.PLAN,
-      });
-      await expect(failed).resolves.toBe(false);
-      await expect(later).resolves.toBe(true);
-      const writesBefore = vi.mocked(jsonl.writeLine).mock.calls.length;
-
-      await expect(
-        service.recordSessionApprovalMode({ mode: ApprovalMode.DEFAULT }),
-      ).resolves.toBe(true);
-      expect(vi.mocked(jsonl.writeLine).mock.calls.length).toBe(
-        writesBefore + 1,
-      );
-    });
-
-    it('rejects a Plan predecessor that is itself Plan', async () => {
-      vi.mocked(jsonl.writeLine).mockClear();
-      await expect(
-        chatRecordingService.recordSessionApprovalMode({
-          mode: ApprovalMode.PLAN,
-          prePlanMode: ApprovalMode.PLAN,
-        }),
-      ).resolves.toBe(false);
-      expect(jsonl.writeLine).not.toHaveBeenCalled();
-    });
-
-    it('rejects Plan as its own execution mode', async () => {
-      vi.mocked(jsonl.writeLine).mockClear();
-      await expect(
-        chatRecordingService.recordSessionApprovalMode({
-          mode: ApprovalMode.PLAN,
-          planExecutionMode: ApprovalMode.PLAN,
-        }),
-      ).resolves.toBe(false);
-      expect(jsonl.writeLine).not.toHaveBeenCalled();
-    });
-
-    it('ignores predecessor data on a non-Plan record', async () => {
-      vi.mocked(jsonl.writeLine).mockClear();
-      await expect(
-        chatRecordingService.recordSessionApprovalMode({
-          mode: ApprovalMode.YOLO,
-          prePlanMode: ApprovalMode.PLAN,
-          planExecutionMode: ApprovalMode.PLAN,
-        }),
-      ).resolves.toBe(true);
-
-      const record = vi.mocked(jsonl.writeLine).mock.calls[0][1] as ChatRecord;
-      expect(record.systemPayload).toEqual({ mode: ApprovalMode.YOLO });
-    });
-  });
-
-  describe('legacy recorder', () => {
-    it('reanchors session source after more than the tail window is appended', async () => {
-      await expect(
-        chatRecordingService.recordSessionSource('channel', 'channel-main'),
-      ).resolves.toBe(true);
-
-      chatRecordingService.recordUserMessage([{ text: 'x'.repeat(65 * 1024) }]);
-      await chatRecordingService.flush();
-
-      const sourceRecords = vi
-        .mocked(mockLease.appendJsonLine)
-        .mock.calls.map((call) => call[0] as ChatRecord)
+        .mock.calls.map((call) => call[1] as ChatRecord)
         .filter((record) => record.subtype === 'session_source');
-      expect(sourceRecords).toHaveLength(2);
-      expect(sourceRecords.at(-1)?.systemPayload).toEqual({
-        sourceType: 'channel',
-        sourceId: 'channel-main',
-      });
-    });
 
     it('reanchors a restored session source on the next append', async () => {
+      resumeWithSessionSource();
       const service = new ChatRecordingService(mockConfig);
-      service.activate(mockLease, undefined, undefined, {
-        lastCompletedUuid: 'projected-leaf',
-        turnParentUuids: [null],
-        sourceType: 'channel',
-        sourceId: 'channel-main',
-      });
 
       service.recordUserMessage([{ text: 'next' }]);
       await service.flush();
 
-      const sourceRecord = vi
-        .mocked(mockLease.appendJsonLine)
-        .mock.calls.map((call) => call[0] as ChatRecord)
-        .find((record) => record.subtype === 'session_source');
-      expect(sourceRecord?.systemPayload).toEqual({
+      expect(writtenSourceRecords()).toHaveLength(1);
+      expect(writtenSourceRecords()[0]?.systemPayload).toEqual({
         sourceType: 'channel',
         sourceId: 'channel-main',
       });
     });
 
-    it('restores reduced recorder state without the full conversation', async () => {
-      const service = new ChatRecordingService(mockConfig, undefined, false, {
-        lastCompletedUuid: 'projected-leaf',
-        turnParentUuids: [null, 'projected-parent'],
-        customTitle: 'Projected title',
-        titleSource: 'manual',
-        parentSessionId: 'parent-session',
+    it('reanchors session source after more than the tail window is appended', async () => {
+      resumeWithSessionSource();
+      const service = new ChatRecordingService(mockConfig);
+      service.recordUserMessage([{ text: 'next' }]);
+      await service.flush();
+      expect(writtenSourceRecords()).toHaveLength(1);
+
+      service.recordUserMessage([{ text: 'x'.repeat(65 * 1024) }]);
+      await service.flush();
+
+      expect(writtenSourceRecords()).toHaveLength(2);
+      expect(writtenSourceRecords().at(-1)?.systemPayload).toEqual({
         sourceType: 'channel',
         sourceId: 'channel-main',
       });
-
-      service.recordUserMessage([{ text: 'next' }]);
-      await service.flush();
-
-      const record = vi.mocked(jsonl.writeLine).mock.calls[0][1] as ChatRecord;
-      expect(record.parentUuid).toBe('projected-leaf');
-      expect(service.getCurrentCustomTitle()).toBe('Projected title');
-      expect(service.getCurrentTitleSource()).toBe('manual');
-      vi.mocked(jsonl.writeLine).mockClear();
-      await expect(service.recordParentSession('parent-session')).resolves.toBe(
-        true,
-      );
-      await expect(
-        service.recordSessionSource('channel', 'channel-main'),
-      ).resolves.toBe(true);
-      expect(jsonl.writeLine).not.toHaveBeenCalled();
-    });
-
-    it('activates a leased recorder from reduced state', async () => {
-      const service = new ChatRecordingService(mockConfig);
-      service.activate(mockLease, undefined, undefined, {
-        lastCompletedUuid: 'leased-projected-leaf',
-        turnParentUuids: [null],
-      });
-
-      service.recordUserMessage([{ text: 'next' }]);
-      await service.flush();
-
-      const record = vi.mocked(jsonl.writeLine).mock.calls[0][1] as ChatRecord;
-      expect(record.parentUuid).toBe('leased-projected-leaf');
-    });
-
-    it('records the first checkpoint after activating from reduced state', async () => {
-      const service = new ChatRecordingService(mockConfig);
-      service.activate(mockLease, undefined, undefined, {
-        lastCompletedUuid: 'leased-projected-leaf',
-        turnParentUuids: [null],
-      });
-      const cursor = service.getBranchCheckpointCursor();
-
-      service.recordUserMessage([{ text: 'next' }]);
-      service.recordAssistantTurn({
-        model: 'gemini-pro',
-        message: [{ text: 'continued answer' }],
-      });
-
-      await expect(
-        service.recordBranchCheckpointTransaction({
-          cursor,
-          stopReason: 'end_turn',
-        }),
-      ).resolves.toMatchObject({
-        startExclusiveRecordUuid: 'leased-projected-leaf',
-      });
-    });
-
-    it('uses the effective session writer lease gate by default', async () => {
-      mockConfig.getExperimentalZedIntegration = vi.fn().mockReturnValue(true);
-      mockConfig.isSessionWriterLeaseEnabled = vi.fn().mockReturnValue(false);
-      const service = new ChatRecordingService(mockConfig);
-
-      service.recordUserMessage([{ text: 'legacy' }]);
-      await service.flush();
-
-      expect(jsonl.writeLine).toHaveBeenCalledOnce();
-    });
-
-    it('retries an identical session_model payload after a synchronous failure', async () => {
-      const writeFileSpy = vi.spyOn(fs, 'writeFileSync');
-      writeFileSpy.mockImplementationOnce(() => {
-        throw Object.assign(new Error('ENOSPC'), { code: 'ENOSPC' });
-      });
-      const service = new ChatRecordingService(mockConfig, undefined, false);
-
-      await expect(
-        service.recordSessionModel({
-          modelId: 'qwen3-coder-plus',
-          authType: 'openai',
-        }),
-      ).resolves.toBe(false);
-      expect(jsonl.writeLine).not.toHaveBeenCalled();
-
-      await expect(
-        service.recordSessionModel({
-          modelId: 'qwen3-coder-plus',
-          authType: 'openai',
-        }),
-      ).resolves.toBe(true);
-      expect(jsonl.writeLine).toHaveBeenCalledOnce();
     });
 
     it('retries directory setup after a synchronous failure', async () => {
@@ -3597,7 +2009,7 @@ describe('ChatRecordingService', () => {
       });
       writeSpy.mockImplementation(() => undefined);
 
-      const service = new ChatRecordingService(mockConfig, undefined, false);
+      const service = new ChatRecordingService(mockConfig);
       service.recordUserMessage([{ text: 'retry me' }]);
       await expect(service.flush()).resolves.toBeUndefined();
       expect(jsonl.writeLine).not.toHaveBeenCalled();
@@ -3613,7 +2025,7 @@ describe('ChatRecordingService', () => {
 
     it('does not notify for a synchronous conversation-file failure', () => {
       const listener = vi.fn();
-      const service = new ChatRecordingService(mockConfig, listener, false);
+      const service = new ChatRecordingService(mockConfig, listener);
       vi.spyOn(fs, 'writeFileSync').mockImplementationOnce(() => {
         throw Object.assign(new Error('EACCES'), { code: 'EACCES' });
       });
@@ -3628,7 +2040,7 @@ describe('ChatRecordingService', () => {
       const mkdirSpy = vi
         .spyOn(fs, 'mkdirSync')
         .mockImplementation(() => undefined);
-      const service = new ChatRecordingService(mockConfig, undefined, false);
+      const service = new ChatRecordingService(mockConfig);
 
       service.recordUserMessage([{ text: 'first' }]);
       await service.flush();
@@ -3647,7 +2059,7 @@ describe('ChatRecordingService', () => {
       const writeSpy = vi
         .spyOn(fs, 'writeFileSync')
         .mockImplementation(() => undefined);
-      const service = new ChatRecordingService(mockConfig, undefined, false);
+      const service = new ChatRecordingService(mockConfig);
 
       service.recordUserMessage([{ text: 'private' }]);
       await service.flush();
@@ -3699,7 +2111,28 @@ describe('ChatRecordingService', () => {
       }
     });
 
-    it('stops queued normal writes when a strict artifact write fails', async () => {
+    const strictGoalPayload: GoalStateRecordPayloadV2 = {
+      v: 2,
+      cause: 'create',
+      snapshot: {
+        v: 2,
+        activity: 'running',
+        goal: {
+          goalId: 'goal-1',
+          revision: 1,
+          objective: 'ship it',
+          status: 'active',
+          evidenceCursor: { recordId: 'goal-first' },
+          turnCount: 0,
+          activeTimeMs: 0,
+          tokensUsed: 0,
+          createdAt: 100,
+          updatedAt: 100,
+        },
+      },
+    };
+
+    it('stops queued normal writes when a strict write fails', async () => {
       let rejectStrict!: (error: Error) => void;
       const strictWrite = new Promise<void>((_resolve, reject) => {
         rejectStrict = reject;
@@ -3708,13 +2141,10 @@ describe('ChatRecordingService', () => {
         .mockImplementationOnce(() => strictWrite)
         .mockResolvedValue(undefined);
 
-      const strict = chatRecordingService.recordSessionArtifactEvent({
-        v: 2,
-        sessionId: 'test-session-id',
-        sequence: 1,
-        recordedAt: '2026-07-04T00:00:00.000Z',
-        changes: [],
-      });
+      const strict = chatRecordingService.recordGoalState(
+        'goal-first',
+        strictGoalPayload,
+      );
       chatRecordingService.recordUserMessage([{ text: 'after strict write' }]);
       rejectStrict(new Error('disk full'));
 
@@ -3724,141 +2154,45 @@ describe('ChatRecordingService', () => {
 
       chatRecordingService.recordUserMessage([{ text: 'next message' }]);
       await expect(
-        chatRecordingService.recordSessionArtifactSnapshot({
-          v: 2,
-          sessionId: 'test-session-id',
-          sequence: 2,
-          recordedAt: '2026-07-04T00:00:01.000Z',
-          artifacts: [],
-          tombstonedIds: [],
-          stickyEphemeralIds: [],
-        }),
+        chatRecordingService.recordGoalState('goal-second', strictGoalPayload),
       ).rejects.toThrow('disk full');
       expect(jsonl.writeLine).toHaveBeenCalledTimes(1);
     });
 
-    it('rejects strict artifact records after a previous strict write failed', async () => {
+    it('rejects strict records after a previous strict write failed', async () => {
       const writeError = new Error('corrupt journal');
       vi.mocked(jsonl.writeLine)
         .mockRejectedValueOnce(writeError)
         .mockResolvedValue(undefined);
 
       await expect(
-        chatRecordingService.recordSessionArtifactEvent({
-          v: 2,
-          sessionId: 'test-session-id',
-          sequence: 1,
-          recordedAt: '2026-07-04T00:00:00.000Z',
-          changes: [],
-        }),
+        chatRecordingService.recordGoalState('goal-first', strictGoalPayload),
       ).rejects.toBe(writeError);
 
       await expect(
-        chatRecordingService.recordSessionArtifactSnapshot({
-          v: 2,
-          sessionId: 'test-session-id',
-          sequence: 2,
-          recordedAt: '2026-07-04T00:00:01.000Z',
-          artifacts: [],
-          tombstonedIds: [],
-          stickyEphemeralIds: [],
-        }),
+        chatRecordingService.recordGoalState('goal-second', strictGoalPayload),
       ).rejects.toBe(writeError);
       await expect(chatRecordingService.flush()).rejects.toBe(writeError);
       expect(jsonl.writeLine).toHaveBeenCalledTimes(1);
     });
-
-    it('does not let anchor size estimation preempt a strict writer result', async () => {
-      await chatRecordingService.recordCustomTitle('durable-title');
-      vi.mocked(jsonl.writeLine).mockClear();
-      const circular: Record<string, unknown> = {};
-      circular['self'] = circular;
-      const payload = {
-        v: 2,
-        sessionId: 'test-session-id',
-        sequence: 1,
-        recordedAt: '2026-07-04T00:00:00.000Z',
-        changes: [
-          {
-            action: 'upsert',
-            artifactId: 'artifact-1',
-            artifact: circular,
-          },
-        ],
-      } as unknown as Parameters<
-        ChatRecordingService['recordSessionArtifactEvent']
-      >[0];
-
-      await expect(
-        chatRecordingService.recordSessionArtifactEvent(payload),
-      ).resolves.toBeUndefined();
-      expect(jsonl.writeLine).toHaveBeenCalledOnce();
-    });
-
-    it('keeps artifact journal records out of the active conversation chain', async () => {
-      chatRecordingService.recordUserMessage([{ text: 'before artifact' }]);
-      await chatRecordingService.flush();
-
-      await chatRecordingService.recordSessionArtifactEvent({
-        v: 2,
-        sessionId: 'test-session-id',
-        sequence: 1,
-        recordedAt: '2026-07-04T00:00:00.000Z',
-        changes: [],
-      });
-
-      chatRecordingService.recordUserMessage([{ text: 'after artifact' }]);
-      await chatRecordingService.flush();
-
-      const before = vi.mocked(jsonl.writeLine).mock.calls[0][1] as ChatRecord;
-      const artifact = vi.mocked(jsonl.writeLine).mock
-        .calls[1][1] as ChatRecord;
-      const after = vi.mocked(jsonl.writeLine).mock.calls[2][1] as ChatRecord;
-      expect(artifact.parentUuid).toBe(before.uuid);
-      expect(after.parentUuid).toBe(before.uuid);
-      expect(after.parentUuid).not.toBe(artifact.uuid);
-    });
   });
 
   describe('close', () => {
-    it('seals instead of releasing after a successful handoff drain', async () => {
-      chatRecordingService.recordUserMessage([{ text: 'durable' }]);
-
-      await expect(
-        chatRecordingService.close({ handoff: true }),
-      ).resolves.toBeUndefined();
-      expect(mockLease.sealForHandoff).toHaveBeenCalledOnce();
-      expect(mockLease.release).not.toHaveBeenCalled();
-      expect(chatRecordingService.hasWriteOwnership()).toBe(false);
-    });
-
-    it('retains ownership when a handoff drain fails', async () => {
-      const failure = new SessionTranscriptChangedError();
-      vi.mocked(mockLease.appendJsonLine).mockRejectedValueOnce(failure);
-      chatRecordingService.recordUserMessage([{ text: 'not durable' }]);
-
-      await expect(chatRecordingService.close({ handoff: true })).rejects.toBe(
-        failure,
-      );
-      expect(mockLease.sealForHandoff).not.toHaveBeenCalled();
-      expect(mockLease.release).not.toHaveBeenCalled();
-      expect(chatRecordingService.hasWriteOwnership()).toBe(true);
-    });
-
-    it('releases the writer lease before reporting a flush failure', async () => {
-      const failure = new SessionTranscriptChangedError();
-      vi.mocked(mockLease.appendJsonLine).mockRejectedValueOnce(failure);
+    it('closes before reporting a flush failure', async () => {
+      const failure = new Error('disk full');
+      vi.mocked(jsonl.writeLine).mockRejectedValueOnce(failure);
 
       chatRecordingService.recordUserMessage([{ text: 'not durable' }]);
 
       await expect(chatRecordingService.close()).rejects.toBe(failure);
-      expect(mockLease.release).toHaveBeenCalledOnce();
-      expect(chatRecordingService.hasWriteOwnership()).toBe(false);
+      chatRecordingService.recordUserMessage([{ text: 'after close' }]);
+      await expect(chatRecordingService.close()).rejects.toBe(failure);
+      expect(jsonl.writeLine).toHaveBeenCalledTimes(1);
     });
 
     it('cuts off new writes synchronously and closes single-flight', async () => {
       let finishWrite!: () => void;
-      vi.mocked(mockLease.appendJsonLine).mockImplementationOnce(
+      vi.mocked(jsonl.writeLine).mockImplementationOnce(
         () =>
           new Promise<void>((resolve) => {
             finishWrite = resolve;
@@ -3876,64 +2210,7 @@ describe('ChatRecordingService', () => {
         undefined,
         undefined,
       ]);
-      expect(mockLease.appendJsonLine).toHaveBeenCalledTimes(1);
-      expect(mockLease.release).toHaveBeenCalledTimes(1);
-      expect(chatRecordingService.hasWriteOwnership()).toBe(false);
-    });
-
-    it('drains a write barrier admitted before the close cutoff', async () => {
-      const operation = vi.fn().mockResolvedValue('snapshot');
-      const barrier = chatRecordingService.runWithWriteBarrier(operation);
-
-      const close = chatRecordingService.close();
-
-      await expect(barrier).resolves.toBe('snapshot');
-      await expect(close).resolves.toBeUndefined();
-      expect(operation).toHaveBeenCalledOnce();
-    });
-
-    it('clears ownership after an error that follows the release commit', async () => {
-      const cleanupFailure = new SessionWriterUnavailableError();
-      Object.defineProperty(mockLease, 'isReleased', {
-        configurable: true,
-        get: () => true,
-      });
-      vi.mocked(mockLease.release).mockRejectedValueOnce(cleanupFailure);
-
-      await expect(chatRecordingService.close()).rejects.toBe(cleanupFailure);
-      expect(chatRecordingService.hasWriteOwnership()).toBe(false);
-    });
-
-    it('retries release durability without reporting stale write ownership', async () => {
-      const cleanupFailure = new SessionWriterUnavailableError();
-      let released = false;
-      let durabilityPending = false;
-      Object.defineProperties(mockLease, {
-        isReleased: {
-          configurable: true,
-          get: () => released,
-        },
-        isReleaseDurabilityPending: {
-          configurable: true,
-          get: () => durabilityPending,
-        },
-      });
-      vi.mocked(mockLease.release)
-        .mockImplementationOnce(async () => {
-          released = true;
-          durabilityPending = true;
-          throw cleanupFailure;
-        })
-        .mockImplementationOnce(async () => {
-          durabilityPending = false;
-        });
-
-      await expect(chatRecordingService.close()).rejects.toBe(cleanupFailure);
-      expect(chatRecordingService.hasWriteOwnership()).toBe(false);
-
-      await expect(chatRecordingService.close()).resolves.toBeUndefined();
-      expect(mockLease.release).toHaveBeenCalledTimes(2);
-      expect(chatRecordingService.hasWriteOwnership()).toBe(false);
+      expect(jsonl.writeLine).toHaveBeenCalledTimes(1);
     });
   });
 

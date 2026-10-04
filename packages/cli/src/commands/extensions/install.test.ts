@@ -203,7 +203,6 @@ describe('handleInstall', () => {
       expect.any(Function),
       undefined,
       expect.any(String),
-      undefined,
       {
         scope: 'workspace',
         workspacePath: expect.any(String),
@@ -270,7 +269,6 @@ describe('handleInstall', () => {
       expect.any(Function),
       undefined,
       expect.any(String),
-      undefined,
       expect.objectContaining({ scope: 'workspace' }),
     );
   });
@@ -293,7 +291,6 @@ describe('handleInstall', () => {
       expect.any(Function),
       undefined,
       expect.any(String),
-      undefined,
       { scope: 'user' },
     );
     expect(mockWriteStdoutLine).toHaveBeenCalledWith(

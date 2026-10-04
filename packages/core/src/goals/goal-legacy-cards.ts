@@ -36,8 +36,7 @@ export interface LegacyRunningGoalCard {
  * can sit back to back with no terminal card between them, and the
  * condition is what identifies the run.
  *
- * Read for presentation only: the session list's label and the trailing
- * card an ACP replay emits so the running card is not the last word.
+ * Read for presentation only: the session list's label.
  */
 export function findRunningLegacyGoalCard(
   records: readonly GoalRecoveryRecord[],

@@ -69,7 +69,6 @@ export async function applyOutputStyleSelection(
   config: Config,
   settings: LoadedSettings,
   style: OutputStyleDefinition | undefined,
-  options: { allowWorkspaceSettingsWrite?: boolean } = {},
 ): Promise<string> {
   if (config.getBareMode() || config.isSafeMode()) {
     throw new Error(
@@ -83,14 +82,6 @@ export async function applyOutputStyleSelection(
       settings.workspace.settings.general ?? {},
       'outputStyle',
     );
-  if (
-    workspaceOwnsOutputStyle &&
-    options.allowWorkspaceSettingsWrite === false
-  ) {
-    throw new Error(
-      t('Project output style settings are not available in this session.'),
-    );
-  }
   const scope = workspaceOwnsOutputStyle
     ? SettingScope.Workspace
     : SettingScope.User;

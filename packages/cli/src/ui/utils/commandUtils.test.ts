@@ -12,7 +12,6 @@ import {
   isAtCommand,
   isSlashCommand,
   copyToClipboard,
-  getUrlOpenCommand,
   CodePage,
   CONTEXT_FILES_ANNOUNCEMENT_PREFIX,
   consumesContextAnnouncementLatch,
@@ -820,44 +819,6 @@ describe('commandUtils', () => {
         await copyToClipboard(specialText);
 
         expect(mockChild.stdin.write).toHaveBeenCalledWith(specialText);
-      });
-    });
-  });
-
-  describe('getUrlOpenCommand', () => {
-    describe('on macOS (darwin)', () => {
-      beforeEach(() => {
-        mockProcess.platform = 'darwin';
-      });
-      it('should return open', () => {
-        expect(getUrlOpenCommand()).toBe('open');
-      });
-    });
-
-    describe('on Windows (win32)', () => {
-      beforeEach(() => {
-        mockProcess.platform = 'win32';
-      });
-      it('should return start', () => {
-        expect(getUrlOpenCommand()).toBe('start');
-      });
-    });
-
-    describe('on Linux (linux)', () => {
-      beforeEach(() => {
-        mockProcess.platform = 'linux';
-      });
-      it('should return xdg-open', () => {
-        expect(getUrlOpenCommand()).toBe('xdg-open');
-      });
-    });
-
-    describe('on unmatched OS', () => {
-      beforeEach(() => {
-        mockProcess.platform = 'unmatched';
-      });
-      it('should return xdg-open', () => {
-        expect(getUrlOpenCommand()).toBe('xdg-open');
       });
     });
   });

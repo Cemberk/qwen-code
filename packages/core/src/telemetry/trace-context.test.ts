@@ -12,14 +12,14 @@ import {
   getActiveSpanTraceContext,
   getSessionRootTraceContext,
   getTraceContext,
-  formatTraceparent,
-  ZERO_TRACE_ID,
 } from './trace-context.js';
 
 const { INVALID_TRACE, INVALID_SPAN } = vi.hoisted(() => ({
   INVALID_TRACE: '0'.repeat(32),
   INVALID_SPAN: '0'.repeat(16),
 }));
+
+const ZERO_TRACE_ID = '0'.repeat(32);
 
 vi.mock('@opentelemetry/api', () => ({
   trace: {
@@ -169,48 +169,6 @@ describe('trace-context', () => {
 
     it('returns null when neither source has context', () => {
       expect(getTraceContext()).toBeNull();
-    });
-  });
-
-  describe('formatTraceparent', () => {
-    it('formats with traceFlags=0', () => {
-      expect(
-        formatTraceparent({
-          traceId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-          spanId: 'bbbbbbbbbbbbbbbb',
-          traceFlags: 0,
-        }),
-      ).toBe('00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-00');
-    });
-
-    it('formats with traceFlags=1 (sampled)', () => {
-      expect(
-        formatTraceparent({
-          traceId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-          spanId: 'bbbbbbbbbbbbbbbb',
-          traceFlags: 1,
-        }),
-      ).toBe('00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01');
-    });
-
-    it('formats with traceFlags=255', () => {
-      expect(
-        formatTraceparent({
-          traceId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-          spanId: 'bbbbbbbbbbbbbbbb',
-          traceFlags: 255,
-        }),
-      ).toBe('00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-ff');
-    });
-
-    it('masks traceFlags to one byte', () => {
-      expect(
-        formatTraceparent({
-          traceId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-          spanId: 'bbbbbbbbbbbbbbbb',
-          traceFlags: 0x1ff,
-        }),
-      ).toBe('00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-ff');
     });
   });
 });

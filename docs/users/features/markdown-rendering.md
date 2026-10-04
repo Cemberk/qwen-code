@@ -42,7 +42,7 @@ current session view; it does not rewrite your settings file.
 
 Image parts use a separate TUI display path and behave the same in Markdown
 `render` and `raw` modes. See [Terminal Images](./terminal-images.md) for terminal
-support, fallbacks, limits, channel delivery, and session-history behavior.
+support, fallbacks, limits, and session-history behavior.
 
 ## Mermaid
 

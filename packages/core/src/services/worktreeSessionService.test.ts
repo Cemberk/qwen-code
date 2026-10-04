@@ -10,9 +10,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   readWorktreeSession,
-  readWorktreeSessionStrict,
   writeWorktreeSession,
-  createWorktreeSession,
   clearWorktreeSession,
   clearWorktreeSessionDurable,
   restoreWorktreeContext,
@@ -180,205 +178,6 @@ describe('readWorktreeSession', () => {
   );
 });
 
-describe('readWorktreeSessionStrict', () => {
-  const differentIdentity = (value: number | bigint): number | bigint =>
-    typeof value === 'bigint' ? (value === 1n ? 2n : 1n) : value === 1 ? 2 : 1;
-
-  it('distinguishes missing, valid, and malformed sidecars', async () => {
-    await expect(readWorktreeSessionStrict(filePath)).resolves.toEqual({
-      state: 'missing',
-    });
-
-    await fs.writeFile(filePath, JSON.stringify(sample), 'utf8');
-    await expect(readWorktreeSessionStrict(filePath)).resolves.toEqual({
-      state: 'valid',
-      session: sample,
-    });
-
-    await fs.writeFile(filePath, '{broken', 'utf8');
-    await expect(readWorktreeSessionStrict(filePath)).resolves.toMatchObject({
-      state: 'invalid',
-    });
-  });
-
-  it('rejects symlinked, hard-linked, and oversized sidecars', async () => {
-    const target = path.join(tmpDir, 'target');
-    await fs.writeFile(target, JSON.stringify(sample), 'utf8');
-    await fs.symlink(target, filePath);
-    await expect(readWorktreeSessionStrict(filePath)).resolves.toMatchObject({
-      state: 'invalid',
-    });
-
-    await fs.unlink(filePath);
-    await fs.link(target, filePath);
-    await expect(readWorktreeSessionStrict(filePath)).resolves.toMatchObject({
-      state: 'invalid',
-    });
-
-    await fs.unlink(filePath);
-    await fs.writeFile(filePath, 'x'.repeat(64 * 1024 + 1));
-    await expect(readWorktreeSessionStrict(filePath)).resolves.toMatchObject({
-      state: 'invalid',
-    });
-  });
-
-  it('uses a bounded read for sidecar contents', async () => {
-    await fs.writeFile(filePath, JSON.stringify(sample), 'utf8');
-    const probe = await fs.open(filePath, 'r');
-    const prototype = Object.getPrototypeOf(probe) as Pick<
-      typeof probe,
-      'read' | 'readFile'
-    >;
-    const readSpy = vi.spyOn(prototype, 'read');
-    const readFileSpy = vi.spyOn(prototype, 'readFile');
-    await probe.close();
-
-    try {
-      await expect(readWorktreeSessionStrict(filePath)).resolves.toMatchObject({
-        state: 'valid',
-      });
-      expect(readFileSpy).not.toHaveBeenCalled();
-      expect(readSpy).toHaveBeenCalledWith(
-        expect.any(Buffer),
-        0,
-        64 * 1024 + 1,
-        0,
-      );
-    } finally {
-      readSpy.mockRestore();
-      readFileSpy.mockRestore();
-    }
-  });
-
-  it('rejects a sidecar whose opened identity differs from its path', async () => {
-    await fs.writeFile(filePath, JSON.stringify(sample), 'utf8');
-    const probe = await fs.open(filePath, 'r');
-    const prototype = Object.getPrototypeOf(probe) as typeof probe;
-    const originalStat = prototype.stat;
-    await probe.close();
-    const statSpy = vi
-      .spyOn(prototype, 'stat')
-      .mockImplementationOnce(async function (this: typeof probe) {
-        const stats = await originalStat.call(this, { bigint: true });
-        return Object.assign(stats, {
-          ino: differentIdentity(stats.ino),
-        });
-      });
-
-    try {
-      await expect(readWorktreeSessionStrict(filePath)).resolves.toEqual({
-        state: 'invalid',
-        reason: 'sidecar identity changed before read',
-      });
-    } finally {
-      statSpy.mockRestore();
-    }
-  });
-
-  it('rejects a sidecar whose opened identity changes during the read', async () => {
-    await fs.writeFile(filePath, JSON.stringify(sample), 'utf8');
-    const probe = await fs.open(filePath, 'r');
-    const prototype = Object.getPrototypeOf(probe) as typeof probe;
-    const originalStat = prototype.stat;
-    await probe.close();
-    let statCalls = 0;
-    const statSpy = vi
-      .spyOn(prototype, 'stat')
-      .mockImplementation(async function (this: typeof probe) {
-        const stats = await originalStat.call(this, { bigint: true });
-        statCalls++;
-        return statCalls === 2
-          ? Object.assign(stats, {
-              ino: differentIdentity(stats.ino),
-            })
-          : stats;
-      });
-
-    try {
-      await expect(readWorktreeSessionStrict(filePath)).resolves.toEqual({
-        state: 'invalid',
-        reason: 'sidecar identity changed during read',
-      });
-    } finally {
-      statSpy.mockRestore();
-    }
-  });
-
-  it('distinguishes a sidecar that disappears during the read', async () => {
-    await fs.writeFile(filePath, JSON.stringify(sample), 'utf8');
-    const probe = await fs.open(filePath, 'r');
-    const prototype = Object.getPrototypeOf(probe) as typeof probe;
-    const originalRead = prototype.read;
-    await probe.close();
-    let removed = false;
-    const readSpy = vi
-      .spyOn(prototype, 'read')
-      .mockImplementation(async function (
-        this: typeof probe,
-        buffer: Buffer,
-        offset: number,
-        length: number,
-        position: number,
-      ) {
-        const result = await originalRead.call(this, {
-          buffer,
-          offset,
-          length,
-          position,
-        });
-        if (!removed) {
-          removed = true;
-          await fs.unlink(filePath);
-        }
-        return result;
-      } as typeof prototype.read);
-
-    try {
-      await expect(readWorktreeSessionStrict(filePath)).resolves.toEqual({
-        state: 'invalid',
-        reason: 'sidecar disappeared during read',
-      });
-    } finally {
-      readSpy.mockRestore();
-    }
-  });
-
-  it('continues reading a stable sidecar after a short read', async () => {
-    await fs.writeFile(filePath, JSON.stringify(sample), 'utf8');
-    const probe = await fs.open(filePath, 'r');
-    const prototype = Object.getPrototypeOf(probe) as typeof probe;
-    const originalRead = prototype.read;
-    await probe.close();
-    const shortRead = function (
-      this: typeof probe,
-      buffer: Buffer,
-      offset: number,
-      length: number,
-      position: number,
-    ) {
-      return originalRead.call(this, {
-        buffer,
-        offset,
-        length: Math.min(length, 5),
-        position,
-      });
-    };
-    const readSpy = vi
-      .spyOn(prototype, 'read')
-      .mockImplementation(shortRead as typeof prototype.read);
-
-    try {
-      await expect(readWorktreeSessionStrict(filePath)).resolves.toEqual({
-        state: 'valid',
-        session: sample,
-      });
-      expect(readSpy.mock.calls.length).toBeGreaterThan(1);
-    } finally {
-      readSpy.mockRestore();
-    }
-  });
-});
-
 describe('writeWorktreeSession', () => {
   it('writes a readable JSON file', async () => {
     await writeWorktreeSession(filePath, sample);
@@ -402,10 +201,7 @@ describe('writeWorktreeSession', () => {
   it('round-trips the supersede link fields used by worktree reset', async () => {
     const linked: WorktreeSession = { ...sample, supersedes: 'session-old' };
     await writeWorktreeSession(filePath, linked);
-    await expect(readWorktreeSessionStrict(filePath)).resolves.toEqual({
-      state: 'valid',
-      session: linked,
-    });
+    await expect(readWorktreeSession(filePath)).resolves.toEqual(linked);
 
     const superseded: WorktreeSession = {
       ...sample,
@@ -421,93 +217,14 @@ describe('writeWorktreeSession', () => {
       JSON.stringify({ ...sample, supersededBy: 42 }),
       'utf-8',
     );
-    await expect(readWorktreeSessionStrict(filePath)).resolves.toMatchObject({
-      state: 'invalid',
-    });
+    await expect(readWorktreeSession(filePath)).resolves.toBeNull();
 
     await fs.writeFile(
       filePath,
       JSON.stringify({ ...sample, supersedes: null }),
       'utf-8',
     );
-    await expect(readWorktreeSessionStrict(filePath)).resolves.toMatchObject({
-      state: 'invalid',
-    });
-  });
-});
-
-describe('createWorktreeSession', () => {
-  it('does not publish an empty or partial sidecar', async () => {
-    const probe = await fs.open(path.join(tmpDir, 'probe'), 'w');
-    const prototype = Object.getPrototypeOf(probe) as Pick<
-      typeof probe,
-      'stat' | 'writeFile' | 'sync'
-    >;
-    const originalStat = prototype.stat;
-    const originalWriteFile = prototype.writeFile;
-    const originalSync = prototype.sync;
-    await probe.close();
-
-    const sizes: Array<number | 'absent'> = [];
-    const samplePath = async (): Promise<void> => {
-      try {
-        sizes.push((await fs.lstat(filePath)).size);
-      } catch {
-        sizes.push('absent');
-      }
-    };
-    const statSpy = vi
-      .spyOn(prototype, 'stat')
-      .mockImplementation(async function (this: typeof prototype) {
-        await samplePath();
-        const result = await originalStat.call(this);
-        await samplePath();
-        return result;
-      });
-    const writeSpy = vi
-      .spyOn(prototype, 'writeFile')
-      .mockImplementation(async function (
-        this: typeof prototype,
-        ...args: Parameters<typeof originalWriteFile>
-      ) {
-        await samplePath();
-        await originalWriteFile.apply(this, args);
-        await samplePath();
-      });
-    const syncSpy = vi
-      .spyOn(prototype, 'sync')
-      .mockImplementation(async function (this: typeof prototype) {
-        await samplePath();
-        await originalSync.call(this);
-        await samplePath();
-      });
-    try {
-      await createWorktreeSession(filePath, sample);
-    } finally {
-      statSpy.mockRestore();
-      writeSpy.mockRestore();
-      syncSpy.mockRestore();
-    }
-
-    const fullSize = Buffer.byteLength(`${JSON.stringify(sample, null, 2)}\n`);
-    expect(sizes.length).toBeGreaterThan(0);
-    expect(
-      sizes.filter((size) => size !== 'absent' && size !== fullSize),
-    ).toEqual([]);
-  });
-
-  it('exclusively creates a durable sidecar', async () => {
-    await createWorktreeSession(filePath, sample);
-    expect(await readWorktreeSession(filePath)).toEqual(sample);
-
-    await expect(createWorktreeSession(filePath, sample)).rejects.toMatchObject(
-      { code: 'EEXIST' },
-    );
-    expect(
-      (await fs.readdir(tmpDir)).filter((name) =>
-        name.startsWith('test.worktree.json.'),
-      ),
-    ).toEqual([]);
+    await expect(readWorktreeSession(filePath)).resolves.toBeNull();
   });
 });
 
@@ -525,7 +242,7 @@ describe('clearWorktreeSession', () => {
 
 describe('clearWorktreeSessionDurable', () => {
   it('deletes the sidecar idempotently', async () => {
-    await createWorktreeSession(filePath, sample);
+    await writeWorktreeSession(filePath, sample);
     await clearWorktreeSessionDurable(filePath);
     await expect(clearWorktreeSessionDurable(filePath)).resolves.not.toThrow();
     expect(await readWorktreeSession(filePath)).toBeNull();
@@ -692,8 +409,8 @@ describe('restoreWorktreeContext', () => {
   });
 
   it('restores a sidecar caught in the link-then-unlink publish window', async () => {
-    // createWorktreeSession publishes by hard-linking the staged inode onto
-    // the sidecar path and only then unlinking the staged name, so a crash
+    // A link-then-unlink publish hard-links the staged inode onto the
+    // sidecar path and only then unlinks the staged name, so a crash
     // (or a concurrent reader) can observe nlink === 2. That state carries
     // complete, fsync'd content — it must restore, not be deleted as stale.
     const liveCwd = path.join(tmpDir, 'repo-inflight');
@@ -705,7 +422,7 @@ describe('restoreWorktreeContext', () => {
       originalCwd: liveCwd,
       worktreePath: liveWorktree,
     };
-    await createWorktreeSession(filePath, live);
+    await writeWorktreeSession(filePath, live);
     await fs.writeFile(
       path.join(liveWorktree, '.qwen-session'),
       'session-owner',

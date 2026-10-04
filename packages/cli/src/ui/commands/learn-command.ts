@@ -28,7 +28,7 @@ export const learnCommand: SlashCommand = {
     );
   },
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'acp'] as const,
+  supportedModes: ['interactive'] as const,
   argumentHint: '<path|text> [focus]',
   action: async (
     context: CommandContext,

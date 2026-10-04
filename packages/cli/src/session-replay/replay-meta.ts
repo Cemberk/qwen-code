@@ -6,11 +6,6 @@
 
 import type { BackgroundNotificationTurn } from '@qwen-code/qwen-code-core';
 
-export const LOAD_REPLAY_META_KEY = 'qwen.session.loadReplay';
-// Bare (unprefixed) key by contract: already-written transcripts pin the
-// value, so it must stay `inputAnnotations`.
-export const DAEMON_INPUT_ANNOTATIONS_META_KEY = 'inputAnnotations';
-
 export function parseBackgroundNotificationTurn(
   value: unknown,
 ): BackgroundNotificationTurn | undefined {

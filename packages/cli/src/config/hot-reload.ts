@@ -278,8 +278,8 @@ export function registerMcpHotReload(
  * unsubscribes.
  *
  * Diffing against applied state (not a listener-local snapshot) keeps the
- * gate correct when other paths rewrite the registry without a watcher event
- * (ACP session reloads), and means a throwing
+ * gate correct when other paths rewrite the registry without a watcher event,
+ * and means a throwing
  * reload retries on the next event — applied state never advanced. A
  * rejected `refreshAuth` is the one exception: the registry reload has
  * already advanced applied state by then, so a listener-local flag retries

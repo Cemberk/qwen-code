@@ -375,7 +375,6 @@ describe('runNonInteractive', () => {
       setModel: vi.fn(async (model: string) => {
         currentModel = model;
       }),
-      getExperimentalZedIntegration: vi.fn().mockReturnValue(false),
       isInteractive: vi.fn().mockReturnValue(false),
       getHookSystem: vi.fn().mockReturnValue(undefined),
       isCronEnabled: vi.fn().mockReturnValue(false),
@@ -1168,7 +1167,7 @@ describe('runNonInteractive', () => {
   // `goalCommand` degrades a persistence-unavailable `status`/`clear` into a
   // successful empty snapshot. The headless consumer then re-requests the
   // very runtime that just failed, so without swallowing that rejection the
-  // degradation is defeated in this mode only (interactive and ACP were fine).
+  // degradation is defeated in this mode only (interactive was fine).
   it.each([
     { input: '/goal', expectedText: 'No Goal is set.' },
     { input: '/goal clear', expectedText: 'Goal cleared.' },

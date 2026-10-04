@@ -7,14 +7,6 @@
 import type { ExtendedSystemInfo } from './systemInfo.js';
 import { t } from '../i18n/index.js';
 
-/**
- * Field configuration for system information display
- */
-export interface SystemInfoField {
-  label: string;
-  key: keyof ExtendedSystemInfo;
-}
-
 export interface SystemInfoDisplayField {
   label: string;
   value: string;

@@ -90,8 +90,7 @@ describe('tasksCommand', () => {
     // Override createMockCommandContext's `'interactive'` default so the
     // hint-suppression tests below see the expected default-no-hint
     // behaviour. The `shows the dialog hint only in interactive mode`
-    // and `acp mode` tests rebind their own context with the mode they
-    // care about; the rest don't assert on the hint so this default
+    // test rebinds its own context with the mode it cares about; the rest don't assert on the hint so this default
     // doesn't affect their expectations.
     context = createMockCommandContext({
       executionMode: 'non_interactive',
@@ -324,28 +323,6 @@ describe('tasksCommand', () => {
     expect(withHint.content).toContain('Enter');
     expect(withHint.content).not.toContain('Ctrl+T');
     expect(withHint.content).toContain('Background tasks (1 total)');
-  });
-
-  it('suppresses the dialog hint in acp mode (no dialog to point at)', async () => {
-    // ACP / IDE-bridge consumers (Zed, etc.) have no TTY for the
-    // dialog — same suppression rationale as non_interactive. Pinning
-    // this so a future regression that switches to `!== 'non_interactive'`
-    // (which would wrongly show the hint to ACP) fails loudly.
-    getShells.mockReturnValue([entry({ shellId: 'bg_x' })]);
-    const acpCtx = createMockCommandContext({
-      executionMode: 'acp',
-      services: {
-        config: {
-          getBackgroundShellRegistry: () => ({ getAll: getShells }),
-          getBackgroundTaskRegistry: () => ({ getAll: getAgents }),
-          getMonitorRegistry: () => ({ getAll: getMonitors }),
-        },
-      },
-    } as unknown as Parameters<typeof createMockCommandContext>[0]);
-    const result = await tasksCommand.action!(acpCtx, '');
-    if (!result || result.type !== 'message') throw new Error('no result');
-    expect(result.content).not.toContain('Tip:');
-    expect(result.content).toContain('Background tasks (1 total)');
   });
 
   it('strips ANSI escape sequences and bare C0 control bytes from entry fields', async () => {

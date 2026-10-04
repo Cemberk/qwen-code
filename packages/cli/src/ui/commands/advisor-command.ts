@@ -145,14 +145,6 @@ async function setAdvisorModel(
   context: CommandContext,
   model: string | undefined,
 ): Promise<SlashCommandActionReturn> {
-  if (context.executionPolicy?.persistModelSelection === false) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content: t('This model selection is not available in this session.'),
-    };
-  }
-
   const { config, settings } = context.services;
   if (!config) {
     return {
@@ -238,7 +230,7 @@ export const advisorCommand: SlashCommand = {
   },
   argumentHint: '[<model-id>|off|review [focus]]',
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
   completion: async (context, partialArg) => {
     const prefix = partialArg.trim();
     const fixed = [

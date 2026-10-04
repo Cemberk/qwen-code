@@ -123,8 +123,6 @@ export default {
   'Failed to load skills: {{error}}': 'Не удалось загрузить навыки: {{error}}',
   'Failed to save skills configuration: {{error}}':
     'Не удалось сохранить конфигурацию навыков: {{error}}',
-  'All available skills are disabled. Edit ~/.qwen/settings.json or .qwen/settings.json (skills.disabled) to re-enable.':
-    'Все доступные навыки отключены. Отредактируйте ~/.qwen/settings.json или .qwen/settings.json (skills.disabled), чтобы снова их включить.',
   'Press esc to close.': 'Нажмите Esc, чтобы закрыть.',
   '{{count}} skills · ': '{{count}} навыков · ',
   '{{matched}} / {{total}} skills · ': '{{matched}} / {{total}} навыков · ',
@@ -571,8 +569,6 @@ export default {
     'Вы устанавливаете расширение от {{originSource}}. Некоторые функции могут работать не идеально с Qwen Code.',
   'Extension "{{name}}" installed successfully and enabled.':
     'Расширение "{{name}}" успешно установлено и включено.',
-  'The github URL, local path, or marketplace source (marketplace-url:plugin-name) of the extension to install.':
-    'URL GitHub, локальный путь или источник в маркетплейсе (marketplace-url:plugin-name) устанавливаемого расширения.',
   'Acknowledge the security risks of installing an extension and skip the confirmation prompt.':
     'Подтвердить риски безопасности установки расширения и пропустить запрос подтверждения.',
   'The source argument must be provided.':
@@ -1916,8 +1912,6 @@ export default {
     'Arena требует минимум 2 модели. Используйте --models model1,model2 для указания.',
   'Arena started with {{count}} agents on task: "{{task}}"\nModels:\n{{modelList}}':
     'Arena запущена с {{count}} агентами на задаче: "{{task}}"\nМодели:\n{{modelList}}',
-  'Arena panes are running in tmux. Attach with: `{{command}}`':
-    'Панели Arena запущены в tmux. Подключитесь с помощью: `{{command}}`',
   '[{{label}}] failed: {{error}}': '[{{label}}] ошибка: {{error}}',
   'Loading suggestions...': 'Загрузка предложений...',
   'Show context window usage breakdown. Use "/context detail" for per-item breakdown.':
@@ -2004,10 +1998,6 @@ export default {
   out: 'вых.',
   'In/Out': 'Вх/Вых',
   // Update command
-  'Standalone install detected. Please rerun the standalone installer to update:':
-    'Обнаружена автономная установка. Повторно запустите автономный установщик для обновления:',
-  'Unable to auto-update this standalone installation. Please reinstall from:':
-    'Невозможно автоматически обновить эту автономную установку. Переустановите с:',
 
   // ============================================================================
   // reload-plugins command

@@ -5,7 +5,6 @@
  */
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { EventEmitter } from 'node:events';
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
@@ -55,6 +54,10 @@ vi.mock('../utils/yaml-parser.js', () => ({
 
 const TEST_HOME = path.resolve('/home/user');
 const TEST_PROJECT_ROOT = path.resolve('/test/project');
+
+function activatedSkillNames(manager: SkillManager): ReadonlySet<string> {
+  return manager['activationRegistry']?.['activated'] ?? new Set<string>();
+}
 
 describe('SkillManager', () => {
   let manager: SkillManager;
@@ -1877,11 +1880,11 @@ Body.
     it('activates a conditional skill when a matching file path is touched', async () => {
       await loadConditionalFixture();
 
-      const newly = await manager.matchAndActivateByPath(
+      const newly = await manager.matchAndActivateByPaths([
         '/test/project/src/App.tsx',
-      );
+      ]);
       expect(newly).toEqual(['tsx-helper']);
-      expect(manager.getActivatedSkillNames().has('tsx-helper')).toBe(true);
+      expect(activatedSkillNames(manager).has('tsx-helper')).toBe(true);
 
       const all = await manager.listSkills();
       const tsx = all.find((s) => s.name === 'tsx-helper')!;
@@ -1895,14 +1898,14 @@ Body.
       manager.addChangeListener(listener);
 
       expect(
-        await manager.matchAndActivateByPath('/test/project/src/A.tsx'),
+        await manager.matchAndActivateByPaths(['/test/project/src/A.tsx']),
       ).toEqual(['tsx-helper']);
       expect(listener).toHaveBeenCalledTimes(1);
 
       // Same pattern touched again — skill already active, no new
       // notification.
       expect(
-        await manager.matchAndActivateByPath('/test/project/src/B.tsx'),
+        await manager.matchAndActivateByPaths(['/test/project/src/B.tsx']),
       ).toEqual([]);
       expect(listener).toHaveBeenCalledTimes(1);
     });
@@ -1910,9 +1913,9 @@ Body.
     it('does nothing for paths outside the project root', async () => {
       await loadConditionalFixture();
       expect(
-        await manager.matchAndActivateByPath('/other/place/foo.tsx'),
+        await manager.matchAndActivateByPaths(['/other/place/foo.tsx']),
       ).toEqual([]);
-      expect(manager.getActivatedSkillNames().size).toBe(0);
+      expect(activatedSkillNames(manager).size).toBe(0);
     });
 
     it('does not activate a conditional skill that is also disable-model-invocation', async () => {
@@ -1942,11 +1945,11 @@ Body.
 `);
       await manager.refreshCache();
 
-      const newly = await manager.matchAndActivateByPath(
+      const newly = await manager.matchAndActivateByPaths([
         '/test/project/src/foo.ts',
-      );
+      ]);
       expect(newly).toEqual([]);
-      expect(manager.getActivatedSkillNames().size).toBe(0);
+      expect(activatedSkillNames(manager).size).toBe(0);
     });
 
     it('matchAndActivateByPaths fires listeners exactly once across multiple paths', async () => {
@@ -2068,14 +2071,14 @@ User body.
       // Touching `lib/x.ts` (matches user-foo's paths but project-foo wins
       // in listSkills) must NOT activate the visible project-foo.
       expect(
-        await manager.matchAndActivateByPath('/test/project/lib/x.ts'),
+        await manager.matchAndActivateByPaths(['/test/project/lib/x.ts']),
       ).toEqual([]);
-      expect(manager.getActivatedSkillNames().has('foo')).toBe(false);
+      expect(activatedSkillNames(manager).has('foo')).toBe(false);
 
       // Touching `src/x.ts` (matches the visible project-foo's paths) does
       // activate it.
       expect(
-        await manager.matchAndActivateByPath('/test/project/src/x.ts'),
+        await manager.matchAndActivateByPaths(['/test/project/src/x.ts']),
       ).toEqual(['foo']);
     });
   });
@@ -2276,46 +2279,6 @@ Symlinked skill content`);
   });
 
   describe('file watchers', () => {
-    it('detaches skill events without native close during macOS process exit', async () => {
-      vi.resetModules();
-      const { SkillManager: FreshSkillManager } = await import(
-        './skill-manager.js'
-      );
-      const { prepareFileWatchersForProcessExit } = await import(
-        '../utils/file-watcher-cleanup.js'
-      );
-      const platform = process.platform;
-      const projectSkillsDir = path.join(TEST_PROJECT_ROOT, '.qwen', 'skills');
-      vi.mocked(fsSync.existsSync).mockImplementation(
-        (p) => String(p) === projectSkillsDir,
-      );
-      vi.mocked(fs.readdir).mockResolvedValue(
-        [] as unknown as Awaited<ReturnType<typeof fs.readdir>>,
-      );
-      const nativeWatcher = Object.assign(new EventEmitter(), {
-        close: vi.fn().mockResolvedValue(undefined),
-      });
-      mockWatch.mockReturnValueOnce(nativeWatcher);
-      const freshManager = new FreshSkillManager(mockConfig);
-      try {
-        await freshManager.startWatching();
-        expect(nativeWatcher.listenerCount('all')).toBe(1);
-        expect(nativeWatcher.listenerCount('error')).toBe(1);
-        Object.defineProperty(process, 'platform', { value: 'darwin' });
-        prepareFileWatchersForProcessExit();
-
-        freshManager.stopWatching();
-
-        expect(nativeWatcher.close).not.toHaveBeenCalled();
-        expect(nativeWatcher.listenerCount('all')).toBe(0);
-        expect(nativeWatcher.listenerCount('error')).toBe(1);
-      } finally {
-        freshManager.stopWatching();
-        Object.defineProperty(process, 'platform', { value: platform });
-        vi.resetModules();
-      }
-    });
-
     it('should pass ignored function and shallow depth to chokidar', async () => {
       const projectSkillsDir = path.join(TEST_PROJECT_ROOT, '.qwen', 'skills');
       vi.mocked(fsSync.existsSync).mockImplementation(

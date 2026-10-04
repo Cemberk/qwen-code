@@ -43,7 +43,7 @@ describe('authCommand', () => {
     });
   });
 
-  it.each(['non_interactive', 'acp'] as const)(
+  it.each(['non_interactive'] as const)(
     'should return an info message in %s mode',
     (executionMode) => {
       if (!authCommand.action) {
@@ -62,11 +62,10 @@ describe('authCommand', () => {
     },
   );
 
-  it('should support interactive, non-interactive, and ACP modes', () => {
+  it('should support interactive and non-interactive modes', () => {
     expect(authCommand.supportedModes).toEqual([
       'interactive',
       'non_interactive',
-      'acp',
     ]);
   });
 

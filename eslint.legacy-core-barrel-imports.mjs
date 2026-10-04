@@ -33,9 +33,7 @@ export const legacyCoreBarrelImports = [
   'packages/cli/src/config/mcpApprovals.ts',
   'packages/cli/src/config/mcpJson.ts',
   'packages/cli/src/config/migration/scheduler.ts',
-  'packages/cli/src/config/permission-settings.ts',
   'packages/cli/src/config/sandboxConfig.ts',
-  'packages/cli/src/config/settings-cache.ts',
   'packages/cli/src/config/settings.ts',
   'packages/cli/src/config/settingsSchema.ts',
   'packages/cli/src/config/settingsWatcher.ts',
@@ -214,7 +212,6 @@ export const legacyCoreBarrelImports = [
   'packages/cli/src/utils/osc.ts',
   'packages/cli/src/utils/resolvePath.ts',
   'packages/cli/src/utils/runBudget.ts',
-  'packages/cli/src/utils/session-model-persistence.ts',
   'packages/cli/src/utils/sessionPaths.ts',
   'packages/cli/src/utils/startupWarnings.ts',
 ];

@@ -27,8 +27,6 @@ vi.mock('../utils/debugLogger.js', async (importOriginal) => {
 import type { GoalStateRecordPayloadV2 } from './goal-protocol.js';
 import type { GoalRecoveryRecord } from './goal-persistence.js';
 import {
-  isGoalRecoveryCandidate,
-  normalizeGoalRecoveryRecord,
   recoverGoalFromRecords,
   selectGoalRecoveryFromRecords,
 } from './goal-persistence.js';
@@ -127,36 +125,6 @@ describe('recoverGoalFromRecords', () => {
       ).toEqual({ kind: 'v2', payload: ACTIVE_PAYLOAD });
     },
   );
-
-  it('treats only goal_state records as recovery candidates', () => {
-    // A restore projection reads candidates and carries their normalized
-    // slice; a legacy goal_status card is neither, so it is never read or
-    // carried for recovery.
-    const legacyCard = record('legacy', {
-      subtype: 'slash_command',
-      systemPayload: {
-        phase: 'result',
-        rawCommand: '/goal ship it',
-        outputHistoryItems: [
-          { type: 'goal_status', kind: 'set', condition: 'ship it' },
-        ],
-      },
-    });
-    const stateRecord = record('state', {
-      subtype: 'goal_state',
-      systemPayload: ACTIVE_PAYLOAD,
-    });
-
-    expect(isGoalRecoveryCandidate(legacyCard)).toBe(false);
-    expect(normalizeGoalRecoveryRecord(legacyCard)).toBeUndefined();
-    expect(isGoalRecoveryCandidate(stateRecord)).toBe(true);
-    expect(normalizeGoalRecoveryRecord(stateRecord)).toEqual({
-      uuid: 'state',
-      type: 'system',
-      subtype: 'goal_state',
-      systemPayload: ACTIVE_PAYLOAD,
-    });
-  });
 
   it('says in the debug log which newer records it walked past', () => {
     const malformed = {

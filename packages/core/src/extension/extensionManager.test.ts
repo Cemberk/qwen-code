@@ -195,6 +195,23 @@ describe('extension tests', () => {
     });
   }
 
+  async function readStoreSnapshot(extensionsDir: string = userExtensionsDir) {
+    return await new ExtensionStore({ extensionsDir }).readSnapshot();
+  }
+
+  async function readActivation(
+    extension: { id: string; name: string },
+    workspacePath: string = tempWorkspaceDir,
+  ) {
+    const store = new ExtensionStore({ extensionsDir: userExtensionsDir });
+    return store.getActivation(
+      await store.readSnapshot(),
+      extension.id,
+      extension.name,
+      workspacePath,
+    );
+  }
+
   describe('extension workflows', () => {
     const workflowSource = (name: string) =>
       `export const meta = { name: '${name}', description: 'Runs ${name}' };\nreturn 1;\n`;
@@ -588,137 +605,6 @@ describe('extension tests', () => {
         manager.loadExtensionConfig({ extensionDir: extensionDirectory }),
       ).toThrow();
     });
-
-    it('saves a mixed batch on an inactive extension without changing activation or refreshing other resources', async () => {
-      const refreshTools = vi
-        .spyOn(manager, 'refreshTools')
-        .mockResolvedValue();
-      await manager.setExtensionDefaultActivation(extensionId, 'disabled');
-      refreshTools.mockClear();
-      const refreshCache = vi.fn().mockResolvedValue(undefined);
-      manager.setConfig({
-        getSkillManager: () => ({ refreshCache }),
-      } as unknown as Config);
-      const before = await manager.getExtensionStoreSnapshot();
-      const onCommitted = vi.fn();
-      const result = await manager.setExtensionSkillStates(
-        extensionId,
-        tempWorkspaceDir,
-        [
-          { name: 'Skill-A', state: 'disabled' },
-          { name: '__proto__', state: 'enabled' },
-        ],
-        onCommitted,
-      );
-      expect(result.generation).toBe(before.generation + 1);
-      expect(onCommitted).toHaveBeenCalledExactlyOnceWith(result.generation);
-      expect(refreshCache).toHaveBeenCalledExactlyOnceWith({
-        throwOnError: true,
-      });
-      expect(refreshTools).not.toHaveBeenCalled();
-      expect(manager.getLoadedExtensions()[0]?.isActive).toBe(false);
-      expect(manager.getExtensionSkillState(extensionId, 'skill-a')).toEqual({
-        defaultEnabled: true,
-        workspaceEnabled: false,
-      });
-      expect(
-        manager.getExtensionSkillState(extensionId, '__proto__')
-          .workspaceEnabled,
-      ).toBe(true);
-      expect(
-        manager.getExtensionSkillState(extensionId, 'skill-b').workspaceEnabled,
-      ).toBeNull();
-      expect(
-        manager.getExtensionSkillState(
-          extensionId,
-          'skill-a',
-          path.join(tempWorkspaceDir, 'other'),
-        ).workspaceEnabled,
-      ).toBeNull();
-
-      fs.writeFileSync(
-        path.join(extensionDirectory, EXTENSIONS_CONFIG_FILENAME),
-        JSON.stringify({
-          name: 'suite',
-          version: '2.0.0',
-          skillStates: { ['__proto__']: false },
-        }),
-      );
-      await manager.refreshCache();
-      expect(
-        manager.getExtensionSkillState(extensionId, '__proto__')
-          .workspaceEnabled,
-      ).toBe(true);
-      fs.writeFileSync(
-        path.join(extensionDirectory, EXTENSIONS_CONFIG_FILENAME),
-        JSON.stringify({ name: 'suite', version: '3.0.0' }),
-      );
-      const restarted = createExtensionManager();
-      await restarted.refreshCache();
-      expect(
-        restarted.getExtensionSkillState(extensionId, 'skill-a')
-          .workspaceEnabled,
-      ).toBe(false);
-    });
-
-    it('rejects the entire batch for foreign ownership or duplicate names and does not refresh skills', async () => {
-      const other = createExtension({
-        extensionsDir: userExtensionsDir,
-        name: 'other',
-      });
-      fs.mkdirSync(path.join(other, 'skills', 'foreign'), { recursive: true });
-      fs.writeFileSync(
-        path.join(other, 'skills', 'foreign', 'SKILL.md'),
-        '---\nname: foreign\ndescription: Other extension\n---\nOther body',
-      );
-      await manager.refreshCache();
-      const before = await manager.getExtensionStoreSnapshot();
-      const refreshCache = vi.fn();
-      manager.setConfig({
-        getSkillManager: () => ({ refreshCache }),
-      } as unknown as Config);
-      await expect(
-        manager.setExtensionSkillStates(extensionId, tempWorkspaceDir, [
-          { name: 'skill-a', state: 'disabled' },
-          { name: 'foreign', state: 'enabled' },
-        ]),
-      ).rejects.toThrow('does not belong');
-      await expect(
-        manager.setExtensionSkillStates(extensionId, tempWorkspaceDir, [
-          { name: 'skill-a', state: 'disabled' },
-          { name: ' Skill-A ', state: 'disabled' },
-        ]),
-      ).rejects.toThrow('Duplicate');
-      expect(await manager.getExtensionStoreSnapshot()).toEqual(before);
-      expect(refreshCache).not.toHaveBeenCalled();
-    });
-
-    it('retains committed states and reports skill-only refresh failure', async () => {
-      manager.setConfig({
-        getSkillManager: () => ({
-          refreshCache: vi
-            .fn()
-            .mockRejectedValue(new Error('skill refresh failed')),
-        }),
-      } as unknown as Config);
-      const result = await manager.setExtensionSkillStates(
-        extensionId,
-        tempWorkspaceDir,
-        [{ name: 'skill-a', state: 'disabled' }],
-      );
-      expect(result.warnings).toEqual([
-        {
-          code: 'extension_runtime_refresh_failed',
-          error: 'skill refresh failed',
-        },
-      ]);
-      expect(
-        manager.getExtensionSkillState(extensionId, 'skill-a').workspaceEnabled,
-      ).toBe(false);
-      expect((await manager.getExtensionStoreSnapshot()).generation).toBe(
-        result.generation,
-      );
-    });
   });
 
   describe('installExtension', () => {
@@ -875,13 +761,15 @@ describe('extension tests', () => {
         name: 'persistent-plugin',
         version: '1.0.1',
       });
-      const updated = await manager.installExtension(
-        installMetadata,
-        async () => {},
-        undefined,
-        undefined,
-        installed.config,
+      const updateInfo = await manager.updateExtension(
+        installed,
+        ExtensionUpdateState.UPDATE_AVAILABLE,
+        () => {},
       );
+      expect(updateInfo?.updatedVersion).toBe('1.0.1');
+      const updated = manager
+        .getLoadedExtensions()
+        .find((extension) => extension.id === installed.id)!;
       expect(updated.version).toBe('1.0.1');
       expect(updated.mcpServers?.['local']?.env?.['PLUGIN_DATA']).toBe(
         pluginData,
@@ -890,7 +778,7 @@ describe('extension tests', () => {
         'persistent',
       );
 
-      await manager.uninstallExtensionById(updated.id, false);
+      await manager.uninstallExtension(updated.name);
       const reinstalled = await manager.installExtension(
         installMetadata,
         async () => {},
@@ -903,7 +791,7 @@ describe('extension tests', () => {
       );
     });
 
-    it('links an Agent Plugin and fingerprints its native manifest', async () => {
+    it('links an Agent Plugin and reloads its native manifest from the source', async () => {
       const sourcePath = path.join(tempWorkspaceDir, 'linked-source');
       createAgentPlugin(sourcePath, {
         name: 'linked-plugin',
@@ -922,8 +810,6 @@ describe('extension tests', () => {
         source: sourcePath,
         originSource: 'AgentPlugins',
       });
-      expect(await manager.refreshCacheIfSourcesChanged()).toBe(true);
-      expect(await manager.refreshCacheIfSourcesChanged()).toBe(false);
 
       const manifest = JSON.parse(
         fs.readFileSync(path.join(sourcePath, 'plugin.json'), 'utf8'),
@@ -932,7 +818,7 @@ describe('extension tests', () => {
         path.join(sourcePath, 'plugin.json'),
         JSON.stringify({ ...manifest, version: '1.0.1-longer' }),
       );
-      expect(await manager.refreshCacheIfSourcesChanged()).toBe(true);
+      await manager.refreshCache();
       expect(manager.getLoadedExtensions()[0]?.version).toBe('1.0.1-longer');
       const installedPath = path.join(userExtensionsDir, 'linked-plugin');
       expect(fs.readdirSync(installedPath)).toEqual([
@@ -1007,7 +893,8 @@ describe('extension tests', () => {
       expect(installed.path).toBe(
         path.join(customExtensionsDir, 'custom-root'),
       );
-      await manager.uninstallExtensionById(installed.id, true);
+      await manager.refreshCache();
+      await manager.uninstallExtension(installed.name);
       expect(fs.existsSync(installed.path)).toBe(false);
     });
 
@@ -1027,14 +914,10 @@ describe('extension tests', () => {
         () => Promise.resolve(),
         undefined,
         tempWorkspaceDir,
-        undefined,
         { scope: 'workspace', workspacePath: tempWorkspaceDir },
       );
 
-      const activation = await manager.getExtensionActivation(
-        extension.id,
-        tempWorkspaceDir,
-      );
+      const activation = await readActivation(extension);
       expect(activation).toMatchObject({
         default: 'disabled',
         workspace: 'enabled',
@@ -1059,7 +942,7 @@ describe('extension tests', () => {
         },
       );
       const manager = createExtensionManager();
-      const before = await manager.getExtensionStoreSnapshot();
+      const before = await readStoreSnapshot();
 
       await expect(
         manager.installExtension(
@@ -1068,7 +951,7 @@ describe('extension tests', () => {
         ),
       ).rejects.toThrow();
 
-      expect(await manager.getExtensionStoreSnapshot()).toEqual(before);
+      expect(await readStoreSnapshot()).toEqual(before);
       expect(
         fs.existsSync(path.join(userExtensionsDir, 'invalid-context')),
       ).toBe(false);
@@ -1096,24 +979,34 @@ describe('extension tests', () => {
       expect(extension.version).toBe('1.0.0');
     });
 
-    it('stops archive preparation when cancellation follows extraction', async () => {
+    it('stops update preparation when cancellation follows extraction', async () => {
       const archivePath = path.join(tempWorkspaceDir, 'cancelled.zip');
       fs.writeFileSync(archivePath, 'archive');
+      createExtension({
+        extensionsDir: userExtensionsDir,
+        name: 'my-extension',
+        version: '1.0.0',
+        installMetadata: {
+          type: 'local',
+          source: archivePath,
+          originSource: 'QwenCode',
+        },
+      });
       const controller = new AbortController();
       const reason = new Error('preparation expired');
       mockExtractArchiveFile.mockImplementationOnce(async () => {
         controller.abort(reason);
       });
       const manager = createExtensionManager();
+      await manager.refreshCache();
+      const extension = manager.getLoadedExtensions()[0]!;
 
       await expect(
-        manager.installExtension(
-          { type: 'local', source: archivePath },
-          async () => {},
-          undefined,
-          undefined,
-          undefined,
-          { scope: 'user' },
+        manager.updateExtension(
+          extension,
+          ExtensionUpdateState.UPDATE_AVAILABLE,
+          () => {},
+          true,
           controller.signal,
         ),
       ).rejects.toBe(reason);
@@ -1469,7 +1362,7 @@ describe('extension tests', () => {
         },
       );
 
-      const result = await manager.uninstallExtension('my-extension', false);
+      const result = await manager.uninstallExtension('my-extension');
 
       expect(result.warnings).toEqual([
         {
@@ -1496,7 +1389,7 @@ describe('extension tests', () => {
         new Error('refresh failed'),
       );
 
-      const result = await manager.uninstallExtension('my-extension', false);
+      const result = await manager.uninstallExtension('my-extension');
 
       expect(result.warnings).toEqual([
         {
@@ -1523,419 +1416,12 @@ describe('extension tests', () => {
       manager.addMutationListener((event) => events.push(event));
       await manager.refreshCache();
 
-      await manager.uninstallExtension('my-extension', false);
+      await manager.uninstallExtension('my-extension');
 
       expect(events).toEqual([
         { id: 1, phase: 'start', operation: 'uninstallExtension' },
         { id: 1, phase: 'end', operation: 'uninstallExtension' },
       ]);
-    });
-
-    it('uninstalls a committed extension by id when it cannot be loaded', async () => {
-      const identity = { id: 'a9'.repeat(32), name: 'broken-extension' };
-      const extensionStore = new ExtensionStore({
-        extensionsDir: userExtensionsDir,
-      });
-      await extensionStore.ensureInitialized([identity]);
-      const destination = path.join(userExtensionsDir, identity.name);
-      fs.mkdirSync(destination, { recursive: true });
-      fs.writeFileSync(path.join(destination, 'qwen-extension.json'), '{');
-      const manager = createExtensionManager({ extensionStore });
-
-      const snapshot = await manager.uninstallExtensionById(identity.id, true);
-
-      expect(snapshot.extensions[identity.id]).toBeUndefined();
-      expect(fs.existsSync(destination)).toBe(false);
-    });
-
-    it('treats a declaration as absent when uninstalling by id', async () => {
-      const identity = { id: 'aa'.repeat(32), name: 'declared-extension' };
-      const extensionStore = new ExtensionStore({
-        extensionsDir: userExtensionsDir,
-      });
-      const declared = await extensionStore.setDefaultActivations(
-        [identity],
-        'disabled',
-      );
-      const manager = createExtensionManager({ extensionStore });
-
-      const snapshot = await manager.uninstallExtensionById(identity.id, true);
-
-      expect(snapshot).toEqual(declared);
-      expect(snapshot.extensions[identity.id]?.declarationOnly).toBe(true);
-    });
-
-    it('uninstalls by id using the loaded artifact directory', async () => {
-      const original = createExtension({
-        extensionsDir: userExtensionsDir,
-        name: 'manifest-name',
-      });
-      const destination = path.join(userExtensionsDir, 'artifact-directory');
-      fs.renameSync(original, destination);
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-      const extension = manager.getLoadedExtensions()[0]!;
-
-      const snapshot = await manager.uninstallExtensionById(extension.id, true);
-
-      expect(snapshot.extensions[extension.id]).toBeUndefined();
-      expect(fs.existsSync(destination)).toBe(false);
-    });
-  });
-
-  describe('refreshCacheIfSourcesChanged', () => {
-    // Extension sources have no watcher, so read-only consumers rely on this to
-    // stay eventually consistent with mutations made outside the process
-    // (`qwen extensions install` in a terminal) without scanning on every read.
-    // See docs/design/workspace-skills-read-model.md.
-    it('does not refresh while the sources are unchanged', async () => {
-      createExtension({ extensionsDir: userExtensionsDir, name: 'ext-a' });
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-      expect(manager.getLoadedExtensions()).toHaveLength(1);
-
-      const refreshSpy = vi.spyOn(manager, 'refreshCache');
-      for (let i = 0; i < 20; i++) {
-        expect(await manager.refreshCacheIfSourcesChanged()).toBe(false);
-      }
-
-      expect(refreshSpy).not.toHaveBeenCalled();
-      expect(manager.getLoadedExtensions()).toHaveLength(1);
-    });
-
-    it('refreshes once a new extension appears on disk', async () => {
-      createExtension({ extensionsDir: userExtensionsDir, name: 'ext-a' });
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-      expect(manager.getLoadedExtensions()).toHaveLength(1);
-
-      createExtension({ extensionsDir: userExtensionsDir, name: 'ext-b' });
-
-      expect(await manager.refreshCacheIfSourcesChanged()).toBe(true);
-      expect(
-        manager
-          .getLoadedExtensions()
-          .map((e) => e.name)
-          .sort(),
-      ).toEqual(['ext-a', 'ext-b']);
-      // The refresh commits a new baseline, so the next call is a no-op again.
-      expect(await manager.refreshCacheIfSourcesChanged()).toBe(false);
-    });
-
-    it('refreshes after an extension is removed', async () => {
-      createExtension({ extensionsDir: userExtensionsDir, name: 'ext-a' });
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-
-      fs.rmSync(path.join(userExtensionsDir, 'ext-a'), {
-        recursive: true,
-        force: true,
-      });
-
-      expect(await manager.refreshCacheIfSourcesChanged()).toBe(true);
-      expect(manager.getLoadedExtensions()).toHaveLength(0);
-    });
-
-    it('refreshes after an in-place manifest edit', async () => {
-      createExtension({ extensionsDir: userExtensionsDir, name: 'ext-a' });
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-      expect(manager.getLoadedExtensions()[0]?.version).toBe('1.0.0');
-
-      // Rewriting the manifest changes neither the extensions dir nor the
-      // extension dir mtime on every platform, which is why the fingerprint
-      // covers each manifest itself. The new version is a different length so
-      // the size differs too — otherwise this would depend on the filesystem's
-      // mtime granularity.
-      fs.writeFileSync(
-        path.join(userExtensionsDir, 'ext-a', EXTENSIONS_CONFIG_FILENAME),
-        JSON.stringify({ name: 'ext-a', version: '10.0.0', mcpServers: {} }),
-      );
-
-      expect(await manager.refreshCacheIfSourcesChanged()).toBe(true);
-      expect(manager.getLoadedExtensions()[0]?.version).toBe('10.0.0');
-    });
-
-    it('shares one refresh between concurrent callers', async () => {
-      createExtension({ extensionsDir: userExtensionsDir, name: 'ext-a' });
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-
-      createExtension({ extensionsDir: userExtensionsDir, name: 'ext-b' });
-      const refreshSpy = vi.spyOn(manager, 'refreshCache');
-
-      const results = await Promise.all([
-        manager.refreshCacheIfSourcesChanged(),
-        manager.refreshCacheIfSourcesChanged(),
-        manager.refreshCacheIfSourcesChanged(),
-      ]);
-
-      expect(results).toEqual([true, true, true]);
-      expect(refreshSpy).toHaveBeenCalledOnce();
-    });
-
-    it('does not mask a change that lands while a refresh is running', async () => {
-      // The committed baseline is captured before the load, so a write that
-      // races the refresh leaves the fingerprint stale and is still seen next
-      // time. Stamping after the load would swallow it until something else
-      // moved on disk.
-      createExtension({ extensionsDir: userExtensionsDir, name: 'ext-a' });
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-      expect(manager.getLoadedExtensions()).toHaveLength(1);
-
-      const realLoad = manager['loadExtensionsFromExtensionsDir'].bind(manager);
-      let raced = false;
-      vi.spyOn(
-        manager as unknown as {
-          loadExtensionsFromExtensionsDir: (
-            ...args: unknown[]
-          ) => Promise<unknown>;
-        },
-        'loadExtensionsFromExtensionsDir',
-      ).mockImplementation(async (...args: unknown[]) => {
-        const loaded = await (
-          realLoad as (...a: unknown[]) => Promise<unknown>
-        )(...args);
-        if (!raced) {
-          raced = true;
-          // Lands after this refresh has already read the directory.
-          createExtension({ extensionsDir: userExtensionsDir, name: 'ext-b' });
-        }
-        return loaded;
-      });
-
-      // Triggered by the enablement file moving, so the first refresh does not
-      // observe ext-b.
-      //
-      // Its mtime is pushed a second into the past on purpose. Hand-writing
-      // this file is how the test simulates "something outside the store
-      // changed the legacy projection", and that is precisely the condition
-      // `ExtensionStore` fails closed on when the two timestamps cannot be
-      // ordered. Left at `now`, the write lands in the same tick as the
-      // store's own often enough to trip that guard: measured, 3 failures in 6
-      // runs here and on unrelated branches, blocking CI on PRs that never
-      // touch extensions. An explicitly older projection is orderable, which
-      // is what this test needs and all it needs — the guard itself is doing
-      // its job and is left alone.
-      const enablementFile = path.join(
-        userExtensionsDir,
-        'extension-enablement.json',
-      );
-      fs.writeFileSync(
-        enablementFile,
-        JSON.stringify({ touched: { overrides: [] } }),
-      );
-      const older = new Date(Date.now() - 1_000);
-      fs.utimesSync(enablementFile, older, older);
-      expect(await manager.refreshCacheIfSourcesChanged()).toBe(true);
-      expect(manager.getLoadedExtensions()).toHaveLength(1);
-
-      vi.restoreAllMocks();
-
-      // The racing install is still visible to the next check.
-      expect(await manager.refreshCacheIfSourcesChanged()).toBe(true);
-      expect(
-        manager
-          .getLoadedExtensions()
-          .map((e) => e.name)
-          .sort(),
-      ).toEqual(['ext-a', 'ext-b']);
-    });
-  });
-
-  describe('refreshCatalogSnapshot', () => {
-    it('loads manifest identity fields without subresources', async () => {
-      createExtension({
-        extensionsDir: userExtensionsDir,
-        name: 'qwen-ext',
-        version: '1.2.3',
-        installMetadata: {
-          type: 'local',
-          source: 'test-source',
-        },
-      });
-      createAgentPlugin(path.join(userExtensionsDir, 'plugin-ext'), {
-        name: 'plugin-ext',
-        version: '2.0.0',
-      });
-
-      const manager = createExtensionManager();
-      const { snapshot, extensions } = await manager.refreshCatalogSnapshot();
-
-      expect(snapshot.extensions).toEqual(
-        expect.objectContaining({
-          [extensions[0]!.id]: expect.objectContaining({
-            name: expect.any(String),
-          }),
-        }),
-      );
-      expect(extensions).toHaveLength(2);
-      const qwenExt = extensions.find((e) => e.name === 'qwen-ext');
-      const pluginExt = extensions.find((e) => e.name === 'plugin-ext');
-      expect(qwenExt?.version).toBe('1.2.3');
-      expect(qwenExt?.installMetadata?.source).toBe('test-source');
-      expect(pluginExt?.version).toBe('2.0.0');
-      // Manifest-only: no subresource is populated on the returned entries.
-      for (const extension of extensions) {
-        expect(extension.skills).toBeUndefined();
-        expect(extension.commands).toBeUndefined();
-        expect(extension.agents).toBeUndefined();
-        expect(extension.hooks).toBeUndefined();
-        expect(extension.contextFiles).toEqual([]);
-      }
-    });
-
-    it('leaves the manager cache and fingerprint baseline untouched', async () => {
-      createExtension({
-        extensionsDir: userExtensionsDir,
-        name: 'ext-a',
-      });
-      const manager = createExtensionManager();
-
-      await manager.refreshCatalogSnapshot();
-
-      // The catalog is stateless: nothing enters extensionCache, and the
-      // fingerprint baseline is not committed — a later refresh on this
-      // manager must not be masked by a manifest-only result.
-      expect(manager.getLoadedExtensions()).toEqual([]);
-      expect(await manager.refreshCacheIfSourcesChanged()).toBe(true);
-      expect(manager.getLoadedExtensions()).toHaveLength(1);
-    });
-
-    it('does not re-read subresources between catalog refreshes but picks up manifest edits', async () => {
-      createExtension({
-        extensionsDir: userExtensionsDir,
-        name: 'ext-a',
-        addContextFile: true,
-      });
-      const manager = createExtensionManager();
-
-      const first = await manager.refreshCatalogSnapshot();
-      expect(first.extensions[0]?.skills).toBeUndefined();
-      expect(first.extensions[0]?.contextFiles).toEqual([]);
-
-      // A skill-file-only edit does not change the catalog's inputs, so the
-      // second refresh reloads the same manifest head — the fingerprint never
-      // covers skill files.
-      const skillFile = path.join(
-        userExtensionsDir,
-        'ext-a',
-        'skills',
-        's',
-        'SKILL.md',
-      );
-      fs.mkdirSync(path.dirname(skillFile), { recursive: true });
-      fs.writeFileSync(skillFile, '---\nname: s\ndescription: d\n---\nbody');
-      const second = await manager.refreshCatalogSnapshot();
-      expect(second.extensions).toHaveLength(1);
-      expect(second.extensions[0]?.skills).toBeUndefined();
-
-      const manifestPath = path.join(
-        userExtensionsDir,
-        'ext-a',
-        EXTENSIONS_CONFIG_FILENAME,
-      );
-      fs.writeFileSync(
-        manifestPath,
-        JSON.stringify({ name: 'ext-a', version: '9.9.9' }),
-      );
-      const third = await manager.refreshCatalogSnapshot();
-      expect(third.extensions.map((e) => e.version)).toEqual(['9.9.9']);
-    });
-
-    it('keeps the full-load fail semantics: corrupt manifest skipped, broken entry stat throws', async () => {
-      createExtension({
-        extensionsDir: userExtensionsDir,
-        name: 'good-ext',
-      });
-      const badExtDir = path.join(userExtensionsDir, 'bad-ext');
-      fs.mkdirSync(badExtDir);
-      fs.writeFileSync(
-        path.join(badExtDir, EXTENSIONS_CONFIG_FILENAME),
-        '{ "name": "bad-ext"',
-      );
-
-      const manager = createExtensionManager();
-      const first = await manager.refreshCatalogSnapshot();
-      expect(first.extensions.map((e) => e.name)).toEqual(['good-ext']);
-
-      // A dangling symlink at the extensions root must fail the whole load,
-      // mirroring `loadExtensionsFromExtensionsDir` fail-closed behavior.
-      fs.rmSync(badExtDir, { recursive: true });
-      fs.symlinkSync(path.join(userExtensionsDir, 'missing-target'), badExtDir);
-      await expect(manager.refreshCatalogSnapshot()).rejects.toThrow();
-    });
-
-    it('excludes an extension whose manifest head throws, matching the full load', async () => {
-      // The head's throws (manifest parse, extension id, the v1 MCP load)
-      // define the inclusion set the full load's catch rejects. Whatever
-      // throws there must be excluded from the catalog too — otherwise the
-      // catalog advertises an id that detail/enable/update routes reject as
-      // nonexistent. The subresource loaders and the MCP loader swallow
-      // their own errors today, so simulate the head throwing via the MCP
-      // dependency rather than a disk shape.
-      createExtension({
-        extensionsDir: userExtensionsDir,
-        name: 'good-ext',
-      });
-      createAgentPlugin(path.join(userExtensionsDir, 'broken-plugin'), {
-        name: 'broken-plugin',
-      });
-      const mcpSpy = vi
-        .spyOn(
-          await import('./agent-plugins-v1/index.js'),
-          'loadAgentPluginMcpServers',
-        )
-        .mockRejectedValue(new Error('mcp unavailable'));
-
-      try {
-        const manager = createExtensionManager();
-        await manager.refreshCache();
-        const fullNames = manager.getLoadedExtensions().map((e) => e.name);
-        expect(fullNames).toEqual(['good-ext']);
-
-        const manager2 = createExtensionManager();
-        const catalog = await manager2.refreshCatalogSnapshot();
-        expect(catalog.extensions.map((e) => e.name)).toEqual(fullNames);
-      } finally {
-        mcpSpy.mockRestore();
-      }
-    });
-
-    it('does not create the agent plugin data root', async () => {
-      createAgentPlugin(path.join(userExtensionsDir, 'plugin-ext'), {
-        name: 'plugin-ext',
-      });
-      const storeDir = path.join(tempHomeDir, 'catalog-store');
-      const manager = createExtensionManager({
-        extensionStore: new ExtensionStore({
-          extensionsDir: userExtensionsDir,
-          storeDir,
-        }),
-      });
-
-      await manager.refreshCatalogSnapshot();
-
-      expect(fs.existsSync(path.join(storeDir, 'plugin-data'))).toBe(false);
-    });
-
-    it('a name-filtered catalog only returns the requested extensions', async () => {
-      createExtension({
-        extensionsDir: userExtensionsDir,
-        name: 'ext-a',
-      });
-      createExtension({
-        extensionsDir: userExtensionsDir,
-        name: 'ext-b',
-      });
-      const manager = createExtensionManager();
-
-      const { extensions } = await manager.refreshCatalogSnapshot({
-        names: ['ext-a'],
-      });
-      expect(extensions.map((e) => e.name)).toEqual(['ext-a']);
-      expect(manager.getLoadedExtensions()).toEqual([]);
     });
   });
 
@@ -2362,288 +1848,6 @@ describe('extension tests', () => {
   });
 
   describe('enableExtension / disableExtension', () => {
-    it('sets multiple default activations with one generation and refresh', async () => {
-      createExtension({
-        extensionsDir: userExtensionsDir,
-        name: 'first-default-extension',
-        version: '1.0.0',
-      });
-      createExtension({
-        extensionsDir: userExtensionsDir,
-        name: 'second-default-extension',
-        version: '1.0.0',
-      });
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-      const extensions = manager
-        .getLoadedExtensions()
-        .filter((extension) => extension.name.endsWith('default-extension'));
-      expect(extensions).toHaveLength(2);
-      const initial = await manager.getExtensionStoreSnapshot();
-      const refreshTools = vi
-        .spyOn(manager, 'refreshTools')
-        .mockResolvedValue();
-
-      const snapshot = await manager.setExtensionDefaultActivations(
-        extensions.map(({ name }) => name),
-        'disabled',
-      );
-
-      expect(snapshot.generation).toBe(initial.generation + 1);
-      expect(refreshTools).toHaveBeenCalledOnce();
-      for (const extension of extensions) {
-        expect(snapshot.extensions[extension.id]?.defaultActivation).toBe(
-          'disabled',
-        );
-      }
-      expect(extensions.every((extension) => !extension.isActive)).toBe(true);
-    });
-
-    it('clears multiple workspace activations with one generation and refresh', async () => {
-      createExtension({
-        extensionsDir: userExtensionsDir,
-        name: 'first-workspace-extension',
-        version: '1.0.0',
-      });
-      createExtension({
-        extensionsDir: userExtensionsDir,
-        name: 'second-workspace-extension',
-        version: '1.0.0',
-      });
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-      const extensions = manager
-        .getLoadedExtensions()
-        .filter((extension) => extension.name.endsWith('workspace-extension'));
-      expect(extensions).toHaveLength(2);
-      await manager.setExtensionWorkspaceActivations(
-        extensions.map(({ name }) => name),
-        tempWorkspaceDir,
-        'disabled',
-      );
-      expect(extensions.every((extension) => !extension.isActive)).toBe(true);
-      const initial = await manager.getExtensionStoreSnapshot();
-      const refreshTools = vi
-        .spyOn(manager, 'refreshTools')
-        .mockResolvedValue();
-
-      const snapshot = await manager.setExtensionWorkspaceActivations(
-        extensions.map(({ name }) => name),
-        tempWorkspaceDir,
-        'inherit',
-      );
-
-      expect(snapshot.generation).toBe(initial.generation + 1);
-      expect(refreshTools).toHaveBeenCalledOnce();
-      for (const extension of extensions) {
-        expect(
-          manager.getExtensionActivationFromSnapshot(
-            extension.id,
-            snapshot,
-            tempWorkspaceDir,
-          ),
-        ).toMatchObject({ workspace: 'inherit', effective: 'enabled' });
-        expect(snapshot.extensions[extension.id]?.workspaceOverrides).toEqual(
-          {},
-        );
-      }
-      expect(extensions.every((extension) => extension.isActive)).toBe(true);
-    });
-
-    it('treats inherit for an unknown extension as a no-op', async () => {
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-      const initial = await manager.getExtensionStoreSnapshot();
-      const refreshTools = vi
-        .spyOn(manager, 'refreshTools')
-        .mockResolvedValue();
-      const onCommitted = vi.fn();
-
-      const snapshot = await manager.setExtensionWorkspaceActivations(
-        ['future-extension'],
-        tempWorkspaceDir,
-        'inherit',
-        onCommitted,
-      );
-
-      expect(snapshot.updated).toBe(false);
-      expect(snapshot.generation).toBe(initial.generation);
-      expect(snapshot.extensions).toEqual(initial.extensions);
-      expect(onCommitted).not.toHaveBeenCalled();
-      expect(refreshTools).not.toHaveBeenCalled();
-      expect(
-        manager.getExtensionActivationForNameFromSnapshot(
-          'future-extension',
-          snapshot,
-          tempWorkspaceDir,
-        ),
-      ).toMatchObject({
-        default: 'enabled',
-        workspace: 'inherit',
-        effective: 'enabled',
-        source: 'default',
-      });
-    });
-
-    it('updates loaded and declared extensions with one generation and refresh', async () => {
-      createExtension({
-        extensionsDir: userExtensionsDir,
-        name: 'available-extension',
-        version: '1.0.0',
-      });
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-      const loaded = manager
-        .getLoadedExtensions()
-        .find((extension) => extension.name === 'available-extension')!;
-      const declaredName = 'future-extension';
-      const declaredId = hashValue(declaredName);
-      const initial = await manager.getExtensionStoreSnapshot();
-      const refreshTools = vi
-        .spyOn(manager, 'refreshTools')
-        .mockResolvedValue();
-      const onCommitted = vi.fn();
-
-      const snapshot = await manager.setExtensionDefaultActivations(
-        [loaded.name, declaredName],
-        'disabled',
-        onCommitted,
-      );
-
-      expect(snapshot.generation).toBe(initial.generation + 1);
-      expect(snapshot.extensions[declaredId]).toMatchObject({
-        name: declaredName,
-        declarationOnly: true,
-        defaultActivation: 'disabled',
-      });
-      expect(snapshot.extensions[loaded.id]?.defaultActivation).toBe(
-        'disabled',
-      );
-      expect(loaded.isActive).toBe(false);
-      expect(onCommitted).toHaveBeenCalledOnce();
-      expect(onCommitted).toHaveBeenCalledWith(snapshot.generation);
-      expect(refreshTools).toHaveBeenCalledOnce();
-      await expect(
-        manager.setExtensionDefaultActivation(declaredId, 'enabled'),
-      ).rejects.toThrow(`Extension with id ${declaredId} does not exist.`);
-    });
-
-    it('applies V2 default and workspace activation to loaded extensions', async () => {
-      createExtension({
-        extensionsDir: userExtensionsDir,
-        name: 'my-extension',
-        version: '1.0.0',
-      });
-
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-      const extension = manager.getLoadedExtensions()[0]!;
-
-      await manager.setExtensionDefaultActivation(extension.id, 'disabled');
-      expect(manager.getLoadedExtensions()[0]?.isActive).toBe(false);
-
-      await manager.setExtensionWorkspaceActivation(
-        extension.id,
-        tempWorkspaceDir,
-        'enabled',
-      );
-      expect(manager.getLoadedExtensions()[0]?.isActive).toBe(true);
-
-      await manager.clearExtensionWorkspaceActivation(
-        extension.id,
-        tempWorkspaceDir,
-      );
-      expect(manager.getLoadedExtensions()[0]?.isActive).toBe(false);
-    });
-
-    it('refreshes runtime tools after V2 activation changes', async () => {
-      createExtension({
-        extensionsDir: userExtensionsDir,
-        name: 'my-extension',
-        version: '1.0.0',
-      });
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-      const extension = manager.getLoadedExtensions()[0]!;
-      const refreshTools = vi
-        .spyOn(manager, 'refreshTools')
-        .mockResolvedValue();
-
-      await manager.setExtensionDefaultActivation(extension.id, 'disabled');
-      await manager.setExtensionActivationScope(extension.id, {
-        scope: 'workspace',
-        workspacePath: tempWorkspaceDir,
-      });
-      await manager.setExtensionWorkspaceActivation(
-        extension.id,
-        tempWorkspaceDir,
-        'disabled',
-      );
-      await manager.clearExtensionWorkspaceActivation(
-        extension.id,
-        tempWorkspaceDir,
-      );
-
-      expect(refreshTools).toHaveBeenCalledTimes(4);
-    });
-
-    it('returns a committed warning when activation runtime refresh fails', async () => {
-      createExtension({
-        extensionsDir: userExtensionsDir,
-        name: 'my-extension',
-        version: '1.0.0',
-      });
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-      const extension = manager.getLoadedExtensions()[0]!;
-      vi.spyOn(manager, 'refreshTools').mockRejectedValue(
-        new Error('refresh failed'),
-      );
-
-      const result = await manager.setExtensionDefaultActivation(
-        extension.id,
-        'disabled',
-      );
-
-      expect(result.warnings).toEqual([
-        {
-          code: 'extension_runtime_refresh_failed',
-          error: 'refresh failed',
-        },
-      ]);
-      expect(result.extensions[extension.id]?.defaultActivation).toBe(
-        'disabled',
-      );
-    });
-
-    it('derives activation from the supplied store snapshot', async () => {
-      createExtension({
-        extensionsDir: userExtensionsDir,
-        name: 'my-extension',
-        version: '1.0.0',
-      });
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-      const extension = manager.getLoadedExtensions()[0]!;
-
-      const disabledSnapshot = await manager.setExtensionDefaultActivation(
-        extension.id,
-        'disabled',
-      );
-      await manager.setExtensionDefaultActivation(extension.id, 'enabled');
-
-      expect(
-        manager.getExtensionActivationFromSnapshot(
-          extension.id,
-          disabledSnapshot,
-          tempWorkspaceDir,
-        ),
-      ).toMatchObject({ effective: 'disabled', source: 'default' });
-      await expect(
-        manager.getExtensionActivation(extension.id, tempWorkspaceDir),
-      ).resolves.toMatchObject({ effective: 'enabled', source: 'default' });
-    });
-
     it('changes activation scope in one policy mutation', async () => {
       createExtension({
         extensionsDir: userExtensionsDir,
@@ -2672,7 +1876,7 @@ describe('extension tests', () => {
       });
     });
 
-    it('emits mutation lifecycle events for V2 activation changes', async () => {
+    it('refreshes runtime tools and emits mutation events for an activation scope change', async () => {
       createExtension({
         extensionsDir: userExtensionsDir,
         name: 'my-extension',
@@ -2683,64 +1887,47 @@ describe('extension tests', () => {
       manager.addMutationListener((event) => events.push(event));
       await manager.refreshCache();
       const extension = manager.getLoadedExtensions()[0]!;
+      const refreshTools = vi
+        .spyOn(manager, 'refreshTools')
+        .mockResolvedValue();
 
-      await manager.setExtensionDefaultActivation(extension.id, 'disabled');
       await manager.setExtensionActivationScope(extension.id, {
         scope: 'workspace',
         workspacePath: tempWorkspaceDir,
       });
-      await manager.setExtensionWorkspaceActivation(
-        extension.id,
-        tempWorkspaceDir,
-        'disabled',
-      );
-      await manager.clearExtensionWorkspaceActivation(
-        extension.id,
-        tempWorkspaceDir,
+
+      expect(refreshTools).toHaveBeenCalledTimes(1);
+      expect(events).toEqual([
+        { id: 1, phase: 'start', operation: 'setExtensionActivationScope' },
+        { id: 1, phase: 'end', operation: 'setExtensionActivationScope' },
+      ]);
+    });
+
+    it('returns a committed warning when activation runtime refresh fails', async () => {
+      createExtension({
+        extensionsDir: userExtensionsDir,
+        name: 'my-extension',
+        version: '1.0.0',
+      });
+      const manager = createExtensionManager();
+      await manager.refreshCache();
+      const extension = manager.getLoadedExtensions()[0]!;
+      vi.spyOn(manager, 'refreshTools').mockRejectedValue(
+        new Error('refresh failed'),
       );
 
-      expect(events).toEqual([
+      const result = await manager.disableExtension(
+        extension.name,
+        SettingScope.User,
+      );
+
+      expect(result.warnings).toEqual([
         {
-          id: 1,
-          phase: 'start',
-          operation: 'setExtensionDefaultActivation',
-        },
-        {
-          id: 1,
-          phase: 'end',
-          operation: 'setExtensionDefaultActivation',
-        },
-        {
-          id: 2,
-          phase: 'start',
-          operation: 'setExtensionActivationScope',
-        },
-        {
-          id: 2,
-          phase: 'end',
-          operation: 'setExtensionActivationScope',
-        },
-        {
-          id: 3,
-          phase: 'start',
-          operation: 'setExtensionWorkspaceActivation',
-        },
-        {
-          id: 3,
-          phase: 'end',
-          operation: 'setExtensionWorkspaceActivation',
-        },
-        {
-          id: 4,
-          phase: 'start',
-          operation: 'clearExtensionWorkspaceActivation',
-        },
-        {
-          id: 4,
-          phase: 'end',
-          operation: 'clearExtensionWorkspaceActivation',
+          code: 'extension_runtime_refresh_failed',
+          error: 'refresh failed',
         },
       ]);
+      expect(manager.getLoadedExtensions()[0]?.isActive).toBe(false);
     });
 
     it('keeps the V2 state in sync after a legacy scope mutation', async () => {
@@ -2754,16 +1941,9 @@ describe('extension tests', () => {
       await manager.refreshCache();
       const extension = manager.getLoadedExtensions()[0]!;
 
-      await manager.disableExtension(
-        extension.name,
-        SettingScope.Workspace,
-        tempWorkspaceDir,
-      );
+      await manager.disableExtension(extension.name, SettingScope.Workspace);
 
-      const activation = await manager.getExtensionActivation(
-        extension.id,
-        tempWorkspaceDir,
-      );
+      const activation = await readActivation(extension);
       expect(activation).toMatchObject({
         effective: 'disabled',
         source: 'workspace_override',
@@ -2780,19 +1960,13 @@ describe('extension tests', () => {
       await manager.refreshCache();
       const extension = manager.getLoadedExtensions()[0]!;
       const otherWorkspace = path.join(os.tmpdir(), 'other-workspace');
-      await manager.setExtensionWorkspaceActivation(
-        extension.id,
-        otherWorkspace,
-        'enabled',
-      );
+      await new ExtensionStore({
+        extensionsDir: userExtensionsDir,
+      }).setWorkspaceActivation(extension, otherWorkspace, 'enabled');
 
-      await manager.disableExtension(
-        extension.name,
-        SettingScope.Workspace,
-        tempWorkspaceDir,
-      );
+      await manager.disableExtension(extension.name, SettingScope.Workspace);
 
-      const snapshot = await manager.getExtensionStoreSnapshot();
+      const snapshot = await readStoreSnapshot();
       expect(snapshot.extensions[extension.id]?.workspaceOverrides).toEqual({
         [otherWorkspace]: 'enabled',
         [fs.realpathSync.native(tempWorkspaceDir)]: 'disabled',
@@ -2809,20 +1983,21 @@ describe('extension tests', () => {
       await manager.refreshCache();
       const extension = manager.getLoadedExtensions()[0]!;
       const outsideWorkspace = path.join(os.tmpdir(), 'outside-workspace');
-      await manager.setExtensionWorkspaceActivation(
-        extension.id,
+      const store = new ExtensionStore({ extensionsDir: userExtensionsDir });
+      await store.setWorkspaceActivation(
+        extension,
         tempWorkspaceDir,
         'enabled',
       );
-      await manager.setExtensionWorkspaceActivation(
-        extension.id,
+      await store.setWorkspaceActivation(
+        extension,
         outsideWorkspace,
         'disabled',
       );
 
       await manager.disableExtension(extension.name, SettingScope.User);
 
-      const snapshot = await manager.getExtensionStoreSnapshot();
+      const snapshot = await readStoreSnapshot();
       expect(snapshot.extensions[extension.id]?.workspaceOverrides).toEqual({
         [outsideWorkspace]: 'disabled',
       });
@@ -2892,11 +2067,7 @@ describe('extension tests', () => {
       const manager = createExtensionManager();
       await manager.refreshCache();
 
-      await manager.disableExtension(
-        'my-extension',
-        SettingScope.Workspace,
-        tempWorkspaceDir,
-      );
+      await manager.disableExtension('my-extension', SettingScope.Workspace);
 
       expect(manager.isEnabled('my-extension', tempHomeDir)).toBe(true);
       expect(manager.isEnabled('my-extension', tempWorkspaceDir)).toBe(false);
@@ -2980,8 +2151,8 @@ describe('extension tests', () => {
   });
 
   describe('updateExtension', () => {
-    it('rejects a stale direct update after the artifact changes', async () => {
-      const archivePath = path.join(tempWorkspaceDir, 'direct-update.zip');
+    it('rejects a stale update after the artifact changes', async () => {
+      const archivePath = path.join(tempWorkspaceDir, 'stale-update.zip');
       fs.writeFileSync(archivePath, 'archive');
       const writeExtension = (destination: string, version: string) => {
         fs.mkdirSync(destination, { recursive: true });
@@ -3021,12 +2192,10 @@ describe('extension tests', () => {
       );
 
       await expect(
-        manager.installExtension(
-          metadata,
-          async () => {},
-          undefined,
-          tempWorkspaceDir,
-          installed.config,
+        manager.updateExtension(
+          installed,
+          ExtensionUpdateState.UPDATE_AVAILABLE,
+          () => {},
         ),
       ).rejects.toMatchObject({ code: 'extension_conflict' });
       expect(
@@ -3037,62 +2206,6 @@ describe('extension tests', () => {
           ),
         ),
       ).toMatchObject({ version: 'concurrent' });
-    });
-
-    it('marks a direct update reload failure as already committed', async () => {
-      const archivePath = path.join(tempWorkspaceDir, 'direct-reload.zip');
-      fs.writeFileSync(archivePath, 'archive');
-      const extensionPath = createExtension({
-        extensionsDir: userExtensionsDir,
-        name: 'my-extension',
-        version: '1.0.0',
-        installMetadata: {
-          type: 'local',
-          source: archivePath,
-          originSource: 'QwenCode',
-        },
-      });
-      mockExtractArchiveFile.mockImplementation(
-        async (_source: string, destination: string) => {
-          fs.mkdirSync(destination, { recursive: true });
-          fs.writeFileSync(
-            path.join(destination, EXTENSIONS_CONFIG_FILENAME),
-            JSON.stringify({ name: 'my-extension', version: '2.0.0' }),
-          );
-        },
-      );
-      const manager = createExtensionManager();
-      await manager.refreshCache();
-      const extension = manager.getLoadedExtensions()[0]!;
-      const updatedExtension = {
-        ...extension,
-        version: '2.0.0',
-        config: { ...extension.config, version: '2.0.0' },
-      };
-      vi.spyOn(manager, 'loadExtension')
-        .mockResolvedValueOnce(updatedExtension)
-        .mockResolvedValueOnce(null);
-
-      await expect(
-        manager.installExtension(
-          { type: 'local', source: archivePath },
-          async () => {},
-          undefined,
-          tempWorkspaceDir,
-          extension.config,
-        ),
-      ).rejects.toMatchObject({
-        code: 'extension_committed_with_warnings',
-        committed: true,
-      });
-      expect(
-        JSON.parse(
-          fs.readFileSync(
-            path.join(extensionPath, EXTENSIONS_CONFIG_FILENAME),
-            'utf8',
-          ),
-        ),
-      ).toMatchObject({ version: '2.0.0' });
     });
 
     it('reports a committed update reload failure as needing restart', async () => {
@@ -3302,53 +2415,7 @@ describe('extension tests', () => {
     });
   });
 
-  describe('performWorkspaceExtensionMigration', () => {
-    const extension = {
-      path: '/tmp/migration-source',
-      config: { name: 'migration-extension' },
-    } as Extension;
-
-    it('reports a committed extension that could not be reloaded', async () => {
-      const manager = createExtensionManager();
-      vi.spyOn(manager, 'installExtension').mockRejectedValueOnce(
-        Object.assign(new Error('committed with warnings'), {
-          code: 'extension_committed_with_warnings',
-          committed: true,
-          identity: { id: 'migration-id', name: 'migration-extension' },
-          warnings: [
-            { code: 'extension_reload_failed', error: 'invalid manifest' },
-          ],
-        }),
-      );
-
-      await expect(
-        manager.performWorkspaceExtensionMigration([extension], async () => {}),
-      ).resolves.toEqual(['migration-extension']);
-    });
-
-    it('does not retry a committed extension for recoverable warnings', async () => {
-      const manager = createExtensionManager();
-      vi.spyOn(manager, 'installExtension').mockRejectedValueOnce(
-        Object.assign(new Error('committed with warnings'), {
-          code: 'extension_committed_with_warnings',
-          committed: true,
-          identity: { id: 'migration-id', name: 'migration-extension' },
-          warnings: [
-            {
-              code: 'extension_runtime_refresh_failed',
-              error: 'refresh delayed',
-            },
-          ],
-        }),
-      );
-
-      await expect(
-        manager.performWorkspaceExtensionMigration([extension], async () => {}),
-      ).resolves.toEqual([]);
-    });
-  });
-
-  describe('validateExtensionOverrides', () => {
+  describe('enabledExtensionOverrides', () => {
     it('should mark all extensions as active if no enabled extensions are provided', async () => {
       createExtension({
         extensionsDir: userExtensionsDir,
@@ -3416,12 +2483,6 @@ describe('extension tests', () => {
       const extensions = manager.getLoadedExtensions();
 
       expect(extensions.every((e) => !e.isActive)).toBe(true);
-      await expect(
-        manager.getExtensionActivation(extensions[0]!.id),
-      ).resolves.toMatchObject({
-        effective: 'disabled',
-        source: 'cli_override',
-      });
     });
 
     it('should treat "none" as disabling all only when it is the sole override', async () => {
@@ -3461,23 +2522,6 @@ describe('extension tests', () => {
       const extensions = manager.getLoadedExtensions();
 
       expect(extensions.find((e) => e.name === 'ext1')?.isActive).toBe(true);
-    });
-
-    it('should log an error for unknown extensions', async () => {
-      createExtension({
-        extensionsDir: userExtensionsDir,
-        name: 'ext1',
-        version: '1.0.0',
-      });
-
-      const manager = createExtensionManager({
-        enabledExtensionOverrides: ['ext4'],
-      });
-      await manager.refreshCache();
-      const extensions = manager.getLoadedExtensions();
-      expect(() =>
-        manager.validateExtensionOverrides(extensions),
-      ).not.toThrow();
     });
   });
 

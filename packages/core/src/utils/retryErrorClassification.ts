@@ -138,7 +138,7 @@ export function classifyRetryError(
       // A 4xx that is actually a wrapped low-level network failure (e.g.
       // "400 network error ... EOF" when the peer closed mid-request) is
       // transient, not a permanent client error. There is no provider error
-      // body in that case, and no manual retry (Ctrl+Y) in channel/daemon
+      // body in that case, and no manual retry (Ctrl+Y) in headless
       // paths, so classify it retryable so the bounded auto-retry applies.
       // Genuine client 4xx (which carry provider fields) stay fail-fast.
       // `transportCode` is deliberately left unset: populating it would admit

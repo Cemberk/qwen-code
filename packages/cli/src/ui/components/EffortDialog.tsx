@@ -44,8 +44,7 @@ export function EffortDialog({
 
   // Pre-select only a tier this model actually exposes. An unset effort starts
   // at the top rather than highlighting 'high', and so does a tier the global
-  // `model.reasoningEffort` carried over from another model (only ACP sessions
-  // reconcile it) — either way the cursor must not read as "this tier is
+  // `model.reasoningEffort` carried over from another model — either way the cursor must not read as "this tier is
   // current", or a bare Enter silently overwrites the stored value with it.
   const configuredIndex = currentEffort ? efforts.indexOf(currentEffort) : -1;
   const initialIndex = Math.max(0, configuredIndex);

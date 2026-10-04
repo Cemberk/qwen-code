@@ -887,25 +887,6 @@ async function unblockDependents(
   notifyTasksUpdated(teamName);
 }
 
-/**
- * Add a blocking relationship: `fromId` blocks `toId`.
- * Updates both task files.
- */
-export async function blockTask(
-  teamName: string,
-  fromId: string,
-  toId: string,
-): Promise<void> {
-  // Sequential, not `Promise.all`: each `updateTask` takes a per-task
-  // lock, so two concurrent `blockTask` calls over the same pair in
-  // opposite directions — blockTask(A, B) and blockTask(B, A) — could
-  // deadlock, call 1 holding A's lock waiting on B while call 2 holds B
-  // waiting on A. Serialising the two writes removes the lock-ordering
-  // hazard (and keeps the two edges from being half-written on failure).
-  await updateTask(teamName, fromId, { addBlocks: [toId] });
-  await updateTask(teamName, toId, { addBlockedBy: [fromId] });
-}
-
 // ─── Claiming ───────────────────────────────────────────────
 
 /**
@@ -1081,32 +1062,6 @@ export async function unassignTeammateTasks(
     notifyTasksUpdated(teamName);
   }
   return released;
-}
-
-/**
- * Get a summary of each agent's task status.
- */
-export async function getAgentStatuses(
-  teamName: string,
-): Promise<Map<string, { inProgress: number; completed: number }>> {
-  const tasks = await listTasks(teamName);
-  const statuses = new Map<string, { inProgress: number; completed: number }>();
-
-  for (const task of tasks) {
-    if (!task.owner) continue;
-    const entry = statuses.get(task.owner) ?? {
-      inProgress: 0,
-      completed: 0,
-    };
-    if (task.status === 'in_progress') {
-      entry.inProgress++;
-    } else if (task.status === 'completed') {
-      entry.completed++;
-    }
-    statuses.set(task.owner, entry);
-  }
-
-  return statuses;
 }
 
 // ─── Helpers ────────────────────────────────────────────────

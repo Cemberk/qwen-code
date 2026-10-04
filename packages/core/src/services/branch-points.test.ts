@@ -7,11 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Part } from '@google/genai';
 import type { ChatRecord } from './chatRecordingService.js';
-import {
-  resolveBranchPoints,
-  resolveCompletedTurnBranchCandidateFromRecords,
-  type BranchPoint,
-} from './branch-points.js';
+import { resolveBranchPoints, type BranchPoint } from './branch-points.js';
 
 function record(
   uuid: string,
@@ -208,29 +204,6 @@ describe('branch points', () => {
     const points = resolveBranchPoints(chain);
     expect(points.has('c1')).toBe(false);
     expect(points.get('c2')?.assistantRecordUuid).toBe('a2');
-  });
-
-  it('keeps carried pending calls separate from calls in the new turn', () => {
-    const records = [
-      record('u1', 'old-tail', 'user', [{ text: 'continue' }]),
-      record('a-tool', 'u1', 'assistant', [
-        { functionCall: { name: 'read_file', args: {} } },
-      ]),
-      record('tool', 'a-tool', 'tool_result', [
-        {
-          functionResponse: { name: 'read_file', response: { output: 'ok' } },
-        },
-      ]),
-      record('a1', 'tool', 'assistant', [{ text: 'done' }]),
-    ];
-
-    expect(
-      resolveCompletedTurnBranchCandidateFromRecords({
-        records,
-        startExclusiveRecordUuid: 'old-tail',
-        pendingCallsAtStart: [{ name: 'read_file' }],
-      })?.assistantRecordUuid,
-    ).toBe('a1');
   });
 
   it('rejects duplicate record and checkpoint identifiers', () => {

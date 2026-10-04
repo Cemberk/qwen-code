@@ -6,161 +6,63 @@
 
 import type { Config, ContentGeneratorConfig } from '@qwen-code/qwen-code-core';
 import { REASONING_EFFORT_TIERS } from '@qwen-code/qwen-code-core';
-import { resolveReasoningCapabilities } from '@qwen-code/qwen-code-core/core/reasoning-overrides.js';
-import type { LoadedSettings } from '../config/settings.js';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  applyReasoningSelection,
-  buildModelReasoningConfigOption,
-  buildModelReasoningConfigPreview,
-  clearReasoningRequestOverrides,
   getConfiguredModelReasoning,
   getReasoningForDisplay,
-  buildModelReasoningRoutePreview,
-  getDefaultReasoningConfig,
   getModelConfiguration,
   getGptReasoningOverrideState,
   getReasoningEffortsForConfig,
-  isReasoningSelectionSupported,
-  resolvePersistedReasoningConfigState,
 } from './model-configuration.js';
-
-describe('default reasoning configuration', () => {
-  it.each([
-    [{ reasoning: false }, { effort: 'high' }, false, false],
-    [{}, false, false, undefined],
-    [undefined, false, false, false],
-    [{ reasoning: { effort: 'max' } }, false, true, false],
-  ] as const)(
-    'resolves model defaults %j with legacy default %j and runtime %s',
-    (generationConfig, legacyDefault, runtime, expected) => {
-      const resolve = vi.fn(() =>
-        generationConfig ? { generationConfig } : undefined,
-      );
-      const config = {
-        getAuthType: () => 'openai',
-        getModel: () => 'gpt-5.5',
-        getCurrentModelRegistryBaseUrl: () => 'http://127.0.0.1:11434/v1',
-        getActiveRuntimeModelSnapshot: () => (runtime ? {} : undefined),
-        getResolvedModelConfig: resolve,
-      } as unknown as Config;
-      const settings = {
-        merged: { model: { generationConfig: { reasoning: legacyDefault } } },
-      } as unknown as LoadedSettings;
-      expect(getDefaultReasoningConfig(config, settings)).toEqual(expected);
-      if (runtime) {
-        expect(resolve).not.toHaveBeenCalled();
-      } else {
-        expect(resolve).toHaveBeenCalledWith(
-          'openai',
-          'gpt-5.5',
-          'http://127.0.0.1:11434/v1',
-        );
-      }
-    },
-  );
-});
 
 describe('model configuration manifest', () => {
   it.each([
-    ['gpt-5.1', ['none', 'low', 'medium', 'high'], 'none'],
-    ['gpt-5.4', ['none', 'low', 'medium', 'high', 'xhigh'], 'none'],
-    ['gpt-5.5', ['none', 'low', 'medium', 'high', 'xhigh'], 'medium'],
-    ['gpt-5.6', ['none', 'low', 'medium', 'high', 'xhigh', 'max'], 'medium'],
-    ['gpt-6-astra', ['low', 'medium', 'high', 'xhigh', 'max'], 'medium'],
-    ['gpt-5.3-codex', ['low', 'medium', 'high', 'xhigh'], 'medium'],
-    ['gpt-5-pro', ['high'], 'high'],
+    ['gpt-5.1', ['low', 'medium', 'high'], 'medium', false, true],
+    ['gpt-5.4', ['low', 'medium', 'high', 'xhigh'], 'medium', false, true],
+    ['gpt-5.5', ['low', 'medium', 'high', 'xhigh'], 'medium', true, true],
+    [
+      'gpt-5.6',
+      ['low', 'medium', 'high', 'xhigh', 'max'],
+      'medium',
+      true,
+      true,
+    ],
+    [
+      'gpt-6-astra',
+      ['low', 'medium', 'high', 'xhigh', 'max'],
+      'medium',
+      true,
+      false,
+    ],
+    [
+      'gpt-5.3-codex',
+      ['low', 'medium', 'high', 'xhigh'],
+      'medium',
+      true,
+      false,
+    ],
+    ['gpt-5-pro', ['high'], 'high', true, false],
   ] as const)(
-    'previews the supported efforts and default for %s',
-    (model, values, currentValue) => {
-      const option = buildModelReasoningConfigOption(model);
-      expect(option?.currentValue).toBe(currentValue);
-      expect(
-        option?.options.map((choice) =>
-          'value' in choice ? choice.value : undefined,
-        ),
-      ).toEqual(values);
-      expect(buildModelReasoningConfigPreview(model)).toEqual([option]);
+    'projects the supported efforts and defaults for %s',
+    (model, efforts, defaultEffort, defaultEnabled, canDisable) => {
+      const reasoning = getModelConfiguration(model)?.reasoning;
+      expect(reasoning).toMatchObject({
+        thinking: true,
+        efforts,
+        defaultEffort,
+        defaultEnabled,
+      });
+      expect(reasoning?.canDisable !== false).toBe(canDisable);
     },
   );
-
-  it.each([
-    ['gpt-5.4', 'max', 'xhigh'],
-    ['gpt-5.1', 'max', 'high'],
-    ['gpt-5-pro', 'low', 'high'],
-  ] as const)(
-    'displays the same clamped %s tier as the provider',
-    (model, effort, expected) => {
-      expect(buildModelReasoningConfigOption(model, { effort })).toMatchObject({
-        currentValue: expected,
-      });
-      expect(resolvePersistedReasoningConfigState(model, effort)).toEqual({
-        enabled: true,
-        effort: expected,
-        thinkingMandatory: model === 'gpt-5-pro',
-      });
-    },
-  );
-
-  it('shows a selected effort when a GPT model defaults to thinking off', () => {
-    expect(
-      buildModelReasoningConfigOption('gpt-5.4', { effort: 'high' }),
-    ).toMatchObject({ currentValue: 'high' });
-    expect(
-      buildModelReasoningConfigOption('gpt-5.4', {
-        enabled: false,
-        effort: 'high',
-      }),
-    ).toMatchObject({ currentValue: 'none' });
-  });
 
   it.each(['gpt-5.3-codex', 'gpt-6-astra'])(
-    'advertises mandatory thinking for %s even when the state does not require it',
+    'requires thinking for %s',
     (model) => {
-      expect(
-        buildModelReasoningConfigOption(model, {
-          enabled: false,
-          thinkingMandatory: false,
-        }),
-      ).toMatchObject({
-        currentValue: 'medium',
-        _meta: { 'qwenCode/reasoning': { thinkingMandatory: true } },
-      });
-      expect(isReasoningSelectionSupported(model, 'none')).toBe(false);
-      expect(resolvePersistedReasoningConfigState(model, 'none')).toEqual({
-        thinkingMandatory: true,
-      });
+      expect(getModelConfiguration(model)?.reasoning?.canDisable).toBe(false);
     },
   );
 
-  it('validates persisted GPT tiers against model capabilities', () => {
-    expect(isReasoningSelectionSupported('gpt-5.1', 'xhigh')).toBe(false);
-    expect(isReasoningSelectionSupported('gpt-5.4', 'max')).toBe(false);
-    expect(isReasoningSelectionSupported('gpt-5.6', 'max')).toBe(true);
-    expect(isReasoningSelectionSupported('gpt-6-astra', 'max')).toBe(true);
-    expect(resolvePersistedReasoningConfigState('gpt-5.4', 'high')).toEqual({
-      thinkingMandatory: false,
-      enabled: true,
-      effort: 'high',
-    });
-  });
-
-  it.each(['gpt-5.4', 'gpt-6-astra'])(
-    'preserves explicit %s reasoning overrides',
-    (model) => {
-      const generation = {
-        model,
-        samplingParams: {
-          max_completion_tokens: 1024,
-          reasoning_effort: 'low',
-        },
-        extra_body: { reasoning: { effort: 'high' } },
-      } as ContentGeneratorConfig;
-      const original = structuredClone(generation);
-      clearReasoningRequestOverrides(generation);
-      expect(generation).toEqual(original);
-    },
-  );
   it('keeps configured GPT tiers and defaults ahead of the built-in fallback', () => {
     const reasoning = {
       thinking: true,
@@ -168,28 +70,18 @@ describe('model configuration manifest', () => {
       defaultEffort: 'max',
       disableField: 'reasoning_effort',
     } as const;
-    expect(
-      buildModelReasoningConfigOption('gpt-5.4', {}, reasoning),
-    ).toMatchObject({
-      currentValue: 'max',
-      options: [{ value: 'none' }, { value: 'medium' }, { value: 'max' }],
+    const configured = getModelConfiguration('gpt-5.4', reasoning)?.reasoning;
+    expect(configured).toMatchObject({
+      efforts: ['medium', 'max'],
+      defaultEffort: 'max',
     });
+    expect(configured?.canDisable).not.toBe(false);
     expect(
-      resolvePersistedReasoningConfigState('gpt-5.4', 'max', false, reasoning),
-    ).toEqual({ thinkingMandatory: false, enabled: true, effort: 'max' });
-    expect(
-      isReasoningSelectionSupported('gpt-5.4', 'low', false, reasoning),
-    ).toBe(false);
-    expect(
-      buildModelReasoningConfigOption(
-        'gpt-6-astra',
-        { enabled: false },
-        reasoning,
-      ),
+      getModelConfiguration('gpt-6-astra', reasoning)?.reasoning,
     ).toMatchObject({
-      currentValue: 'max',
-      options: [{ value: 'medium' }, { value: 'max' }],
-      _meta: { 'qwenCode/reasoning': { thinkingMandatory: true } },
+      efforts: ['medium', 'max'],
+      defaultEffort: 'max',
+      canDisable: false,
     });
   });
 
@@ -212,37 +104,21 @@ describe('model configuration manifest', () => {
     } as unknown as Config;
 
     expect(getConfiguredModelReasoning(config)).toBe(reasoning);
-    for (const guarded of [
-      { getActiveRuntimeModelSnapshot: () => ({ id: 'runtime-model' }) },
-      { getModel: () => 'qwen-route:v1:opaque' },
-    ]) {
-      expect(
-        getConfiguredModelReasoning({
-          ...config,
-          ...guarded,
-        } as unknown as Config),
-      ).toBeUndefined();
-    }
     expect(
-      buildModelReasoningConfigOption('deepseek-v4-pro', {}, reasoning),
-    ).toMatchObject({
-      currentValue: 'high',
-      options: [{ value: 'none' }, { value: 'high' }, { value: 'max' }],
+      getConfiguredModelReasoning({
+        ...config,
+        getActiveRuntimeModelSnapshot: () => ({ id: 'runtime-model' }),
+      } as unknown as Config),
+    ).toBeUndefined();
+    const projected = getModelConfiguration(
+      'deepseek-v4-pro',
+      reasoning,
+    )?.reasoning;
+    expect(projected).toMatchObject({
+      efforts: ['high', 'max'],
+      defaultEffort: 'high',
     });
-    expect(
-      isReasoningSelectionSupported('deepseek-v4-pro', 'low', false, reasoning),
-    ).toBe(false);
-
-    expect(
-      buildModelReasoningConfigOption(
-        'deepseek-v4-pro',
-        {},
-        {
-          ...reasoning,
-          canDisable: false,
-        },
-      )?.options,
-    ).toMatchObject([{ value: 'high' }, { value: 'max' }]);
+    expect(projected?.canDisable).not.toBe(false);
   });
 
   it('ignores an incomplete user-provided reasoning capability', () => {
@@ -265,116 +141,6 @@ describe('model configuration manifest', () => {
       },
     });
   });
-
-  it('builds the stable qwen3.8-max default reasoning option', () => {
-    expect(buildModelReasoningConfigOption('qwen3.8-max')).toMatchObject({
-      id: 'reasoning_effort',
-      currentValue: 'xhigh',
-      options: [
-        { value: 'none' },
-        { value: 'low' },
-        { value: 'medium' },
-        { value: 'xhigh' },
-      ],
-      _meta: {
-        'qwenCode/reasoning': { defaultEffort: 'xhigh' },
-      },
-    });
-  });
-
-  it('omits Thinking off when qwen3.8-max requires thinking', () => {
-    expect(
-      buildModelReasoningConfigOption('qwen3.8-max', {
-        thinkingMandatory: true,
-      }),
-    ).toMatchObject({
-      currentValue: 'xhigh',
-      options: [{ value: 'low' }, { value: 'medium' }, { value: 'xhigh' }],
-      _meta: {
-        'qwenCode/reasoning': {
-          defaultEffort: 'xhigh',
-          thinkingMandatory: true,
-        },
-      },
-    });
-  });
-
-  it.each(['high', 'max'] as const)(
-    'falls back from stale %s to the qwen3.8-max model default',
-    (effort) => {
-      expect(
-        buildModelReasoningConfigOption('qwen3.8-max', { effort }),
-      ).toMatchObject({ currentValue: 'xhigh' });
-    },
-  );
-
-  it.each([
-    undefined,
-    'qwen3.8-max-preview',
-    'qwen3.8-max-latest',
-    'qwen3.8-max-2026-08-12',
-    'qwen-route:v1:stable',
-    '$runtime|openai|qwen3.8-max',
-  ])('does not project a tiered welcome preview for %s', (modelId) => {
-    expect(buildModelReasoningConfigPreview(modelId)).toBeUndefined();
-  });
-
-  it('projects toggle-only reasoning on Welcome without effort tiers', () => {
-    expect(buildModelReasoningConfigPreview('qwen3.7-plus')).toEqual([
-      buildModelReasoningConfigOption('qwen3.7-plus'),
-    ]);
-  });
-
-  it.each([
-    ['qwen3.8-max', 'low', false, true],
-    ['qwen3.8-max', 'max', false, false],
-    ['qwen3.8-max', 'none', false, true],
-    ['qwen3.8-max', 'none', true, false],
-    ['qwen3.7-plus', 'default', false, true],
-    ['qwen3.7-plus', 'none', false, true],
-    ['qwen3.7-plus', 'low', false, false],
-    ['qwen-plus', 'max', false, false],
-    ['claude-opus-4-6', 'max', false, true],
-  ] as const)(
-    'validates %s selection %s with mandatory=%s',
-    (modelId, selection, thinkingMandatory, supported) => {
-      expect(
-        isReasoningSelectionSupported(modelId, selection, thinkingMandatory),
-      ).toBe(supported);
-    },
-  );
-
-  it('wraps the stable default option for workspace preview', () => {
-    expect(buildModelReasoningConfigPreview('qwen3.8-max')).toEqual([
-      buildModelReasoningConfigOption('qwen3.8-max'),
-    ]);
-  });
-
-  it('preserves mandatory thinking in the workspace preview', () => {
-    expect(
-      buildModelReasoningConfigPreview('qwen3.8-max', {
-        thinkingMandatory: true,
-      }),
-    ).toEqual([
-      buildModelReasoningConfigOption('qwen3.8-max', {
-        thinkingMandatory: true,
-      }),
-    ]);
-  });
-
-  it.each([
-    ['qwen3.8-max', 'medium', false, { enabled: true, effort: 'medium' }],
-    ['qwen3.8-max', 'none', false, { enabled: false }],
-    ['qwen3.8-max', 'max', false, {}],
-    ['qwen3.8-max', 'none', true, {}],
-  ] as const)(
-    'projects persisted %s selection %s with mandatory=%s',
-    (modelId, selection, mandatory, expected) => {
-      expect(
-        resolvePersistedReasoningConfigState(modelId, selection, mandatory),
-      ).toEqual({ ...expected, thinkingMandatory: mandatory });
-    },
-  );
 
   it.each([
     'qwen3.5-plus',
@@ -405,58 +171,6 @@ describe('model configuration manifest', () => {
     'qwen3-coder-next',
   ])('does not broaden the manifest to %s', (modelId) => {
     expect(getModelConfiguration(modelId)).toBeUndefined();
-  });
-
-  it('preserves reasoning siblings when returning to the model default', () => {
-    const live = {
-      reasoning: { effort: 'high' as const, budget_tokens: 42_000 },
-    };
-    const rebuildable = {
-      reasoning: { effort: 'high' as const, budget_tokens: 42_000 },
-    };
-    const config = {
-      getContentGeneratorConfig: () => live,
-      getModelsConfig: () => ({
-        getGenerationConfig: () => rebuildable,
-      }),
-    } as unknown as Config;
-
-    applyReasoningSelection(config, 'default');
-
-    expect(live.reasoning).toEqual({ budget_tokens: 42_000 });
-    expect(rebuildable.reasoning).toEqual({ budget_tokens: 42_000 });
-  });
-
-  it('restores configured reasoning siblings after thinking is turned off', () => {
-    const live: Partial<ContentGeneratorConfig> = {
-      reasoning: { effort: 'max', budget_tokens: 42_000 },
-    };
-    const rebuildable = { ...live };
-    const config = {
-      getContentGeneratorConfig: () => live,
-      getModelsConfig: () => ({
-        getGenerationConfig: () => rebuildable,
-      }),
-    } as unknown as Config;
-
-    applyReasoningSelection(config, 'none');
-    applyReasoningSelection(config, 'default', { budget_tokens: 42_000 });
-
-    expect(live.reasoning).toEqual({ budget_tokens: 42_000 });
-    expect(rebuildable.reasoning).toEqual({ budget_tokens: 42_000 });
-  });
-
-  it('resets to a configured default-off state instead of enabling thinking', () => {
-    const live: Partial<ContentGeneratorConfig> = {
-      reasoning: { effort: 'max' },
-    };
-    const config = {
-      getContentGeneratorConfig: () => live,
-    } as unknown as Config;
-
-    applyReasoningSelection(config, 'default', false);
-
-    expect(live.reasoning).toBe(false);
   });
 });
 
@@ -591,41 +305,6 @@ describe('external reasoning controls', () => {
     baseUrl: 'http://127.0.0.1:11434/v1',
   } as ContentGeneratorConfig;
 
-  it('shows concrete defaults without persisting them as a selection', () => {
-    const config = {
-      getModel: () => generation.model,
-      getContentGeneratorConfig: () => generation,
-      getResolvedModelConfig: () => ({
-        capabilities: { reasoning: declaration },
-      }),
-    } as unknown as Config;
-    const reasoning = getConfiguredModelReasoning(config);
-    expect(
-      buildModelReasoningRoutePreview(generation, reasoning, undefined)?.[0],
-    ).toMatchObject({
-      currentValue: 'medium',
-      options: [
-        { value: 'none' },
-        { value: 'low' },
-        { value: 'medium' },
-        { value: 'high' },
-      ],
-    });
-    expect(getReasoningForDisplay(config, generation)).toEqual({
-      effort: 'medium',
-    });
-    expect(generation.reasoning).toBeUndefined();
-    const limited = resolveReasoningCapabilities(generation, {
-      ...declaration,
-      efforts: ['low', 'high'],
-      defaultEffort: 'low',
-    });
-    expect(
-      buildModelReasoningRoutePreview(generation, limited, 'medium')?.[0]
-        .currentValue,
-    ).toBe('high');
-  });
-
   it('uses the captured exact route while live settings change', () => {
     const active = {
       ...generation,
@@ -663,58 +342,4 @@ describe('external reasoning controls', () => {
       }),
     ).toEqual({ effort: 'high' });
   });
-
-  it.each(['openai-effort', 'openai-reasoning'] as const)(
-    'projects canonical raw overrides for %s aliases',
-    (profile) => {
-      const reasoning = resolveReasoningCapabilities(generation, {
-        ...declaration,
-        profile,
-      });
-      expect(
-        getGptReasoningOverrideState(
-          {
-            ...generation,
-            extra_body:
-              profile === 'openai-effort'
-                ? { reasoning_effort: 'none' }
-                : { reasoning: { enabled: false } },
-          },
-          reasoning,
-        )?.enabled,
-      ).toBe(false);
-      const extra_body =
-        profile === 'openai-effort'
-          ? { reasoning_effort: 'high' }
-          : { reasoning: { effort: 'high' } };
-      const raw = {
-        ...generation,
-        extra_body,
-        reasoningSnapshot: [
-          {
-            id: generation.model,
-            authType: generation.authType!,
-            baseUrl: generation.baseUrl,
-            reasoning: { ...declaration, profile },
-          },
-        ],
-      };
-      clearReasoningRequestOverrides(raw);
-      expect(raw.extra_body).toEqual(extra_body);
-      expect(
-        buildModelReasoningRoutePreview(
-          { ...generation, extra_body },
-          reasoning,
-          undefined,
-        )?.[0].currentValue,
-      ).toBe('high');
-      expect(
-        buildModelReasoningRoutePreview(
-          { ...generation, extra_body, reasoning: false },
-          reasoning,
-          undefined,
-        )?.[0].currentValue,
-      ).toBe('none');
-    },
-  );
 });

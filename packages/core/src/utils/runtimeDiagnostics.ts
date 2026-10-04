@@ -175,24 +175,6 @@ export class RuntimeDiagnosticsCollector {
     });
   }
 
-  recordToolUse(name: string, args: unknown): void {
-    if (!this.enabled) {
-      return;
-    }
-
-    const argBytes = utf8Bytes(args);
-    const tool = this.getToolNameDiagnostics(name);
-    tool.uses += 1;
-    tool.argBytes += argBytes;
-    tool.maxArgBytes = Math.max(tool.maxArgBytes, argBytes);
-    this.tools.toolUseCount += 1;
-    this.tools.totalToolUseArgBytes += argBytes;
-    this.tools.maxToolUseArgBytes = Math.max(
-      this.tools.maxToolUseArgBytes,
-      argBytes,
-    );
-  }
-
   recordToolResult(record: RuntimeToolResultRecord): void {
     if (!this.enabled) {
       return;

@@ -50,7 +50,6 @@ describe('learnCommand', () => {
     expect(learnCommand.name).toBe('learn');
     expect(learnCommand.kind).toBe(CommandKind.BUILT_IN);
     expect(learnCommand.supportedModes).toContain('interactive');
-    expect(learnCommand.supportedModes).toContain('acp');
     expect(learnCommand.argumentHint).toMatch(/path|text/i);
   });
 

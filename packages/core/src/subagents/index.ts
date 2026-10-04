@@ -23,9 +23,8 @@ export type {
 } from './types.js';
 
 // `SubagentErrorCode` is both a value (the const enum-like object used
-// at runtime) and a type. Re-export both shapes so callers like the
-// `qwen serve` workspace-agents route can use it as a value without
-// reaching into `./types.js` directly.
+// at runtime) and a type. Re-export both shapes so callers can use it as a
+// value without reaching into `./types.js` directly.
 export { SubagentError, SubagentErrorCode } from './types.js';
 
 // Built-in agents registry

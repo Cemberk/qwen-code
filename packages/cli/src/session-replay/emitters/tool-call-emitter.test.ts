@@ -5,14 +5,16 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ToolCallEmitter } from './tool-call-emitter.js';
+import {
+  buildToolResultContentPrefix,
+  ToolCallEmitter,
+} from './tool-call-emitter.js';
+import type { SessionContext, SessionEmitterContext } from '../types.js';
+import {
+  createTranscriptToolCallResultUpdate,
+  type TranscriptToolCallResultOptions,
+} from '../transcript-replay.js';
 import type {
-  SessionContext,
-  SessionEmitterContext,
-  SubagentMeta,
-} from '../types.js';
-import type {
-  AgentResultDisplay,
   Config,
   ToolRegistry,
   AnyDeclarativeTool,
@@ -64,318 +66,25 @@ describe('ToolCallEmitter', () => {
     emitter = new ToolCallEmitter(mockContext);
   });
 
-  it('emits recorded timing on starts, results and errors without using send time', async () => {
-    const startedAt = 1_760_000_000_000;
-    await emitter.emitStart({
-      toolName: 'test_tool',
-      callId: 'timed',
-      startedAt,
-    });
-    await emitter.emitResult({
-      toolName: 'test_tool',
-      callId: 'timed',
-      success: true,
-      message: [],
-      startedAt,
-      durationMs: 4000,
-    });
-    await emitter.emitError(
-      'failed',
-      'test_tool',
-      new Error('failed'),
-      undefined,
-      { startedAt: startedAt + 10_000, durationMs: 20 },
-    );
-    expect(
-      sendUpdateSpy.mock.calls.map(([update]) => ({
-        status: update.status,
-        startedAt: update._meta?.startedAt,
-        durationMs: update._meta?.durationMs,
-      })),
-    ).toEqual([
-      { status: 'pending', startedAt, durationMs: undefined },
-      { status: 'completed', startedAt, durationMs: 4000 },
-      { status: 'failed', startedAt: startedAt + 10_000, durationMs: 20 },
-    ]);
-  });
-
-  describe('emitStart', () => {
-    it.each([undefined, 'preparing'] as const)(
-      'marks agent launch frames unavailable during %s',
-      async (phase) => {
-        await emitter.emitStart({
-          toolName: ToolNames.AGENT,
-          callId: 'agent-1',
-          phase,
-        });
-        expect(sendUpdateSpy).toHaveBeenCalledWith(
-          expect.objectContaining({
-            _meta: expect.objectContaining({ subagentSessionReady: false }),
-          }),
-        );
-      },
+  // Builds a tool result update the way history replay does: the
+  // transcript-replay builder with this module's content prefix.
+  const sendResult = ({
+    error,
+    ...params
+  }: Omit<TranscriptToolCallResultOptions, 'errorMessage' | 'contentPrefix'> & {
+    error?: Error;
+  }) =>
+    sendUpdateSpy(
+      createTranscriptToolCallResultUpdate({
+        ...params,
+        errorMessage: error?.message,
+        contentPrefix: buildToolResultContentPrefix(params.resultDisplay),
+      }),
     );
 
-    it('leaves legacy inline child streams without a readiness lifecycle compatible', async () => {
-      await emitter.emitStart({
-        toolName: ToolNames.AGENT,
-        callId: 'nested',
-        subagentMeta: {
-          parentToolCallId: 'parent',
-          subagentType: 'general-purpose',
-        },
-      });
-      expect(sendUpdateSpy.mock.calls[0][0]._meta).not.toHaveProperty(
-        'subagentSessionReady',
-      );
-    });
-
-    it('should emit tool_call update with basic params when tool not in registry', async () => {
-      const result = await emitter.emitStart({
-        toolName: 'unknown_tool',
-        callId: 'call-123',
-        args: { arg1: 'value1' },
-      });
-
-      expect(result).toBe(true);
-      expect(sendUpdateSpy).toHaveBeenCalledWith({
-        sessionUpdate: 'tool_call',
-        toolCallId: 'call-123',
-        status: 'pending',
-        title: 'unknown_tool', // Falls back to tool name
-        content: [],
-        locations: [],
-        kind: 'other',
-        rawInput: { arg1: 'value1' },
-        _meta: { toolName: 'unknown_tool', provenance: 'builtin' },
-      });
-    });
-
-    it('should emit tool_call with resolved metadata when tool is in registry', async () => {
-      const mockTool = createMockTool({ kind: Kind.Edit });
-      vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
-
-      const result = await emitter.emitStart({
-        toolName: 'edit_file',
-        callId: 'call-456',
-        args: { path: '/test.ts' },
-      });
-
-      expect(result).toBe(true);
-      expect(sendUpdateSpy).toHaveBeenCalledWith({
-        sessionUpdate: 'tool_call',
-        toolCallId: 'call-456',
-        status: 'pending',
-        title: 'edit_file: Test tool description',
-        content: [],
-        locations: [{ path: '/test/file.ts', line: 10 }],
-        kind: 'edit',
-        rawInput: { path: '/test.ts' },
-        _meta: { toolName: 'edit_file', provenance: 'builtin' },
-      });
-    });
-
-    it('should skip emit for TodoWriteTool and return false', async () => {
-      const result = await emitter.emitStart({
-        toolName: ToolNames.TODO_WRITE,
-        callId: 'call-todo',
-        args: { todos: [] },
-      });
-
-      expect(result).toBe(false);
-      expect(sendUpdateSpy).not.toHaveBeenCalled();
-    });
-
-    it('should handle empty args', async () => {
-      await emitter.emitStart({
-        toolName: 'test_tool',
-        callId: 'call-empty',
-      });
-
-      expect(sendUpdateSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          rawInput: {},
-          _meta: { toolName: 'test_tool', provenance: 'builtin' },
-        }),
-      );
-    });
-
-    it('should fall back gracefully when tool build fails', async () => {
-      const mockTool = createMockTool();
-      vi.mocked(mockTool.build).mockImplementation(() => {
-        throw new Error('Build failed');
-      });
-      vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
-
-      await emitter.emitStart({
-        toolName: 'failing_tool',
-        callId: 'call-fail',
-        args: { invalid: true },
-      });
-
-      // Should use fallback values
-      expect(sendUpdateSpy).toHaveBeenCalledWith({
-        sessionUpdate: 'tool_call',
-        toolCallId: 'call-fail',
-        status: 'pending',
-        title: 'failing_tool', // Fallback to tool name
-        content: [],
-        locations: [], // Fallback to empty
-        kind: 'other', // Fallback to other
-        rawInput: { invalid: true },
-        _meta: { toolName: 'failing_tool', provenance: 'builtin' },
-      });
-    });
-  });
-
-  describe('tool preparation lifecycle', () => {
-    it('emits a preparing tool call without partial input', async () => {
-      await emitter.emitStart({
-        callId: 'call-1',
-        toolName: 'read_file',
-        args: {},
-        status: 'pending',
-        phase: 'preparing',
-      });
-
-      expect(sendUpdateSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          sessionUpdate: 'tool_call',
-          toolCallId: 'call-1',
-          status: 'pending',
-          rawInput: {},
-          _meta: expect.objectContaining({
-            toolName: 'read_file',
-            phase: 'preparing',
-          }),
-        }),
-      );
-    });
-
-    it('suppresses duplicate preparing frames for the same call ID', async () => {
-      const params = {
-        callId: 'call-1',
-        toolName: 'read_file',
-        args: {},
-        status: 'pending' as const,
-        phase: 'preparing' as const,
-      };
-
-      const first = await emitter.emitStart(params);
-      const duplicate = await emitter.emitStart(params);
-
-      expect(first).toBe(true);
-      expect(duplicate).toBe(false);
-      expect(sendUpdateSpy).toHaveBeenCalledTimes(1);
-    });
-
-    it('updates the prepared tool call when execution starts', async () => {
-      await emitter.emitStart({
-        callId: 'call-1',
-        toolName: 'read_file',
-        args: {},
-        status: 'pending',
-        phase: 'preparing',
-      });
-      await emitter.emitStart({
-        callId: 'call-1',
-        toolName: 'read_file',
-        args: { file_path: 'README.md' },
-        status: 'in_progress',
-      });
-
-      expect(sendUpdateSpy.mock.calls.map(([update]) => update)).toEqual([
-        expect.objectContaining({
-          sessionUpdate: 'tool_call',
-          toolCallId: 'call-1',
-          _meta: expect.objectContaining({ phase: 'preparing' }),
-        }),
-        expect.objectContaining({
-          sessionUpdate: 'tool_call_update',
-          toolCallId: 'call-1',
-          status: 'in_progress',
-          rawInput: { file_path: 'README.md' },
-        }),
-      ]);
-    });
-
-    it('emits a protocol-valid discarded preparation terminal update', async () => {
-      await emitter.emitPreparationDiscarded(
-        'call-1',
-        'mcp__filesystem__read_file',
-      );
-
-      expect(sendUpdateSpy).toHaveBeenCalledWith({
-        sessionUpdate: 'tool_call_update',
-        toolCallId: 'call-1',
-        status: 'failed',
-        content: [],
-        _meta: {
-          toolName: 'mcp__filesystem__read_file',
-          phase: 'preparing',
-          preparationDiscarded: true,
-          provenance: 'mcp',
-          serverId: 'filesystem',
-        },
-      });
-    });
-
-    it.each(['result', 'error'] as const)(
-      'clears prepared state after terminal %s',
-      async (terminal) => {
-        const preparation = {
-          callId: 'call-1',
-          toolName: 'read_file',
-          args: {},
-          status: 'pending' as const,
-          phase: 'preparing' as const,
-        };
-        await emitter.emitStart(preparation);
-
-        if (terminal === 'result') {
-          await emitter.emitResult({
-            callId: 'call-1',
-            toolName: 'read_file',
-            success: true,
-            message: [],
-          });
-        } else {
-          await emitter.emitError('call-1', 'read_file', new Error('failed'));
-        }
-        sendUpdateSpy.mockClear();
-
-        const emitted = await emitter.emitStart(preparation);
-
-        expect(emitted).toBe(true);
-        expect(sendUpdateSpy).toHaveBeenCalledOnce();
-        expect(sendUpdateSpy).toHaveBeenCalledWith(
-          expect.objectContaining({
-            sessionUpdate: 'tool_call',
-            toolCallId: 'call-1',
-            _meta: expect.objectContaining({ phase: 'preparing' }),
-          }),
-        );
-      },
-    );
-
-    it('suppresses preparation lifecycle frames for TodoWrite', async () => {
-      const emitted = await emitter.emitStart({
-        callId: 'call-todo',
-        toolName: ToolNames.TODO_WRITE,
-        args: {},
-        status: 'pending',
-        phase: 'preparing',
-      });
-      await emitter.emitPreparationDiscarded('call-todo', ToolNames.TODO_WRITE);
-
-      expect(emitted).toBe(false);
-      expect(sendUpdateSpy).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('emitResult', () => {
+  describe('tool result updates', () => {
     it('should emit tool_call_update with completed status on success', async () => {
-      await emitter.emitResult({
+      sendResult({
         toolName: 'test_tool',
         callId: 'call-123',
         success: true,
@@ -401,7 +110,7 @@ describe('ToolCallEmitter', () => {
         notice: 'Converted 4 images via qwen3-vl-plus (127.0.0.1:11434).',
       };
 
-      await emitter.emitResult({
+      sendResult({
         toolName: 'read_file',
         callId: 'call-pdf-success',
         success: true,
@@ -440,7 +149,7 @@ describe('ToolCallEmitter', () => {
         notice: 'Converted via qwen3-vl-plus.',
       };
 
-      await emitter.emitResult({
+      sendResult({
         toolName: 'read_file',
         callId: 'call-pdf-unsafe-name',
         success: true,
@@ -466,7 +175,7 @@ describe('ToolCallEmitter', () => {
           'Vision bridge (qwen3-vl-plus) failed after sending images to 127.0.0.1:11434.',
       };
 
-      await emitter.emitResult({
+      sendResult({
         toolName: 'read_file',
         callId: 'call-pdf-failure',
         success: false,
@@ -500,7 +209,7 @@ describe('ToolCallEmitter', () => {
     });
 
     it('emits structured artifacts without a wire trust marker', async () => {
-      await emitter.emitResult({
+      sendResult({
         toolName: ToolNames.ARTIFACT,
         callId: 'call-artifact',
         success: true,
@@ -542,7 +251,7 @@ describe('ToolCallEmitter', () => {
     });
 
     it('should emit tool_call_update with failed status on failure', async () => {
-      await emitter.emitResult({
+      sendResult({
         toolName: 'test_tool',
         callId: 'call-123',
         success: false,
@@ -565,7 +274,7 @@ describe('ToolCallEmitter', () => {
     });
 
     it('emits structured artifacts from failed tool results', async () => {
-      await emitter.emitResult({
+      sendResult({
         toolName: ToolNames.RECORD_ARTIFACT,
         callId: 'call-failed-artifact',
         success: false,
@@ -594,7 +303,7 @@ describe('ToolCallEmitter', () => {
     });
 
     it('should handle diff display format', async () => {
-      await emitter.emitResult({
+      sendResult({
         toolName: 'edit_file',
         callId: 'call-edit',
         success: true,
@@ -630,7 +339,7 @@ describe('ToolCallEmitter', () => {
     });
 
     it('should not replay truncated session previews as full diffs', async () => {
-      await emitter.emitResult({
+      sendResult({
         toolName: 'edit_file',
         callId: 'call-edit',
         success: true,
@@ -668,7 +377,7 @@ describe('ToolCallEmitter', () => {
     it('should replay an intact saved patch without truncated file bodies', async () => {
       const fileDiff = '--- a/file.ts\n+++ b/file.ts\n@@ -1 +1 @@\n-old\n+new';
 
-      await emitter.emitResult({
+      sendResult({
         toolName: 'edit_file',
         callId: 'call-edit',
         success: true,
@@ -693,7 +402,7 @@ describe('ToolCallEmitter', () => {
     });
 
     it('should transform message parts to content', async () => {
-      await emitter.emitResult({
+      sendResult({
         toolName: 'test_tool',
         callId: 'call-123',
         success: true,
@@ -719,7 +428,7 @@ describe('ToolCallEmitter', () => {
     });
 
     it('should handle empty message parts', async () => {
-      await emitter.emitResult({
+      sendResult({
         toolName: 'test_tool',
         callId: 'call-empty',
         success: true,
@@ -734,226 +443,6 @@ describe('ToolCallEmitter', () => {
         _meta: { toolName: 'test_tool', provenance: 'builtin' },
       });
     });
-
-    describe('TodoWriteTool handling', () => {
-      it('should emit plan update instead of tool_call_update for TodoWriteTool', async () => {
-        await emitter.emitResult({
-          toolName: ToolNames.TODO_WRITE,
-          callId: 'call-todo',
-          success: true,
-          message: [],
-          resultDisplay: {
-            type: 'todo_list',
-            planId: 'plan-1',
-            todos: [
-              { id: '1', content: 'Task 1', status: 'pending' },
-              {
-                id: '2',
-                content: 'Task 2',
-                status: 'in_progress',
-                blockedBy: ['1'],
-              },
-            ],
-          },
-        });
-
-        expect(sendUpdateSpy).toHaveBeenCalledTimes(1);
-        expect(sendUpdateSpy).toHaveBeenCalledWith({
-          sessionUpdate: 'plan',
-          entries: [
-            {
-              content: 'Task 1',
-              priority: 'medium',
-              status: 'pending',
-              _meta: { qwenTodo: { id: '1' } },
-            },
-            {
-              content: 'Task 2',
-              priority: 'medium',
-              status: 'in_progress',
-              _meta: { qwenTodo: { id: '2', blockedBy: ['1'] } },
-            },
-          ],
-          _meta: {
-            qwenTodoPlan: { id: 'plan-1' },
-            qwenTranscript: { planToolCallId: 'call-todo' },
-          },
-        });
-      });
-
-      it('should use args as fallback for TodoWriteTool todos', async () => {
-        await emitter.emitResult({
-          toolName: ToolNames.TODO_WRITE,
-          callId: 'call-todo',
-          success: true,
-          message: [],
-          resultDisplay: null,
-          args: {
-            todos: [{ id: '1', content: 'From args', status: 'completed' }],
-          },
-        });
-
-        expect(sendUpdateSpy).toHaveBeenCalledWith({
-          sessionUpdate: 'plan',
-          entries: [
-            {
-              content: 'From args',
-              priority: 'medium',
-              status: 'completed',
-              _meta: { qwenTodo: { id: '1' } },
-            },
-          ],
-          _meta: { qwenTranscript: { planToolCallId: 'call-todo' } },
-        });
-      });
-
-      it('should not emit anything for TodoWriteTool with empty todos', async () => {
-        await emitter.emitResult({
-          toolName: ToolNames.TODO_WRITE,
-          callId: 'call-todo',
-          success: true,
-          message: [],
-          resultDisplay: { type: 'todo_list', todos: [] },
-        });
-
-        expect(sendUpdateSpy).not.toHaveBeenCalled();
-      });
-
-      it('should not emit anything for TodoWriteTool with no extractable todos', async () => {
-        await emitter.emitResult({
-          toolName: ToolNames.TODO_WRITE,
-          callId: 'call-todo',
-          success: true,
-          message: [],
-          resultDisplay: 'Some string result',
-        });
-
-        expect(sendUpdateSpy).not.toHaveBeenCalled();
-      });
-
-      it('should not publish rejected TodoWrite arguments as a plan', async () => {
-        await emitter.emitResult({
-          toolName: ToolNames.TODO_WRITE,
-          callId: 'call-invalid-todo',
-          success: true,
-          message: [],
-          resultDisplay:
-            'Error writing todos: dependency graph contains a cycle',
-          args: {
-            todos: [
-              {
-                id: 'a',
-                content: 'Invalid cycle',
-                status: 'pending',
-                blockedBy: ['a'],
-              },
-            ],
-          },
-        });
-
-        expect(sendUpdateSpy).not.toHaveBeenCalled();
-      });
-
-      it('does not promote a subagent TodoWrite as the session plan', async () => {
-        await emitter.emitResult({
-          toolName: ToolNames.TODO_WRITE,
-          callId: 'call-subagent-todo',
-          success: true,
-          message: [],
-          resultDisplay: {
-            type: 'todo_list',
-            todos: [{ id: '1', content: 'Child task', status: 'pending' }],
-          },
-          subagentMeta: {
-            parentToolCallId: 'parent-agent',
-            subagentType: 'explore',
-          },
-        });
-
-        expect(sendUpdateSpy).not.toHaveBeenCalled();
-      });
-    });
-  });
-
-  describe('emitError', () => {
-    it('should emit tool_call_update with failed status and error message', async () => {
-      const error = new Error('Connection timeout');
-
-      await emitter.emitError('call-123', 'test_tool', error);
-
-      expect(sendUpdateSpy).toHaveBeenCalledWith({
-        sessionUpdate: 'tool_call_update',
-        toolCallId: 'call-123',
-        status: 'failed',
-        content: [
-          {
-            type: 'content',
-            content: { type: 'text', text: 'Connection timeout' },
-          },
-        ],
-        _meta: { toolName: 'test_tool', provenance: 'builtin' },
-      });
-    });
-  });
-
-  describe('emitProgressUpdate', () => {
-    it('should emit tool_call_update with in_progress status and text content', async () => {
-      await emitter.emitProgressUpdate(
-        'parent-call-1',
-        'Explore',
-        'Searching files...',
-      );
-
-      expect(sendUpdateSpy).toHaveBeenCalledWith({
-        sessionUpdate: 'tool_call_update',
-        toolCallId: 'parent-call-1',
-        status: 'in_progress',
-        content: [
-          {
-            type: 'content',
-            content: {
-              type: 'text',
-              text: 'Searching files...',
-            },
-          },
-        ],
-        _meta: {
-          subagentType: 'Explore',
-          provenance: 'subagent',
-          subagentProgress: true,
-        },
-      });
-    });
-
-    it('should sanitizes terminal controls in the progress message', async () => {
-      await emitter.emitProgressUpdate(
-        'parent-call-2',
-        'Coder',
-        'Running command\x1b[31mred text\x1b[0m',
-      );
-
-      const call = sendUpdateSpy.mock.calls[0][0] as {
-        content: Array<{ content?: { text?: string } }>;
-      };
-
-      const progressText = call.content[0].content?.text;
-
-      expect(progressText).toContain('Running command');
-      expect(progressText).toContain('red text');
-      expect(progressText).not.toContain('\x1b');
-    });
-  });
-
-  describe('isTodoWriteTool', () => {
-    it('should return true for ToolNames.TODO_WRITE', () => {
-      expect(emitter.isTodoWriteTool(ToolNames.TODO_WRITE)).toBe(true);
-    });
-
-    it('should return false for other tool names', () => {
-      expect(emitter.isTodoWriteTool('read_file')).toBe(false);
-      expect(emitter.isTodoWriteTool('edit_file')).toBe(false);
-      expect(emitter.isTodoWriteTool('')).toBe(false);
-    });
   });
 
   describe('mapToolKind', () => {
@@ -966,8 +455,7 @@ describe('ToolCallEmitter', () => {
       expect(emitter.mapToolKind(Kind.Execute)).toBe('execute');
       expect(emitter.mapToolKind(Kind.Think)).toBe('think');
       expect(emitter.mapToolKind(Kind.Fetch)).toBe('fetch');
-      // Kind.Agent maps to 'other' on the wire: ACP has no 'agent' ToolKind,
-      // so emitting it would be Zod-rejected at the daemon's ACP boundary.
+      // Kind.Agent maps to 'other': ACP has no 'agent' ToolKind.
       expect(emitter.mapToolKind(Kind.Agent)).toBe('other');
       expect(emitter.mapToolKind(Kind.Other)).toBe('other');
     });
@@ -1037,6 +525,18 @@ describe('ToolCallEmitter', () => {
       });
     });
 
+    it('falls back to the tool name when the tool build fails', () => {
+      const mockTool = createMockTool();
+      vi.mocked(mockTool.build).mockImplementation(() => {
+        throw new Error('Build failed');
+      });
+      vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
+
+      expect(
+        emitter.resolveToolMetadata('failing_tool', { invalid: true }),
+      ).toEqual({ title: 'failing_tool', locations: [], kind: 'other' });
+    });
+
     it('should return tool metadata when tool found and built successfully', () => {
       const mockTool = createMockTool({ kind: Kind.Search });
       vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
@@ -1053,35 +553,10 @@ describe('ToolCallEmitter', () => {
     });
   });
 
-  describe('integration: consistent behavior across flows', () => {
-    it('should handle the same params consistently regardless of source', async () => {
-      // This test verifies that the emitter produces consistent output
-      // whether called from normal flow, replay, or subagent
-
-      const params = {
-        toolName: 'read_file',
-        callId: 'consistent-call',
-        args: { path: '/test.ts' },
-      };
-
-      // First call (e.g., from normal flow)
-      await emitter.emitStart(params);
-      const firstCall = sendUpdateSpy.mock.calls[0][0];
-
-      // Reset and call again (e.g., from replay)
-      sendUpdateSpy.mockClear();
-      await emitter.emitStart(params);
-      const secondCall = sendUpdateSpy.mock.calls[0][0];
-
-      // Both should produce identical output
-      expect(firstCall).toEqual(secondCall);
-    });
-  });
-
   describe('fixes verification', () => {
     describe('Fix 2: functionResponse parts are stringified', () => {
       it('should stringify functionResponse parts in message', async () => {
-        await emitter.emitResult({
+        sendResult({
           toolName: 'test_tool',
           callId: 'call-func',
           success: true,
@@ -1117,9 +592,9 @@ describe('ToolCallEmitter', () => {
       });
     });
 
-    describe('Fix 3: rawOutput is included in emitResult', () => {
+    describe('Fix 3: rawOutput is included in tool results', () => {
       it('should include rawOutput when resultDisplay is provided', async () => {
-        await emitter.emitResult({
+        sendResult({
           toolName: 'test_tool',
           callId: 'call-extra',
           success: true,
@@ -1139,7 +614,7 @@ describe('ToolCallEmitter', () => {
       });
 
       it('should not include rawOutput when resultDisplay is undefined', async () => {
-        await emitter.emitResult({
+        sendResult({
           toolName: 'test_tool',
           callId: 'call-null',
           success: true,
@@ -1151,49 +626,6 @@ describe('ToolCallEmitter', () => {
         expect(call._meta).toEqual({
           toolName: 'test_tool',
           provenance: 'builtin',
-        });
-      });
-
-      it('should omit diagnostic artifact summaries from rawOutput', async () => {
-        const resultDisplay: AgentResultDisplay = {
-          type: 'task_execution',
-          subagentName: 'test-agent',
-          taskDescription: 'Test task',
-          taskPrompt: 'Test prompt',
-          status: 'completed',
-          toolCalls: [
-            {
-              callId: 'child-call',
-              name: 'read_file',
-              status: 'success',
-              resultDisplay: 'done',
-              boundaryArtifact: { state: 'reusable', kinds: ['file'] },
-            },
-          ],
-        };
-
-        await emitter.emitResult({
-          toolName: 'task',
-          callId: 'parent-call',
-          success: true,
-          message: [],
-          resultDisplay,
-        });
-
-        expect(sendUpdateSpy.mock.calls[0][0].rawOutput).toEqual({
-          ...resultDisplay,
-          toolCalls: [
-            {
-              callId: 'child-call',
-              name: 'read_file',
-              status: 'success',
-              resultDisplay: 'done',
-            },
-          ],
-        });
-        expect(resultDisplay.toolCalls?.[0].boundaryArtifact).toEqual({
-          state: 'reusable',
-          kinds: ['file'],
         });
       });
     });
@@ -1224,57 +656,9 @@ describe('ToolCallEmitter', () => {
       });
     });
 
-    describe('Fix 6: Empty plan emission when args has todos', () => {
-      it('should emit empty plan when args had todos but result has none', async () => {
-        await emitter.emitResult({
-          toolName: ToolNames.TODO_WRITE,
-          callId: 'call-todo-empty',
-          success: true,
-          message: [],
-          resultDisplay: null, // No result display
-          args: {
-            todos: [], // Empty array in args
-          },
-        });
-
-        expect(sendUpdateSpy).toHaveBeenCalledWith({
-          sessionUpdate: 'plan',
-          entries: [],
-          _meta: {
-            qwenTranscript: { planToolCallId: 'call-todo-empty' },
-          },
-        });
-      });
-
-      it('should emit empty plan when result todos is empty but args had todos', async () => {
-        await emitter.emitResult({
-          toolName: ToolNames.TODO_WRITE,
-          callId: 'call-todo-cleared',
-          success: true,
-          message: [],
-          resultDisplay: {
-            type: 'todo_list',
-            todos: [], // Empty result
-          },
-          args: {
-            todos: [{ id: '1', content: 'Was here', status: 'pending' }],
-          },
-        });
-
-        // Should still emit empty plan (result takes precedence but we emit empty)
-        expect(sendUpdateSpy).toHaveBeenCalledWith({
-          sessionUpdate: 'plan',
-          entries: [],
-          _meta: {
-            qwenTranscript: { planToolCallId: 'call-todo-cleared' },
-          },
-        });
-      });
-    });
-
     describe('Message transformation', () => {
       it('should transform text parts from message', async () => {
-        await emitter.emitResult({
+        sendResult({
           toolName: 'test_tool',
           callId: 'call-text',
           success: true,
@@ -1296,7 +680,7 @@ describe('ToolCallEmitter', () => {
       });
 
       it('should transform functionResponse parts from message', async () => {
-        await emitter.emitResult({
+        sendResult({
           toolName: 'test_tool',
           callId: 'call-func-resp',
           success: true,
@@ -1327,117 +711,6 @@ describe('ToolCallEmitter', () => {
           }),
         );
       });
-    });
-  });
-
-  describe('resolveToolProvenance (#4175 F4 prereq, chiga0 #19 P0)', () => {
-    // Pure static utility — exercise without an emitter instance.
-    it('classifies a plain tool name as builtin (no serverId)', () => {
-      const out = ToolCallEmitter.resolveToolProvenance('shell');
-      expect(out).toEqual({ provenance: 'builtin' });
-    });
-
-    it('classifies a tool name without mcp__ prefix as builtin', () => {
-      const out = ToolCallEmitter.resolveToolProvenance('read_file');
-      expect(out).toEqual({ provenance: 'builtin' });
-    });
-
-    it('classifies mcp__<server>__<tool> as mcp with serverId', () => {
-      const out = ToolCallEmitter.resolveToolProvenance(
-        'mcp__filesystem__read',
-      );
-      expect(out).toEqual({ provenance: 'mcp', serverId: 'filesystem' });
-    });
-
-    it('preserves underscores in the tool segment', () => {
-      // Server segment is `playwright`; tool segment is `take_screenshot`
-      // (with underscore inside the tool name — `split("__")` handles
-      // this because we split on the double-underscore delimiter).
-      const out = ToolCallEmitter.resolveToolProvenance(
-        'mcp__playwright__take_screenshot',
-      );
-      expect(out).toEqual({ provenance: 'mcp', serverId: 'playwright' });
-    });
-
-    it('classifies malformed mcp__ prefix (only one segment) as builtin', () => {
-      // No double-underscore delimiter past the prefix → not a valid
-      // mcp tool name; fall back to builtin rather than stamping
-      // garbage serverId.
-      const out = ToolCallEmitter.resolveToolProvenance('mcp__just_one');
-      expect(out).toEqual({ provenance: 'builtin' });
-    });
-
-    it('classifies mcp__<empty>__<tool> as builtin (empty server segment)', () => {
-      const out = ToolCallEmitter.resolveToolProvenance('mcp____read');
-      expect(out).toEqual({ provenance: 'builtin' });
-    });
-
-    it('classifies any tool as subagent when subagentMeta is present', () => {
-      // subagent takes precedence over mcp__ naming — a sub-agent
-      // calling an MCP tool is rendered as "subagent block" not
-      // "MCP block" in the UI.
-      const out = ToolCallEmitter.resolveToolProvenance('mcp__fs__read', {
-        agentType: 'researcher',
-      } as unknown as SubagentMeta);
-      expect(out).toEqual({ provenance: 'subagent' });
-    });
-
-    it('classifies a plain builtin tool with subagentMeta as subagent', () => {
-      const out = ToolCallEmitter.resolveToolProvenance('shell', {
-        agentType: 'coder',
-      } as unknown as SubagentMeta);
-      expect(out).toEqual({ provenance: 'subagent' });
-    });
-  });
-
-  describe('provenance stamping on emit (#4175 F4 prereq)', () => {
-    it('stamps provenance:mcp + serverId on emitStart for mcp__ tools', async () => {
-      await emitter.emitStart({
-        toolName: 'mcp__github__create_issue',
-        callId: 'call-mcp',
-        args: { title: 'bug' },
-      });
-      expect(sendUpdateSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          sessionUpdate: 'tool_call',
-          _meta: expect.objectContaining({
-            toolName: 'mcp__github__create_issue',
-            provenance: 'mcp',
-            serverId: 'github',
-          }),
-        }),
-      );
-    });
-
-    it('stamps provenance:subagent (no serverId) when subagentMeta present', async () => {
-      await emitter.emitStart({
-        toolName: 'shell',
-        callId: 'call-sub',
-        args: {},
-        subagentMeta: { agentType: 'researcher' } as unknown as SubagentMeta,
-      });
-      const call = sendUpdateSpy.mock.calls[0][0];
-      expect(call._meta.provenance).toBe('subagent');
-      expect(call._meta.serverId).toBeUndefined();
-    });
-
-    it('stamps provenance on emitResult so reconnecting clients can re-derive it', async () => {
-      await emitter.emitResult({
-        toolName: 'mcp__db__query',
-        callId: 'call-r',
-        success: true,
-        message: [],
-      });
-      const call = sendUpdateSpy.mock.calls[0][0];
-      expect(call._meta.provenance).toBe('mcp');
-      expect(call._meta.serverId).toBe('db');
-    });
-
-    it('stamps provenance on emitError as well', async () => {
-      await emitter.emitError('call-e', 'mcp__fs__write', new Error('boom'));
-      const call = sendUpdateSpy.mock.calls[0][0];
-      expect(call._meta.provenance).toBe('mcp');
-      expect(call._meta.serverId).toBe('fs');
     });
   });
 });

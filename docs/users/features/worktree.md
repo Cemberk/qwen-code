@@ -32,8 +32,6 @@ qwen --resume <session-id> --worktree=my-feature
 
 `process.cwd()` and the model's workspace are switched to the worktree before the first turn runs. Exit with `Ctrl+C` twice and the [Exit Dialog](#exit-dialog-ctrlc--ctrld) prompts to keep or remove the worktree.
 
-The `--worktree` flag cannot be combined with `--acp`/`--experimental-acp` — for ACP hosts (like Zed), pass the worktree path as the `cwd` of the `loadSession`/`newSession` request instead.
-
 ### Or ask mid-session
 
 Alternatively, ask Qwen Code in plain language to create a worktree from inside an existing session:
@@ -144,7 +142,7 @@ The active worktree binding is persisted to a sidecar file alongside your sessio
 <chatsDir>/<sessionId>.worktree.json
 ```
 
-When you launch the CLI with `--resume <sessionId>` (or pick the session from `/resume`), three things happen consistently across **interactive TUI**, **headless `-p`**, and **ACP/Zed** modes:
+When you launch the CLI with `--resume <sessionId>` (or pick the session from `/resume`), three things happen consistently across **interactive TUI** and **headless `-p`** modes:
 
 1. The sidecar is loaded and the worktree directory is verified to still exist on disk.
 2. If alive, the model receives a one-shot reminder on its very next prompt:
@@ -159,7 +157,6 @@ Each mode chooses its own injection mechanism, but the user-visible behavior is 
 | ----------------- | ------------------------------------------------------------------------------------------------------ |
 | Interactive (TUI) | `INFO` history item + system-reminder prefix on the next user prompt.                                  |
 | Headless (`-p`)   | `<system-reminder>` prefix on the prompt + `worktree_restored` JSON system event in the output stream. |
-| ACP (e.g. Zed)    | Pending notice attached to the next `prompt()` call.                                                   |
 
 The model is **not** automatically `chdir`'d into the worktree — the reminder is what keeps it routing edits through the worktree path.
 
@@ -198,7 +195,7 @@ The uncommitted-content guard reads `git status --porcelain --untracked-files=no
 
 - **Disposable build output** — an _ignored_ entry whose _first_ path segment is `node_modules`, `dist` or `coverage`, so that output and anything git lists under it, a single ignored file included (`!! dist/archive.zip` under a `*.zip` rule). Also an ignored _directory_ nested inside the checkout whose own name is one of those three (a monorepo's `packages/app/node_modules/`) — but only when git collapses the entry _at_ that directory, which needs an ignore rule matching the directory itself (`node_modules/`, or a bare `node_modules`). A rule matching the directory's _contents_ instead (`**/node_modules/*`, or a package-local `node_modules/**`) makes git list the files individually (`!! packages/app/node_modules/x/`), which is not exempt and preserves the checkout. A nested ignored _file_ with one of those names is not build output and still preserves the worktree, so `go test -coverprofile=coverage` writing `packages/app/coverage` keeps the checkout — but nothing stored under a root `dist/`, `coverage/` or `node_modules/` is kept. The same tree left _untracked_, so git says `?? dist/`, is not exempt and preserves the checkout. Note that `??` describes the _rendered entry_, not the absence of a rule: git collapses an untracked parent (`?? packages/`) whenever it holds any non-ignored untracked file, and lists ignored files inside it separately as `!!` at the same time. The usual reasons an entry renders `??` are that no ignore rule reaches it — including a rule whose spelling does not reach that path, since a root `node_modules/**` covers only the root-level tree — or that the rule was committed after the worktree branch was cut.
 - **Symlinks** — removing the checkout unlinks them and never touches what they point at, which is what keeps `worktree.symlinkDirectories` checkouts reapable. A nested value (`tools/cache`) makes git collapse the subtree to a single `?? tools/` entry, so a collapsed directory qualifies only when it holds at least one entry and everything inside it is itself a symlink; one real file beside the links — or an empty directory, which holds no link to speak of — preserves the worktree.
-- **The daemon's `.qwen-session` marker**, as long as git lists it as untracked or ignored. A marker the repository actually tracks is not exempt: an edit to a tracked path is indistinguishable from user work, and `writeWorktreeSessionMarker` overwrites a tracked marker unconditionally, so the daemon itself can be the author of that edit — the preserve then holds until the marker is committed or reverted.
+- **The `.qwen-session` session marker**, as long as git lists it as untracked or ignored. A marker the repository actually tracks is not exempt: an edit to a tracked path is indistinguishable from user work, and `writeWorktreeSessionMarker` overwrites a tracked marker unconditionally, so Qwen Code itself can be the author of that edit — the preserve then holds until the marker is committed or reverted.
 
 A path git quotes because it contains special characters is not resolved and counts as work.
 
@@ -302,8 +299,6 @@ qwen --worktree=my-feature                                    # = form
 | -------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | Bare flag (no value) | Auto slug `<adjective>-<noun>-<6hex>`, branch `worktree-<slug>`, base = current branch.                               |
 | Plain slug           | Branch `worktree-<slug>`, base = current branch. Slug validation: letters/digits/dot/underscore/hyphen, max 64 chars. |
-
-`--worktree` cannot be combined with `--acp` / `--experimental-acp`.
 
 When `--worktree` is combined with `--resume <session-id>`, the worktree wins: the resumed session's saved worktree (if any) is overridden and a stderr line + first-prompt reminder report the override.
 

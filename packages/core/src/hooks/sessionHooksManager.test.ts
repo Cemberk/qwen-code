@@ -130,25 +130,6 @@ describe('SessionHooksManager', () => {
     });
   });
 
-  describe('removeHook', () => {
-    it('should remove hook by ID across all events', () => {
-      const callback = vi.fn().mockResolvedValue({ continue: true });
-
-      const hookId = manager.addFunctionHook(
-        'session-1',
-        HookEventName.PreToolUse,
-        'Bash',
-        callback,
-        'Test error',
-      );
-
-      const removed = manager.removeHook('session-1', hookId);
-
-      expect(removed).toBe(true);
-      expect(manager.hasSessionHooks('session-1')).toBe(false);
-    });
-  });
-
   describe('getHooksForEvent', () => {
     it('should return hooks for specific event', () => {
       const callback = vi.fn().mockResolvedValue({ continue: true });
@@ -429,7 +410,7 @@ describe('SessionHooksManager', () => {
         'Test error',
       );
 
-      manager.removeHook('session-1', hookId);
+      manager.removeFunctionHook('session-1', HookEventName.PreToolUse, hookId);
 
       expect(manager.hasSessionHooks('session-1')).toBe(false);
     });
@@ -483,60 +464,6 @@ describe('SessionHooksManager', () => {
 
       expect(manager.hasSessionHooks('session-1')).toBe(false);
       expect(manager.hasSessionHooks('session-2')).toBe(true);
-    });
-  });
-
-  describe('getActiveSessions', () => {
-    it('should return all session IDs with hooks', () => {
-      const callback = vi.fn().mockResolvedValue({ continue: true });
-
-      manager.addFunctionHook(
-        'session-1',
-        HookEventName.PreToolUse,
-        'Bash',
-        callback,
-        'Test error',
-      );
-
-      manager.addFunctionHook(
-        'session-2',
-        HookEventName.PreToolUse,
-        'Bash',
-        callback,
-        'Test error',
-      );
-
-      const sessions = manager.getActiveSessions();
-      expect(sessions).toContain('session-1');
-      expect(sessions).toContain('session-2');
-    });
-  });
-
-  describe('getHookCount', () => {
-    it('should return correct hook count', () => {
-      const callback = vi.fn().mockResolvedValue({ continue: true });
-
-      manager.addFunctionHook(
-        'session-1',
-        HookEventName.PreToolUse,
-        'Bash',
-        callback,
-        'Test error',
-      );
-
-      manager.addFunctionHook(
-        'session-1',
-        HookEventName.PostToolUse,
-        '*',
-        callback,
-        'Test error',
-      );
-
-      expect(manager.getHookCount('session-1')).toBe(2);
-    });
-
-    it('should return 0 for non-existent session', () => {
-      expect(manager.getHookCount('non-existent')).toBe(0);
     });
   });
 

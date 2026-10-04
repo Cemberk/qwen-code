@@ -283,12 +283,6 @@ export class MemoryPressureMonitor extends EventEmitter {
     }
   }
 
-  // Public API
-
-  getConsecutiveFailures(): number {
-    return this.consecutiveCleanupFailures;
-  }
-
   resetConsecutiveFailures(): void {
     this.consecutiveCleanupFailures = 0;
     this.consecutiveIneffectiveCleanups = 0;

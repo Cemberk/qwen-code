@@ -159,13 +159,13 @@ export const tasksCommand: SlashCommand = {
     );
   },
   kind: CommandKind.BUILT_IN,
-  // Kept on all three modes: the interactive dialog (reachable via ↓ +
+  // Kept on both modes: the interactive dialog (reachable via ↓ +
   // Enter on the footer Background tasks pill) is the richer surface
-  // when a TTY is available, but `non_interactive` and `acp` consumers
-  // (headless `-p`, IDE bridges, SDK) have no dialog and rely on this
+  // when a TTY is available, but `non_interactive` consumers
+  // (headless `-p`) have no dialog and rely on this
   // text dump as the only way to inspect background task state. See the
   // interactive-mode hint at the top of the output for the soft redirect.
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
   canRunDuringStreaming: true,
   action: async (context) => {
     const { config } = context.services;
@@ -206,8 +206,8 @@ export const tasksCommand: SlashCommand = {
     const lines: string[] = [];
     // Soft redirect: in interactive mode the dialog is richer (per-entry
     // detail view, live updates, cancel keybinding). Don't show the hint
-    // in non_interactive / acp — those consumers have no dialog to point
-    // at and the noise just clutters their output. The wording avoids
+    // in non_interactive — that consumer has no dialog to point at and the
+    // noise just clutters its output. The wording avoids
     // pinning a single-key path because Down may pass through the Arena
     // agent tab bar first when subagents are present (`InputPrompt`
     // focus chain: agent tab bar → bg pill); calling it "the footer

@@ -172,7 +172,7 @@ export function resolveCliGenerationConfig(
       // mirroring auth.ts:findModelConfig.
       //
       // Note: `settings` is already merged across user/workspace/system scopes.
-      // Every writer of model.name (the picker, /model, ACP, provider install)
+      // Every writer of model.name (the picker, /model, provider install)
       // also writes model.baseUrl in the SAME scope — a real URL, or an empty
       // string tombstone when there is none. The tombstone matters because an
       // omitted key cannot override a stale model.baseUrl in a lower-priority

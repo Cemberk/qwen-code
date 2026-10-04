@@ -482,7 +482,7 @@ describe('computeApiTruncationIndex', () => {
     // /compress-fast's forced microcompaction replaces the top-level
     // inlineData/fileData parts of user entries with text placeholders
     // ('[Old inline media cleared: <mime>]'). A media-only user entry
-    // (e.g. an image-only ACP prompt) never produced a UI user turn, but
+    // (e.g. an image-only prompt) never produced a UI user turn, but
     // once cleared it satisfies a naive 'text' in part check — counting it
     // desynchronizes the API prompt count from the UI turn count and makes
     // the walk truncate one turn early, silently dropping a turn the UI

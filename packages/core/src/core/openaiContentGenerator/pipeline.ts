@@ -582,7 +582,7 @@ export class ContentGenerationPipeline {
           (response.candidates?.[0]?.content?.parts?.length ?? 0) === 0 &&
           !response.candidates?.[0]?.finishReason &&
           !response.usageMetadata &&
-          // Preparation-only responses must reach ACP before arguments complete.
+          // Preparation-only responses must be emitted before arguments complete.
           getToolCallPreparations(response).length === 0
         ) {
           continue;

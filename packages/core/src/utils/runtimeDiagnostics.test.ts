@@ -128,10 +128,9 @@ describe('RuntimeDiagnosticsCollector', () => {
     expect(JSON.stringify(summary)).not.toContain('secret user');
   });
 
-  it('aggregates tool use and tool result sizes without retaining payloads', () => {
+  it('aggregates tool result sizes per tool', () => {
     const collector = new RuntimeDiagnosticsCollector({ enabled: true });
 
-    collector.recordToolUse('read_file', { path: '/private/path.txt' });
     collector.recordToolResult({
       name: 'read_file',
       callId: 'tool-1',
@@ -147,25 +146,18 @@ describe('RuntimeDiagnosticsCollector', () => {
 
     const snapshot = collector.snapshot();
     expect(snapshot.tools).toMatchObject({
-      toolUseCount: 1,
       toolResultCount: 2,
       toolResultErrorCount: 1,
-      totalToolUseArgBytes: expect.any(Number),
-      maxToolUseArgBytes: expect.any(Number),
       totalToolResultBytes: 2560,
       maxToolResultBytes: 2048,
       byName: {
         read_file: {
-          uses: 1,
-          argBytes: expect.any(Number),
-          maxArgBytes: expect.any(Number),
           results: 1,
           errors: 0,
           resultBytes: 2048,
           maxResultBytes: 2048,
         },
         run_shell_command: {
-          uses: 0,
           results: 1,
           errors: 1,
           resultBytes: 512,
@@ -173,6 +165,5 @@ describe('RuntimeDiagnosticsCollector', () => {
         },
       },
     });
-    expect(JSON.stringify(snapshot)).not.toContain('/private/path.txt');
   });
 });

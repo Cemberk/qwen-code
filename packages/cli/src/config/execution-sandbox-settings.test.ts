@@ -9,7 +9,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  assertExecutionSandboxSupported,
   parseExecutionSandboxSettings,
   readOperatorSandboxSettings,
   selectOperatorExecutionSandbox,
@@ -271,13 +270,4 @@ describe('operator execution sandbox policy', () => {
       ).toEqual(restricted);
     },
   );
-  it('rejects unsupported frontends with the actual policy', () => {
-    expect(() =>
-      assertExecutionSandboxSupported(
-        { tools: { executionSandbox: restricted } },
-        'serve',
-      ),
-    ).toThrow('does not yet support serve');
-    expect(() => assertExecutionSandboxSupported({}, 'serve')).not.toThrow();
-  });
 });

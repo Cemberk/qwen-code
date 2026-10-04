@@ -31,9 +31,8 @@ export function resolveRequestTimeout(
 // ingest and long thinking phases room while staying below
 // LoggingContentGenerator's stream-span idle timer, so this watchdog fires first.
 export const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 240000;
-// Env override (deployment knob) for the streaming inactivity timeout, so a
-// daemon deployment can tune it without code — the same way the QWEN_SERVE_*
-// params are set. An explicit ContentGeneratorConfig.streamIdleTimeoutMs still
+// Env override (deployment knob) for the streaming inactivity timeout, so it
+// can be tuned without code. An explicit ContentGeneratorConfig.streamIdleTimeoutMs still
 // takes precedence; a malformed value is ignored (falls back to the default).
 export const QWEN_STREAM_IDLE_TIMEOUT_MS_ENV = 'QWEN_STREAM_IDLE_TIMEOUT_MS';
 // Maximum JS timer delay (~24.8 days). setTimeout silently compresses larger

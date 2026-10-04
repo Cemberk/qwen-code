@@ -10,7 +10,6 @@ import {
   loadSkillsFromDir,
   validateConfig,
   parsePriorityField,
-  normalizeSkillPriority,
 } from './skill-load.js';
 import {
   parseModelField,
@@ -953,33 +952,6 @@ Symlinked skill body.
         parsePriorityField({ priority: { level: 1 } }, filePath),
       ).toBeUndefined();
       expect(parsePriorityField({ priority: [1] }, filePath)).toBeUndefined();
-    });
-  });
-
-  describe('normalizeSkillPriority', () => {
-    it('returns finite numbers verbatim, including 0 and negatives', () => {
-      expect(normalizeSkillPriority(0)).toBe(0);
-      expect(normalizeSkillPriority(42)).toBe(42);
-      expect(normalizeSkillPriority(-5)).toBe(-5);
-      expect(normalizeSkillPriority(1.5)).toBe(1.5);
-    });
-
-    it('coerces undefined, null, and non-finite numbers to 0', () => {
-      expect(normalizeSkillPriority(undefined)).toBe(0);
-      expect(normalizeSkillPriority(null)).toBe(0);
-      expect(normalizeSkillPriority(Number.NaN)).toBe(0);
-      expect(normalizeSkillPriority(Number.POSITIVE_INFINITY)).toBe(0);
-      expect(normalizeSkillPriority(Number.NEGATIVE_INFINITY)).toBe(0);
-    });
-
-    it('coerces non-number types to 0 (defends the sort comparator)', () => {
-      // The sort comparator computes `b - a`. If any value here returned
-      // NaN, the comparator would return NaN and the result order would be
-      // implementation-defined.
-      expect(normalizeSkillPriority('high')).toBe(0);
-      expect(normalizeSkillPriority(true)).toBe(0);
-      expect(normalizeSkillPriority({})).toBe(0);
-      expect(normalizeSkillPriority([5])).toBe(0);
     });
   });
 });

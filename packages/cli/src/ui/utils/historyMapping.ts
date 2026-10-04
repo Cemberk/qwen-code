@@ -56,8 +56,7 @@ export function isRealUserTurn(
  * a visible user turn, so counting it would desynchronize the API prompt
  * count from the UI turn count and truncate one turn early. See
  * `ApiUserPromptOptions` in core for why that exclusion is an option rather
- * than part of the shared rule — ACP must keep those entries counted — and
- * for the exact-match collision it leaves behind, which remains an open
+ * than part of the shared rule, and for the exact-match collision it leaves behind, which remains an open
  * limitation pinned by the tests in this file's suite.
  */
 export function isUserTextContent(content: Content): boolean {

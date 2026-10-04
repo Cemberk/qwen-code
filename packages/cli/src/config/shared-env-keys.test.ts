@@ -6,7 +6,6 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import {
-  ENV_ACP_REPEATED_TOOL_FAILURE_GUARD,
   INHERITED_LOADER_ENV_KEYS,
   isHardcodedProjectEnvExclusion,
   isLoaderEnvKey,
@@ -50,12 +49,6 @@ describe('PROJECT_ENV_HARDCODED_EXCLUSIONS', () => {
       'QWEN_CODE_SYSTEM_DEFAULTS_PATH',
     );
   });
-  it('keeps ACP repeated-tool-failure rollout policy operator-owned', () => {
-    expect(PROJECT_ENV_HARDCODED_EXCLUSIONS).toContain(
-      ENV_ACP_REPEATED_TOOL_FAILURE_GUARD,
-    );
-  });
-
   // The name-only lock is a deployment policy: a repo-shipped .env, or a
   // mid-session edit of one, must not overwrite the operator's exported =1
   // and silently let the model run workflow scripts again.
@@ -71,12 +64,9 @@ describe('PROJECT_ENV_HARDCODED_EXCLUSIONS', () => {
     );
   });
 
-  // QWEN_CLI_ENTRY is the spawned session-process entrypoint; a project file
-  // fixing it is arbitrary script execution as the daemon.
   // NODE_EXTRA_CA_CERTS adds a TLS trust anchor — the
   // NODE_TLS_REJECT_UNAUTHORIZED outcome by addition instead of disable.
-  it('excludes entrypoint and trust-anchor keys', () => {
-    expect(PROJECT_ENV_HARDCODED_EXCLUSIONS).toContain('QWEN_CLI_ENTRY');
+  it('excludes trust-anchor keys', () => {
     expect(PROJECT_ENV_HARDCODED_EXCLUSIONS).toContain('NODE_EXTRA_CA_CERTS');
   });
 
@@ -97,20 +87,6 @@ describe('PROJECT_ENV_HARDCODED_EXCLUSIONS', () => {
   // the launch env, so a project file must not set it.
   it('excludes DEV so a project .env cannot spoof the dev harness', () => {
     expect(PROJECT_ENV_HARDCODED_EXCLUSIONS).toContain('DEV');
-  });
-
-  // QWEN_CODE_PRIVATE_CONVERSATIONS_RUNTIME is the private daemon-to-child
-  // Conversations provenance marker. A project `.env` or settings.env setting
-  // it would mark ordinary workspace children as Conversations-hosted,
-  // forcing the writer lease and the unbound-durable-task skip onto sessions
-  // the contract does not cover.
-  it('excludes the Conversations provenance marker from project env files', () => {
-    expect(PROJECT_ENV_HARDCODED_EXCLUSIONS).toContain(
-      'QWEN_CODE_PRIVATE_CONVERSATIONS_RUNTIME',
-    );
-    expect(
-      isHardcodedProjectEnvExclusion('qwen_code_private_conversations_runtime'),
-    ).toBe(true);
   });
 
   // The non-Node TLS trust-anchor vars reach the same MITM outcome as
@@ -233,13 +209,12 @@ describe('PROJECT_ENV_HARDCODED_EXCLUSIONS', () => {
 
 describe('isHardcodedProjectEnvExclusion', () => {
   // Windows env lookup is case-insensitive; exact-case membership would let
-  // `node_extra_ca_certs`/`qwen_cli_entry` slip past every application gate.
+  // `node_extra_ca_certs` slip past every application gate.
   it('matches the hardcoded exclusions case-insensitively', () => {
     expect(isHardcodedProjectEnvExclusion('QWEN_HOME')).toBe(true);
     expect(isHardcodedProjectEnvExclusion('qwen_home')).toBe(true);
     expect(isHardcodedProjectEnvExclusion('node_extra_ca_certs')).toBe(true);
     expect(isHardcodedProjectEnvExclusion('Node_Extra_Ca_Certs')).toBe(true);
-    expect(isHardcodedProjectEnvExclusion('qwen_cli_entry')).toBe(true);
     expect(isHardcodedProjectEnvExclusion('DEV')).toBe(true);
     expect(isHardcodedProjectEnvExclusion('dev')).toBe(true);
     expect(isHardcodedProjectEnvExclusion('QWEN_SERVER_TOKEN')).toBe(false);

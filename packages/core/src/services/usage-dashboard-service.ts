@@ -274,13 +274,13 @@ export function buildUsageDashboard(
 }
 
 /**
- * Read-only snapshot of local token usage for the daemon usage-dashboard API.
+ * Read-only snapshot of local token usage for the stream-json usage dashboard
+ * control request.
  * Loads the global cross-project history (`~/.qwen`) via
  * {@link loadUsageHistoryWithLive} — the persisted `usage_record.jsonl` unioned
- * with a replay of recent transcripts — so the totals include daemon / Web Shell
+ * with a replay of recent transcripts — so the totals include headless
  * and in-progress sessions that the persisted file never captures. The load can
- * be I/O heavy on large histories, so callers should cache (the daemon route
- * caches the loaded records and re-runs {@link buildUsageDashboard} per range).
+ * be I/O heavy on large histories, so callers should cache.
  */
 export async function loadUsageDashboard(
   options: LoadUsageDashboardOptions = {},

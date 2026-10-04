@@ -4,8 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { Config } from '../config/config.js';
+import { LlmClient } from './client.js';
 import type { MCPServerConfig } from '../config/config.js';
 import { buildMcpServerInstructionsReminder } from './environmentContext.js';
 import { DiscoveredMCPTool, type McpDirectClient } from '../tools/mcp-tool.js';
@@ -36,7 +37,13 @@ import {
 describe('MCP server instructions and subagent registries', () => {
   const configs: Config[] = [];
 
+  beforeEach(() => {
+    // No model is configured; the chat client is not under test.
+    vi.spyOn(LlmClient.prototype, 'initialize').mockResolvedValue(undefined);
+  });
+
   afterEach(async () => {
+    vi.restoreAllMocks();
     while (configs.length) {
       await configs.pop()?.shutdown();
     }
@@ -57,12 +64,7 @@ describe('MCP server instructions and subagent registries', () => {
 
   it('leaves a skipDiscovery registry with no server instructions', async () => {
     const config = makeConfig({ 'server-a': { command: 'a' } });
-    await config.initialize({
-      skipLlmInitialization: true,
-      skipHooks: true,
-      skipMcpDiscovery: true,
-      skipFileCheckpointing: true,
-    });
+    await config.initialize({ skipMcpDiscovery: true });
 
     // The shape `AgentTool` builds for every subagent launch.
     const subagentRegistry = await config.createToolRegistry(undefined, {
@@ -87,12 +89,7 @@ describe('MCP server instructions and subagent registries', () => {
     // Skipped, relative paths resolve against the parent's working directory
     // instead of the provisioned worktree.
     const config = makeConfig({ 'server-a': { command: 'a' } });
-    await config.initialize({
-      skipLlmInitialization: true,
-      skipHooks: true,
-      skipMcpDiscovery: true,
-      skipFileCheckpointing: true,
-    });
+    await config.initialize({ skipMcpDiscovery: true });
 
     const longLived = Object.create(config) as typeof config;
     await rebuildToolRegistryOnOverride(longLived, config, {
@@ -115,12 +112,7 @@ describe('MCP server instructions and subagent registries', () => {
     // pins `copyDiscoveredToolsFrom`'s contract only, and a change that
     // propagated instructions inside the rebuild would survive.
     const config = makeConfig({ 'server-a': { command: 'a' } });
-    await config.initialize({
-      skipLlmInitialization: true,
-      skipHooks: true,
-      skipMcpDiscovery: true,
-      skipFileCheckpointing: true,
-    });
+    await config.initialize({ skipMcpDiscovery: true });
 
     // The parent must actually HOLD instructions, or this asserts nothing:
     // discovery is skipped in tests, so an un-stubbed parent reports an empty

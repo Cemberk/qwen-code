@@ -285,7 +285,7 @@ describe('relaunchAppInChildProcess', () => {
       // cli-entry.js on POSIX: gc comes from v8.setFlagsFromString, not argv.
       globalThis.gc = vi.fn() as unknown as typeof globalThis.gc;
       process.execArgv = [];
-      process.argv = ['/usr/bin/node', '/app/cli.js', '--acp'];
+      process.argv = ['/usr/bin/node', '/app/cli.js', '--debug'];
     });
 
     afterEach(() => {
@@ -302,7 +302,7 @@ describe('relaunchAppInChildProcess', () => {
       expect(mockedSpawn.mock.calls[0][1]).toEqual([
         '--expose-gc',
         '/app/cli.js',
-        '--acp',
+        '--debug',
       ]);
       child.emit('close', 0);
       await expect(promise).rejects.toThrow('PROCESS_EXIT_CALLED');
@@ -324,7 +324,7 @@ describe('relaunchAppInChildProcess', () => {
           '--expose-gc',
           '--max-old-space-size=4096',
           '/app/cli.js',
-          '--acp',
+          '--debug',
         ],
         expect.any(Object),
       );
@@ -340,7 +340,7 @@ describe('relaunchAppInChildProcess', () => {
       expect(mockedSpawn.mock.calls[0][1]).toEqual([
         '--expose-gc',
         '/app/cli.js',
-        '--acp',
+        '--debug',
       ]);
       child.emit('close', 0);
       await expect(promise).rejects.toThrow('PROCESS_EXIT_CALLED');
@@ -533,22 +533,22 @@ describe('relaunchAppInChildProcess', () => {
 
     it('passes child-only environment without restoring it on the parent', async () => {
       process.argv = ['/usr/bin/node', '/app/cli.js'];
-      delete process.env['QWEN_CODE_PRIVATE_ACP_CAPABILITY'];
+      delete process.env['QWEN_TEST_CHILD_ONLY'];
       const mockChild = createMockChildProcess(0, false);
       mockedSpawn.mockReturnValue(mockChild);
 
       const promise = relaunchAppInChildProcess([], [], {
         childEnv: {
-          QWEN_CODE_PRIVATE_ACP_CAPABILITY: 'private-capability',
+          QWEN_TEST_CHILD_ONLY: 'child-only',
         },
       });
 
       await vi.waitFor(() => expect(mockedSpawn).toHaveBeenCalledOnce());
       expect(mockedSpawn.mock.calls[0]?.[2]?.env).toMatchObject({
-        QWEN_CODE_PRIVATE_ACP_CAPABILITY: 'private-capability',
+        QWEN_TEST_CHILD_ONLY: 'child-only',
         QWEN_CODE_NO_RELAUNCH: 'true',
       });
-      expect(process.env['QWEN_CODE_PRIVATE_ACP_CAPABILITY']).toBeUndefined();
+      expect(process.env['QWEN_TEST_CHILD_ONLY']).toBeUndefined();
 
       mockChild.emit('close', 0);
       await expect(promise).rejects.toThrow('PROCESS_EXIT_CALLED');
@@ -580,44 +580,6 @@ describe('relaunchAppInChildProcess', () => {
       secondChild.emit('close', 0);
       await expect(promise).rejects.toThrow('PROCESS_EXIT_CALLED');
     });
-
-    it.each([
-      ['managed ACP', '1', '1'],
-      ['ordinary', undefined, undefined],
-    ])(
-      'handles Electron Node mode for every %s relaunch',
-      async (_name, marker, expectedElectron) => {
-        process.argv = ['/usr/bin/node', '/app/cli.js'];
-        if (marker) {
-          process.env['QWEN_CODE_SCRUB_ELECTRON_RUN_AS_NODE'] = marker;
-        } else {
-          delete process.env['QWEN_CODE_SCRUB_ELECTRON_RUN_AS_NODE'];
-        }
-        delete process.env['ELECTRON_RUN_AS_NODE'];
-
-        const firstChild = createMockChildProcess(0, false);
-        const secondChild = createMockChildProcess(0, false);
-        mockedSpawn
-          .mockReturnValueOnce(firstChild)
-          .mockReturnValueOnce(secondChild);
-
-        const promise = relaunchAppInChildProcess([], []);
-
-        firstChild.emit('close', RELAUNCH_EXIT_CODE);
-        await vi.waitFor(() => expect(mockedSpawn).toHaveBeenCalledTimes(2));
-
-        for (const call of mockedSpawn.mock.calls) {
-          const env = call[2]?.env;
-          expect(env?.['ELECTRON_RUN_AS_NODE']).toBe(expectedElectron);
-          expect(env?.['QWEN_CODE_SCRUB_ELECTRON_RUN_AS_NODE']).toBe(marker);
-          expect(env?.['QWEN_CODE_NO_RELAUNCH']).toBe('true');
-        }
-        expect(process.env['ELECTRON_RUN_AS_NODE']).toBeUndefined();
-
-        secondChild.emit('close', 0);
-        await expect(promise).rejects.toThrow('PROCESS_EXIT_CALLED');
-      },
-    );
 
     it('should handle null exit code from child process', async () => {
       process.argv = ['/usr/bin/node', '/app/cli.js'];

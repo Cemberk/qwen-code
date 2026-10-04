@@ -19,7 +19,7 @@ export const authCommand: SlashCommand = {
     return t('Connect an LLM provider');
   },
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'],
+  supportedModes: ['interactive', 'non_interactive'],
   action: (
     context,
     _args,

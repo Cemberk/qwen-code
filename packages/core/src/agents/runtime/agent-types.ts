@@ -259,16 +259,3 @@ export function lastVisibleAnswer(
   }
   return undefined;
 }
-
-/**
- * Snapshot of in-progress streaming state for UI mid-switch handoff.
- * Returned by AgentInteractive.getInProgressStream().
- */
-export interface InProgressStreamState {
-  /** Accumulated non-thought text so far in the current round. */
-  text: string;
-  /** Accumulated thinking text so far in the current round. */
-  thinking: string;
-  /** The reasoning-loop round number being streamed. */
-  round: number;
-}

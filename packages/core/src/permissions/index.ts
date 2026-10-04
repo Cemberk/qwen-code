@@ -13,7 +13,6 @@ export type { ShellOperation } from './shell-semantics.js';
 export {
   applyAutoModeDecision,
   decorateAutoModeFallbackConfirmation,
-  decorateClassifierUnavailableConfirmation,
   evaluateAutoMode,
   getAutoModeActionFingerprint,
   prepareAutoModeFallback,

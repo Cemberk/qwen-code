@@ -175,10 +175,10 @@ export const workflowsCommand: SlashCommand = {
     return t('[runId | p <runId>]');
   },
   kind: CommandKind.BUILT_IN,
-  // Same triple-mode coverage as `/tasks`: the dialog is richer in
-  // interactive mode but headless / acp consumers need the text dump
-  // as their only inspection path.
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  // Same dual-mode coverage as `/tasks`: the dialog is richer in
+  // interactive mode but headless consumers need the text dump as their
+  // only inspection path.
+  supportedModes: ['interactive', 'non_interactive'] as const,
   action: async (context, args) => {
     const { config } = context.services;
     if (!config) {

@@ -56,8 +56,8 @@ export function formatInterruptedWorkflowRunsNotice(
     };
     const call = hasJournal ? buildResumeCall(target) : null;
     if (call) {
-      // The third reader of this predicate, beside the daemon's refusal and
-      // the task projection. This notice is a call to paste, and on this
+      // Another reader of this predicate, beside the task projection. This
+      // notice is a call to paste, and on this
       // path nothing refuses it: a run whose history cannot name its args
       // would resume with none, replay nothing and re-dispatch every agent.
       const argsNote =

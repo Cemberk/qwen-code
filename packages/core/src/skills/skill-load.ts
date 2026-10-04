@@ -333,16 +333,3 @@ export function parsePriorityField(
 
   return raw;
 }
-
-/**
- * Normalize a skill priority to a finite number for sort comparisons.
- * Used in the `listSkills()` sort comparator so extension-provided skills
- * (which bypass the frontmatter parser and validateConfig) can't poison
- * ordering with `NaN` or non-number values that `(a ?? 0) - (b ?? 0)`
- * would otherwise propagate as `NaN`.
- */
-export function normalizeSkillPriority(priority: unknown): number {
-  return typeof priority === 'number' && Number.isFinite(priority)
-    ? priority
-    : 0;
-}

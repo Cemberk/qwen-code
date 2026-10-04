@@ -24,7 +24,6 @@ import { ToolNames } from '../tools/tool-names.js';
 import { STRUCTURED_OUTPUT_REDACTED_ARGS } from '../tools/syntheticOutput.js';
 import type { SkillTool } from '../tools/skill.js';
 import type { AgentTool } from '../tools/agent/agent.js';
-import type { ToolErrorType } from '../tools/tool-error.js';
 import type {
   GoalLimitKind,
   GoalStateCause,
@@ -429,18 +428,6 @@ export class ApiResponseEvent implements BaseTelemetryEvent {
   }
 }
 
-export class FlashFallbackEvent implements BaseTelemetryEvent {
-  'event.name': 'flash_fallback';
-  'event.timestamp': string;
-  auth_type: string;
-
-  constructor(auth_type: string) {
-    this['event.name'] = 'flash_fallback';
-    this['event.timestamp'] = new Date().toISOString();
-    this.auth_type = auth_type;
-  }
-}
-
 export class RipgrepFallbackEvent implements BaseTelemetryEvent {
   'event.name': 'ripgrep_fallback';
   'event.timestamp': string;
@@ -519,95 +506,6 @@ export class LoopDetectedEvent implements BaseTelemetryEvent {
     this['event.timestamp'] = new Date().toISOString();
     this.loop_type = loop_type;
     this.prompt_id = prompt_id;
-  }
-}
-
-export type RepeatedToolFailureGuardTelemetryMode =
-  | 'shadow'
-  | 'warn'
-  | 'enforce';
-export type RepeatedToolFailureGuardTelemetryPhase =
-  | 'idle'
-  | 'tracking'
-  | 'warned'
-  | 'latched';
-export type RepeatedToolFailureGuardTelemetryDecision =
-  | 'reset'
-  | 'tracked'
-  | 'would_warn'
-  | 'warned'
-  | 'would_stop'
-  | 'stopped';
-export type RepeatedToolFailureGuardCountBucket =
-  | '0'
-  | '1-2'
-  | '3-4'
-  | '5-7'
-  | '8+';
-export type RepeatedToolFailureGuardBatchBucket = '0' | '1' | '2' | '3+';
-export type RepeatedToolFailureGuardResetReason =
-  | 'success'
-  | 'cancelled'
-  | 'not_started'
-  | 'post_execution_failure'
-  | 'unknown'
-  | 'mixed'
-  | 'incomplete'
-  | 'external_input'
-  | 'queued_prompt'
-  | 'unreliable_input'
-  | 'contract_violation';
-
-export class RepeatedToolFailureGuardEvent implements BaseTelemetryEvent {
-  'event.name': 'repeated_tool_failure_guard';
-  'event.timestamp': string;
-  prompt_id: string;
-  route: 'acp_foreground';
-  mode: RepeatedToolFailureGuardTelemetryMode;
-  phase_before: RepeatedToolFailureGuardTelemetryPhase;
-  phase_after: RepeatedToolFailureGuardTelemetryPhase;
-  decision: RepeatedToolFailureGuardTelemetryDecision;
-  failure_count_bucket: RepeatedToolFailureGuardCountBucket;
-  batch_count_bucket: RepeatedToolFailureGuardBatchBucket;
-  candidate_ordinal: number;
-  declare reset_reason?: RepeatedToolFailureGuardResetReason;
-  declare terminal_status?: 'error';
-  declare execution_status?: 'error';
-  declare execution_error_type?: ToolErrorType;
-  declare tool_type?: 'native' | 'mcp';
-
-  constructor(
-    params: Omit<
-      RepeatedToolFailureGuardEvent,
-      'event.name' | 'event.timestamp'
-    >,
-  ) {
-    this['event.name'] = 'repeated_tool_failure_guard';
-    this['event.timestamp'] = new Date().toISOString();
-    this.prompt_id = params.prompt_id;
-    this.route = params.route;
-    this.mode = params.mode;
-    this.phase_before = params.phase_before;
-    this.phase_after = params.phase_after;
-    this.decision = params.decision;
-    this.failure_count_bucket = params.failure_count_bucket;
-    this.batch_count_bucket = params.batch_count_bucket;
-    this.candidate_ordinal = params.candidate_ordinal;
-    if (params.reset_reason !== undefined) {
-      this.reset_reason = params.reset_reason;
-    }
-    if (params.terminal_status !== undefined) {
-      this.terminal_status = params.terminal_status;
-    }
-    if (params.execution_status !== undefined) {
-      this.execution_status = params.execution_status;
-    }
-    if (params.execution_error_type !== undefined) {
-      this.execution_error_type = params.execution_error_type;
-    }
-    if (params.tool_type !== undefined) {
-      this.tool_type = params.tool_type;
-    }
   }
 }
 
@@ -691,18 +589,6 @@ export function makeChatCompressionEvent({
   };
 }
 
-export class MalformedJsonResponseEvent implements BaseTelemetryEvent {
-  'event.name': 'malformed_json_response';
-  'event.timestamp': string;
-  model: string;
-
-  constructor(model: string) {
-    this['event.name'] = 'malformed_json_response';
-    this['event.timestamp'] = new Date().toISOString();
-    this.model = model;
-  }
-}
-
 export class ConversationFinishedEvent {
   'event_name': 'conversation_finished';
   'event.timestamp': string; // ISO 8601;
@@ -757,19 +643,6 @@ export class FileOperationEvent implements BaseTelemetryEvent {
     this.mimetype = mimetype;
     this.extension = extension;
     this.programming_language = programming_language;
-  }
-}
-
-// Add these new event interfaces
-export class InvalidChunkEvent implements BaseTelemetryEvent {
-  'event.name': 'invalid_chunk';
-  'event.timestamp': string;
-  error_message?: string; // Optional: validation error details
-
-  constructor(error_message?: string) {
-    this['event.name'] = 'invalid_chunk';
-    this['event.timestamp'] = new Date().toISOString();
-    this.error_message = error_message;
   }
 }
 
@@ -1106,41 +979,6 @@ export class SkillLaunchEvent implements BaseTelemetryEvent {
     this.prompt_id = prompt_id;
   }
 }
-
-export type TelemetryEvent =
-  | StartSessionEvent
-  | EndSessionEvent
-  | UserPromptEvent
-  | ToolCallEvent
-  | ApiRequestEvent
-  | ApiErrorEvent
-  | ApiCancelEvent
-  | ApiResponseEvent
-  | FlashFallbackEvent
-  | RipgrepRuntimeRecoveryEvent
-  | LoopDetectedEvent
-  | RepeatedToolFailureGuardEvent
-  | NextSpeakerCheckEvent
-  | KittySequenceOverflowEvent
-  | MalformedJsonResponseEvent
-  | ConversationFinishedEvent
-  | SlashCommandEvent
-  | FileOperationEvent
-  | InvalidChunkEvent
-  | ContentRetryEvent
-  | ProtocolTagSanitizedEvent
-  | ContentRetryFailureEvent
-  | ApiRetryEvent
-  | SubagentExecutionEvent
-  | GoalStateEvent
-  | ToolOutputTruncatedEvent
-  | ToolResultPersistedEvent
-  | ModelSlashCommandEvent
-  | AuthEvent
-  | SkillLaunchEvent
-  | ArenaSessionStartedEvent
-  | ArenaAgentCompletedEvent
-  | ArenaSessionEndedEvent;
 
 // ─── Arena Telemetry Events ────────────────────────────────────
 

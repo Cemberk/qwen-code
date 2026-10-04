@@ -11,19 +11,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as McpCallableToolLib from './mcp-callable-tool.js';
 import { MCPServerConfig, type Config } from '../config/config.js';
 import type { PromptRegistry } from '../prompts/prompt-registry.js';
-import type { ResourceRegistry } from '../resources/resource-registry.js';
 import type { WorkspaceContext } from '../utils/workspaceContext.js';
 import {
-  INVOCATION_CONTEXT_META_KEY,
-  runWithInvocationContext,
-  type InvocationContextV1,
-} from '../utils/invocation-context.js';
-import {
   addMCPStatusChangeListener,
-  connectAndDiscover,
   createTransport,
-  discoverPrompts,
-  discoverResources,
   getAllMCPServerStatuses,
   getMCPServerLastError,
   getMCPServerStatus,
@@ -32,13 +23,17 @@ import {
   listMcpResources,
   MCPServerStatus,
   McpClient,
-  discoverTools,
+  discoverToolsWithMetadata,
   populateMcpServerCommand,
   removeMCPServerStatus,
   removeMCPStatusChangeListener,
   updateMCPServerStatus,
 } from './mcp-client.js';
 import type { ToolRegistry } from './tool-registry.js';
+
+const discoverTools = async (
+  ...args: Parameters<typeof discoverToolsWithMetadata>
+) => (await discoverToolsWithMetadata(...args)).tools;
 
 const mockExistsSync = vi.hoisted(() => vi.fn(() => true));
 const mockDebugLogger = vi.hoisted(() => ({
@@ -594,7 +589,7 @@ describe('mcp-client', () => {
       expect(tools[0].alwaysLoad).toBe(true);
     });
 
-    it('preserves App-only tools for the separate App registry', async () => {
+    it('omits tools whose visibility does not include the model', async () => {
       const mockedClient = {
         listTools: vi.fn().mockResolvedValue({
           tools: [
@@ -602,7 +597,6 @@ describe('mcp-client', () => {
               name: 'show_dashboard',
               _meta: {
                 ui: {
-                  resourceUri: 'ui://demo/dash',
                   visibility: ['model'],
                 },
               },
@@ -611,7 +605,6 @@ describe('mcp-client', () => {
               name: 'internal_refresh',
               _meta: {
                 ui: {
-                  resourceUri: 'ui://demo/refresh',
                   visibility: ['app'],
                 },
               },
@@ -638,11 +631,7 @@ describe('mcp-client', () => {
 
       expect(tools.map((tool) => tool.serverToolName)).toEqual([
         'show_dashboard',
-        'internal_refresh',
       ]);
-      expect(tools[0].isAppVisible).toBe(false);
-      expect(tools[1].isModelVisible).toBe(false);
-      expect(tools[1].appVisibility).toEqual(['app']);
     });
 
     it.each(
@@ -666,81 +655,6 @@ describe('mcp-client', () => {
           cfgWithResources(),
         ),
       ).toEqual([]);
-    });
-
-    it('attaches listing-level app resource UI onto discovered tools', async () => {
-      const mockedClient = {
-        connect: vi.fn(),
-        registerCapabilities: vi.fn(),
-        setRequestHandler: vi.fn(),
-        getProtocolEra: vi.fn().mockReturnValue('modern'),
-        getServerCapabilities: vi.fn().mockReturnValue({
-          tools: {},
-          resources: {},
-        }),
-        listTools: vi.fn().mockResolvedValue({
-          tools: [
-            {
-              name: 'show_dashboard',
-              _meta: { ui: { resourceUri: 'ui://demo/dash' } },
-            },
-          ],
-        }),
-        listResources: vi.fn().mockResolvedValue({
-          resources: [
-            {
-              uri: 'ui://demo/dash',
-              name: 'dash',
-              _meta: {
-                ui: {
-                  csp: { connectDomains: ['https://api.example.com'] },
-                  permissions: { clipboardWrite: {} },
-                },
-              },
-            },
-          ],
-        }),
-        listPrompts: vi.fn().mockResolvedValue({ prompts: [] }),
-        request: vi.fn().mockResolvedValue({ prompts: [] }),
-        getInstructions: vi.fn(),
-      };
-      vi.mocked(ClientLib.Client).mockReturnValue(
-        mockedClient as unknown as ClientLib.Client,
-      );
-      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
-        {} as SdkClientStdioLib.StdioClientTransport,
-      );
-      vi.mocked(McpCallableToolLib.mcpToTool).mockReturnValue({
-        tool: () =>
-          Promise.resolve({
-            functionDeclarations: [{ name: 'show_dashboard' }],
-          }),
-      } as unknown as CallableTool);
-
-      const client = new McpClient(
-        'apps',
-        {
-          command: 'test-command',
-          appResourceMaxBytes: 2_097_152,
-          appResourceTimeoutMs: 30_000,
-        },
-        { registerTool: vi.fn() } as unknown as ToolRegistry,
-        { registerPrompt: vi.fn() } as unknown as PromptRegistry,
-        {} as WorkspaceContext,
-        false,
-      );
-      await client.connect();
-      const snapshot = await client.discoverAndReturn(cfgWithResources());
-
-      expect(snapshot.tools[0]?.appResourceLimits).toEqual({
-        appResourceMaxBytes: 2_097_152,
-        appResourceTimeoutMs: 30_000,
-      });
-      expect(snapshot.tools[0]?.appResourceUri).toBe('ui://demo/dash');
-      expect(snapshot.tools[0]?.appResourceUi).toEqual({
-        csp: { connectDomains: ['https://api.example.com'] },
-        permissions: { clipboardWrite: {} },
-      });
     });
 
     it('lists tools via request when a modern server omits the tools capability', async () => {
@@ -772,91 +686,6 @@ describe('mcp-client', () => {
       );
       expect(vi.mocked(mockedClient.listTools)).not.toHaveBeenCalled();
       expect(tools.map((tool) => tool.serverToolName)).toEqual(['echo']);
-    });
-
-    it('allows invocation context only for a client bound to a created stdio transport', async () => {
-      const callTool = vi.fn().mockResolvedValue({
-        content: [{ type: 'text', text: 'ok' }],
-      });
-      const mockedClient = {
-        connect: vi.fn(),
-        registerCapabilities: vi.fn(),
-        setRequestHandler: vi.fn(),
-        getServerCapabilities: vi.fn().mockReturnValue({}),
-        listTools: vi.fn().mockResolvedValue({ tools: [] }),
-        getInstructions: vi.fn(),
-        callTool,
-      };
-      vi.mocked(ClientLib.Client).mockReturnValue(
-        mockedClient as unknown as ClientLib.Client,
-      );
-      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
-        {} as SdkClientStdioLib.StdioClientTransport,
-      );
-      vi.mocked(McpCallableToolLib.mcpToTool).mockReturnValue({
-        tool: () =>
-          Promise.resolve({
-            functionDeclarations: [{ name: 'local-tool' }],
-          }),
-      } as unknown as CallableTool);
-      const client = new McpClient(
-        'local-server',
-        { command: 'test-command' },
-        {} as ToolRegistry,
-        {} as PromptRegistry,
-        {} as WorkspaceContext,
-        false,
-      );
-      await client.connect();
-      const { tools } = await client.discoverAndReturn(cfgWithResources());
-      const context: InvocationContextV1 = {
-        version: 1,
-        sessionId: 'session-1',
-        promptId: 'prompt-1',
-      };
-
-      await runWithInvocationContext(context, () =>
-        tools[0].build({ param: 'test' }).execute(new AbortController().signal),
-      );
-
-      expect(callTool.mock.calls[0][0]._meta).toEqual({
-        [INVOCATION_CONTEXT_META_KEY]: context,
-      });
-    });
-
-    it('does not trust a stdio-shaped config without an internally bound client', async () => {
-      const callTool = vi.fn().mockResolvedValue({
-        content: [{ type: 'text', text: 'ok' }],
-      });
-      const arbitraryClient = {
-        listTools: vi.fn().mockResolvedValue({ tools: [] }),
-        callTool,
-      } as unknown as ClientLib.Client;
-      vi.mocked(McpCallableToolLib.mcpToTool).mockReturnValue({
-        tool: () =>
-          Promise.resolve({
-            functionDeclarations: [{ name: 'unbound-tool' }],
-          }),
-      } as unknown as CallableTool);
-      const [unboundTool] = await discoverTools(
-        'unbound-server',
-        { command: 'looks-like-stdio' },
-        arbitraryClient,
-        cfgWithResources(),
-      );
-      const context: InvocationContextV1 = {
-        version: 1,
-        sessionId: 'session-1',
-        promptId: 'prompt-1',
-      };
-
-      await runWithInvocationContext(context, () =>
-        unboundTool
-          .build({ param: 'test' })
-          .execute(new AbortController().signal),
-      );
-
-      expect(Object.hasOwn(callTool.mock.calls[0][0], '_meta')).toBe(false);
     });
 
     it('discoverAndReturn (default) applies config filters and trust — legacy non-pool callers (R23 T1)', async () => {
@@ -1022,7 +851,7 @@ describe('mcp-client', () => {
       removeMCPServerStatus('discovery-cause-server');
     });
 
-    it('keeps a server with only app-visible tools connected', async () => {
+    it('keeps a server whose only tools are hidden from the model connected', async () => {
       mockAppOnlyMcpServer();
       const client = new McpClient(
         'app-only-server',
@@ -1036,42 +865,10 @@ describe('mcp-client', () => {
 
       const snapshot = await client.discoverAndReturn(cfgWithResources());
 
-      expect(snapshot.tools).toHaveLength(1);
-      expect(snapshot.tools[0].serverToolName).toBe('internal_refresh');
-      expect(snapshot.tools[0].isModelVisible).toBe(false);
-      expect(snapshot.tools[0].isAppVisible).toBe(true);
+      expect(snapshot.tools).toEqual([]);
       expect(snapshot.prompts).toEqual([]);
       expect(snapshot.resources).toEqual([]);
       expect(client.getStatus()).toBe(MCPServerStatus.CONNECTED);
-    });
-
-    it('keeps standalone discovery connected for app-visible-only tools', async () => {
-      mockAppOnlyMcpServer();
-      const serverName = `app-only-standalone-${Date.now()}`;
-      const toolRegistry = {
-        registerTool: vi.fn(),
-      } as unknown as ToolRegistry;
-
-      await connectAndDiscover(
-        serverName,
-        { command: 'test-command' },
-        toolRegistry,
-        { registerPrompt: vi.fn() } as unknown as PromptRegistry,
-        false,
-        {
-          getDirectories: vi.fn().mockReturnValue([]),
-          onDirectoriesChanged: vi.fn().mockReturnValue(vi.fn()),
-        } as unknown as WorkspaceContext,
-        cfgWithResources(),
-      );
-
-      expect(getMCPServerStatus(serverName)).toBe(MCPServerStatus.CONNECTED);
-      expect(toolRegistry.registerTool).toHaveBeenCalledWith(
-        expect.objectContaining({
-          serverToolName: 'internal_refresh',
-          appVisibility: ['app'],
-        }),
-      );
     });
 
     it('discoverAndReturn throws when called before connect()', async () => {
@@ -1524,54 +1321,6 @@ describe('mcp-client', () => {
       expect(result).toEqual([]);
       // 1 initial + 2 retries = 3 total calls
       expect(vi.mocked(mockClient.request)).toHaveBeenCalledTimes(3);
-    });
-  });
-
-  describe('discoverResources wrapper', () => {
-    it('registers discovered resources into the supplied ResourceRegistry', async () => {
-      const mockClient = {
-        getServerCapabilities: vi.fn().mockReturnValue({ resources: {} }),
-        request: vi.fn().mockResolvedValue({
-          resources: [{ uri: 'file:///x.txt', name: 'x' }],
-        }),
-      } as unknown as ClientLib.Client;
-      const resourceRegistry = {
-        registerResource: vi.fn(),
-      } as unknown as ResourceRegistry;
-      const out = await discoverResources(
-        'wrapper-server',
-        mockClient,
-        resourceRegistry,
-      );
-      expect(resourceRegistry.registerResource).toHaveBeenCalledTimes(1);
-      expect(out).toHaveLength(1);
-      expect(out[0].uri).toBe('file:///x.txt');
-      expect(out[0].serverName).toBe('wrapper-server');
-    });
-  });
-
-  describe('discoverPrompts wrapper (backward compat after F2-1 split)', () => {
-    it('still registers prompts into the supplied PromptRegistry', async () => {
-      const mockClient = {
-        getServerCapabilities: vi.fn().mockReturnValue({ prompts: {} }),
-        request: vi.fn().mockResolvedValue({
-          prompts: [{ name: 'register-me' }],
-        }),
-      } as unknown as ClientLib.Client;
-      const promptRegistry = {
-        registerPrompt: vi.fn(),
-      } as unknown as PromptRegistry;
-      const out = await discoverPrompts(
-        'wrapper-server',
-        mockClient,
-        promptRegistry,
-      );
-      expect(promptRegistry.registerPrompt).toHaveBeenCalledTimes(1);
-      expect(out).toHaveLength(1);
-      expect(out[0].name).toBe('register-me');
-      // Historical contract: return type strips serverName/invoke.
-      expect((out[0] as Record<string, unknown>)['serverName']).toBeUndefined();
-      expect((out[0] as Record<string, unknown>)['invoke']).toBeUndefined();
     });
   });
 

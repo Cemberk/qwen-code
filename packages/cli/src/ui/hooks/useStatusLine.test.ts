@@ -93,7 +93,6 @@ vi.mock('../contexts/VimModeContext.js', () => ({
     toggleVimEnabled: vi.fn(),
     setVimMode: vi.fn(),
   }),
-  useVimMode: () => mockVimMode,
 }));
 
 vi.mock('./useTerminalSize.js', () => ({

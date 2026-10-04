@@ -120,6 +120,14 @@ function configWithStorage(): { config: Config; storage: Storage } {
   return { config: { storage } as unknown as Config, storage };
 }
 
+// The registry aborts a reserved start only on shutdown (`abortAll`); abort
+// one reservation directly so a test can land the cancel at a chosen point.
+function abortStarting(registry: WorkflowRunRegistry, runId: string): boolean {
+  const controller = registry['starting'].get(runId);
+  controller?.abort();
+  return controller !== undefined;
+}
+
 describe('WorkflowTool', () => {
   it('has the registered name and display name', () => {
     const tool = new WorkflowTool(fakeConfig());
@@ -976,121 +984,6 @@ await agent('scan package.json')
         run_in_background: true,
       }),
     ).toThrow(/completion channel/i);
-    expect(() =>
-      new WorkflowTool(interactiveConfig).buildSessionOwnedBackground({
-        script: 'return 1',
-      }),
-    ).toThrow(/completion channel/i);
-
-    interactiveRegistry.setCompletionCallback(vi.fn());
-    const acpConfig = {
-      isInteractive: () => true,
-      getExperimentalZedIntegration: () => true,
-      getWorkflowRunRegistry: () => interactiveRegistry,
-    } as unknown as Config;
-    expect(() =>
-      new WorkflowTool(acpConfig).build({
-        script: 'return 1',
-        run_in_background: true,
-      }),
-    ).toThrow(/interactive TUI/i);
-  });
-
-  // A retry of a saved workflow whose file is no longer readable falls back to
-  // the run's inline source and passes no name — the ACP retry path. The runner
-  // still resolves the name from the resumed run, so the notice says to copy
-  // the saved workflow, and must not also say "fix the script". The same
-  // holds for a foreground resume, whose trailer carries the same advice.
-  it('keeps the authoring hint off a saved workflow resumed from its inline source', async () => {
-    const runtimeDir = await fs.mkdtemp(
-      path.join(os.tmpdir(), 'workflow-session-hint-'),
-    );
-    const registry = new WorkflowRunRegistry();
-    const completion = vi.fn();
-    registry.setCompletionCallback(completion);
-    const config = {
-      ...fakeConfig(),
-      storage: new Storage(path.join(runtimeDir, 'project'), runtimeDir),
-      isInteractive: () => false,
-      getWorkflowRunRegistry: () => registry,
-      getSkipWorkflowUsageWarning: () => true,
-    } as unknown as Config;
-    const script = 'throw new Error("boom");';
-
-    try {
-      const tool = new WorkflowTool(config, { dispatch: async () => 'unused' });
-      expect(tool.authoringSurface).toBe('pointer');
-      const first = (await tool
-        .buildSessionOwnedBackground({ script }, 'review-and-fix')
-        .execute(new AbortController().signal)) as { workflowRunId?: string };
-      await vi.waitFor(() => expect(completion).toHaveBeenCalledTimes(1));
-      const runId = first.workflowRunId;
-      expect(runId).toMatch(/^wf_/);
-      // The completion callback fires from fail()/complete() while the
-      // runner's finally block still holds the run's handle; a resume that
-      // lands before releaseHandle is refused with "has not exited yet".
-      await registry.getHandle(runId!)?.completion;
-
-      await tool
-        .buildSessionOwnedBackground({ script, resumeFromRunId: runId })
-        .execute(new AbortController().signal);
-      await vi.waitFor(() => expect(completion).toHaveBeenCalledTimes(2));
-      await registry.getHandle(runId!)?.completion;
-      const retryText = completion.mock.calls[1][1] as string;
-      expect(retryText).toContain(
-        'This reads the saved /review-and-fix workflow',
-      );
-      expect(retryText).not.toContain('hint:');
-
-      const foreground = await tool
-        .build({ script, resumeFromRunId: runId })
-        .execute(new AbortController().signal);
-      const trailer = (foreground.llmContent as Array<{ text: string }>)
-        .map((part) => part.text)
-        .join('\n');
-      expect(trailer).toContain('this reads the saved workflow');
-      expect(trailer).not.toContain('hint:');
-    } finally {
-      await fs.rm(runtimeDir, { recursive: true, force: true });
-    }
-  });
-
-  it('starts a session-owned background run outside the interactive TUI', async () => {
-    const runtimeDir = await fs.mkdtemp(
-      path.join(os.tmpdir(), 'workflow-session-owned-'),
-    );
-    const registry = new WorkflowRunRegistry();
-    registry.setCompletionCallback(vi.fn());
-    const config = {
-      storage: new Storage(path.join(runtimeDir, 'project'), runtimeDir),
-      isInteractive: () => false,
-      getWorkflowRunRegistry: () => registry,
-      getSkipWorkflowUsageWarning: () => true,
-    } as unknown as Config;
-
-    try {
-      const result = await new WorkflowTool(config, {
-        dispatch: async () => 'unused',
-      })
-        .buildSessionOwnedBackground(
-          {
-            script: `phase('Inspect'); return { status: 'ready' };`,
-          },
-          'review-and-fix',
-        )
-        .execute(new AbortController().signal);
-
-      expect(result.workflowRunId).toMatch(/^wf_[0-9a-f]+$/);
-      const run = registry.get(result.workflowRunId!);
-      expect(run?.isBackgrounded).toBe(true);
-      expect(run?.workflowName).toBe('review-and-fix');
-      await vi.waitFor(() =>
-        expect(registry.get(result.workflowRunId!)?.status).toBe('completed'),
-      );
-      await registry.getHandle(result.workflowRunId!)?.completion;
-    } finally {
-      await fs.rm(runtimeDir, { recursive: true, force: true });
-    }
   });
 
   it('does not register a background run when the caller is already aborted', async () => {
@@ -1132,7 +1025,7 @@ await agent('scan package.json')
     const load = vi
       .spyOn(WorkflowJournal.prototype, 'load')
       .mockImplementation(async () => {
-        expect(registry.cancelStarting('wf_1234abcd')).toBe(true);
+        expect(abortStarting(registry, 'wf_1234abcd')).toBe(true);
         return {
           kind: 'loaded' as const,
           replay: { results: new Map(), started: new Map(), failed: new Set() },
@@ -1180,7 +1073,7 @@ await agent('scan package.json')
     const load = vi
       .spyOn(WorkflowJournal.prototype, 'load')
       .mockImplementation(async () => {
-        expect(registry.cancelStarting('wf_1234abcd')).toBe(true);
+        expect(abortStarting(registry, 'wf_1234abcd')).toBe(true);
         return {
           kind: 'loaded' as const,
           replay: { results: new Map(), started: new Map(), failed: new Set() },
@@ -1297,7 +1190,7 @@ await agent('scan package.json')
     expect(updateOutput).not.toHaveBeenCalled();
 
     resolveDispatch?.('done');
-    await registry.getHandle(entry.runId)!.completion;
+    await registry['handles'].get(entry.runId)!.completion;
     expect(registry.get(entry.runId)?.status).toBe('completed');
     expect(updateOutput).not.toHaveBeenCalled();
   });
@@ -1395,18 +1288,14 @@ await agent('scan package.json')
     },
   );
 
-  it.each([
-    { interactive: false, acp: false },
-    { interactive: true, acp: true },
-  ])(
+  it.each([{ interactive: false }])(
     'keeps completion routing unchanged outside the TUI: %j',
-    async ({ interactive, acp }) => {
+    async ({ interactive }) => {
       const registry = new WorkflowRunRegistry();
       const completion = vi.fn();
       registry.setCompletionCallback(completion);
       const config = {
         isInteractive: () => interactive,
-        getExperimentalZedIntegration: () => acp,
         getWorkflowRunRegistry: () => registry,
         getSkipWorkflowUsageWarning: () => true,
       } as unknown as Config;
@@ -2819,7 +2708,7 @@ await agent('scan package.json')
       await expect(fs.stat(result.journalPath!)).resolves.toBeDefined();
 
       resolveDispatch?.('done');
-      await config.getWorkflowRunRegistry!()!.getHandle(runId)!.completion;
+      await config.getWorkflowRunRegistry!()!['handles'].get(runId)!.completion;
     });
 
     // The whole point of persisting the script: a resume can edit the file
@@ -3267,88 +3156,6 @@ describe('WorkflowTool — name-only sessions', () => {
     expect(unlocked.schema).toEqual(baseline.schema);
     expect(unlocked.authoringSurface).toBe(baseline.authoringSurface);
     expect(() => unlocked.build({ script: 'return 1' })).not.toThrow();
-  });
-
-  async function hostSession() {
-    const runtimeDir = await fs.realpath(
-      await fs.mkdtemp(path.join(os.tmpdir(), 'workflow-name-only-host-')),
-    );
-    const storage = new Storage(path.join(runtimeDir, 'project'), runtimeDir);
-    const workflowsDir = storage.getProjectWorkflowsDir();
-    await fs.mkdir(path.join(workflowsDir, 'sub'), { recursive: true });
-    const registry = new WorkflowRunRegistry();
-    registry.setNameOnly(true);
-    const completion = vi.fn();
-    registry.setCompletionCallback(completion);
-    const config = lockedConfig({
-      storage,
-      isInteractive: () => false,
-      getWorkflowRunRegistry: () => registry,
-      getSkipWorkflowUsageWarning: () => true,
-    });
-    const tool = new WorkflowTool(config, { dispatch: async () => 'unused' });
-    const run = async (
-      params: Parameters<WorkflowTool['buildSessionOwnedBackground']>[0],
-      workflowName?: string,
-    ) => {
-      const result = await tool
-        .buildSessionOwnedBackground(params, workflowName)
-        .execute(new AbortController().signal);
-      await registry.getHandle(result.workflowRunId!)?.completion;
-      return registry.get(result.workflowRunId!)!;
-    };
-    return { runtimeDir, workflowsDir, registry, completion, tool, run };
-  }
-
-  // The host is not the model: ACP run-script, run-saved, retry and rerun go
-  // through buildSessionOwnedBackground and must keep working under the lock,
-  // nested workflow({ scriptPath }) included.
-  it("runs the host's own script-backed runs, nesting by path included", async () => {
-    const { runtimeDir, workflowsDir, tool, run } = await hostSession();
-    try {
-      const inner = path.join(workflowsDir, 'inner.js');
-      await fs.writeFile(inner, "return 'inner-ran';", 'utf8');
-      expect(() =>
-        tool.buildSessionOwnedBackground({ scriptPath: '/w/a.js' }),
-      ).not.toThrow();
-      const entry = await run({
-        script: `return await workflow({ scriptPath: ${JSON.stringify(inner)} });`,
-      });
-      expect(entry.status).toBe('completed');
-      expect(entry.result).toBe('inner-ran');
-    } finally {
-      await fs.rm(runtimeDir, { recursive: true, force: true });
-    }
-  });
-
-  // A name recorded from a path does not always lead back to that path: a
-  // file in a subdirectory gets its basename as a name no lookup resolves.
-  // Only a name that resolves to the script that ran may be offered.
-  it('offers a resume by name only when the name leads back to the script that ran', async () => {
-    const { runtimeDir, workflowsDir, completion, run } = await hostSession();
-    try {
-      const failing = "throw new Error('boom');";
-      const top = path.join(workflowsDir, 'audit.js');
-      const nested = path.join(workflowsDir, 'sub', 'report.js');
-      await fs.writeFile(top, failing, 'utf8');
-      await fs.writeFile(nested, failing, 'utf8');
-
-      const matched = await run({ scriptPath: top }, 'audit');
-      expect(matched.resumeName).toBe('audit');
-      expect(completion.mock.calls[0][1] as string).toContain(
-        `Resume: Workflow({ name: "audit", resumeFromRunId: "${matched.runId}" })`,
-      );
-
-      const unmatched = await run({ scriptPath: nested }, 'report');
-      expect(unmatched.resumeName).toBeUndefined();
-      const text = completion.mock.calls[1][1] as string;
-      expect(text).toContain(
-        'This session runs named workflows only, and this run cannot be resumed by name, so only whoever started it can retry it.',
-      );
-      expect(text).not.toContain('Workflow({');
-    } finally {
-      await fs.rm(runtimeDir, { recursive: true, force: true });
-    }
   });
 });
 

@@ -30,7 +30,7 @@ export const clearCommand: SlashCommand = {
     return t('Clear conversation history and free up context');
   },
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
   action: async (context, _args) => {
     const { config } = context.services;
 

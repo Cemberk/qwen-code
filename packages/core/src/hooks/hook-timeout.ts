@@ -9,7 +9,6 @@ import {
   isDebugLogFileEnabled,
 } from '../utils/debugLogger.js';
 import { sessionIdContext } from '../utils/sessionIdContext.js';
-import { HookType } from './types.js';
 
 const debugLogger = createDebugLogger('HOOK_TIMEOUT');
 
@@ -107,71 +106,21 @@ export function resetLegacyTimeoutWarnings(): void {
 }
 
 /**
- * How a hook's timer delay was decided.
+ * How a command hook's timer delay was decided.
  * - `configured`: the configured value, converted to milliseconds.
- * - `legacy-milliseconds`: a command hook value read in the old millisecond
- *   form (see {@link LEGACY_MILLISECOND_TIMEOUT_THRESHOLD}).
- * - `default`: the hook type's default.
- * - `unusable`: the configured value was used, but the runtime cannot honour
- *   it as written: the timer fires after 1 ms, or no timer is installed.
+ * - `legacy-milliseconds`: a value read in the old millisecond form (see
+ *   {@link LEGACY_MILLISECOND_TIMEOUT_THRESHOLD}).
+ * - `default`: the default.
  */
-export type HookTimeoutSource =
+type CommandHookTimeoutSource =
   | 'configured'
   | 'legacy-milliseconds'
-  | 'default'
-  | 'unusable';
+  | 'default';
 
-export interface HookTimeoutDescription {
-  /**
-   * The delay, in milliseconds, of the timer the runner installs, or `null`
-   * when it installs none and the hook can run unbounded.
-   */
-  timeoutMs: number | null;
-  source: HookTimeoutSource;
-  /** A value was configured, and the hook type's default replaced it. */
-  ignoredConfiguredValue: boolean;
-}
-
-/**
- * Node runs a timer whose delay is not between 1 ms and 2^31 - 1 ms (zero,
- * negative, NaN, below one, or too large for a 32-bit signed integer) after
- * 1 ms instead.
- */
-const MIN_TIMER_DELAY_MS = 1;
-const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
-
-function describeTimerDelay(
-  delayMs: number,
-  source: 'configured' | 'legacy-milliseconds' = 'configured',
-): HookTimeoutDescription {
-  return delayMs >= MIN_TIMER_DELAY_MS && delayMs <= MAX_TIMER_DELAY_MS
-    ? { timeoutMs: delayMs, source, ignoredConfiguredValue: false }
-    : {
-        timeoutMs: MIN_TIMER_DELAY_MS,
-        source: 'unusable',
-        ignoredConfiguredValue: false,
-      };
-}
-
-function defaultTimeout(
-  timeoutMs: number,
-  timeout: unknown,
-): HookTimeoutDescription {
-  return {
-    timeoutMs,
-    source: 'default',
-    ignoredConfiguredValue: timeout !== undefined,
-  };
-}
-
-/**
- * The command runner's reading of `timeout`, before Node's timer adjusts it.
- * Shared by {@link resolveCommandHookTimeoutMs} and
- * {@link describeHookTimeout} so the two cannot drift.
- */
+/** The command runner's reading of `timeout`, before Node's timer adjusts it. */
 function readCommandHookTimeout(timeout: unknown): {
   timeoutMs: number;
-  source: Exclude<HookTimeoutSource, 'unusable'>;
+  source: CommandHookTimeoutSource;
   ignoredConfiguredValue: boolean;
 } {
   if (timeout === undefined) {
@@ -230,41 +179,4 @@ export function resolveCommandHookTimeoutMs(
     );
   }
   return resolved.timeoutMs;
-}
-
-/**
- * What a hook runner really does with a configured `timeout`, for display.
- * Pure: no logging, no warnings, no clock. It mirrors each runner:
- * - command: {@link resolveCommandHookTimeoutMs}, then a timer. Command hooks
- *   on MessageDisplay, StopFailure and SessionDelete run detached and install
- *   no timer, and async command hooks are checked by polling, where a delay
- *   above the timer limit is honoured; this still describes the timer.
- * - prompt: `(timeout ?? default) * 1000` goes straight to `setTimeout`.
- * - function: `timeout ?? default`, in milliseconds, goes straight to
- *   `setTimeout`.
- */
-export function describeHookTimeout(
-  hookType: HookType,
-  timeout: unknown,
-): HookTimeoutDescription {
-  switch (hookType) {
-    case HookType.Command: {
-      const resolved = readCommandHookTimeout(timeout);
-      return resolved.source === 'default'
-        ? resolved
-        : describeTimerDelay(resolved.timeoutMs, resolved.source);
-    }
-    case HookType.Prompt:
-      return timeout === undefined || timeout === null
-        ? defaultTimeout(DEFAULT_PROMPT_HOOK_TIMEOUT_SECONDS * 1000, timeout)
-        : describeTimerDelay(Number(timeout) * 1000);
-    case HookType.Function:
-      return timeout === undefined || timeout === null
-        ? defaultTimeout(DEFAULT_FUNCTION_HOOK_TIMEOUT_MS, timeout)
-        : describeTimerDelay(Number(timeout));
-    default: {
-      const exhaustive: never = hookType;
-      return exhaustive;
-    }
-  }
 }

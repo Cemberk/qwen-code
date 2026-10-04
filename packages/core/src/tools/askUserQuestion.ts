@@ -163,9 +163,8 @@ class AskUserQuestionToolInvocation extends BaseToolInvocation<
 
   /**
    * Whether a host is present that can put the questions in front of the
-   * user *and* answer them. ACP hosts (VSCode extension, Zed, stream-json
-   * clients) run in non-interactive mode but still collect answers through
-   * the confirmation channel.
+   * user *and* answer them. Stream-json clients run in non-interactive mode
+   * but still collect answers through the confirmation channel.
    *
    * The modality half is `resolveInteractionMode()`. The responder half is
    * what that helper cannot know: a stream-json session only has something
@@ -184,7 +183,6 @@ class AskUserQuestionToolInvocation extends BaseToolInvocation<
     }
     return (
       this._config.isInteractive() ||
-      this._config.getExperimentalZedIntegration() ||
       this._config.getInputFormat() !== InputFormat.STREAM_JSON ||
       this._config.getSdkMode()
     );
@@ -192,12 +190,12 @@ class AskUserQuestionToolInvocation extends BaseToolInvocation<
 
   /**
    * ask_user_question always requires user confirmation so the user can
-   * provide answers. In non-interactive mode without ACP support, we skip
-   * confirmation (and subsequently skip execution).
+   * provide answers. In non-interactive mode without an answering host, we
+   * skip confirmation (and subsequently skip execution).
    */
   override async getDefaultPermission(): Promise<PermissionDecision> {
     if (!this.canCollectAnswers()) {
-      // Non-interactive + no ACP: skip entirely
+      // Non-interactive with no answering host: skip entirely
       return 'allow';
     }
     return 'ask';
@@ -252,10 +250,10 @@ class AskUserQuestionToolInvocation extends BaseToolInvocation<
 
   async execute(_signal: AbortSignal): Promise<ToolResult> {
     try {
-      // In non-interactive mode without ACP support, we cannot collect user input
+      // In non-interactive mode without an answering host, we cannot collect user input
       if (!this.canCollectAnswers()) {
         const errorMessage =
-          'Cannot ask user questions in non-interactive mode without ACP support. Please run in interactive mode or enable ACP mode to use this tool.';
+          'Cannot ask user questions in non-interactive mode. Please run in interactive mode to use this tool.';
         return {
           llmContent: errorMessage,
           returnDisplay: errorMessage,

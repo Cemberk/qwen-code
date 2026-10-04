@@ -10,7 +10,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { parse, quote } from 'shell-quote';
 import { isTool } from './is-tool.js';
-import { isShellCommandReadOnly } from './shellReadOnlyChecker.js';
 import {
   execFile,
   execFileSync,
@@ -2441,22 +2440,6 @@ export async function isCommandAllowed(
     return { allowed: true };
   }
   return { allowed: false, reason: blockReason };
-}
-
-export function isCommandNeedsPermission(command: string): {
-  requiresPermission: boolean;
-  reason?: string;
-} {
-  const isAllowed = isShellCommandReadOnly(command);
-
-  if (isAllowed) {
-    return { requiresPermission: false };
-  }
-
-  return {
-    requiresPermission: true,
-    reason: 'Command requires permission to execute.',
-  };
 }
 
 /**

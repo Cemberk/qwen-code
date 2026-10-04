@@ -126,22 +126,6 @@ export class ExtensionRefreshState {
     };
   }
 
-  suppressNotifications<T>(fn: () => T, onSettle?: () => void): T {
-    const endSuppression = this.beginSuppression(onSettle);
-
-    try {
-      const result = fn();
-      if (isPromiseLike(result)) {
-        return Promise.resolve(result).finally(endSuppression) as T;
-      }
-      endSuppression();
-      return result;
-    } catch (error) {
-      endSuppression();
-      throw error;
-    }
-  }
-
   resetForTesting(): void {
     this.extensionRefreshNeeded = false;
     this.reloadInProgress = false;
@@ -150,13 +134,4 @@ export class ExtensionRefreshState {
     this.suppressionDepth = 0;
     this.suppressUntil = 0;
   }
-}
-
-function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'then' in value &&
-    typeof value.then === 'function'
-  );
 }

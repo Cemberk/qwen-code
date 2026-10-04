@@ -9,7 +9,7 @@
  *
  * This module provides the common building blocks for managing multiple concurrent
  * agent subprocesses:
- * - Backend: Display abstraction (tmux, iTerm2)
+ * - Backend: Agent lifecycle abstraction (in-process)
  * - Shared types for agent spawning and lifecycle
  */
 
@@ -20,13 +20,9 @@ export * from './team/index.js';
 export * from './background-tasks.js';
 export * from './background-agent-resume.js';
 export {
-  MAX_AGENT_TRACE_NODES,
   getSubagentSessionDir,
   getSubagentsRootDir,
   readAgentMeta,
-  readAgentMetaAsync,
-  readAgentTrace,
   sanitizeFilenameComponent,
 } from './agent-transcript.js';
-export type { AgentTrace, AgentTraceNode } from './agent-transcript.js';
 export * from './tasks/types.js';

@@ -23,7 +23,6 @@ import { NO_EXEC_CONFIG } from '../utils/gitUtils.js';
 import { runGitCapture } from '../utils/git-branches.js';
 import { loadSimpleGit } from '../utils/load-simple-git.js';
 import { gitEnv } from '../utils/git-branches.js';
-import { initRepositoryWithMainBranch } from './gitInit.js';
 import { atomicWriteFile } from '../utils/atomicFileWrite.js';
 
 const debugLogger = createDebugLogger('GIT_WORKTREE_SERVICE');
@@ -73,9 +72,7 @@ export const DISPOSABLE_IGNORED_ROOTS: ReadonlySet<string> = new Set([
 /**
  * The one "is there work here?" predicate for every path that destroys a
  * worktree checkout: the CLI startup sweep (`cleanupStaleAgentWorktrees`)
- * and the daemon's orphan reaper both gate `removeUserWorktree` on this,
- * so the two reapers cannot drift into disagreeing policies again
- * (#12758).
+ * gates `removeUserWorktree` on this (#12758).
  *
  * Runs `git status --porcelain --untracked-files=normal
  * --ignored=matching`: tracked, untracked and ignored entries all count
@@ -88,7 +85,7 @@ export const DISPOSABLE_IGNORED_ROOTS: ReadonlySet<string> = new Set([
  * rule) or untracked (a fixture without one). A marker the repository tracks
  * counts as work like any other tracked change: an edit to a tracked path is
  * indistinguishable from user work, and since `writeWorktreeSessionMarker`
- * overwrites a tracked marker unconditionally the daemon can be the author of
+ * overwrites a tracked marker unconditionally the CLI can be the author of
  * that edit, so such a preserve is permanent rather than transient. The argv
  * tokens added for this probe are literals placed after the `status`
  * subcommand and are never caller-derived (see `load-simple-git.ts`), and
@@ -331,7 +328,7 @@ export class WorktreeMarkerCommittedError extends Error {
 }
 
 /**
- * Creates the daemon-owned marker without replacing any existing path.
+ * Creates the session marker without replacing any existing path.
  */
 export async function createWorktreeSessionMarkerExclusive(
   worktreePath: string,
@@ -433,7 +430,7 @@ function assertValidWorktreeSessionMarkerOwner(sessionId: string): void {
   }
 }
 
-/** Strict daemon-only marker read that never collapses corruption into absence. */
+/** Strict marker read that never collapses corruption into absence. */
 export async function readWorktreeSessionMarkerStrict(
   worktreePath: string,
 ): Promise<StrictWorktreeSessionMarker> {
@@ -1240,38 +1237,6 @@ export class GitWorktreeService {
       }
     } catch {
       return false;
-    }
-  }
-
-  /**
-   * Initializes the source directory as a git repository.
-   * Returns true if initialization was performed, false if already a repo.
-   */
-  async initializeRepository(): Promise<{
-    initialized: boolean;
-    error?: string;
-  }> {
-    const isRepo = await this.isGitRepository();
-    if (isRepo) {
-      return { initialized: false };
-    }
-
-    try {
-      const git = await this.getGit();
-      await initRepositoryWithMainBranch(git);
-
-      // Create initial commit so we can create worktrees
-      await git.add('.');
-      await git.commit('Initial commit', {
-        '--allow-empty': null,
-      });
-
-      return { initialized: true };
-    } catch (error) {
-      return {
-        initialized: false,
-        error: `Failed to initialize git repository: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      };
     }
   }
 
@@ -2831,247 +2796,6 @@ export class GitWorktreeService {
     // did not opt into force-delete. Surface this so callers can leave
     // a note for the user.
     return { success: true, branchPreserved: true };
-  }
-
-  async removePreparedUserWorktree(
-    slug: string,
-    expectedOwner: string | null,
-    expectedBaseCommit: string,
-    onWorktreeRemoved?: () => Promise<void>,
-  ): Promise<{
-    success: boolean;
-    error?: string;
-    branchPreserved?: boolean;
-  }> {
-    const expectedPath = this.getUserWorktreePath(slug);
-    let worktreePath: string;
-    try {
-      worktreePath = await fs.realpath(expectedPath);
-      const initialPathStat = await fs.lstat(worktreePath);
-      const canonicalRepo = await fs.realpath(this.sourceRepoPath);
-      const canonicalExpectedPath = path.join(
-        canonicalRepo,
-        '.qwen',
-        WORKTREES_DIR,
-        slug,
-      );
-      if (
-        !initialPathStat.isDirectory() ||
-        worktreePath !== canonicalExpectedPath
-      ) {
-        return { success: false, error: 'Worktree path identity changed' };
-      }
-      const markerPath = path.join(worktreePath, WORKTREE_SESSION_FILE);
-      // Complete the interrupted publish's last step before the
-      // cleanliness gates: a crash between the marker's link and its
-      // post-commit unlink leaves `.qwen-session` (and the staged sibling)
-      // untracked with no info/exclude rule, which both `git status` and
-      // `git worktree remove` treat as blocking content. The path-identity
-      // check above proves this is the daemon-managed worktree, and the
-      // anchored rule names only the daemon's own bookkeeping files.
-      await ensureWorktreeSessionMarkerExcluded(worktreePath);
-      const markerMatches = async () => {
-        if (expectedOwner === null) {
-          return await fs
-            .lstat(markerPath)
-            .then(() => false)
-            .catch((error: NodeJS.ErrnoException) => {
-              if (error.code === 'ENOENT') return true;
-              throw error;
-            });
-        }
-        // Read-only owner comparison, so no nlink gate (unlike the
-        // write paths): the publisher's link-then-unlink leaves the marker
-        // at nlink 2 permanently after a crash, with complete fsync'd
-        // content. Removal unlinks names and never writes through the
-        // inode, so that residue must still match its owner — refusing it
-        // would make the crash residue impossible to clean up.
-        const markerStat = await fs.lstat(markerPath);
-        if (!markerStat.isFile()) return false;
-        const owner = await readWorktreeSessionMarker(worktreePath);
-        return owner === expectedOwner;
-      };
-      if (!(await markerMatches())) {
-        return { success: false, error: 'Worktree marker owner changed' };
-      }
-      const { simpleGit } = await loadSimpleGit();
-      const worktreeGit = simpleGit(worktreePath).env(gitEnv());
-      const trackedMarker = await worktreeGit.raw([
-        'ls-files',
-        '-z',
-        '--',
-        WORKTREE_SESSION_FILE,
-      ]);
-      if (trackedMarker.length > 0) {
-        return { success: false, error: 'Worktree marker is tracked' };
-      }
-      const checkoutMatches = async () => {
-        const [head, branch] = await Promise.all([
-          worktreeGit.revparse(['HEAD']),
-          worktreeGit.revparse(['--abbrev-ref', 'HEAD']),
-        ]);
-        return (
-          head.trim() === expectedBaseCommit &&
-          branch.trim() === worktreeBranchForSlug(slug)
-        );
-      };
-      if (!(await checkoutMatches())) {
-        return { success: false, error: 'Worktree checkout changed' };
-      }
-      const hasPopulatedGitlink = async () => {
-        const index = await worktreeGit.raw(['ls-files', '--stage', '-z']);
-        for (const entry of index.split('\0')) {
-          if (!entry.startsWith('160000 ')) continue;
-          const separator = entry.indexOf('\t');
-          if (separator < 0) return true;
-          const gitlinkPath = path.resolve(
-            worktreePath,
-            entry.slice(separator + 1),
-          );
-          if (
-            gitlinkPath === worktreePath ||
-            !gitlinkPath.startsWith(`${worktreePath}${path.sep}`)
-          ) {
-            return true;
-          }
-          const populated = await fs
-            .lstat(gitlinkPath)
-            .then(async (stat) => {
-              if (!stat.isDirectory()) return true;
-              return (await fs.readdir(gitlinkPath)).length > 0;
-            })
-            .catch((error: NodeJS.ErrnoException) => {
-              if (error.code === 'ENOENT') return false;
-              throw error;
-            });
-          if (populated) return true;
-        }
-        return false;
-      };
-      const isClean = async () => {
-        const status = await worktreeGit.status();
-        const hiddenIndexEntries = await worktreeGit.raw([
-          'ls-files',
-          '-v',
-          '-z',
-        ]);
-        const hasHiddenIndexBits = hiddenIndexEntries
-          .split('\0')
-          .some((entry) => /^(?:S|[a-z])/.test(entry));
-        return (
-          status.isClean() &&
-          !hasHiddenIndexBits &&
-          !(await hasPopulatedGitlink()) &&
-          (
-            await worktreeGit.raw([
-              'clean',
-              '-ndx',
-              '-e',
-              `/${WORKTREE_SESSION_FILE}`,
-              '-e',
-              `/${WORKTREE_SESSION_FILE}.*.tmp`,
-            ])
-          ).trim().length === 0
-        );
-      };
-      if (!(await isClean())) {
-        return { success: false, error: 'Worktree contains changes' };
-      }
-      let branchTip = await this.getPreparedUserWorktreeBranchTip(slug);
-      if (branchTip !== expectedBaseCommit) {
-        return { success: false, error: 'Worktree branch changed' };
-      }
-      if (!(await isClean())) {
-        return { success: false, error: 'Worktree contains changes' };
-      }
-      branchTip = await this.getPreparedUserWorktreeBranchTip(slug);
-      if (branchTip !== expectedBaseCommit) {
-        return { success: false, error: 'Worktree branch changed' };
-      }
-      const finalPath = await fs.realpath(expectedPath);
-      const finalPathStat = await fs.lstat(finalPath);
-      if (
-        finalPath !== worktreePath ||
-        !finalPathStat.isDirectory() ||
-        finalPathStat.dev !== initialPathStat.dev ||
-        finalPathStat.ino !== initialPathStat.ino
-      ) {
-        return { success: false, error: 'Worktree path identity changed' };
-      }
-      if (!(await markerMatches())) {
-        return { success: false, error: 'Worktree marker owner changed' };
-      }
-      if (!(await checkoutMatches())) {
-        return { success: false, error: 'Worktree checkout changed' };
-      }
-      const git = await this.getGit();
-      await git.raw(['worktree', 'remove', worktreePath]);
-      await onWorktreeRemoved?.();
-      return await this.finalizePreparedUserWorktreeBranch(
-        slug,
-        expectedBaseCommit,
-      );
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
-  }
-
-  async isPreparedUserWorktreeRegistered(slug: string): Promise<boolean> {
-    const expectedPath = path.resolve(this.getUserWorktreePath(slug));
-    const output = await (
-      await this.getGit()
-    ).raw(['worktree', 'list', '--porcelain', '-z']);
-    return output
-      .split('\0')
-      .some(
-        (record) =>
-          record.startsWith('worktree ') &&
-          path.resolve(record.slice('worktree '.length)) === expectedPath,
-      );
-  }
-
-  async getPreparedUserWorktreeBranchTip(slug: string): Promise<string | null> {
-    const branchName = worktreeBranchForSlug(slug);
-    const output = await (
-      await this.getGit()
-    ).raw([
-      'for-each-ref',
-      '--count=1',
-      '--format=%(objectname)',
-      `refs/heads/${branchName}`,
-    ]);
-    return output.trim() || null;
-  }
-
-  async finalizePreparedUserWorktreeBranch(
-    slug: string,
-    expectedBaseCommit: string,
-  ): Promise<{
-    success: boolean;
-    error?: string;
-    branchPreserved?: boolean;
-  }> {
-    try {
-      const branchTip = await this.getPreparedUserWorktreeBranchTip(slug);
-      if (branchTip === null) return { success: true };
-      if (branchTip !== expectedBaseCommit) {
-        return { success: true, branchPreserved: true };
-      }
-      try {
-        await (await this.getGit()).branch(['-d', worktreeBranchForSlug(slug)]);
-        return { success: true };
-      } catch {
-        return { success: true, branchPreserved: true };
-      }
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
   }
 
   /**

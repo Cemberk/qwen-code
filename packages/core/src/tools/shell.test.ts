@@ -61,8 +61,6 @@ import {
   type ShellToolInvocation,
   type ShellToolParams,
 } from './shell.js';
-import { detectBlockedSleepPattern } from './shell.js';
-import { stripShellWrapper } from '../utils/shell-utils.js';
 import { ApprovalMode, type Config } from '../config/config.js';
 import {
   ToolConfirmationOutcome,
@@ -769,7 +767,6 @@ describe('ShellTool', () => {
         expect(mockFileSystemService.writeTextFile).toHaveBeenCalledWith({
           path: expectedSedFilePath,
           content: 'bar bar\n',
-          toolWriteOrigin: 'shell_sed_edit',
           _meta: { bom: false, encoding: 'utf-8', lineEnding: 'lf' },
         });
         expect(result.llmContent).toContain('sed edit applied');
@@ -892,7 +889,6 @@ describe('ShellTool', () => {
         expect(mockFileSystemService.writeTextFile).toHaveBeenCalledWith({
           path: expectedSedFilePath,
           content: 'bar\n',
-          toolWriteOrigin: 'shell_sed_edit',
           _meta: { bom: false, encoding: 'utf-8', lineEnding: 'lf' },
         });
         expect(result.llmContent).toContain('sed edit applied');
@@ -949,7 +945,6 @@ describe('ShellTool', () => {
         expect(mockFileSystemService.writeTextFile).toHaveBeenCalledWith({
           path: expectedSedFilePath,
           content: 'baz\n',
-          toolWriteOrigin: 'shell_sed_edit',
           _meta: { bom: false, encoding: 'utf-8', lineEnding: 'lf' },
         });
         expect(result.llmContent).toContain('sed edit applied');
@@ -6725,186 +6720,5 @@ describe('ShellTool', () => {
         expect.objectContaining({ postPromote: expect.any(Object) }),
       );
     });
-  });
-});
-
-describe('detectBlockedSleepPattern', () => {
-  it('blocks standalone sleep >= 2s', () => {
-    expect(detectBlockedSleepPattern('sleep 5')).toBe('standalone sleep 5');
-    expect(detectBlockedSleepPattern('sleep 10')).toBe('standalone sleep 10');
-    expect(detectBlockedSleepPattern('sleep 2.5')).toBe('standalone sleep 2.5');
-    expect(detectBlockedSleepPattern('sleep 2s')).toBe('standalone sleep 2s');
-    expect(detectBlockedSleepPattern('sleep 2000ms')).toBe(
-      'standalone sleep 2000ms',
-    );
-    expect(detectBlockedSleepPattern('sleep 3m')).toBe('standalone sleep 3m');
-  });
-
-  it('blocks sleep followed by another command', () => {
-    expect(detectBlockedSleepPattern('sleep 5 && curl http://localhost')).toBe(
-      'sleep 5 followed by: curl http://localhost',
-    );
-    expect(detectBlockedSleepPattern('sleep 3; echo done')).toBe(
-      'sleep 3 followed by: echo done',
-    );
-    expect(detectBlockedSleepPattern('sleep 2.5 || echo done')).toBe(
-      'sleep 2.5 followed by: echo done',
-    );
-    expect(detectBlockedSleepPattern('sleep 2s\necho done')).toBe(
-      'sleep 2s followed by: echo done',
-    );
-  });
-
-  it('allows sleep < 2s', () => {
-    expect(detectBlockedSleepPattern('sleep 1')).toBeNull();
-    expect(detectBlockedSleepPattern('sleep 0')).toBeNull();
-  });
-
-  it('allows sleep durations below 2 seconds', () => {
-    expect(detectBlockedSleepPattern('sleep 0.5')).toBeNull();
-    expect(detectBlockedSleepPattern('sleep 1.5')).toBeNull();
-    expect(detectBlockedSleepPattern('sleep 1500ms')).toBeNull();
-  });
-
-  it('allows sleep not as first subcommand', () => {
-    expect(detectBlockedSleepPattern('echo hello && sleep 5')).toBeNull();
-  });
-
-  it('allows non-sleep commands', () => {
-    expect(detectBlockedSleepPattern('cat file.txt')).toBeNull();
-    expect(detectBlockedSleepPattern('npm run dev')).toBeNull();
-  });
-
-  it('allows sleep in pipelines', () => {
-    expect(detectBlockedSleepPattern('sleep 5 | cat')).toBeNull();
-    expect(
-      detectBlockedSleepPattern(
-        'sleep 10 | while read line; do echo $line; done',
-      ),
-    ).toBeNull();
-  });
-
-  it('allows backgrounded sleep (bare &)', () => {
-    expect(detectBlockedSleepPattern('sleep 5 & echo done')).toBeNull();
-    expect(detectBlockedSleepPattern('sleep 10 & wait')).toBeNull();
-  });
-
-  it('returns null for empty command', () => {
-    expect(detectBlockedSleepPattern('')).toBeNull();
-  });
-
-  it('blocks sleep followed by a top-level shell comment', () => {
-    // Shell ignores trailing comments, so these are equivalent to
-    // standalone foreground sleeps unless they use the explicit
-    // intentional-sleep escape hatch.
-    expect(detectBlockedSleepPattern('sleep 5 # wait')).toBe(
-      'standalone sleep 5',
-    );
-    expect(detectBlockedSleepPattern('sleep 5  #wait')).toBe(
-      'standalone sleep 5',
-    );
-    expect(detectBlockedSleepPattern('sleep 2s   # comment')).toBe(
-      'standalone sleep 2s',
-    );
-    expect(detectBlockedSleepPattern('sleep 5 && echo ok # trailing')).toBe(
-      'sleep 5 followed by: echo ok',
-    );
-  });
-
-  it('allows standalone sleep with an intentional sleep comment', () => {
-    expect(
-      detectBlockedSleepPattern(
-        'sleep 5 # intentional-sleep: wait for MCP rate limit reset',
-      ),
-    ).toBeNull();
-    expect(
-      detectBlockedSleepPattern(
-        'sleep 2s # intentional-sleep: deliberate rate limit backoff',
-      ),
-    ).toBeNull();
-    expect(
-      detectBlockedSleepPattern(
-        'sleep 10m # intentional-sleep: wait for MCP rate limit reset',
-      ),
-    ).toBeNull();
-  });
-
-  it('requires a meaningful intentional sleep reason', () => {
-    expect(detectBlockedSleepPattern('sleep 5 # intentional-sleep:')).toBe(
-      'standalone sleep 5',
-    );
-    expect(detectBlockedSleepPattern('sleep 5 # intentional-sleep: wait')).toBe(
-      'standalone sleep 5',
-    );
-    expect(
-      detectBlockedSleepPattern('sleep 5 # intentional-sleep: 1234567'),
-    ).toBe('standalone sleep 5');
-    expect(
-      detectBlockedSleepPattern('sleep 5 # intentional-sleep: 12345678'),
-    ).toBeNull();
-  });
-
-  it('blocks intentional sleep comments above the duration cap', () => {
-    expect(
-      detectBlockedSleepPattern(
-        'sleep 601s # intentional-sleep: wait for MCP rate limit reset',
-      ),
-    ).toBe('standalone sleep 601s');
-  });
-
-  it('does not allow intentional sleep comments on leading sleep chains', () => {
-    expect(
-      detectBlockedSleepPattern(
-        'sleep 5 && echo ok # intentional-sleep: wait for rate limit reset',
-      ),
-    ).toBe('sleep 5 followed by: echo ok');
-  });
-
-  it('does not allow intentional sleep comments to hide newline commands', () => {
-    expect(
-      detectBlockedSleepPattern(
-        'sleep 5 # intentional-sleep: wait for rate limit reset\necho ok',
-      ),
-    ).toBe('sleep 5 followed by: echo ok');
-  });
-
-  it('preserves commands after a shell comment newline', () => {
-    expect(detectBlockedSleepPattern('sleep 5 # wait\necho ok')).toBe(
-      'sleep 5 followed by: echo ok',
-    );
-  });
-
-  it('does not treat in-quoted `#` as a comment', () => {
-    // `#` inside single quotes is literal, so the suffix is not a comment
-    // and the existing separator logic still rejects it.
-    expect(
-      detectBlockedSleepPattern("sleep 5 'arg # not a comment'"),
-    ).toBeNull();
-  });
-
-  it('blocks wrapped foreground sleep when paired with stripShellWrapper', () => {
-    // This mirrors the shell validator call site: the foreground sleep
-    // guard runs on `stripShellWrapper(params.command)`, so `bash -c` and
-    // sibling wrappers cannot route around the block by hiding the sleep
-    // inside a `-c` script.
-    expect(
-      detectBlockedSleepPattern(stripShellWrapper("bash -c 'sleep 5'")),
-    ).toBe('standalone sleep 5');
-    expect(
-      detectBlockedSleepPattern(stripShellWrapper("sh -c 'sleep 10'")),
-    ).toBe('standalone sleep 10');
-    expect(
-      detectBlockedSleepPattern(stripShellWrapper("zsh -c 'sleep 2s'")),
-    ).toBe('standalone sleep 2s');
-    expect(
-      detectBlockedSleepPattern(
-        stripShellWrapper("bash -c 'sleep 5 && curl http://localhost'"),
-      ),
-    ).toBe('sleep 5 followed by: curl http://localhost');
-
-    // A wrapped sleep < 2s is still allowed.
-    expect(
-      detectBlockedSleepPattern(stripShellWrapper("bash -c 'sleep 1'")),
-    ).toBeNull();
   });
 });

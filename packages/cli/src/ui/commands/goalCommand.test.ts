@@ -62,7 +62,7 @@ function makeContext(
     executionMode = 'interactive',
   }: {
     trusted?: boolean;
-    executionMode?: 'interactive' | 'non_interactive' | 'acp';
+    executionMode?: 'interactive' | 'non_interactive';
   } = {},
 ) {
   const getGoalRuntimeReady = vi.fn().mockResolvedValue(runtime);
@@ -126,11 +126,10 @@ describe('parseGoalCommand', () => {
 });
 
 describe('goalCommand', () => {
-  it('is available in interactive, non-interactive, and ACP modes', () => {
+  it('is available in interactive and non-interactive modes', () => {
     expect(goalCommand.supportedModes).toEqual([
       'interactive',
       'non_interactive',
-      'acp',
     ]);
   });
 
@@ -195,12 +194,12 @@ describe('goalCommand', () => {
     ['resume', { action: 'resume' }, { kind: 'resume' }],
     ['clear', { action: 'clear' }, { kind: 'clear' }],
   ] as const)(
-    'uses the canonical runtime for ACP /goal %s',
+    'returns the canonical goal_control result for /goal %s',
     async (args, request, operation) => {
       const snapshot = goalSnapshot();
       const { dispatch, runtime } = makeRuntime(snapshot);
       const { context, getGoalRuntimeReady } = makeContext(runtime, {
-        executionMode: 'acp',
+        executionMode: 'non_interactive',
       });
 
       const result = await goalCommand.action!(context, args);
@@ -463,11 +462,8 @@ describe('goalCommand', () => {
   });
 
   describe('goal persistence unavailable', () => {
-    // In ACP an error return throws out of `#processSlashCommandResult`, so
-    // failing here fails the user's whole prompt request — and a sticky
-    // `recoveryError` keeps failing it for the rest of the session, while
-    // `GET /goals` answers the same question fine. The sibling
-    // `sessionGoalGet`/`sessionGoalClear` ext methods already degrade.
+    // A sticky `recoveryError` would otherwise keep failing `/goal` for the
+    // rest of the session, so status/clear degrade to an empty snapshot.
     function unavailableContext() {
       const getGoalRuntimeReady = vi
         .fn()
@@ -480,7 +476,7 @@ describe('goalCommand', () => {
         isTrustedFolder: () => true,
       } as unknown as Config;
       return createMockCommandContext({
-        executionMode: 'acp',
+        executionMode: 'non_interactive',
         services: { config },
       });
     }

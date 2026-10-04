@@ -13,7 +13,6 @@ import {
   getTeamName,
   isTeammate,
   isTeamLead,
-  getTeammateColor,
   runWithTeammateIdentity,
 } from './identity.js';
 import type { TeammateIdentity } from './types.js';
@@ -61,10 +60,6 @@ describe('identity', () => {
     it('isTeamLead returns false', () => {
       expect(isTeamLead()).toBe(false);
     });
-
-    it('getTeammateColor returns undefined', () => {
-      expect(getTeammateColor()).toBeUndefined();
-    });
   });
 
   // ─── runWithTeammateIdentity ────────────────────────────────
@@ -78,7 +73,6 @@ describe('identity', () => {
         expect(getTeamName()).toBe('my-team');
         expect(isTeammate()).toBe(true);
         expect(isTeamLead()).toBe(false);
-        expect(getTeammateColor()).toBe('#FF6B6B');
       });
     });
 

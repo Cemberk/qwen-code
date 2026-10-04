@@ -31,12 +31,11 @@ describe('getEffectiveSupportedModes', () => {
 
   it('supportedModes can declare all modes', () => {
     const cmd = makeCmd({
-      supportedModes: ['interactive', 'non_interactive', 'acp'],
+      supportedModes: ['interactive', 'non_interactive'],
     });
     expect(getEffectiveSupportedModes(cmd)).toEqual([
       'interactive',
       'non_interactive',
-      'acp',
     ]);
   });
 
@@ -56,7 +55,6 @@ describe('getEffectiveSupportedModes', () => {
     expect(getEffectiveSupportedModes(cmd)).toEqual([
       'interactive',
       'non_interactive',
-      'acp',
     ]);
   });
 
@@ -65,7 +63,6 @@ describe('getEffectiveSupportedModes', () => {
     expect(getEffectiveSupportedModes(cmd)).toEqual([
       'interactive',
       'non_interactive',
-      'acp',
     ]);
   });
 
@@ -74,7 +71,6 @@ describe('getEffectiveSupportedModes', () => {
     expect(getEffectiveSupportedModes(cmd)).toEqual([
       'interactive',
       'non_interactive',
-      'acp',
     ]);
   });
 });
@@ -83,7 +79,7 @@ describe('filterCommandsForMode', () => {
   const commands: SlashCommand[] = [
     makeCmd({
       name: 'init',
-      supportedModes: ['interactive', 'non_interactive', 'acp'],
+      supportedModes: ['interactive', 'non_interactive'],
     }),
     makeCmd({
       name: 'model',
@@ -92,17 +88,17 @@ describe('filterCommandsForMode', () => {
     makeCmd({
       name: 'review',
       kind: CommandKind.SKILL,
-      supportedModes: ['interactive', 'non_interactive', 'acp'],
+      supportedModes: ['interactive', 'non_interactive'],
     }),
     makeCmd({
       name: 'gh-prompt',
       kind: CommandKind.MCP_PROMPT,
-      supportedModes: ['interactive', 'non_interactive', 'acp'],
+      supportedModes: ['interactive', 'non_interactive'],
     }),
     makeCmd({
       name: 'my-script',
       kind: CommandKind.FILE,
-      supportedModes: ['interactive', 'non_interactive', 'acp'],
+      supportedModes: ['interactive', 'non_interactive'],
     }),
   ];
 
@@ -119,16 +115,6 @@ describe('filterCommandsForMode', () => {
 
   it('non_interactive mode excludes interactive-only commands', () => {
     const result = filterCommandsForMode(commands, 'non_interactive');
-    expect(result.map((c) => c.name)).toEqual([
-      'init',
-      'review',
-      'gh-prompt',
-      'my-script',
-    ]);
-  });
-
-  it('acp mode excludes interactive-only commands', () => {
-    const result = filterCommandsForMode(commands, 'acp');
     expect(result.map((c) => c.name)).toEqual([
       'init',
       'review',
@@ -162,7 +148,7 @@ describe('filterCommandsForMode', () => {
       makeCmd({
         name: 'hidden-cmd',
         hidden: true,
-        supportedModes: ['interactive', 'non_interactive', 'acp'],
+        supportedModes: ['interactive', 'non_interactive'],
       }),
     ];
     const result = filterCommandsForMode(withHidden, 'non_interactive');

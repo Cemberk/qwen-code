@@ -14,25 +14,18 @@ import {
   afterAll,
 } from 'vitest';
 import type { LogEntry } from './logger.js';
-import {
-  Logger,
-  MessageSenderType,
-  encodeTagName,
-  decodeTagName,
-} from './logger.js';
+import { Logger, MessageSenderType } from './logger.js';
 import { Storage } from '../config/storage.js';
 import { getProjectHash } from '../utils/paths.js';
 import { atomicWriteFile } from '../utils/atomicFileWrite.js';
-import { promises as fs, existsSync } from 'node:fs';
+import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { Content } from '@google/genai';
 
 import os from 'node:os';
 
 const GEMINI_DIR_NAME = '.qwen';
 const TMP_DIR_NAME = 'tmp';
 const LOG_FILE_NAME = 'logs.json';
-const CHECKPOINT_FILE_NAME = 'checkpoint.json';
 
 const projectDir = process.cwd();
 const hash = getProjectHash(projectDir);
@@ -42,15 +35,13 @@ let originalHome: string | undefined;
 let originalRuntimeDir: string | undefined;
 let testGeminiDir: string;
 let testLogFilePath: string;
-let testCheckpointFilePath: string;
 
 const setTestPaths = () => {
   testGeminiDir = path.join(os.homedir(), GEMINI_DIR_NAME, TMP_DIR_NAME, hash);
   testLogFilePath = path.join(testGeminiDir, LOG_FILE_NAME);
-  testCheckpointFilePath = path.join(testGeminiDir, CHECKPOINT_FILE_NAME);
 };
 
-async function cleanupLogAndCheckpointFiles() {
+async function cleanupLogFiles() {
   try {
     if (!testGeminiDir) return;
     await fs.rm(testGeminiDir, { recursive: true, force: true });
@@ -129,7 +120,7 @@ describe('Logger', () => {
     delete process.env['QWEN_RUNTIME_DIR'];
     setTestPaths();
     // Clean up before the test
-    await cleanupLogAndCheckpointFiles();
+    await cleanupLogFiles();
     // Ensure the directory exists for the test
     await fs.mkdir(testGeminiDir, { recursive: true });
     logger = new Logger(testSessionId, new Storage(process.cwd()));
@@ -141,7 +132,7 @@ describe('Logger', () => {
       logger.close();
     }
     // Clean up after the test
-    await cleanupLogAndCheckpointFiles();
+    await cleanupLogFiles();
     vi.useRealTimers();
     vi.restoreAllMocks();
     if (originalHome === undefined) {
@@ -158,7 +149,7 @@ describe('Logger', () => {
 
   afterAll(async () => {
     // Final cleanup
-    await cleanupLogAndCheckpointFiles();
+    await cleanupLogFiles();
   });
 
   describe('initialize', () => {
@@ -542,287 +533,6 @@ describe('Logger', () => {
     });
   });
 
-  describe('saveCheckpoint', () => {
-    const conversation: Content[] = [
-      { role: 'user', parts: [{ text: 'Hello' }] },
-      { role: 'model', parts: [{ text: 'Hi there' }] },
-    ];
-
-    it.each([
-      {
-        tag: 'test-tag',
-        encodedTag: 'test-tag',
-      },
-      {
-        tag: '你好世界',
-        encodedTag: '%E4%BD%A0%E5%A5%BD%E4%B8%96%E7%95%8C',
-      },
-      {
-        tag: 'japanese-ひらがなひらがな形声',
-        encodedTag:
-          'japanese-%E3%81%B2%E3%82%89%E3%81%8C%E3%81%AA%E3%81%B2%E3%82%89%E3%81%8C%E3%81%AA%E5%BD%A2%E5%A3%B0',
-      },
-      {
-        tag: '../../secret',
-        encodedTag: '..%2F..%2Fsecret',
-      },
-    ])('should save a checkpoint', async ({ tag, encodedTag }) => {
-      await logger.saveCheckpoint(conversation, tag);
-      const taggedFilePath = path.join(
-        testGeminiDir,
-        `checkpoint-${encodedTag}.json`,
-      );
-      const fileContent = await fs.readFile(taggedFilePath, 'utf-8');
-      expect(JSON.parse(fileContent)).toEqual(conversation);
-    });
-
-    it('should not throw if logger is not initialized', async () => {
-      const uninitializedLogger = new Logger(
-        testSessionId,
-        new Storage(process.cwd()),
-      );
-      uninitializedLogger.close();
-
-      await expect(
-        uninitializedLogger.saveCheckpoint(conversation, 'tag'),
-      ).resolves.not.toThrow();
-    });
-  });
-
-  describe('loadCheckpoint', () => {
-    const conversation: Content[] = [
-      { role: 'user', parts: [{ text: 'Hello' }] },
-      { role: 'model', parts: [{ text: 'Hi there' }] },
-    ];
-
-    beforeEach(async () => {
-      await fs.writeFile(
-        testCheckpointFilePath,
-        JSON.stringify(conversation, null, 2),
-      );
-    });
-
-    it.each([
-      {
-        tag: 'test-tag',
-        encodedTag: 'test-tag',
-      },
-      {
-        tag: '你好世界',
-        encodedTag: '%E4%BD%A0%E5%A5%BD%E4%B8%96%E7%95%8C',
-      },
-      {
-        tag: 'japanese-ひらがなひらがな形声',
-        encodedTag:
-          'japanese-%E3%81%B2%E3%82%89%E3%81%8C%E3%81%AA%E3%81%B2%E3%82%89%E3%81%8C%E3%81%AA%E5%BD%A2%E5%A3%B0',
-      },
-      {
-        tag: '../../secret',
-        encodedTag: '..%2F..%2Fsecret',
-      },
-    ])('should load from a checkpoint', async ({ tag, encodedTag }) => {
-      const taggedConversation = [
-        ...conversation,
-        { role: 'user', parts: [{ text: 'hello' }] },
-      ];
-      const taggedFilePath = path.join(
-        testGeminiDir,
-        `checkpoint-${encodedTag}.json`,
-      );
-      await fs.writeFile(
-        taggedFilePath,
-        JSON.stringify(taggedConversation, null, 2),
-      );
-
-      const loaded = await logger.loadCheckpoint(tag);
-      expect(loaded).toEqual(taggedConversation);
-      expect(encodeTagName(tag)).toBe(encodedTag);
-      expect(decodeTagName(encodedTag)).toBe(tag);
-    });
-
-    it('should return an empty array if a tagged checkpoint file does not exist', async () => {
-      const loaded = await logger.loadCheckpoint('nonexistent-tag');
-      expect(loaded).toEqual([]);
-    });
-
-    it('should return an empty array if the checkpoint file does not exist', async () => {
-      await fs.unlink(testCheckpointFilePath); // Ensure it's gone
-      const loaded = await logger.loadCheckpoint('missing');
-      expect(loaded).toEqual([]);
-    });
-
-    it('should return an empty array if the file contains invalid JSON', async () => {
-      const tag = 'invalid-json-tag';
-      const encodedTag = 'invalid-json-tag';
-      const taggedFilePath = path.join(
-        testGeminiDir,
-        `checkpoint-${encodedTag}.json`,
-      );
-      await fs.writeFile(taggedFilePath, 'invalid json');
-      const loadedCheckpoint = await logger.loadCheckpoint(tag);
-      expect(loadedCheckpoint).toEqual([]);
-    });
-
-    it('should return an empty array if logger is not initialized', async () => {
-      const uninitializedLogger = new Logger(
-        testSessionId,
-        new Storage(process.cwd()),
-      );
-      uninitializedLogger.close();
-      const loadedCheckpoint = await uninitializedLogger.loadCheckpoint('tag');
-      expect(loadedCheckpoint).toEqual([]);
-    });
-  });
-
-  describe('deleteCheckpoint', () => {
-    const conversation: Content[] = [
-      { role: 'user', parts: [{ text: 'Content to be deleted' }] },
-    ];
-    const tag = 'delete-me';
-    const encodedTag = 'delete-me';
-    let taggedFilePath: string;
-
-    beforeEach(async () => {
-      taggedFilePath = path.join(
-        testGeminiDir,
-        `checkpoint-${encodedTag}.json`,
-      );
-      // Create a file to be deleted
-      await fs.writeFile(taggedFilePath, JSON.stringify(conversation));
-    });
-
-    it('should delete the specified checkpoint file and return true', async () => {
-      const result = await logger.deleteCheckpoint(tag);
-      expect(result).toBe(true);
-
-      // Verify the file is actually gone
-      await expect(fs.access(taggedFilePath)).rejects.toThrow(/ENOENT/);
-    });
-
-    it('should delete both new and old checkpoint files if they exist', async () => {
-      const oldTag = 'delete-me(old)';
-      const oldStylePath = path.join(
-        testGeminiDir,
-        `checkpoint-${oldTag}.json`,
-      );
-      const newStylePath = logger['_checkpointPath'](oldTag);
-
-      // Create both files
-      await fs.writeFile(oldStylePath, '{}');
-      await fs.writeFile(newStylePath, '{}');
-
-      // Verify both files exist before deletion
-      expect(existsSync(oldStylePath)).toBe(true);
-      expect(existsSync(newStylePath)).toBe(true);
-
-      const result = await logger.deleteCheckpoint(oldTag);
-      expect(result).toBe(true);
-
-      // Verify both are gone
-      expect(existsSync(oldStylePath)).toBe(false);
-      expect(existsSync(newStylePath)).toBe(false);
-    });
-
-    it('should return false if the checkpoint file does not exist', async () => {
-      const result = await logger.deleteCheckpoint('non-existent-tag');
-      expect(result).toBe(false);
-    });
-
-    it('should re-throw an error if file deletion fails for reasons other than not existing', async () => {
-      // Simulate a different error (e.g., permission denied)
-      vi.spyOn(fs, 'unlink').mockRejectedValueOnce(
-        Object.assign(new Error('EACCES: permission denied'), {
-          code: 'EACCES',
-        }),
-      );
-
-      await expect(logger.deleteCheckpoint(tag)).rejects.toThrow(
-        'EACCES: permission denied',
-      );
-    });
-
-    it('should return false if logger is not initialized', async () => {
-      const uninitializedLogger = new Logger(
-        testSessionId,
-        new Storage(process.cwd()),
-      );
-      uninitializedLogger.close();
-
-      const result = await uninitializedLogger.deleteCheckpoint(tag);
-      expect(result).toBe(false);
-    });
-  });
-
-  describe('checkpointExists', () => {
-    const tag = 'exists-test';
-    const encodedTag = 'exists-test';
-    let taggedFilePath: string;
-
-    beforeEach(() => {
-      taggedFilePath = path.join(
-        testGeminiDir,
-        `checkpoint-${encodedTag}.json`,
-      );
-    });
-
-    it('should return true if the checkpoint file exists', async () => {
-      await fs.writeFile(taggedFilePath, '{}');
-      const exists = await logger.checkpointExists(tag);
-      expect(exists).toBe(true);
-    });
-
-    it('should return false if the checkpoint file does not exist', async () => {
-      const exists = await logger.checkpointExists('non-existent-tag');
-      expect(exists).toBe(false);
-    });
-
-    it('should throw an error if logger is not initialized', async () => {
-      const uninitializedLogger = new Logger(
-        testSessionId,
-        new Storage(process.cwd()),
-      );
-      uninitializedLogger.close();
-
-      await expect(uninitializedLogger.checkpointExists(tag)).rejects.toThrow(
-        'Logger not initialized. Cannot check for checkpoint existence.',
-      );
-    });
-
-    it('should re-throw an error if fs.access fails for reasons other than not existing', async () => {
-      vi.spyOn(fs, 'access').mockRejectedValueOnce(
-        Object.assign(new Error('EACCES: permission denied'), {
-          code: 'EACCES',
-        }),
-      );
-
-      await expect(logger.checkpointExists(tag)).rejects.toThrow(
-        'EACCES: permission denied',
-      );
-    });
-  });
-
-  describe('Backward compatibility', () => {
-    const conversation: Content[] = [
-      { role: 'user', parts: [{ text: 'Hello' }] },
-      { role: 'model', parts: [{ text: 'Hi there' }] },
-    ];
-    it('should load from a checkpoint with a raw special character tag', async () => {
-      const taggedConversation = [
-        ...conversation,
-        { role: 'user', parts: [{ text: 'hello' }] },
-      ];
-      const tag = 'special(char)';
-      const taggedFilePath = path.join(testGeminiDir, `checkpoint-${tag}.json`);
-      await fs.writeFile(
-        taggedFilePath,
-        JSON.stringify(taggedConversation, null, 2),
-      );
-
-      const loaded = await logger.loadCheckpoint(tag);
-      expect(loaded).toEqual(taggedConversation);
-    });
-  });
-
   describe('close', () => {
     it('should reset logger state', async () => {
       await logger.logMessage(MessageSenderType.USER, 'A message');
@@ -1033,7 +743,7 @@ describe('Logger', () => {
     });
   });
 
-  describe('removeSessionMessages', () => {
+  describe('removeSessionsMessages', () => {
     // `/delete` removes a session's transcript, but its prompts also sit in
     // the project-shared logs.json that backs cross-session ↑-history —
     // issue #11762. These cover the purge that closes that gap.
@@ -1065,7 +775,9 @@ describe('Logger', () => {
         'ssh root@prod-db',
       ]);
 
-      expect(await current.removeSessionMessages('doomed-session')).toBe(true);
+      expect(await current.removeSessionsMessages(['doomed-session'])).toBe(
+        true,
+      );
 
       // Gone from ↑-history — and only that session: cross-session history
       // is deliberate, so the sessions that still exist must keep theirs.
@@ -1090,7 +802,7 @@ describe('Logger', () => {
       await logPromptAs('doomed-session', 'ssh root@prod-db');
       const current = await currentSessionLogger();
 
-      const purge = current.removeSessionMessages('doomed-session');
+      const purge = current.removeSessionsMessages(['doomed-session']);
 
       expect(await current.getPreviousUserMessages()).toEqual([]);
       expect(await purge).toBe(true);
@@ -1101,7 +813,7 @@ describe('Logger', () => {
     it('returns false and leaves the file alone when the session has no rows', async () => {
       await logger.logMessage(MessageSenderType.USER, 'kept');
 
-      expect(await logger.removeSessionMessages('never-logged')).toBe(false);
+      expect(await logger.removeSessionsMessages(['never-logged'])).toBe(false);
 
       expect((await readLogFile()).map((e) => e.message)).toEqual(['kept']);
       expect(await logger.getPreviousUserMessages()).toEqual(['kept']);
@@ -1110,7 +822,9 @@ describe('Logger', () => {
     it('returns false when the logger is uninitialized', async () => {
       const fresh = new Logger(testSessionId, new Storage(process.cwd()));
       // No initialize() call.
-      expect(await fresh.removeSessionMessages('doomed-session')).toBe(false);
+      expect(await fresh.removeSessionsMessages(['doomed-session'])).toBe(
+        false,
+      );
     });
 
     it('rolls back the optimistic removal when the disk write fails', async () => {
@@ -1121,7 +835,9 @@ describe('Logger', () => {
       const current = await currentSessionLogger();
 
       vi.mocked(atomicWriteFile).mockRejectedValueOnce(new Error('Disk full'));
-      expect(await current.removeSessionMessages('doomed-session')).toBe(false);
+      expect(await current.removeSessionsMessages(['doomed-session'])).toBe(
+        false,
+      );
 
       expect(await current.getPreviousUserMessages()).toEqual([
         'ssh root@prod-db',
@@ -1139,7 +855,9 @@ describe('Logger', () => {
       vi.spyOn(fs, 'readFile').mockRejectedValueOnce(
         new Error('Permission denied'),
       );
-      expect(await current.removeSessionMessages('doomed-session')).toBe(false);
+      expect(await current.removeSessionsMessages(['doomed-session'])).toBe(
+        false,
+      );
 
       expect(await current.getPreviousUserMessages()).toEqual([
         'ssh root@prod-db',
@@ -1154,7 +872,7 @@ describe('Logger', () => {
       await logPromptAs('doomed-session', 'ssh root@prod-db');
       const current = await currentSessionLogger();
 
-      const purge = current.removeSessionMessages('doomed-session');
+      const purge = current.removeSessionsMessages(['doomed-session']);
       const logged = current.logMessage(
         MessageSenderType.USER,
         'typed while deleting',
@@ -1197,8 +915,8 @@ describe('Logger', () => {
       await logPromptAs('doomed-b', 'cat ~/.aws/credentials');
       const current = await currentSessionLogger();
 
-      const first = current.removeSessionMessages('doomed-a');
-      const second = current.removeSessionMessages('doomed-b');
+      const first = current.removeSessionsMessages(['doomed-a']);
+      const second = current.removeSessionsMessages(['doomed-b']);
 
       expect(await first).toBe(true);
       // After only the FIRST has resolved, neither session may be observable.
@@ -1225,7 +943,7 @@ describe('Logger', () => {
         await current.logMessage(MessageSenderType.USER, 'cancelled prompt');
 
         const ahead = queueAhead(current);
-        const purge = current.removeSessionMessages('doomed-session');
+        const purge = current.removeSessionsMessages(['doomed-session']);
 
         await ahead;
         // The op ahead has landed; the purge behind it has not written yet.
@@ -1247,11 +965,11 @@ describe('Logger', () => {
       // Another instance drops the undo target from disk first, so the undo takes
       // the branch that adopts its snapshot without writing.
       const other = await currentSessionLogger();
-      await other.removeSessionMessages('current-session');
+      await other.removeSessionsMessages(['current-session']);
       other.close();
 
       const undo = current.removeLastUserMessage();
-      const purge = current.removeSessionMessages('doomed-session');
+      const purge = current.removeSessionsMessages(['doomed-session']);
 
       expect(await undo).toBe(false);
       expect(await current.getPreviousUserMessages()).toEqual([]);
@@ -1300,8 +1018,8 @@ describe('Logger', () => {
       const current = await currentSessionLogger();
 
       vi.mocked(atomicWriteFile).mockRejectedValueOnce(new Error('Disk full'));
-      expect(await current.removeSessionMessages('doomed-a')).toBe(false);
-      expect(await current.removeSessionMessages('doomed-b')).toBe(true);
+      expect(await current.removeSessionsMessages(['doomed-a'])).toBe(false);
+      expect(await current.removeSessionsMessages(['doomed-b'])).toBe(true);
 
       expect(await current.getPreviousUserMessages()).toEqual([
         'ssh root@prod-db',
@@ -1316,8 +1034,8 @@ describe('Logger', () => {
       await logPromptAs('doomed-b', 'ssh root@prod-db');
       const current = await currentSessionLogger();
 
-      const first = current.removeSessionMessages('never-logged');
-      const second = current.removeSessionMessages('doomed-b');
+      const first = current.removeSessionsMessages(['never-logged']);
+      const second = current.removeSessionsMessages(['doomed-b']);
 
       expect(await first).toBe(false);
       // The first op adopted a disk snapshot that still holds doomed-b's row.
@@ -1334,7 +1052,9 @@ describe('Logger', () => {
       const current = await currentSessionLogger(); // cache: empty
       await logPromptAs('doomed-session', 'ssh root@prod-db');
 
-      expect(await current.removeSessionMessages('doomed-session')).toBe(true);
+      expect(await current.removeSessionsMessages(['doomed-session'])).toBe(
+        true,
+      );
 
       expect(await readLogFile()).toEqual([]);
       current.close();
@@ -1348,7 +1068,9 @@ describe('Logger', () => {
       await doomed.logMessage(MessageSenderType.USER, 'ssh root@prod-db');
       expect(doomed['lastLoggedUserEntry']).not.toBeNull();
 
-      expect(await doomed.removeSessionMessages('doomed-session')).toBe(true);
+      expect(await doomed.removeSessionsMessages(['doomed-session'])).toBe(
+        true,
+      );
 
       expect(doomed['lastLoggedUserEntry']).toBeNull();
       expect(await doomed.removeLastUserMessage()).toBe(false);

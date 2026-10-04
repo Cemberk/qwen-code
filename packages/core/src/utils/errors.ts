@@ -301,11 +301,6 @@ export class FatalError extends Error {
   }
 }
 
-export class FatalAuthenticationError extends FatalError {
-  constructor(message: string) {
-    super(message, 41);
-  }
-}
 export class FatalInputError extends FatalError {
   constructor(message: string) {
     super(message, 42);
@@ -324,11 +319,6 @@ export class FatalConfigError extends FatalError {
 export class FatalTurnLimitedError extends FatalError {
   constructor(message: string) {
     super(message, 53);
-  }
-}
-export class FatalToolExecutionError extends FatalError {
-  constructor(message: string) {
-    super(message, 54);
   }
 }
 /**

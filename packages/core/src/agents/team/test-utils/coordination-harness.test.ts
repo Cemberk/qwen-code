@@ -67,6 +67,36 @@ vi.mock('../mailbox.js', async (importOriginal) => {
 
 import { Storage } from '../../../config/storage.js';
 
+// Puts a shutdown marker on a teammate's ledger without sending the
+// structured request, so tests can inject the shutdown message directly.
+function markShutdownRequested(
+  teamManager: TeamCoordinationHarness['teamManager'],
+  name: string,
+): void {
+  const ledger = (
+    teamManager as unknown as {
+      getOrCreateShutdownLedger(name: string): {
+        outstandingTokens: Array<{
+          kind: 'delivered' | 'marker';
+          reservations: number;
+          consumed: boolean;
+        }>;
+      };
+    }
+  ).getOrCreateShutdownLedger(name);
+  if (
+    !ledger.outstandingTokens.some(
+      (token) => token.kind === 'marker' && !token.consumed,
+    )
+  ) {
+    ledger.outstandingTokens.push({
+      kind: 'marker',
+      reservations: 0,
+      consumed: false,
+    });
+  }
+}
+
 function setMockDir(dir: string): void {
   (
     Storage as unknown as {
@@ -384,7 +414,7 @@ describe('TeamCoordinationHarness', () => {
       const h = await createHarness();
       const worker = await h.spawnTeammate('worker');
 
-      h.teamManager.markShutdownRequested('worker');
+      markShutdownRequested(h.teamManager, 'worker');
       await createTask(h.teamName, {
         subject: 'Do not claim',
         description: 'Wait for another worker',
@@ -708,7 +738,7 @@ describe('TeamCoordinationHarness', () => {
         owner: 'leader',
       });
       await h.spawnTeammate('alice', { onMessage: () => {} });
-      h.teamManager.markShutdownRequested('alice');
+      markShutdownRequested(h.teamManager, 'alice');
 
       const result = await leaderAssign(h, {
         taskId: task.id,
@@ -734,7 +764,7 @@ describe('TeamCoordinationHarness', () => {
         owner: 'alice',
       });
       await h.spawnTeammate('alice', { onMessage: () => {} });
-      h.teamManager.markShutdownRequested('alice');
+      markShutdownRequested(h.teamManager, 'alice');
 
       const result = await leaderAssign(h, {
         taskId: task.id,
@@ -874,7 +904,7 @@ describe('TeamCoordinationHarness', () => {
         owner: 'alice',
       });
       await h.spawnTeammate('alice', { onMessage: () => {} });
-      h.teamManager.markShutdownRequested('alice');
+      markShutdownRequested(h.teamManager, 'alice');
 
       const result = await leaderAssign(h, {
         taskId: task.id,
@@ -938,7 +968,7 @@ describe('TeamCoordinationHarness', () => {
         type: 'shutdown_request',
         text: 'Please shut down now.',
       });
-      h.teamManager.markShutdownRequested('worker');
+      markShutdownRequested(h.teamManager, 'worker');
 
       // Go idle → shutdown should be delivered first.
       worker.goIdle();
@@ -1064,7 +1094,7 @@ describe('TeamCoordinationHarness', () => {
       await h.spawnTeammate('target', {
         onMessage: () => {},
       });
-      h.teamManager.markShutdownRequested('target');
+      markShutdownRequested(h.teamManager, 'target');
       const mailboxError = new Error('EIO: mailbox write failed');
       mockSendStructuredMessage.mockRejectedValueOnce(mailboxError);
 
@@ -1082,8 +1112,8 @@ describe('TeamCoordinationHarness', () => {
         onMessage: () => {},
       });
 
-      h.teamManager.markShutdownRequested('target');
-      h.teamManager.markShutdownRequested('target');
+      markShutdownRequested(h.teamManager, 'target');
+      markShutdownRequested(h.teamManager, 'target');
       await h.teamManager.sendMessage(
         'leader',
         'shutdown_rejected: marker resolved',
@@ -1098,7 +1128,7 @@ describe('TeamCoordinationHarness', () => {
       await h.spawnTeammate('target', {
         onMessage: () => {},
       });
-      h.teamManager.markShutdownRequested('target');
+      markShutdownRequested(h.teamManager, 'target');
 
       const mailboxError = new Error('EIO: mailbox write failed');
       const write = gateNextMailboxWrite(mockSendStructuredMessage, {
@@ -1172,7 +1202,7 @@ describe('TeamCoordinationHarness', () => {
       await h.spawnTeammate('target', {
         onMessage: () => {},
       });
-      h.teamManager.markShutdownRequested('target');
+      markShutdownRequested(h.teamManager, 'target');
 
       const responseWrite = gateNextMailboxWrite(mockWriteMessage);
       const markerResponse = h.teamManager.sendMessage(
@@ -1637,7 +1667,7 @@ describe('TeamCoordinationHarness', () => {
         if (currentKind === 'real') {
           await h.teamManager.requestShutdown('target');
         } else {
-          h.teamManager.markShutdownRequested('target');
+          markShutdownRequested(h.teamManager, 'target');
         }
 
         const responseWrite = gateNextMailboxWrite(mockWriteMessage);
@@ -1762,7 +1792,7 @@ describe('TeamCoordinationHarness', () => {
           'target',
         );
         await oldResponseWrite.started;
-        h.teamManager.markShutdownRequested('target');
+        markShutdownRequested(h.teamManager, 'target');
 
         oldResponseWrite.release();
         await staleResponse;
@@ -1785,7 +1815,7 @@ describe('TeamCoordinationHarness', () => {
         const target = await h.spawnTeammate('target', {
           onMessage: () => {},
         });
-        h.teamManager.markShutdownRequested('target');
+        markShutdownRequested(h.teamManager, 'target');
 
         const oldResponseWrite = gateNextMailboxWrite(mockWriteMessage);
 
@@ -1818,7 +1848,7 @@ describe('TeamCoordinationHarness', () => {
         const target = await h.spawnTeammate('target', {
           onMessage: () => {},
         });
-        h.teamManager.markShutdownRequested('target');
+        markShutdownRequested(h.teamManager, 'target');
 
         const oldResponseWrite = gateNextMailboxWrite(mockWriteMessage);
 
@@ -1833,7 +1863,7 @@ describe('TeamCoordinationHarness', () => {
           'shutdown_rejected: clear old marker',
           'target',
         );
-        h.teamManager.markShutdownRequested('target');
+        markShutdownRequested(h.teamManager, 'target');
 
         oldResponseWrite.release();
         await staleResponse;

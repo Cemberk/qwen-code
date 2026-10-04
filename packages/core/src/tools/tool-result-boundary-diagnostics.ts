@@ -34,9 +34,6 @@ export type ToolResultBoundaryStage =
   | 'finalizer_output'
   | 'recorder_input'
   | 'recorder_output'
-  | 'acp_projection_input'
-  | 'acp_projection_output'
-  | 'acp_wire'
   | 'headless_projection_input'
   | 'headless_projection_output'
   | 'headless_wire';
@@ -44,8 +41,6 @@ export type ToolResultBoundaryStage =
 export type ToolResultRepresentation =
   | 'model_text'
   | 'display'
-  | 'acp_content'
-  | 'acp_raw_output'
   | 'headless_content';
 
 export type ToolResultBoundaryArtifactKind = ToolArtifactKind | 'unknown';

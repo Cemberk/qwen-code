@@ -7,7 +7,6 @@
 import type { RecordToolResultOptions } from '../services/chatRecordingService.js';
 import { canonicalToolName, ToolNames } from '../tools/tool-names.js';
 import type { GoalTurnPermit } from './goal-protocol.js';
-import { goalTurnContext } from './goal-turn-context.js';
 
 /** The slice of a tool-call request this reads. */
 export interface GoalToolResultRequest {
@@ -34,8 +33,8 @@ export interface GoalToolResultRequest {
  * would be circular.
  *
  * Every site that records tool results during a Goal turn routes through
- * here -- the interactive scheduler, both TUI recording paths, headless, and
- * ACP -- so the rule cannot drift between them.
+ * here -- the interactive scheduler, both TUI recording paths, and headless --
+ * so the rule cannot drift between them.
  */
 export function goalToolResultProvenance(
   request: GoalToolResultRequest,
@@ -62,24 +61,4 @@ export function goalToolResultProvenance(
     return { goalContext: { ...goalContext }, provenance: 'goal_runtime' };
   }
   return { goalContext: { ...goalContext } };
-}
-
-/**
- * The same rule for a host that executes tools straight from the model's
- * function calls and so has no `ToolCallRequestInfo` to read a permit from.
- *
- * The permit comes from the ambient Goal turn context, which the host enters
- * around the whole turn -- including the tool calls it issues -- so a result
- * recorded here belongs to the turn that asked for it.
- */
-export function ambientGoalToolResultProvenance(
-  toolName: string,
-  args?: Record<string, unknown>,
-): RecordToolResultOptions | undefined {
-  const goalContext = goalTurnContext.getStore();
-  return goalToolResultProvenance({
-    name: toolName,
-    ...(args ? { args } : {}),
-    ...(goalContext ? { goalContext } : {}),
-  });
 }

@@ -103,10 +103,6 @@ export class SleepInhibitor {
     };
   }
 
-  getActiveCount(): number {
-    return this.activeCount;
-  }
-
   isRunning(): boolean {
     return this.child !== undefined;
   }

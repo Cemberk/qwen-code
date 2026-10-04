@@ -47,9 +47,6 @@ export const HOOKS_MANAGEMENT_STEPS = {
   HOOK_CONFIG_DETAIL: 'hook_config_detail',
 } as const;
 
-export type HooksManagementStep =
-  (typeof HOOKS_MANAGEMENT_STEPS)[keyof typeof HOOKS_MANAGEMENT_STEPS];
-
 export interface HooksManagementDialogProps {
   onClose: () => void;
 }

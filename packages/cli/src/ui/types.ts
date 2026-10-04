@@ -73,8 +73,8 @@ export interface IndividualToolCallDisplay {
    * setting exists to recover.
    *
    * Holds the same object reference as the scheduler's `request.args` — no
-   * copy, so it costs nothing in memory. Undefined on the daemon path, which
-   * never carries args across the boundary; the args row is then skipped.
+   * copy, so it costs nothing in memory. When undefined, the args row is
+   * skipped.
    */
   args?: Record<string, unknown>;
   resultDisplay: ToolResultDisplay | string | undefined;
@@ -127,51 +127,6 @@ export interface CompressionProps {
    */
   originalTokenCountIsEstimated?: boolean;
   newTokenCountIsEstimated?: boolean;
-}
-
-/**
- * Structured companion to the `/compress` sentences a command streams over ACP.
- *
- * The English sentence stays on the wire so text-only ACP hosts keep rendering
- * something, but a host that owns its own UI language renders the outcome from
- * this instead. Token counts travel as numbers (never preformatted) so the
- * consumer picks its own grouping and estimated marker.
- */
-export type ContextCompressionMeta =
-  | {
-      phase: 'progress';
-    }
-  | {
-      /**
-       * Terminal, like `done`: the fast path had nothing to strip. The session
-       * merges it into the progress block so the pending row is replaced in
-       * place, which is why it carries no counts.
-       */
-      phase: 'noop';
-    }
-  | {
-      phase: 'done';
-      originalTokenCount: number;
-      newTokenCount: number;
-      originalTokenCountIsEstimated?: boolean;
-      newTokenCountIsEstimated?: boolean;
-      /** Server-authored advisory; free-form text, not a translation key. */
-      warning?: string;
-    };
-
-/**
- * A note about the invocation itself, emitted before the compression starts.
- *
- * It rides on its own `_meta` key rather than on `contextCompression`: the
- * reducer folds a turn's text frames into one block and spreads `_meta` key by
- * key, so a note sharing that key would be overwritten by the result frame that
- * follows. A host that reads this key renders the note as its own row beside
- * the compression it belongs to.
- */
-export interface ContextCompressionNotice {
-  phase: 'notice';
-  /** Instruction budget the caller was clipped to. */
-  instructionsLimit: number;
 }
 
 export interface SummaryProps {
@@ -308,7 +263,7 @@ export type HistoryItemStats = HistoryItemBase & {
 /**
  * Structured payload rendered by `/diff`. Kept as plain data (not React nodes)
  * so the same model can feed both the Ink-based interactive display and the
- * plain-text non-interactive / ACP output.
+ * plain-text non-interactive output.
  */
 export interface DiffRenderRow {
   filename: string;
@@ -711,38 +666,6 @@ export type GoalStatusKind =
   | 'paused'
   | 'checking';
 
-export const GOAL_STATUS_KINDS = [
-  'set',
-  'achieved',
-  'cleared',
-  'failed',
-  'aborted',
-  'paused',
-  'checking',
-] as const satisfies readonly GoalStatusKind[];
-
-/** Narrows an untrusted value (e.g. a persisted transcript field). */
-export function isGoalStatusKind(value: unknown): value is GoalStatusKind {
-  return (
-    typeof value === 'string' &&
-    (GOAL_STATUS_KINDS as readonly string[]).includes(value)
-  );
-}
-
-export const TERMINAL_GOAL_STATUS_KINDS = [
-  'achieved',
-  'aborted',
-  'failed',
-] as const satisfies readonly GoalStatusKind[];
-
-export function isTerminalGoalStatusKind(
-  kind: GoalStatusKind,
-): kind is (typeof TERMINAL_GOAL_STATUS_KINDS)[number] {
-  return TERMINAL_GOAL_STATUS_KINDS.includes(
-    kind as (typeof TERMINAL_GOAL_STATUS_KINDS)[number],
-  );
-}
-
 export type HistoryItemGoalStatus = HistoryItemBase & {
   type: 'goal_status';
   kind: GoalStatusKind;
@@ -945,12 +868,6 @@ export type Message =
       progress: InsightProgressProps;
       timestamp: Date;
     };
-
-export interface ConsoleMessageItem {
-  type: 'log' | 'warn' | 'error' | 'debug' | 'info';
-  content: string;
-  count: number;
-}
 
 /**
  * Result type for a slash command that should immediately result in a prompt

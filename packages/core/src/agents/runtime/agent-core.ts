@@ -24,7 +24,7 @@ import {
   subagentIdentityContext,
   subagentNameContext,
 } from '../../utils/subagentNameContext.js';
-import { runWithInvocationContext } from '../../utils/invocation-context.js';
+
 import type { Config } from '../../config/config.js';
 import {
   getCurrentAgentDepth,
@@ -851,9 +851,7 @@ export class AgentCore {
         abortController,
         options,
       );
-    return runWithInvocationContext(undefined, () =>
-      this.runInAgentFrames(inner),
-    );
+    return this.runInAgentFrames(inner);
   }
 
   /**

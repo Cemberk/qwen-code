@@ -13,7 +13,6 @@ import {
   assertRealProjectSkillPath,
   getProjectSkillsRoot,
   isProjectSkillPath,
-  sanitizeSkillName,
 } from './skill-paths.js';
 
 describe('skill project paths', () => {
@@ -43,10 +42,6 @@ describe('skill project paths', () => {
     expect(() => assertProjectSkillPath(sibling, projectRoot)).toThrow(
       'Skills writes are restricted to',
     );
-  });
-
-  it('normalizes skill names', () => {
-    expect(sanitizeSkillName(' My Skill! ')).toBe('my-skill-');
   });
 });
 

@@ -14,19 +14,6 @@ import type {
   ToolResult,
   ToolResultDisplay,
 } from '../tools/tools.js';
-import { ToolNames } from '../tools/tool-names.js';
-
-export const EXECUTION_TOOL_NAMES = new Set<string>([
-  ToolNames.READ_FILE,
-  ToolNames.WRITE_FILE,
-  ToolNames.EDIT,
-  ToolNames.NOTEBOOK_EDIT,
-  ToolNames.GLOB,
-  ToolNames.GREP,
-  ToolNames.LS,
-  ToolNames.SHELL,
-  ToolNames.TASK_STOP,
-]);
 
 export class ExecutionCleanupError extends Error {
   readonly retryCleanup?: () => Promise<void>;

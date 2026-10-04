@@ -166,12 +166,9 @@ class TeamCreateInvocation extends BaseToolInvocation<
     };
     this.config.setTeamContext(ctx);
 
-    // No leader approval bridge is registered here. Teammate
-    // tool approvals surface through each teammate's own
-    // pendingApprovals map, which the interactive UI renders
-    // in the teammate's tab (AgentChatView). The bridge
-    // (leaderPermissionBridge) is available for future use if
-    // approvals need to appear in the leader's context too.
+    // Teammate tool approvals surface through each teammate's own
+    // pendingApprovals map, which the interactive UI renders in the
+    // teammate's tab (AgentChatView).
 
     const display: TeamResultDisplay = {
       type: 'team_result',

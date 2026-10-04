@@ -30,7 +30,6 @@ describe('EnterPlanModeTool', () => {
         approvalMode = mode;
       }),
       isInteractive: vi.fn(() => true),
-      getExperimentalZedIntegration: vi.fn(() => false),
       getInputFormat: vi.fn(() => undefined),
       getSdkMode: vi.fn(() => false),
     } as unknown as Config;
@@ -192,26 +191,6 @@ describe('EnterPlanModeTool', () => {
       );
       expect(approvalMode).toBe(ApprovalMode.PLAN);
       expect(savedPrePlanMode).toBe(ApprovalMode.YOLO);
-      expect(result.llmContent).toBe(getPlanModeSystemReminder(false));
-    });
-
-    it('should honour a user-requested YOLO entry in an ACP session', async () => {
-      // Headless + ACP: no `/plan`, no Shift+Tab. This tool is the only path.
-      approvalMode = ApprovalMode.YOLO;
-      (mockConfig.isInteractive as ReturnType<typeof vi.fn>).mockReturnValue(
-        false,
-      );
-      (
-        mockConfig.getExperimentalZedIntegration as ReturnType<typeof vi.fn>
-      ).mockReturnValue(true);
-
-      const invocation = tool.build({ userRequested: true });
-      const result = await invocation.execute(new AbortController().signal);
-
-      expect(mockConfig.setApprovalMode).toHaveBeenCalledWith(
-        ApprovalMode.PLAN,
-      );
-      expect(approvalMode).toBe(ApprovalMode.PLAN);
       expect(result.llmContent).toBe(getPlanModeSystemReminder(false));
     });
 

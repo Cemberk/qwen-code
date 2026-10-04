@@ -277,7 +277,7 @@ describe('ExtensionActionsView', () => {
       await confirm?.onConfirm(extension);
     });
 
-    expect(manager.uninstallExtension).toHaveBeenCalledWith('demo', false);
+    expect(manager.uninstallExtension).toHaveBeenCalledWith('demo');
     expect(onReload).toHaveBeenCalledOnce();
     expect(onExit).toHaveBeenCalledOnce();
     expect(statuses).toContainEqual({

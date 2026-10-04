@@ -30,8 +30,9 @@ import {
   type ModelMetrics,
   type ModelMetricsCore,
   Storage,
+  apiResponseEventToTokenUsageRecord,
   getTokenUsageFilePath,
-  recordTokenUsageFromApiResponse,
+  writeLine,
 } from '@qwen-code/qwen-code-core';
 
 const fsPromisesMock = vi.hoisted(() => ({
@@ -137,8 +138,10 @@ describe('statsCommand', () => {
     );
     second['event.timestamp'] = '2025-07-14T11:00:00.000Z';
 
-    await recordTokenUsageFromApiResponse(config, first);
-    await recordTokenUsageFromApiResponse(config, second);
+    for (const event of [first, second]) {
+      const record = apiResponseEventToTokenUsageRecord(config, event);
+      await writeLine(getTokenUsageFilePath(record.localMonth), record);
+    }
 
     mockContext.services.config = config;
   }

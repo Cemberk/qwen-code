@@ -55,7 +55,6 @@ describe('useOutputStyleCommand', () => {
       getOutputStyle: vi.fn().mockReturnValue(undefined),
       getLlmClient: () => ({ refreshSystemInstruction }),
       getSystemPrompt: vi.fn().mockReturnValue(undefined),
-      getExperimentalZedIntegration: vi.fn().mockReturnValue(false),
       getInputFormat: vi.fn().mockReturnValue('text'),
       isInteractive: vi.fn().mockReturnValue(true),
       getBareMode: vi.fn().mockReturnValue(false),

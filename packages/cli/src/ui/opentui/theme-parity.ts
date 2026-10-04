@@ -14,7 +14,7 @@
  * `getActiveTheme()`.
  */
 
-import { SyntaxStyle, type StyleDefinitionInput } from '@opentui/core';
+import { type StyleDefinitionInput } from '@opentui/core';
 import type { Palette } from './theme.js';
 import type { Theme, ThemeType } from '../themes/theme.js';
 import { themeManager } from '../themes/theme-manager.js';
@@ -129,36 +129,10 @@ export function openTuiThemeFromInkTheme(theme: Theme): OpenTuiThemeDefinition {
   };
 }
 
-/** Resolves one theme by name (built-in, custom or file path), or undefined. */
-export function getOpenTuiTheme(
-  name: string,
-): OpenTuiThemeDefinition | undefined {
-  const theme = themeManager.getTheme(name);
-  return theme ? openTuiThemeFromInkTheme(theme) : undefined;
-}
-
-/** All built-in ink themes mapped for OpenTUI, in dialog order. */
-export function getBuiltInOpenTuiThemes(): OpenTuiThemeDefinition[] {
-  return themeManager
-    .getAvailableThemes()
-    .filter((display) => !display.isCustom)
-    .flatMap((display) => {
-      const definition = getOpenTuiTheme(display.name);
-      return definition ? [definition] : [];
-    });
-}
-
 /**
  * The currently active theme mapped for OpenTUI — includes the ink parity
  * rule that `NO_COLOR` forces the NoColor theme.
  */
 export function getActiveOpenTuiTheme(): OpenTuiThemeDefinition {
   return openTuiThemeFromInkTheme(themeManager.getActiveTheme());
-}
-
-/** Builds a live opentui `SyntaxStyle` for a theme definition. */
-export function createSyntaxStyle(
-  definition: OpenTuiThemeDefinition,
-): SyntaxStyle {
-  return SyntaxStyle.fromStyles(definition.syntaxStyles);
 }

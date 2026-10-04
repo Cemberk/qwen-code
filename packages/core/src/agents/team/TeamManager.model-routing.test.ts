@@ -512,8 +512,8 @@ describe('TeamManager teammate model routing (#10071)', () => {
   });
 
   it('fails loudly on a backend that omits getAgentContentGenerator', async () => {
-    // PTY-style backends may omit getAgentContentGenerator (types.ts
-    // allows it). A model-selecting definition on such a backend must
+    // A backend may omit getAgentContentGenerator (types.ts allows
+    // it). A model-selecting definition on such a backend must
     // fail with the real cause — not with a missing-generator error
     // that looks like a missing API key, and not by silently joining
     // on the leader's generator (#10071).
@@ -523,8 +523,8 @@ describe('TeamManager teammate model routing (#10071)', () => {
       model: 'openai:worker-model',
     });
 
-    const ptyStyleBackend = {
-      type: 'tmux',
+    const generatorlessBackend = {
+      type: 'in-process',
       init: vi.fn().mockResolvedValue(undefined),
       spawnAgent: vi.fn().mockResolvedValue(undefined),
       stopAgent: vi.fn(),
@@ -539,7 +539,7 @@ describe('TeamManager teammate model routing (#10071)', () => {
     } as unknown as Backend;
 
     const localTeamManager = new TeamManager(
-      ptyStyleBackend,
+      generatorlessBackend,
       await writeTeamFileFixture(),
       new SubagentManager(leaderConfig),
     );

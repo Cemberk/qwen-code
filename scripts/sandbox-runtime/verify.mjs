@@ -693,7 +693,7 @@ try {
       };
     },
   );
-  for (const entrypoint of ['mcp', 'extensions', 'lsp', 'acp']) {
+  for (const entrypoint of ['mcp', 'extensions', 'lsp']) {
     await check(
       `explicit unsupported startup is rejected: ${entrypoint}`,
       async () => {
@@ -711,9 +711,7 @@ try {
               }
             : entrypoint === 'extensions'
               ? { extensions: ['sandbox-test-extension'] }
-              : entrypoint === 'lsp'
-                ? { experimentalLsp: true }
-                : { acp: true };
+              : { experimentalLsp: true };
         const run = await invoke(f, { argv, startupOnly: true });
         assert.notEqual(run.code, 0, 'Unsupported startup must fail closed');
         assert.match(

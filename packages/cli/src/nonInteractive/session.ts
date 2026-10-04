@@ -156,8 +156,7 @@ class Session {
    * at stake on this path — checkpointing defaults off outside interactive
    * sessions, so headless turns write none.
    *
-   * ACP seeds through this same helper (`primeTurnFromHistory`). Interactive
-   * mode seeds too, but by its own inline count of resumed user turns
+   * Interactive mode seeds too, but by its own inline count of resumed user turns
    * (`seedPromptCount` in AppContainer), which ignores the turns the
    * transcript actually claims.
    *

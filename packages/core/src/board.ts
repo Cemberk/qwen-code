@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// A dedicated subpath keeps the board dependency chain out of ACP startup.
+// A dedicated subpath keeps the board dependency chain out of CLI startup.
 export { assertSafeName } from './agents/team/board-lock.js';
 export {
   claimBoardTask,

@@ -29,7 +29,7 @@ export const compressCommand: SlashCommand = {
     return t('Compresses the context by replacing it with a summary.');
   },
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
   action: async (context) => {
     const { ui } = context;
     const executionMode = context.executionMode ?? 'interactive';
@@ -89,76 +89,6 @@ export const compressCommand: SlashCommand = {
         customInstructions,
       );
     };
-
-    if (executionMode === 'acp') {
-      const messages = async function* () {
-        try {
-          if (truncationNotice) {
-            yield {
-              messageType: 'info' as const,
-              content: truncationNotice,
-              // The daemon locale files have no translation for this sentence,
-              // so hosts that render their own language take it from here. Its
-              // own key, not `contextCompression`: the result frame that follows
-              // merges into the same block and would overwrite a shared key.
-              contextCompressionNotice: {
-                phase: 'notice' as const,
-                instructionsLimit: MAX_COMPRESS_INSTRUCTIONS_CHARS,
-              },
-            };
-          }
-          yield {
-            messageType: 'info' as const,
-            content: 'Compressing context...',
-            contextCompression: { phase: 'progress' as const },
-          };
-          const compressed = await doCompress();
-          if (
-            !compressed ||
-            isCompressionFailureStatus(compressed.compressionStatus)
-          ) {
-            yield {
-              messageType: 'error' as const,
-              content: compressed
-                ? getCompressionFailureStatusText({
-                    compressionStatus: compressed.compressionStatus,
-                    originalTokenCount: compressed.originalTokenCount,
-                  })
-                : t('Failed to compress chat history.'),
-            };
-            return;
-          }
-          yield {
-            messageType: 'info' as const,
-            content:
-              `Context compressed (${formatCompressionTokenCount(compressed.originalTokenCount, compressed.originalTokenCountIsEstimated)} -> ${formatCompressionTokenCount(compressed.newTokenCount, compressed.newTokenCountIsEstimated)}).` +
-              (compressed.warning ? `\n⚠️ ${compressed.warning}` : ''),
-            contextCompression: {
-              phase: 'done' as const,
-              originalTokenCount: compressed.originalTokenCount,
-              newTokenCount: compressed.newTokenCount,
-              // An omitted flag travels as `false`, which is how the daemon's
-              // own banner reads it (`isEstimated ? '~' : ''`). Core is more
-              // conservative about an omitted flag (`?? true`, #9309).
-              originalTokenCountIsEstimated:
-                compressed.originalTokenCountIsEstimated ?? false,
-              newTokenCountIsEstimated:
-                compressed.newTokenCountIsEstimated ?? false,
-              ...(compressed.warning ? { warning: compressed.warning } : {}),
-            },
-          };
-        } catch (e) {
-          yield {
-            messageType: 'error' as const,
-            content: t('Failed to compress chat history: {{error}}', {
-              error: e instanceof Error ? e.message : String(e),
-            }),
-          };
-        }
-      };
-
-      return { type: 'stream_messages', messages: messages() };
-    }
 
     try {
       if (executionMode === 'interactive') {

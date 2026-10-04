@@ -131,8 +131,7 @@ describe('WorkflowTool registration', () => {
   it('QWEN_CODE_DISABLE_WORKFLOWS=1 overrides enable-via-settings', async () => {
     process.env['QWEN_CODE_DISABLE_WORKFLOWS'] = '1';
     delete process.env['QWEN_CODE_ENABLE_WORKFLOWS'];
-    const cfg = new Config({ ...baseParams });
-    cfg.setWorkflowsEnabled(true);
+    const cfg = new Config({ ...baseParams, workflowsEnabled: true });
     const registry = await cfg.createToolRegistry(undefined, {
       skipDiscovery: true,
     });

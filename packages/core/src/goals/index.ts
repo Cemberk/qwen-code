@@ -9,9 +9,7 @@ export {
   GoalConflictError,
   GoalInvalidTransitionError,
   elapsedActiveTime,
-  parseGoalControlRequest,
   parseGoalSnapshotV2,
-  parseGoalStateCause,
   parseGoalStateRecordPayloadV2,
   reduceGoalControl,
   reduceGoalTurnFinished,
@@ -34,7 +32,6 @@ export * from './goal-runtime.js';
 export {
   applyPendingGoalProposal,
   formatProposeGoalRecoveryFailed,
-  formatProposeGoalRecoveryNotStarted,
   ProposeGoalTool,
 } from './goal-tools.js';
 export type { PendingGoalProposal } from './goal-tools.js';

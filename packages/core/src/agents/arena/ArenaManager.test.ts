@@ -80,7 +80,6 @@ const createMockConfig = (
   // main session actually carries, so the main session's prompt-override and
   // interaction-mode state is part of that decision.
   getSystemPrompt: (): string | undefined => undefined,
-  getExperimentalZedIntegration: () => false,
   isInteractive: () => true,
   getAutoMemoryPrompt: () => '',
   getToolRegistry: () => ({
@@ -260,30 +259,6 @@ describe('ArenaManager', () => {
     });
   });
 
-  describe('PTY interaction methods', () => {
-    it('should expose PTY interaction methods', () => {
-      const manager = new ArenaManager(mockConfig as never);
-      expect(typeof manager.switchToAgent).toBe('function');
-      expect(typeof manager.switchToNextAgent).toBe('function');
-      expect(typeof manager.switchToPreviousAgent).toBe('function');
-      expect(typeof manager.getActiveAgentId).toBe('function');
-      expect(typeof manager.getActiveSnapshot).toBe('function');
-      expect(typeof manager.getAgentSnapshot).toBe('function');
-      expect(typeof manager.forwardInput).toBe('function');
-      expect(typeof manager.resizeAgents).toBe('function');
-    });
-
-    it('should return null for active agent ID when no session', () => {
-      const manager = new ArenaManager(mockConfig as never);
-      expect(manager.getActiveAgentId()).toBeNull();
-    });
-
-    it('should return null for active snapshot when no session', () => {
-      const manager = new ArenaManager(mockConfig as never);
-      expect(manager.getActiveSnapshot()).toBeNull();
-    });
-  });
-
   describe('cancel', () => {
     it('should handle cancel when no session is active', async () => {
       const manager = new ArenaManager(mockConfig as never);
@@ -321,14 +296,6 @@ describe('ArenaManager', () => {
     });
   });
 
-  describe('getAgentDiff', () => {
-    it('should return error message for non-existent agent', async () => {
-      const manager = new ArenaManager(mockConfig as never);
-      const diff = await manager.getAgentDiff('non-existent');
-      expect(diff).toContain('not found');
-    });
-  });
-
   describe('backend initialization', () => {
     it('should emit SESSION_UPDATE with type warning when backend detection returns warning', async () => {
       const manager = new ArenaManager(mockConfig as never);
@@ -347,7 +314,7 @@ describe('ArenaManager', () => {
 
       hoistedMockDetectBackend.mockResolvedValueOnce({
         backend: mockBackend,
-        warning: 'fallback to tmux backend',
+        warning: 'fallback to in-process backend',
       });
 
       await manager.start(createValidStartOptions());
@@ -358,7 +325,9 @@ describe('ArenaManager', () => {
       );
       const warningUpdate = updates.find((u) => u.type === 'warning');
       expect(warningUpdate).toBeDefined();
-      expect(warningUpdate?.message).toContain('fallback to tmux backend');
+      expect(warningUpdate?.message).toContain(
+        'fallback to in-process backend',
+      );
       expect(warningUpdate?.sessionId).toBe('test-session');
     });
 
@@ -381,7 +350,6 @@ describe('ArenaManager', () => {
 
   describe('chat history forwarding', () => {
     it('passes approvalMode to in-process backend spawn configs', async () => {
-      mockBackend.type = 'in-process';
       const manager = new ArenaManager(mockConfig as never);
 
       await manager.start({
@@ -442,7 +410,6 @@ describe('ArenaManager', () => {
       // telling arena workers to ask the user questions no one can answer.
       // Assert on the produced prompt: the headless variant carries a
       // single-turn marker that is absent from every other interaction mode.
-      mockBackend.type = 'in-process';
       mockConfig = {
         ...createMockConfig(tempDir, { worktreeBaseDir: tempDir }),
         getOutputStyle: () => getBuiltInOutputStyle('Concise'),
@@ -474,7 +441,6 @@ describe('ArenaManager', () => {
     // faithfully — that a `keepCodingInstructions: false` style deletes from
     // the base prompt.
     it('does not let a style strip the coding instructions from a peer', async () => {
-      mockBackend.type = 'in-process';
       const haiku = {
         name: 'Haiku',
         source: 'user' as const,
@@ -507,7 +473,6 @@ describe('ArenaManager', () => {
     // A replaced main-session prompt carries no style section; the peer must
     // not reintroduce one the main session deliberately dropped.
     it('gives a peer no style when a custom system prompt replaces the main one', async () => {
-      mockBackend.type = 'in-process';
       mockConfig = {
         ...createMockConfig(tempDir, { worktreeBaseDir: tempDir }),
         getSystemPrompt: () => 'You are terse.',
@@ -541,7 +506,6 @@ describe('ArenaManager', () => {
         ...createMockConfig(tempDir, { worktreeBaseDir: tempDir }),
         getAutoMemoryPrompt: () => marker,
       };
-      mockBackend.type = 'in-process';
       const manager = new ArenaManager(mockConfig as never);
 
       await manager.start(createValidStartOptions());
@@ -573,44 +537,23 @@ index 111..222 100644
 +new
 +extra`);
 
-      const startPromise = manager.start(createValidStartOptions());
-      await waitForCondition(
-        () => mockBackend.spawnAgent.mock.calls.length >= 2,
+      const agentInteractives = new Map<
+        string,
+        ReturnType<typeof createMockInteractive>
+      >();
+      mockBackend.getAgent.mockImplementation((agentId: string) =>
+        agentInteractives.get(agentId),
+      );
+      mockBackend.spawnAgent.mockImplementation(
+        async (config: { agentId: string }) => {
+          agentInteractives.set(
+            config.agentId,
+            createMockInteractive(config.agentId),
+          );
+        },
       );
 
-      const agentsDir = path.join(
-        os.tmpdir(),
-        'arena-mock',
-        'testsess',
-        'agents',
-      );
-      await fs.mkdir(agentsDir, { recursive: true });
-      for (const modelId of ['model-1', 'model-2']) {
-        await fs.writeFile(
-          path.join(agentsDir, `${modelId}.json`),
-          JSON.stringify({
-            agentId: modelId,
-            status: AgentStatus.COMPLETED,
-            updatedAt: Date.now(),
-            rounds: 1,
-            stats: {
-              rounds: 1,
-              totalTokens: 0,
-              inputTokens: 0,
-              outputTokens: 0,
-              durationMs: 0,
-              toolCalls: 0,
-              successfulToolCalls: 0,
-              failedToolCalls: 0,
-            },
-            finalSummary: null,
-            error: null,
-          }),
-          'utf-8',
-        );
-      }
-
-      const result = await startPromise;
+      const result = await manager.start(createValidStartOptions());
 
       expect(result.agents).toHaveLength(2);
       expect(result.agents[0]?.modifiedFiles).toEqual(['src/auth.ts']);
@@ -645,7 +588,6 @@ index 111..222 100644
           generateText: summaryGenerateText,
         }),
       };
-      mockBackend.type = 'in-process';
       mockBackend.setAutoExit(false);
       const agentInteractives = new Map<
         string,
@@ -749,7 +691,7 @@ function createMockBackend() {
   let autoExit = true;
 
   const backend = {
-    type: 'tmux' as 'tmux' | 'in-process',
+    type: 'in-process' as const,
     init: vi.fn().mockResolvedValue(undefined),
     spawnAgent: vi.fn(async (config: { agentId: string }) => {
       // By default, simulate immediate agent termination so tests
@@ -765,17 +707,6 @@ function createMockBackend() {
       onAgentExit = cb;
     }),
     waitForAll: vi.fn().mockResolvedValue(true),
-    switchTo: vi.fn(),
-    switchToNext: vi.fn(),
-    switchToPrevious: vi.fn(),
-    getActiveAgentId: vi.fn().mockReturnValue(null),
-    getActiveSnapshot: vi.fn().mockReturnValue(null),
-    getAgentSnapshot: vi.fn().mockReturnValue(null),
-    getAgentScrollbackLength: vi.fn().mockReturnValue(0),
-    forwardInput: vi.fn().mockReturnValue(false),
-    writeToAgent: vi.fn().mockReturnValue(false),
-    resizeAll: vi.fn(),
-    getAttachHint: vi.fn().mockReturnValue(null),
     getAgent: vi.fn().mockReturnValue(undefined),
     /** Disable automatic agent exit for tests that need to control timing. */
     setAutoExit(value: boolean) {

@@ -72,16 +72,6 @@ export class ResourceRegistry {
   }
 
   /**
-   * Look up a single resource by its `(serverName, uri)` identity.
-   */
-  getResource(
-    serverName: string,
-    uri: string,
-  ): DiscoveredMCPResource | undefined {
-    return this.resources.get(this.key(serverName, uri));
-  }
-
-  /**
    * Clears all resources from the registry.
    */
   clear(): void {

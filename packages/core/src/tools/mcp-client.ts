@@ -51,17 +51,13 @@ import { existsSync } from 'node:fs';
 import { basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { PromptRegistry } from '../prompts/prompt-registry.js';
-import type { ResourceRegistry } from '../resources/resource-registry.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
 import { discoveryTimeoutFor } from './mcp-discovery-timeout.js';
 import { retryWithBackoff } from './mcp-retry.js';
 import { normalizePathEnvForWindows } from '../utils/windowsPath.js';
 import { sanitizeChildEnv } from '../utils/sanitize-child-env.js';
-import type {
-  Unsubscribe,
-  WorkspaceContext,
-} from '../utils/workspaceContext.js';
+import type { WorkspaceContext } from '../utils/workspaceContext.js';
 import type { ToolRegistry } from './tool-registry.js';
 
 /**
@@ -81,23 +77,8 @@ export const MCP_VERSION_NEGOTIATION_PROBE_TIMEOUT_MS = 5_000;
 /** Reserve a full handshake window after a silent stdio discovery probe. */
 export const MCP_VERSION_NEGOTIATION_FALLBACK_HEADROOM_MS =
   MCP_VERSION_NEGOTIATION_PROBE_TIMEOUT_MS;
-export const MCP_APPS_EXTENSION_ID = 'io.modelcontextprotocol/ui';
-export const MCP_APP_RESOURCE_MIME_TYPE = 'text/html;profile=mcp-app';
 
 const debugLogger = createDebugLogger('MCP');
-
-const invocationContextTransports = new WeakSet<Transport>();
-const invocationContextClients = new WeakSet<Client>();
-
-function bindInvocationContextPolicy(
-  client: Client,
-  transport: Transport,
-): void {
-  invocationContextClients.delete(client);
-  if (invocationContextTransports.has(transport)) {
-    invocationContextClients.add(client);
-  }
-}
 
 export type DiscoveredMCPPrompt = Prompt & {
   serverName: string;
@@ -156,32 +137,11 @@ export function createMcpClient(name: string, cfg: MCPServerConfig): Client {
       // repeated cursors, while its default 64-page cap turns larger valid
       // catalogs into a discovery failure that this module reports as empty.
       listMaxPages: 0,
-      capabilities: {
-        extensions: {
-          [MCP_APPS_EXTENSION_ID]: {
-            mimeTypes: [MCP_APP_RESOURCE_MIME_TYPE],
-          },
-        },
-      },
     },
   );
 }
 
-export function getMcpAppResourceUri(tool: {
-  _meta?: Record<string, unknown>;
-}): string | undefined {
-  const ui = tool._meta?.['ui'];
-  const nested =
-    typeof ui === 'object' && ui !== null && !Array.isArray(ui)
-      ? (ui as Record<string, unknown>)['resourceUri']
-      : undefined;
-  const value = nested ?? tool._meta?.['ui/resourceUri'];
-  return typeof value === 'string' && value.startsWith('ui://')
-    ? value
-    : undefined;
-}
-
-function getMcpAppVisibility(tool: {
+function getMcpToolVisibility(tool: {
   _meta?: Record<string, unknown>;
 }): readonly string[] | undefined {
   const ui = tool._meta?.['ui'];
@@ -198,7 +158,7 @@ function getMcpAppVisibility(tool: {
 export function isMcpToolVisibleToModel(tool: {
   _meta?: Record<string, unknown>;
 }): boolean {
-  const visibility = getMcpAppVisibility(tool);
+  const visibility = getMcpToolVisibility(tool);
   return visibility === undefined || visibility.includes('model');
 }
 
@@ -247,7 +207,6 @@ export class McpClient {
    */
   async connect(): Promise<void> {
     this.isDisconnecting = false;
-    invocationContextClients.delete(this.client);
     this.updateStatus(MCPServerStatus.CONNECTING);
     try {
       this.transport = await this.createTransport();
@@ -283,7 +242,6 @@ export class McpClient {
         timeout: this.serverConfig.timeout,
       });
       this.instructions = this.client.getInstructions();
-      bindInvocationContextPolicy(this.client, this.transport);
 
       this.updateStatus(MCPServerStatus.CONNECTED);
     } catch (error) {
@@ -387,7 +345,7 @@ export class McpClient {
           cliConfig,
         ),
       ]);
-      const tools = applyListingAppResourceUi(toolDiscovery.tools, resources);
+      const tools = toolDiscovery.tools;
 
       if (
         prompts.length === 0 &&
@@ -516,64 +474,6 @@ export class McpClient {
   }
 }
 
-/**
- * Track the overall MCP discovery state
- */
-let mcpDiscoveryState: MCPDiscoveryState = MCPDiscoveryState.NOT_STARTED;
-
-/**
- * Get the current MCP discovery state
- */
-export function getMCPDiscoveryState(): MCPDiscoveryState {
-  return mcpDiscoveryState;
-}
-
-/**
- * Discovers tools from all configured MCP servers and registers them with the tool registry.
- * It orchestrates the connection and discovery process for each server defined in the
- * configuration, as well as any server specified via a command-line argument.
- *
- * @param mcpServers A record of named MCP server configurations.
- * @param mcpServerCommand An optional command string for a dynamically specified MCP server.
- * @param toolRegistry The central registry where discovered tools will be registered.
- * @returns A promise that resolves when the discovery process has been attempted for all servers.
- */
-
-export async function discoverMcpTools(
-  mcpServers: Record<string, MCPServerConfig>,
-  mcpServerCommand: string | undefined,
-  toolRegistry: ToolRegistry,
-  promptRegistry: PromptRegistry,
-  debugMode: boolean,
-  workspaceContext: WorkspaceContext,
-  cliConfig: Config,
-): Promise<void> {
-  mcpDiscoveryState = MCPDiscoveryState.IN_PROGRESS;
-  try {
-    mcpServers = populateMcpServerCommand(
-      mcpServers,
-      mcpServerCommand,
-      cliConfig.getTargetDir(),
-    );
-
-    const discoveryPromises = Object.entries(mcpServers).map(
-      ([mcpServerName, mcpServerConfig]) =>
-        connectAndDiscover(
-          mcpServerName,
-          mcpServerConfig,
-          toolRegistry,
-          promptRegistry,
-          debugMode,
-          workspaceContext,
-          cliConfig,
-        ),
-    );
-    await Promise.all(discoveryPromises);
-  } finally {
-    mcpDiscoveryState = MCPDiscoveryState.COMPLETED;
-  }
-}
-
 /** Visible for Testing */
 export function populateMcpServerCommand(
   mcpServers: Record<string, MCPServerConfig>,
@@ -611,143 +511,12 @@ export function populateMcpServerCommand(
   );
 }
 
-/**
- * Connects to an MCP server and discovers available tools, registering them with the tool registry.
- * This function handles the complete lifecycle of connecting to a server, discovering tools,
- * and cleaning up resources if no tools are found.
- *
- * @param mcpServerName The name identifier for this MCP server
- * @param mcpServerConfig Configuration object containing connection details
- * @param toolRegistry The registry to register discovered tools with
- * @param sendSdkMcpMessage Optional callback for SDK MCP servers to route messages via control plane.
- * @returns Promise that resolves when discovery is complete
- */
-export async function connectAndDiscover(
-  mcpServerName: string,
-  mcpServerConfig: MCPServerConfig,
-  toolRegistry: ToolRegistry,
-  promptRegistry: PromptRegistry,
-  debugMode: boolean,
-  workspaceContext: WorkspaceContext,
-  cliConfig: Config,
-  sendSdkMcpMessage?: SendSdkMcpMessage,
-): Promise<void> {
-  updateMCPServerStatus(mcpServerName, MCPServerStatus.CONNECTING);
-
-  let mcpClient: Client | undefined;
-  try {
-    mcpClient = await connectToMcpServer(
-      mcpServerName,
-      mcpServerConfig,
-      debugMode,
-      workspaceContext,
-      sendSdkMcpMessage,
-    );
-
-    mcpClient.onerror = (error) => {
-      debugLogger.error(`MCP ERROR (${mcpServerName}):`, error.toString());
-      updateMCPServerStatus(mcpServerName, MCPServerStatus.DISCONNECTED);
-    };
-
-    // Attempt to discover prompts, resources, and tools
-    const prompts = await discoverPrompts(
-      mcpServerName,
-      mcpClient,
-      promptRegistry,
-    );
-    const resources = await discoverResources(
-      mcpServerName,
-      mcpClient,
-      cliConfig.getResourceRegistry(),
-    );
-    const toolDiscovery = await discoverToolsWithMetadata(
-      mcpServerName,
-      mcpServerConfig,
-      mcpClient,
-      cliConfig,
-    );
-    const tools = applyListingAppResourceUi(toolDiscovery.tools, resources);
-
-    // If we found no prompts, resources, or tools, it's a failed discovery
-    if (
-      prompts.length === 0 &&
-      resources.length === 0 &&
-      tools.length === 0 &&
-      !toolDiscovery.hadVisibilityFilteredTools
-    ) {
-      throw new Error('No prompts, tools, or resources found on the server.');
-    }
-
-    // If we found anything, the server is connected
-    updateMCPServerStatus(mcpServerName, MCPServerStatus.CONNECTED);
-
-    // Register any discovered tools
-    for (const tool of tools) {
-      toolRegistry.registerTool(tool);
-    }
-  } catch (error) {
-    if (mcpClient) {
-      mcpClient.close();
-    }
-    debugLogger.error(
-      `Error connecting to MCP server '${mcpServerName}': ${getErrorMessage(
-        error,
-      )}`,
-    );
-    updateMCPServerStatus(mcpServerName, MCPServerStatus.DISCONNECTED);
-  }
-}
-
-/**
- * Applies resource listing UI metadata (`_meta.ui`) to matching discovered tools.
- * @param tools Discovered tools.
- * @param resources Resources whose `_meta.ui` decorates matching tools.
- * @returns The updated tool list.
- */
-function applyListingAppResourceUi(
-  tools: DiscoveredMCPTool[],
-  resources: readonly DiscoveredMCPResource[],
-): DiscoveredMCPTool[] {
-  if (tools.length === 0 || resources.length === 0) return tools;
-  const uiByUri = new Map<string, Record<string, unknown>>();
-  for (const resource of resources) {
-    const meta = resource._meta;
-    if (!meta || typeof meta !== 'object' || Array.isArray(meta)) continue;
-    const ui = meta['ui'];
-    if (!ui || typeof ui !== 'object' || Array.isArray(ui)) continue;
-    uiByUri.set(resource.uri, ui as Record<string, unknown>);
-  }
-  if (uiByUri.size === 0) return tools;
-  return tools.map((tool) => {
-    const listingUi = tool.appResourceUri
-      ? uiByUri.get(tool.appResourceUri)
-      : undefined;
-    return listingUi ? tool.withAppResourceUi(listingUi) : tool;
-  });
-}
-
-export async function discoverTools(
-  mcpServerName: string,
-  mcpServerConfig: MCPServerConfig,
-  mcpClient: Client,
-  cliConfig: Config,
-): Promise<DiscoveredMCPTool[]> {
-  return (
-    await discoverToolsWithMetadata(
-      mcpServerName,
-      mcpServerConfig,
-      mcpClient,
-      cliConfig,
-    )
-  ).tools;
-}
-
 type ToolDiscoveryResult = {
   tools: DiscoveredMCPTool[];
   hadVisibilityFilteredTools: boolean;
 };
 
-async function discoverToolsWithMetadata(
+export async function discoverToolsWithMetadata(
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
   mcpClient: Client,
@@ -792,15 +561,12 @@ async function discoverToolsWithMetadata(
     // Fetch raw tool list from MCP client to get annotations (readOnlyHint, etc.)
     // that are not preserved by mcpToTool's functionDeclarations conversion.
     const annotationsMap = new Map<string, McpToolAnnotations>();
-    const appResourceUriMap = new Map<string, string>();
     try {
       if (!didListTools) await listTools();
       for (const mcpTool of listedTools) {
         if (mcpTool.annotations) {
           annotationsMap.set(mcpTool.name, mcpTool.annotations);
         }
-        const resourceUri = getMcpAppResourceUri(mcpTool);
-        if (resourceUri) appResourceUriMap.set(mcpTool.name, resourceUri);
       }
     } catch {
       // If listTools fails, proceed without annotations — non-critical
@@ -837,10 +603,9 @@ async function discoverToolsWithMetadata(
         const listed = listedTools.find(
           (mcpTool) => mcpTool.name === funcDecl.name,
         );
-        const appVisibility = listed ? getMcpAppVisibility(listed) : undefined;
         if (listed && !isMcpToolVisibleToModel(listed)) {
           hadVisibilityFilteredTools = true;
-          if (!appVisibility?.includes('app')) continue;
+          continue;
         }
 
         discoveredTools.push(
@@ -857,16 +622,6 @@ async function discoverToolsWithMetadata(
             cliConfig?.getMcpToolIdleTimeoutMs?.(),
             annotationsMap.get(funcDecl.name!),
             mcpServerConfig.alwaysLoadTools === true,
-            invocationContextClients.has(mcpClient),
-            appResourceUriMap.get(funcDecl.name!),
-            undefined,
-            {
-              appResourceMaxBytes: mcpServerConfig.appResourceMaxBytes,
-              appResourceTimeoutMs: mcpServerConfig.appResourceTimeoutMs,
-              extensionName: mcpServerConfig.extensionName,
-              scope: mcpServerConfig.scope,
-            },
-            appVisibility,
           ),
         );
       } catch (error) {
@@ -925,8 +680,8 @@ function canUseModernTypedHelper(
  * enriched `DiscoveredMCPPrompt[]` (with `serverName` + bound `invoke`)
  * WITHOUT registering them anywhere.
  *
- * Returns `[]` on protocol errors or when the server has no prompts —
- * matches `discoverPrompts` swallow-and-continue behavior.
+ * Returns `[]` on protocol errors or when the server has no prompts
+ * (swallow-and-continue).
  *
  * We deliberately do NOT skip the wire request when
  * `getServerCapabilities()?.prompts` is absent. A non-trivial number of
@@ -972,31 +727,6 @@ export async function listMcpPrompts(
     }
     return [];
   }
-}
-
-/**
- * Discovers prompts AND registers them into the supplied PromptRegistry.
- * Thin wrapper over `listMcpPrompts` that preserves the historical
- * `Promise<Prompt[]>` signature (used by `connectAndDiscover`, standalone
- * qwen, and existing tests). New code should prefer `listMcpPrompts`
- * for testability.
- *
- * @param mcpServerName The name of the MCP server.
- * @param mcpClient The active MCP client instance.
- * @param promptRegistry The registry to register discovered prompts into.
- */
-export async function discoverPrompts(
-  mcpServerName: string,
-  mcpClient: Client,
-  promptRegistry: PromptRegistry,
-): Promise<Prompt[]> {
-  const enriched = await listMcpPrompts(mcpServerName, mcpClient);
-  for (const prompt of enriched) {
-    promptRegistry.registerPrompt(prompt);
-  }
-  // Preserve historical return type: raw Prompt (without serverName/invoke).
-  // Callers only ever inspected `length`, but the type contract is preserved.
-  return enriched.map(({ serverName: _s, invoke: _i, ...rest }) => rest);
 }
 
 /**
@@ -1090,126 +820,6 @@ export async function listMcpResources(
   }
 }
 
-/**
- * Discovers resources AND registers them into the supplied
- * `ResourceRegistry`. Thin wrapper over `listMcpResources`, mirroring
- * `discoverPrompts`.
- *
- * @param mcpServerName The name of the MCP server.
- * @param mcpClient The active MCP client instance.
- * @param resourceRegistry The registry to register discovered resources into.
- */
-export async function discoverResources(
-  mcpServerName: string,
-  mcpClient: Client,
-  resourceRegistry: ResourceRegistry,
-): Promise<DiscoveredMCPResource[]> {
-  const resources = await listMcpResources(mcpServerName, mcpClient);
-  for (const resource of resources) {
-    resourceRegistry.registerResource(resource);
-  }
-  return resources;
-}
-
-/**
- * Creates and connects an MCP client to a server based on the provided configuration.
- * It determines the appropriate transport (stdio or SDK) and
- * establishes a connection. It also applies a patch to handle request timeouts.
- *
- * @param mcpServerName The name of the MCP server, used for logging and identification.
- * @param mcpServerConfig The configuration specifying how to connect to the server.
- * @param sendSdkMcpMessage Optional callback for SDK MCP servers to route messages via control plane.
- * @returns A promise that resolves to a connected MCP `Client` instance.
- * @throws An error if the connection fails or the configuration is invalid.
- */
-export async function connectToMcpServer(
-  mcpServerName: string,
-  mcpServerConfig: MCPServerConfig,
-  debugMode: boolean,
-  workspaceContext: WorkspaceContext,
-  sendSdkMcpMessage?: SendSdkMcpMessage,
-): Promise<Client> {
-  const mcpClient = createMcpClient('qwen-code-mcp-client', mcpServerConfig);
-
-  mcpClient.registerCapabilities({
-    roots: {
-      listChanged: true,
-    },
-  });
-
-  mcpClient.setRequestHandler('roots/list', async () => {
-    const roots = [];
-    for (const dir of workspaceContext.getDirectories()) {
-      roots.push({
-        uri: pathToFileURL(dir).toString(),
-        name: basename(dir),
-      });
-    }
-    return {
-      roots,
-    };
-  });
-
-  let unlistenDirectories: Unsubscribe | undefined =
-    workspaceContext.onDirectoriesChanged(async () => {
-      try {
-        await mcpClient.notification({
-          method: 'notifications/roots/list_changed',
-        });
-      } catch (_) {
-        // If this fails, its almost certainly because the connection was closed
-        // and we should just stop listening for future directory changes.
-        unlistenDirectories?.();
-        unlistenDirectories = undefined;
-      }
-    });
-
-  // Attempt to pro-actively unsubscribe if the mcp client closes. This API is
-  // very brittle though so we don't have any guarantees, hence the try/catch
-  // above as well.
-  //
-  // Be a good steward and don't just bash over onclose.
-  const oldOnClose = mcpClient.onclose;
-  mcpClient.onclose = () => {
-    oldOnClose?.();
-    unlistenDirectories?.();
-    unlistenDirectories = undefined;
-  };
-
-  try {
-    const transport = await createTransport(
-      mcpServerName,
-      mcpServerConfig,
-      debugMode,
-      sendSdkMcpMessage,
-    );
-    try {
-      await mcpClient.connect(transport, {
-        timeout: mcpServerConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
-      });
-      bindInvocationContextPolicy(mcpClient, transport);
-      return mcpClient;
-    } catch (error) {
-      unlistenDirectories?.();
-      unlistenDirectories = undefined;
-      await transport.close();
-      throw error;
-    }
-  } catch (error) {
-    unlistenDirectories?.();
-    unlistenDirectories = undefined;
-    // Create a concise error message
-    const errorMessage = (error as Error).message || String(error);
-    let conciseError = `Connection failed for '${mcpServerName}': ${errorMessage}`;
-
-    if (process.env['SANDBOX']) {
-      conciseError += ` (check sandbox availability)`;
-    }
-
-    throw new Error(conciseError);
-  }
-}
-
 /** Visible for Testing */
 export async function createTransport(
   mcpServerName: string,
@@ -1255,7 +865,6 @@ export async function createTransport(
       cwd: mcpServerConfig.cwd,
       stderr: 'pipe',
     });
-    invocationContextTransports.add(transport);
     if (debugMode) {
       transport.stderr!.on('data', (data) => {
         const stderrStr = data.toString().trim();

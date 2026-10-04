@@ -143,17 +143,6 @@ export function spawnedEnvironmentView(
   });
 }
 
-/**
- * Whether a path names one place for every process. On Windows, `\x` and
- * `/x` take the drive of the working directory and `C:x` its directory on
- * that drive; only a drive root or a UNC path with a server and a share does.
- */
-export function isFullyQualifiedPath(location: string): boolean {
-  return os.platform() === 'win32'
-    ? /^(?:[a-zA-Z]:[\\/]|[\\/]{2}[^\\/]+[\\/]+[^\\/]+)/.test(location)
-    : path.isAbsolute(location);
-}
-
 export function getGlobalQwenDirLite(
   env: Readonly<NodeJS.ProcessEnv> = process.env,
 ): string {

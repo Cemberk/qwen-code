@@ -5,10 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  convertTomlToMarkdown,
-  isTomlFormat,
-} from './toml-to-markdown-converter.js';
+import { convertTomlToMarkdown } from './toml-to-markdown-converter.js';
 import { parse as parseYaml } from './yaml-parser.js';
 
 function readDescriptionFromFrontmatter(markdown: string): unknown {
@@ -90,34 +87,5 @@ description = ${JSON.stringify(description)}`;
 
       expect(readDescriptionFromFrontmatter(result)).toBe(description);
     }
-  });
-});
-
-describe('isTomlFormat', () => {
-  it('should return true for valid TOML', () => {
-    const validToml = `prompt = "Test"
-description = "Description"`;
-
-    expect(isTomlFormat(validToml)).toBe(true);
-  });
-
-  it('should return false for invalid TOML', () => {
-    const invalidToml = '{ this is not toml }';
-
-    expect(isTomlFormat(invalidToml)).toBe(false);
-  });
-
-  it('should return true for empty TOML', () => {
-    expect(isTomlFormat('')).toBe(true);
-  });
-
-  it('should return false for Markdown format', () => {
-    const markdown = `---
-description: Test
----
-
-Prompt content`;
-
-    expect(isTomlFormat(markdown)).toBe(false);
   });
 });

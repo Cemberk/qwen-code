@@ -187,17 +187,6 @@ describe('SettingsSchema', () => {
       ).toBeDefined();
     });
 
-    it('should keep the ACP session writer lease opt-in', () => {
-      expect(
-        getSettingsSchema().experimental.properties.sessionWriterLease,
-      ).toMatchObject({
-        type: 'boolean',
-        default: false,
-        requiresRestart: true,
-        showInDialog: true,
-      });
-    });
-
     // requiresRestart is load-bearing, not decorative: the Workflow tool is
     // registered once while the tool registry is built, so a mid-session
     // toggle would leave the dialog claiming the feature is on while the
@@ -498,13 +487,13 @@ describe('SettingsSchema', () => {
       checkBooleanDefaults(getSettingsSchema() as SettingsSchema);
     });
 
-    it('keeps Session Workflow opt-in without requiring a restart', () => {
+    it('keeps Session Workflow opt-in and applies it on restart', () => {
       expect(
         getSettingsSchema().experimental.properties.sessionWorkflow,
       ).toMatchObject({
         type: 'boolean',
         default: false,
-        requiresRestart: false,
+        requiresRestart: true,
         showInDialog: true,
       });
     });

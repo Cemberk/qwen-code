@@ -14,8 +14,8 @@
  * prompt triggered their execution — useful for tracing, audit logging,
  * and business context correlation.
  *
- * The ALS-first lookup matters in daemon mode: one process hosts many
- * sessions, but only the first Config ever claims the process-global
+ * The ALS-first lookup matters when one process hosts several
+ * sessions: but only the first Config ever claims the process-global
  * env slot (`sessionEnvClaimed` in config.ts), so process.env alone
  * would report a stale session ID for every later session.
  *
@@ -110,8 +110,8 @@ function identityDescribes(identity: string, model: string): boolean {
 export function getShellContextEnvVars(): Record<string, string> {
   const env: Record<string, string> = {};
 
-  // Prefer the per-async-context session ID (set by multi-session hosts
-  // like the daemon) over the process-global env slot, which only ever
+  // Prefer the per-async-context session ID (set by multi-session hosts)
+  // over the process-global env slot, which only ever
   // reflects the first session created in this process.
   const sessionId =
     sessionIdContext.getStore() ?? process.env['QWEN_CODE_SESSION_ID'];
@@ -125,8 +125,8 @@ export function getShellContextEnvVars(): Record<string, string> {
   // /review skill does exactly that, and would look for a directory that never
   // existed. Passed through, never recomputed downstream.
   // Keyed on *this* session, exactly as the session id above is — a process-global
-  // slot holds whichever session booted first, and in daemon mode every later one
-  // would hand its subprocesses another session's directory.
+  // slot holds whichever session booted first, and with several sessions every
+  // later one would hand its subprocesses another session's directory.
   const projectDir =
     (sessionId ? getSessionProjectDir(sessionId) : undefined) ??
     process.env['QWEN_CODE_PROJECT_DIR'];
@@ -137,10 +137,10 @@ export function getShellContextEnvVars(): Record<string, string> {
   // The CLI a subprocess should call to reach *this* build.
   //
   // A skill that shells out to `qwen …` gets whatever `qwen` PATH resolves to,
-  // which is not necessarily the code that launched it: run `npm run dev:daemon`
+  // which is not necessarily the code that launched it: run a source checkout
   // on a machine with an older global install and every `qwen review …` the
   // /review skill issues lands in the old binary. Measured: a current-source
-  // daemon told its shell to run `qwen review agent-prompt --role 0`, PATH
+  // session told its shell to run `qwen review agent-prompt --role 0`, PATH
   // resolved to a v0.19.10 global whose `agent-prompt` predates `--role`, and the
   // run died on `Missing required argument: chunk` — the skill and the CLI running
   // it were different programs.
@@ -177,7 +177,7 @@ export function getShellContextEnvVars(): Record<string, string> {
   // publishes it per session and republishes on every model change
   // (publishModelEnv in config.ts). Keyed on this session exactly as the
   // project dir above is — a process-global slot would hold whichever session
-  // booted first, and in daemon mode every later one would hand its
+  // booted first, and with several sessions every later one would hand its
   // subprocesses another session's model. Falls back to the global slot for the
   // single-session CLI. Omitted (not blanked) when absent, for the session ID's
   // reason — no value in this process means the spawn-site spread has nothing

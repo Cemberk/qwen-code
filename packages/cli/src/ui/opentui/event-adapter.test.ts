@@ -860,16 +860,6 @@ describe('event-adapter (ServerGeminiStreamEvent -> neutral)', () => {
         }),
       ).toBe('Deploy where?\nStaging');
     });
-
-    it('renders mcp_app with its fallbackText only', () => {
-      expect(
-        renderResultDisplay({
-          type: 'mcp_app',
-          html: '<b>must not leak</b>',
-          fallbackText: 'app fallback',
-        }),
-      ).toBe('app fallback');
-    });
   });
 
   describe('toolResultEvent payload precedence', () => {

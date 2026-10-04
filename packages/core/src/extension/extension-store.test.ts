@@ -18,6 +18,16 @@ import {
 } from './extension-store.js';
 import { mockCompromisedLock } from '../test-utils/mock-compromised-lock.js';
 
+/** Initializes the store under its lock, as `readConsistent` does. */
+function ensureInitialized(
+  store: ExtensionStore,
+  extensions: Parameters<ExtensionStore['ensureInitializedUnlocked']>[0],
+) {
+  return store['withLock'](() =>
+    store['ensureInitializedUnlocked'](extensions),
+  );
+}
+
 describe('ExtensionStore', () => {
   let root: string;
   let extensionsDir: string;
@@ -42,6 +52,22 @@ describe('ExtensionStore', () => {
 
   const makeStore = () =>
     new ExtensionStore({ extensionsDir, storeDir, enablementPath });
+
+  // A live policy mutation: scoping an extension to one workspace disables
+  // it by default and enables it only there.
+  const scopedWorkspace = workspacePath('scoped');
+  const disableByDefault = (
+    store: ExtensionStore,
+    identity: { id: string; name: string },
+  ) =>
+    store.setActivationScope(identity, {
+      scope: 'workspace',
+      workspacePath: scopedWorkspace,
+    });
+  const enableByDefault = (
+    store: ExtensionStore,
+    identity: { id: string; name: string },
+  ) => store.setActivationScope(identity, { scope: 'user' });
 
   const readQuarantinedJournal = async (journal: string): Promise<string> => {
     const prefix = `${path.basename(journal)}.corrupt-`;
@@ -76,7 +102,7 @@ describe('ExtensionStore', () => {
     );
     const store = makeStore();
 
-    const snapshot = await store.ensureInitialized([
+    const snapshot = await ensureInitialized(store, [
       { id: 'a'.repeat(64), name: 'demo' },
     ]);
 
@@ -103,7 +129,7 @@ describe('ExtensionStore', () => {
     await fsp.writeFile(enablementPath, projection);
 
     await expect(
-      store.ensureInitialized([
+      ensureInitialized(store, [
         { id: 'a1'.repeat(32), name: 'Demo' },
         { id: 'a2'.repeat(32), name: 'demo' },
       ]),
@@ -111,414 +137,6 @@ describe('ExtensionStore', () => {
 
     expect(fs.existsSync(path.join(storeDir, 'state.json'))).toBe(false);
     expect(await fsp.readFile(enablementPath, 'utf8')).toBe(projection);
-  });
-
-  it('preserves exact workspace overrides when the global default changes', async () => {
-    const store = makeStore();
-    const id = 'b'.repeat(64);
-    await store.ensureInitialized([{ id, name: 'demo' }]);
-    await store.setWorkspaceActivation(
-      { id, name: 'demo' },
-      workspacePath('a'),
-      'enabled',
-    );
-
-    const snapshot = await store.setDefaultActivation(
-      { id, name: 'demo' },
-      'disabled',
-    );
-
-    expect(snapshot.generation).toBe(2);
-    expect(snapshot.extensions[id]?.workspaceOverrides).toEqual({
-      [workspacePath('a')]: 'enabled',
-    });
-    expect(
-      store.getActivation(snapshot, id, 'demo', workspacePath('a')),
-    ).toMatchObject({ effective: 'enabled', source: 'workspace_override' });
-  });
-
-  it('merges concurrent skill batches without splitting workspace aliases or losing other entries', async () => {
-    const workspace = path.join(root, 'workspace');
-    const alias = path.join(root, 'workspace-alias');
-    await fsp.mkdir(workspace);
-    await fsp.symlink(
-      workspace,
-      alias,
-      process.platform === 'win32' ? 'junction' : 'dir',
-    );
-    const identity = { id: 'a1'.repeat(32), name: 'suite' };
-    const other = { id: 'b1'.repeat(32), name: 'other' };
-    const store = makeStore();
-    const initial = await store.ensureInitialized([identity, other]);
-    const results = await Promise.all([
-      store.setSkillWorkspaceOverrides(
-        identity,
-        workspace,
-        Object.fromEntries([
-          ['__proto__', false],
-          ['skill-a', false],
-        ]),
-        0,
-      ),
-      makeStore().setSkillWorkspaceOverrides(
-        identity,
-        alias,
-        { constructor: true },
-        0,
-      ),
-      makeStore().setSkillWorkspaceOverrides(
-        identity,
-        workspacePath('other'),
-        { 'skill-a': true },
-        0,
-      ),
-      makeStore().setSkillWorkspaceOverrides(
-        other,
-        workspace,
-        { 'skill-a': true },
-        0,
-      ),
-    ]);
-    expect(results.map((result) => result.generation).sort()).toEqual([
-      initial.generation + 1,
-      initial.generation + 2,
-      initial.generation + 3,
-      initial.generation + 4,
-    ]);
-    const snapshot = await makeStore().readSnapshot();
-    expect(snapshot.extensions[identity.id]?.skillWorkspaceOverrides).toEqual({
-      [await fsp.realpath(workspace)]: Object.fromEntries([
-        ['__proto__', false],
-        ['skill-a', false],
-        ['constructor', true],
-      ]),
-      [workspacePath('other')]: { 'skill-a': true },
-    });
-    expect(
-      store.getSkillWorkspaceOverride(
-        snapshot,
-        identity.id,
-        alias,
-        '__proto__',
-      ),
-    ).toBe(false);
-    expect(
-      store.getSkillWorkspaceOverride(
-        snapshot,
-        identity.id,
-        alias,
-        'Constructor',
-      ),
-    ).toBe(true);
-    expect(
-      store.getSkillWorkspaceOverride(snapshot, identity.id, alias, 'toString'),
-    ).toBeNull();
-    expect(
-      store.getSkillWorkspaceOverride(snapshot, other.id, workspace, 'skill-a'),
-    ).toBe(true);
-  });
-
-  it('preserves skill overrides on update and rejects stale or closed-workspace commits without writing', async () => {
-    const identity = { id: 'd1'.repeat(32), name: 'suite' };
-    const store = makeStore();
-    const destinationDirectory = path.join(extensionsDir, identity.name);
-    await fsp.mkdir(destinationDirectory);
-    await store.ensureInitialized([identity]);
-    await store.setSkillWorkspaceOverrides(
-      identity,
-      workspacePath('a'),
-      { review: false },
-      0,
-    );
-    const updated = await store.commitArtifact({
-      operation: 'update',
-      identity,
-      destinationDirectory,
-      stagingDirectory: await store.createStagingDirectory(),
-      expectedArtifactGeneration: 0,
-    });
-    expect(
-      store.getSkillWorkspaceOverride(
-        updated,
-        identity.id,
-        workspacePath('a'),
-        'review',
-      ),
-    ).toBe(false);
-    await expect(
-      store.setSkillWorkspaceOverrides(
-        identity,
-        workspacePath('a'),
-        { review: true },
-        0,
-      ),
-    ).rejects.toBeInstanceOf(ExtensionConflictError);
-    await expect(
-      store.setSkillWorkspaceOverrides(
-        identity,
-        workspacePath('a'),
-        { review: true },
-        updated.extensions[identity.id]!.artifactGeneration!,
-        () => {
-          throw new Error('workspace closed');
-        },
-      ),
-    ).rejects.toThrow('workspace closed');
-    expect(await store.readSnapshot()).toEqual(updated);
-    const uninstalled = await store.commitArtifact({
-      operation: 'uninstall',
-      identity,
-      destinationDirectory,
-    });
-    expect(uninstalled.extensions[identity.id]).toBeUndefined();
-  });
-
-  it('changes multiple workspace activations in one generation', async () => {
-    const store = makeStore();
-    const identities = [
-      { id: 'b1'.repeat(32), name: 'first' },
-      { id: 'b2'.repeat(32), name: 'second' },
-    ];
-    const initial = await store.ensureInitialized(identities);
-
-    const snapshot = await store.setWorkspaceActivations(
-      identities,
-      workspacePath('batch'),
-      'disabled',
-    );
-
-    expect(snapshot.generation).toBe(initial.generation + 1);
-    for (const identity of identities) {
-      expect(
-        store.getActivation(
-          snapshot,
-          identity.id,
-          identity.name,
-          workspacePath('batch'),
-        ),
-      ).toMatchObject({
-        effective: 'disabled',
-        source: 'workspace_override',
-      });
-    }
-  });
-
-  it('changes multiple default activations in one generation', async () => {
-    const store = makeStore();
-    const identities = [
-      { id: 'b7'.repeat(32), name: 'first' },
-      { id: 'b8'.repeat(32), name: 'second' },
-    ];
-    const initial = await store.ensureInitialized(identities);
-
-    const snapshot = await store.setDefaultActivations(identities, 'disabled');
-
-    expect(snapshot.generation).toBe(initial.generation + 1);
-    for (const identity of identities) {
-      expect(snapshot.extensions[identity.id]?.defaultActivation).toBe(
-        'disabled',
-      );
-    }
-  });
-
-  it('clears multiple workspace activations in one generation', async () => {
-    const store = makeStore();
-    const identities = [
-      { id: 'b9'.repeat(32), name: 'first' },
-      { id: 'ba'.repeat(32), name: 'second' },
-    ];
-    await store.ensureInitialized(identities);
-    for (const identity of identities) {
-      await store.setLegacyPathActivation(
-        identity,
-        workspacePath('batch'),
-        'disabled',
-      );
-    }
-    const before = await store.setWorkspaceActivations(
-      identities,
-      workspacePath('batch'),
-      'enabled',
-    );
-
-    const outcome = await store.clearWorkspaceActivations(
-      identities,
-      workspacePath('batch'),
-    );
-    const snapshot = outcome.snapshot;
-
-    expect(outcome.updated).toBe(true);
-    expect(snapshot.generation).toBe(before.generation + 1);
-    for (const identity of identities) {
-      expect(
-        store.getActivation(
-          snapshot,
-          identity.id,
-          identity.name,
-          workspacePath('batch'),
-        ),
-      ).toMatchObject({
-        workspace: 'inherit',
-        effective: 'enabled',
-        source: 'default',
-      });
-    }
-  });
-
-  it('does not declare an unknown identity when clearing workspace activation', async () => {
-    const store = makeStore();
-    const identity = { id: 'cb'.repeat(32), name: 'future' };
-    const initial = await store.ensureInitialized([]);
-
-    const outcome = await store.clearWorkspaceActivations(
-      [identity],
-      workspacePath('batch'),
-    );
-
-    expect(outcome.updated).toBe(false);
-    expect(outcome.snapshot.generation).toBe(initial.generation);
-    expect(outcome.snapshot.extensions[identity.id]).toBeUndefined();
-
-    const staging = await store.createStagingDirectory();
-    await fsp.writeFile(path.join(staging, 'qwen-extension.json'), '{}');
-    const installed = await store.commitArtifact({
-      operation: 'install',
-      identity,
-      stagingDirectory: staging,
-      destinationDirectory: path.join(extensionsDir, identity.name),
-      initialActivation: {
-        scope: 'workspace',
-        workspacePath: workspacePath('install'),
-      },
-    });
-
-    expect(installed.extensions[identity.id]).toMatchObject({
-      defaultActivation: 'disabled',
-      workspaceOverrides: { [workspacePath('install')]: 'enabled' },
-    });
-  });
-
-  it('declares a missing identity in the same batch generation', async () => {
-    const store = makeStore();
-    const installed = { id: 'b3'.repeat(32), name: 'installed' };
-    const declared = { id: 'b4'.repeat(32), name: 'declared' };
-    const initial = await store.ensureInitialized([installed]);
-
-    const snapshot = await store.setWorkspaceActivations(
-      [installed, declared],
-      workspacePath('batch'),
-      'disabled',
-    );
-
-    expect(snapshot.generation).toBe(initial.generation + 1);
-    expect(snapshot.extensions[installed.id]?.workspaceOverrides).toEqual({
-      [workspacePath('batch')]: 'disabled',
-    });
-    expect(snapshot.extensions[declared.id]).toEqual({
-      name: declared.name,
-      declarationOnly: true,
-      defaultActivation: 'enabled',
-      workspaceOverrides: { [workspacePath('batch')]: 'disabled' },
-    });
-  });
-
-  it('does not commit a batch when an identity name mismatches', async () => {
-    const store = makeStore();
-    const installed = { id: 'bb'.repeat(32), name: 'installed' };
-    const initial = await store.ensureInitialized([installed]);
-
-    await expect(
-      store.setDefaultActivations(
-        [{ id: installed.id, name: 'different' }],
-        'disabled',
-      ),
-    ).rejects.toThrow(
-      `Extension id ${installed.id} belongs to "installed", not "different".`,
-    );
-
-    const snapshot = await store.readSnapshot();
-    expect(snapshot.generation).toBe(initial.generation);
-    expect(snapshot.extensions[installed.id]?.defaultActivation).toBe(
-      'enabled',
-    );
-  });
-
-  it('declares a batch before the store is initialized', async () => {
-    const store = makeStore();
-    const identity = { id: 'bc'.repeat(32), name: 'declared' };
-    await fsp.writeFile(
-      enablementPath,
-      JSON.stringify({
-        [identity.name]: { overrides: ['!/legacy/*'] },
-        unrelated: { overrides: ['!/unrelated/*'] },
-      }),
-    );
-
-    const snapshot = await store.setDefaultActivations([identity], 'disabled');
-
-    expect(snapshot.generation).toBe(1);
-    expect(snapshot.extensions[identity.id]).toEqual({
-      name: identity.name,
-      declarationOnly: true,
-      defaultActivation: 'disabled',
-      workspaceOverrides: {},
-      legacyPathRules: ['!/legacy/*'],
-    });
-    expect(snapshot.legacyProjectionRemainder).toEqual({
-      unrelated: { overrides: ['!/unrelated/*'] },
-    });
-    expect(JSON.parse(await fsp.readFile(enablementPath, 'utf8'))).toEqual({
-      unrelated: { overrides: ['!/unrelated/*'] },
-      [identity.name]: { overrides: ['!/*', '!/legacy/*'] },
-    });
-
-    const staging = await store.createStagingDirectory();
-    await fsp.writeFile(path.join(staging, 'qwen-extension.json'), '{}');
-    const installedIdentity = { id: 'bd'.repeat(32), name: identity.name };
-    const installed = await store.commitArtifact({
-      operation: 'install',
-      identity: installedIdentity,
-      stagingDirectory: staging,
-      destinationDirectory: path.join(extensionsDir, identity.name),
-      initialActivation: { scope: 'user' },
-    });
-
-    expect(installed.extensions[identity.id]).toBeUndefined();
-    expect(installed.extensions[installedIdentity.id]).toMatchObject({
-      name: identity.name,
-      defaultActivation: 'disabled',
-    });
-    expect(installed.legacyProjectionRemainder).toEqual({
-      unrelated: { overrides: ['!/unrelated/*'] },
-    });
-    expect(JSON.parse(await fsp.readFile(enablementPath, 'utf8'))).toEqual({
-      unrelated: { overrides: ['!/unrelated/*'] },
-      [identity.name]: { overrides: ['!/*', '!/legacy/*'] },
-    });
-  });
-
-  it('imports legacy rules case-insensitively for a batch declaration', async () => {
-    const store = makeStore();
-    const identity = { id: 'c0'.repeat(32), name: 'declared' };
-    await fsp.writeFile(
-      enablementPath,
-      JSON.stringify({
-        Declared: { overrides: ['!/legacy/*'] },
-      }),
-    );
-
-    const snapshot = await store.setDefaultActivations([identity], 'disabled');
-
-    expect(snapshot.extensions[identity.id]).toMatchObject({
-      name: identity.name,
-      declarationOnly: true,
-      defaultActivation: 'disabled',
-      legacyPathRules: ['!/legacy/*'],
-    });
-    expect(snapshot.legacyProjectionRemainder).toBeUndefined();
-    expect(JSON.parse(await fsp.readFile(enablementPath, 'utf8'))).toEqual({
-      [identity.name]: { overrides: ['!/*', '!/legacy/*'] },
-    });
   });
 
   it.each([
@@ -535,10 +153,7 @@ describe('ExtensionStore', () => {
     await fsp.writeFile(enablementPath, original);
 
     await expect(
-      store.setDefaultActivations(
-        [{ id: 'cf'.repeat(32), name: 'demo' }],
-        'disabled',
-      ),
+      ensureInitialized(store, [{ id: 'cf'.repeat(32), name: 'demo' }]),
     ).rejects.toMatchObject({ code: 'extension_store_corrupt' });
 
     await expect(
@@ -547,168 +162,19 @@ describe('ExtensionStore', () => {
     await expect(fsp.readFile(enablementPath, 'utf8')).resolves.toBe(original);
   });
 
-  it('keeps a newer V1 removal from resurrecting a persisted remainder', async () => {
-    const store = makeStore();
-    const identity = { id: 'ce'.repeat(32), name: 'declared' };
-    await fsp.writeFile(
-      enablementPath,
-      JSON.stringify({ unrelated: { overrides: ['!/unrelated/*'] } }),
-    );
-    const declared = await store.setDefaultActivations([identity], 'enabled');
-    expect(declared.legacyProjectionRemainder).toEqual({
-      unrelated: { overrides: ['!/unrelated/*'] },
-    });
-    await fsp.writeFile(enablementPath, '{}');
-    const stateStat = await fsp.stat(path.join(storeDir, 'state.json'));
-    const newer = new Date(stateStat.mtimeMs + 10_000);
-    await fsp.utimes(enablementPath, newer, newer);
-
-    const reconciled = await store.ensureInitialized([]);
-
-    expect(reconciled.generation).toBe(declared.generation + 1);
-    expect(reconciled.legacyProjectionRemainder).toBeUndefined();
-    expect(JSON.parse(await fsp.readFile(enablementPath, 'utf8'))).toEqual({});
-  });
-
-  it('imports a persisted legacy remainder while repairing an older projection', async () => {
-    const store = makeStore();
-    const trigger = { id: 'c1'.repeat(32), name: 'trigger' };
-    const discovered = { id: 'c2'.repeat(32), name: 'future' };
-    await fsp.writeFile(
-      enablementPath,
-      JSON.stringify({
-        Future: { overrides: ['!/future/*'] },
-        unrelated: { overrides: ['!/unrelated/*'] },
-      }),
-    );
-    const declared = await store.setDefaultActivations([trigger], 'enabled');
-    await fsp.writeFile(enablementPath, '{}');
-    await fsp.utimes(enablementPath, new Date(0), new Date(0));
-
-    const snapshot = await store.ensureInitialized([discovered]);
-
-    expect(snapshot.generation).toBe(declared.generation + 1);
-    expect(snapshot.extensions[discovered.id]).toMatchObject({
-      name: discovered.name,
-      defaultActivation: 'enabled',
-      workspaceOverrides: {},
-      legacyPathRules: ['!/future/*'],
-    });
-    expect(snapshot.legacyProjectionRemainder).toEqual({
-      unrelated: { overrides: ['!/unrelated/*'] },
-    });
-    expect(JSON.parse(await fsp.readFile(enablementPath, 'utf8'))).toEqual({
-      unrelated: { overrides: ['!/unrelated/*'] },
-      [discovered.name]: { overrides: ['!/future/*'] },
-    });
-  });
-
-  it('preserves an authoritative V2 remainder during a batch mutation', async () => {
-    const store = makeStore();
-    const trigger = { id: 'c3'.repeat(32), name: 'trigger' };
-    await fsp.writeFile(
-      enablementPath,
-      JSON.stringify({
-        future: { overrides: ['!/future/*'] },
-        unrelated: { overrides: ['!/unrelated/*'] },
-      }),
-    );
-    const declared = await store.setDefaultActivations([trigger], 'enabled');
-    await fsp.writeFile(
-      enablementPath,
-      JSON.stringify({ unrelated: { overrides: ['!/unrelated/*'] } }),
-    );
-    const stateStat = await fsp.stat(path.join(storeDir, 'state.json'));
-    const older = new Date(stateStat.mtimeMs - 10_000);
-    await fsp.utimes(enablementPath, older, older);
-
-    const updated = await store.setDefaultActivations([trigger], 'disabled');
-
-    expect(updated.generation).toBe(declared.generation + 1);
-    expect(updated.legacyProjectionRemainder).toEqual({
-      future: { overrides: ['!/future/*'] },
-      unrelated: { overrides: ['!/unrelated/*'] },
-    });
-    expect(JSON.parse(await fsp.readFile(enablementPath, 'utf8'))).toEqual({
-      future: { overrides: ['!/future/*'] },
-      unrelated: { overrides: ['!/unrelated/*'] },
-      [trigger.name]: { overrides: ['!/*'] },
-    });
-  });
-
-  it('imports a newer V1 rule during a batch mutation', async () => {
-    const store = makeStore();
-    const identity = { id: 'c4'.repeat(32), name: 'demo' };
-    const initialized = await store.ensureInitialized([identity]);
-    await fsp.writeFile(
-      enablementPath,
-      JSON.stringify({
-        demo: { overrides: ['!/legacy/*'] },
-        future: { overrides: ['!/future/*'] },
-      }),
-    );
-    const stateStat = await fsp.stat(path.join(storeDir, 'state.json'));
-    const newer = new Date(stateStat.mtimeMs + 10_000);
-    await fsp.utimes(enablementPath, newer, newer);
-
-    const updated = await store.setDefaultActivations([identity], 'disabled');
-
-    expect(updated.generation).toBe(initialized.generation + 1);
-    expect(updated.extensions[identity.id]).toMatchObject({
-      defaultActivation: 'disabled',
-      legacyPathRules: ['!/legacy/*'],
-    });
-    expect(updated.legacyProjectionRemainder).toEqual({
-      future: { overrides: ['!/future/*'] },
-    });
-    expect(JSON.parse(await fsp.readFile(enablementPath, 'utf8'))).toEqual({
-      demo: { overrides: ['!/*', '!/legacy/*'] },
-      future: { overrides: ['!/future/*'] },
-    });
-  });
-
-  it('keeps singular activation mutations installed-only', async () => {
-    const store = makeStore();
-    const identity = { id: 'bd'.repeat(32), name: 'declared' };
-    const declared = await store.setDefaultActivations([identity], 'disabled');
-
-    await expect(
-      store.setDefaultActivation(identity, 'enabled'),
-    ).rejects.toMatchObject({ code: 'extension_conflict' });
-
-    expect(await store.readSnapshot()).toEqual(declared);
-  });
-
-  it('rejects an empty batch without materializing store state', async () => {
-    const legacy = {
-      demo: { overrides: ['!/work/*', '/work/enabled/*'] },
-    };
-    await fsp.writeFile(enablementPath, JSON.stringify(legacy));
-    const store = makeStore();
-
-    await expect(store.setDefaultActivations([], 'disabled')).rejects.toThrow(
-      'At least one extension identity is required.',
-    );
-
-    expect(fs.existsSync(path.join(storeDir, 'state.json'))).toBe(false);
-    expect(JSON.parse(await fsp.readFile(enablementPath, 'utf8'))).toEqual(
-      legacy,
-    );
-  });
-
   it('re-keys a policy to a new id for the same name after an id-formula change', async () => {
     const store = makeStore();
     const oldId = 'a'.repeat(64);
     const newId = 'b'.repeat(64);
-    await store.ensureInitialized([{ id: oldId, name: 'dotnet' }]);
-    await store.setDefaultActivation({ id: oldId, name: 'dotnet' }, 'disabled');
+    await ensureInitialized(store, [{ id: oldId, name: 'dotnet' }]);
+    await disableByDefault(store, { id: oldId, name: 'dotnet' });
     await store.setWorkspaceActivation(
       { id: oldId, name: 'dotnet' },
       workspacePath('a'),
       'enabled',
     );
 
-    const snapshot = await store.ensureInitialized([
+    const snapshot = await ensureInitialized(store, [
       { id: newId, name: 'dotnet' },
     ]);
 
@@ -734,9 +200,9 @@ describe('ExtensionStore', () => {
       destinationDirectory: path.join(extensionsDir, oldIdentity.name),
       initialActivation: { scope: 'user' },
     });
-    await store.setDefaultActivation({ id: oldId, name: 'DotNet' }, 'disabled');
+    await disableByDefault(store, { id: oldId, name: 'DotNet' });
 
-    const snapshot = await store.ensureInitialized([
+    const snapshot = await ensureInitialized(store, [
       { id: newId, name: 'dotnet' },
     ]);
 
@@ -766,61 +232,6 @@ describe('ExtensionStore', () => {
     expect(fs.existsSync(path.join(extensionsDir, 'DotNet'))).toBe(false);
   });
 
-  it('adopts a manifest rename and its declared activation', async () => {
-    const store = makeStore();
-    const identity = { id: 'd1'.repeat(32), name: 'before' };
-    const declaration = { id: 'd2'.repeat(32), name: 'after' };
-    const staging = await store.createStagingDirectory();
-    await fsp.writeFile(path.join(staging, 'version'), 'before');
-    await store.commitArtifact({
-      operation: 'install',
-      identity,
-      stagingDirectory: staging,
-      destinationDirectory: path.join(extensionsDir, identity.name),
-      initialActivation: { scope: 'user' },
-    });
-    const declared = await store.setDefaultActivations(
-      [declaration],
-      'disabled',
-    );
-
-    const renamed = await store.ensureInitialized([
-      { id: identity.id, name: declaration.name },
-    ]);
-
-    expect(renamed.generation).toBe(declared.generation + 1);
-    expect(renamed.extensions[declaration.id]).toBeUndefined();
-    expect(renamed.extensions[identity.id]).toMatchObject({
-      name: 'after',
-      artifactDirectory: 'before',
-      defaultActivation: 'disabled',
-    });
-    expect(renamed.extensions[identity.id]?.declarationOnly).toBeUndefined();
-    expect(renamed.extensions[identity.id]?.artifactGeneration).toBeDefined();
-    expect(fs.existsSync(path.join(extensionsDir, 'before'))).toBe(true);
-    expect(fs.existsSync(path.join(extensionsDir, 'after'))).toBe(false);
-    expect(renamed.legacyProjectionRemainder).toBeUndefined();
-    expect(JSON.parse(await fsp.readFile(enablementPath, 'utf8'))).toEqual({
-      after: { overrides: ['!/*'] },
-    });
-
-    const activated = await store.setDefaultActivations(
-      [{ id: identity.id, name: 'after' }],
-      'enabled',
-    );
-    expect(activated.extensions[identity.id]?.declarationOnly).toBeUndefined();
-
-    const uninstalled = await store.commitArtifact({
-      operation: 'uninstall',
-      identity: { id: identity.id, name: 'after' },
-      destinationDirectory: path.join(extensionsDir, 'after'),
-    });
-    expect(uninstalled.extensions[identity.id]).toBeUndefined();
-    expect(fs.existsSync(path.join(extensionsDir, 'before'))).toBe(false);
-    expect(fs.existsSync(path.join(extensionsDir, 'after'))).toBe(false);
-    expect((await store.ensureInitialized([])).extensions).toEqual({});
-  });
-
   it('removes an obsolete old name from a newer V1 projection on rename', async () => {
     const store = makeStore();
     const identity = { id: 'd3'.repeat(32), name: 'before' };
@@ -833,7 +244,7 @@ describe('ExtensionStore', () => {
       destinationDirectory: path.join(extensionsDir, identity.name),
       initialActivation: { scope: 'user' },
     });
-    const disabled = await store.setDefaultActivation(identity, 'disabled');
+    const disabled = await disableByDefault(store, identity);
     await fsp.writeFile(
       enablementPath,
       JSON.stringify({
@@ -845,7 +256,7 @@ describe('ExtensionStore', () => {
     const newer = new Date(stateStat.mtimeMs + 10_000);
     await fsp.utimes(enablementPath, newer, newer);
 
-    const renamed = await store.ensureInitialized([
+    const renamed = await ensureInitialized(store, [
       { id: identity.id, name: 'after' },
     ]);
 
@@ -858,7 +269,7 @@ describe('ExtensionStore', () => {
       future: { overrides: ['!/future/*'] },
     });
     expect(JSON.parse(await fsp.readFile(enablementPath, 'utf8'))).toEqual({
-      after: { overrides: ['!/*'] },
+      after: { overrides: ['!/*', legacyWorkspaceRule(scopedWorkspace)] },
       future: { overrides: ['!/future/*'] },
     });
   });
@@ -868,9 +279,9 @@ describe('ExtensionStore', () => {
     const repoOnlyId = 'a'.repeat(64);
     const dotnetId = 'b'.repeat(64);
     const dotnetTestId = 'c'.repeat(64);
-    await store.ensureInitialized([{ id: repoOnlyId, name: 'dotnet' }]);
+    await ensureInitialized(store, [{ id: repoOnlyId, name: 'dotnet' }]);
 
-    const snapshot = await store.ensureInitialized([
+    const snapshot = await ensureInitialized(store, [
       { id: dotnetId, name: 'dotnet' },
       { id: dotnetTestId, name: 'dotnet-test' },
     ]);
@@ -884,9 +295,9 @@ describe('ExtensionStore', () => {
     const store = makeStore();
     const demoId = 'a'.repeat(64);
     const otherId = 'b'.repeat(64);
-    await store.ensureInitialized([{ id: demoId, name: 'demo' }]);
+    await ensureInitialized(store, [{ id: demoId, name: 'demo' }]);
 
-    const snapshot = await store.ensureInitialized([
+    const snapshot = await ensureInitialized(store, [
       { id: demoId, name: 'demo' },
       { id: otherId, name: 'other' },
     ]);
@@ -906,7 +317,7 @@ describe('ExtensionStore', () => {
     );
     const store = makeStore();
     const id = 'c'.repeat(64);
-    await store.ensureInitialized([{ id, name: 'demo' }]);
+    await ensureInitialized(store, [{ id, name: 'demo' }]);
 
     const snapshot = await store.clearWorkspaceActivation(
       { id, name: 'demo' },
@@ -930,7 +341,7 @@ describe('ExtensionStore', () => {
     const id = 'd'.repeat(64);
     const first = makeStore();
     const second = makeStore();
-    await first.ensureInitialized([{ id, name: 'demo' }]);
+    await ensureInitialized(first, [{ id, name: 'demo' }]);
 
     await Promise.all([
       first.setWorkspaceActivation(
@@ -956,7 +367,7 @@ describe('ExtensionStore', () => {
   it('preserves a committed result when lock release reports an error', async () => {
     const store = makeStore();
     const identity = { id: 'd3'.repeat(32), name: 'demo' };
-    await store.ensureInitialized([identity]);
+    await ensureInitialized(store, [identity]);
     const lock = lockfile.lock.bind(lockfile);
     const lockSpy = vi
       .spyOn(lockfile, 'lock')
@@ -969,9 +380,9 @@ describe('ExtensionStore', () => {
       });
 
     try {
-      await expect(
-        store.setDefaultActivation(identity, 'disabled'),
-      ).resolves.toMatchObject({ generation: 1 });
+      await expect(disableByDefault(store, identity)).resolves.toMatchObject({
+        generation: 1,
+      });
     } finally {
       lockSpy.mockRestore();
     }
@@ -990,9 +401,11 @@ describe('ExtensionStore', () => {
     const { lockSpy, getOnCompromised } = mockCompromisedLock();
 
     try {
-      await expect(store.ensureInitialized([identity])).resolves.toMatchObject({
-        generation: 0,
-      });
+      await expect(ensureInitialized(store, [identity])).resolves.toMatchObject(
+        {
+          generation: 0,
+        },
+      );
       expect(getOnCompromised()).toBeTypeOf('function');
     } finally {
       lockSpy.mockRestore();
@@ -1002,7 +415,7 @@ describe('ExtensionStore', () => {
   it('serializes mutations from two Node processes sharing QWEN_HOME', async () => {
     const id = 'd2'.repeat(32);
     const store = makeStore();
-    await store.ensureInitialized([{ id, name: 'demo' }]);
+    await ensureInitialized(store, [{ id, name: 'demo' }]);
     const moduleUrl = new URL('./extension-store.ts', import.meta.url).href;
     const runChild = async (workspacePath: string, activation: string) => {
       const source = `
@@ -1049,7 +462,7 @@ describe('ExtensionStore', () => {
   it('holds mutation commits while a consistent artifact snapshot is read', async () => {
     const id = 'd3'.repeat(32);
     const store = makeStore();
-    await store.ensureInitialized([{ id, name: 'demo' }]);
+    await ensureInitialized(store, [{ id, name: 'demo' }]);
     let releaseRead!: () => void;
     const readGate = new Promise<void>((resolve) => {
       releaseRead = resolve;
@@ -1068,11 +481,11 @@ describe('ExtensionStore', () => {
     });
     await started;
     let mutationSettled = false;
-    const mutation = store
-      .setDefaultActivation({ id, name: 'demo' }, 'disabled')
-      .finally(() => {
+    const mutation = disableByDefault(store, { id, name: 'demo' }).finally(
+      () => {
         mutationSettled = true;
-      });
+      },
+    );
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(mutationSettled).toBe(false);
 
@@ -1093,7 +506,7 @@ describe('ExtensionStore', () => {
       const linkedWorkspace = path.join(root, 'linked-workspace');
       await fsp.mkdir(realWorkspace);
       await fsp.symlink(realWorkspace, linkedWorkspace);
-      await store.ensureInitialized([{ id, name: 'demo' }]);
+      await ensureInitialized(store, [{ id, name: 'demo' }]);
 
       const snapshot = await store.setWorkspaceActivation(
         { id, name: 'demo' },
@@ -1128,7 +541,7 @@ describe('ExtensionStore', () => {
       );
       const store = makeStore();
       const identity = { id: 'd2'.repeat(32), name: 'demo' };
-      let snapshot = await store.ensureInitialized([identity]);
+      let snapshot = await ensureInitialized(store, [identity]);
 
       expect(
         store.getActivation(
@@ -1180,9 +593,12 @@ describe('ExtensionStore', () => {
   it('writes a V1 projection after every policy mutation', async () => {
     const store = makeStore();
     const id = 'e'.repeat(64);
-    await store.ensureInitialized([{ id, name: 'demo' }]);
+    await ensureInitialized(store, [{ id, name: 'demo' }]);
 
-    await store.setDefaultActivation({ id, name: 'demo' }, 'disabled');
+    await store.setActivationScope(
+      { id, name: 'demo' },
+      { scope: 'workspace', workspacePath: workspacePath('a') },
+    );
     await store.setWorkspaceActivation(
       { id, name: 'demo' },
       workspacePath('a'),
@@ -1207,9 +623,12 @@ describe('ExtensionStore', () => {
       // literals here, where the workspace path is a stable POSIX string.
       const store = makeStore();
       const id = 'f'.repeat(64);
-      await store.ensureInitialized([{ id, name: 'demo' }]);
+      await ensureInitialized(store, [{ id, name: 'demo' }]);
 
-      await store.setDefaultActivation({ id, name: 'demo' }, 'disabled');
+      await store.setActivationScope(
+        { id, name: 'demo' },
+        { scope: 'workspace', workspacePath: workspacePath('a') },
+      );
       await store.setWorkspaceActivation(
         { id, name: 'demo' },
         workspacePath('a'),
@@ -1226,29 +645,26 @@ describe('ExtensionStore', () => {
   it('repairs an older V1 projection without changing generation', async () => {
     const store = makeStore();
     const id = 'e1'.repeat(32);
-    await store.ensureInitialized([{ id, name: 'demo' }]);
-    const changed = await store.setDefaultActivation(
-      { id, name: 'demo' },
-      'disabled',
-    );
+    await ensureInitialized(store, [{ id, name: 'demo' }]);
+    const changed = await disableByDefault(store, { id, name: 'demo' });
     await fsp.writeFile(enablementPath, '{}');
     const stateStat = await fsp.stat(path.join(storeDir, 'state.json'));
     const older = new Date(stateStat.mtimeMs - 1_000);
     await fsp.utimes(enablementPath, older, older);
 
-    const repaired = await store.ensureInitialized([{ id, name: 'demo' }]);
+    const repaired = await ensureInitialized(store, [{ id, name: 'demo' }]);
 
     expect(repaired.generation).toBe(changed.generation);
     expect(JSON.parse(await fsp.readFile(enablementPath, 'utf8'))).toEqual({
-      demo: { overrides: ['!/*'] },
+      demo: { overrides: ['!/*', legacyWorkspaceRule(scopedWorkspace)] },
     });
   });
 
   it('fails closed when state and a different V1 projection have equal mtimes', async () => {
     const store = makeStore();
     const id = 'e6'.repeat(32);
-    await store.ensureInitialized([{ id, name: 'demo' }]);
-    await store.setDefaultActivation({ id, name: 'demo' }, 'disabled');
+    await ensureInitialized(store, [{ id, name: 'demo' }]);
+    await disableByDefault(store, { id, name: 'demo' });
     await fsp.writeFile(enablementPath, '{}');
     const sameTime = new Date(Math.floor(Date.now() / 1_000) * 1_000);
     await Promise.all([
@@ -1257,7 +673,7 @@ describe('ExtensionStore', () => {
     ]);
 
     await expect(
-      store.ensureInitialized([{ id, name: 'demo' }]),
+      ensureInitialized(store, [{ id, name: 'demo' }]),
     ).rejects.toBeInstanceOf(ExtensionStoreCorruptError);
     expect(JSON.parse(await fsp.readFile(enablementPath, 'utf8'))).toEqual({});
   });
@@ -1265,11 +681,8 @@ describe('ExtensionStore', () => {
   it('keeps V2 reads available when an older V1 projection cannot be repaired', async () => {
     const store = makeStore();
     const id = 'e5'.repeat(32);
-    await store.ensureInitialized([{ id, name: 'demo' }]);
-    const changed = await store.setDefaultActivation(
-      { id, name: 'demo' },
-      'disabled',
-    );
+    await ensureInitialized(store, [{ id, name: 'demo' }]);
+    const changed = await disableByDefault(store, { id, name: 'demo' });
     await fsp.writeFile(enablementPath, '{}');
     const stateStat = await fsp.stat(path.join(storeDir, 'state.json'));
     const older = new Date(stateStat.mtimeMs - 1_000);
@@ -1288,7 +701,7 @@ describe('ExtensionStore', () => {
         return false;
       });
     try {
-      const readable = await store.ensureInitialized([{ id, name: 'demo' }]);
+      const readable = await ensureInitialized(store, [{ id, name: 'demo' }]);
       expect(readable).toEqual(changed);
       expect((await fsp.stat(enablementPath)).isDirectory()).toBe(true);
     } finally {
@@ -1298,23 +711,23 @@ describe('ExtensionStore', () => {
     await fsp.rm(enablementPath, { recursive: true });
     await fsp.writeFile(enablementPath, '{}');
     await fsp.utimes(enablementPath, older, older);
-    await store.ensureInitialized([{ id, name: 'demo' }]);
+    await ensureInitialized(store, [{ id, name: 'demo' }]);
     expect(JSON.parse(await fsp.readFile(enablementPath, 'utf8'))).toEqual({
-      demo: { overrides: ['!/*'] },
+      demo: { overrides: ['!/*', legacyWorkspaceRule(scopedWorkspace)] },
     });
   });
 
   it('imports a newer V1 projection as a sequential downgrade write', async () => {
     const store = makeStore();
     const id = 'e2'.repeat(32);
-    await store.ensureInitialized([{ id, name: 'demo' }]);
+    await ensureInitialized(store, [{ id, name: 'demo' }]);
     await new Promise((resolve) => setTimeout(resolve, 10));
     await fsp.writeFile(
       enablementPath,
       JSON.stringify({ demo: { overrides: ['!/workspace/*'] } }),
     );
 
-    const imported = await store.ensureInitialized([{ id, name: 'demo' }]);
+    const imported = await ensureInitialized(store, [{ id, name: 'demo' }]);
 
     expect(imported.generation).toBe(1);
     expect(imported.extensions[id]?.legacyPathRules).toEqual(['!/workspace/*']);
@@ -1323,14 +736,14 @@ describe('ExtensionStore', () => {
   it('preserves an unknown entry added by a newer V1 writer', async () => {
     const store = makeStore();
     const id = 'e4'.repeat(32);
-    const initialized = await store.ensureInitialized([{ id, name: 'demo' }]);
+    const initialized = await ensureInitialized(store, [{ id, name: 'demo' }]);
     await new Promise((resolve) => setTimeout(resolve, 10));
     await fsp.writeFile(
       enablementPath,
       JSON.stringify({ future: { overrides: ['/workspace/future'] } }),
     );
 
-    const imported = await store.ensureInitialized([{ id, name: 'demo' }]);
+    const imported = await ensureInitialized(store, [{ id, name: 'demo' }]);
 
     expect(imported.generation).toBe(initialized.generation + 1);
     expect(imported.legacyProjectionRemainder).toEqual({
@@ -1345,14 +758,14 @@ describe('ExtensionStore', () => {
     const store = makeStore();
     const first = { id: 'e8'.repeat(32), name: 'first' };
     const second = { id: 'e9'.repeat(32), name: 'second' };
-    const initialized = await store.ensureInitialized([first]);
+    const initialized = await ensureInitialized(store, [first]);
     await fsp.writeFile(
       enablementPath,
       JSON.stringify({ stale: { overrides: ['!/workspace/*'] } }),
     );
     await fsp.utimes(enablementPath, new Date(0), new Date(0));
 
-    const repaired = await store.ensureInitialized([first, second]);
+    const repaired = await ensureInitialized(store, [first, second]);
 
     expect(repaired.generation).toBe(initialized.generation + 1);
     expect(repaired.extensions[second.id]).toMatchObject({
@@ -1381,7 +794,7 @@ describe('ExtensionStore', () => {
       JSON.stringify({ demo: { overrides: ['!/workspace/*'] } }),
     );
 
-    const imported = await store.ensureInitialized([identity]);
+    const imported = await ensureInitialized(store, [identity]);
 
     expect(imported.extensions[identity.id]?.artifactGeneration).toBe(
       installed.extensions[identity.id]?.artifactGeneration,
@@ -1396,8 +809,8 @@ describe('ExtensionStore', () => {
   it('preserves V2 activation policy across a sequential downgrade write', async () => {
     const store = makeStore();
     const identity = { id: 'e4'.repeat(32), name: 'demo' };
-    await store.ensureInitialized([identity]);
-    await store.setDefaultActivation(identity, 'disabled');
+    await ensureInitialized(store, [identity]);
+    await disableByDefault(store, identity);
     await store.setWorkspaceActivation(
       identity,
       workspacePath('enabled'),
@@ -1409,7 +822,7 @@ describe('ExtensionStore', () => {
       JSON.stringify({ demo: { overrides: ['!/workspace/legacy/*'] } }),
     );
 
-    const imported = await store.ensureInitialized([identity]);
+    const imported = await ensureInitialized(store, [identity]);
 
     expect(imported.extensions[identity.id]).toMatchObject({
       defaultActivation: 'disabled',
@@ -1421,8 +834,8 @@ describe('ExtensionStore', () => {
   it('does not import generated V2 rules as legacy rules', async () => {
     const store = makeStore();
     const identity = { id: 'e5'.repeat(32), name: 'demo' };
-    await store.ensureInitialized([identity]);
-    await store.setDefaultActivation(identity, 'disabled');
+    await ensureInitialized(store, [identity]);
+    await disableByDefault(store, identity);
     await store.setWorkspaceActivation(
       identity,
       workspacePath('enabled'),
@@ -1442,7 +855,7 @@ describe('ExtensionStore', () => {
       }),
     );
 
-    const imported = await store.ensureInitialized([identity]);
+    const imported = await ensureInitialized(store, [identity]);
 
     expect(imported.extensions[identity.id]?.legacyPathRules).toEqual([
       '!/workspace/legacy/*',
@@ -1452,7 +865,7 @@ describe('ExtensionStore', () => {
   it('imports an opposite V1 workspace rule into structured activation', async () => {
     const store = makeStore();
     const identity = { id: 'ea'.repeat(32), name: 'demo' };
-    await store.ensureInitialized([identity]);
+    await ensureInitialized(store, [identity]);
     await store.setWorkspaceActivation(identity, workspacePath(), 'enabled');
     await new Promise((resolve) => setTimeout(resolve, 10));
     await fsp.writeFile(
@@ -1462,7 +875,7 @@ describe('ExtensionStore', () => {
       }),
     );
 
-    const imported = await store.ensureInitialized([identity]);
+    const imported = await ensureInitialized(store, [identity]);
 
     expect(imported.extensions[identity.id]).toMatchObject({
       workspaceOverrides: { [workspacePath()]: 'disabled' },
@@ -1477,7 +890,7 @@ describe('ExtensionStore', () => {
     const store = makeStore();
     const first = { id: 'e6'.repeat(32), name: 'first' };
     const second = { id: 'e7'.repeat(32), name: 'second' };
-    await store.ensureInitialized([first, second]);
+    await ensureInitialized(store, [first, second]);
     await new Promise((resolve) => setTimeout(resolve, 10));
     await fsp.writeFile(
       enablementPath,
@@ -1487,7 +900,7 @@ describe('ExtensionStore', () => {
       }),
     );
 
-    const imported = await store.ensureInitialized([first]);
+    const imported = await ensureInitialized(store, [first]);
 
     expect(imported.extensions[first.id]?.legacyPathRules).toEqual([
       '!/workspace/first/*',
@@ -1581,35 +994,6 @@ describe('ExtensionStore', () => {
     expect(fs.existsSync(staging)).toBe(false);
   });
 
-  it('promotes a declaration without replacing its activation policy', async () => {
-    const store = makeStore();
-    const identity = { id: 'f1'.repeat(32), name: 'demo' };
-    const declared = await store.setDefaultActivations([identity], 'disabled');
-    await store.setWorkspaceActivations(
-      [identity],
-      workspacePath('enabled'),
-      'enabled',
-    );
-    const staging = await store.createStagingDirectory();
-    await fsp.writeFile(path.join(staging, 'qwen-extension.json'), '{}');
-
-    const installed = await store.commitArtifact({
-      operation: 'install',
-      identity,
-      stagingDirectory: staging,
-      destinationDirectory: path.join(extensionsDir, identity.name),
-      initialActivation: { scope: 'user' },
-    });
-
-    expect(installed.generation).toBe(declared.generation + 2);
-    expect(installed.extensions[identity.id]).toEqual({
-      name: identity.name,
-      artifactGeneration: installed.generation,
-      defaultActivation: 'disabled',
-      workspaceOverrides: { [workspacePath('enabled')]: 'enabled' },
-    });
-  });
-
   it('migrates matching persisted legacy rules during a normal install', async () => {
     const store = makeStore();
     const trigger = { id: 'f8'.repeat(32), name: 'trigger' };
@@ -1621,7 +1005,7 @@ describe('ExtensionStore', () => {
         unrelated: { overrides: ['!/unrelated/*'] },
       }),
     );
-    await store.setDefaultActivations([trigger], 'enabled');
+    await ensureInitialized(store, [trigger]);
     const staging = await store.createStagingDirectory();
     await fsp.writeFile(path.join(staging, 'qwen-extension.json'), '{}');
 
@@ -1660,7 +1044,7 @@ describe('ExtensionStore', () => {
       }),
     );
 
-    const initialized = await store.ensureInitialized([installed]);
+    const initialized = await ensureInitialized(store, [installed]);
 
     expect(initialized.legacyProjectionRemainder).toEqual({
       future: { overrides: ['!/future/*'] },
@@ -1686,163 +1070,10 @@ describe('ExtensionStore', () => {
     expect(snapshot.legacyProjectionRemainder).toBeUndefined();
   });
 
-  it('promotes a declaration discovered outside the artifact transaction', async () => {
-    const store = makeStore();
-    const identity = { id: 'f7'.repeat(32), name: 'demo' };
-    const declared = await store.setDefaultActivations([identity], 'disabled');
-    const destination = path.join(extensionsDir, identity.name);
-    await fsp.mkdir(destination);
-
-    const discovered = await store.ensureInitialized([identity]);
-
-    expect(discovered.generation).toBe(declared.generation + 1);
-    expect(discovered.extensions[identity.id]).toEqual({
-      name: identity.name,
-      artifactGeneration: discovered.generation,
-      preserveActivationOnNextInstall: true,
-      defaultActivation: 'disabled',
-      workspaceOverrides: {},
-    });
-
-    await fsp.rm(destination, { recursive: true });
-    const staging = await store.createStagingDirectory();
-    await fsp.writeFile(path.join(staging, 'qwen-extension.json'), '{}');
-    const reinstalled = await store.commitArtifact({
-      operation: 'install',
-      identity,
-      stagingDirectory: staging,
-      destinationDirectory: destination,
-      initialActivation: { scope: 'user' },
-    });
-
-    expect(reinstalled.extensions[identity.id]).toMatchObject({
-      artifactGeneration: reinstalled.generation,
-      defaultActivation: 'disabled',
-    });
-    expect(
-      reinstalled.extensions[identity.id]?.preserveActivationOnNextInstall,
-    ).toBeUndefined();
-  });
-
-  it('targets an existing policy by name when the supplied id is provisional', async () => {
-    const store = makeStore();
-    const installed = { id: 'f2'.repeat(32), name: 'demo' };
-    const initial = await store.ensureInitialized([installed]);
-
-    const snapshot = await store.setDefaultActivations(
-      [{ id: 'f4'.repeat(32), name: 'DEMO' }],
-      'disabled',
-    );
-
-    expect(snapshot.generation).toBe(initial.generation + 1);
-    expect(snapshot.extensions[installed.id]?.defaultActivation).toBe(
-      'disabled',
-    );
-    expect(snapshot.extensions['f4'.repeat(32)]).toBeUndefined();
-  });
-
-  it('re-keys an explicit name declaration to the discovered id', async () => {
-    const store = makeStore();
-    const declared = { id: 'f5'.repeat(32), name: 'demo' };
-    const discovered = { id: 'f6'.repeat(32), name: 'demo' };
-    const initial = await store.setDefaultActivations([declared], 'disabled');
-    const destination = path.join(extensionsDir, discovered.name);
-    await fsp.mkdir(destination);
-
-    const promoted = await store.ensureInitialized([discovered]);
-
-    expect(promoted.generation).toBe(initial.generation + 1);
-    expect(promoted.extensions[declared.id]).toBeUndefined();
-    expect(promoted.extensions[discovered.id]).toEqual({
-      name: discovered.name,
-      artifactGeneration: promoted.generation,
-      preserveActivationOnNextInstall: true,
-      defaultActivation: 'disabled',
-      workspaceOverrides: {},
-    });
-
-    await fsp.rm(destination, { recursive: true });
-    const staging = await store.createStagingDirectory();
-    await fsp.writeFile(path.join(staging, 'qwen-extension.json'), '{}');
-    const reinstalled = await store.commitArtifact({
-      operation: 'install',
-      identity: discovered,
-      stagingDirectory: staging,
-      destinationDirectory: destination,
-      initialActivation: { scope: 'user' },
-    });
-
-    expect(reinstalled.extensions[discovered.id]).toMatchObject({
-      artifactGeneration: reinstalled.generation,
-      defaultActivation: 'disabled',
-    });
-    expect(
-      reinstalled.extensions[discovered.id]?.preserveActivationOnNextInstall,
-    ).toBeUndefined();
-  });
-
-  it('promotes a declaration when only the discovered name casing changes', async () => {
-    const store = makeStore();
-    const identity = { id: 'f7'.repeat(32), name: 'Demo' };
-    const declared = await store.setDefaultActivations([identity], 'disabled');
-
-    const promoted = await store.ensureInitialized([
-      { id: identity.id, name: 'demo' },
-    ]);
-
-    expect(promoted.generation).toBe(declared.generation + 1);
-    expect(promoted.extensions[identity.id]).toEqual({
-      name: 'demo',
-      artifactGeneration: promoted.generation,
-      preserveActivationOnNextInstall: true,
-      defaultActivation: 'disabled',
-      workspaceOverrides: {},
-    });
-  });
-
-  it('keeps a case-renamed installed extension attached to its artifact', async () => {
-    const store = makeStore();
-    const installedIdentity = { id: 'da'.repeat(32), name: 'Demo' };
-    const staging = await store.createStagingDirectory();
-    await fsp.writeFile(path.join(staging, 'qwen-extension.json'), '{}');
-    await store.commitArtifact({
-      operation: 'install',
-      identity: installedIdentity,
-      stagingDirectory: staging,
-      destinationDirectory: path.join(extensionsDir, installedIdentity.name),
-      initialActivation: { scope: 'user' },
-    });
-
-    const renamedIdentity = { ...installedIdentity, name: 'demo' };
-    await store.ensureInitialized([renamedIdentity]);
-    const internals = store as unknown as {
-      pathExists(filePath: string): Promise<boolean>;
-    };
-    const pathExists = internals.pathExists.bind(store);
-    vi.spyOn(internals, 'pathExists').mockImplementation(async (filePath) =>
-      filePath === path.join(extensionsDir, renamedIdentity.name)
-        ? false
-        : await pathExists(filePath),
-    );
-    const toggled = await store.setDefaultActivations(
-      [renamedIdentity],
-      'disabled',
-    );
-
-    expect(toggled.extensions[installedIdentity.id]).toMatchObject({
-      name: renamedIdentity.name,
-      defaultActivation: 'disabled',
-      artifactGeneration: expect.any(Number),
-    });
-    expect(
-      toggled.extensions[installedIdentity.id]?.declarationOnly,
-    ).toBeUndefined();
-  });
-
   it('preserves the original error when rollback also fails', async () => {
     const store = makeStore();
     const identity = { id: 'fa'.repeat(32), name: 'demo' };
-    await store.ensureInitialized([]);
+    await ensureInitialized(store, []);
     const staging = await store.createStagingDirectory();
     await fsp.writeFile(path.join(staging, 'qwen-extension.json'), '{}');
     const primaryError = new Error('state write failed');
@@ -1892,7 +1123,7 @@ describe('ExtensionStore', () => {
       initialActivation: { scope: 'user' },
     });
 
-    const activated = await store.setDefaultActivation(identity, 'disabled');
+    const activated = await disableByDefault(store, identity);
     expect(activated.generation).toBe(installed.generation + 1);
     expect(activated.extensions[identity.id]?.artifactGeneration).toBe(
       installed.generation,
@@ -1931,9 +1162,9 @@ describe('ExtensionStore', () => {
       destinationDirectory: destination,
     });
 
-    await expect(
-      store.setDefaultActivation(identity, 'disabled'),
-    ).rejects.toMatchObject({ code: 'extension_conflict' });
+    await expect(disableByDefault(store, identity)).rejects.toMatchObject({
+      code: 'extension_conflict',
+    });
     await expect(store.readSnapshot()).resolves.toMatchObject({
       extensions: {},
     });
@@ -2093,61 +1324,6 @@ describe('ExtensionStore', () => {
     ).resolves.toBe('new artifact');
   });
 
-  it('preserves batch activation declared after an artifact disappears', async () => {
-    const store = makeStore();
-    const identity = { id: '9b'.repeat(32), name: 'retained-policy' };
-    const destination = path.join(extensionsDir, identity.name);
-    const initialStaging = await store.createStagingDirectory();
-    await fsp.writeFile(path.join(initialStaging, 'version'), 'old artifact');
-    await store.commitArtifact({
-      operation: 'install',
-      identity,
-      stagingDirectory: initialStaging,
-      destinationDirectory: destination,
-      initialActivation: { scope: 'user' },
-    });
-    await fsp.rm(destination, { recursive: true });
-    const provisional = { id: '9c'.repeat(32), name: identity.name };
-
-    await store.setDefaultActivations([provisional], 'disabled');
-    const declared = await store.setWorkspaceActivations(
-      [provisional],
-      workspacePath('disabled'),
-      'disabled',
-    );
-
-    expect(declared.extensions[identity.id]).toMatchObject({
-      name: identity.name,
-      declarationOnly: true,
-      defaultActivation: 'disabled',
-      workspaceOverrides: {
-        [workspacePath('disabled')]: 'disabled',
-      },
-    });
-    expect(
-      declared.extensions[identity.id]?.artifactGeneration,
-    ).toBeUndefined();
-
-    const staging = await store.createStagingDirectory();
-    await fsp.writeFile(path.join(staging, 'version'), 'new artifact');
-    const installed = await store.commitArtifact({
-      operation: 'install',
-      identity,
-      stagingDirectory: staging,
-      destinationDirectory: destination,
-      initialActivation: { scope: 'user' },
-    });
-
-    expect(installed.extensions[identity.id]).toEqual({
-      name: identity.name,
-      artifactGeneration: installed.generation,
-      defaultActivation: 'disabled',
-      workspaceOverrides: {
-        [workspacePath('disabled')]: 'disabled',
-      },
-    });
-  });
-
   it('rejects update when the artifact has no matching policy', async () => {
     const store = makeStore();
     const identity = { id: '94'.repeat(32), name: 'orphan-artifact' };
@@ -2173,7 +1349,7 @@ describe('ExtensionStore', () => {
     const destination = path.join(extensionsDir, 'demo');
     await fsp.mkdir(destination);
     await fsp.writeFile(path.join(destination, 'version'), 'old');
-    await store.ensureInitialized([identity]);
+    await ensureInitialized(store, [identity]);
     await store.setWorkspaceActivation(
       identity,
       workspacePath('a'),
@@ -2203,7 +1379,7 @@ describe('ExtensionStore', () => {
     const destination = path.join(extensionsDir, 'demo');
     await fsp.mkdir(destination);
     await fsp.writeFile(path.join(destination, 'version'), 'old');
-    await store.ensureInitialized([identity]);
+    await ensureInitialized(store, [identity]);
 
     const snapshot = await store.commitArtifact({
       operation: 'uninstall',
@@ -2215,27 +1391,11 @@ describe('ExtensionStore', () => {
     expect(snapshot.extensions[identity.id]).toBeUndefined();
   });
 
-  it('rejects uninstalling a declaration without deleting its policy', async () => {
-    const store = makeStore();
-    const identity = { id: 'b5'.repeat(32), name: 'declared' };
-    const declared = await store.setDefaultActivations([identity], 'disabled');
-
-    await expect(
-      store.commitArtifact({
-        operation: 'uninstall',
-        identity,
-        destinationDirectory: path.join(extensionsDir, identity.name),
-      }),
-    ).rejects.toThrow(`Extension "${identity.name}" is not installed.`);
-
-    expect(await store.readSnapshot()).toEqual(declared);
-  });
-
   it('idempotently handles concurrent uninstalls when the artifact is absent', async () => {
     const store = makeStore();
     const identity = { id: 'b4'.repeat(32), name: 'demo' };
     const destination = path.join(extensionsDir, 'demo');
-    await store.ensureInitialized([identity]);
+    await ensureInitialized(store, [identity]);
 
     const [uninstalled, repeated] = await Promise.all([
       store.commitArtifact({
@@ -2260,7 +1420,7 @@ describe('ExtensionStore', () => {
     const duplicateId = 'b3'.repeat(32);
     const destination = path.join(extensionsDir, identity.name);
     await fsp.mkdir(destination);
-    const snapshot = await store.ensureInitialized([
+    const snapshot = await ensureInitialized(store, [
       identity,
       { id: duplicateId, name: 'other' },
     ]);
@@ -2283,7 +1443,7 @@ describe('ExtensionStore', () => {
   it('rolls back an artifact-swapped transaction before the commit point', async () => {
     const store = makeStore();
     const identity = { id: 'c1'.repeat(32), name: 'demo' };
-    const initial = await store.ensureInitialized([identity]);
+    const initial = await ensureInitialized(store, [identity]);
     const targetSnapshot = structuredClone(initial);
     targetSnapshot.generation = 1;
     const transactionId = 'recover-before-commit';
@@ -2318,7 +1478,7 @@ describe('ExtensionStore', () => {
       }),
     );
 
-    await store.ensureInitialized([identity]);
+    await ensureInitialized(store, [identity]);
 
     expect(await fsp.readFile(path.join(destination, 'version'), 'utf8')).toBe(
       'old',
@@ -2357,7 +1517,7 @@ describe('ExtensionStore', () => {
   ])('rolls back a fabricated $name journal', async (scenario) => {
     const store = makeStore();
     const identity = { id: 'c4'.repeat(32), name: 'demo' };
-    const initial = await store.ensureInitialized([identity]);
+    const initial = await ensureInitialized(store, [identity]);
     const targetSnapshot = structuredClone(initial);
     targetSnapshot.generation = 1;
     const transactionId = scenario.name.replaceAll(' ', '-');
@@ -2420,7 +1580,7 @@ describe('ExtensionStore', () => {
   it('recovers an artifact-swapped transaction before reading a snapshot', async () => {
     const store = makeStore();
     const identity = { id: 'c2'.repeat(32), name: 'demo' };
-    const initial = await store.ensureInitialized([identity]);
+    const initial = await ensureInitialized(store, [identity]);
     const targetSnapshot = structuredClone(initial);
     targetSnapshot.generation = 1;
     const transactionId = 'recover-before-read';
@@ -2463,7 +1623,7 @@ describe('ExtensionStore', () => {
   it('keeps an artifact when state reached the target generation before the journal phase', async () => {
     const store = makeStore();
     const identity = { id: 'c3'.repeat(32), name: 'demo' };
-    const initial = await store.ensureInitialized([identity]);
+    const initial = await ensureInitialized(store, [identity]);
     const targetSnapshot = structuredClone(initial);
     targetSnapshot.generation = 1;
     const transactionId = 'recover-after-state-write';
@@ -2511,11 +1671,8 @@ describe('ExtensionStore', () => {
   it('finishes cleanup after a committed transaction', async () => {
     const store = makeStore();
     const identity = { id: 'd1'.repeat(32), name: 'demo' };
-    await store.ensureInitialized([identity]);
-    const targetSnapshot = await store.setDefaultActivation(
-      identity,
-      'disabled',
-    );
+    await ensureInitialized(store, [identity]);
+    const targetSnapshot = await disableByDefault(store, identity);
     const transactionId = 'recover-after-commit';
     const destination = path.join(extensionsDir, 'demo');
     const backup = path.join(storeDir, 'rollback', transactionId);
@@ -2548,7 +1705,7 @@ describe('ExtensionStore', () => {
       }),
     );
 
-    await store.ensureInitialized([identity]);
+    await ensureInitialized(store, [identity]);
 
     expect(await fsp.readFile(path.join(destination, 'version'), 'utf8')).toBe(
       'new',
@@ -2560,11 +1717,8 @@ describe('ExtensionStore', () => {
   it('keeps committed cleanup failures from blocking store operations', async () => {
     const store = makeStore();
     const identity = { id: 'd2'.repeat(32), name: 'demo' };
-    await store.ensureInitialized([identity]);
-    const targetSnapshot = await store.setDefaultActivation(
-      identity,
-      'disabled',
-    );
+    await ensureInitialized(store, [identity]);
+    const targetSnapshot = await disableByDefault(store, identity);
     const transactionId = 'recover-cleanup-failure';
     const destination = path.join(extensionsDir, 'demo');
     const backup = path.join(storeDir, 'rollback', transactionId);
@@ -2602,9 +1756,9 @@ describe('ExtensionStore', () => {
       await expect(store.readSnapshot()).resolves.toMatchObject({
         generation: 1,
       });
-      await expect(
-        store.setDefaultActivation(identity, 'enabled'),
-      ).resolves.toMatchObject({ generation: 2 });
+      await expect(enableByDefault(store, identity)).resolves.toMatchObject({
+        generation: 2,
+      });
       expect(fs.existsSync(journal)).toBe(true);
     } finally {
       rmSpy.mockRestore();
@@ -2618,7 +1772,7 @@ describe('ExtensionStore', () => {
   it('quarantines a corrupt transaction journal and continues', async () => {
     const store = makeStore();
     const identity = { id: 'd4'.repeat(32), name: 'demo' };
-    await store.ensureInitialized([identity]);
+    await ensureInitialized(store, [identity]);
     const transactionsDir = path.join(storeDir, 'transactions');
     const journal = path.join(transactionsDir, 'corrupt.json');
     await fsp.writeFile(journal, '{not-json');
@@ -2626,9 +1780,9 @@ describe('ExtensionStore', () => {
     await expect(store.readSnapshot()).resolves.toMatchObject({
       generation: 0,
     });
-    await expect(
-      store.setDefaultActivation(identity, 'disabled'),
-    ).resolves.toMatchObject({ generation: 1 });
+    await expect(disableByDefault(store, identity)).resolves.toMatchObject({
+      generation: 1,
+    });
     expect(fs.existsSync(journal)).toBe(false);
     expect(await readQuarantinedJournal(journal)).toBe('{not-json');
   });
@@ -2636,8 +1790,8 @@ describe('ExtensionStore', () => {
   it('quarantines a corrupt journal while recovering corrupt state', async () => {
     const store = makeStore();
     const identity = { id: 'd6'.repeat(32), name: 'demo' };
-    await store.ensureInitialized([identity]);
-    await store.setDefaultActivation(identity, 'disabled');
+    await ensureInitialized(store, [identity]);
+    await disableByDefault(store, identity);
     await fsp.writeFile(path.join(storeDir, 'state.json'), '{not-json');
     const journal = path.join(storeDir, 'transactions', 'corrupt.json');
     await fsp.writeFile(journal, '{also-not-json');
@@ -2657,7 +1811,7 @@ describe('ExtensionStore', () => {
     async (kind) => {
       const store = makeStore();
       const identity = { id: 'd5'.repeat(32), name: 'demo' };
-      const initial = await store.ensureInitialized([identity]);
+      const initial = await ensureInitialized(store, [identity]);
       const targetSnapshot = structuredClone(initial);
       targetSnapshot.generation = 1;
       const transactionId = `hostile-${kind}`;
@@ -2699,9 +1853,9 @@ describe('ExtensionStore', () => {
       await expect(store.readSnapshot()).resolves.toMatchObject({
         generation: 0,
       });
-      await expect(
-        store.setDefaultActivation(identity, 'disabled'),
-      ).resolves.toMatchObject({ generation: 1 });
+      await expect(disableByDefault(store, identity)).resolves.toMatchObject({
+        generation: 1,
+      });
       expect(await fsp.readFile(sentinel, 'utf8')).toBe('preserve');
       expect(fs.existsSync(journal)).toBe(false);
       expect(JSON.parse(await readQuarantinedJournal(journal))).toMatchObject({
@@ -2716,11 +1870,8 @@ describe('ExtensionStore', () => {
     async (stateCondition) => {
       const store = makeStore();
       const identity = { id: 'f1'.repeat(32), name: 'demo' };
-      await store.ensureInitialized([identity]);
-      const targetSnapshot = await store.setDefaultActivation(
-        identity,
-        'disabled',
-      );
+      await ensureInitialized(store, [identity]);
+      const targetSnapshot = await disableByDefault(store, identity);
       const transactionId = 'recover-corrupt-commit';
       const destination = path.join(extensionsDir, 'demo');
       const backup = path.join(storeDir, 'rollback', transactionId);
@@ -2756,7 +1907,7 @@ describe('ExtensionStore', () => {
         await fsp.rm(path.join(storeDir, 'state.json'));
       }
 
-      const recovered = await store.ensureInitialized([identity]);
+      const recovered = await ensureInitialized(store, [identity]);
 
       expect(recovered.generation).toBe(1);
       expect(recovered.extensions[identity.id]?.defaultActivation).toBe(
@@ -2769,11 +1920,8 @@ describe('ExtensionStore', () => {
   it('rolls back an artifact-swapped transaction when current state is corrupt', async () => {
     const store = makeStore();
     const identity = { id: 'f4'.repeat(32), name: 'demo' };
-    await store.ensureInitialized([identity]);
-    const targetSnapshot = await store.setDefaultActivation(
-      identity,
-      'disabled',
-    );
+    await ensureInitialized(store, [identity]);
+    const targetSnapshot = await disableByDefault(store, identity);
     const transactionId = 'recover-corrupt-artifact-swap';
     const destination = path.join(extensionsDir, identity.name);
     const backup = path.join(storeDir, 'rollback', transactionId);
@@ -2820,8 +1968,8 @@ describe('ExtensionStore', () => {
     async (stateCondition) => {
       const store = makeStore();
       const identity = { id: 'f2'.repeat(32), name: 'demo' };
-      await store.ensureInitialized([identity]);
-      await store.setDefaultActivation(identity, 'disabled');
+      await ensureInitialized(store, [identity]);
+      await disableByDefault(store, identity);
       if (stateCondition === 'corrupt') {
         await fsp.writeFile(path.join(storeDir, 'state.json'), '{broken');
       } else {
@@ -2832,7 +1980,7 @@ describe('ExtensionStore', () => {
         JSON.stringify({ demo: { overrides: ['!/*'] } }),
       );
 
-      const recovered = await store.ensureInitialized([identity]);
+      const recovered = await ensureInitialized(store, [identity]);
 
       expect(recovered.generation).toBe(0);
       expect(recovered.extensions[identity.id]?.defaultActivation).toBe(
@@ -2847,373 +1995,16 @@ describe('ExtensionStore', () => {
   it('fails closed when current and previous state are corrupt', async () => {
     const store = makeStore();
     const identity = { id: 'f3'.repeat(32), name: 'demo' };
-    await store.ensureInitialized([identity]);
-    await store.setDefaultActivation(identity, 'disabled');
+    await ensureInitialized(store, [identity]);
+    await disableByDefault(store, identity);
     await fsp.writeFile(path.join(storeDir, 'state.json'), '{broken');
     await fsp.writeFile(
       path.join(storeDir, 'state.previous.json'),
       '{also-broken',
     );
 
-    await expect(store.ensureInitialized([identity])).rejects.toBeInstanceOf(
+    await expect(ensureInitialized(store, [identity])).rejects.toBeInstanceOf(
       ExtensionStoreCorruptError,
     );
-  });
-});
-
-describe('ExtensionStore.inspectEmptiness', () => {
-  let root: string;
-  let extensionsDir: string;
-  let storeDir: string;
-  const identity = { id: 'a'.repeat(64), name: 'demo' };
-
-  beforeEach(async () => {
-    root = await fsp.mkdtemp(path.join(os.tmpdir(), 'qwen-extension-empty-'));
-    extensionsDir = path.join(root, 'extensions');
-    storeDir = path.join(root, 'extension-store');
-  });
-
-  afterEach(async () => {
-    vi.restoreAllMocks();
-    await fsp.rm(root, { recursive: true, force: true });
-  });
-
-  const makeStore = () =>
-    new ExtensionStore({
-      extensionsDir,
-      storeDir,
-      enablementPath: path.join(extensionsDir, 'extension-enablement.json'),
-    });
-
-  // Every entry under the root with its bytes and identity, to prove a read
-  // leaves the tree exactly as it found it.
-  const describeTree = async (): Promise<string[]> => {
-    const lines: string[] = [];
-    const walk = async (directory: string) => {
-      for (const entry of (await fsp.readdir(directory)).sort()) {
-        const entryPath = path.join(directory, entry);
-        const stats = await fsp.lstat(entryPath, { bigint: true });
-        const identityText = `${stats.ino}:${stats.mtimeNs}:${stats.ctimeNs}`;
-        if (stats.isDirectory()) {
-          lines.push(`${path.relative(root, entryPath)}/ ${identityText}`);
-          await walk(entryPath);
-        } else if (stats.isFile()) {
-          lines.push(
-            `${path.relative(root, entryPath)} ${identityText} ${await fsp.readFile(entryPath, 'utf8')}`,
-          );
-        } else {
-          lines.push(`${path.relative(root, entryPath)} link ${identityText}`);
-        }
-      }
-    };
-    await walk(root);
-    return lines;
-  };
-
-  const inspectReadOnly = async () => {
-    const before = await describeTree();
-    const result = await makeStore().inspectEmptiness();
-    expect(await describeTree()).toEqual(before);
-    return result;
-  };
-
-  it('proves an absent store empty', async () => {
-    await expect(inspectReadOnly()).resolves.toEqual({ status: 'empty' });
-  });
-
-  it('proves an initialized empty store empty', async () => {
-    await makeStore().ensureInitialized([]);
-
-    await expect(inspectReadOnly()).resolves.toEqual({ status: 'empty' });
-  });
-
-  it('accepts the files an idle reader and extension control files leave', async () => {
-    // A locked read of an absent state prepares the lock file and the
-    // transaction directories without writing a state.
-    await makeStore().readSnapshot();
-    await fsp.writeFile(
-      path.join(extensionsDir, 'extension-preferences.json'),
-      '{}',
-    );
-    await fsp.writeFile(path.join(extensionsDir, 'marketplaces.json'), '{}');
-    await fsp.mkdir(path.join(storeDir, 'plugin-data'));
-    expect(await fsp.readdir(storeDir)).not.toContain('state.json');
-
-    await expect(inspectReadOnly()).resolves.toEqual({ status: 'empty' });
-  });
-
-  it('accepts journals recovery quarantined and leftovers of interrupted state writes', async () => {
-    await makeStore().ensureInitialized([]);
-    await fsp.writeFile(path.join(storeDir, 'transactions', 'torn.json'), '{');
-    // The next store operation quarantines the torn journal for good.
-    await makeStore().ensureInitialized([]);
-    expect(await fsp.readdir(path.join(storeDir, 'transactions'))).toEqual([
-      expect.stringMatching(/^torn\.json\.corrupt-/),
-    ]);
-    await fsp.writeFile(
-      path.join(storeDir, 'state.json.0123456789ab.tmp'),
-      '{',
-    );
-    await fsp.writeFile(
-      path.join(storeDir, 'transactions', 'journal.json.0123456789ab.tmp'),
-      '{',
-    );
-
-    await expect(inspectReadOnly()).resolves.toEqual({ status: 'empty' });
-  });
-
-  it('reports an enablement file that is not a regular file as unknown', async () => {
-    // A FIFO would block the read, and a device's times change whenever any
-    // process writes to it. A directory shows the same check, placed outside
-    // the extensions directory, where it would count as an extension.
-    const enablementPath = path.join(root, 'enablement.json');
-    const store = new ExtensionStore({
-      extensionsDir,
-      storeDir,
-      enablementPath,
-    });
-    await store.ensureInitialized([]);
-    await fsp.rm(enablementPath, { force: true });
-    await fsp.mkdir(enablementPath);
-    const before = await describeTree();
-
-    await expect(store.inspectEmptiness()).resolves.toEqual({
-      status: 'unknown',
-      reason: 'the extension enablement file is not a regular file',
-    });
-    expect(await describeTree()).toEqual(before);
-  });
-
-  it('ignores entries the file system adds, such as .DS_Store', async () => {
-    await makeStore().ensureInitialized([]);
-    for (const directory of [
-      storeDir,
-      path.join(storeDir, 'staging'),
-      path.join(storeDir, 'rollback'),
-    ]) {
-      await fsp.writeFile(path.join(directory, '.DS_Store'), '');
-    }
-
-    await expect(inspectReadOnly()).resolves.toEqual({ status: 'empty' });
-  });
-
-  it('proves a store that keeps legacy rules for absent extensions empty', async () => {
-    await fsp.mkdir(extensionsDir, { recursive: true });
-    await fsp.writeFile(
-      path.join(extensionsDir, 'extension-enablement.json'),
-      JSON.stringify({ demo: { overrides: ['/w/'] } }),
-    );
-    // Every later initialization keeps the rules until "demo" is installed.
-    await makeStore().ensureInitialized([]);
-    await makeStore().ensureInitialized([]);
-    const state = JSON.parse(
-      await fsp.readFile(path.join(storeDir, 'state.json'), 'utf8'),
-    );
-    expect(state.extensions).toEqual({});
-    expect(Object.keys(state.legacyProjectionRemainder)).toEqual(['demo']);
-
-    await expect(inspectReadOnly()).resolves.toEqual({ status: 'empty' });
-  });
-
-  it.each([
-    [
-      'an extension directory',
-      async () => {
-        await fsp.mkdir(path.join(extensionsDir, 'demo'), { recursive: true });
-      },
-      'an extension directory is present',
-    ],
-    [
-      'a link to an extension directory',
-      async () => {
-        await fsp.mkdir(path.join(root, 'elsewhere'));
-        await fsp.mkdir(extensionsDir, { recursive: true });
-        await fsp.symlink(
-          path.join(root, 'elsewhere'),
-          path.join(extensionsDir, 'demo'),
-          'dir',
-        );
-      },
-      'an extension directory is present',
-    ],
-    [
-      'an extension recorded by the store',
-      async () => {
-        await makeStore().ensureInitialized([identity]);
-      },
-      'the extension store records extensions',
-    ],
-  ])('reports %s as installed', async (_name, arrange, reason) => {
-    await arrange();
-
-    await expect(inspectReadOnly()).resolves.toEqual({
-      status: 'installed',
-      reason,
-    });
-  });
-
-  it.each([
-    [
-      'a held lock',
-      async () => {
-        await makeStore().ensureInitialized([]);
-        await fsp.mkdir(path.join(storeDir, 'lock.lock'));
-      },
-      'the extension store is locked',
-    ],
-    [
-      'a transaction in progress',
-      async () => {
-        await makeStore().ensureInitialized([]);
-        await fsp.writeFile(
-          path.join(storeDir, 'transactions', 'journal.json'),
-          '{}',
-        );
-      },
-      'an extension store transaction is in progress or awaits recovery',
-    ],
-    [
-      'an interrupted install',
-      async () => {
-        const staging = await makeStore().createStagingDirectory();
-        await fsp.writeFile(path.join(staging, 'qwen-extension.json'), '{}');
-      },
-      'an extension install or removal is in progress or was interrupted',
-    ],
-    [
-      'a corrupt enablement file',
-      async () => {
-        await makeStore().ensureInitialized([]);
-        await fsp.writeFile(
-          path.join(extensionsDir, 'extension-enablement.json'),
-          '{',
-        );
-      },
-      'the extension enablement file is corrupt',
-    ],
-    [
-      'a previous state without a current one',
-      async () => {
-        await makeStore().ensureInitialized([]);
-        await fsp.rename(
-          path.join(storeDir, 'state.json'),
-          path.join(storeDir, 'state.previous.json'),
-        );
-      },
-      'the extension store state was replaced incompletely',
-    ],
-    [
-      'a corrupt state',
-      async () => {
-        await makeStore().ensureInitialized([]);
-        await fsp.writeFile(path.join(storeDir, 'state.json'), '{');
-      },
-      'the extension store state is corrupt',
-    ],
-    [
-      'a projection that disagrees with the state',
-      async () => {
-        await makeStore().ensureInitialized([]);
-        await fsp.writeFile(
-          path.join(extensionsDir, 'extension-enablement.json'),
-          JSON.stringify({ demo: { overrides: [] } }),
-        );
-      },
-      'the extension enablement projection needs reconciliation',
-    ],
-    [
-      'enablement records without a state',
-      async () => {
-        await fsp.mkdir(extensionsDir, { recursive: true });
-        await fsp.writeFile(
-          path.join(extensionsDir, 'extension-enablement.json'),
-          JSON.stringify({ demo: { overrides: [] } }),
-        );
-      },
-      'extension enablement exists without a store state',
-    ],
-    [
-      'an unexpected store entry',
-      async () => {
-        await makeStore().ensureInitialized([]);
-        await fsp.writeFile(path.join(storeDir, 'staging-note'), '');
-      },
-      'the extension store holds an unexpected entry',
-    ],
-    [
-      'a file named like the state that the store never writes',
-      async () => {
-        await makeStore().ensureInitialized([]);
-        await fsp.writeFile(path.join(storeDir, 'state.json.bak'), '{}');
-      },
-      'the extension store holds an unexpected entry',
-    ],
-    [
-      'a link in place of a transaction directory',
-      async () => {
-        await makeStore().ensureInitialized([]);
-        await fsp.mkdir(path.join(root, 'elsewhere'));
-        await fsp.rm(path.join(storeDir, 'rollback'), { recursive: true });
-        await fsp.symlink(
-          path.join(root, 'elsewhere'),
-          path.join(storeDir, 'rollback'),
-          'dir',
-        );
-      },
-      'the extension store holds an unexpected entry',
-    ],
-    [
-      'a dangling link in the extensions directory',
-      async () => {
-        await fsp.mkdir(extensionsDir, { recursive: true });
-        await fsp.symlink(
-          path.join(root, 'gone'),
-          path.join(extensionsDir, 'demo'),
-          'dir',
-        );
-      },
-      'the extension store could not be read (ENOENT)',
-    ],
-    [
-      'a transaction name that is not a directory',
-      async () => {
-        await makeStore().ensureInitialized([]);
-        await fsp.rm(path.join(storeDir, 'rollback'), { recursive: true });
-        await fsp.writeFile(path.join(storeDir, 'rollback'), '');
-      },
-      'the extension store could not be read (ENOTDIR)',
-    ],
-    [
-      'an extensions path that is not a directory',
-      async () => {
-        await fsp.writeFile(extensionsDir, '');
-      },
-      'the extension store could not be read (ENOTDIR)',
-    ],
-  ])('reports %s as unknown', async (_name, arrange, reason) => {
-    await arrange();
-
-    await expect(inspectReadOnly()).resolves.toEqual({
-      status: 'unknown',
-      reason,
-    });
-  });
-
-  it('reports a store that changes while it is read as unknown', async () => {
-    const store = makeStore();
-    await store.ensureInitialized([]);
-    const readFile = fsp.readFile.bind(fsp);
-    vi.spyOn(fsp, 'readFile').mockImplementationOnce(async (...args) => {
-      await fsp.writeFile(
-        path.join(storeDir, 'transactions', 'journal.json'),
-        '{}',
-      );
-      return await readFile(...(args as Parameters<typeof readFile>));
-    });
-
-    await expect(store.inspectEmptiness()).resolves.toEqual({
-      status: 'unknown',
-      reason: 'the extension store changed while it was read',
-    });
   });
 });

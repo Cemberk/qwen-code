@@ -71,8 +71,7 @@ function formatUiLanguageDisplay(lang: SupportedLanguage): string {
  * Parses `--project` / `--global` scope flags from a UI-language argument
  * string, returning the resolved scope and the argument with the flags removed.
  * Mirrors the scope handling in `modelCommand` so UI-language edits can target
- * workspace or user settings (e.g. from the web-shell settings panel's
- * Workspace/User tab) instead of always writing user scope.
+ * workspace or user settings instead of always writing user scope.
  */
 function parseUiScopeFlags(input: string): {
   scope: SettingScope | undefined;
@@ -116,18 +115,6 @@ function validateUiScopeFlags(
   }
   // Workspace settings are ignored on merge when untrusted, so a
   // --project save would silently not take effect — reject it up front.
-  if (
-    parsed.scope === SettingScope.Workspace &&
-    context.executionPolicy?.allowWorkspaceSettingsWrite === false
-  ) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content: t(
-        'Project language settings are not available in this session.',
-      ),
-    };
-  }
   if (
     parsed.scope === SettingScope.Workspace &&
     context.services.settings &&
@@ -270,7 +257,7 @@ export const languageCommand: SlashCommand = {
   },
   argumentHint: 'ui|output <language>',
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
 
   action: async (
     context: CommandContext,
@@ -356,7 +343,7 @@ export const languageCommand: SlashCommand = {
         return t('Set UI language');
       },
       kind: CommandKind.BUILT_IN,
-      supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+      supportedModes: ['interactive', 'non_interactive'] as const,
 
       action: async (
         context: CommandContext,
@@ -416,12 +403,11 @@ export const languageCommand: SlashCommand = {
             });
           },
           kind: CommandKind.BUILT_IN,
-          supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+          supportedModes: ['interactive', 'non_interactive'] as const,
           action: async (context, args) => {
-            // The web-shell settings panel switches language through
-            // `/language ui <id> --global|--project`, and the command router
-            // descends into this nested subcommand — so scope flags must be
-            // accepted here exactly like in the `ui` action above.
+            // `/language ui <id> --global|--project` descends into this nested
+            // subcommand, so scope flags must be accepted here exactly like in
+            // the `ui` action above.
             const parsed = parseUiScopeFlags(args.trim());
             const scopeError = validateUiScopeFlags(context, parsed);
             if (scopeError) {
@@ -449,7 +435,7 @@ export const languageCommand: SlashCommand = {
         return t('Set LLM output language');
       },
       kind: CommandKind.BUILT_IN,
-      supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+      supportedModes: ['interactive', 'non_interactive'] as const,
 
       action: async (
         context: CommandContext,

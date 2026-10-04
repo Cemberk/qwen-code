@@ -11,7 +11,7 @@
  *
  * Typed in the interactive UI, the command dispatches the `workflow` tool with
  * the file's path; the script is read at execution time (by the tool), so edits
- * take effect on the next invocation. Everywhere else — headless, ACP, and the
+ * take effect on the next invocation. Everywhere else — headless and the
  * model invoking the command through the Skill tool — a `{type:'tool'}` return
  * cannot run, so the command expands to a prompt asking the model to call
  * `Workflow({ name })`.
@@ -126,10 +126,7 @@ export class SavedWorkflowLoader implements ICommandLoader {
         args: string,
       ): SlashCommandActionReturn => {
         const workflowArgs = parseWorkflowArgs(args);
-        if (
-          context.executionMode === 'non_interactive' ||
-          context.executionMode === 'acp'
-        ) {
+        if (context.executionMode === 'non_interactive') {
           return {
             type: 'submit_prompt',
             content: buildWorkflowInvocationPrompt(entry, workflowArgs),

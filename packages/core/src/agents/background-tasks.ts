@@ -28,7 +28,7 @@ import {
   promptIdContext,
   todoWorkChainContext,
 } from '../utils/promptIdContext.js';
-import { getInvocationContext } from '../utils/invocation-context.js';
+
 import { escapeXml } from '../utils/xml.js';
 import { patchAgentMeta } from './agent-transcript.js';
 import { runOutsideAgentContext } from './runtime/agent-context.js';
@@ -711,8 +711,7 @@ export class BackgroundTaskRegistry {
       : false;
     entry.todoWorkChainId ??= todoWorkChainContext.getStore();
     if (!options.preserveNotificationState) {
-      entry.sourceTurnId =
-        getInvocationContext()?.promptId ?? promptIdContext.getStore();
+      entry.sourceTurnId = promptIdContext.getStore();
     }
     entry.pendingMessages = registration.pendingMessages ?? [];
     // Resolve the parent's display name at registration time — before the
@@ -1423,33 +1422,6 @@ export class BackgroundTaskRegistry {
       if (entry.status === 'cancelled' && !entry.notified) return true;
     }
     return false;
-  }
-
-  /**
-   * The agent ids behind `hasUnfinalizedTasks()`, in registration order.
-   *
-   * Callers that must *name* the outstanding work — rather than just know
-   * that some exists — use this. The daemon's active-work snapshot builds
-   * one hold per id so a restart controller and the session-retention path
-   * both see the same set the registry itself would report, with no second
-   * ledger to drift out of sync. Deliberately shares
-   * `hasUnfinalizedTasks()`'s predicate (and not `hasRunningTasks()`'s):
-   * a cancelled entry still owes its terminal task-notification, and
-   * dropping it here would let the daemon reap the session inside the
-   * cancel → finalizeCancelled() window.
-   */
-  listUnfinalizedBackgroundAgentIds(): string[] {
-    const ids: string[] = [];
-    for (const entry of this.agents.values()) {
-      if (!entry.isBackgrounded) continue;
-      if (
-        entry.status === 'running' ||
-        (entry.status === 'cancelled' && !entry.notified)
-      ) {
-        ids.push(entry.agentId);
-      }
-    }
-    return ids;
   }
 
   /**

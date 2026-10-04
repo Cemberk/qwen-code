@@ -38,7 +38,7 @@ describe('AsyncHookRegistry', () => {
       });
 
       expect(hookId).toBe('test-hook-1');
-      expect(registry.hasRunningHooks()).toBe(true);
+      expect(registry['pendingHooks'].size > 0).toBe(true);
     });
   });
 
@@ -57,7 +57,7 @@ describe('AsyncHookRegistry', () => {
 
       registry.updateOutput('test-hook-1', 'stdout data', undefined);
 
-      const pending = registry.getPendingHooks();
+      const pending = Array.from(registry['pendingHooks'].values());
       expect(pending[0].stdout).toBe('stdout data');
     });
 
@@ -75,7 +75,7 @@ describe('AsyncHookRegistry', () => {
 
       registry.updateOutput('test-hook-1', undefined, 'stderr data');
 
-      const pending = registry.getPendingHooks();
+      const pending = Array.from(registry['pendingHooks'].values());
       expect(pending[0].stderr).toBe('stderr data');
     });
   });
@@ -95,7 +95,7 @@ describe('AsyncHookRegistry', () => {
 
       registry.complete('test-hook-1', { continue: true });
 
-      expect(registry.hasRunningHooks()).toBe(false);
+      expect(registry['pendingHooks'].size > 0).toBe(false);
     });
 
     it('should process JSON output for system message', () => {
@@ -112,10 +112,10 @@ describe('AsyncHookRegistry', () => {
 
       registry.complete('test-hook-1');
 
-      const output = registry.getPendingOutput();
-      expect(output.messages.length).toBe(1);
-      expect(output.messages[0].message).toBe('Build completed');
-      expect(output.messages[0].type).toBe('system');
+      const messages = registry['completedOutputs'];
+      expect(messages.length).toBe(1);
+      expect(messages[0].message).toBe('Build completed');
+      expect(messages[0].type).toBe('system');
     });
   });
 
@@ -134,11 +134,11 @@ describe('AsyncHookRegistry', () => {
 
       registry.fail('test-hook-1', new Error('Hook failed'));
 
-      expect(registry.hasRunningHooks()).toBe(false);
-      const output = registry.getPendingOutput();
-      expect(output.messages.length).toBe(1);
-      expect(output.messages[0].type).toBe('error');
-      expect(output.messages[0].message).toContain('Hook failed');
+      expect(registry['pendingHooks'].size > 0).toBe(false);
+      const messages = registry['completedOutputs'];
+      expect(messages.length).toBe(1);
+      expect(messages[0].type).toBe('error');
+      expect(messages[0].message).toContain('Hook failed');
     });
   });
 
@@ -154,17 +154,17 @@ describe('AsyncHookRegistry', () => {
         stdout: '',
         stderr: '',
       });
-      const [hook] = registry.getPendingHooks();
+      const [hook] = Array.from(registry['pendingHooks'].values());
 
       registry.timeout('test-hook-1');
 
-      expect(registry.hasRunningHooks()).toBe(false);
+      expect(registry['pendingHooks'].size > 0).toBe(false);
       // The registered timeout is in milliseconds; both messages report seconds.
       expect(hook?.error?.message).toBe('Hook timed out after 1.5s');
-      const output = registry.getPendingOutput();
-      expect(output.messages.length).toBe(1);
-      expect(output.messages[0].type).toBe('warning');
-      expect(output.messages[0].message).toBe(
+      const messages = registry['completedOutputs'];
+      expect(messages.length).toBe(1);
+      expect(messages[0].type).toBe('warning');
+      expect(messages[0].message).toBe(
         'Async hook Test Hook timed out after 1.5s',
       );
     });
@@ -246,7 +246,7 @@ describe('AsyncHookRegistry', () => {
         stderr: '',
       });
 
-      const pending = registry.getPendingHooks();
+      const pending = Array.from(registry['pendingHooks'].values());
       expect(pending.length).toBe(2);
     });
   });
@@ -275,33 +275,11 @@ describe('AsyncHookRegistry', () => {
         stderr: '',
       });
 
-      const session1Hooks = registry.getPendingHooksForSession('session-1');
+      const session1Hooks = Array.from(
+        registry['pendingHooks'].values(),
+      ).filter((hook) => hook.sessionId === 'session-1');
       expect(session1Hooks.length).toBe(1);
       expect(session1Hooks[0].hookId).toBe('test-hook-1');
-    });
-  });
-
-  describe('getPendingOutput', () => {
-    it('should return and clear pending output', () => {
-      registry.register({
-        hookId: 'test-hook-1',
-        hookName: 'Test Hook',
-        hookEvent: HookEventName.PostToolUse,
-        sessionId: 'session-1',
-        startTime: Date.now(),
-        timeout: 60000,
-        stdout: 'plain text output',
-        stderr: '',
-      });
-
-      registry.complete('test-hook-1');
-
-      const output1 = registry.getPendingOutput();
-      expect(output1.messages.length).toBe(1);
-
-      // Second call should return empty
-      const output2 = registry.getPendingOutput();
-      expect(output2.messages.length).toBe(0);
     });
   });
 
@@ -331,7 +309,7 @@ describe('AsyncHookRegistry', () => {
 
       registry.clearSession('session-1');
 
-      const pending = registry.getPendingHooks();
+      const pending = Array.from(registry['pendingHooks'].values());
       expect(pending.length).toBe(1);
       expect(pending[0].sessionId).toBe('session-2');
     });
@@ -354,8 +332,8 @@ describe('AsyncHookRegistry', () => {
 
       registry.checkTimeouts();
 
-      expect(registry.hasRunningHooks()).toBe(false);
-      expect(registry.hasPendingOutput()).toBe(true);
+      expect(registry['pendingHooks'].size > 0).toBe(false);
+      expect(registry['completedOutputs'].length).toBeGreaterThan(0);
     });
   });
 
@@ -475,7 +453,7 @@ describe('AsyncHookRegistry', () => {
   });
 
   describe('auto timeout checker', () => {
-    it('should start and stop timeout checker', () => {
+    it('leaves an expired hook for an explicit timeout check once the checker stops', () => {
       const autoRegistry = new AsyncHookRegistry({
         enableAutoTimeoutCheck: true,
         timeoutCheckInterval: 100,
@@ -495,28 +473,15 @@ describe('AsyncHookRegistry', () => {
       });
 
       // Stop the checker to prevent interference with other tests
-      autoRegistry.stopTimeoutChecker();
+      clearInterval(autoRegistry['timeoutCheckTimer']);
 
       // Manually check - hook should still be there since we stopped the checker
       // before it could run
-      expect(autoRegistry.hasRunningHooks()).toBe(true);
+      expect(autoRegistry['pendingHooks'].size > 0).toBe(true);
 
       // Now manually trigger timeout check
       autoRegistry.checkTimeouts();
-      expect(autoRegistry.hasRunningHooks()).toBe(false);
-    });
-
-    it('should stop timeout checker on stopTimeoutChecker call', () => {
-      const autoRegistry = new AsyncHookRegistry({
-        enableAutoTimeoutCheck: true,
-        timeoutCheckInterval: 50,
-      });
-
-      // Stop immediately
-      autoRegistry.stopTimeoutChecker();
-
-      // Should not throw or cause issues
-      expect(() => autoRegistry.stopTimeoutChecker()).not.toThrow();
+      expect(autoRegistry['pendingHooks'].size > 0).toBe(false);
     });
   });
 });

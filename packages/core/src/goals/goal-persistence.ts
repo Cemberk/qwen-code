@@ -78,27 +78,3 @@ export function selectGoalRecoveryFromRecords(
     ? { recovery: unsupported, sourceUuid: unsupportedSourceUuid }
     : { recovery: { kind: 'none' } };
 }
-
-/**
- * The slice of a record that Goal recovery reads, so a restore projection can
- * carry it without the rest of the record; undefined for a record recovery
- * never looks at.
- */
-export function normalizeGoalRecoveryRecord(
-  record: GoalRecoveryRecord,
-): GoalRecoveryRecord | undefined {
-  if (record.subtype !== 'goal_state') return undefined;
-  return {
-    uuid: record.uuid,
-    type: record.type,
-    subtype: record.subtype,
-    systemPayload:
-      record.type === 'system'
-        ? (parseGoalStateRecordPayloadV2(record.systemPayload) ?? null)
-        : null,
-  };
-}
-
-export function isGoalRecoveryCandidate(record: GoalRecoveryRecord): boolean {
-  return record.subtype === 'goal_state';
-}

@@ -113,7 +113,7 @@ export const summaryCommand: SlashCommand = {
   },
   argumentHint: '[path]',
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
   action: async (context, args): Promise<SlashCommandActionReturn> => {
     const { config } = context.services;
     const { ui } = context;
@@ -468,18 +468,6 @@ export const summaryCommand: SlashCommand = {
 
     const returnNoConversationMessage = (): SlashCommandActionReturn => {
       const msg = t('No conversation found to summarize.');
-      if (executionMode === 'acp') {
-        const messages = async function* () {
-          yield {
-            messageType: 'info' as const,
-            content: msg,
-          };
-        };
-        return {
-          type: 'stream_messages',
-          messages: messages(),
-        };
-      }
       return {
         type: 'message',
         messageType: 'info',
@@ -514,36 +502,6 @@ export const summaryCommand: SlashCommand = {
       validateChatHistory(history);
     } catch (_error) {
       return returnNoConversationMessage();
-    }
-
-    if (executionMode === 'acp') {
-      const messages = async function* () {
-        try {
-          yield {
-            messageType: 'info' as const,
-            content: t('Generating project summary...'),
-          };
-
-          const { filePathForDisplay } =
-            await executeSummaryGeneration(history);
-
-          yield {
-            messageType: 'info' as const,
-            content: formatSuccessMessage(filePathForDisplay),
-          };
-        } catch (error) {
-          failInteractive(error);
-          yield {
-            messageType: 'error' as const,
-            content: formatErrorMessage(error),
-          };
-        }
-      };
-
-      return {
-        type: 'stream_messages',
-        messages: messages(),
-      };
     }
 
     try {

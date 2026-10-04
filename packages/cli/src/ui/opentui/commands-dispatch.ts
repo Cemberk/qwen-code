@@ -70,7 +70,6 @@ import {
   formatUserPromptExpansionBlockedMessage,
   serializeUserPromptExpansionPrompt,
 } from '../../utils/userPromptExpansionHook.js';
-import type { RecentSlashCommand } from '../hooks/useSlashCompletion.js';
 import { loadInteractiveCommands } from './slash-dispatch.js';
 import {
   createOpenTuiCommandContext,
@@ -198,7 +197,6 @@ const replayedExtensionRefresh = new WeakSet<ExtensionRefreshState>();
 
 export class OpenTuiSlashDispatcher {
   private activeAbortController: AbortController | null = null;
-  private recentCommands = new Map<string, RecentSlashCommand>();
   private readonly extensionRefreshState: ExtensionRefreshState;
   private readonly extensionRefreshListeners: Array<() => void> = [];
   private extensionContentRefreshTimer: ReturnType<typeof setTimeout> | null =
@@ -390,11 +388,6 @@ export class OpenTuiSlashDispatcher {
       // "Unknown command" if the command really doesn't exist.
     }
     return true;
-  }
-
-  /** Parity of `recentSlashCommands` (hidden commands are not tracked). */
-  get recentCommandList(): ReadonlyMap<string, RecentSlashCommand> {
-    return this.recentCommands;
   }
 
   /**
@@ -650,15 +643,6 @@ export class OpenTuiSlashDispatcher {
       }
 
       if (commandToExecute) {
-        if (!commandToExecute.hidden) {
-          const existing = this.recentCommands.get(commandToExecute.name);
-          this.recentCommands.set(commandToExecute.name, {
-            name: commandToExecute.name,
-            usedAt: Date.now(),
-            count: (existing?.count ?? 0) + 1,
-          });
-        }
-
         if (commandToExecute.action) {
           const baseContext = createOpenTuiCommandContext(
             this.host,
@@ -909,13 +893,6 @@ export class OpenTuiSlashDispatcher {
                   existingInvocationItemId: invocationItemId,
                 });
               }
-              case 'stream_messages': {
-                // stream_messages is only used in ACP/Zed integration mode
-                // and should not be returned in interactive UI mode
-                throw new Error(
-                  'stream_messages result type is not supported in interactive mode',
-                );
-              }
               default: {
                 const unhandled: never = result;
                 throw new Error(`Unhandled slash command result: ${unhandled}`);
@@ -1023,21 +1000,4 @@ export class OpenTuiSlashDispatcher {
       this.host.setIsProcessing(false);
     }
   }
-}
-
-/**
- * Convenience: loads the interactive registry through the original loader
- * stack (same as the ink processor) and returns a ready dispatcher.
- */
-export async function createOpenTuiSlashDispatcher(
-  host: OpenTuiCommandHost,
-  services: OpenTuiCommandServices,
-  signal?: AbortSignal,
-): Promise<OpenTuiSlashDispatcher> {
-  const commands = await loadInteractiveCommands(
-    services.config,
-    signal,
-    services.settings,
-  );
-  return new OpenTuiSlashDispatcher(host, services, commands);
 }

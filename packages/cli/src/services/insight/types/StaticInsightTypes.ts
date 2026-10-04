@@ -75,14 +75,6 @@ export interface SessionFacets {
   brief_summary: string;
 }
 
-export interface StaticInsightTemplateData {
-  styles: string;
-  content: string;
-  data: InsightData;
-  scripts: string;
-  generatedTime: string;
-}
-
 export type InsightProgressCallback = (
   stage: string,
   progress: number,

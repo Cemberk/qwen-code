@@ -73,14 +73,3 @@ export const HOOK_EVENT_DISPLAY: Readonly<
   [HookEventName.StopFailure]: ORDINARY,
   [HookEventName.InstructionsLoaded]: ORDINARY,
 });
-
-/**
- * Display metadata for one event. An event name this build does not know,
- * for example one that arrived over a protocol, is treated as ordinary: shown
- * once per execution, with no dedicated message.
- */
-export function hookEventDisplay(
-  eventName: HookEventName,
-): Readonly<HookEventDisplayMeta> {
-  return HOOK_EVENT_DISPLAY[eventName] ?? ORDINARY;
-}

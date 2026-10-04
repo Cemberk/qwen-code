@@ -12,8 +12,6 @@ import {
 } from './types.js';
 import { MessageType } from '../types.js';
 import { t } from '../../i18n/index.js';
-import { normalizeSkillPriority } from '@qwen-code/qwen-code-core';
-import { skillOriginLabel } from '../utils/skill-level-label.js';
 
 export const skillsCommand: SlashCommand = {
   name: 'skills',
@@ -21,7 +19,7 @@ export const skillsCommand: SlashCommand = {
     return t('Open the skills panel (browse, search, toggle, pick).');
   },
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'acp'] as const,
+  supportedModes: ['interactive'] as const,
   // Accepting `/skills` from the auto-completion popup (e.g. typing
   // `/skil<Enter>`) submits immediately rather than inserting `/skills `
   // and forcing a second Enter — `/skills` has no required arg, the bare
@@ -34,72 +32,16 @@ export const skillsCommand: SlashCommand = {
     // is the single entry for browsing, search, toggle, and skill launch.
     const skillManager = context.services.config?.getSkillManager();
     if (!skillManager) {
-      if (context.executionMode === 'interactive') {
-        context.ui.addItem(
-          {
-            type: MessageType.ERROR,
-            text: t('Could not retrieve skill manager.'),
-          },
-          Date.now(),
-        );
-        return;
-      }
-      return {
-        type: 'message' as const,
-        messageType: 'error' as const,
-        content: t('Could not retrieve skill manager.'),
-      };
+      context.ui.addItem(
+        {
+          type: MessageType.ERROR,
+          text: t('Could not retrieve skill manager.'),
+        },
+        Date.now(),
+      );
+      return;
     }
 
-    if (context.executionMode === 'interactive') {
-      return { type: 'dialog', dialog: 'skills_manage' };
-    }
-
-    // ACP / non-interactive: dialog can't render; fall back to a read-only
-    // listing so users in those contexts still get something useful from
-    // the bare command.
-    const skills = await skillManager.listSkills();
-    const userInvocableSkills = skills.filter(
-      (skill) => skill.userInvocable !== false,
-    );
-    const visibleSkills = userInvocableSkills.filter(
-      (skill) => context.services.config?.isSkillEnabled(skill) ?? true,
-    );
-    if (visibleSkills.length === 0) {
-      const content =
-        skills.length > 0 && userInvocableSkills.length === 0
-          ? t('All skills are marked as non-user-invocable.')
-          : userInvocableSkills.length === 0
-            ? t('No skills are currently available.')
-            : t(
-                'All available skills are disabled. Edit ~/.qwen/settings.json or .qwen/settings.json (skills.disabled) to re-enable.',
-              );
-      return {
-        type: 'message' as const,
-        messageType: 'info' as const,
-        content,
-      };
-    }
-    const sortedSkills = [...visibleSkills].sort(
-      (a, b) =>
-        normalizeSkillPriority(b.priority) -
-          normalizeSkillPriority(a.priority) || a.name.localeCompare(b.name),
-    );
-    const sanitize = (text: string, max: number): string => {
-      const oneLine = text.replace(/[\r\n]+/g, ' ').trim();
-      return oneLine.length <= max
-        ? oneLine
-        : `${oneLine.slice(0, Math.max(0, max - 1))}…`;
-    };
-    const lines = sortedSkills.map(
-      (s) =>
-        `  - ${s.name}${s.description ? `  ${sanitize(s.description, 80)}` : ''}` +
-        `${s.level ? `  ${skillOriginLabel(s)}` : ''}`,
-    );
-    return {
-      type: 'message' as const,
-      messageType: 'info' as const,
-      content: `${t('Available skills:')}\n\n${lines.join('\n')}`,
-    };
+    return { type: 'dialog', dialog: 'skills_manage' };
   },
 };

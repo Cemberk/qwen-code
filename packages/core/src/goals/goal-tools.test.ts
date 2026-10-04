@@ -28,7 +28,6 @@ import {
   type ProposeGoalToolConfig,
   applyPendingGoalProposal,
   formatProposeGoalRecoveryFailed,
-  formatProposeGoalRecoveryNotStarted,
   UpdateGoalTool,
   type GoalToolConfig,
 } from './goal-tools.js';
@@ -1286,13 +1285,9 @@ describe('ProposeGoalTool', () => {
   });
 
   it('prints each recovery command as a complete final line', () => {
-    for (const message of [
-      formatProposeGoalRecoveryNotStarted(objective),
-      formatProposeGoalRecoveryFailed(objective),
-    ]) {
-      expect(message.split('\n').at(-1)).toBe(`/goal set ${objective}`);
-      expect(message.match(/\/goal/g)).toHaveLength(1);
-    }
+    const message = formatProposeGoalRecoveryFailed(objective);
+    expect(message.split('\n').at(-1)).toBe(`/goal set ${objective}`);
+    expect(message.match(/\/goal/g)).toHaveLength(1);
   });
 
   it('keeps what the Goal tools cost every request inside a budget', () => {

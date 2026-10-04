@@ -18,7 +18,6 @@
 import { DiagLogLevel, diag } from '@opentelemetry/api';
 import type { DiagLogger } from '@opentelemetry/api';
 import type { NodeSDK } from '@opentelemetry/sdk-node';
-import type { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import type { TelemetryRuntimeConfig } from './runtime-config.js';
 import { initializeMetrics } from './metrics.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
@@ -52,7 +51,6 @@ let sdk: NodeSDK | undefined;
 let telemetryInitialized = false;
 let telemetryInitPromise: Promise<void> | undefined;
 let telemetryShutdownPromise: Promise<void> | undefined;
-let activeMetricReader: PeriodicExportingMetricReader | undefined;
 
 const OTEL_EXPORTER_ENV_VARS = [
   'OTEL_TRACES_EXPORTER',
@@ -115,7 +113,6 @@ export function initializeTelemetry(
       startSdkWithExplicitExporters(sdk);
       debugLogger.debug('OpenTelemetry SDK started successfully.');
       telemetryInitialized = true;
-      activeMetricReader = started.metricReader;
       const sessionId = config.getSessionId();
       setSessionContext(createSessionRootContext(sessionId), sessionId);
       // Unconditional catch-up: in every init mode `logStartSession` can run
@@ -221,36 +218,9 @@ export function shutdownTelemetry(): Promise<void> {
     } finally {
       telemetryInitialized = false;
       sdk = undefined;
-      activeMetricReader = undefined;
       telemetryShutdownPromise = undefined;
       setSessionContext(undefined);
     }
   })();
   return telemetryShutdownPromise;
-}
-
-const FORCE_FLUSH_TIMEOUT_MS = 2_000;
-
-export async function forceFlushMetrics(): Promise<void> {
-  if (!telemetryInitialized || !activeMetricReader) return;
-  const flush = activeMetricReader.forceFlush();
-  flush.catch(() => {});
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<void>((_, reject) => {
-    timer = setTimeout(
-      () =>
-        reject(
-          new Error(
-            `forceFlushMetrics timed out after ${FORCE_FLUSH_TIMEOUT_MS}ms`,
-          ),
-        ),
-      FORCE_FLUSH_TIMEOUT_MS,
-    );
-    timer.unref?.();
-  });
-  try {
-    await Promise.race([flush, timeout]);
-  } finally {
-    clearTimeout(timer);
-  }
 }

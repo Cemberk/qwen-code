@@ -24,11 +24,6 @@ const GIT_ENV_VARS_TO_CLEAR = [
 const NORMALIZED_GIT_ENV_VARS_TO_CLEAR = new Set(
   GIT_ENV_VARS_TO_CLEAR.map((key) => key.toLowerCase()),
 );
-const REMOTE_GIT_TRANSPORT_KEYS = new Set(
-  ['GIT_SSH_COMMAND', 'GIT_SSH', 'GIT_ASKPASS', 'SSH_ASKPASS'].map((key) =>
-    key.toLowerCase(),
-  ),
-);
 const GIT_METADATA_KEYS = new Set(
   [
     'GIT_AUTHOR_NAME',
@@ -85,17 +80,6 @@ export function gitEnv(
   }
   env['LC_ALL'] = 'C';
   env['LANG'] = 'C';
-  return env;
-}
-
-export function gitRemoteEnv(
-  base?: Readonly<Record<string, string | undefined>>,
-): Record<string, string | undefined> {
-  const source = base ?? process.env;
-  const env = gitEnv(source);
-  for (const [key, value] of Object.entries(source)) {
-    if (REMOTE_GIT_TRANSPORT_KEYS.has(key.toLowerCase())) env[key] = value;
-  }
   return env;
 }
 

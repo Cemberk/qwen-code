@@ -62,7 +62,6 @@ import {
   SETTINGS_DIRECTORY_NAME, // This is from the original module, but used by the mock.
   type Settings,
   loadEnvironment,
-  reloadEnvironment,
   SETTINGS_VERSION,
   SETTINGS_VERSION_KEY,
   resetHomeEnvBootstrapForTesting,
@@ -5382,113 +5381,6 @@ describe('Settings Loading and Merging', () => {
         delete process.env['OPENAI_API_KEY'];
         cwdSpy.mockRestore();
       });
-    });
-  });
-
-  describe('reloadEnvironment', () => {
-    const normalizeFsPath = (
-      p: fs.PathLike | fs.PathOrFileDescriptor,
-    ): string => path.normalize(p.toString());
-
-    it('uses user .qwen/.env as fallback when the project .env lacks an API key', () => {
-      delete process.env['OPENCODE_GO_API_KEY'];
-      delete process.env['PROJECT_ONLY_VAR'];
-      const projectEnvPath = path.resolve(MOCK_WORKSPACE_DIR, '.env');
-      const userQwenEnvPath = path.normalize(
-        path.join('/mock/home/user', QWEN_DIR, '.env'),
-      );
-      const envPaths = new Set([projectEnvPath, userQwenEnvPath]);
-
-      vi.mocked(isWorkspaceTrusted).mockReturnValue({
-        isTrusted: true,
-        source: 'file',
-      });
-      (mockFsExistsSync as Mock).mockImplementation((p: fs.PathLike) =>
-        envPaths.has(normalizeFsPath(p)),
-      );
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          const filePath = normalizeFsPath(p);
-          if (filePath === projectEnvPath)
-            return 'PROJECT_ONLY_VAR=from_project';
-          if (filePath === userQwenEnvPath)
-            return 'OPENCODE_GO_API_KEY=from_user_qwen_env';
-          return '{}';
-        },
-      );
-
-      const result = reloadEnvironment({}, MOCK_WORKSPACE_DIR);
-
-      expect(process.env['PROJECT_ONLY_VAR']).toEqual('from_project');
-      expect(process.env['OPENCODE_GO_API_KEY']).toEqual('from_user_qwen_env');
-      expect(result.updatedKeys).toEqual([
-        'PROJECT_ONLY_VAR',
-        'OPENCODE_GO_API_KEY',
-      ]);
-      expect(result.removedKeys).toEqual([]);
-    });
-
-    it('keeps the project .env value during reload when user .qwen/.env also defines it', () => {
-      delete process.env['OPENCODE_GO_API_KEY'];
-      const projectEnvPath = path.resolve(MOCK_WORKSPACE_DIR, '.env');
-      const userQwenEnvPath = path.normalize(
-        path.join('/mock/home/user', QWEN_DIR, '.env'),
-      );
-      const envPaths = new Set([projectEnvPath, userQwenEnvPath]);
-
-      vi.mocked(isWorkspaceTrusted).mockReturnValue({
-        isTrusted: true,
-        source: 'file',
-      });
-      (mockFsExistsSync as Mock).mockImplementation((p: fs.PathLike) =>
-        envPaths.has(normalizeFsPath(p)),
-      );
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          const filePath = normalizeFsPath(p);
-          if (filePath === projectEnvPath)
-            return 'OPENCODE_GO_API_KEY=from_project_env';
-          if (filePath === userQwenEnvPath)
-            return 'OPENCODE_GO_API_KEY=from_user_qwen_env';
-          return '{}';
-        },
-      );
-
-      const result = reloadEnvironment({}, MOCK_WORKSPACE_DIR);
-
-      expect(process.env['OPENCODE_GO_API_KEY']).toEqual('from_project_env');
-      expect(result.updatedKeys).toEqual(['OPENCODE_GO_API_KEY']);
-      expect(result.removedKeys).toEqual([]);
-    });
-
-    it('keeps settings.env value during reload when .env value is empty', () => {
-      process.env['RELOAD_EMPTY_DOTENV_VAR'] = 'from_settings';
-      const projectEnvPath = path.resolve(MOCK_WORKSPACE_DIR, '.env');
-
-      vi.mocked(isWorkspaceTrusted).mockReturnValue({
-        isTrusted: true,
-        source: 'file',
-      });
-      (mockFsExistsSync as Mock).mockImplementation(
-        (p: fs.PathLike) => projectEnvPath === normalizeFsPath(p),
-      );
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          const filePath = normalizeFsPath(p);
-          if (filePath === projectEnvPath) return 'RELOAD_EMPTY_DOTENV_VAR=';
-          return '{}';
-        },
-      );
-
-      const result = reloadEnvironment(
-        { env: { RELOAD_EMPTY_DOTENV_VAR: 'from_settings' } },
-        MOCK_WORKSPACE_DIR,
-      );
-
-      expect(process.env['RELOAD_EMPTY_DOTENV_VAR']).toEqual('from_settings');
-      expect(result.updatedKeys).toEqual([]);
-      expect(result.removedKeys).toEqual([]);
-      delete process.env['RELOAD_EMPTY_DOTENV_VAR'];
     });
   });
 

@@ -62,7 +62,7 @@ function readManifest(packageDir) {
 }
 
 // Specifiers aliased to TypeScript source in a consumer's vitest config
-// (keys of `resolve.alias`, e.g. `'@qwen-code/acp-bridge/bridgeErrors'`).
+// (keys of `resolve.alias`, e.g. `'@qwen-code/qwen-code-core/shellResult'`).
 // Dist targets behind an aliased specifier are never resolved from dist/
 // during test collection, so probing them would block runs that pass.
 // Alias keys are matched as quoted object keys containing a `/` — the only
@@ -86,7 +86,7 @@ export function aliasedSpecifiers(configPath) {
 // Every file under `dist/` that the manifest's `exports`/`main` entries
 // point at, each paired with the import specifier it serves. Checking all
 // of them (not only the '.' entry) also covers unaliased subpath imports
-// such as `@qwen-code/acp-bridge/sessionRestoreTimeout`; a package whose
+// such as `@qwen-code/qwen-code-core/transcriptRecords`; a package whose
 // dist is missing any listed file would still break test collection. Note
 // that dist files reachable only through a root-index re-export are not
 // listed in `exports` and remain outside this probe.

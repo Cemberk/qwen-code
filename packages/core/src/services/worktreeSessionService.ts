@@ -4,10 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import nodeFs from 'node:fs';
 import * as fs from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
-import { randomBytes } from 'node:crypto';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { Storage } from '../config/storage.js';
@@ -54,7 +52,7 @@ export interface WorktreeSession {
    * field; capture cwd separately at the time of need.
    */
   originalCwd: string;
-  /** Registered daemon workspace root for route-owned worktree attestation. */
+  /** Workspace root written by older daemon-hosted builds; read for compat. */
   workspaceCwd?: string;
   originalBranch: string;
   /**
@@ -78,11 +76,6 @@ export interface WorktreeSession {
    */
   supersedes?: string;
 }
-
-export type StrictWorktreeSession =
-  | { state: 'missing' }
-  | { state: 'valid'; session: WorktreeSession }
-  | { state: 'invalid'; reason: string };
 
 /**
  * Runtime shape check for a parsed sidecar object. Returns true only when
@@ -184,9 +177,8 @@ async function readWorktreeSessionOnce(
   try {
     options.signal?.throwIfAborted();
     const pathStat = await fs.lstat(filePath);
-    // Deliberately no nlink check (unlike readWorktreeSessionStrict):
-    // createWorktreeSession's link-then-unlink publish leaves a complete,
-    // fsync'd sidecar at nlink === 2 inside its window and after a crash,
+    // Deliberately no nlink check: a link-then-unlink publish leaves a
+    // complete sidecar at nlink === 2 inside its window and after a crash,
     // and restoreWorktreeContext deletes whatever this read rejects.
     if (!pathStat.isFile()) return null;
     handle = await fs.open(
@@ -247,99 +239,6 @@ async function readWorktreeSessionOnce(
   return parsed;
 }
 
-/** Strict daemon-only sidecar read that preserves corruption for recovery. */
-export async function readWorktreeSessionStrict(
-  filePath: string,
-): Promise<StrictWorktreeSession> {
-  let handle: fs.FileHandle | undefined;
-  let observedSidecar = false;
-  try {
-    const flags =
-      nodeFs.constants.O_RDONLY |
-      (nodeFs.constants.O_NOFOLLOW ?? 0) |
-      (nodeFs.constants.O_NONBLOCK ?? 0);
-    const before = await fs.lstat(filePath, { bigint: true });
-    observedSidecar = true;
-    if (before.isSymbolicLink() || !before.isFile() || before.nlink !== 1n) {
-      return { state: 'invalid', reason: 'unsafe sidecar file type' };
-    }
-    if (
-      before.ino === 0n ||
-      before.size > BigInt(WORKTREE_SESSION_SIDECAR_MAX_BYTES)
-    ) {
-      return { state: 'invalid', reason: 'unsafe sidecar size or identity' };
-    }
-    handle = await fs.open(filePath, flags);
-    const opened = await handle.stat({ bigint: true });
-    if (
-      !opened.isFile() ||
-      opened.nlink !== 1n ||
-      opened.dev !== before.dev ||
-      opened.ino !== before.ino
-    ) {
-      return {
-        state: 'invalid',
-        reason: 'sidecar identity changed before read',
-      };
-    }
-    const buffer = Buffer.alloc(WORKTREE_SESSION_SIDECAR_MAX_BYTES + 1);
-    let bytesRead = 0;
-    while (bytesRead < buffer.length) {
-      const chunk = await handle.read(
-        buffer,
-        bytesRead,
-        buffer.length - bytesRead,
-        bytesRead,
-      );
-      if (chunk.bytesRead === 0) break;
-      bytesRead += chunk.bytesRead;
-    }
-    if (bytesRead > WORKTREE_SESSION_SIDECAR_MAX_BYTES) {
-      return { state: 'invalid', reason: 'unsafe sidecar size or identity' };
-    }
-    const after = await handle.stat({ bigint: true });
-    const pathStats = await fs.lstat(filePath, { bigint: true });
-    if (
-      !after.isFile() ||
-      after.nlink !== 1n ||
-      after.size !== BigInt(bytesRead) ||
-      after.dev !== opened.dev ||
-      after.ino !== opened.ino ||
-      !pathStats.isFile() ||
-      pathStats.nlink !== 1n ||
-      pathStats.dev !== after.dev ||
-      pathStats.ino !== after.ino
-    ) {
-      return {
-        state: 'invalid',
-        reason: 'sidecar identity changed during read',
-      };
-    }
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(buffer.subarray(0, bytesRead).toString('utf8'));
-    } catch {
-      return { state: 'invalid', reason: 'invalid sidecar JSON' };
-    }
-    if (!isValidWorktreeSession(parsed)) {
-      return { state: 'invalid', reason: 'invalid sidecar contents' };
-    }
-    return { state: 'valid', session: parsed };
-  } catch (error) {
-    if (isNodeError(error) && error.code === 'ENOENT') {
-      return observedSidecar
-        ? { state: 'invalid', reason: 'sidecar disappeared during read' }
-        : { state: 'missing' };
-    }
-    return {
-      state: 'invalid',
-      reason: error instanceof Error ? error.message : String(error),
-    };
-  } finally {
-    await handle?.close().catch(() => {});
-  }
-}
-
 /** Writes the worktree session sidecar via `atomicWriteJSON`. */
 export async function writeWorktreeSession(
   filePath: string,
@@ -366,62 +265,6 @@ async function fsyncParentDirectory(filePath: string): Promise<void> {
       throw error;
     }
   }
-}
-
-/** Creates a new sidecar without replacing an existing session binding. */
-export async function createWorktreeSession(
-  filePath: string,
-  session: WorktreeSession,
-): Promise<void> {
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  const stagedPath = `${filePath}.${randomBytes(6).toString('hex')}.tmp`;
-  const handle = await fs.open(
-    stagedPath,
-    fsConstants.O_WRONLY |
-      fsConstants.O_CREAT |
-      fsConstants.O_EXCL |
-      (fsConstants.O_NOFOLLOW ?? 0),
-    0o600,
-  );
-  let openedStat: Awaited<ReturnType<typeof handle.stat>> | undefined;
-  try {
-    openedStat = await handle.stat();
-    if (
-      !openedStat.isFile() ||
-      openedStat.nlink !== 1 ||
-      openedStat.ino === 0
-    ) {
-      throw new Error('Worktree session sidecar must be a regular file');
-    }
-    await handle.writeFile(`${JSON.stringify(session, null, 2)}\n`, 'utf8');
-    await handle.sync();
-    const pathStat = await fs.lstat(stagedPath);
-    if (
-      !pathStat.isFile() ||
-      pathStat.nlink !== 1 ||
-      pathStat.dev !== openedStat.dev ||
-      pathStat.ino !== openedStat.ino
-    ) {
-      throw new Error('Worktree session sidecar path changed');
-    }
-    await handle.close();
-    await fs.link(stagedPath, filePath);
-  } catch (error) {
-    await handle.close().catch(() => {});
-    if (openedStat) {
-      try {
-        const current = await fs.lstat(stagedPath);
-        if (current.dev === openedStat.dev && current.ino === openedStat.ino) {
-          await fs.unlink(stagedPath);
-        }
-      } catch {
-        // Leave any path whose identity cannot be verified untouched.
-      }
-    }
-    throw error;
-  }
-  await fs.unlink(stagedPath);
-  await fsyncParentDirectory(filePath);
 }
 
 export async function clearWorktreeSession(filePath: string): Promise<void> {
@@ -682,7 +525,6 @@ export interface WorktreeRestoreResult {
    * Each entry point chooses its own injection mechanism:
    * - TUI: `historyManager.addItem({ type: INFO, text })`
    * - Headless: prepend as a `<system-reminder>` block to the user prompt
-   * - ACP: emit as a `system` message and prepend to the next prompt
    */
   contextMessage: string | null;
   /** Active worktree session, or null when no sidecar / sidecar was stale. */
@@ -712,11 +554,10 @@ export interface WorktreeRestoreResult {
  *
  * A sidecar carrying `supersededBy` is refused the same way but deliberately
  * NOT cleared: a worktree reset moved ownership of that checkout to the
- * replacement session, and the daemon's reset route still reads this sidecar's
- * `supersededBy` to redirect and to classify an interrupted transfer. Restoring
- * here would point a live session at a checkout another session owns.
+ * replacement session. Restoring here would point a live session at a
+ * checkout another session owns.
  *
- * Shared by TUI / headless / ACP entry points so all three behave
+ * Shared by the TUI and headless entry points so both behave
  * consistently on `--resume`. Failures are logged via the supplied
  * `onWarn` callback but never thrown — worktree restore is best-effort,
  * the session itself must still load.
@@ -766,8 +607,7 @@ export async function restoreWorktreeContext(
     // A worktree reset moved ownership of this checkout to
     // `session.supersededBy`. Refuse the restore — resuming here would direct
     // a live session into a worktree another session now owns — but leave the
-    // sidecar alone: the daemon's reset route still reads this link to
-    // redirect and to classify an interrupted transfer.
+    // sidecar alone: it records which session took the checkout over.
     onWarn?.(
       new Error(
         `worktree session was superseded by ${session.supersededBy}; ` +

@@ -52,9 +52,9 @@ const SUBAGENT_MARKER = '.subagent-cleanup';
 const OPENAI_LOGS_MARKER = '.openai-logs-cleanup';
 const DEBUG_LOGS_MARKER = '.debug-logs-cleanup';
 
-// ACP binds two fixed non-UUID session-id contexts whose debug logs land in
-// the same sweep directory: sessionIdContext.run('workspace-mcp-discovery')
-// and the 'transcript-replay' fallback (acpAgent.ts). Those stems fail
+// The removed ACP mode bound two fixed non-UUID session-id contexts whose debug
+// logs may still sit in the same sweep directory: 'workspace-mcp-discovery'
+// and the 'transcript-replay' fallback. Those stems fail
 // isValidSessionId, and each is one fixed-name file appended across every
 // run with no rotation — so they would grow unbounded in exactly the
 // directory this pass keeps bounded. Sweep them by name; the mtime cutoff
@@ -497,7 +497,7 @@ async function runHousekeeping(
   // and the size-rotated `daemon/` subdir. Runs unconditionally so residue
   // from earlier debugging sessions is cleaned even when logging is now off.
   // Interactive sessions only: the sole caller startBackgroundHousekeeping is
-  // gated on config.isInteractive(), so headless/ACP/serve processes never
+  // gated on config.isInteractive(), so headless processes never
   // sweep (and per-workspace runtime dirs are never resolved here). The
   // shared ~/.qwen/debug backlog is self-healing — the next interactive run
   // in the same runtime dir sweeps it. Non-interactive coverage is a

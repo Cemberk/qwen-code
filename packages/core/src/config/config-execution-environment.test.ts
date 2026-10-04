@@ -25,11 +25,6 @@ const params = {
   debugMode: false,
   model: 'test',
 };
-const shutdownOptions = {
-  shutdownTelemetry: false,
-  skipSessionWriter: true,
-  strictResourceCleanup: true,
-};
 
 describe('execution environment ownership', () => {
   it('aborts startup before other shutdown work and refuses new factory lookups', async () => {
@@ -53,7 +48,7 @@ describe('execution environment ownership', () => {
     );
     config.registerExecutionEnvironment(pending);
     const rejected = pending.catch((error: unknown) => error);
-    const shutdown = config.shutdown(shutdownOptions);
+    const shutdown = config.shutdown();
     expect(startupSignal.aborted).toBe(true);
     expect(caller.signal.aborted).toBe(false);
     expect(config.getExecutionEnvironmentFactory()).toBeUndefined();
@@ -61,52 +56,35 @@ describe('execution environment ownership', () => {
     await shutdown;
   });
 
-  it.each([false, true])(
-    'bounds stalled startup and visibly retains cleanup ownership (strict=%s)',
-    async (strictResourceCleanup) => {
-      vi.useFakeTimers();
-      const warning = vi
-        .spyOn(console, 'warn')
-        .mockImplementation(() => undefined);
-      const config = new Config(params);
-      let finishStartup!: (environment: ExecutionEnvironment) => void;
-      const dispose = vi.fn().mockResolvedValue(undefined);
-      config.registerExecutionEnvironment(
-        new Promise((resolve) => {
-          finishStartup = resolve;
-        }),
+  it('bounds stalled startup and visibly retains cleanup ownership', async () => {
+    vi.useFakeTimers();
+    const warning = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    const config = new Config(params);
+    let finishStartup!: (environment: ExecutionEnvironment) => void;
+    const dispose = vi.fn().mockResolvedValue(undefined);
+    config.registerExecutionEnvironment(
+      new Promise((resolve) => {
+        finishStartup = resolve;
+      }),
+    );
+    const shutdown = config.shutdown().catch((error: unknown) => error);
+    try {
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(await shutdown).toBeUndefined();
+      expect(warning).toHaveBeenCalledWith(
+        expect.stringContaining('workspace /tmp'),
       );
-      const shutdown = config
-        .shutdown({
-          ...shutdownOptions,
-          strictResourceCleanup,
-        })
-        .catch((error: unknown) => error);
-      try {
-        await vi.advanceTimersByTimeAsync(1_000);
-        const result = await shutdown;
-        if (strictResourceCleanup) {
-          expect(result).toMatchObject({
-            message: expect.stringContaining(
-              'Container execution cleanup failed',
-            ),
-          });
-        } else {
-          expect(result).toBeUndefined();
-        }
-        expect(warning).toHaveBeenCalledWith(
-          expect.stringContaining('workspace /tmp'),
-        );
-        expect(dispose).not.toHaveBeenCalled();
-        finishStartup({ dispose } as unknown as ExecutionEnvironment);
-        await vi.advanceTimersByTimeAsync(0);
-        expect(dispose).toHaveBeenCalledOnce();
-      } finally {
-        warning.mockRestore();
-        vi.useRealTimers();
-      }
-    },
-  );
+      expect(dispose).not.toHaveBeenCalled();
+      finishStartup({ dispose } as unknown as ExecutionEnvironment);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(dispose).toHaveBeenCalledOnce();
+    } finally {
+      warning.mockRestore();
+      vi.useRealTimers();
+    }
+  });
 
   it('does not wait for unrelated session resources before starting container disposal', async () => {
     const config = new Config(params);
@@ -125,7 +103,7 @@ describe('execution environment ownership', () => {
     config.registerExecutionEnvironment(
       Promise.resolve({ dispose } as unknown as ExecutionEnvironment),
     );
-    const shutdown = config.shutdown(shutdownOptions);
+    const shutdown = config.shutdown();
     await vi.waitFor(() => expect(dispose).toHaveBeenCalledOnce());
     expect(stop).toHaveBeenCalledOnce();
     finishRegistry();
@@ -149,7 +127,7 @@ describe('execution environment ownership', () => {
     for (const context of [config, worktree, approval, child]) {
       expect(context.getAgentExecutionBackend()).toBe('container');
     }
-    await config.shutdown(shutdownOptions);
+    await config.shutdown();
     expect(config.getExecutionEnvironmentFactory()).toBeUndefined();
     expect(child.getExecutionEnvironmentFactory()).toBeUndefined();
     expect(child.getAgentExecutionBackend()).toBe('container');
@@ -174,7 +152,7 @@ describe('execution environment ownership', () => {
   );
 
   it.each(['cleanupArenaRuntime', 'cleanupTeamRuntime'] as const)(
-    'logs %s failures during non-strict shutdown',
+    'logs %s failures during shutdown',
     async (method) => {
       const config = new Config(params);
       (config as unknown as { initialized: boolean }).initialized = true;
@@ -189,9 +167,7 @@ describe('execution environment ownership', () => {
       vi.spyOn(config, 'cleanupTeamRuntime').mockResolvedValue(undefined);
       vi.spyOn(config, method).mockRejectedValue(failure);
       try {
-        await expect(
-          config.shutdown({ ...shutdownOptions, strictResourceCleanup: false }),
-        ).resolves.toBeUndefined();
+        await expect(config.shutdown()).resolves.toBeUndefined();
         expect(log).toHaveBeenCalledWith(
           'Error during session runtime cleanup:',
           failure,
@@ -245,7 +221,7 @@ describe('execution environment ownership', () => {
             });
       deriveConfig(config).registerExecutionEnvironment(startup);
       let closed = false;
-      const shutdown = config.shutdown(shutdownOptions).then(() => {
+      const shutdown = config.shutdown().then(() => {
         closed = true;
       });
       expect(config.getExecutionEnvironmentFactory()).toBeUndefined();
@@ -276,7 +252,7 @@ describe('execution environment ownership', () => {
       Promise.resolve({ dispose } as unknown as ExecutionEnvironment),
     );
     unregister();
-    await config.shutdown(shutdownOptions);
+    await config.shutdown();
     expect(dispose).not.toHaveBeenCalled();
   });
 
@@ -285,16 +261,7 @@ describe('execution environment ownership', () => {
     config.registerExecutionEnvironment(
       Promise.reject(new Error('Image unavailable')),
     );
-    await expect(config.shutdown(shutdownOptions)).resolves.toBeUndefined();
-  });
-
-  it('reports a startup cleanup failure', async () => {
-    const config = new Config(params);
-    const error = new ExecutionCleanupError('Container is still running');
-    config.registerExecutionEnvironment(Promise.reject(error));
-    await expect(config.shutdown(shutdownOptions)).rejects.toMatchObject({
-      errors: [error],
-    });
+    await expect(config.shutdown()).resolves.toBeUndefined();
   });
 
   it('shares timed-out startup recovery until cleanup actually finishes', async () => {
@@ -351,30 +318,8 @@ describe('execution environment ownership', () => {
           ),
       } as unknown as ExecutionEnvironment),
     );
-    await expect(config.shutdown(shutdownOptions)).rejects.toThrow(
-      'Container execution cleanup failed',
-    );
+    await expect(config.shutdown()).resolves.toBeUndefined();
     expect(arenaCleanup).not.toHaveBeenCalled();
     expect(teamCleanup).not.toHaveBeenCalled();
-  });
-
-  it('preserves an earlier shutdown failure when container cleanup also fails', async () => {
-    const config = new Config(params);
-    const resourceError = new Error('Resource shutdown failed');
-    const cleanupError = new ExecutionCleanupError('Container removal failed');
-    vi.spyOn(
-      config as unknown as { clearSessionRestoreProjection(): void },
-      'clearSessionRestoreProjection',
-    ).mockImplementation(() => {
-      throw resourceError;
-    });
-    config.registerExecutionEnvironment(
-      Promise.resolve({
-        dispose: vi.fn().mockRejectedValue(cleanupError),
-      } as unknown as ExecutionEnvironment),
-    );
-    await expect(config.shutdown(shutdownOptions)).rejects.toMatchObject({
-      errors: [resourceError, cleanupError],
-    });
   });
 });

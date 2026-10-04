@@ -63,8 +63,6 @@ export default {
   'MCP "{{name}}" {{state}}.': 'MCP "{{name}}" {{state}}.',
   'MCP servers': 'MCP servers',
   'Mark for Update': 'Mark for Update',
-  'No extensions or marketplaces added yet.':
-    'No extensions or marketplaces added yet.',
   'No plugins or MCP servers installed.':
     'No plugins or MCP servers installed.',
   None: 'None',
@@ -119,7 +117,6 @@ export default {
   'toolDisplayName.Advisor': 'toolDisplayName.Advisor',
   'toolDisplayName.Artifact': 'toolDisplayName.Artifact',
   'toolDisplayName.RecordArtifact': 'toolDisplayName.RecordArtifact',
-  'toolDisplayName.RecordSource': 'toolDisplayName.RecordSource',
   'toolDisplayName.ReportFindings': 'toolDisplayName.ReportFindings',
   'toolDisplayName.DisplayImage': 'toolDisplayName.DisplayImage',
   'toolDisplayName.Skill': 'toolDisplayName.Skill',
@@ -132,7 +129,6 @@ export default {
   'toolDisplayName.CronList': 'toolDisplayName.CronList',
   'toolDisplayName.CronDelete': 'toolDisplayName.CronDelete',
   'toolDisplayName.LoopWakeup': 'toolDisplayName.LoopWakeup',
-  'toolDisplayName.CreateSubSession': 'toolDisplayName.CreateSubSession',
   'toolDisplayName.ListAgents': 'toolDisplayName.ListAgents',
   'toolDisplayName.TaskCreate': 'toolDisplayName.TaskCreate',
   'toolDisplayName.TaskUpdate': 'toolDisplayName.TaskUpdate',
@@ -272,8 +268,6 @@ export default {
   'Failed to load skills: {{error}}': 'Failed to load skills: {{error}}',
   'Failed to save skills configuration: {{error}}':
     'Failed to save skills configuration: {{error}}',
-  'All available skills are disabled. Edit ~/.qwen/settings.json or .qwen/settings.json (skills.disabled) to re-enable.':
-    'All available skills are disabled. Edit ~/.qwen/settings.json or .qwen/settings.json (skills.disabled) to re-enable.',
   'Press esc to close.': 'Press esc to close.',
   '{{count}} skills · ': '{{count}} skills · ',
   '{{matched}} / {{total}} skills · ': '{{matched}} / {{total}} skills · ',
@@ -809,10 +803,6 @@ export default {
     'You are installing an extension from {{originSource}}. Some features may not work perfectly with Qwen Code.',
   'Extension "{{name}}" installed successfully and enabled.':
     'Extension "{{name}}" installed successfully and enabled.',
-  'The github URL, local path, or marketplace source (marketplace-url:plugin-name) of the extension to install.':
-    'The github URL, local path, or marketplace source (marketplace-url:plugin-name) of the extension to install.',
-  'Installs an extension from a git repository URL, local path, scoped npm package (@scope/name), or claude marketplace (marketplace-url:plugin-name).':
-    'Installs an extension from a git repository URL, local path, scoped npm package (@scope/name), or claude marketplace (marketplace-url:plugin-name).',
   Description: 'Description',
   'Delete Session': 'Delete Session',
   'Acknowledge the security risks of installing an extension and skip the confirmation prompt.':
@@ -1368,14 +1358,8 @@ export default {
   // ============================================================================
   'Switch the model for this session (--fast for suggestion model, [model-id] to switch immediately).':
     'Switch the model for this session (--fast for suggestion model, [model-id] to switch immediately).',
-  'Switch the model for this session (--fast for suggestion model, --voice for voice transcription model, [model-id] to switch immediately).':
-    'Switch the model for this session (--fast for suggestion model, --voice for voice transcription model, [model-id] to switch immediately).',
-  'Switch the model for this session (--fast for suggestion model, --voice for voice transcription model, --vision for the vision bridge model, --project to persist to project settings, --global to persist to user settings, [model-id] to switch immediately, or [model-id] [prompt] to run a one-off prompt on another model; the inline prompt is sent verbatim without @file expansion).':
-    'Switch the model for this session (--fast for suggestion model, --voice for voice transcription model, --vision for the vision bridge model, --project to persist to project settings, --global to persist to user settings, [model-id] to switch immediately, or [model-id] [prompt] to run a one-off prompt on another model; the inline prompt is sent verbatim without @file expansion).',
   'Switch the model for this session (--fast for suggestion model, --vision for the vision bridge model, --compaction for chat compression model, --project to persist to project settings, --global to persist to user settings, [model-id] to switch immediately, or [model-id] [prompt] to run a one-off prompt on another model; the inline prompt is sent verbatim without @file expansion).':
     'Switch the model for this session (--fast for suggestion model, --vision for the vision bridge model, --compaction for chat compression model, --project to persist to project settings, --global to persist to user settings, [model-id] to switch immediately, or [model-id] [prompt] to run a one-off prompt on another model; the inline prompt is sent verbatim without @file expansion).',
-  "Inline one-shot override isn't supported in this mode — run '/model {{model}}' first, then send your prompt.":
-    "Inline one-shot override isn't supported in this mode — run '/model {{model}}' first, then send your prompt.",
   "Inline one-shot override can't switch providers. '{{model}}' belongs to a different provider — run '/model {{model}}' first, then send your prompt.":
     "Inline one-shot override can't switch providers. '{{model}}' belongs to a different provider — run '/model {{model}}' first, then send your prompt.",
   "⚠ '{{model}}' is not a known image-capable model; the vision bridge may fail on images.":
@@ -1406,8 +1390,6 @@ export default {
     'Selected compaction model is unavailable.',
   'No models are configured.': 'No models are configured.',
   'Configured models: {{models}}.': 'Configured models: {{models}}.',
-  "Voice model '{{modelName}}' cannot be used for transcription.":
-    "Voice model '{{modelName}}' cannot be used for transcription.",
   'Content generator configuration not available.':
     'Content generator configuration not available.',
   'Authentication type not available.': 'Authentication type not available.',
@@ -2274,8 +2256,6 @@ export default {
     'Arena requires at least 2 models. Use --models model1,model2 to specify.',
   'Arena started with {{count}} agents on task: "{{task}}"\nModels:\n{{modelList}}':
     'Arena started with {{count}} agents on task: "{{task}}"\nModels:\n{{modelList}}',
-  'Arena panes are running in tmux. Attach with: `{{command}}`':
-    'Arena panes are running in tmux. Attach with: `{{command}}`',
   '[{{label}}] failed: {{error}}': '[{{label}}] failed: {{error}}',
   'Loading suggestions...': 'Loading suggestions...',
   'Show per-item context usage breakdown.':
@@ -2361,10 +2341,6 @@ export default {
   out: 'out',
 
   // Update command
-  'Standalone install detected. Please rerun the standalone installer to update:':
-    'Standalone install detected. Please rerun the standalone installer to update:',
-  'Unable to auto-update this standalone installation. Please reinstall from:':
-    'Unable to auto-update this standalone installation. Please reinstall from:',
   '⚠️ History gap: earlier conversation was lost before this point (storage interruption) and could not be recovered.':
     '⚠️ History gap: earlier conversation was lost before this point (storage interruption) and could not be recovered.',
 

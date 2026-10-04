@@ -32,8 +32,6 @@ const baseConfigParams: ConfigParameters = {
   sandbox: undefined,
   targetDir: '/test/dir',
   debugMode: false,
-  userMemory: '',
-  memoryFileCount: 0,
   approvalMode: ApprovalMode.DEFAULT,
 };
 
@@ -422,29 +420,6 @@ describe('ToolSearchTool', () => {
       expect(result.error?.message).toContain('bridge');
     },
   );
-
-  it('does not publish a Goal proposal schema outside an armed ACP turn', async () => {
-    const acpConfig = new Config({
-      ...baseConfigParams,
-      experimentalZedIntegration: true,
-    });
-    acpConfig.setGoalProposalHostSupported(true);
-    const acpRegistry = new ToolRegistry(acpConfig);
-    vi.spyOn(acpConfig, 'getToolRegistry').mockReturnValue(acpRegistry);
-    acpRegistry.registerTool(new MockTool({ name: 'propose_goal' }));
-    const tool = new ToolSearchTool(acpConfig);
-
-    const unavailable = await tool
-      .build({ query: 'select:propose_goal' })
-      .execute(new AbortController().signal);
-    expect(String(unavailable.llmContent)).toBe('Not found: propose_goal');
-
-    acpConfig.setGoalProposalTurnKey('user-turn');
-    const available = await tool
-      .build({ query: 'select:propose_goal' })
-      .execute(new AbortController().signal);
-    expect(String(available.llmContent)).toContain('"name":"propose_goal"');
-  });
 
   it('escapes `<` in schema JSON so embedded </function> cannot close the wrapper', async () => {
     // MCP descriptions are remote-supplied untrusted text. A description

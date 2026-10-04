@@ -125,9 +125,8 @@ export const NOTIFICATION_LABEL_MAX_LENGTH = 80;
  * slice could emit an unpaired surrogate), and an astral-heavy label
  * within the cap is never falsely "truncated" into a longer string.
  *
- * Shared by every background-notification label surface — the registries'
- * legacy displayText and the ACP session's structured i18n fields — so
- * the surfaces cannot drift.
+ * Shared by every background-notification label surface so the surfaces
+ * cannot drift.
  */
 export function truncateNotificationLabel(label: string): string {
   const normalized = stripDisplayControlChars(label)

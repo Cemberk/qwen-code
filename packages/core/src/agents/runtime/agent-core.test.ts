@@ -57,11 +57,7 @@ import type {
   ContentGenerator,
   ContentGeneratorConfig,
 } from '../../core/contentGenerator.js';
-import {
-  getInvocationContext,
-  runWithInvocationContext,
-  type InvocationContextV1,
-} from '../../utils/invocation-context.js';
+
 import { LlmChat } from '../../core/llm-chat.js';
 import { ContextState } from './agent-headless.js';
 import type { ToolResultBoundaryObservation } from '../../tools/tool-result-boundary-diagnostics.js';
@@ -366,31 +362,6 @@ describe('AgentCore.runInAgentFrames', () => {
 
     expect(observedView).toBeUndefined();
     expect(observedName).toBe('inherit-agent');
-  });
-
-  it('clears the parent invocation context before running the reasoning loop', async () => {
-    const core = makeCore('isolated-agent');
-    const parentContext: InvocationContextV1 = {
-      version: 1,
-      sessionId: 'parent-session',
-      promptId: 'parent-prompt',
-    };
-    let observed: InvocationContextV1 | undefined;
-    vi.spyOn(
-      core as unknown as {
-        _runReasoningLoopInner: () => Promise<ReasoningLoopResult>;
-      },
-      '_runReasoningLoopInner',
-    ).mockImplementation(async () => {
-      observed = getInvocationContext();
-      return { text: '', terminateMode: null, turnsUsed: 0 };
-    });
-
-    await runWithInvocationContext(parentContext, () =>
-      core.runReasoningLoop({} as never, [], [], new AbortController()),
-    );
-
-    expect(observed).toBeUndefined();
   });
 
   it('uses inheritedView for deferred-approval continuation when the agent owns no view', async () => {
@@ -2026,32 +1997,6 @@ describe('AgentCore.prepareTools', () => {
     await expect(core.prepareTools()).resolves.toEqual([]);
   });
 
-  it.each(['subagent', 'teammate'])(
-    'excludes parent-owned record_source from a reused registry in a %s',
-    async (context) => {
-      const { core } = buildAgentForTools({ tools: ['*'] }, [
-        { name: ToolNames.RECORD_SOURCE },
-        { name: ToolNames.READ_FILE },
-      ]);
-
-      const prepareTools = () => core.prepareTools();
-      const tools =
-        context === 'subagent'
-          ? await runWithAgentContext('workflow-subagent', prepareTools)
-          : await runWithTeammateIdentity(
-              {
-                agentId: 'scribe@demo',
-                agentName: 'scribe',
-                teamName: 'demo',
-                isTeamLead: false,
-              },
-              prepareTools,
-            );
-
-      expect(tools.map((tool) => tool.name)).toEqual([ToolNames.READ_FILE]);
-    },
-  );
-
   it('explicit tools list does NOT use the wildcard inherit path', async () => {
     // When the subagent enumerates tools by name, deferred-tool inclusion
     // is not the wildcard branch's responsibility — getFunctionDeclarationsFiltered
@@ -2552,7 +2497,6 @@ describe('extractParentToolNames', () => {
             { name: ToolNames.WORKFLOW },
             { name: ToolNames.AGENT },
             { name: ToolNames.REQUEST_SHUTDOWN },
-            { name: ToolNames.RECORD_SOURCE },
             { name: ToolNames.READ_FILE },
           ],
         },
@@ -2564,7 +2508,6 @@ describe('extractParentToolNames', () => {
     // Leader-only team control: a subagent must never impersonate the
     // leader by requesting a teammate shutdown (#9401).
     expect(names).not.toContain(ToolNames.REQUEST_SHUTDOWN);
-    expect(names).not.toContain(ToolNames.RECORD_SOURCE);
   });
 
   it('filters out empty and non-string declaration names', () => {

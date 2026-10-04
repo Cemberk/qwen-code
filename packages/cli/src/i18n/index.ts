@@ -49,15 +49,6 @@ const getBuiltinLocalesDir = (): string =>
 const getUserLocalesDir = (): string =>
   path.join(Storage.getGlobalQwenDir(), 'locales');
 
-/**
- * Get the path to the user's custom locales directory.
- * Users can place custom language packs (e.g., es.js, fr.js) in this directory.
- * @returns The path to ~/.qwen/locales
- */
-export function getUserLocalesDirectory(): string {
-  return getUserLocalesDir();
-}
-
 const getLocalePath = (
   lang: SupportedLanguage,
   useUserDir: boolean = false,

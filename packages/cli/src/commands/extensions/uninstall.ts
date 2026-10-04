@@ -34,7 +34,7 @@ export async function handleUninstall(args: UninstallArgs) {
         isWorkspaceTrusted(loadSettings(workspaceDir).merged).isTrusted ?? true,
     });
     await extensionManager.refreshCache();
-    const result = await extensionManager.uninstallExtension(args.name, false);
+    const result = await extensionManager.uninstallExtension(args.name);
     writeStdoutLine(
       t('Extension "{{name}}" successfully uninstalled.', { name: args.name }),
     );

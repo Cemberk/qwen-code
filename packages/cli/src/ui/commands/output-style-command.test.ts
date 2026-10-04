@@ -70,7 +70,6 @@ describe('outputStyleCommand', () => {
           setOutputStyle,
           getLlmClient: () => ({ refreshSystemInstruction }),
           getSystemPrompt: vi.fn().mockReturnValue(undefined),
-          getExperimentalZedIntegration: vi.fn().mockReturnValue(false),
           getInputFormat: vi.fn().mockReturnValue('text'),
           isInteractive: vi.fn().mockReturnValue(true),
           getBareMode: vi.fn().mockReturnValue(false),
@@ -341,27 +340,6 @@ describe('outputStyleCommand', () => {
       undefined,
       { throwOnWriteFailure: true },
     );
-  });
-
-  it('honors a policy that forbids workspace settings writes', async () => {
-    context.services.settings = {
-      setValue,
-      isTrusted: true,
-      user: { settings: {} },
-      workspace: { settings: { general: { outputStyle: 'Concise' } } },
-    } as never;
-    context.executionPolicy = {
-      allowSessionReset: false,
-      allowWorkspaceSettingsWrite: false,
-      persistModelSelection: false,
-      blockedBuiltinCommandNames: [],
-    };
-
-    const res = await outputStyleCommand.action!(context, 'Learning');
-
-    expect(res).toMatchObject({ type: 'message', messageType: 'error' });
-    expect(setValue).not.toHaveBeenCalled();
-    expect(setOutputStyle).not.toHaveBeenCalled();
   });
 
   it('reports why Learning is skipped in a headless run', async () => {

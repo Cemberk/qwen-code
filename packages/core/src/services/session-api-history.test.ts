@@ -9,10 +9,11 @@ import type { Content } from '@google/genai';
 import type { ChatRecord } from './chatRecordingService.js';
 import { CompressionStatus } from '../core/turn.js';
 import { detectTurnInterruption } from '../core/turn-interruption.js';
-import {
-  buildApiHistoryFromConversation,
-  buildSessionHistoryFromConversation,
-} from './session-api-history.js';
+import { buildSessionHistoryFromConversation } from './session-api-history.js';
+
+const buildApiHistoryFromConversation = (
+  ...args: Parameters<typeof buildSessionHistoryFromConversation>
+) => buildSessionHistoryFromConversation(...args).apiHistory;
 
 const permit = { goalId: 'goal', revision: 1, turnId: 'turn' };
 

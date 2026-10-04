@@ -531,7 +531,7 @@ Use the chart palette.`,
       const result = await reg.matchAndConsume('/project/src/App.tsx');
       expect(result).toContain('Strict.');
       expect(result).toContain('Hooks.');
-      expect(reg.injectedCount).toBe(2);
+      expect(reg['injected'].size).toBe(2);
     });
 
     it('tracks totalCount and injectedCount', async () => {
@@ -540,9 +540,9 @@ Use the chart palette.`,
         '/project',
       );
       expect(reg.totalCount).toBe(2);
-      expect(reg.injectedCount).toBe(0);
+      expect(reg['injected'].size).toBe(0);
       await reg.matchAndConsume('/project/foo.ts');
-      expect(reg.injectedCount).toBe(1);
+      expect(reg['injected'].size).toBe(1);
     });
 
     it('returns undefined when registry is empty', async () => {

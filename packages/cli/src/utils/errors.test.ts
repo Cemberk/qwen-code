@@ -64,14 +64,6 @@ vi.mock('@qwen-code/qwen-code-core', async (importOriginal) => {
         ),
       ),
     })),
-    FatalToolExecutionError: class extends Error {
-      constructor(message: string) {
-        super(message);
-        this.name = 'FatalToolExecutionError';
-        this.exitCode = 54;
-      }
-      exitCode: number;
-    },
     FatalCancellationError: class extends Error {
       constructor(message: string) {
         super(message);

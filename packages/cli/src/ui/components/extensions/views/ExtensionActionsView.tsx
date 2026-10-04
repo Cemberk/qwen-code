@@ -357,7 +357,7 @@ export const ExtensionActionsView = ({
       if (!manager) return;
       setUninstallBusy(true);
       try {
-        const result = await manager.uninstallExtension(ext.name, false);
+        const result = await manager.uninstallExtension(ext.name);
         const warnings = result.warnings ?? [];
         onStatus({
           type: warnings.length > 0 ? 'warning' : 'success',

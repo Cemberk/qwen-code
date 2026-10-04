@@ -51,13 +51,8 @@ function safe(s: string): string {
  * The current session id.
  *
  * Prefers the async-local `sessionIdContext` over the process-global
- * `QWEN_CODE_SESSION_ID`, and in that order for a reason: in daemon mode a single
- * process serves many sessions, the env var holds whichever `Config` booted
- * first, and each turn binds its own session through `sessionIdContext.run(...)`.
- * Reading only the env would make a later session write under the first
- * session's name while `submit` — a subprocess whose shell env the daemon sets
- * from the async-local value (see `getShellContextEnvVars`) — reads a different
- * one. Both sides must agree, so both read the same context first.
+ * `QWEN_CODE_SESSION_ID`, matching `getShellContextEnvVars`, so the writer and
+ * the `submit` subprocess read the same session id.
  *
  * Empty string when neither is set (a bare `node dist/cli.js`), which just means
  * one un-scoped directory.

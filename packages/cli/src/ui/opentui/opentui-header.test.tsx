@@ -66,7 +66,11 @@ vi.mock('@opentui/react/jsx-dev-runtime', () => mocks.buildJsxRuntime());
 import type { Config } from '@qwen-code/qwen-code-core';
 import type { LoadedSettings } from '../../config/settings.js';
 import { OpenTuiBanner } from './opentui-header.js';
-import { getActiveOpenTuiTheme, getOpenTuiTheme } from './theme-parity.js';
+import {
+  getActiveOpenTuiTheme,
+  openTuiThemeFromInkTheme,
+} from './theme-parity.js';
+import { themeManager } from '../themes/theme-manager.js';
 import { C, applyOpenTuiTheme, applyThemeMode } from './theme.js';
 
 /** Per-wordmark-row foregrounds, in column order. */
@@ -222,7 +226,9 @@ describe('wordmark gradient', () => {
   });
 
   it('follows the active theme’s own ramp', () => {
-    applyOpenTuiTheme(getOpenTuiTheme('Dracula')!);
+    applyOpenTuiTheme(
+      openTuiThemeFromInkTheme(themeManager.getTheme('Dracula')!),
+    );
     try {
       const { container } = render(
         <OpenTuiBanner config={fakeConfig()} settings={fakeSettings()} />,
@@ -246,7 +252,9 @@ describe('wordmark gradient', () => {
     );
     expect(logoRows(container)[0]![0]).toBe('#4796e4');
 
-    applyOpenTuiTheme(getOpenTuiTheme('Dracula')!);
+    applyOpenTuiTheme(
+      openTuiThemeFromInkTheme(themeManager.getTheme('Dracula')!),
+    );
     try {
       rerender(<OpenTuiBanner config={config} settings={settings} />);
       expect(logoRows(container)[0]![0]).toBe('#ff79c6');

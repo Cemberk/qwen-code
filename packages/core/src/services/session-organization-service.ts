@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { Storage } from '../config/storage.js';
@@ -55,28 +54,6 @@ export interface SessionOrganizationSnapshot {
   sessions: Map<string, SessionOrganizationView>;
 }
 
-export interface SessionGroupCatalog {
-  groups: SessionGroup[];
-  colorOptions: SessionGroupPresetColor[];
-}
-
-export interface CreateSessionGroupInput {
-  name: string;
-  color: SessionGroupColor;
-}
-
-export interface UpdateSessionGroupInput {
-  name?: string;
-  color?: SessionGroupColor;
-  order?: number;
-}
-
-export interface UpdateSessionOrganizationInput {
-  isPinned?: boolean;
-  groupId?: string | null;
-  color?: SessionGroupPresetColor | null;
-}
-
 interface SessionOrganizationStoreV1 {
   schemaVersion: 1;
   groups: SessionGroup[];
@@ -96,49 +73,9 @@ export class SessionOrganizationError extends Error {
 
 const STORE_FILE = 'session-organization.v1.json';
 const SCHEMA_VERSION = 1;
-const MAX_GROUP_NAME_LENGTH = 64;
-const MAX_GROUPS = 200;
 const FALLBACK_GROUP_COLOR: SessionGroupColor = 'blue';
 const locks = new Map<string, Promise<unknown>>();
 const warningKeysByStorePath = new Map<string, Set<string>>();
-
-function hasControlCharacter(value: string): boolean {
-  return [...value].some((char) => {
-    const codePoint = char.codePointAt(0);
-    return (
-      codePoint !== undefined &&
-      ((codePoint >= 0x00 && codePoint <= 0x1f) ||
-        (codePoint >= 0x7f && codePoint <= 0x9f) ||
-        (codePoint >= 0x200b && codePoint <= 0x200f) ||
-        (codePoint >= 0x202a && codePoint <= 0x202e) ||
-        (codePoint >= 0x2066 && codePoint <= 0x2069) ||
-        codePoint === 0xfeff)
-    );
-  });
-}
-
-function normalizeGroupName(name: unknown): string {
-  if (typeof name !== 'string') {
-    throw new SessionOrganizationError(
-      '`name` must be a string',
-      'invalid_group_name',
-      'name',
-    );
-  }
-  const trimmed = name.trim();
-  if (
-    trimmed.length === 0 ||
-    trimmed.length > MAX_GROUP_NAME_LENGTH ||
-    hasControlCharacter(trimmed)
-  ) {
-    throw new SessionOrganizationError(
-      '`name` must be 1-64 characters and contain no control characters',
-      'invalid_group_name',
-      'name',
-    );
-  }
-  return trimmed;
-}
 
 function normalizeGroupColor(color: unknown): SessionGroupColor {
   const normalized = typeof color === 'string' ? color.trim() : color;
@@ -153,33 +90,6 @@ function normalizeGroupColor(color: unknown): SessionGroupColor {
     'invalid_group_color',
     'color',
   );
-}
-
-function assertSessionColor(
-  color: unknown,
-): asserts color is SessionGroupPresetColor {
-  if (typeof color !== 'string' || !isPresetGroupColor(color)) {
-    throw new SessionOrganizationError(
-      '`color` must be one of the supported color options',
-      'invalid_group_color',
-      'color',
-    );
-  }
-}
-
-function normalizeOrder(order: unknown): number {
-  if (
-    typeof order !== 'number' ||
-    !Number.isFinite(order) ||
-    !Number.isSafeInteger(order)
-  ) {
-    throw new SessionOrganizationError(
-      '`order` must be a safe integer',
-      'invalid_group_order',
-      'order',
-    );
-  }
-  return order;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -232,19 +142,6 @@ function viewOrganization(
   };
 }
 
-function serializeOrganization(
-  organization: SessionOrganizationView,
-): SessionOrganization {
-  return {
-    groupId: organization.groupId,
-    ...(organization.color != null ? { color: organization.color } : {}),
-    ...(organization.pinnedAt !== undefined
-      ? { pinnedAt: organization.pinnedAt }
-      : {}),
-    updatedAt: organization.updatedAt,
-  };
-}
-
 export class SessionOrganizationService {
   private readonly storage: Storage;
   private readFailed = false;
@@ -260,14 +157,6 @@ export class SessionOrganizationService {
     return path.join(this.storage.getProjectDir(), STORE_FILE);
   }
 
-  async listGroups(): Promise<SessionGroupCatalog> {
-    const store = await this.readStore();
-    return {
-      groups: this.sortGroups(store.groups),
-      colorOptions: [...GROUP_COLOR_OPTIONS],
-    };
-  }
-
   async readSnapshot(): Promise<SessionOrganizationSnapshot> {
     const store = await this.readStore();
     const validGroupIds = new Set(store.groups.map((group) => group.id));
@@ -281,138 +170,6 @@ export class SessionOrganizationService {
       sessions.set(sessionId, view);
     }
     return { groups: this.sortGroups(store.groups), sessions };
-  }
-
-  async createGroup(input: CreateSessionGroupInput): Promise<SessionGroup> {
-    const name = normalizeGroupName(input.name);
-    const color = normalizeGroupColor(input.color);
-    return this.withStoreLock(async () => {
-      const store = await this.readStore();
-      this.assertGroupNameAvailable(store.groups, name);
-      if (store.groups.length >= MAX_GROUPS) {
-        throw new SessionOrganizationError(
-          `Maximum number of groups (${MAX_GROUPS}) reached`,
-          'group_limit_reached',
-        );
-      }
-      const now = new Date().toISOString();
-      const group: SessionGroup = {
-        id: randomUUID(),
-        name,
-        color,
-        order: Math.min(
-          store.groups.reduce(
-            (maxOrder, existing) => Math.max(maxOrder, existing.order),
-            -1,
-          ) + 1,
-          Number.MAX_SAFE_INTEGER,
-        ),
-        createdAt: now,
-        updatedAt: now,
-      };
-      store.groups.push(group);
-      await this.writeStore(store);
-      return group;
-    });
-  }
-
-  async updateGroup(
-    groupId: string,
-    input: UpdateSessionGroupInput,
-  ): Promise<SessionGroup> {
-    return this.withStoreLock(async () => {
-      const store = await this.readStore();
-      const group = store.groups.find((candidate) => candidate.id === groupId);
-      if (!group) {
-        throw new SessionOrganizationError(
-          `Group not found: ${groupId}`,
-          'group_not_found',
-          'groupId',
-        );
-      }
-      if (input.name !== undefined) {
-        const name = normalizeGroupName(input.name);
-        this.assertGroupNameAvailable(store.groups, name, groupId);
-        group.name = name;
-      }
-      if (input.color !== undefined) {
-        group.color = normalizeGroupColor(input.color);
-      }
-      if (input.order !== undefined) {
-        group.order = normalizeOrder(input.order);
-      }
-      group.updatedAt = new Date().toISOString();
-      await this.writeStore(store);
-      return group;
-    });
-  }
-
-  async deleteGroup(groupId: string): Promise<boolean> {
-    return this.withStoreLock(async () => {
-      const store = await this.readStore();
-      const before = store.groups.length;
-      store.groups = store.groups.filter((group) => group.id !== groupId);
-      if (store.groups.length === before) {
-        return false;
-      }
-      const now = new Date().toISOString();
-      for (const session of Object.values(store.sessions)) {
-        if (session.groupId === groupId) {
-          session.groupId = null;
-          session.updatedAt = now;
-        }
-      }
-      await this.writeStore(store);
-      return true;
-    });
-  }
-
-  async updateSessionOrganization(
-    sessionId: string,
-    input: UpdateSessionOrganizationInput,
-  ): Promise<SessionOrganizationView> {
-    const hasUpdate =
-      input.groupId !== undefined ||
-      input.isPinned !== undefined ||
-      input.color !== undefined;
-    return this.withStoreLock(async () => {
-      const store = await this.readStore();
-      const current = viewOrganization(store.sessions[sessionId]);
-      if (!hasUpdate) {
-        return current;
-      }
-      const now = new Date().toISOString();
-      if (input.color !== undefined) {
-        if (input.color !== null) {
-          assertSessionColor(input.color);
-        }
-        current.color = input.color;
-      }
-      if (input.groupId !== undefined) {
-        if (
-          input.groupId !== null &&
-          !store.groups.some((group) => group.id === input.groupId)
-        ) {
-          throw new SessionOrganizationError(
-            `Group not found: ${input.groupId}`,
-            'group_not_found',
-            'groupId',
-          );
-        }
-        current.groupId = input.groupId;
-      }
-      if (input.isPinned !== undefined) {
-        if (input.isPinned) {
-          current.pinnedAt = current.pinnedAt ?? now;
-        } else {
-          delete current.pinnedAt;
-        }
-      }
-      current.updatedAt = now;
-      store.sessions[sessionId] = serializeOrganization(current);
-      await this.writeStore(store);
-      return viewOrganization(store.sessions[sessionId]);
-    });
   }
 
   async removeSession(
@@ -565,26 +322,6 @@ export class SessionOrganizationService {
       { assertCanCommit: options.assertCanCommit },
     );
     this.readFailed = false;
-  }
-
-  private assertGroupNameAvailable(
-    groups: SessionGroup[],
-    name: string,
-    exceptGroupId?: string,
-  ): void {
-    const key = groupNameKey(name);
-    if (
-      groups.some(
-        (group) =>
-          group.id !== exceptGroupId && groupNameKey(group.name) === key,
-      )
-    ) {
-      throw new SessionOrganizationError(
-        `Group name already exists: ${name}`,
-        'group_name_conflict',
-        'name',
-      );
-    }
   }
 
   private sortGroups(groups: SessionGroup[]): SessionGroup[] {

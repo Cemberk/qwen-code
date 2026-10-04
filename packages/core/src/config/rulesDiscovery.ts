@@ -295,10 +295,6 @@ export class ConditionalRulesRegistry {
   get totalCount(): number {
     return this.compiledRules.length;
   }
-
-  get injectedCount(): number {
-    return this.injected.size;
-  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

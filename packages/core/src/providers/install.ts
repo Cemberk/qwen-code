@@ -243,7 +243,7 @@ export async function applyProviderInstallPlan(
     settings.setValue('security.auth.selectedType', plan.authType);
 
     // Model selection
-    // Re-applying a plan (manual /auth, ACP reconnect, or an upgrade that
+    // Re-applying a plan (manual /auth, or an upgrade that
     // reordered the model list) must not silently move the user off a model
     // they chose. If the plan still offers the current model, keep it; a
     // genuine first-time setup still adopts the plan's first model. (#5819)

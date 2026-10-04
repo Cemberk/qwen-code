@@ -7,7 +7,6 @@
 import type { Argv } from 'yargs';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  chmodSync,
   copyFileSync,
   mkdirSync,
   mkdtempSync,
@@ -1020,7 +1019,6 @@ describe('bootstrap import boundaries', () => {
     expect(source).not.toContain("from '@qwen-code/qwen-code-core'");
     expect(source).not.toContain("import './llm.js'");
     expect(source).not.toContain("import { main } from './llm.js'");
-    expect(source).not.toContain("from './utils/acp-startup-profiler.js'");
   });
 
   it('keeps the shared option definitions free of runtime imports', () => {
@@ -1070,33 +1068,6 @@ describe('bootstrap import boundaries', () => {
     expect(source).toContain("hasFlag('--help', '-h')");
     expect(source).toContain("hasFlag('--version', '-v')");
     expect(source).not.toContain('UPDATE_COMPLETE_EXIT_CODE');
-  });
-
-  it('does not pass the standalone launcher hint to child processes', () => {
-    const tempDir = mkdtempSync(path.join(tmpdir(), 'qwen-cli-launcher-env-'));
-    const entryPath = path.join(tempDir, 'entry.mjs');
-    const launcherPath = path.join(tempDir, 'qwen');
-    try {
-      copyFileSync('../../scripts/cli-entry.js', entryPath);
-      writeFileSync(
-        path.join(tempDir, 'cli.js'),
-        'process.stdout.write(JSON.stringify({ launcherPath: process.env.QWEN_CODE_LAUNCHER_PATH }));\n',
-      );
-      writeFileSync(launcherPath, '#!/bin/sh\n');
-      chmodSync(launcherPath, 0o755);
-
-      const output = execFileSync(process.execPath, [entryPath], {
-        encoding: 'utf8',
-        env: {
-          ...process.env,
-          QWEN_CODE_LAUNCHER_PATH: launcherPath,
-        },
-      });
-
-      expect(JSON.parse(output)).toEqual({});
-    } finally {
-      rmSync(tempDir, { recursive: true, force: true });
-    }
   });
 
   it('prints CLI_VERSION from the npm bin wrapper version shortcut', () => {

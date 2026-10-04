@@ -102,18 +102,6 @@ export interface WizardStepProps {
   config: Config | null;
 }
 
-/**
- * Result of the wizard completion.
- */
-export interface WizardResult {
-  name: string;
-  description: string;
-  systemPrompt: string;
-  location: SubagentLevel;
-  tools?: string[];
-  color: string;
-}
-
 export const MANAGEMENT_STEPS = {
   AGENT_SELECTION: 'agent-selection',
   ACTION_SELECTION: 'action-selection',

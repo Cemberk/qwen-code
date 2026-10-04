@@ -157,28 +157,6 @@ export class LspConfigLoader {
     return mergedConfigs;
   }
 
-  collectExtensionToLanguageOverrides(
-    configs: LspServerConfig[],
-  ): Record<string, string> {
-    const overrides: Record<string, string> = {};
-    for (const config of configs) {
-      if (!config.extensionToLanguage) {
-        continue;
-      }
-      for (const [key, value] of Object.entries(config.extensionToLanguage)) {
-        if (typeof value !== 'string') {
-          continue;
-        }
-        const normalized = key.startsWith('.') ? key.slice(1) : key;
-        if (!normalized) {
-          continue;
-        }
-        overrides[normalized.toLowerCase()] = value;
-      }
-    }
-    return overrides;
-  }
-
   /**
    * Parse configuration source and extract server configs.
    * Expects basic format keyed by language identifier.

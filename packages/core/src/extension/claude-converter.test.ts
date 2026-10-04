@@ -12,7 +12,6 @@ import {
   convertClaudeToQwenConfig,
   convertClaudeAgentConfig,
   mergeClaudeConfigs,
-  isClaudePluginConfig,
   convertClaudePluginPackage,
   convertClaudePluginStandalone,
   normalizeClaudeMcpServer,
@@ -184,22 +183,6 @@ describe('mergeClaudeConfigs', () => {
     };
 
     expect(() => mergeClaudeConfigs(marketplacePlugin)).toThrow();
-  });
-});
-
-describe('isClaudePluginConfig', () => {
-  it('should identify Claude plugin directory', () => {
-    const extensionDir = '/tmp/test-extension';
-    const marketplace = {
-      extensionSource: 'https://test.com',
-      pluginName: 'test-plugin',
-    };
-
-    // This will check if marketplace.json exists and contains the plugin
-    // Note: In real usage, this requires actual file system setup
-    expect(typeof isClaudePluginConfig(extensionDir, marketplace)).toBe(
-      'boolean',
-    );
   });
 });
 

@@ -161,7 +161,7 @@ const statusCommand: SlashCommand = {
     return t('Show project auto-skill lifecycle status.');
   },
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
   action: statusAction,
 };
 
@@ -172,7 +172,7 @@ const runCommand: SlashCommand = {
   },
   argumentHint: '[--dry-run]',
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
   action: async (context, args) => {
     const config = context.services.config;
     if (!config) return message(t('Config not loaded.'), 'error');
@@ -210,7 +210,7 @@ const restoreCommand: SlashCommand = {
   },
   argumentHint: '<directory>',
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
   action: async (context, args) => {
     const config = context.services.config;
     if (!config) return message(t('Config not loaded.'), 'error');
@@ -259,7 +259,7 @@ function pinCommand(name: 'pin' | 'unpin', pinned: boolean): SlashCommand {
     },
     argumentHint: '<directory>',
     kind: CommandKind.BUILT_IN,
-    supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+    supportedModes: ['interactive', 'non_interactive'] as const,
     action: async (context, args) => {
       const config = context.services.config;
       if (!config) return message(t('Config not loaded.'), 'error');
@@ -321,7 +321,7 @@ export const curatorCommand: SlashCommand = {
   argumentHint:
     '[status|run [--dry-run]|pin <directory>|unpin <directory>|restore <directory>]',
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
   action: statusAction,
   subCommands: [
     statusCommand,

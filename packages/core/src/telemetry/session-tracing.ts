@@ -37,7 +37,6 @@ import {
   setSessionIdOnContext,
 } from './session-context.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
-import { getErrorType } from '../utils/errors.js';
 import { stripAnsiAndControl } from '../utils/textUtils.js';
 import { redactUrlCredentials } from '../extension/redaction.js';
 import type { ToolExecutionStatus } from '../core/turn.js';
@@ -66,8 +65,6 @@ export interface EndInteractionOptions {
   errorMessage?: string;
   errorType?: string;
 }
-
-export type InteractionSpanResultStatus = 'ok' | 'error' | 'cancelled';
 
 export interface StartLLMRequestSpanOptions {
   operationName?: 'chat' | 'generate_content';
@@ -234,17 +231,12 @@ const interactionIdentityByPromptId = new Map<
   }
 >();
 
-export function isInNativeSubagentSpan(): boolean {
-  const ctx = subagentContext.getStore();
-  return ctx !== undefined && !ctx.ended;
-}
-
 /**
  * Resolve the session.id for a child span (llm_request / tool / tool.execution)
  * from the logical parent, an explicit owner, or the active per-request
  * contexts. The process-global value is only the final compatibility fallback.
  *
- * A daemon hosts many sessions in one process, but getCurrentSessionId() is a
+ * One process can host several sessions, but getCurrentSessionId() is a
  * single module-global set at telemetry init — so reading it directly would
  * stamp a child span with whichever session last touched the global rather than
  * the session that owns the parenting interaction span. The interaction span
@@ -486,9 +478,7 @@ function buildInteractionAttributes(
   const sessionId = config.getSessionId();
   const userId = config.getTelemetryUserId();
   const ownsStructuredOutputContract =
-    options.messageType === 'userQuery' ||
-    options.messageType === 'retry' ||
-    options.messageType === 'acp_prompt';
+    options.messageType === 'userQuery' || options.messageType === 'retry';
   return {
     'session.id': sessionId,
     ...(userId ? { 'gen_ai.user.id': userId } : {}),
@@ -674,82 +664,6 @@ export function endAllInteractionSpans(
     finalizeInteractionContext(spanCtx, status);
   }
   interactionContext.enterWith(undefined);
-}
-
-export async function withInteractionSpan<T>(
-  config: Config,
-  options: StartInteractionOptions & { parentContext?: Context },
-  fn: () => Promise<T>,
-  getResultStatus?: (result: T) => InteractionSpanResultStatus,
-): Promise<T> {
-  if (!isTelemetrySdkInitialized()) return await fn();
-
-  ensureCleanupInterval();
-  interactionSequence++;
-  const sessionId = config.getSessionId();
-  const attributes = buildInteractionAttributes(config, options);
-
-  const parentContext = options.parentContext ?? ROOT_CONTEXT;
-  const span = getTracer().startSpan(
-    SPAN_INTERACTION,
-    {
-      kind: SpanKind.INTERNAL,
-      attributes,
-    },
-    parentContext,
-  );
-  const spanContextObj: SpanContext = {
-    span,
-    startTime: Date.now(),
-    lastActivityTime: Date.now(),
-    attributes: attributes as Record<string, string | number | boolean>,
-    type: 'interaction',
-  };
-  registerInteractionContext(options.promptId, spanContextObj);
-
-  const activeContext = trace.setSpan(
-    setSessionIdOnContext(parentContext, sessionId),
-    span,
-  );
-  return await otelContext.with(activeContext, async () =>
-    interactionContext.run(spanContextObj, async () => {
-      let terminalStatus: InteractionStatus = 'ok';
-      let errorMetadata: EndInteractionOptions | undefined;
-      try {
-        const result = await fn();
-        terminalStatus = getResultStatus?.(result) ?? 'ok';
-        return result;
-      } catch (error) {
-        terminalStatus = 'error';
-        errorMetadata = {
-          promptId: options.promptId,
-          errorMessage: error instanceof Error ? error.message : String(error),
-          errorType: getErrorType(error),
-        };
-        throw error;
-      } finally {
-        finalizeInteractionContext(spanContextObj, terminalStatus, {
-          promptId: options.promptId,
-          ...(terminalStatus === 'error' && !errorMetadata
-            ? {
-                errorMessage: 'interaction error',
-                errorType: 'interaction_error',
-              }
-            : errorMetadata),
-        });
-      }
-    }),
-  );
-}
-
-// --- LLM Request Spans ---
-
-export function startLLMRequestSpan(
-  model: string,
-  promptId: string,
-  options?: StartLLMRequestSpanOptions,
-): Span {
-  return startLLMRequestSpanWithContext(model, promptId, options).span;
 }
 
 export function startLLMRequestSpanWithContext(

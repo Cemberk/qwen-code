@@ -6,7 +6,7 @@
 
 import type { ShellResultDisplay } from '../utils/shell-result.js';
 import type { FunctionDeclaration, Part, PartListUnion } from '@google/genai';
-import { ToolErrorType } from './tool-error.js';
+import type { ToolErrorType } from './tool-error.js';
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
 import { SchemaValidator } from '../utils/schemaValidator.js';
 import { type AgentStatsSummary } from '../agents/runtime/agent-statistics.js';
@@ -345,82 +345,6 @@ export abstract class DeclarativeTool<
    * @returns A `ToolInvocation` instance.
    */
   abstract build(params: TParams): ToolInvocation<TParams, TResult>;
-
-  /**
-   * A convenience method that builds and executes the tool in one step.
-   * Throws an error if validation fails.
-   * @param params The raw, untrusted parameters from the model.
-   * @param signal AbortSignal for tool cancellation.
-   * @param updateOutput Optional callback to stream output.
-   * @returns The result of the tool execution.
-   */
-  async buildAndExecute(
-    params: TParams,
-    signal: AbortSignal,
-    updateOutput?: (output: ToolResultDisplay) => void,
-    shellExecutionConfig?: ShellExecutionConfig,
-  ): Promise<TResult> {
-    const invocation = this.build(params);
-    return invocation.execute(signal, updateOutput, shellExecutionConfig);
-  }
-
-  /**
-   * Similar to `build` but never throws.
-   * @param params The raw, untrusted parameters from the model.
-   * @returns A `ToolInvocation` instance.
-   */
-  private silentBuild(
-    params: TParams,
-  ): ToolInvocation<TParams, TResult> | Error {
-    try {
-      return this.build(params);
-    } catch (e) {
-      if (e instanceof Error) {
-        return e;
-      }
-      return new Error(String(e));
-    }
-  }
-
-  /**
-   * A convenience method that builds and executes the tool in one step.
-   * Never throws.
-   * @param params The raw, untrusted parameters from the model.
-   * @params abortSignal a signal to abort.
-   * @returns The result of the tool execution.
-   */
-  async validateBuildAndExecute(
-    params: TParams,
-    abortSignal: AbortSignal,
-  ): Promise<ToolResult> {
-    const invocationOrError = this.silentBuild(params);
-    if (invocationOrError instanceof Error) {
-      const errorMessage = invocationOrError.message;
-      return {
-        llmContent: `Error: Invalid parameters provided. Reason: ${errorMessage}`,
-        returnDisplay: errorMessage,
-        error: {
-          message: errorMessage,
-          type: ToolErrorType.INVALID_TOOL_PARAMS,
-        },
-      };
-    }
-
-    try {
-      return await invocationOrError.execute(abortSignal);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      return {
-        llmContent: `Error: Tool call execution failed. Reason: ${errorMessage}`,
-        returnDisplay: errorMessage,
-        error: {
-          message: errorMessage,
-          type: ToolErrorType.EXECUTION_FAILED,
-        },
-      };
-    }
-  }
 }
 
 /**
@@ -556,7 +480,7 @@ export interface ToolResult {
   resultFilePaths?: string[];
 
   /**
-   * Structured artifacts produced by this tool call. Daemon/session surfaces
+   * Structured artifacts produced by this tool call. Session surfaces
    * consume this as metadata only; the producer remains responsible for the
    * underlying file, URL, or managed resource lifecycle.
    */
@@ -725,53 +649,13 @@ export interface McpToolProgressData {
   message?: string;
 }
 
-export interface McpAppResourceCsp {
-  connectDomains?: string[];
-  resourceDomains?: string[];
-  frameDomains?: string[];
-  baseUriDomains?: string[];
-}
-
-export interface McpAppResourcePermissions {
-  camera?: Record<string, never>;
-  microphone?: Record<string, never>;
-  geolocation?: Record<string, never>;
-  clipboardWrite?: Record<string, never>;
-}
-
-export interface McpAppToolResult {
-  content?: Array<{
-    type: string;
-    text?: string;
-    data?: string;
-    mimeType?: string;
-    [key: string]: unknown;
-  }>;
-  isError?: boolean;
-  structuredContent?: unknown;
-  [key: string]: unknown;
-}
-
-/** A completed MCP tool call with an interactive MCP Apps resource. */
-export interface McpAppResultDisplay {
-  type: 'mcp_app';
-  serverName: string;
-  resourceUri: string;
-  html: string;
-  toolResult: McpAppToolResult;
-  toolArguments: Record<string, unknown>;
-  fallbackText: string;
-  csp?: McpAppResourceCsp;
-  permissions?: McpAppResourcePermissions;
-}
-
 /**
  * Structured heartbeat for silent foreground shell commands, emitted through
  * the updateOutput channel while no display update has fired for
  * `tools.shell.heartbeatIntervalMs` (default 10s). Carries liveness stats
  * only — never command output — and never enters model context. Consumers
- * that render live output (TUI, subagent views) ignore it; the ACP session
- * and stream-json adapters forward it so headless gateways can distinguish
+ * that render live output (TUI, subagent views) ignore it; the stream-json
+ * adapter forwards it so headless gateways can distinguish
  * "still running" from a dead execution chain.
  */
 export interface ShellProgressData {
@@ -842,7 +726,6 @@ export type ToolResultDisplay =
   | FindingsResultDisplay
   | AnsiOutputDisplay
   | McpToolProgressData
-  | McpAppResultDisplay
   | VisionBridgeNoticeDisplay
   | ShellProgressData
   | TerminalImageDisplay;
@@ -1233,14 +1116,6 @@ export enum Kind {
   Agent = 'agent',
   Other = 'other',
 }
-
-// Function kinds that have side effects
-export const MUTATOR_KINDS: Kind[] = [
-  Kind.Edit,
-  Kind.Delete,
-  Kind.Move,
-  Kind.Execute,
-] as const;
 
 /**
  * Tool kinds that are safe to execute concurrently (pure reads, no writes).

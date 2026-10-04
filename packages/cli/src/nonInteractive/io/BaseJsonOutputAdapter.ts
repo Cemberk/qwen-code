@@ -1417,25 +1417,6 @@ export function partsToContentBlock(parts: Part[]): ContentBlock[] {
 }
 
 /**
- * Converts Part array to string representation.
- * This is a legacy function kept for backward compatibility.
- * For new code, prefer using partsToContentBlock.
- *
- * @param parts - Array of Part objects
- * @returns String representation
- */
-export function partsToString(parts: Part[]): string {
-  return parts
-    .map((part) => {
-      if ('text' in part && typeof part.text === 'string') {
-        return part.text;
-      }
-      return JSON.stringify(part);
-    })
-    .join('');
-}
-
-/**
  * Checks if responseParts contain any functionResponse with an error.
  * Helper function for extracting error messages from responseParts.
  * @param responseParts - Array of Part objects
@@ -1474,21 +1455,6 @@ function checkResponsePartsForError(
  * @param response - Tool call response
  * @returns String content or undefined
  */
-function mcpAppFallbackText(display: unknown): string | undefined {
-  if (
-    !display ||
-    typeof display !== 'object' ||
-    !('type' in display) ||
-    display.type !== 'mcp_app' ||
-    !('fallbackText' in display) ||
-    typeof display.fallbackText !== 'string'
-  ) {
-    return undefined;
-  }
-  const text = display.fallbackText.trim();
-  return text.length > 0 ? display.fallbackText : undefined;
-}
-
 export function toolResultContent(
   response: ToolCallResponseInfo,
 ): string | undefined {
@@ -1524,10 +1490,6 @@ export function toolResultContent(
   }
   if (response.error) {
     return response.error.message;
-  }
-  const mcpAppFallback = mcpAppFallbackText(response.resultDisplay);
-  if (mcpAppFallback) {
-    return mcpAppFallback;
   }
   const displayText = shellResultText(response.resultDisplay);
   if (displayText?.trim()) return displayText;

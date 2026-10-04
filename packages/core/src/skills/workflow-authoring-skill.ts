@@ -27,7 +27,6 @@
 import type { Config } from '../config/config.js';
 import {
   readBundledReference,
-  resolveBundledReferenceRoute,
   resolveBundledReferenceSurface,
   type BundledReference,
   type BundledReferenceRoute,
@@ -62,12 +61,6 @@ export type WorkflowAuthoringSurface = BundledReferenceSurface;
 
 export function readWorkflowAuthoringReference(): WorkflowAuthoringReference | null {
   return readBundledReference(WORKFLOW_AUTHORING_SKILL_NAME);
-}
-
-export function resolveWorkflowAuthoringRoute(
-  config: Config,
-): WorkflowAuthoringRoute {
-  return resolveBundledReferenceRoute(config, WORKFLOW_AUTHORING_SKILL_NAME);
 }
 
 export function resolveWorkflowAuthoringSurface(

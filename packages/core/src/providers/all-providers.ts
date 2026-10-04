@@ -20,10 +20,6 @@ export {
 /** All known providers, in display order. */
 export const ALL_PROVIDERS: readonly ProviderConfig[] = [customProvider];
 
-export function findProviderById(id: string): ProviderConfig | undefined {
-  return ALL_PROVIDERS.find((p) => p.id === id);
-}
-
 /** Find a provider by model credentials (baseUrl + envKey). */
 export function findProviderByCredentials(
   baseUrl: string | undefined,

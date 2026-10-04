@@ -12,7 +12,6 @@ import {
   isGoalLimitKind,
   isGoalTokenBudgetSpent,
   isGoalTurnBudgetSpent,
-  validateGoalPauseReason,
   type GoalControlRequest,
   type GoalRecord,
   type GoalSnapshotV2,
@@ -293,82 +292,6 @@ export function reduceGoalTurnFinished(
   });
 }
 
-export function parseGoalControlRequest(
-  value: unknown,
-): GoalControlRequest | undefined {
-  if (!isRecord(value) || typeof value['action'] !== 'string') {
-    return undefined;
-  }
-
-  switch (value['action']) {
-    case 'create':
-      if (!hasOnlyKeys(value, ['action', 'objective'])) return undefined;
-      return typeof value['objective'] === 'string'
-        ? parseObjectiveRequest(value['action'], value['objective'])
-        : undefined;
-    case 'replace':
-    case 'edit':
-      if (
-        !hasOnlyKeys(value, [
-          'action',
-          'objective',
-          'expectedGoalId',
-          'expectedRevision',
-        ]) ||
-        typeof value['objective'] !== 'string' ||
-        !isExpectedVersion(value)
-      ) {
-        return undefined;
-      }
-      return parseObjectiveVersionedRequest(
-        value['action'],
-        value['objective'],
-        value['expectedGoalId'],
-        value['expectedRevision'],
-      );
-    case 'pause': {
-      if (
-        !hasOnlyKeys(value, [
-          'action',
-          'expectedGoalId',
-          'expectedRevision',
-          'reason',
-        ]) ||
-        !isExpectedVersion(value)
-      ) {
-        return undefined;
-      }
-      const reason = value['reason'];
-      if (reason !== undefined) {
-        if (typeof reason !== 'string' || validateGoalPauseReason(reason)) {
-          return undefined;
-        }
-      }
-      return {
-        action: 'pause',
-        expectedGoalId: value['expectedGoalId'],
-        expectedRevision: value['expectedRevision'],
-        ...(reason === undefined ? {} : { reason }),
-      };
-    }
-    case 'resume':
-    case 'clear':
-      if (
-        !hasOnlyKeys(value, ['action', 'expectedGoalId', 'expectedRevision']) ||
-        !isExpectedVersion(value)
-      ) {
-        return undefined;
-      }
-      return {
-        action: value['action'],
-        expectedGoalId: value['expectedGoalId'],
-        expectedRevision: value['expectedRevision'],
-      };
-    default:
-      return undefined;
-  }
-}
-
 export function parseGoalStateRecordPayloadV2(
   value: unknown,
 ): GoalStateRecordPayloadV2 | undefined {
@@ -444,12 +367,6 @@ function parseGoalOrder(value: unknown): GoalSnapshotV2['clearedGoal'] {
     revision: value['revision'],
     updatedAt: value['updatedAt'],
   };
-}
-
-export function parseGoalStateCause(
-  value: unknown,
-): GoalStateCause | undefined {
-  return isGoalStateCause(value) ? value : undefined;
 }
 
 function createGoal(
@@ -647,26 +564,6 @@ function copyCursor(cursor: TranscriptCursor): TranscriptCursor {
   return { recordId: cursor.recordId };
 }
 
-function parseObjectiveRequest(
-  action: 'create',
-  objective: string,
-): GoalControlRequest | undefined {
-  const normalized = objective.trim();
-  return normalized ? { action, objective: normalized } : undefined;
-}
-
-function parseObjectiveVersionedRequest(
-  action: 'replace' | 'edit',
-  objective: string,
-  expectedGoalId: string,
-  expectedRevision: number,
-): GoalControlRequest | undefined {
-  const normalized = objective.trim();
-  return normalized
-    ? { action, objective: normalized, expectedGoalId, expectedRevision }
-    : undefined;
-}
-
 function parseGoalRecord(value: unknown): GoalRecord | undefined {
   if (
     !isRecord(value) ||
@@ -758,21 +655,6 @@ function parseGoalRecord(value: unknown): GoalRecord | undefined {
       ? {}
       : { limitKind: value['limitKind'] }),
   };
-}
-
-function isExpectedVersion(value: Record<string, unknown>): value is Record<
-  string,
-  unknown
-> & {
-  expectedGoalId: string;
-  expectedRevision: number;
-} {
-  return (
-    typeof value['expectedGoalId'] === 'string' &&
-    value['expectedGoalId'].length > 0 &&
-    isNonNegativeInteger(value['expectedRevision']) &&
-    value['expectedRevision'] > 0
-  );
 }
 
 function isTranscriptCursor(value: unknown): value is TranscriptCursor {

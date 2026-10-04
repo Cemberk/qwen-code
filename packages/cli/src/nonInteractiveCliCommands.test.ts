@@ -18,11 +18,7 @@ import {
   uiTelemetryService,
 } from '@qwen-code/qwen-code-core';
 import type { LoadedSettings } from './config/settings.js';
-import {
-  CommandKind,
-  type ExecutionMode,
-  type NonInteractiveSlashCommandPolicy,
-} from './ui/commands/types.js';
+import { CommandKind, type ExecutionMode } from './ui/commands/types.js';
 import { filterCommandsForMode } from './services/commandUtils.js';
 import { goalCommand } from './ui/commands/goalCommand.js';
 
@@ -42,13 +38,6 @@ vi.mock('./services/CommandService.js', () => ({
     create: mockCommandServiceCreate,
   },
 }));
-
-const restrictedPolicy: NonInteractiveSlashCommandPolicy = {
-  allowSessionReset: false,
-  allowWorkspaceSettingsWrite: false,
-  persistModelSelection: false,
-  blockedBuiltinCommandNames: ['clear', 'export'],
-};
 
 describe('handleSlashCommand', () => {
   let mockConfig: Config;
@@ -99,7 +88,6 @@ describe('handleSlashCommand', () => {
     mockFireUserPromptExpansionEvent = vi.fn().mockResolvedValue(undefined);
 
     mockConfig = {
-      getExperimentalZedIntegration: vi.fn().mockReturnValue(false),
       isInteractive: vi.fn().mockReturnValue(false),
       getSessionId: vi.fn().mockReturnValue('test-session'),
       getFolderTrust: vi.fn().mockReturnValue(false),
@@ -207,50 +195,12 @@ describe('handleSlashCommand', () => {
     }
   });
 
-  it('forwards artifact descriptors from a message command result', async () => {
-    const artifacts = [
-      {
-        kind: 'file',
-        storage: 'workspace',
-        title: 'export.md',
-        workspacePath: 'export.md',
-        sizeBytes: 42,
-      },
-    ];
-    mockGetCommands.mockReturnValue([
-      {
-        name: 'export',
-        description: 'Export',
-        kind: CommandKind.BUILT_IN,
-        supportedModes: ['non_interactive'],
-        action: vi.fn().mockResolvedValue({
-          type: 'message',
-          messageType: 'info',
-          content: 'Exported.',
-          artifacts,
-        }),
-      },
-    ]);
-    const result = await handleSlashCommand(
-      '/export md',
-      abortController,
-      mockConfig,
-      mockSettings,
-    );
-    expect(result).toMatchObject({
-      type: 'message',
-      messageType: 'info',
-      content: 'Exported.',
-      artifacts,
-    });
-  });
-
   it('should execute local commands with non_interactive supportedModes', async () => {
     const mockInitCommand = {
       name: 'init',
       description: 'Initialize project',
       kind: CommandKind.BUILT_IN,
-      supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+      supportedModes: ['interactive', 'non_interactive'] as const,
       action: vi.fn().mockResolvedValue({
         type: 'message',
         messageType: 'info',
@@ -272,41 +222,12 @@ describe('handleSlashCommand', () => {
     }
   });
 
-  it('blocks a canonical built-in through its alias before action execution', async () => {
-    const action = vi.fn();
-    mockGetCommands.mockReturnValue([
-      {
-        name: 'clear',
-        altNames: ['reset', 'new'],
-        description: 'Reset the session',
-        kind: CommandKind.BUILT_IN,
-        supportedModes: ['non_interactive'] as const,
-        action,
-      },
-    ]);
-
-    const result = await handleSlashCommand(
-      '/reset',
-      abortController,
-      mockConfig,
-      mockSettings,
-      undefined,
-      restrictedPolicy,
-    );
-
-    expect(result).toMatchObject({
-      type: 'unsupported',
-      originalType: 'unsupported_action',
-    });
-    expect(action).not.toHaveBeenCalled();
-  });
-
   it('should execute /btw with non_interactive supportedModes', async () => {
     const mockBtwCommand = {
       name: 'btw',
       description: 'Ask a side question',
       kind: CommandKind.BUILT_IN,
-      supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+      supportedModes: ['interactive', 'non_interactive'] as const,
       action: vi.fn().mockResolvedValue({
         type: 'message',
         messageType: 'info',
@@ -847,7 +768,6 @@ describe('handleSlashCommand', () => {
     expect(result).toEqual({
       type: 'submit_prompt',
       content: 'Expanded prompt',
-      resolvedCommand: { name: 'custom', kind: CommandKind.FILE },
     });
   });
 
@@ -875,7 +795,6 @@ describe('handleSlashCommand', () => {
     expect(result).toEqual({
       type: 'submit_prompt',
       content: 'Expanded prompt',
-      resolvedCommand: { name: 'custom', kind: CommandKind.FILE },
     });
   });
 
@@ -903,7 +822,6 @@ describe('handleSlashCommand', () => {
     expect(result).toEqual({
       type: 'submit_prompt',
       content: 'Expanded prompt',
-      resolvedCommand: { name: 'custom', kind: CommandKind.FILE },
     });
   });
 
@@ -937,7 +855,6 @@ describe('handleSlashCommand', () => {
       type: 'message',
       messageType: 'error',
       content: 'UserPromptExpansion blocked: Blocked by policy',
-      resolvedCommand: { name: 'custom', kind: CommandKind.FILE },
     });
   });
 
@@ -1050,7 +967,7 @@ describe('handleSlashCommand', () => {
       name: 'help',
       description: 'Show help',
       kind: CommandKind.BUILT_IN,
-      supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+      supportedModes: ['interactive', 'non_interactive'] as const,
       action: vi.fn().mockResolvedValue({
         type: 'message',
         messageType: 'info',
@@ -1105,7 +1022,7 @@ describe('handleSlashCommand', () => {
           description: 'Run the pdf skill',
           kind: CommandKind.SKILL,
           skillDetail: { name: 'demo:pdf', authoredName: 'pdf' },
-          supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+          supportedModes: ['interactive', 'non_interactive'] as const,
           action: vi.fn().mockResolvedValue({
             type: 'submit_prompt',
             content: [{ text: 'PDF prompt' }],
@@ -1199,7 +1116,7 @@ describe('handleSlashCommand', () => {
       name,
       description: `Skill ${name}`,
       kind: CommandKind.SKILL,
-      supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+      supportedModes: ['interactive', 'non_interactive'] as const,
       action: vi.fn().mockResolvedValue({
         type: 'submit_prompt',
         content: [{ text: `SKILL_BODY:${name}:${body}` }],
@@ -1390,7 +1307,7 @@ describe('handleSlashCommand', () => {
         name: 'no-action',
         description: 'No action',
         kind: CommandKind.SKILL,
-        supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+        supportedModes: ['interactive', 'non_interactive'] as const,
         action: undefined,
       };
       const skillB = createSkillCommand('review', 'b');
@@ -1418,7 +1335,7 @@ describe('handleSlashCommand', () => {
         name: 'error-skill',
         description: 'Skill returning error',
         kind: CommandKind.SKILL,
-        supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+        supportedModes: ['interactive', 'non_interactive'] as const,
         action: vi.fn().mockResolvedValue({
           type: 'message',
           messageType: 'error',
@@ -1452,7 +1369,7 @@ describe('handleSlashCommand', () => {
         name: 'error-skill',
         description: 'Skill returning error',
         kind: CommandKind.SKILL,
-        supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+        supportedModes: ['interactive', 'non_interactive'] as const,
         action: vi.fn().mockResolvedValue({
           type: 'message',
           messageType: 'error',
@@ -1479,7 +1396,7 @@ describe('handleSlashCommand', () => {
         name: 'feat-dev',
         description: 'Skill with model override',
         kind: CommandKind.SKILL,
-        supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+        supportedModes: ['interactive', 'non_interactive'] as const,
         action: vi.fn().mockResolvedValue({
           type: 'submit_prompt',
           content: [{ text: 'SKILL_BODY:feat-dev' }],
@@ -1529,7 +1446,6 @@ describe('getAvailableCommands', () => {
     fireUserPromptExpansionEvent = vi.fn().mockResolvedValue(undefined);
 
     mockConfig = {
-      getExperimentalZedIntegration: vi.fn().mockReturnValue(false),
       isInteractive: vi.fn().mockReturnValue(false),
       getSessionId: vi.fn().mockReturnValue('test-session'),
       getFolderTrust: vi.fn().mockReturnValue(false),
@@ -1552,7 +1468,7 @@ describe('getAvailableCommands', () => {
       name: 'export',
       description: 'Export current session',
       kind: CommandKind.BUILT_IN,
-      supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+      supportedModes: ['interactive', 'non_interactive'] as const,
       action: vi.fn(),
     };
     mockGetCommands.mockReturnValue([exportCommand]);
@@ -1560,49 +1476,10 @@ describe('getAvailableCommands', () => {
     const commands = await getAvailableCommands(
       mockConfig,
       new AbortController().signal,
+      'non_interactive',
     );
 
     expect(commands.map((command) => command.name)).toContain('export');
-  });
-
-  it('removes policy-blocked built-ins from command and model-invocable lists', async () => {
-    const exportCommand = {
-      name: 'export',
-      description: 'Export current session',
-      kind: CommandKind.BUILT_IN,
-      modelInvocable: true,
-      supportedModes: ['non_interactive'] as const,
-      action: vi.fn(),
-    };
-    const customCommand = {
-      name: 'export-custom',
-      description: 'Custom export helper',
-      kind: CommandKind.FILE,
-      modelInvocable: true,
-      supportedModes: ['non_interactive'] as const,
-      action: vi.fn(),
-    };
-    mockGetCommands.mockReturnValue([exportCommand, customCommand]);
-
-    const commands = await getAvailableCommands(
-      mockConfig,
-      new AbortController().signal,
-      'non_interactive',
-      {
-        system: { path: '', settings: {} },
-        systemDefaults: { path: '', settings: {} },
-        user: { path: '', settings: {} },
-        workspace: { path: '', settings: {} },
-      } as LoadedSettings,
-      restrictedPolicy,
-    );
-
-    expect(commands.map((command) => command.name)).toEqual(['export-custom']);
-    const provider = vi.mocked(mockConfig.setModelInvocableCommandsProvider)
-      .mock.calls[0]?.[0];
-    expect(provider?.()).toEqual([
-      { name: 'export-custom', description: 'Custom export helper' },
-    ]);
   });
 
   it('does not partially register model-invocable commands without settings', async () => {
@@ -1616,14 +1493,18 @@ describe('getAvailableCommands', () => {
       },
     ]);
 
-    await getAvailableCommands(mockConfig, new AbortController().signal, 'acp');
+    await getAvailableCommands(
+      mockConfig,
+      new AbortController().signal,
+      'non_interactive',
+    );
 
     expect(mockConfig.setModelInvocableCommandsProvider).not.toHaveBeenCalled();
     expect(mockConfig.setModelInvocableCommandsExecutor).not.toHaveBeenCalled();
     expect(notifyConfigChanged).not.toHaveBeenCalled();
   });
 
-  it('registers model-invocable commands for ACP command snapshots', async () => {
+  it('registers model-invocable commands for command snapshots', async () => {
     const promptCommand = {
       name: 'expand-prompt',
       description: 'Fallback description',
@@ -1644,7 +1525,7 @@ describe('getAvailableCommands', () => {
     await getAvailableCommands(
       mockConfig,
       expiredSnapshotSignal.signal,
-      'acp',
+      'non_interactive',
       {
         system: { path: '', settings: {} },
         systemDefaults: { path: '', settings: {} },
@@ -1671,7 +1552,7 @@ describe('getAvailableCommands', () => {
     expect(fireUserPromptExpansionEvent.mock.calls[0]?.[3].aborted).toBe(false);
     expect(promptCommand.action).toHaveBeenCalledWith(
       expect.objectContaining({
-        executionMode: 'acp',
+        executionMode: 'non_interactive',
         invocation: {
           raw: '/expand-prompt with args',
           name: 'expand-prompt',

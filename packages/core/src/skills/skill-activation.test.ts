@@ -67,7 +67,7 @@ describe('SkillActivationRegistry', () => {
     const newly = await reg.matchAndConsume('/project/src/App.tsx');
     expect(newly).toEqual(['tsx-helper']);
     expect(reg.isActivated('tsx-helper')).toBe(true);
-    expect(reg.activatedCount).toBe(1);
+    expect(reg['activated'].size).toBe(1);
   });
 
   it('does not re-activate an already-active skill on subsequent matches', async () => {
@@ -80,7 +80,7 @@ describe('SkillActivationRegistry', () => {
     ]);
     // Second touch of the same pattern returns nothing new.
     expect(await reg.matchAndConsume('/project/src/B.tsx')).toEqual([]);
-    expect(reg.activatedCount).toBe(1);
+    expect(reg['activated'].size).toBe(1);
   });
 
   it('returns empty for paths that do not match any skill', async () => {
@@ -117,7 +117,7 @@ describe('SkillActivationRegistry', () => {
       projectRoot,
     );
     expect(await reg.matchAndConsume('/other/project/src/App.tsx')).toEqual([]);
-    expect(reg.activatedCount).toBe(0);
+    expect(reg['activated'].size).toBe(0);
   });
 
   it('supports multiple glob patterns per skill (OR semantics)', async () => {
@@ -195,7 +195,7 @@ describe('SkillActivationRegistry', () => {
     expect(await reg.matchAndConsume('/totally/other/place/file.ts')).toEqual(
       [],
     );
-    expect(reg.activatedCount).toBe(0);
+    expect(reg['activated'].size).toBe(0);
   });
 });
 

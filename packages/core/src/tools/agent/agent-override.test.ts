@@ -30,10 +30,7 @@ import { PermissionManager } from '../../permissions/permission-manager.js';
 import { DiscoveredTool } from '../tool-registry.js';
 import { AgentCore } from '../../agents/runtime/agent-core.js';
 import type { LlmChat } from '../../core/llm-chat.js';
-import {
-  EXECUTION_TOOL_NAMES,
-  type ExecutionEnvironment,
-} from '../../services/execution-environment.js';
+import { type ExecutionEnvironment } from '../../services/execution-environment.js';
 
 /**
  * Regression: Object.create(parent) is not enough to isolate a subagent's
@@ -98,9 +95,18 @@ describe('createApprovalModeOverride bound-tool isolation', () => {
     );
     const registry = child.getToolRegistry();
     expect(registry.getAllToolNames().sort()).toEqual(
-      [...EXECUTION_TOOL_NAMES, ToolNames.TOOL_CALL, ToolNames.TOOL_SEARCH]
-        .filter((name) => name !== ToolNames.LS)
-        .sort(),
+      [
+        ToolNames.READ_FILE,
+        ToolNames.WRITE_FILE,
+        ToolNames.EDIT,
+        ToolNames.NOTEBOOK_EDIT,
+        ToolNames.GLOB,
+        ToolNames.GREP,
+        ToolNames.SHELL,
+        ToolNames.TASK_STOP,
+        ToolNames.TOOL_CALL,
+        ToolNames.TOOL_SEARCH,
+      ].sort(),
     );
     expect(parent.getExecutionEnvironment()).toBeUndefined();
     expect(registry).not.toBe(parent.getToolRegistry());

@@ -11,6 +11,7 @@ import path from 'node:path';
 import type { GenerateContentResponseUsageMetadata } from '@google/genai';
 import { AuthType } from '../core/contentGenerator.js';
 import { Storage } from '../config/storage.js';
+import type { Config } from '../config/config.js';
 import { makeFakeConfig } from '../test-utils/config.js';
 import { ApiResponseEvent } from '../telemetry/types.js';
 import { setDebugLogSession } from '../utils/debugLogger.js';
@@ -18,11 +19,9 @@ import * as jsonl from '../utils/jsonl-utils.js';
 import {
   __overrideNowForTesting,
   apiResponseEventToTokenUsageRecord,
-  exportTokenUsageSummary,
   formatTokenUsageSummaryAsCsv,
   getTokenUsageFilePath,
   queryTokenUsage,
-  recordTokenUsageFromApiResponse,
   recordTokenUsageFromApiResponseBestEffort,
   resetTokenUsageFailureLogging,
 } from './tokenUsageService.js';
@@ -30,6 +29,15 @@ import {
 // Usage files can hold records written under an auth type that no longer
 // exists; they still group under their own key.
 const OTHER_AUTH_TYPE = 'legacy-auth';
+
+/** Writes the record the logger would append, and waits for the write. */
+async function recordUsage(
+  config: Config,
+  event: ApiResponseEvent,
+): Promise<void> {
+  const record = apiResponseEventToTokenUsageRecord(config, event);
+  await jsonl.writeLine(getTokenUsageFilePath(record.localMonth), record);
+}
 
 describe('tokenUsageService', () => {
   let tempDir: string;
@@ -174,7 +182,7 @@ describe('tokenUsageService', () => {
       targetDir: path.join(tempDir, 'project'),
     });
 
-    await recordTokenUsageFromApiResponse(
+    await recordUsage(
       config,
       createEvent('model-a', 'prompt-1', {
         promptTokenCount: 10,
@@ -184,7 +192,7 @@ describe('tokenUsageService', () => {
         totalTokenCount: 32,
       }),
     );
-    await recordTokenUsageFromApiResponse(
+    await recordUsage(
       config,
       createEvent(
         'model-b',
@@ -202,7 +210,7 @@ describe('tokenUsageService', () => {
         },
       ),
     );
-    await recordTokenUsageFromApiResponse(
+    await recordUsage(
       config,
       createEvent(
         'model-a',
@@ -435,7 +443,7 @@ describe('tokenUsageService', () => {
       targetDir: path.join(tempDir, 'project'),
     });
 
-    await recordTokenUsageFromApiResponse(
+    await recordUsage(
       config,
       createEvent(
         'model-a',
@@ -451,7 +459,7 @@ describe('tokenUsageService', () => {
         },
       ),
     );
-    await recordTokenUsageFromApiResponse(
+    await recordUsage(
       config,
       createEvent(
         'model-a',
@@ -467,7 +475,7 @@ describe('tokenUsageService', () => {
         },
       ),
     );
-    await recordTokenUsageFromApiResponse(
+    await recordUsage(
       config,
       createEvent(
         'model-b',
@@ -525,7 +533,7 @@ describe('tokenUsageService', () => {
       targetDir: path.join(tempDir, 'project'),
     });
 
-    await recordTokenUsageFromApiResponse(
+    await recordUsage(
       config,
       createEvent('model-a', 'prompt-1', {
         promptTokenCount: 10,
@@ -550,7 +558,7 @@ describe('tokenUsageService', () => {
       targetDir: path.join(tempDir, 'project'),
     });
 
-    await recordTokenUsageFromApiResponse(
+    await recordUsage(
       config,
       createEvent('model-a', 'prompt-1', {
         promptTokenCount: 0,
@@ -657,51 +665,6 @@ describe('tokenUsageService', () => {
 
     expect(summary.totals.totalTokens).toBe(3);
     expect(summary.totals.requests).toBe(1);
-  });
-
-  it('exports summaries as JSON and escaped CSV', async () => {
-    const config = makeFakeConfig({
-      sessionId: 'session-1',
-      targetDir: path.join(tempDir, 'project'),
-    });
-    await recordTokenUsageFromApiResponse(
-      config,
-      createEvent(
-        '=cmd|quoted',
-        'prompt-1',
-        {
-          promptTokenCount: 1,
-          candidatesTokenCount: 2,
-          totalTokenCount: 3,
-        },
-        {
-          authType: 'auth"quoted',
-        },
-      ),
-    );
-
-    const json = await exportTokenUsageSummary({
-      period: 'day',
-      value: '2026-05-25',
-      format: 'json',
-    });
-    expect(JSON.parse(json)).toMatchObject({
-      period: 'day',
-      value: '2026-05-25',
-      totals: { totalTokens: 3 },
-    });
-    expect(JSON.parse(json)).not.toHaveProperty('coordination');
-
-    const csv = formatTokenUsageSummaryAsCsv(
-      await queryTokenUsage({ period: 'day', value: '2026-05-25' }),
-    );
-    expect(csv).toContain('day,2026-05-25,total,total,,,,1,1,2,0,0,3,100');
-    expect(csv).toContain(
-      "day,2026-05-25,model,'=cmd|quoted,'=cmd|quoted,,,1,1,2,0,0,3,100",
-    );
-    expect(csv).toContain(
-      'day,2026-05-25,auth_type,"auth""quoted",,"auth""quoted",,1,1,2,0,0,3,100',
-    );
   });
 
   it('escapes formula-like CSV fields after leading whitespace', () => {

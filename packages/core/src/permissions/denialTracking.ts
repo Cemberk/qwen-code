@@ -227,9 +227,7 @@ export function recordFallbackApprove(
 
 /**
  * True when a `ToolConfirmationOutcome` represents the user approving
- * the call (any kind of "proceed"). Shared between the CLI scheduler's
- * outcome handler and the ACP Session's outcome handler so adding a new
- * approve-shaped outcome can't drift between the two paths.
+ * the call (any kind of "proceed").
  *
  * Cancel / abort intentionally not handled — they leave denialTracking
  * untouched on the AUTO-fallback path. Caller decides.
@@ -242,9 +240,8 @@ export function isApproveOutcome(outcome: string): boolean {
     outcome === 'proceed_always_project' ||
     outcome === 'proceed_always_user' ||
     // The per-server and per-tool "always allow" buttons. They are older than
-    // the project/user pair above but still reach here -- web-shell's
-    // ToolApproval sends them, and background-tasks, tool-call-decision and
-    // the ACP Session all count them as approvals. Omitting them here meant a
+    // the project/user pair above but still reach here -- background-tasks
+    // and tool-call-decision count them as approvals. Omitting them here meant a
     // user who approved a fallen-back call with one of these two buttons did
     // not clear the AUTO denial counters, so the session kept prompting.
     outcome === 'proceed_always_server' ||

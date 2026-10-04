@@ -7,7 +7,7 @@
 import { render } from 'ink-testing-library';
 import { describe, expect, it } from 'vitest';
 import type { GoalSnapshotV2 } from '@qwen-code/qwen-code-core';
-import { GOAL_STATUS_KINDS, MessageType } from '../../types.js';
+
 import { theme } from '../../semantic-colors.js';
 import { GoalStatusMessage, goalCardThemeColor } from './GoalStatusMessage.js';
 
@@ -78,19 +78,6 @@ describe('<GoalStatusMessage />', () => {
     expect(output).toContain('2 turns');
     expect(output).toContain('Goal: merge a nonexistent branch');
     expect(output).toContain('Last check: the remote branch does not exist');
-  });
-
-  it('keeps the legacy GoalStatusKind union closed', () => {
-    expect(GOAL_STATUS_KINDS).toEqual([
-      'set',
-      'achieved',
-      'cleared',
-      'failed',
-      'aborted',
-      'paused',
-      'checking',
-    ]);
-    expect(MessageType.GOAL_STATE).toBe('goal_state');
   });
 
   it('renders legacy pause as a non-terminal paused card', () => {

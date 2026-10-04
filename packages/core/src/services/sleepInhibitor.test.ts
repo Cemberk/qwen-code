@@ -114,7 +114,7 @@ describe('SleepInhibitor', () => {
         windowsHide: true,
       }),
     );
-    expect(inhibitor.getActiveCount()).toBe(2);
+    expect(inhibitor['activeCount']).toBe(2);
 
     first.release();
     expect(children[0]!.kill).not.toHaveBeenCalled();
@@ -122,7 +122,7 @@ describe('SleepInhibitor', () => {
 
     second.release();
     expect(children[0]!.kill).toHaveBeenCalledTimes(1);
-    expect(inhibitor.getActiveCount()).toBe(0);
+    expect(inhibitor['activeCount']).toBe(0);
     expect(inhibitor.isRunning()).toBe(false);
   });
 
@@ -136,7 +136,7 @@ describe('SleepInhibitor', () => {
 
     expect(spawn).not.toHaveBeenCalled();
     expect(inhibitor.isRunning()).toBe(false);
-    expect(inhibitor.getActiveCount()).toBe(2);
+    expect(inhibitor['activeCount']).toBe(2);
     expect(logger.debug).toHaveBeenCalledWith(
       'Sleep inhibition skipped for headless SSH session.',
     );
@@ -144,7 +144,7 @@ describe('SleepInhibitor', () => {
 
     first.release();
     second.release();
-    expect(inhibitor.getActiveCount()).toBe(0);
+    expect(inhibitor['activeCount']).toBe(0);
   });
 
   it('starts systemd-inhibit for SSH sessions with a display server', async () => {
@@ -232,7 +232,7 @@ describe('SleepInhibitor', () => {
     handle.release();
     handle.release();
 
-    expect(inhibitor.getActiveCount()).toBe(0);
+    expect(inhibitor['activeCount']).toBe(0);
     expect(children[0]!.kill).toHaveBeenCalledTimes(1);
   });
 
@@ -254,7 +254,7 @@ describe('SleepInhibitor', () => {
     expect(logger.debug).toHaveBeenCalledWith(
       'Failed to spawn sleep inhibitor: missing command',
     );
-    expect(inhibitor.getActiveCount()).toBe(0);
+    expect(inhibitor['activeCount']).toBe(0);
   });
 
   it('handles async error events from the spawned child', async () => {
@@ -311,11 +311,11 @@ describe('SleepInhibitor', () => {
     inhibitor.acquire('work');
     inhibitor.acquire('more work');
     await vi.waitFor(() => expect(inhibitor.isRunning()).toBe(true));
-    expect(inhibitor.getActiveCount()).toBe(2);
+    expect(inhibitor['activeCount']).toBe(2);
 
     inhibitor.dispose();
     expect(children[0]!.kill).toHaveBeenCalledTimes(1);
-    expect(inhibitor.getActiveCount()).toBe(0);
+    expect(inhibitor['activeCount']).toBe(0);
     expect(inhibitor.isRunning()).toBe(false);
 
     // Second dispose is a no-op and must not throw or re-kill.
@@ -352,7 +352,7 @@ describe('SleepInhibitor', () => {
     expect(logger.warn).toHaveBeenCalledWith(
       'Failed to stop sleep inhibitor: ESRCH',
     );
-    expect(inhibitor.getActiveCount()).toBe(0);
+    expect(inhibitor['activeCount']).toBe(0);
   });
 
   it('does not kill a child whose spawn failed (no pid)', async () => {
@@ -389,7 +389,7 @@ describe('SleepInhibitor', () => {
     handle.release();
 
     expect(children[0]!.kill).not.toHaveBeenCalled();
-    expect(inhibitor.getActiveCount()).toBe(0);
+    expect(inhibitor['activeCount']).toBe(0);
     expect(inhibitor.isRunning()).toBe(false);
   });
 

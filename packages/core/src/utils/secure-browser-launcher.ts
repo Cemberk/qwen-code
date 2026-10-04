@@ -336,13 +336,3 @@ function parseBrowserCommand(
   }
   return { command, args };
 }
-
-/**
- * Checks if the current environment should attempt to launch a browser.
- * This is the same logic as in browser.ts for consistency.
- *
- * @returns True if the tool should attempt to launch a browser
- */
-export function shouldLaunchBrowser(): boolean {
-  return shouldAttemptBrowserLaunch();
-}

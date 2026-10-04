@@ -45,7 +45,7 @@ export type TurnInterruption =
     };
 
 // Continue detection only walks the final run of trailing user/model entries.
-// A bounded tail avoids deep-cloning long daemon histories for each probe while
+// A bounded tail avoids deep-cloning long histories for each probe while
 // still leaving ample room for repeated failed sends and tool-result retries.
 export const TURN_INTERRUPTION_HISTORY_TAIL_COUNT = 50;
 
@@ -154,7 +154,7 @@ function isWrappedIn(part: Part, open: string, close: string): boolean {
  * `provenance: 'system'` + `subtype: 'notification'` stamp. The only field that
  * differs is `backgroundTurn`, and the `channelTask` admission branch runs it
  * with `backgroundTurnContext.exit(...)`, so it is not a reliable discriminator.
- * Closing that needs a distinguishing record field or a daemon-side re-drive.
+ * Closing that needs a distinguishing record field.
  *
  * Needed at all because the record's `subtype: 'notification'` and
  * `provenance: 'system'` cannot ride along on `Content` (that type comes from
@@ -240,8 +240,8 @@ export function detectTurnInterruption(
   trailingSystemNotifications?: number,
 ): TurnInterruption {
   const boundary = completedToolCallBoundary(history, completedToolCallIds);
-  // Trailing background notifications are not an unfinished turn: the daemon
-  // persists each one before its automatic turn runs, so a notification whose
+  // Trailing background notifications are not an unfinished turn: each one is
+  // persisted before its automatic turn runs, so a notification whose
   // turn never ran leaves a `user` tail that nothing will ever answer. Left in
   // place it classifies as `interrupted_prompt`, which keeps the recovery
   // banner pinned on a session whose last real turn ended cleanly.

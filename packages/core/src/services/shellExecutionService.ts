@@ -43,8 +43,7 @@ const SIGKILL_TIMEOUT_MS = 200;
  * flowing until 'close' — but 'close' also waits on *inherited* fds, so a
  * shell that exits while a grandchild holds the pipe (`sleep 10 &`,
  * `nohup … &`) would defer 'close' indefinitely and wedge the result
- * promise (background shells and the ACP channel both stream this way;
- * PR #12067 review). Settle on 'close' or this bound after exit,
+ * promise (background shells stream this way; PR #12067 review). Settle on 'close' or this bound after exit,
  * whichever comes first. 1s covers trailing writes that land shortly
  * after exit while bounding the grandchild case.
  */

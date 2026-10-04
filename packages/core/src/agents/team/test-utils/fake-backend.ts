@@ -7,12 +7,10 @@
 /**
  * @fileoverview FakeBackend — test double for the Backend interface.
  *
- * Creates FakeAgent instances instead of real PTY subprocesses.
- * Implements the full Backend interface with no-op stubs for
- * navigation and screen capture methods.
+ * Creates scripted FakeAgent instances instead of real AgentInteractive
+ * ones, implementing the full Backend interface.
  */
 
-import type { AnsiOutput } from '../../../utils/terminalSerializer.js';
 import {
   DISPLAY_MODE,
   type Backend,
@@ -56,7 +54,7 @@ export class FakeBackend implements Backend {
     this.spawnedConfigs.set(config.agentId, config);
 
     const script = this.scripts.get(config.agentId) ?? {};
-    const name = config.inProcess?.agentName ?? config.agentId;
+    const name = config.inProcess.agentName;
     const agent = new FakeAgent(config.agentId, name, script);
     this.agents.set(config.agentId, agent);
 
@@ -143,50 +141,6 @@ export class FakeBackend implements Backend {
 
     clearTimeout(timerId!);
     return result === 'done';
-  }
-
-  // ─── Navigation & screen capture: no-op stubs ──────────────
-
-  switchTo(_agentId: string): void {}
-  switchToNext(): void {}
-  switchToPrevious(): void {}
-  getActiveAgentId(): string | null {
-    return null;
-  }
-  getActiveSnapshot(): AnsiOutput | null {
-    return null;
-  }
-  getAgentSnapshot(
-    _agentId: string,
-    _scrollOffset?: number,
-  ): AnsiOutput | null {
-    return null;
-  }
-  getAgentScrollbackLength(_agentId: string): number {
-    return 0;
-  }
-
-  // ─── Input ─────────────────────────────────────────────────
-
-  forwardInput(_data: string): boolean {
-    return false;
-  }
-
-  writeToAgent(agentId: string, data: string): boolean {
-    const agent = this.agents.get(agentId);
-    if (!agent) return false;
-    agent.enqueueMessage(data);
-    return true;
-  }
-
-  // ─── Resize ────────────────────────────────────────────────
-
-  resizeAll(_cols: number, _rows: number): void {}
-
-  // ─── External session ──────────────────────────────────────
-
-  getAttachHint(): string | null {
-    return null;
   }
 
   // ─── Extra: matches InProcessBackend.getAgent() ────────────

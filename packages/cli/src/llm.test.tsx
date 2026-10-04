@@ -44,17 +44,6 @@ import {
   Storage,
 } from '@qwen-code/qwen-code-core';
 
-const mockPrepareFileWatchersForProcessExit = vi.hoisted(() => vi.fn());
-vi.mock(
-  '@qwen-code/qwen-code-core/utils/file-watcher-cleanup.js',
-  async (importOriginal) => ({
-    ...(await importOriginal<
-      typeof import('@qwen-code/qwen-code-core/utils/file-watcher-cleanup.js')
-    >()),
-    prepareFileWatchersForProcessExit: mockPrepareFileWatchersForProcessExit,
-  }),
-);
-
 const mockWriteStderrLine = vi.hoisted(() => vi.fn());
 const mockWriteStdoutLine = vi.hoisted(() => vi.fn());
 const mockConsumeLastRenderError = vi.hoisted(() => vi.fn());
@@ -427,7 +416,7 @@ describe('llm.tsx main function', () => {
 
   // Pins the process-replacement predicate in llm.tsx: a one-shot headless
   // prompt replaces the already-loaded process, while supervisor-backed
-  // modes (ACP, -i, stream-json / file / json-fd input) keep the parent.
+  // modes (-i, stream-json / file / json-fd input) keep the parent.
   // The slash-command row pins the contract: a headless `/update` updates
   // standalone installs in-process or prints manual instructions and never
   // emits a relaunch exit code, so it keeps the execve optimization like any
@@ -691,7 +680,6 @@ describe('llm.tsx main function', () => {
       getModelProvidersConfig: () => undefined,
       initialize: vi.fn().mockResolvedValue(undefined),
       waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-      getExperimentalZedIntegration: () => false,
       getScreenReader: () => false,
       getMemoryFileCount: () => 0,
       getProjectRoot: () => '/',
@@ -733,10 +721,7 @@ describe('llm.tsx main function', () => {
         userHooks: undefined,
       },
       expect.any(Function),
-      undefined,
       // settingsWatcher: not started in bare mode
-      undefined,
-      undefined,
       undefined,
       expect.any(Function),
     );
@@ -989,7 +974,6 @@ describe('llm.tsx main function', () => {
       }),
       waitForMcpReady: vi.fn().mockResolvedValue(undefined),
       getFailedMcpServerNames: () => [],
-      getExperimentalZedIntegration: () => false,
       getScreenReader: () => false,
       getMemoryFileCount: () => 0,
       getProjectRoot: () => '/',
@@ -1229,7 +1213,6 @@ describe('llm.tsx main function', () => {
       initialize: vi.fn().mockResolvedValue(undefined),
       waitForMcpReady: vi.fn().mockResolvedValue(undefined),
       getFailedMcpServerNames: () => [],
-      getExperimentalZedIntegration: () => false,
       getScreenReader: () => false,
       getMemoryFileCount: () => 0,
       getProjectRoot: () => '/',
@@ -1575,7 +1558,6 @@ describe('llm.tsx main function', () => {
       getModelProvidersConfig: () => undefined,
       initialize: vi.fn().mockResolvedValue(undefined),
       waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-      getExperimentalZedIntegration: () => false,
       getScreenReader: () => false,
       getMemoryFileCount: () => 0,
       getProjectRoot: () => '/',
@@ -1763,7 +1745,6 @@ describe('llm.tsx OpenTUI renderer dispatch', () => {
       getModelProvidersConfig: () => undefined,
       initialize: vi.fn(),
       waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-      getExperimentalZedIntegration: () => false,
       getScreenReader: () => screenReader,
       getMemoryFileCount: () => 0,
       getWarnings: () => [],
@@ -1982,7 +1963,6 @@ describe('llm.tsx main function kitty protocol', () => {
       getModelProvidersConfig: () => undefined,
       initialize: vi.fn(),
       waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-      getExperimentalZedIntegration: () => false,
       getScreenReader: () => false,
       getMemoryFileCount: () => 0,
       getWarnings: () => [],
@@ -2095,7 +2075,6 @@ describe('llm.tsx main function kitty protocol', () => {
       getModelProvidersConfig: () => undefined,
       initialize: vi.fn(),
       waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-      getExperimentalZedIntegration: () => false,
       getScreenReader: () => false,
       getMemoryFileCount: () => 0,
       getWarnings: () => [],
@@ -2207,7 +2186,6 @@ describe('llm.tsx main function kitty protocol', () => {
       getModelProvidersConfig: () => undefined,
       initialize: vi.fn(),
       waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-      getExperimentalZedIntegration: () => false,
       getScreenReader: () => false,
       getMemoryFileCount: () => 0,
       getWarnings: () => [],
@@ -2311,7 +2289,6 @@ describe('llm.tsx main function kitty protocol', () => {
       getModelProvidersConfig: () => undefined,
       initialize: vi.fn(),
       waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-      getExperimentalZedIntegration: () => false,
       getScreenReader: () => false,
       getMemoryFileCount: () => 0,
       getWarnings: () => [],
@@ -2629,7 +2606,6 @@ describe('llm.tsx main function kitty protocol', () => {
       getModelProvidersConfig: () => undefined,
       initialize: vi.fn(),
       waitForMcpReady: vi.fn().mockResolvedValue(undefined),
-      getExperimentalZedIntegration: () => false,
       getScreenReader: () => false,
       getMemoryFileCount: () => 0,
       getWarnings: () => [],

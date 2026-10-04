@@ -240,18 +240,6 @@ function projectValue(
   return out;
 }
 
-/**
- * Bound an MCP argument object for inclusion in the classifier prompt.
- * Non-object inputs project to `{}`, flagged as truncated when they carried
- * content (see {@link projectMcpArgumentsWithBudget}).
- */
-export function projectMcpArguments(args: unknown): ProjectMcpArgumentsResult {
-  return projectMcpArgumentsWithBudget(args, {
-    remaining: MCP_CLASSIFIER_MAX_TOTAL_CHARS,
-    truncated: false,
-  });
-}
-
 function projectMcpArgumentsWithBudget(
   args: unknown,
   budget: ProjectionBudget,

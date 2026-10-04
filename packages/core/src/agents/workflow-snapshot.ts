@@ -208,8 +208,8 @@ export function snapshotArgs(
  * - `unrecorded`: the snapshot predates {@link snapshotArgs}, so it cannot
  *   say whether the run had args at all.
  *
- * The daemon refuses these, and the task projection reports the same answer
- * to clients, so a client never offers an action the daemon will refuse.
+ * The task projection reports the same answer to clients, so a client never
+ * offers an action that will be refused.
  */
 export function snapshotArgsUnavailable(
   snapshot: Pick<WorkflowSnapshot, 'args' | 'argsOmitted' | 'argsRecorded'>,
@@ -357,39 +357,6 @@ export async function listWorkflowSnapshots(
   }
   snapshots.sort((a, b) => (b.startTime ?? 0) - (a.startTime ?? 0));
   return snapshots;
-}
-
-/**
- * Delete one persisted run summary, resume journal, and generated inline
- * script. The run id must be well-formed because every target is derived from
- * it below the project runs dir.
- * Returns true when the safe target is absent after this call.
- */
-export async function deleteWorkflowSnapshot(
-  config: Config,
-  runId: string,
-): Promise<boolean> {
-  const storage = config.storage;
-  if (!storage || !/^wf_[0-9a-f]+$/.test(runId)) return false;
-  try {
-    await fs.rm(path.dirname(storage.getWorkflowRunJournalPath(runId)), {
-      recursive: true,
-      force: true,
-    });
-  } catch (error) {
-    debugLogger.warn(`delete workflow journal failed for ${runId}: ${error}`);
-    return false;
-  }
-  if (!(await deleteInlineWorkflowScript(config, runId))) return false;
-  try {
-    await fs.unlink(storage.getWorkflowRunSnapshotPath(runId));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-      debugLogger.warn(`deleteWorkflowSnapshot failed for ${runId}: ${error}`);
-      return false;
-    }
-  }
-  return true;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

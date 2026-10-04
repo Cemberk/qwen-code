@@ -882,7 +882,7 @@ describe('registerModelProvidersHotReload', () => {
     makeModelConfig(bootProviders);
     registerModelProvidersHotReload(watcher, settings, config);
 
-    // ACP flow: settings.setValue updates merged without
+    // Out-of-band flow: settings.setValue updates merged without
     // a watcher event (self-write), then reloads the registry out-of-band.
     const outOfBand = {
       openai: [{ id: 'gpt-b', baseUrl: 'http://localhost:1234/v1' }],

@@ -85,8 +85,6 @@ function createMockConfig() {
 function createSpawnConfig(agentId: string): AgentSpawnConfig {
   return {
     agentId,
-    command: 'node',
-    args: [],
     cwd: '/tmp',
     inProcess: {
       agentName: `Agent ${agentId}`,
@@ -143,27 +141,12 @@ describe('InProcessBackend', () => {
     expect(createContentGenerator).toHaveBeenCalledTimes(contentGeneratorCalls);
     expect(AgentCore).toHaveBeenCalledTimes(coreCalls);
     expect(containedBackend.getAgent('contained-team-agent')).toBeUndefined();
-    expect(containedBackend.getActiveAgentId()).toBeNull();
-  });
-
-  it('should throw when spawning without inProcess config', async () => {
-    const config: AgentSpawnConfig = {
-      agentId: 'test',
-      command: 'node',
-      args: [],
-      cwd: '/tmp',
-    };
-
-    await expect(backend.spawnAgent(config)).rejects.toThrow(
-      'InProcessBackend requires inProcess config',
-    );
   });
 
   it('should spawn an agent with inProcess config', async () => {
     await backend.init();
     await backend.spawnAgent(createSpawnConfig('agent-1'));
 
-    expect(backend.getActiveAgentId()).toBe('agent-1');
     expect(backend.getAgent('agent-1')).toBeDefined();
     const call = destructureAgentCoreCall(vi.mocked(AgentCore).mock.calls[0]!);
     expect(call.taskName).toBe('Do something');
@@ -215,65 +198,6 @@ describe('InProcessBackend', () => {
     );
   });
 
-  it('should set first spawned agent as active', async () => {
-    await backend.init();
-    await backend.spawnAgent(createSpawnConfig('agent-1'));
-    await backend.spawnAgent(createSpawnConfig('agent-2'));
-
-    expect(backend.getActiveAgentId()).toBe('agent-1');
-  });
-
-  it('should navigate between agents', async () => {
-    await backend.init();
-    await backend.spawnAgent(createSpawnConfig('agent-1'));
-    await backend.spawnAgent(createSpawnConfig('agent-2'));
-    await backend.spawnAgent(createSpawnConfig('agent-3'));
-
-    expect(backend.getActiveAgentId()).toBe('agent-1');
-
-    backend.switchToNext();
-    expect(backend.getActiveAgentId()).toBe('agent-2');
-
-    backend.switchToNext();
-    expect(backend.getActiveAgentId()).toBe('agent-3');
-
-    // Wraps around
-    backend.switchToNext();
-    expect(backend.getActiveAgentId()).toBe('agent-1');
-
-    backend.switchToPrevious();
-    expect(backend.getActiveAgentId()).toBe('agent-3');
-  });
-
-  it('should switch to a specific agent', async () => {
-    await backend.init();
-    await backend.spawnAgent(createSpawnConfig('agent-1'));
-    await backend.spawnAgent(createSpawnConfig('agent-2'));
-
-    backend.switchTo('agent-2');
-    expect(backend.getActiveAgentId()).toBe('agent-2');
-  });
-
-  it('should forward input to active agent', async () => {
-    await backend.init();
-    await backend.spawnAgent(createSpawnConfig('agent-1'));
-
-    const result = backend.forwardInput('hello');
-    expect(result).toBe(true);
-  });
-
-  it('should return false for forwardInput with no active agent', () => {
-    expect(backend.forwardInput('hello')).toBe(false);
-  });
-
-  it('should write to specific agent', async () => {
-    await backend.init();
-    await backend.spawnAgent(createSpawnConfig('agent-1'));
-
-    expect(backend.writeToAgent('agent-1', 'hello')).toBe(true);
-    expect(backend.writeToAgent('nonexistent', 'hello')).toBe(false);
-  });
-
   it('runs direct enqueued teammate messages inside teammate identity', async () => {
     const seenContexts: unknown[] = [];
     runReasoningLoopMock.mockImplementation(async () => {
@@ -308,19 +232,6 @@ describe('InProcessBackend', () => {
         planModeRequired: true,
       }),
     ]);
-  });
-
-  it('should return null for screen capture methods', async () => {
-    await backend.init();
-    await backend.spawnAgent(createSpawnConfig('agent-1'));
-
-    expect(backend.getActiveSnapshot()).toBeNull();
-    expect(backend.getAgentSnapshot('agent-1')).toBeNull();
-    expect(backend.getAgentScrollbackLength('agent-1')).toBe(0);
-  });
-
-  it('should return null for attach hint', () => {
-    expect(backend.getAttachHint()).toBeNull();
   });
 
   it('should stop a specific agent', async () => {
@@ -399,45 +310,6 @@ describe('InProcessBackend', () => {
     const respawned = backend.getAgent('agent-1');
     expect(respawned).toBeDefined();
     expect(respawned).not.toBe(agent);
-
-    // The respawned agent is live again: input and switching work.
-    expect(backend.writeToAgent('agent-1', 'follow-up')).toBe(true);
-    backend.switchTo('agent-1');
-    expect(backend.getActiveAgentId()).toBe('agent-1');
-  });
-
-  it('stopAgent reassigns the active agent and removes the stopped id from navigation', async () => {
-    // Mutation pin for the stopAgent roster bookkeeping: without the
-    // agentOrder splice a same-id respawn duplicates the entry and
-    // navigate() wrap-around skews; without the activeAgentId
-    // reassignment, forwardInput resolves to a stopped agent and
-    // typed input is silently dropped.
-    await backend.init();
-    await backend.spawnAgent(createSpawnConfig('agent-1'));
-    await backend.spawnAgent(createSpawnConfig('agent-2'));
-    expect(backend.getActiveAgentId()).toBe('agent-1');
-
-    backend.stopAgent('agent-1');
-
-    expect(backend.getActiveAgentId()).toBe('agent-2');
-    expect(backend.forwardInput('typed input')).toBe(true);
-    expect(backend.writeToAgent('agent-1', 'to a stopped agent')).toBe(false);
-
-    // Switching back to the stopped agent must not stick the roster
-    // on a dead handle (enqueueMessage would restart its run loop).
-    backend.switchTo('agent-1');
-    expect(backend.getActiveAgentId()).toBe('agent-2');
-
-    // Same-id respawn must not duplicate the roster entry: navigation
-    // cycles over exactly the two surviving ids.
-    await backend.spawnAgent(createSpawnConfig('agent-1'));
-    expect(backend.getActiveAgentId()).toBe('agent-2');
-    backend.switchToNext();
-    expect(backend.getActiveAgentId()).toBe('agent-1');
-    backend.switchToNext();
-    expect(backend.getActiveAgentId()).toBe('agent-2');
-    backend.switchToPrevious();
-    expect(backend.getActiveAgentId()).toBe('agent-1');
   });
 
   it('cleanup disposes all remaining registries (covers the in-flight shutdown path)', async () => {
@@ -599,7 +471,6 @@ describe('InProcessBackend', () => {
 
     await backend.cleanup();
 
-    expect(backend.getActiveAgentId()).toBeNull();
     expect(backend.getAgent('agent-1')).toBeUndefined();
   });
 
@@ -1026,7 +897,6 @@ describe('InProcessBackend', () => {
     expect(exitCallback).toHaveBeenCalledWith('agent-fail', 1, null);
     expect(registry.stop).toHaveBeenCalledTimes(1);
     expect(failingBackend.getAgent('agent-fail')).toBeUndefined();
-    expect(failingBackend.getActiveAgentId()).toBeNull();
     expect(
       (
         failingBackend as unknown as {

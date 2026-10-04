@@ -19,8 +19,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ACP_HOME_PREFIX } from './scratch-dir.js';
-
 // The env keys globalSetup's setup() writes, saved so a case can restore the
 // suite-wide values after re-importing the module and running its lifecycle.
 const SETUP_ENV_KEYS = [
@@ -144,27 +142,21 @@ describe('globalSetup hermetic qwen home', () => {
     expect(existsSync(home!)).toBe(false);
   });
 
-  it.each([['per-agent ACP home', ACP_HOME_PREFIX]])(
-    'sweeps a stale %s a torn-down run left behind',
-    async (_label, prefix) => {
-      // cli/acp-integration.test.ts creates its scratch roots directly under
-      // the OS temp dir, and a worker torn down mid-test never runs the
-      // cleanup that removes them. A root is reclaimed only while its prefix
-      // stays nested under the sweeper's — each prefix is the exact string its
-      // creation site builds the name from.
-      const leakedHome = join(tmpRoot, `${prefix}leaked`);
-      await mkdir(leakedHome, { recursive: true });
-      const leakedAt = new Date(Date.now() - 48 * 60 * 60 * 1000);
-      await utimes(leakedHome, leakedAt, leakedAt);
+  it('sweeps a stale qwen home a torn-down run left behind', async () => {
+    // A run torn down before teardown never removes its hermetic home under
+    // the OS temp dir; the next run reclaims it once it is a day old.
+    const leakedHome = join(tmpRoot, 'qwen-e2e-home-leaked');
+    await mkdir(leakedHome, { recursive: true });
+    const leakedAt = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    await utimes(leakedHome, leakedAt, leakedAt);
 
-      const { setup, teardown } = await loadGlobalSetup();
-      await setup();
+    const { setup, teardown } = await loadGlobalSetup();
+    await setup();
 
-      expect(existsSync(leakedHome)).toBe(false);
+    expect(existsSync(leakedHome)).toBe(false);
 
-      await teardown();
-    },
-  );
+    await teardown();
+  });
 
   it('does not exit an all-green run red when the scratch home cannot be removed', async () => {
     // A CLI child that outlives its test keeps writing under `debug/`, so the

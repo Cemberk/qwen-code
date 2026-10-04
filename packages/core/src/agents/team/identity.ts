@@ -78,13 +78,6 @@ export function isTeamLead(): boolean {
 }
 
 /**
- * Get the current teammate's assigned color, or undefined.
- */
-export function getTeammateColor(): string | undefined {
-  return teammateIdentityStore.getStore()?.color;
-}
-
-/**
  * Run a function within a teammate identity context.
  * Used by TeamManager when executing in-process teammate code.
  */

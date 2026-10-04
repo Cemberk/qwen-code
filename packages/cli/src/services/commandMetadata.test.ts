@@ -262,17 +262,15 @@ describe('getCommandSourceGroup', () => {
 // formatSupportedModes
 // ---------------------------------------------------------------------------
 describe('formatSupportedModes', () => {
-  it('returns [all] when all three modes are present', () => {
+  it('returns [all] when both modes are present', () => {
     const cmd = makeCmd({
-      supportedModes: ['interactive', 'non_interactive', 'acp'],
+      supportedModes: ['interactive', 'non_interactive'],
     });
     expect(formatSupportedModes(cmd)).toBe('[all]');
   });
 
-  it('returns [headless] when non_interactive and acp but not interactive', () => {
-    const cmd = makeCmd({
-      supportedModes: ['non_interactive', 'acp'],
-    });
+  it('returns [headless] when non_interactive but not interactive', () => {
+    const cmd = makeCmd({ supportedModes: ['non_interactive'] });
     expect(formatSupportedModes(cmd)).toBe('[headless]');
   });
 
@@ -281,11 +279,9 @@ describe('formatSupportedModes', () => {
     expect(formatSupportedModes(cmd)).toBe('[interactive]');
   });
 
-  it('formats individual modes with short tokens', () => {
-    const cmd = makeCmd({ supportedModes: ['interactive', 'acp'] });
-    const result = formatSupportedModes(cmd);
-    expect(result).toContain('[i]');
-    expect(result).toContain('[acp]');
+  it('returns an empty label when no mode is supported', () => {
+    const cmd = makeCmd({ supportedModes: [] });
+    expect(formatSupportedModes(cmd)).toBe('');
   });
 });
 

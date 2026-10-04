@@ -5,9 +5,9 @@
  */
 
 /**
- * @fileoverview Admission rule shared by the two front ends that cap queued
- * background notifications: the interactive TUI and the ACP `Session`.
- * The headless CLI's local queue is not capped here.
+ * @fileoverview Admission rule for the interactive TUI's queue of
+ * background notifications. The headless CLI's local queue is not capped
+ * here.
  *
  * Both front ends turn a queued notification into a model turn once the
  * session goes idle. Without a cap, a noisy producer — a monitor printing on
@@ -24,7 +24,7 @@
  */
 
 /**
- * Hard cap on queued background notifications in the TUI and ACP session.
+ * Hard cap on queued background notifications in the TUI.
  *
  * Sized above the default background-agent concurrency cap (10).
  * `QWEN_CODE_MAX_BACKGROUND_AGENTS` can raise fan-out past this cap, at which
@@ -70,7 +70,7 @@ export interface NotificationAdmissionOptions<T> {
   /**
    * Items the rule may never evict, by queue index. Defaults to "nothing is
    * protected". The index lets a caller consult state that lives outside the
-   * queued item itself (the ACP session's todo-stop-guard work chain, say).
+   * queued item itself.
    */
   isProtected?: (item: T, index: number) => boolean;
 }

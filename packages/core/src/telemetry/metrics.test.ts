@@ -13,12 +13,7 @@ import type {
   Histogram,
 } from '@opentelemetry/api';
 import type { Config } from '../config/config.js';
-import {
-  FileOperation,
-  MemoryMetricType,
-  ToolExecutionPhase,
-  ApiRequestPhase,
-} from './metrics.js';
+import { FileOperation, MemoryMetricType, ApiRequestPhase } from './metrics.js';
 import { makeFakeConfig } from '../test-utils/config.js';
 import type { GoalStateEvent } from './types.js';
 
@@ -71,20 +66,11 @@ describe('Telemetry Metrics', () => {
   let recordToolCallMetricsModule: typeof import('./metrics.js').recordToolCallMetrics;
   let recordTokenUsageMetricsModule: typeof import('./metrics.js').recordTokenUsageMetrics;
   let recordToolExecutionMetricsModule: typeof import('./metrics.js').recordToolExecutionMetrics;
-  let recordRepeatedToolFailureGuardMetricsModule: typeof import('./metrics.js').recordRepeatedToolFailureGuardMetrics;
   let recordFileOperationMetricModule: typeof import('./metrics.js').recordFileOperationMetric;
   let recordChatCompressionMetricsModule: typeof import('./metrics.js').recordChatCompressionMetrics;
-  let recordStartupPerformanceModule: typeof import('./metrics.js').recordStartupPerformance;
   let recordMemoryUsageModule: typeof import('./metrics.js').recordMemoryUsage;
   let recordCpuUsageModule: typeof import('./metrics.js').recordCpuUsage;
-  let recordToolQueueDepthModule: typeof import('./metrics.js').recordToolQueueDepth;
-  let recordToolExecutionBreakdownModule: typeof import('./metrics.js').recordToolExecutionBreakdown;
-  let recordTokenEfficiencyModule: typeof import('./metrics.js').recordTokenEfficiency;
   let recordApiRequestBreakdownModule: typeof import('./metrics.js').recordApiRequestBreakdown;
-  let recordPerformanceScoreModule: typeof import('./metrics.js').recordPerformanceScore;
-  let recordPerformanceRegressionModule: typeof import('./metrics.js').recordPerformanceRegression;
-  let recordBaselineComparisonModule: typeof import('./metrics.js').recordBaselineComparison;
-  let recordChannelMemoryRecallMetricsModule: typeof import('./metrics.js').recordChannelMemoryRecallMetrics;
   let recordMemoryRecallDeliveryMetricsModule: typeof import('./metrics.js').recordMemoryRecallDeliveryMetrics;
   let recordGoalStateMetricsModule: typeof import('./metrics.js').recordGoalStateMetrics;
 
@@ -102,25 +88,12 @@ describe('Telemetry Metrics', () => {
     recordTokenUsageMetricsModule = metricsJsModule.recordTokenUsageMetrics;
     recordToolExecutionMetricsModule =
       metricsJsModule.recordToolExecutionMetrics;
-    recordRepeatedToolFailureGuardMetricsModule =
-      metricsJsModule.recordRepeatedToolFailureGuardMetrics;
     recordFileOperationMetricModule = metricsJsModule.recordFileOperationMetric;
     recordChatCompressionMetricsModule =
       metricsJsModule.recordChatCompressionMetrics;
-    recordStartupPerformanceModule = metricsJsModule.recordStartupPerformance;
     recordMemoryUsageModule = metricsJsModule.recordMemoryUsage;
     recordCpuUsageModule = metricsJsModule.recordCpuUsage;
-    recordToolQueueDepthModule = metricsJsModule.recordToolQueueDepth;
-    recordToolExecutionBreakdownModule =
-      metricsJsModule.recordToolExecutionBreakdown;
-    recordTokenEfficiencyModule = metricsJsModule.recordTokenEfficiency;
     recordApiRequestBreakdownModule = metricsJsModule.recordApiRequestBreakdown;
-    recordPerformanceScoreModule = metricsJsModule.recordPerformanceScore;
-    recordPerformanceRegressionModule =
-      metricsJsModule.recordPerformanceRegression;
-    recordBaselineComparisonModule = metricsJsModule.recordBaselineComparison;
-    recordChannelMemoryRecallMetricsModule =
-      metricsJsModule.recordChannelMemoryRecallMetrics;
     recordMemoryRecallDeliveryMetricsModule =
       metricsJsModule.recordMemoryRecallDeliveryMetrics;
     recordGoalStateMetricsModule = metricsJsModule.recordGoalStateMetrics;
@@ -550,47 +523,6 @@ describe('Telemetry Metrics', () => {
     });
   });
 
-  describe('recordRepeatedToolFailureGuardMetrics', () => {
-    const config = makeFakeConfig({
-      sessionId: 'test-session-id',
-    });
-
-    it('records only low-cardinality transition attributes', () => {
-      initializeMetricsModule(config);
-      mockCounterAddFn.mockClear();
-
-      recordRepeatedToolFailureGuardMetricsModule({
-        route: 'acp_foreground',
-        mode: 'enforce',
-        phase_before: 'warned',
-        phase_after: 'latched',
-        decision: 'stopped',
-        failure_count_bucket: '8+',
-        batch_count_bucket: '3+',
-        terminal_status: 'error',
-        execution_status: 'error',
-        tool_type: 'mcp',
-      });
-
-      expect(mockCreateCounterFn).toHaveBeenCalledWith(
-        'qwen-code.repeated_tool_failure_guard.count',
-        expect.any(Object),
-      );
-      expect(mockCounterAddFn).toHaveBeenCalledWith(1, {
-        route: 'acp_foreground',
-        mode: 'enforce',
-        phase_before: 'warned',
-        phase_after: 'latched',
-        decision: 'stopped',
-        failure_count_bucket: '8+',
-        batch_count_bucket: '3+',
-        terminal_status: 'error',
-        execution_status: 'error',
-        tool_type: 'mcp',
-      });
-    });
-  });
-
   describe('recordFileOperationMetric', () => {
     const mockConfig = {
       getSessionId: () => 'test-session-id',
@@ -706,85 +638,6 @@ describe('Telemetry Metrics', () => {
       getTelemetryMetricsIncludeSessionId: () => false,
     } as unknown as Config;
 
-    describe('recordStartupPerformance', () => {
-      it('should not record metrics when performance monitoring is disabled', async () => {
-        // Re-import with performance monitoring disabled by mocking the config
-        const mockConfigDisabled = {
-          getSessionId: () => 'test-session-id',
-          getTelemetryEnabled: () => false, // Disable telemetry to disable performance monitoring
-          getTelemetryMetricsIncludeSessionId: () => false,
-        } as unknown as Config;
-
-        initializeMetricsModule(mockConfigDisabled);
-        mockHistogramRecordFn.mockClear();
-
-        recordStartupPerformanceModule(mockConfigDisabled, 100, {
-          phase: 'settings_loading',
-          details: {
-            auth_type: 'gemini',
-          },
-        });
-
-        expect(mockHistogramRecordFn).not.toHaveBeenCalled();
-      });
-
-      it('should record startup performance with phase and details', () => {
-        initializeMetricsModule(mockConfig);
-        mockHistogramRecordFn.mockClear();
-
-        recordStartupPerformanceModule(mockConfig, 150, {
-          phase: 'settings_loading',
-          details: {
-            auth_type: 'gemini',
-            telemetry_enabled: true,
-            settings_sources: 2,
-          },
-        });
-
-        expect(mockHistogramRecordFn).toHaveBeenCalledWith(150, {
-          phase: 'settings_loading',
-          auth_type: 'gemini',
-          telemetry_enabled: true,
-          settings_sources: 2,
-        });
-      });
-
-      it('should record startup performance without details', () => {
-        initializeMetricsModule(mockConfig);
-        mockHistogramRecordFn.mockClear();
-
-        recordStartupPerformanceModule(mockConfig, 50, { phase: 'cleanup' });
-
-        expect(mockHistogramRecordFn).toHaveBeenCalledWith(50, {
-          phase: 'cleanup',
-        });
-      });
-
-      it('should handle floating-point duration values from performance.now()', () => {
-        initializeMetricsModule(mockConfig);
-        mockHistogramRecordFn.mockClear();
-
-        // Test with realistic floating-point values that performance.now() would return
-        const floatingPointDuration = 123.45678;
-        recordStartupPerformanceModule(mockConfig, floatingPointDuration, {
-          phase: 'total_startup',
-          details: {
-            is_tty: true,
-            has_question: false,
-          },
-        });
-
-        expect(mockHistogramRecordFn).toHaveBeenCalledWith(
-          floatingPointDuration,
-          {
-            phase: 'total_startup',
-            is_tty: true,
-            has_question: false,
-          },
-        );
-      });
-    });
-
     describe('recordMemoryUsage', () => {
       it('should record memory usage for different memory types', () => {
         initializeMetricsModule(mockConfig);
@@ -871,109 +724,6 @@ describe('Telemetry Metrics', () => {
       });
     });
 
-    describe('recordToolQueueDepth', () => {
-      it('should record tool queue depth', () => {
-        initializeMetricsModule(mockConfig);
-        mockHistogramRecordFn.mockClear();
-
-        recordToolQueueDepthModule(mockConfig, 3);
-
-        expect(mockHistogramRecordFn).toHaveBeenCalledWith(3, {});
-      });
-
-      it('should record zero queue depth', () => {
-        initializeMetricsModule(mockConfig);
-        mockHistogramRecordFn.mockClear();
-
-        recordToolQueueDepthModule(mockConfig, 0);
-
-        expect(mockHistogramRecordFn).toHaveBeenCalledWith(0, {});
-      });
-    });
-
-    describe('recordToolExecutionBreakdown', () => {
-      it('should record tool execution breakdown for all phases', () => {
-        initializeMetricsModule(mockConfig);
-        mockHistogramRecordFn.mockClear();
-
-        recordToolExecutionBreakdownModule(mockConfig, 25, {
-          function_name: 'Read',
-          phase: ToolExecutionPhase.VALIDATION,
-        });
-
-        expect(mockHistogramRecordFn).toHaveBeenCalledWith(25, {
-          function_name: 'Read',
-          phase: 'validation',
-        });
-      });
-
-      it('should record execution breakdown for different phases', () => {
-        initializeMetricsModule(mockConfig);
-        mockHistogramRecordFn.mockClear();
-
-        recordToolExecutionBreakdownModule(mockConfig, 50, {
-          function_name: 'Bash',
-          phase: ToolExecutionPhase.PREPARATION,
-        });
-        recordToolExecutionBreakdownModule(mockConfig, 1500, {
-          function_name: 'Bash',
-          phase: ToolExecutionPhase.EXECUTION,
-        });
-        recordToolExecutionBreakdownModule(mockConfig, 75, {
-          function_name: 'Bash',
-          phase: ToolExecutionPhase.RESULT_PROCESSING,
-        });
-
-        expect(mockHistogramRecordFn).toHaveBeenCalledTimes(3); // One for each call
-        expect(mockHistogramRecordFn).toHaveBeenNthCalledWith(1, 50, {
-          function_name: 'Bash',
-          phase: 'preparation',
-        });
-        expect(mockHistogramRecordFn).toHaveBeenNthCalledWith(2, 1500, {
-          function_name: 'Bash',
-          phase: 'execution',
-        });
-        expect(mockHistogramRecordFn).toHaveBeenNthCalledWith(3, 75, {
-          function_name: 'Bash',
-          phase: 'result_processing',
-        });
-      });
-    });
-
-    describe('recordTokenEfficiency', () => {
-      it('should record token efficiency metrics', () => {
-        initializeMetricsModule(mockConfig);
-        mockHistogramRecordFn.mockClear();
-
-        recordTokenEfficiencyModule(mockConfig, 0.85, {
-          model: 'gemini-pro',
-          metric: 'cache_hit_rate',
-          context: 'api_request',
-        });
-
-        expect(mockHistogramRecordFn).toHaveBeenCalledWith(0.85, {
-          model: 'gemini-pro',
-          metric: 'cache_hit_rate',
-          context: 'api_request',
-        });
-      });
-
-      it('should record token efficiency without context', () => {
-        initializeMetricsModule(mockConfig);
-        mockHistogramRecordFn.mockClear();
-
-        recordTokenEfficiencyModule(mockConfig, 125.5, {
-          model: 'gemini-pro',
-          metric: 'tokens_per_operation',
-        });
-
-        expect(mockHistogramRecordFn).toHaveBeenCalledWith(125.5, {
-          model: 'gemini-pro',
-          metric: 'tokens_per_operation',
-        });
-      });
-    });
-
     describe('recordApiRequestBreakdown', () => {
       it('should record API request breakdown for all phases', () => {
         initializeMetricsModule(mockConfig);
@@ -1020,187 +770,6 @@ describe('Telemetry Metrics', () => {
           model: 'gemini-pro',
           phase: 'token_processing',
         });
-      });
-    });
-
-    describe('recordPerformanceScore', () => {
-      it('should record performance score with category and baseline', () => {
-        initializeMetricsModule(mockConfig);
-        mockHistogramRecordFn.mockClear();
-
-        recordPerformanceScoreModule(mockConfig, 85.5, {
-          category: 'memory_efficiency',
-          baseline: 80.0,
-        });
-
-        expect(mockHistogramRecordFn).toHaveBeenCalledWith(85.5, {
-          category: 'memory_efficiency',
-          baseline: 80.0,
-        });
-      });
-
-      it('should record performance score without baseline', () => {
-        initializeMetricsModule(mockConfig);
-        mockHistogramRecordFn.mockClear();
-
-        recordPerformanceScoreModule(mockConfig, 92.3, {
-          category: 'overall_performance',
-        });
-
-        expect(mockHistogramRecordFn).toHaveBeenCalledWith(92.3, {
-          category: 'overall_performance',
-        });
-      });
-    });
-
-    describe('recordPerformanceRegression', () => {
-      it('should record performance regression with baseline comparison', () => {
-        initializeMetricsModule(mockConfig);
-        mockCounterAddFn.mockClear();
-        mockHistogramRecordFn.mockClear();
-
-        recordPerformanceRegressionModule(mockConfig, {
-          metric: 'startup_time',
-          current_value: 1200,
-          baseline_value: 1000,
-          severity: 'medium',
-        });
-
-        // Verify regression counter
-        expect(mockCounterAddFn).toHaveBeenCalledWith(1, {
-          metric: 'startup_time',
-          severity: 'medium',
-          current_value: 1200,
-          baseline_value: 1000,
-        });
-
-        // Verify baseline comparison histogram (20% increase)
-        expect(mockHistogramRecordFn).toHaveBeenCalledWith(20, {
-          metric: 'startup_time',
-          severity: 'medium',
-          current_value: 1200,
-          baseline_value: 1000,
-        });
-      });
-
-      it('should handle zero baseline value gracefully', () => {
-        initializeMetricsModule(mockConfig);
-        mockCounterAddFn.mockClear();
-        mockHistogramRecordFn.mockClear();
-
-        recordPerformanceRegressionModule(mockConfig, {
-          metric: 'memory_usage',
-          current_value: 100,
-          baseline_value: 0,
-          severity: 'high',
-        });
-
-        // Verify regression counter still recorded
-        expect(mockCounterAddFn).toHaveBeenCalledWith(1, {
-          metric: 'memory_usage',
-          severity: 'high',
-          current_value: 100,
-          baseline_value: 0,
-        });
-
-        // Verify no baseline comparison due to zero baseline
-        expect(mockHistogramRecordFn).not.toHaveBeenCalled();
-      });
-
-      it('should record different severity levels', () => {
-        initializeMetricsModule(mockConfig);
-        mockCounterAddFn.mockClear();
-
-        recordPerformanceRegressionModule(mockConfig, {
-          metric: 'api_latency',
-          current_value: 500,
-          baseline_value: 400,
-          severity: 'low',
-        });
-        recordPerformanceRegressionModule(mockConfig, {
-          metric: 'cpu_usage',
-          current_value: 90,
-          baseline_value: 70,
-          severity: 'high',
-        });
-
-        expect(mockCounterAddFn).toHaveBeenNthCalledWith(1, 1, {
-          metric: 'api_latency',
-          severity: 'low',
-          current_value: 500,
-          baseline_value: 400,
-        });
-        expect(mockCounterAddFn).toHaveBeenNthCalledWith(2, 1, {
-          metric: 'cpu_usage',
-          severity: 'high',
-          current_value: 90,
-          baseline_value: 70,
-        });
-      });
-    });
-
-    describe('recordBaselineComparison', () => {
-      it('should record baseline comparison with percentage change', () => {
-        initializeMetricsModule(mockConfig);
-        mockHistogramRecordFn.mockClear();
-
-        recordBaselineComparisonModule(mockConfig, {
-          metric: 'memory_usage',
-          current_value: 120,
-          baseline_value: 100,
-          category: 'performance_tracking',
-        });
-
-        // 20% increase: (120 - 100) / 100 * 100 = 20%
-        expect(mockHistogramRecordFn).toHaveBeenCalledWith(20, {
-          metric: 'memory_usage',
-          category: 'performance_tracking',
-          current_value: 120,
-          baseline_value: 100,
-        });
-      });
-
-      it('should handle negative percentage change (improvement)', () => {
-        initializeMetricsModule(mockConfig);
-        mockHistogramRecordFn.mockClear();
-
-        recordBaselineComparisonModule(mockConfig, {
-          metric: 'startup_time',
-          current_value: 800,
-          baseline_value: 1000,
-          category: 'optimization',
-        });
-
-        // 20% decrease: (800 - 1000) / 1000 * 100 = -20%
-        expect(mockHistogramRecordFn).toHaveBeenCalledWith(-20, {
-          metric: 'startup_time',
-          category: 'optimization',
-          current_value: 800,
-          baseline_value: 1000,
-        });
-      });
-
-      it('should skip recording when baseline is zero', async () => {
-        // Access the actual mocked module
-        const mockedModule = (await vi.importMock('@opentelemetry/api')) as {
-          diag: { warn: ReturnType<typeof vi.fn> };
-        };
-        const diagSpy = vi.spyOn(mockedModule.diag, 'warn');
-
-        initializeMetricsModule(mockConfig);
-        mockHistogramRecordFn.mockClear();
-
-        recordBaselineComparisonModule(mockConfig, {
-          metric: 'new_metric',
-          current_value: 50,
-          baseline_value: 0,
-          category: 'testing',
-        });
-
-        expect(diagSpy).toHaveBeenCalledWith(
-          'Baseline value is zero, skipping comparison.',
-        );
-        expect(mockHistogramRecordFn).not.toHaveBeenCalled();
       });
     });
   });
@@ -1258,66 +827,6 @@ describe('Telemetry Metrics', () => {
 
       const attrs = mockCounterAddFn.mock.calls[0]?.[1] ?? {};
       expect(attrs['session.id']).toBe('cardinality-test');
-    });
-  });
-
-  describe('recordChannelMemoryRecallMetrics', () => {
-    it('does not record before metrics are initialized', () => {
-      recordChannelMemoryRecallMetricsModule({
-        durationMs: 12,
-        cache: 'hit',
-        result: 'selected',
-        selectedCount: 2,
-      });
-
-      expect(mockCounterAddFn).not.toHaveBeenCalled();
-      expect(mockHistogramRecordFn).not.toHaveBeenCalled();
-    });
-
-    it('records only bounded recall outcome attributes', () => {
-      initializeMetricsModule(makeFakeConfig({ sessionId: 'secret-session' }));
-      mockCounterAddFn.mockClear();
-      mockHistogramRecordFn.mockClear();
-
-      recordChannelMemoryRecallMetricsModule({
-        durationMs: 12.5,
-        cache: 'miss',
-        result: 'revision_unstable',
-        selectedCount: 1,
-      });
-
-      const attributes = {
-        cache: 'miss',
-        result: 'revision_unstable',
-      };
-      expect(mockCounterAddFn).toHaveBeenCalledWith(1, attributes);
-      expect(mockHistogramRecordFn).toHaveBeenNthCalledWith(
-        1,
-        12.5,
-        attributes,
-      );
-      expect(mockHistogramRecordFn).toHaveBeenNthCalledWith(2, 1, attributes);
-      expect(Object.keys(mockCounterAddFn.mock.calls[0]![1]!).sort()).toEqual([
-        'cache',
-        'result',
-      ]);
-    });
-
-    it('initializes dedicated channel memory recall instruments', () => {
-      initializeMetricsModule(makeFakeConfig({}));
-
-      expect(mockCreateCounterFn).toHaveBeenCalledWith(
-        'qwen-code.channel.memory.recall.count',
-        expect.any(Object),
-      );
-      expect(mockCreateHistogramFn).toHaveBeenCalledWith(
-        'qwen-code.channel.memory.recall.duration',
-        expect.objectContaining({ unit: 'ms' }),
-      );
-      expect(mockCreateHistogramFn).toHaveBeenCalledWith(
-        'qwen-code.channel.memory.recall.selected_count',
-        expect.any(Object),
-      );
     });
   });
 });

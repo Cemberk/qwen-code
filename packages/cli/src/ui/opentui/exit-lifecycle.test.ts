@@ -22,7 +22,6 @@ import {
   exitSession,
   isExitInProgress,
   EXIT_CODE_INTERRUPT,
-  EXIT_CODE_TERMINATED,
   _resetExitLifecycleForTest,
 } from './exit-lifecycle.js';
 
@@ -97,7 +96,6 @@ describe('exitSession', () => {
 
   it('uses signal-style exit codes', () => {
     expect(EXIT_CODE_INTERRUPT).toBe(130);
-    expect(EXIT_CODE_TERMINATED).toBe(143);
   });
 
   it('is idempotent: a second call never re-runs the drain', async () => {

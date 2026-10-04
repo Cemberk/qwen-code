@@ -400,9 +400,6 @@ export class ModelsConfig {
    * For runtime models, the modelId can be:
    * - A RuntimeModelSnapshot ID (format: `$runtime|${authType}|${modelId}`)
    * - With explicit `$runtime|` prefix (format: `$runtime|${authType}|${modelId}`)
-   *
-   * When called from ACP integration, the modelId has already been parsed
-   * by parseAcpModelOption, which strips any (${authType}) suffix.
    */
   async switchModel(
     authType: AuthType,
@@ -504,10 +501,6 @@ export class ModelsConfig {
    * Supports the following formats:
    * - Direct snapshot ID: `$runtime|${authType}|${modelId}` → returns as-is if exists in Map
    * - Direct snapshot ID match: returns if exists in Map
-   *
-   * Note: When called from ACP integration via setModel, the modelId has already
-   * been parsed by parseAcpModelOption which strips any (${authType}) suffix.
-   * So we don't need to handle ACP format here - the ACP layer handles that.
    *
    * @param modelId - The model ID to parse
    * @returns The RuntimeModelSnapshot ID if found, undefined otherwise
@@ -727,13 +720,6 @@ export class ModelsConfig {
    */
   isStrictModelProviderSelection(): boolean {
     return this.strictModelProviderSelection;
-  }
-
-  /**
-   * Reset strict model provider selection flag
-   */
-  resetStrictModelProviderSelection(): void {
-    this.strictModelProviderSelection = false;
   }
 
   /**
@@ -1012,13 +998,6 @@ export class ModelsConfig {
   }
 
   /**
-   * Update callback for model changes
-   */
-  setOnModelChange(callback: OnModelChangeCallback): void {
-    this.onModelChange = callback;
-  }
-
-  /**
    * Detect and capture RuntimeModelSnapshot during initialization.
    *
    * Checks if the current configuration represents a runtime model (not from
@@ -1094,15 +1073,6 @@ export class ModelsConfig {
       return undefined;
     }
     return this.runtimeModelSnapshots.get(this.activeRuntimeModelSnapshotId);
-  }
-
-  /**
-   * Get the ID of the currently active RuntimeModelSnapshot.
-   *
-   * @returns The active snapshot ID, or undefined if no runtime model is active
-   */
-  getActiveRuntimeModelSnapshotId(): string | undefined {
-    return this.activeRuntimeModelSnapshotId;
   }
 
   /**

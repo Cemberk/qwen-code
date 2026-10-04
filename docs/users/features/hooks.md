@@ -330,13 +330,11 @@ Qwen does not control whether a hook process, callback, or model provider retain
   "timestamp": "string",
   "permission_mode": "default | plan | auto_edit | auto | yolo",
   "agent_id": "string (only when the event fires inside a subagent)",
-  "prompt_id": "string (when the event belongs to a model turn)",
-  "source_type": "string (only when the session has a declared source)",
-  "source_id": "string (only when the session source has an id)"
+  "prompt_id": "string (when the event belongs to a model turn)"
 }
 ```
 
-Event-specific fields are added based on the hook type. `permission_mode` is the session's approval mode unless the event reports the mode that applied to it, as tool and subagent events do. `agent_id` is present only when the event fires inside a subagent; `agent_type` is reported on `SessionStart`, `SubagentStart` and `SubagentStop`. `source_type` and `source_id` appear only in ACP sessions whose client declared a session source when creating the session.
+Event-specific fields are added based on the hook type. `permission_mode` is the session's approval mode unless the event reports the mode that applied to it, as tool and subagent events do. `agent_id` is present only when the event fires inside a subagent; `agent_type` is reported on `SessionStart`, `SubagentStart` and `SubagentStop`.
 
 Hook input is a forward-extensible JSON contract: new optional fields can be added to existing events. Consumers should ignore unknown fields. A strict decoder that rejects unknown properties must be updated to explicitly allow each new optional field before upgrading Qwen Code. For security-sensitive hooks, a decoder failure can change fail-open or fail-closed behavior, so administrators must validate the upgraded payload against the deployed hook before rollout.
 
@@ -539,7 +537,7 @@ If the hooks fail, or do not finish within 15 seconds, the batch continues with 
 
 #### UserPromptSubmit
 
-**Purpose**: Executed before supported model invocations to validate, block, or enrich their input. On the core/headless path, the event currently covers `UserQuery`, `ToolResult`, and `Hook` sends, while `Retry`, `Steer`, `Cron`, `Notification`, and `Teammate` sends are skipped. It can therefore occur on continuation paths, and `prompt` must not be assumed to be raw user input. The ACP session path has its own invocation policy: retries and newly dispatched background tasks can still invoke legacy hooks; continue, restored-question, and runtime-goal turns do not.
+**Purpose**: Executed before supported model invocations to validate, block, or enrich their input. The event currently covers `UserQuery`, `ToolResult`, and `Hook` sends, while `Retry`, `Steer`, `Cron`, `Notification`, and `Teammate` sends are skipped. It can therefore occur on continuation paths, and `prompt` must not be assumed to be raw user input.
 
 **Event-specific fields**:
 
@@ -550,17 +548,15 @@ If the hooks fail, or do not finish within 15 seconds, the batch continues with 
 }
 ```
 
-`submitted_prompt` is optional. It is present on supported interactive TUI submissions and first-turn headless `UserQuery` sends. On the ACP session path used by ACP clients, a fresh turn must carry an explicit submission declaration. Missing, non-string, empty, or whitespace-only declarations omit the field; the value is never reconstructed from `prompt` or a display label. Retries and continuations omit it.
+`submitted_prompt` is optional. It is present on supported interactive TUI submissions and first-turn headless `UserQuery` sends; the value is never reconstructed from `prompt` or a display label. Retries and continuations omit it.
 
-ACP clients can opt in per request with `_meta: { "qwen.submittedPrompt": "original submitted text" }`, captured before resource or model-only expansion. Existing clients without this declaration continue running legacy hooks but do not trigger provenance-gated Auto Recall. Do not add the declaration globally to a client transport: scheduled tasks and promoted mid-turn messages must not acquire it automatically. These declarations are caller-supplied provenance, not proof of human authorship or authorization.
+Legacy `prompt` represents the current model-bound text for the hook invocation. Neither field is a complete DLP inspection surface.
 
-On the ACP path, the initial legacy `prompt` is the request's text blocks joined with a space before resource, attachment, slash-command, or model-only expansion. It does not expose the complete expanded model input. `submitted_prompt` can equal that text, but comes only from the explicit declaration and preserves its original whitespace. On the core/headless path, legacy `prompt` represents the current model-bound text for the hook invocation. Neither field is a complete DLP inspection surface.
-
-The following composer rules apply to the interactive TUI, not to ACP clients. Deferred input can retain the field when its provenance remains complete. A combined batch retains provenance only when every constituent item has it; edited, partially known, or otherwise ambiguous input omits the field. Prompt, command, and shell-history navigation or selected search matches, cross-restart stash restores, and conversation rewind restores also omit it because those paths can surface model-bound text without its original provenance. Consumers that require user-submitted text should treat absence as unavailable rather than falling back to `prompt`.
+The following composer rules apply to the interactive TUI. Deferred input can retain the field when its provenance remains complete. A combined batch retains provenance only when every constituent item has it; edited, partially known, or otherwise ambiguous input omits the field. Prompt, command, and shell-history navigation or selected search matches, cross-restart stash restores, and conversation rewind restores also omit it because those paths can surface model-bound text without its original provenance. Consumers that require user-submitted text should treat absence as unavailable rather than falling back to `prompt`.
 
 After restored or provenance-unavailable model-bound input is cleared or submitted, the composer also clears its undo and redo history. This prevents undo from restoring expanded text after its marker or sidecar has been consumed.
 
-Large-paste placeholders remain compact in `submitted_prompt`; the expanded pasted content appears only in `prompt`. On that TUI path, consumers should treat the field as a text projection rather than a byte-for-byte record of clipboard input. ACP clients have no equivalent built-in Vim, paste-placeholder, history, or rewind provenance tracking; they own whether restored or edited text retains a valid submission declaration.
+Large-paste placeholders remain compact in `submitted_prompt`; the expanded pasted content appears only in `prompt`. On that TUI path, consumers should treat the field as a text projection rather than a byte-for-byte record of clipboard input.
 
 Any non-empty input present while Vim mode is enabled omits `submitted_prompt`, including after Vim is disabled, because Vim registers do not carry provenance in this version. This conservative rule also covers drafts entered before enabling Vim. Clearing the composer starts a new eligible input.
 
@@ -598,7 +594,7 @@ This two-field payload is written only for this kind of user-prompt record.
 `hookContext` intentionally duplicates the tagged part so offline and
 third-party consumers can identify its provenance without parsing model text.
 `displayText` is the pre-hook display projection and never includes the hook
-context. On the core/headless path it is the submitted projection when available, otherwise the expanded pre-hook prompt. ACP records the trusted display projection or raw request text before expansion when a projection, attachment references, or input annotations require a payload; otherwise it records the user message without `systemPayload` or `displayText`.
+context. It is the submitted projection when available, otherwise the expanded pre-hook prompt.
 
 Transcript display consumers treat `displayText` as this user-prompt projection
 when `systemPayload.hookContext` is a string. For compatibility with released
@@ -623,7 +619,7 @@ recall both use the pre-hook prompt. They do not include
 - `reason`: human-readable explanation for the decision
 - `hookSpecificOutput.additionalContext`: additional context to append to the prompt (optional)
 
-When sent to the model, injected `additionalContext` is appended as its own message part wrapped in a reserved `<qwen:user-prompt-submit-context>...</qwen:user-prompt-submit-context>` tag, so it stays distinguishable from user-authored text in model history and session transcripts. Angle brackets in hook output are escaped before wrapping, so hook content cannot close or forge the tag. The session transcript also records the user's original prompt text separately; the interactive TUI and the ACP/export transcript-replay path display that original text rather than the injected context.
+When sent to the model, injected `additionalContext` is appended as its own message part wrapped in a reserved `<qwen:user-prompt-submit-context>...</qwen:user-prompt-submit-context>` tag, so it stays distinguishable from user-authored text in model history and session transcripts. Angle brackets in hook output are escaped before wrapping, so hook content cannot close or forge the tag. The session transcript also records the user's original prompt text separately; the interactive TUI and the export transcript-replay path display that original text rather than the injected context.
 
 **Note**: Since UserPromptSubmitOutput extends HookOutput, all standard fields are available but only additionalContext in hookSpecificOutput is specifically defined for this event.
 
@@ -641,7 +637,7 @@ When sent to the model, injected `additionalContext` is appended as its own mess
 
 #### UserPromptExpansion
 
-**Purpose**: Runs when a slash command expands into a prompt for the model, after the expansion and before the prompt is sent. This covers commands that submit a prompt, such as custom commands, skills, MCP prompts and built-in commands like `/init`. Commands that only act locally do not fire it. It fires in the interactive UI, headless runs and ACP sessions, and when the model runs a model-invocable command.
+**Purpose**: Runs when a slash command expands into a prompt for the model, after the expansion and before the prompt is sent. This covers commands that submit a prompt, such as custom commands, skills, MCP prompts and built-in commands like `/init`. Commands that only act locally do not fire it. It fires in the interactive UI and headless runs, and when the model runs a model-invocable command.
 
 **Matcher**: Matches against `command_name`. For example, `"matcher": "^init$"` fires only for `/init`.
 
@@ -655,7 +651,7 @@ When sent to the model, injected `additionalContext` is appended as its own mess
 }
 ```
 
-When a headless or ACP message invokes several skills at once, `command_name` is their names joined by spaces and `command_args` is the remaining text.
+When a headless message invokes several skills at once, `command_name` is their names joined by spaces and `command_args` is the remaining text.
 
 **Output Options**:
 
@@ -734,7 +730,7 @@ A command hook that exits 0 with plain-text `stdout` has that text treated as `a
 }
 ```
 
-The hook uses the deleting runtime's normal session fields (`session_id`, `transcript_path`, and `cwd`); over ACP, `transcript_path` is empty because the deleting runtime has no transcript of its own. `SessionDelete` currently fires for the interactive `/delete` flow and ACP's explicit `deleteSession` method; internal cleanup does not emit it. A command hook is left to finish if Qwen exits after dispatch; its stdout and stderr are ignored and remain independent of Qwen's pipes.
+The hook uses the deleting runtime's normal session fields (`session_id`, `transcript_path`, and `cwd`). `SessionDelete` currently fires for the interactive `/delete` flow; internal cleanup does not emit it. A command hook is left to finish if Qwen exits after dispatch; its stdout and stderr are ignored and remain independent of Qwen's pipes.
 
 #### MessageDisplay
 
@@ -756,12 +752,12 @@ The hook uses the deleting runtime's normal session fields (`session_id`, `trans
 
 - **Slow hooks see fewer, newer payloads.** At most one mid-stream hook execution per message is in flight at a time; while one runs, newer debounced payloads _replace_ the queued one rather than piling up behind it. A hook slower than the debounce window therefore skips intermediate snapshots — lossless, since each payload carries the full cumulative text.
 - **`is_final` is never queued behind a stale delivery.** The final payload is dispatched the moment the message ends — alongside a still-running mid-stream execution if there is one (the one exception to the one-at-a-time rule, justified the same way: the final cumulative text strictly supersedes whatever that execution is processing). Your hook always receives the `is_final` payload, and receives it before the `Stop` hook fires. One consequence for stateful hooks: when the final execution overlaps a superseded mid-stream one, their _completion_ order is unspecified — the stale execution may finish after the final one (even after `Stop`). Treat `is_final` as terminal per `message_id` and let the cumulative text win, rather than assuming the last execution to finish carries the newest state.
-- **The turn waits for `is_final` delivery to complete — but not forever.** The turn's end (and the `Stop` hook, when it fires) waits up to 5 seconds for the final delivery to finish. A hook that completes within that budget keeps the strongest guarantee: a headless run (`qwen -p ...`) exits only after the hook finished, and the `is_final` execution completes before `Stop` starts. A slower hook still receives `is_final` first — only the wait for its completion is bounded: in the terminal UI or an ACP session the execution simply finishes in the background, while a headless run exits without waiting. The hook process is not killed on exit; it is left to finish on its own, so a script chaining `qwen -p … && next-step` can observe `next-step` starting while a slow hook is still running. Hitting this timeout prints a warning on stderr.
+- **The turn waits for `is_final` delivery to complete — but not forever.** The turn's end (and the `Stop` hook, when it fires) waits up to 5 seconds for the final delivery to finish. A hook that completes within that budget keeps the strongest guarantee: a headless run (`qwen -p ...`) exits only after the hook finished, and the `is_final` execution completes before `Stop` starts. A slower hook still receives `is_final` first — only the wait for its completion is bounded: in the terminal UI the execution simply finishes in the background, while a headless run exits without waiting. The hook process is not killed on exit; it is left to finish on its own, so a script chaining `qwen -p … && next-step` can observe `next-step` starting while a slow hook is still running. Hitting this timeout prints a warning on stderr.
 - **Cancellation behaviour depends on timing.** A turn cancelled _before `is_final` dispatches_ fires no `is_final` — the message is treated as abandoned, and a consumer that buffers until `is_final` should treat cancellation-silence as its flush/discard signal (e.g. a timeout fallback). The criterion is the abort signal's state at the moment the turn ends, not whether every chunk had already streamed — an abort landing in the brief gap before that check can still suppress `is_final` for a message whose text had, in practice, finished arriving. Cancelling _after `is_final` has dispatched_ (during the drain wait) is different: the still-running hook execution may be terminated mid-flight (SIGTERM), but the payload itself has already been delivered.
 - **`displayed_text` is provisional until `is_final`.** It reflects what has streamed so far; treat intermediate payloads as display state, not as authoritative final content.
 - **A tool-using turn produces multiple messages.** Each model call gets its own `message_id` with its own `is_final: true` firing: the text before a tool call is one message, the continuation after the tool result is another. Model calls that produce no displayed text (tool-call-only) fire nothing.
 
-**Note**: Fires in the terminal UI, headless (`-p`), and ACP (editor) sessions, with the same payload contract on every surface.
+**Note**: Fires in the terminal UI and headless (`-p`) sessions, with the same payload contract on both surfaces.
 
 #### Stop
 
@@ -806,7 +802,7 @@ The `context_usage`, `context_limit`, and `input_tokens` fields allow hook scrip
 
 #### StopFailure
 
-**Purpose**: Runs instead of `Stop` when an API error or loop detection ends the turn. API errors fire it in the interactive UI and in ACP sessions, but not in headless (`-p`) runs. Loop detection fires it in the interactive UI and in headless runs, but not in ACP sessions. This is a **fire-and-forget** event: Qwen does not wait for the hooks, and their output and exit codes are ignored.
+**Purpose**: Runs instead of `Stop` when an API error or loop detection ends the turn. API errors fire it in the interactive UI, but not in headless (`-p`) runs. Loop detection fires it in the interactive UI and in headless runs. This is a **fire-and-forget** event: Qwen does not wait for the hooks, and their output and exit codes are ignored.
 
 **Event-specific fields**:
 
@@ -1490,9 +1486,9 @@ Configure in `.qwen/settings.json`:
 
 ### Example 2: Submitted Prompt Validation Hook
 
-On the core/headless path, `prompt` can include generated or expanded content rather than original user input. On ACP it starts with the pre-expansion request text, so reading it does not inspect attachment bodies or the complete model input. `UserPromptSubmit` does not cover every model send. Do not silently fall back from `submitted_prompt` to `prompt` when source provenance is required.
+`prompt` can include generated or expanded content rather than original user input. `UserPromptSubmit` does not cover every model send. Do not silently fall back from `submitted_prompt` to `prompt` when source provenance is required.
 
-A UserPromptSubmit hook that validates supported submitted text and provides context for long prompts. It also runs on headless submissions and explicitly declared ACP submissions; it is not TUI-only. It skips invocations where source provenance is unavailable. A blocking result stops the affected invocation, including on these non-TUI paths. The keyword check is illustrative and is not a complete DLP policy:
+A UserPromptSubmit hook that validates supported submitted text and provides context for long prompts. It also runs on headless submissions; it is not TUI-only. It skips invocations where source provenance is unavailable. A blocking result stops the affected invocation, including on these non-TUI paths. The keyword check is illustrative and is not a complete DLP policy:
 
 **prompt_validator.py**
 

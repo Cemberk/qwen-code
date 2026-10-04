@@ -15,10 +15,7 @@
  */
 
 import type { Context, TextMapPropagator } from '@opentelemetry/api';
-import {
-  getNumberFromEnv,
-  W3CTraceContextPropagator,
-} from '@opentelemetry/core';
+import { getNumberFromEnv } from '@opentelemetry/core';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
 import { resourceFromAttributes } from '@opentelemetry/resources';
@@ -38,7 +35,7 @@ import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
 import { UndiciInstrumentation } from '@opentelemetry/instrumentation-undici';
 import type { TelemetryRuntimeConfig } from './runtime-config.js';
 import { SERVICE_NAME } from './constants.js';
-import { setDaemonFallbackPropagator } from './daemon-tracing.js';
+
 import { configureContextUsageAttributeLengthLimit } from './context-usage.js';
 import {
   FileLogExporter,
@@ -88,7 +85,6 @@ class SessionIdSpanProcessor implements SpanProcessor {
 
 export interface StartedTelemetrySdk {
   sdk: NodeSDK;
-  metricReader: PeriodicExportingMetricReader | undefined;
 }
 
 /**
@@ -187,15 +183,5 @@ export async function startTelemetrySdk(
     instrumentations: [new HttpInstrumentation(), new UndiciInstrumentation()],
   });
 
-  // Construct the daemon fallback W3C propagator here rather than in
-  // daemon-tracing.ts to keep @opentelemetry/core out of the static startup
-  // graph: this module is only loaded via dynamic import when telemetry is
-  // enabled, and its closure already contains @opentelemetry/core (via
-  // sdk-node/resources), so the fallback adds no bytes to the CLI launch
-  // path. The setter is a no-op-safe seam — until it runs, inbound
-  // traceparent extraction yields no parent context, matching the
-  // telemetry-off state.
-  setDaemonFallbackPropagator(new W3CTraceContextPropagator());
-
-  return { sdk, metricReader };
+  return { sdk };
 }

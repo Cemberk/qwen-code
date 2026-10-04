@@ -7,7 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import stripAnsi from 'strip-ansi';
 import { renderWithProviders } from '../../test-utils/render.js';
-import { getPlainTextLength, RenderInline } from './InlineMarkdownRenderer.js';
+import { RenderInline } from './InlineMarkdownRenderer.js';
 import { HYPERLINK_ENV_KEYS } from './osc8.js';
 
 describe('<RenderInline />', () => {
@@ -122,23 +122,6 @@ math then literal: $x^2\$$`;
 
     expect(lastFrame()).toContain('$xy$');
     expect(lastFrame()).not.toContain('$y$');
-  });
-
-  it('measures recognized single-character math without delimiters', () => {
-    expect(getPlainTextLength('value $x$', true)).toBe('value x'.length);
-    expect(getPlainTextLength('code `$xy$`', true)).toBe('code $xy$'.length);
-    expect(getPlainTextLength('code ``a `$xy$` b``', true)).toBe(
-      'code a `$xy$` b'.length,
-    );
-    expect(getPlainTextLength(String.raw`literal \$x$`, true)).toBe(
-      'literal $x$'.length,
-    );
-    expect(getPlainTextLength(String.raw`formula $x + \$5$`, true)).toBe(
-      'formula x + $5'.length,
-    );
-    expect(getPlainTextLength(String.raw`even \\$x$`, true)).toBe(
-      'even \\x'.length,
-    );
   });
 
   it('does not parse ordinary dollar amounts as inline math', () => {

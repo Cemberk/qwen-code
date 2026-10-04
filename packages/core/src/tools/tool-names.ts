@@ -63,7 +63,6 @@ export const ToolNames = {
   WORKFLOW: 'workflow',
   ARTIFACT: 'artifact',
   RECORD_ARTIFACT: 'record_artifact',
-  RECORD_SOURCE: 'record_source',
   REPORT_FINDINGS: 'report_findings',
   GET_GOAL: 'get_goal',
   UPDATE_GOAL: 'update_goal',
@@ -122,7 +121,6 @@ export const ToolDisplayNames = {
   WORKFLOW: 'Workflow',
   ARTIFACT: 'Artifact',
   RECORD_ARTIFACT: 'RecordArtifact',
-  RECORD_SOURCE: 'RecordSource',
   REPORT_FINDINGS: 'ReportFindings',
   GET_GOAL: 'Goal',
   UPDATE_GOAL: 'UpdateGoal',
@@ -144,7 +142,7 @@ export const ToolNamesMigration = {
  * `search_file_content` → `grep_search`) to its canonical form. The single
  * alias-resolution site: every caller that classifies or keys tool calls by
  * name — the scheduler, loop detection, plan redaction, memory refresh, the
- * headless partitioner in nonInteractiveCli, the daemon/ACP session — must
+ * headless partitioner in nonInteractiveCli — must
  * use this so an aliased call is treated identically everywhere.
  */
 export function canonicalToolName(toolName: string): string {

@@ -336,12 +336,7 @@ export function renderResultDisplay(display: unknown): string {
       const totalStr = o['total'] != null ? `/${o['total']}` : '';
       return `◌ [${o['progress']}${totalStr}] ${msg}`;
     }
-    // mcp_app renders only its fallbackText in ink — the embedded HTML must
-    // never reach output, including the (currently unreachable) case where
-    // the field is absent: the JSON dump would expose the raw HTML.
-    if (o['type'] === 'mcp_app') {
-      return typeof o['fallbackText'] === 'string' ? o['fallbackText'] : '';
-    }
+
     // vision_bridge_notice renders summary\nnotice (ink's
     // formatVisionBridgeNoticeDisplay); the generic summary branch below
     // would drop the notice body.
@@ -905,14 +900,3 @@ export function createEventMapper(
 }
 
 export type { GoalSnapshotLike };
-
-/** Drains a real agent stream into a neutral-event sink. */
-export async function pumpServerStream(
-  stream: AsyncIterable<ServerGeminiStreamEvent>,
-  sink: (ev: OpenTuiStreamEvent) => void,
-): Promise<void> {
-  const map = createEventMapper();
-  for await (const ev of stream) {
-    for (const neutral of map(ev)) sink(neutral);
-  }
-}

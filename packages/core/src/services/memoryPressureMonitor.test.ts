@@ -804,7 +804,7 @@ describe('MemoryPressureMonitor', () => {
         await drainCleanupMeasurement();
       }
 
-      expect(monitor.getConsecutiveFailures()).toBe(0);
+      expect(monitor['consecutiveCleanupFailures']).toBe(0);
       expect(cleanupFailed).not.toHaveBeenCalled();
     });
 
@@ -1028,7 +1028,7 @@ describe('MemoryPressureMonitor', () => {
       monitor.performCheck();
       await drainCleanupMeasurement();
 
-      expect(monitor.getConsecutiveFailures()).toBe(1);
+      expect(monitor['consecutiveCleanupFailures']).toBe(1);
       expect(mockDebugLogger.error).toHaveBeenCalledWith(
         'Cleanup "aggressive" failed: queued RSS unavailable; ' +
           'consecutive failures: 1',
@@ -1131,7 +1131,7 @@ describe('MemoryPressureMonitor', () => {
         await drainCleanupMeasurement();
       }
 
-      expect(monitor.getConsecutiveFailures()).toBe(3);
+      expect(monitor['consecutiveCleanupFailures']).toBe(3);
       expect(cleanupFailed).toHaveBeenCalledTimes(1);
       expect(cleanupFailed).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1157,13 +1157,13 @@ describe('MemoryPressureMonitor', () => {
       setMemUsage(9 * 1024 * 1024 * 1024); // soft pressure
       monitor.performCheck();
       await drainCleanupMeasurement();
-      expect(monitor.getConsecutiveFailures()).toBe(1);
+      expect(monitor['consecutiveCleanupFailures']).toBe(1);
 
       evictSpy.mockReturnValue(0);
       monitor.performCheck();
       await drainCleanupMeasurement();
 
-      expect(monitor.getConsecutiveFailures()).toBe(0);
+      expect(monitor['consecutiveCleanupFailures']).toBe(0);
     });
 
     it('records cleanup failures when RSS cannot be read', async () => {
@@ -1187,7 +1187,7 @@ describe('MemoryPressureMonitor', () => {
       monitor.performCheck();
       await drainCleanupMeasurement();
 
-      expect(monitor.getConsecutiveFailures()).toBe(1);
+      expect(monitor['consecutiveCleanupFailures']).toBe(1);
       expect(mockDebugLogger.error).toHaveBeenCalledWith(
         'Failed to read RSS after cleanup failure: RSS unavailable',
       );
@@ -1217,7 +1217,7 @@ describe('MemoryPressureMonitor', () => {
         await drainCleanupMeasurement();
       }
 
-      expect(monitor.getConsecutiveFailures()).toBe(10);
+      expect(monitor['consecutiveCleanupFailures']).toBe(10);
       expect(cleanupFailed).toHaveBeenCalledTimes(2);
       expect(cleanupFailed).toHaveBeenLastCalledWith(
         expect.objectContaining({
@@ -1249,7 +1249,7 @@ describe('MemoryPressureMonitor', () => {
         await drainCleanupMeasurement();
       }
 
-      expect(monitor.getConsecutiveFailures()).toBe(3);
+      expect(monitor['consecutiveCleanupFailures']).toBe(3);
     });
   });
 
@@ -1305,7 +1305,7 @@ describe('MemoryPressureMonitor', () => {
       await drainCleanupMeasurement();
 
       // The step ran without errors — no crash, no failure count
-      expect(monitor.getConsecutiveFailures()).toBe(0);
+      expect(monitor['consecutiveCleanupFailures']).toBe(0);
     });
 
     it('handles empty history without errors', async () => {
@@ -1351,7 +1351,7 @@ describe('MemoryPressureMonitor', () => {
 
       // compact_history error is caught and logged without propagating,
       // so subsequent cleanup steps (like trigger_gc) can still run.
-      expect(monitor.getConsecutiveFailures()).toBe(0);
+      expect(monitor['consecutiveCleanupFailures']).toBe(0);
     });
 
     it('handles getLlmClient returning null', async () => {
@@ -1820,7 +1820,7 @@ describe('MemoryPressureMonitor', () => {
     it('starts at zero', () => {
       setOsTotalmem(16 * 1024 * 1024 * 1024);
       const monitor = new MemoryPressureMonitor(createMockConfig());
-      expect(monitor.getConsecutiveFailures()).toBe(0);
+      expect(monitor['consecutiveCleanupFailures']).toBe(0);
     });
 
     it('can reset consecutive failures', async () => {
@@ -1840,9 +1840,9 @@ describe('MemoryPressureMonitor', () => {
       monitor.performCheck();
       await drainCleanupMeasurement();
 
-      expect(monitor.getConsecutiveFailures()).toBe(1);
+      expect(monitor['consecutiveCleanupFailures']).toBe(1);
       monitor.resetConsecutiveFailures();
-      expect(monitor.getConsecutiveFailures()).toBe(0);
+      expect(monitor['consecutiveCleanupFailures']).toBe(0);
     });
 
     it('can reset ineffective cleanup diagnostics', async () => {

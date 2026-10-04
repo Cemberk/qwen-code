@@ -148,13 +148,6 @@ export class FileDiscoveryService {
     return false;
   }
 
-  /**
-   * Returns loaded patterns from Qwen/agent ignore files.
-   */
-  getQwenIgnorePatterns(): string[] {
-    return this.qwenIgnoreFilter?.getPatterns() ?? [];
-  }
-
   getQwenIgnoreFileDisplayForPath(filePath: string): string {
     return (
       this.qwenIgnoreFilter?.getIgnoreFileNameForPath(filePath) ??

@@ -22,7 +22,7 @@ export const rememberCommand: SlashCommand = {
     return t('Save a durable memory to the memory system.');
   },
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'acp'] as const,
+  supportedModes: ['interactive'] as const,
   argumentHint: '<text to remember>',
   action: (context: CommandContext, args): SlashCommandActionReturn | void => {
     const fact = args.trim();

@@ -100,8 +100,6 @@ const baseConfigParams: ConfigParameters = {
   sandbox: undefined,
   targetDir: '/test/dir',
   debugMode: false,
-  userMemory: '',
-  memoryFileCount: 0,
   approvalMode: ApprovalMode.DEFAULT,
 };
 
@@ -141,148 +139,6 @@ describe('ToolRegistry', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-  });
-
-  const appTool = (
-    server: string,
-    name: string,
-    visibility?: readonly string[],
-    resourceUri = 'ui://app/view',
-  ) =>
-    new DiscoveredMCPTool(
-      {} as McpDirectClient,
-      server,
-      name,
-      'App tool',
-      { type: 'object', properties: {} },
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      false,
-      false,
-      resourceUri,
-      undefined,
-      undefined,
-      visibility,
-    );
-
-  it('keeps App-only tools outside every model lookup and clears them on removal', () => {
-    const tool = appTool('tableau', 'get-token', ['app']);
-    toolRegistry.registerTool(tool);
-    expect(toolRegistry.getMcpAppTool('tableau', 'get-token')).toBe(tool);
-    expect(toolRegistry.getMcpAppTool('other', 'get-token')).toBeUndefined();
-    expect(toolRegistry.getMcpAppTool('tableau', tool.name)).toBeUndefined();
-    expect(toolRegistry.getTool(tool.name)).toBeUndefined();
-    expect(toolRegistry.getAllToolNames()).not.toContain(tool.name);
-    expect(toolRegistry.getAllTools()).not.toContain(tool);
-    expect(toolRegistry.getFunctionDeclarations()).not.toContainEqual(
-      tool.schema,
-    );
-    toolRegistry.removeMcpToolsByServer('tableau');
-    expect(toolRegistry.getMcpAppTool('tableau', 'get-token')).toBeUndefined();
-  });
-
-  it('honors App visibility and disabled rules while retaining model-only App resources', () => {
-    const model = appTool('tableau', 'show', ['model']);
-    const disabled = appTool('tableau', 'disabled', ['app']);
-    vi.spyOn(config, 'getDisabledTools').mockReturnValue(
-      new Set([disabled.name]),
-    );
-    for (const tool of [
-      model,
-      disabled,
-      appTool('tableau', 'empty', []),
-      appTool('tableau', 'unknown', ['unknown']),
-      appTool('tableau', 'default'),
-    ]) {
-      toolRegistry.registerTool(tool);
-    }
-    expect(toolRegistry.hasMcpAppResource('tableau', 'ui://app/view')).toBe(
-      true,
-    );
-    for (const name of ['show', 'disabled', 'empty', 'unknown']) {
-      expect(toolRegistry.getMcpAppTool('tableau', name)).toBeUndefined();
-    }
-    expect(toolRegistry.getMcpAppTool('tableau', 'default')).toBeDefined();
-    expect(toolRegistry.getTool(model.name)).toBe(model);
-  });
-
-  it('copies App-only tools and model-only source resources, then clears only the re-discovered server', async () => {
-    const source = new ToolRegistry(config);
-    source.registerTool(appTool('tableau', 'token', ['app']));
-    source.registerTool(
-      appTool('tableau', 'source', ['model'], 'ui://model/source'),
-    );
-    source.registerTool(appTool('other', 'token', ['app']));
-    toolRegistry.copyDiscoveredToolsFrom(source);
-    expect(toolRegistry.getMcpAppTool('tableau', 'token')).toBeDefined();
-    expect(toolRegistry.getTool('mcp__tableau__token')).toBeUndefined();
-    expect(toolRegistry.hasMcpAppResource('tableau', 'ui://model/source')).toBe(
-      true,
-    );
-    vi.spyOn(
-      McpClientManager.prototype,
-      'discoverMcpToolsForServer',
-    ).mockResolvedValue();
-    await toolRegistry.discoverToolsForServer('tableau');
-    expect(toolRegistry.getMcpAppTool('tableau', 'token')).toBeUndefined();
-    expect(toolRegistry.hasMcpAppResource('tableau', 'ui://model/source')).toBe(
-      false,
-    );
-    expect(toolRegistry.getMcpAppTool('other', 'token')).toBeDefined();
-  });
-
-  it('clears App-only tools on full discovery and shutdown', async () => {
-    vi.spyOn(
-      McpClientManager.prototype,
-      'discoverAllMcpTools',
-    ).mockResolvedValue();
-    vi.spyOn(McpClientManager.prototype, 'stop').mockResolvedValue();
-    toolRegistry.registerTool(appTool('tableau', 'token', ['app']));
-    await toolRegistry.discoverMcpTools();
-    expect(toolRegistry.getMcpAppTool('tableau', 'token')).toBeUndefined();
-    toolRegistry.registerTool(appTool('tableau', 'token', ['app']));
-    await toolRegistry.stop();
-    expect(toolRegistry.getMcpAppTool('tableau', 'token')).toBeUndefined();
-  });
-
-  it('updates code mode bindings when propose_goal availability changes', async () => {
-    const name = 'propose_goal';
-    const config = new Config({
-      ...baseConfigParams,
-      codeModeOnly: true,
-      experimentalZedIntegration: true,
-    });
-    config.setGoalProposalHostSupported(true);
-    const registry = new ToolRegistry(config);
-    const tool = new MockTool({ name });
-    registry.registerTool(tool);
-    registry.registerTool(new MockTool({ name: 'exec' }));
-    registry.registerTool(new MockTool({ name: 'other_tool' }));
-    for (const enabled of [true, false, true]) {
-      config.setGoalProposalTurnKey(enabled ? 'user-turn' : undefined);
-      const bindings = registry
-        .getCodeModeBindingPlan()
-        .bindings.map((binding) => binding.name);
-      expect(bindings.includes(name)).toBe(enabled);
-      expect(bindings).toContain('other_tool');
-      for (const declarations of [
-        registry.getFunctionDeclarations(),
-        registry.getFunctionDeclarationsFiltered([name, 'other_tool']),
-      ]) {
-        const exec = declarations.find(
-          (declaration) => declaration.name === 'exec',
-        );
-        expect(exec?.description).toContain('tools.other_tool(args:');
-        expect(exec?.description?.includes(`tools.${name}(args:`)).toBe(
-          enabled,
-        );
-      }
-      expect(config.isGoalProposalAvailable()).toBe(enabled);
-    }
   });
 
   describe('registerTool', () => {
@@ -593,38 +449,6 @@ describe('ToolRegistry', () => {
       const names = toolRegistry.getFunctionDeclarations().map((d) => d.name);
 
       expect(names).toEqual(['alpha', 'middle', 'zeta']);
-    });
-
-    it('only declares Goal proposals during an ACP turn with a responder', () => {
-      const acpConfig = new Config({
-        ...baseConfigParams,
-        experimentalZedIntegration: true,
-      });
-      acpConfig.setGoalProposalHostSupported(true);
-      const registry = new ToolRegistry(acpConfig);
-      registry.registerTool(new MockTool({ name: 'other_tool' }));
-      registry.registerTool(new MockTool({ name: 'propose_goal' }));
-      expect(
-        registry.getFunctionDeclarations().map((tool) => tool.name),
-      ).toEqual(['other_tool']);
-      expect(
-        registry
-          .getFunctionDeclarationsFiltered(['other_tool', 'propose_goal'])
-          .map((tool) => tool.name),
-      ).toEqual(['other_tool']);
-      acpConfig.setGoalProposalTurnKey('user-turn');
-      expect(
-        registry.getFunctionDeclarations().map((tool) => tool.name),
-      ).toEqual(['other_tool', 'propose_goal']);
-      expect(
-        registry
-          .getFunctionDeclarationsFiltered(['other_tool', 'propose_goal'])
-          .map((tool) => tool.name),
-      ).toEqual(['other_tool', 'propose_goal']);
-      acpConfig.setGoalProposalTurnKey(undefined);
-      expect(
-        registry.getFunctionDeclarations().map((tool) => tool.name),
-      ).toEqual(['other_tool']);
     });
 
     it('keeps Goal proposals declared in an interactive terminal', () => {
@@ -1102,28 +926,6 @@ describe('ToolRegistry', () => {
       expect(summary).toEqual([{ name: 'beta', description: 'b' }]);
     });
 
-    it('excludes unavailable Goal proposals from the deferred summary', () => {
-      const acpConfig = new Config({
-        ...baseConfigParams,
-        experimentalZedIntegration: true,
-      });
-      acpConfig.setGoalProposalHostSupported(true);
-      const registry = new ToolRegistry(acpConfig);
-      registry.registerTool(
-        new MockTool({
-          name: 'propose_goal',
-          description: 'propose a Goal',
-          shouldDefer: true,
-        }),
-      );
-
-      expect(registry.getDeferredToolSummary()).toEqual([]);
-      acpConfig.setGoalProposalTurnKey('user-turn');
-      expect(registry.getDeferredToolSummary()).toEqual([
-        { name: 'propose_goal', description: 'propose a Goal' },
-      ]);
-    });
-
     it('visibleTools has no effect on non-deferred tools', () => {
       const visibleConfig = new Config({
         ...baseConfigParams,
@@ -1178,43 +980,6 @@ describe('ToolRegistry', () => {
       expect(registry.getFunctionDeclarations().map((d) => d.name)).toContain(
         'web_fetch',
       );
-    });
-
-    it('pinned reveal survives clearRevealedDeferredTools, discovered reveals do not', () => {
-      const registry = new ToolRegistry(new Config(baseConfigParams));
-      registry.registerTool(
-        new MockTool({ name: 'daemon-setup', shouldDefer: true }),
-      );
-      registry.registerTool(
-        new MockTool({ name: 'discovered', shouldDefer: true }),
-      );
-      registry.revealDeferredTool('daemon-setup');
-      registry.pinDeferredToolReveal('daemon-setup');
-      registry.revealDeferredTool('discovered');
-
-      registry.clearRevealedDeferredTools();
-
-      // A transient reveal is dropped by the reset...
-      expect(registry.isDeferredToolRevealed('discovered')).toBe(false);
-      expect(
-        registry.getFunctionDeclarations().map((d) => d.name),
-      ).not.toContain('discovered');
-      // ...but the pinned session-setup reveal survives it, so the fresh
-      // session's declaration list still offers the tool (a `/clear` whose
-      // budget-based preload withholds it would otherwise strand it).
-      expect(registry.isDeferredToolRevealed('daemon-setup')).toBe(true);
-      expect(registry.getFunctionDeclarations().map((d) => d.name)).toContain(
-        'daemon-setup',
-      );
-    });
-
-    it('pin for an unregistered tool reveals nothing on clear', () => {
-      const registry = new ToolRegistry(new Config(baseConfigParams));
-      registry.pinDeferredToolReveal('ghost');
-
-      registry.clearRevealedDeferredTools();
-
-      expect(registry.isDeferredToolRevealed('ghost')).toBe(false);
     });
   });
 
@@ -1323,76 +1088,6 @@ describe('ToolRegistry', () => {
       expect(toolRegistry.getFunctionDeclarations().map((d) => d.name)).toEqual(
         ['ordinary-deferred'],
       );
-    });
-  });
-
-  describe('getToolsByServer', () => {
-    it('should return an empty array if no tools match the server name', () => {
-      toolRegistry.registerTool(new MockTool({ name: 'mock-tool' }));
-      expect(toolRegistry.getToolsByServer('any-mcp-server')).toEqual([]);
-    });
-
-    it('should return only tools matching the server name, sorted by name', async () => {
-      const server1Name = 'mcp-server-uno';
-      const server2Name = 'mcp-server-dos';
-      const mockCallable = {} as McpDirectClient;
-      const mcpTool1_c = new DiscoveredMCPTool(
-        mockCallable,
-        server1Name,
-        'zebra-tool',
-        'd1',
-        {},
-      );
-      const mcpTool1_a = new DiscoveredMCPTool(
-        mockCallable,
-        server1Name,
-        'apple-tool',
-        'd2',
-        {},
-      );
-      const mcpTool1_b = new DiscoveredMCPTool(
-        mockCallable,
-        server1Name,
-        'banana-tool',
-        'd3',
-        {},
-      );
-
-      const mcpTool2 = new DiscoveredMCPTool(
-        mockCallable,
-        server2Name,
-        'tool-on-server2',
-        'd4',
-        {},
-      );
-      const nonMcpTool = new MockTool({ name: 'regular-tool' });
-
-      toolRegistry.registerTool(mcpTool1_c);
-      toolRegistry.registerTool(mcpTool1_a);
-      toolRegistry.registerTool(mcpTool1_b);
-      toolRegistry.registerTool(mcpTool2);
-      toolRegistry.registerTool(nonMcpTool);
-
-      const toolsFromServer1 = toolRegistry.getToolsByServer(server1Name);
-      const toolNames = toolsFromServer1.map((t) => t.name);
-
-      // Assert that the array has the correct tools and is sorted by name
-      expect(toolsFromServer1).toHaveLength(3);
-      expect(toolNames).toEqual([
-        'mcp__mcp-server-uno__apple-tool',
-        'mcp__mcp-server-uno__banana-tool',
-        'mcp__mcp-server-uno__zebra-tool',
-      ]);
-
-      // Assert that all returned tools are indeed from the correct server
-      for (const tool of toolsFromServer1) {
-        expect((tool as DiscoveredMCPTool).serverName).toBe(server1Name);
-      }
-
-      // Assert that the other server's tools are returned correctly
-      const toolsFromServer2 = toolRegistry.getToolsByServer(server2Name);
-      expect(toolsFromServer2).toHaveLength(1);
-      expect(toolsFromServer2[0].name).toBe(mcpTool2.name);
     });
   });
 

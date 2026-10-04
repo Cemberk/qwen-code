@@ -5,33 +5,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { SettingScope, type LoadedSettings } from './settings.js';
-import {
-  getPersistScopeForModelSelection,
-  getWritableScopes,
-} from './modelProvidersScope.js';
-
-// A LoadedSettings stub exposing forScope()/user/workspace/isTrusted — enough
-// for the scope-resolution helpers, which only read those.
-function makeLoaded({
-  isTrusted,
-  user = {},
-  workspace = {},
-}: {
-  isTrusted: boolean;
-  user?: Record<string, unknown>;
-  workspace?: Record<string, unknown>;
-}): LoadedSettings {
-  return {
-    isTrusted,
-    user: { settings: user },
-    workspace: { settings: workspace },
-    forScope: (scope: SettingScope) =>
-      scope === SettingScope.Workspace
-        ? { settings: workspace }
-        : { settings: user },
-  } as unknown as LoadedSettings;
-}
+import { SettingScope } from './settings.js';
+import { getPersistScopeForModelSelection } from './modelProvidersScope.js';
 
 function makeSettings({
   isTrusted,
@@ -106,20 +81,5 @@ describe('getPersistScopeForModelSelection', () => {
       workspaceModelProviders: undefined,
     });
     expect(getPersistScopeForModelSelection(untrusted)).toBe(SettingScope.User);
-  });
-});
-
-describe('getWritableScopes', () => {
-  it('lists workspace then user when trusted', () => {
-    expect(getWritableScopes(makeLoaded({ isTrusted: true }))).toEqual([
-      SettingScope.Workspace,
-      SettingScope.User,
-    ]);
-  });
-
-  it('lists only user when untrusted (workspace is ignored on merge)', () => {
-    expect(getWritableScopes(makeLoaded({ isTrusted: false }))).toEqual([
-      SettingScope.User,
-    ]);
   });
 });

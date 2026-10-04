@@ -21,7 +21,6 @@ describe('AskUserQuestionTool', () => {
       getApprovalMode: vi.fn().mockReturnValue(ApprovalMode.DEFAULT),
       getTargetDir: vi.fn().mockReturnValue('/mock/dir'),
       getChatRecordingService: vi.fn(),
-      getExperimentalZedIntegration: vi.fn().mockReturnValue(false),
       getInputFormat: vi.fn().mockReturnValue(undefined),
       getSdkMode: vi.fn().mockReturnValue(false),
     } as unknown as Config;
@@ -243,25 +242,6 @@ describe('AskUserQuestionTool', () => {
       expect(invocation.requiresUserInteraction?.()).toBe(true);
     });
 
-    it('should require interaction through an ACP host', () => {
-      (mockConfig.isInteractive as Mock).mockReturnValue(false);
-      (mockConfig.getExperimentalZedIntegration as Mock).mockReturnValue(true);
-      const invocation = tool.build({
-        questions: [
-          {
-            question: 'Test?',
-            header: 'Test',
-            options: [
-              { label: 'A', description: 'Option A' },
-              { label: 'B', description: 'Option B' },
-            ],
-          },
-        ],
-      });
-
-      expect(invocation.requiresUserInteraction?.()).toBe(true);
-    });
-
     it('should return allow permission in non-interactive mode', async () => {
       (mockConfig.isInteractive as Mock).mockReturnValue(false);
 
@@ -307,21 +287,6 @@ describe('AskUserQuestionTool', () => {
       // tool with no dialog and execute() would report "declined".
       const invocation = tool.build(params);
       expect(invocation.requiresUserInteraction?.()).toBe(true);
-    });
-
-    it('requires the dialog for ACP hosts that run non-interactively', () => {
-      // stream-json only has a responder once the SDK control system is up,
-      // so this arm has to say so explicitly — without getSdkMode() the case
-      // reads as "ACP" but actually pins direct mode.
-      (mockConfig.isInteractive as Mock).mockReturnValue(false);
-      (mockConfig.getInputFormat as Mock).mockReturnValue('stream-json');
-      (mockConfig.getSdkMode as Mock).mockReturnValue(true);
-      expect(tool.build(params).requiresUserInteraction?.()).toBe(true);
-
-      (mockConfig.getSdkMode as Mock).mockReturnValue(false);
-      (mockConfig.getInputFormat as Mock).mockReturnValue(undefined);
-      (mockConfig.getExperimentalZedIntegration as Mock).mockReturnValue(true);
-      expect(tool.build(params).requiresUserInteraction?.()).toBe(true);
     });
 
     it('does not require a dialog in stream-json direct mode, which has no responder', () => {

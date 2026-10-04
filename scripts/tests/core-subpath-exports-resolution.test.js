@@ -26,8 +26,7 @@
 //    two instances of barrel-exported, stateful modules in one process, the
 //    module-identity failure #10908's Known risks name. The esbuild guard
 //    below bundles every core subpath statically imported from
-//    packages/cli/src — plus the subpaths the bundle reaches through
-//    @qwen-code/acp-bridge — under the tsconfig each route's importing file
+//    packages/cli/src under the tsconfig each route's importing file
 //    discovers, and asserts every input lands under
 //    packages/core/src, never packages/core/dist.
 //
@@ -51,9 +50,8 @@ import { describe, expect, it } from 'vitest';
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 
 // Every core subpath specifier statically imported from packages/cli/src
-// (storage, atomicFileWrite, debugLogger, noFollowOpen, envVarResolver,
-// toolWriteOrigin, memoryScopes, conversationsRuntimeMarker, goalWire,
-// transcriptRecords, telemetryConstants). Values are the dist targets pinned
+// (storage, atomicFileWrite, debugLogger, envVarResolver, goalWire,
+// transcriptRecords). Values are the dist targets pinned
 // by the exports map in packages/core/package.json. Probes run from
 // packages/cli.
 const expectedDistTargets = {
@@ -63,22 +61,12 @@ const expectedDistTargets = {
     'packages/core/dist/src/utils/atomicFileWrite.js',
   '@qwen-code/qwen-code-core/debugLogger':
     'packages/core/dist/src/utils/debugLogger.js',
-  '@qwen-code/qwen-code-core/noFollowOpen':
-    'packages/core/dist/src/utils/no-follow-open.js',
   '@qwen-code/qwen-code-core/envVarResolver':
     'packages/core/dist/src/utils/envVarResolver.js',
-  '@qwen-code/qwen-code-core/toolWriteOrigin':
-    'packages/core/dist/src/services/tool-write-origin.js',
-  '@qwen-code/qwen-code-core/memoryScopes':
-    'packages/core/dist/src/memory/scopes.js',
-  '@qwen-code/qwen-code-core/conversationsRuntimeMarker':
-    'packages/core/dist/src/utils/conversations-runtime-marker.js',
   '@qwen-code/qwen-code-core/goalWire':
     'packages/core/dist/src/goals/goal-wire.js',
   '@qwen-code/qwen-code-core/transcriptRecords':
     'packages/core/dist/src/utils/transcript-records.js',
-  '@qwen-code/qwen-code-core/telemetryConstants':
-    'packages/core/dist/src/telemetry/constants.js',
 };
 
 function probe(specifier) {
@@ -110,25 +98,16 @@ describe('core subpath specifiers resolve under plain Node', () => {
 
 // The core subpath specifiers the cli bundle resolves under
 // packages/cli/tsconfig.json `paths` — everything statically imported from
-// packages/cli/src, plus goalWire, which the bundle reaches through
-// @qwen-code/acp-bridge's transcript-replay — each mapped to the core source
-// file the matching named `paths` entry must resolve it to.
+// packages/cli/src — each mapped to the core source file the matching named
+// `paths` entry must resolve it to.
 const expectedSrcTargets = {
   '@qwen-code/qwen-code-core/storage': 'packages/core/src/config/storage.ts',
   '@qwen-code/qwen-code-core/atomicFileWrite':
     'packages/core/src/utils/atomicFileWrite.ts',
   '@qwen-code/qwen-code-core/debugLogger':
     'packages/core/src/utils/debugLogger.ts',
-  '@qwen-code/qwen-code-core/noFollowOpen':
-    'packages/core/src/utils/no-follow-open.ts',
   '@qwen-code/qwen-code-core/envVarResolver':
     'packages/core/src/utils/envVarResolver.ts',
-  '@qwen-code/qwen-code-core/toolWriteOrigin':
-    'packages/core/src/services/tool-write-origin.ts',
-  '@qwen-code/qwen-code-core/memoryScopes':
-    'packages/core/src/memory/scopes.ts',
-  '@qwen-code/qwen-code-core/conversationsRuntimeMarker':
-    'packages/core/src/utils/conversations-runtime-marker.ts',
   '@qwen-code/qwen-code-core/goalWire': 'packages/core/src/goals/goal-wire.ts',
 };
 

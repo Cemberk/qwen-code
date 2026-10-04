@@ -11,14 +11,6 @@ import {
   type ScreenSelection,
 } from 'ink';
 
-/** A single addressable cell of the composited screen. */
-export interface ScreenCell {
-  /** The character in this cell; empty string for a wide-character spacer. */
-  value: string;
-  /** Whether this cell holds the leading half of a wide (2-column) character. */
-  fullWidth: boolean;
-}
-
 /**
  * Read side of the frame-buffer bridge. Wraps Ink's {@link FrameController} to
  * answer "what character is at (x, y)" against the latest composited frame and
@@ -37,11 +29,6 @@ export class ScreenBuffer {
   get dimensions(): { width: number; height: number } {
     const frame = this.frame;
     return { width: frame?.width ?? 0, height: frame?.height ?? 0 };
-  }
-
-  getCellAt(x: number, y: number): ScreenCell | null {
-    const cell = this.frame?.cells[y]?.[x];
-    return cell ? { value: cell.value, fullWidth: cell.fullWidth } : null;
   }
 
   /** Visual text of a row, with trailing padding trimmed. */

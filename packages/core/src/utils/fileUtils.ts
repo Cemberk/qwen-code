@@ -97,9 +97,6 @@ const PROVIDER_SAFE_IMAGE_MIME_TYPES = new Set<string>(
   PIPELINE_IMAGE_MIME_TYPES,
 );
 
-// Default values for encoding and separator format
-export const DEFAULT_ENCODING: BufferEncoding = 'utf-8';
-
 // Upper bounds on the on-disk size of PDFs we will hand to pdftotext.
 // The 10MB inline-data cap is bypassed for this path, so keep explicit
 // ceilings before spawning poppler. Full reads are tighter because they

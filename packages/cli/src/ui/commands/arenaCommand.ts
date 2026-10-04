@@ -250,18 +250,6 @@ function executeArenaCommand(
   };
 
   const handleSessionUpdate = (event: ArenaSessionUpdateEvent) => {
-    const attachHintPrefix = 'To view agent panes, run: ';
-    if (event.message.startsWith(attachHintPrefix)) {
-      const command = event.message.slice(attachHintPrefix.length).trim();
-      addAndRecordArenaMessage(
-        MessageType.INFO,
-        t('Arena panes are running in tmux. Attach with: `{{command}}`', {
-          command,
-        }),
-      );
-      return;
-    }
-
     if (event.type === 'success') {
       addAndRecordArenaMessage(MessageType.SUCCESS, event.message);
     } else if (event.type === 'info') {
@@ -363,15 +351,10 @@ function executeArenaCommand(
 
   config.setArenaManager(manager);
 
-  const cols = process.stdout.columns || 120;
-  const rows = Math.max((process.stdout.rows || 40) - 2, 1);
-
   const lifecycle = manager
     .start({
       task: input.task,
       models: input.models,
-      cols,
-      rows,
       approvalMode: input.approvalMode,
       chatHistory,
     })

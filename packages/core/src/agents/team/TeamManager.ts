@@ -41,10 +41,7 @@ import type {
   AgentToolResultEvent,
   AgentApprovalRequestEvent,
 } from '../runtime/agent-events.js';
-import {
-  forwardApproval,
-  wrapConfirmWithBadge,
-} from './leaderPermissionBridge.js';
+
 import type { TeammateApprovalRequestEvent } from './team-events.js';
 import { TeamEventEmitter, TeamEventType } from './team-events.js';
 import type {
@@ -430,7 +427,6 @@ export class TeamManager {
       color,
       joinedAt: Date.now(),
       cwd,
-      tmuxPaneId: '',
       backendType: this.backend.type,
       isActive: undefined,
       subscriptions: [],
@@ -600,8 +596,6 @@ export class TeamManager {
       // Build spawn config for the backend.
       const spawnConfig: AgentSpawnConfig = {
         agentId,
-        command: '',
-        args: [],
         cwd,
         inProcess: {
           agentName: name,
@@ -1588,24 +1582,6 @@ export class TeamManager {
     return this.teamEventEmitter;
   }
 
-  /** Mark that a shutdown has been requested for `name` so the
-   *  mailbox is checked on its next idle transition. Used by tests
-   *  that inject the structured shutdown message directly without
-   *  going through `requestShutdown`. */
-  markShutdownRequested(name: string): void {
-    const ledger = this.getOrCreateShutdownLedger(name);
-    const hasMarker = ledger.outstandingTokens.some(
-      (token) => token.kind === 'marker' && !token.consumed,
-    );
-    if (!hasMarker) {
-      ledger.outstandingTokens.push({
-        kind: 'marker',
-        reservations: 0,
-        consumed: false,
-      });
-    }
-  }
-
   private getOrCreateShutdownLedger(name: string): ShutdownLedger {
     let ledger = this.shutdownLedgers.get(name);
     if (!ledger) {
@@ -1685,8 +1661,6 @@ export class TeamManager {
 
   /**
    * Get an agent object from the backend by agent ID.
-   * Returns undefined for backends that don't expose in-process
-   * agent handles (e.g. tmux/iTerm2).
    */
   getAgentFromBackend(agentId: string): TeamAgentHandle | undefined {
     return this.backend.getAgent?.(agentId);
@@ -1919,24 +1893,10 @@ export class TeamManager {
     emitter.on(AgentEventType.TOOL_CALL, onToolCall);
     emitter.on(AgentEventType.TOOL_RESULT, onToolResult);
 
-    // Forward teammate tool approval requests to the leader's UI
-    // via the permission bridge.
-    const member = findMemberByName(this.teamFile.members, agentName);
+    // Teammate tool approval requests are emitted as a team event so the
+    // host can route them through its own permission channel.
     const onApproval = (event: AgentApprovalRequestEvent) => {
-      const color = member?.color;
-      const badged = wrapConfirmWithBadge(
-        event.confirmationDetails,
-        agentName,
-        event.respond,
-        color,
-      );
-      const forwarded = forwardApproval(agentName, color, badged);
-      if (!forwarded) {
-        // No leader UI registered (headless / stream-json).
-        // Emit a team event so the host can route the
-        // approval through its own permission channel.
-        this.emitTeammateApprovalRequest(agentName, event);
-      }
+      this.emitTeammateApprovalRequest(agentName, event);
     };
 
     emitter.on(AgentEventType.TOOL_WAITING_APPROVAL, onApproval);

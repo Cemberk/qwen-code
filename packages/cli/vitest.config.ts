@@ -20,7 +20,7 @@ export default defineConfig({
   resolve: {
     alias: [
       // Named core subpaths. None of these targets can be derived from the
-      // specifier (noFollowOpen lives at utils/no-follow-open.ts), so they
+      // specifier (shellResult lives at utils/shell-result.ts), so they
       // have to be matched ahead of the wildcard below. A new named subpath
       // added to packages/cli/tsconfig.json must be added here too, above
       // the wildcard, or the wildcard will claim it and point at a file
@@ -30,10 +30,6 @@ export default defineConfig({
           __dirname,
           '../core/src/utils/shell-result.ts',
         ),
-        '@qwen-code/qwen-code-core/noFollowOpen': path.resolve(
-          __dirname,
-          '../core/src/utils/no-follow-open.ts',
-        ),
         '@qwen-code/qwen-code-core/goalWire': path.resolve(
           __dirname,
           '../core/src/goals/goal-wire.ts',
@@ -41,22 +37,6 @@ export default defineConfig({
         '@qwen-code/qwen-code-core/transcriptRecords': path.resolve(
           __dirname,
           '../core/src/utils/transcript-records.ts',
-        ),
-        '@qwen-code/qwen-code-core/telemetryConstants': path.resolve(
-          __dirname,
-          '../core/src/telemetry/constants.ts',
-        ),
-        '@qwen-code/qwen-code-core/userPromptSubmitContext': path.resolve(
-          __dirname,
-          '../core/src/hooks/user-prompt-submit-context.ts',
-        ),
-        '@qwen-code/qwen-code-core/memoryScopes': path.resolve(
-          __dirname,
-          '../core/src/memory/scopes.ts',
-        ),
-        '@qwen-code/qwen-code-core/toolWriteOrigin': path.resolve(
-          __dirname,
-          '../core/src/services/tool-write-origin.ts',
         ),
         '@qwen-code/qwen-code-core/envVarResolver': path.resolve(
           __dirname,
@@ -73,10 +53,6 @@ export default defineConfig({
         '@qwen-code/qwen-code-core/debugLogger': path.resolve(
           __dirname,
           '../core/src/utils/debugLogger.ts',
-        ),
-        '@qwen-code/qwen-code-core/conversationsRuntimeMarker': path.resolve(
-          __dirname,
-          '../core/src/utils/conversations-runtime-marker.ts',
         ),
       }),
       // Mirrors `"@qwen-code/qwen-code-core/*": ["../core/src/*"]` from

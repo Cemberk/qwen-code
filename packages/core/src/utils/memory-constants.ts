@@ -26,7 +26,6 @@ export const AGENT_CONTEXT_FILENAME = 'AGENTS.md';
  * the global Qwen dir at `~/.qwen/`.
  */
 export const LOCAL_CONTEXT_FILENAME = 'QWEN.local.md';
-export const MEMORY_SECTION_HEADER = '## Qwen Added Memories';
 
 // This variable will hold the currently configured filename for context files.
 // It defaults to include both QWEN.md and AGENTS.md but can be overridden by setMemoryFilename.
@@ -48,14 +47,8 @@ export function setMemoryFilename(newFilename: string | string[]): void {
 
 export function getCurrentMemoryFilename(): string {
   if (Array.isArray(currentMemoryFilename)) {
-    //   (qwen-latest critical, addresses divergence
-    // with daemon's `extractContextFilename`): skip empty / whitespace
-    // entries so callers that pass `[' ', 'AGENTS.md']` get
-    // `'AGENTS.md'` instead of `''`. Without this filter the daemon's
-    // `extractContextFilename` (which DOES skip empty) and this
-    // process-global picker disagreed on the same input — daemon
-    // parent would write `AGENTS.md` while the ACP child would read
-    // `''`, leaving the init'd file orphaned.
+    // Skip empty / whitespace entries so callers that pass
+    // `[' ', 'AGENTS.md']` get `'AGENTS.md'` instead of `''`.
     for (const entry of currentMemoryFilename) {
       if (typeof entry === 'string' && entry.trim() !== '') {
         return entry.trim();
@@ -74,12 +67,6 @@ export function getAllMemoryFilenames(): string[] {
   }
   return [currentMemoryFilename];
 }
-
-/** @deprecated Use `setMemoryFilename`; retained until a future major release. */
-export const setGeminiMdFilename = setMemoryFilename;
-
-/** @deprecated Use `getCurrentMemoryFilename`; retained until a future major release. */
-export const getCurrentGeminiMdFilename = getCurrentMemoryFilename;
 
 /** @deprecated Use `getAllMemoryFilenames`; retained until a future major release. */
 export const getAllGeminiMdFilenames = getAllMemoryFilenames;

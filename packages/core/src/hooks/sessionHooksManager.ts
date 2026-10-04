@@ -216,32 +216,6 @@ export class SessionHooksManager {
   }
 
   /**
-   * Remove a hook by ID (searches all events)
-   * @param sessionId Session ID
-   * @param hookId Hook ID to remove
-   * @returns True if hook was found and removed
-   */
-  removeHook(sessionId: string, hookId: string): boolean {
-    const storage = this.sessions.get(sessionId);
-    if (!storage) {
-      return false;
-    }
-
-    for (const [event, eventHooks] of storage.hooks.entries()) {
-      const index = eventHooks.findIndex((entry) => entry.hookId === hookId);
-      if (index !== -1) {
-        eventHooks.splice(index, 1);
-        debugLogger.debug(
-          `Removed hook ${hookId} from session ${sessionId} on event ${event}`,
-        );
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  /**
    * Get all hooks for a session and event
    * @param sessionId Session ID
    * @param event Hook event name
@@ -325,29 +299,6 @@ export class SessionHooksManager {
   clearSessionHooks(sessionId: string): void {
     this.sessions.delete(sessionId);
     debugLogger.debug(`Cleared all hooks for session ${sessionId}`);
-  }
-
-  /**
-   * Get all session IDs with registered hooks
-   */
-  getActiveSessions(): string[] {
-    return Array.from(this.sessions.keys());
-  }
-
-  /**
-   * Get hook count for a session
-   */
-  getHookCount(sessionId: string): number {
-    const storage = this.sessions.get(sessionId);
-    if (!storage) {
-      return 0;
-    }
-
-    let count = 0;
-    for (const eventHooks of storage.hooks.values()) {
-      count += eventHooks.length;
-    }
-    return count;
   }
 
   /**

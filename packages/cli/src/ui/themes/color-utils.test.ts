@@ -6,76 +6,12 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  interpolateColor,
-  isValidColor,
   resolveColor,
   CSS_NAME_TO_HEX_MAP,
   INK_SUPPORTED_NAMES,
 } from './color-utils.js';
 
 describe('Color Utils', () => {
-  describe('isValidColor', () => {
-    it('should validate hex colors', () => {
-      expect(isValidColor('#ff0000')).toBe(true);
-      expect(isValidColor('#00ff00')).toBe(true);
-      expect(isValidColor('#0000ff')).toBe(true);
-      expect(isValidColor('#fff')).toBe(true);
-      expect(isValidColor('#000')).toBe(true);
-      expect(isValidColor('#FF0000')).toBe(true); // Case insensitive
-    });
-
-    it('should validate Ink-supported color names', () => {
-      expect(isValidColor('black')).toBe(true);
-      expect(isValidColor('red')).toBe(true);
-      expect(isValidColor('green')).toBe(true);
-      expect(isValidColor('yellow')).toBe(true);
-      expect(isValidColor('blue')).toBe(true);
-      expect(isValidColor('cyan')).toBe(true);
-      expect(isValidColor('magenta')).toBe(true);
-      expect(isValidColor('white')).toBe(true);
-      expect(isValidColor('gray')).toBe(true);
-      expect(isValidColor('grey')).toBe(true);
-      expect(isValidColor('blackbright')).toBe(true);
-      expect(isValidColor('redbright')).toBe(true);
-      expect(isValidColor('greenbright')).toBe(true);
-      expect(isValidColor('yellowbright')).toBe(true);
-      expect(isValidColor('bluebright')).toBe(true);
-      expect(isValidColor('cyanbright')).toBe(true);
-      expect(isValidColor('magentabright')).toBe(true);
-      expect(isValidColor('whitebright')).toBe(true);
-    });
-
-    it('should validate Ink-supported color names case insensitive', () => {
-      expect(isValidColor('BLACK')).toBe(true);
-      expect(isValidColor('Red')).toBe(true);
-      expect(isValidColor('GREEN')).toBe(true);
-    });
-
-    it('should validate CSS color names', () => {
-      expect(isValidColor('darkkhaki')).toBe(true);
-      expect(isValidColor('coral')).toBe(true);
-      expect(isValidColor('teal')).toBe(true);
-      expect(isValidColor('tomato')).toBe(true);
-      expect(isValidColor('turquoise')).toBe(true);
-      expect(isValidColor('violet')).toBe(true);
-      expect(isValidColor('wheat')).toBe(true);
-      expect(isValidColor('whitesmoke')).toBe(true);
-      expect(isValidColor('yellowgreen')).toBe(true);
-    });
-
-    it('should validate CSS color names case insensitive', () => {
-      expect(isValidColor('DARKKHAKI')).toBe(true);
-      expect(isValidColor('Coral')).toBe(true);
-      expect(isValidColor('TEAL')).toBe(true);
-    });
-
-    it('should reject invalid color names', () => {
-      expect(isValidColor('invalidcolor')).toBe(false);
-      expect(isValidColor('notacolor')).toBe(false);
-      expect(isValidColor('')).toBe(false);
-    });
-  });
-
   describe('resolveColor', () => {
     it('should resolve hex colors', () => {
       expect(resolveColor('#ff0000')).toBe('#ff0000');
@@ -166,92 +102,6 @@ describe('Color Utils', () => {
       expect(INK_SUPPORTED_NAMES.has('darkkhaki')).toBe(false);
       expect(INK_SUPPORTED_NAMES.has('coral')).toBe(false);
       expect(INK_SUPPORTED_NAMES.has('teal')).toBe(false);
-    });
-  });
-
-  describe('Consistency between validation and resolution', () => {
-    it('should have consistent behavior between isValidColor and resolveColor', () => {
-      // Test that any color that isValidColor returns true for can be resolved
-      const testColors = [
-        '#ff0000',
-        '#00ff00',
-        '#0000ff',
-        '#fff',
-        '#000',
-        'black',
-        'red',
-        'green',
-        'yellow',
-        'blue',
-        'cyan',
-        'magenta',
-        'white',
-        'gray',
-        'grey',
-        'darkkhaki',
-        'coral',
-        'teal',
-        'tomato',
-        'turquoise',
-        'violet',
-        'wheat',
-        'whitesmoke',
-        'yellowgreen',
-      ];
-
-      for (const color of testColors) {
-        expect(isValidColor(color)).toBe(true);
-        expect(resolveColor(color)).toBeDefined();
-      }
-
-      // Test that invalid colors are consistently rejected
-      const invalidColors = [
-        'invalidcolor',
-        'notacolor',
-        '',
-        '#gg0000',
-        '#ff00',
-      ];
-
-      for (const color of invalidColors) {
-        expect(isValidColor(color)).toBe(false);
-        expect(resolveColor(color)).toBeUndefined();
-      }
-    });
-  });
-
-  describe('interpolateColor', () => {
-    it('returns color1 when factor <= 0', () => {
-      expect(interpolateColor('#000000', '#ffffff', 0)).toBe('#000000');
-      expect(interpolateColor('#000000', '#ffffff', -1)).toBe('#000000');
-    });
-
-    it('returns color2 when factor >= 1', () => {
-      expect(interpolateColor('#000000', '#ffffff', 1)).toBe('#ffffff');
-      expect(interpolateColor('#000000', '#ffffff', 2)).toBe('#ffffff');
-    });
-
-    it('blends two hex colors at 50%', () => {
-      expect(interpolateColor('#000000', '#ffffff', 0.5)).toBe('#808080');
-    });
-
-    it('blends with a small factor', () => {
-      const result = interpolateColor('#000000', '#ffffff', 0.06);
-      expect(result).toMatch(/^#[0-9a-f]{6}$/);
-      expect(result).not.toBe('#000000');
-    });
-
-    it('handles 3-digit hex shorthand', () => {
-      expect(interpolateColor('#000', '#fff', 0.5)).toBe('#808080');
-    });
-
-    it('handles Ink color names', () => {
-      expect(interpolateColor('black', 'white', 0.5)).toBe('#808080');
-    });
-
-    it('returns empty string for unparseable input', () => {
-      expect(interpolateColor('notacolor', '#ffffff', 0.5)).toBe('');
-      expect(interpolateColor('#ffffff', 'notacolor', 0.5)).toBe('');
     });
   });
 });

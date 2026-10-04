@@ -14,16 +14,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // very try/catch it is supposed to prove exists. Tests that trigger a stderr
 // line spy on `process.stderr.write` instead.
 
-import {
-  HistoryReplayer,
-  MISSING_TOOL_RESULT_MESSAGE,
-} from './history-replayer.js';
+import { HistoryReplayer } from './history-replayer.js';
+import { MISSING_TRANSCRIPT_TOOL_RESULT_MESSAGE } from './transcript-replay.js';
 import type { SessionContext } from './types.js';
 import { ApprovalMode, ChatRecordingService } from '@qwen-code/qwen-code-core';
 import type {
   Config,
   ChatRecord,
-  HistoryGap,
   ToolRegistry,
   ToolResultDisplay,
   TodoResultDisplay,
@@ -393,7 +390,7 @@ describe('HistoryReplayer', () => {
             type: 'content',
             content: {
               type: 'text',
-              text: MISSING_TOOL_RESULT_MESSAGE,
+              text: MISSING_TRANSCRIPT_TOOL_RESULT_MESSAGE,
             },
           },
         ],
@@ -411,207 +408,6 @@ describe('HistoryReplayer', () => {
         activeRecordId: record.uuid,
         activeRecordTimestamp: record.timestamp,
       });
-    });
-
-    it('does not fail a skipped ask_user_question dangling call', async () => {
-      const record: ChatRecord = {
-        ...createAssistantRecord(''),
-        message: {
-          role: 'model',
-          parts: [
-            {
-              functionCall: {
-                id: 'call-auq',
-                name: 'ask_user_question',
-                args: {},
-              },
-            },
-          ],
-        },
-      };
-
-      await replayer.replay([record], undefined, {
-        skipFinalizeCallIds: new Set(['call-auq']),
-      });
-
-      const updates = sentUpdates();
-      expect(updates.map((update) => update['sessionUpdate'])).toEqual([
-        'tool_call',
-      ]);
-    });
-
-    it('keeps a dangling call in flight when finalizeDangling is false', async () => {
-      const record: ChatRecord = {
-        ...createAssistantRecord(''),
-        message: {
-          role: 'model',
-          parts: [
-            {
-              functionCall: {
-                id: 'call-inflight',
-                name: 'run_shell_command',
-                args: { command: 'sleep 10' },
-              },
-            },
-          ],
-        },
-      };
-
-      await replayer.replay([record], undefined, { finalizeDangling: false });
-
-      const updates = sentUpdates();
-      expect(updates.map((update) => update['sessionUpdate'])).toEqual([
-        'tool_call',
-      ]);
-      expect(replayer.getPendingToolCalls()).toEqual([
-        expect.objectContaining({ callId: 'call-inflight' }),
-      ]);
-    });
-
-    it('should carry dangling function calls across replay pages', async () => {
-      const record: ChatRecord = {
-        ...createAssistantRecord(''),
-        message: {
-          role: 'model',
-          parts: [
-            {
-              functionCall: {
-                id: 'call-missing',
-                name: 'run_shell_command',
-                args: { command: 'sleep 10' },
-              },
-            },
-          ],
-        },
-      };
-
-      const firstPage = await replayer.replayPage([record], {
-        finalizeDangling: false,
-      });
-      expect(firstPage.pendingToolCalls).toEqual([
-        {
-          callId: 'call-missing',
-          toolName: 'run_shell_command',
-          recordId: record.uuid,
-          timestamp: record.timestamp,
-        },
-      ]);
-      expect(sentUpdates().map((update) => update['sessionUpdate'])).toEqual([
-        'tool_call',
-      ]);
-
-      sendUpdateSpy.mockClear();
-      sentUpdateContexts = [];
-      const lastPage = await replayer.replayPage([], {
-        pendingToolCalls: firstPage.pendingToolCalls,
-        finalizeDangling: true,
-      });
-
-      expect(lastPage.pendingToolCalls).toEqual([]);
-      expect(sentUpdates().map((update) => update['sessionUpdate'])).toEqual([
-        'tool_call_update',
-      ]);
-      expect(sentUpdates()[0]).toMatchObject({
-        sessionUpdate: 'tool_call_update',
-        toolCallId: 'call-missing',
-        status: 'failed',
-        content: [
-          {
-            type: 'content',
-            content: {
-              type: 'text',
-              text: MISSING_TOOL_RESULT_MESSAGE,
-            },
-          },
-        ],
-        _meta: {
-          toolName: 'run_shell_command',
-          provenance: 'builtin',
-          timestamp: toEpochMs(record.timestamp),
-        },
-      });
-      expect(sentUpdateContexts[0]).toEqual({
-        activeRecordId: record.uuid,
-        activeRecordTimestamp: record.timestamp,
-      });
-    });
-
-    it('should match a pending function call with its result on the next page', async () => {
-      const callRecord: ChatRecord = {
-        ...createAssistantRecord(''),
-        message: {
-          role: 'model',
-          parts: [
-            {
-              functionCall: {
-                id: 'call-123',
-                name: 'read_file',
-                args: { path: '/test.ts' },
-              },
-            },
-          ],
-        },
-      };
-      const firstPage = await replayer.replayPage([callRecord], {
-        finalizeDangling: false,
-      });
-
-      sendUpdateSpy.mockClear();
-      const resultRecord = createToolResultRecord(
-        'read_file',
-        'File contents here',
-      );
-      const secondPage = await replayer.replayPage([resultRecord], {
-        pendingToolCalls: firstPage.pendingToolCalls,
-        finalizeDangling: true,
-      });
-
-      expect(secondPage.pendingToolCalls).toEqual([]);
-      expect(sentUpdates()).toHaveLength(1);
-      expect(sentUpdates()[0]).toMatchObject({
-        sessionUpdate: 'tool_call_update',
-        toolCallId: 'call-123',
-        status: 'completed',
-      });
-    });
-
-    it('should expose pending function calls when replayPage throws mid-page', async () => {
-      const record: ChatRecord = {
-        ...createAssistantRecord(''),
-        message: {
-          role: 'model',
-          parts: [
-            {
-              functionCall: {
-                id: 'call-started-before-error',
-                name: 'run_shell_command',
-                args: { command: 'sleep 10' },
-              },
-            },
-            { text: 'this send fails' },
-          ],
-        },
-      };
-      sendUpdateSpy.mockImplementation(
-        async (update: Record<string, unknown>) => {
-          if (update['sessionUpdate'] === 'agent_message_chunk') {
-            throw new Error('replay failed');
-          }
-        },
-      );
-
-      await expect(
-        replayer.replayPage([record], { finalizeDangling: false }),
-      ).rejects.toThrow('replay failed');
-
-      expect(replayer.getPendingToolCalls()).toEqual([
-        {
-          callId: 'call-started-before-error',
-          toolName: 'run_shell_command',
-          recordId: record.uuid,
-          timestamp: record.timestamp,
-        },
-      ]);
     });
 
     it('should not guess correlation between synthesized and explicit call ids', async () => {
@@ -961,17 +757,13 @@ describe('HistoryReplayer', () => {
         },
       ];
       try {
-        const recorder = new ChatRecordingService(
-          {
-            getSessionId: () => sessionId,
-            getProjectRoot: () => projectDir,
-            getCliVersion: () => '1.0.0',
-            getResumedSessionData: () => undefined,
-            storage: { getProjectDir: () => projectDir },
-          } as unknown as Config,
-          undefined,
-          false,
-        );
+        const recorder = new ChatRecordingService({
+          getSessionId: () => sessionId,
+          getProjectRoot: () => projectDir,
+          getCliVersion: () => '1.0.0',
+          getResumedSessionData: () => undefined,
+          storage: { getProjectDir: () => projectDir },
+        } as unknown as Config);
         const responseParts = [
           {
             functionResponse: {
@@ -1523,50 +1315,6 @@ describe('HistoryReplayer', () => {
     });
   });
 
-  describe('history gaps', () => {
-    const userRec = (uuid: string, text: string): ChatRecord =>
-      ({
-        uuid,
-        parentUuid: null,
-        sessionId: 'test-session',
-        timestamp: '2026-07-05T00:00:00.000Z',
-        type: 'user',
-        message: { role: 'user', parts: [{ text }] },
-        cwd: '/tmp',
-        version: '0',
-      }) as unknown as ChatRecord;
-
-    it('emits a history-gap notice before the gap child record', async () => {
-      const records = [
-        userRec('old', 'older turn'),
-        userRec('new', 'newer turn'),
-      ];
-      const gaps: HistoryGap[] = [
-        { childUuid: 'new', missingParentUuid: 'gone' },
-      ];
-
-      await replayer.replay(records, gaps);
-
-      const texts = sentUpdates().map((u) => {
-        const content = u['content'] as { text?: string } | undefined;
-        return content?.text ?? '';
-      });
-      const gapIdx = texts.findIndex((t) => t.includes('History gap'));
-      const newIdx = texts.findIndex((t) => t.includes('newer turn'));
-      expect(gapIdx).toBeGreaterThanOrEqual(0);
-      expect(newIdx).toBeGreaterThan(gapIdx);
-    });
-
-    it('emits no gap notice when there are no gaps', async () => {
-      await replayer.replay([userRec('a', 'a turn')]);
-      const hasGap = sentUpdates().some((u) => {
-        const content = u['content'] as { text?: string } | undefined;
-        return (content?.text ?? '').includes('History gap');
-      });
-      expect(hasGap).toBe(false);
-    });
-  });
-
   describe('qwen.session.recordId stamping', () => {
     it('should stamp persisted updates with activeRecordId for user messages', async () => {
       const userRecord = createUserRecord('Hello');
@@ -1590,7 +1338,7 @@ describe('HistoryReplayer', () => {
   });
 });
 
-describe('HistoryReplayer timing frames', () => {
+describe('HistoryReplayer ui_telemetry records', () => {
   const SESSION_ID = 'timing-session';
   const TIMESTAMP = '2026-07-14T00:00:06.544Z';
 
@@ -1618,16 +1366,6 @@ describe('HistoryReplayer timing frames', () => {
     } as unknown as ChatRecord;
   }
 
-  function timingsFrom(updates: Array<Record<string, unknown>>) {
-    return updates
-      .map(
-        (update) =>
-          (update as { _meta?: { timing?: Record<string, unknown> } })._meta
-            ?.timing,
-      )
-      .filter(Boolean);
-  }
-
   function makeReplayer() {
     const sent: Array<Record<string, unknown>> = [];
     const context = {
@@ -1643,36 +1381,7 @@ describe('HistoryReplayer timing frames', () => {
     return { replayer: new HistoryReplayer(context), sent };
   }
 
-  it('emits a timing frame when a page opts in', async () => {
-    const { replayer, sent } = makeReplayer();
-
-    await replayer.replayPage([telemetryRecord()], { includeTiming: true });
-
-    expect(timingsFrom(sent)).toEqual([
-      {
-        kind: 'request',
-        status: 'ok',
-        durationMs: 6544,
-        ttftMs: 2344,
-        startedAt: Date.parse(TIMESTAMP) - 6544,
-        responseId: 'chatcmpl-abc',
-        promptId: `${SESSION_ID}########0`,
-        model: 'qwen3.8-max',
-      },
-    ]);
-  });
-
-  it('emits nothing for a page that does not opt in', async () => {
-    const { replayer, sent } = makeReplayer();
-
-    await replayer.replayPage([telemetryRecord()]);
-
-    expect(sent).toEqual([]);
-  });
-
-  it('emits nothing on the bulk replay path', async () => {
-    // The bulk path runs against a fixed update cap, so timing stays off
-    // there even though the same records flow through it.
+  it('emits nothing for a telemetry record', async () => {
     const { replayer, sent } = makeReplayer();
 
     await replayer.replay([telemetryRecord()]);
@@ -1680,7 +1389,7 @@ describe('HistoryReplayer timing frames', () => {
     expect(sent).toEqual([]);
   });
 
-  it('leaves the bulk path update count unchanged by telemetry records', async () => {
+  it('leaves the replayed updates unchanged by telemetry records', async () => {
     const assistant = {
       uuid: 'assistant-record',
       parentUuid: 'telemetry-record',

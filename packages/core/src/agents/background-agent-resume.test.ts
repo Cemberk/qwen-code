@@ -30,11 +30,7 @@ import {
   runWithAgentConfiguredToolAllowlist,
 } from './runtime/agent-context.js';
 import { AgentHeadless } from './runtime/agent-headless.js';
-import {
-  getInvocationContext,
-  runWithInvocationContext,
-  type InvocationContextV1,
-} from '../utils/invocation-context.js';
+
 import {
   FORK_DEFAULT_MAX_TURNS,
   FORK_SUBAGENT_TYPE,
@@ -1128,11 +1124,8 @@ describe('BackgroundAgentResumeService', () => {
       metaPath,
     });
 
-    let resumedInvocation: InvocationContextV1 | undefined;
     const execute = vi.fn(
-      async (_context: { get: (key: string) => unknown }) => {
-        resumedInvocation = getInvocationContext();
-      },
+      async (_context: { get: (key: string) => unknown }) => {},
     );
     const setExternalMessageProvider = vi.fn();
     const subagent = {
@@ -1157,15 +1150,7 @@ describe('BackgroundAgentResumeService', () => {
       getAdditionalContext: () => 'resume-context',
     });
 
-    const resumed = await runWithInvocationContext(
-      {
-        version: 1,
-        sessionId,
-        promptId: 'stale-daemon-prompt',
-        originatorClientId: 'stale-client',
-      },
-      () => service.resumeBackgroundAgent(agentId, 'continue'),
-    );
+    const resumed = await service.resumeBackgroundAgent(agentId, 'continue');
 
     expect(resumed).toBeDefined();
     expect(subagentManager.createAgentHeadless).toHaveBeenCalledWith(
@@ -1192,7 +1177,6 @@ describe('BackgroundAgentResumeService', () => {
     }
     expect(contextArg.get('hook_context')).toBe('resume-context');
     expect(contextArg.get('task_prompt')).toBe('continue');
-    expect(resumedInvocation).toBeUndefined();
     await vi.waitFor(() => {
       expect(registry.get(agentId)?.status).toBe('completed');
     });

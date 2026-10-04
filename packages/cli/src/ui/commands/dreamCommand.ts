@@ -16,7 +16,7 @@ export const dreamCommand: SlashCommand = {
     return t('Consolidate managed auto-memory topic files.');
   },
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'acp'] as const,
+  supportedModes: ['interactive'] as const,
   action: async (context) => {
     const config = context.services.config;
     if (!config) {
@@ -59,11 +59,6 @@ export const dreamCommand: SlashCommand = {
         config
           .getMemoryManager()
           .writeDreamManualRun(projectRoot, config.getSessionId());
-
-      if (context.executionMode === 'acp') {
-        recordDream().catch(() => {});
-        return { type: 'submit_prompt', content: prompt };
-      }
 
       return {
         type: 'submit_prompt',

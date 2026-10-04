@@ -84,6 +84,3 @@ export const MAX_KITTY_SEQUENCE_LENGTH = 32;
  * Character codes for common escape sequences
  */
 export const CHAR_CODE_ESC = 27;
-export const CHAR_CODE_LEFT_BRACKET = 91;
-export const CHAR_CODE_1 = 49;
-export const CHAR_CODE_2 = 50;

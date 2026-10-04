@@ -6,18 +6,11 @@
 
 /**
  * Normalize a raw `tools.disabled` settings array into the canonical
- * deduplicated list the agent / restart paths share.
- *
- * Boot path (`cli/src/config/config.ts`'s `disabledTools` array
- * construction) and MCP restart refresh path
- * (`cli/src/acp-integration/acpAgent.ts` post-`restartMcpServer`
- * settings refresh) must agree byte-for-byte on what counts as
- * "disabled" — without that agreement, `ToolRegistry.has(tool.name)`
- * exact-match check silently re-registers tools whose disabled-name
- * carries whitespace (e.g., `' Foo '` typed in settings.json by hand).
- *
- * Lifted from inline implementations so boot path and MCP restart
- * refresh path share a single implementation.
+ * deduplicated list used by the boot path (`cli/src/config/config.ts`'s
+ * `disabledTools` array construction). Trimming matters: the
+ * `ToolRegistry.has(tool.name)` exact-match check would otherwise silently
+ * keep tools whose disabled-name carries whitespace (e.g., `' Foo '` typed in
+ * settings.json by hand).
  *
  * Behavior contract:
  *

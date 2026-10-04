@@ -13,7 +13,6 @@
 
 import type { Content } from '@google/genai';
 import type { ContentGenerator } from '../../core/contentGenerator.js';
-import type { AnsiOutput } from '../../utils/terminalSerializer.js';
 import type {
   AgentMessage,
   AgentStatus,
@@ -31,8 +30,6 @@ import type { TeammateIdentity } from '../team/types.js';
  */
 export const DISPLAY_MODE = {
   IN_PROCESS: 'in-process',
-  TMUX: 'tmux',
-  ITERM2: 'iterm2',
 } as const;
 
 /**
@@ -41,41 +38,19 @@ export const DISPLAY_MODE = {
 export type DisplayMode = (typeof DISPLAY_MODE)[keyof typeof DISPLAY_MODE];
 
 /**
- * Configuration for spawning an agent subprocess.
+ * Configuration for spawning an agent.
  */
 export interface AgentSpawnConfig {
   /** Unique identifier for this agent */
   agentId: string;
-  /** Command to execute (e.g., the CLI binary path) */
-  command: string;
-  /** Arguments to pass to the command */
-  args: string[];
-  /** Working directory for the subprocess */
+  /** Working directory for the agent */
   cwd: string;
-  /** Additional environment variables (merged with process.env) */
-  env?: Record<string, string>;
-  /** Terminal columns (default: 120) */
-  cols?: number;
-  /** Terminal rows (default: 40) */
-  rows?: number;
-  /**
-   * Backend-specific options (optional).
-   * These are ignored by backends that do not support them.
-   */
-  backend?: {
-    tmux?: TmuxBackendOptions;
-  };
-
-  /**
-   * In-process spawn configuration (optional).
-   * When provided, InProcessBackend uses this to create an AgentInteractive
-   * instead of launching a PTY subprocess.
-   */
-  inProcess?: InProcessSpawnConfig;
+  /** In-process spawn configuration used to create the AgentInteractive. */
+  inProcess: InProcessSpawnConfig;
 }
 
 /**
- * Configuration for spawning an in-process agent (no PTY subprocess).
+ * Configuration for spawning an in-process agent.
  */
 export interface InProcessSpawnConfig {
   /** Human-readable agent name for display. */
@@ -130,8 +105,7 @@ export type AgentExitCallback = (
  * Minimal handle a backend can return for an in-process agent.
  *
  * Both `AgentInteractive` (real) and `FakeAgent` (tests) satisfy this
- * shape. PTY-based backends (tmux, iTerm2) don't expose an agent handle
- * because the agent runs in a subprocess.
+ * shape.
  */
 export interface TeamAgentHandle {
   getStatus(): AgentStatus;
@@ -145,8 +119,8 @@ export interface TeamAgentHandle {
    */
   getError?(): string | undefined;
   /**
-   * Conversation message history. Optional: in-process handles
-   * (AgentInteractive, FakeAgent) provide it; PTY handles don't.
+   * Conversation message history. Optional: AgentInteractive and
+   * FakeAgent provide it; future handles may not.
    * TeamManager reads it to recover round text emitted before its
    * event bridge attached.
    */
@@ -154,11 +128,10 @@ export interface TeamAgentHandle {
 }
 
 /**
- * Backend abstracts the display/pane management layer for multi-agent systems.
+ * Backend abstracts the agent management layer for multi-agent systems.
  *
- * Each display mode (in-process / tmux / iTerm2) implements this interface. The orchestration
- * layer (Arena, Team, etc.) delegates all pane operations through the backend,
- * making the display mode transparent.
+ * The orchestration layer (Arena, Team, etc.) delegates agent lifecycle
+ * operations through the backend.
  */
 export interface Backend {
   /** Backend type identifier. */
@@ -166,19 +139,16 @@ export interface Backend {
 
   /**
    * Initialize the backend.
-   * - in-process: runs in the current process (not yet implemented)
-   * - tmux: verifies tmux availability, creates session
-   * - iTerm2: verifies iTerm2 is running
    */
   init(): Promise<void>;
 
   // ─── Agent Lifecycle ────────────────────────────────────────
 
   /**
-   * Spawn a new agent subprocess.
+   * Spawn a new agent.
    *
-   * @param config - Agent spawn configuration (command, args, cwd, env, etc.)
-   * @returns Promise that resolves when the agent's pane/PTY is created and ready.
+   * @param config - Agent spawn configuration
+   * @returns Promise that resolves when the agent is created and ready.
    */
   spawnAgent(config: AgentSpawnConfig): Promise<void>;
 
@@ -188,9 +158,8 @@ export interface Backend {
   stopAgent(agentId: string): void;
 
   /**
-   * Get an in-process agent handle by id, when the backend keeps
-   * agents in the current process. PTY-based backends do not expose
-   * a handle and may omit this method.
+   * Get an in-process agent handle by id. Backends that keep no handle
+   * may omit this method.
    */
   getAgent?(agentId: string): TeamAgentHandle | undefined;
 
@@ -199,10 +168,9 @@ export interface Backend {
    * with, when the backend created one for an explicitly requested
    * per-agent route. Lets spawn callers verify a requested route
    * actually materialized instead of silently falling back to the
-   * parent's generator. PTY-based backends run each agent in its own
-   * process and may omit this method; note that TeamManager fails the
-   * spawn of a model-selecting definition on a backend that omits it,
-   * because absence makes the route unverifiable.
+   * parent's generator. A backend may omit this method; note that
+   * TeamManager fails the spawn of a model-selecting definition on a
+   * backend that omits it, because absence makes the route unverifiable.
    */
   getAgentContentGenerator?(agentId: string): ContentGenerator | undefined;
 
@@ -211,8 +179,7 @@ export interface Backend {
    * agent, when the backend swallowed the creation failure and fell
    * back to the parent's generator. Lets spawn callers surface the
    * underlying cause (missing API key, bad base URL, ...) instead of a
-   * bare "route did not materialize". PTY-based backends may omit this
-   * method.
+   * bare "route did not materialize". A backend may omit this method.
    */
   getAgentContentGeneratorError?(agentId: string): string | undefined;
 
@@ -222,7 +189,7 @@ export interface Backend {
   stopAll(): void;
 
   /**
-   * Clean up all resources (kill processes, destroy panes/sessions).
+   * Clean up all resources.
    */
   cleanup(): Promise<void>;
 
@@ -237,111 +204,4 @@ export interface Backend {
    * @returns true if all agents exited, false if timeout was reached.
    */
   waitForAll(timeoutMs?: number): Promise<boolean>;
-
-  // ─── Active Agent & Navigation ──────────────────────────────
-
-  /**
-   * Switch the active agent for screen capture and input routing.
-   */
-  switchTo(agentId: string): void;
-
-  /**
-   * Switch to the next agent in order.
-   */
-  switchToNext(): void;
-
-  /**
-   * Switch to the previous agent in order.
-   */
-  switchToPrevious(): void;
-
-  /**
-   * Get the ID of the currently active agent.
-   */
-  getActiveAgentId(): string | null;
-
-  // ─── Screen Capture ─────────────────────────────────────────
-
-  /**
-   * Get the screen snapshot for the currently active agent.
-   *
-   * @returns AnsiOutput or null if no active agent or not supported.
-   */
-  getActiveSnapshot(): AnsiOutput | null;
-
-  /**
-   * Get the screen snapshot for a specific agent.
-   *
-   * @param agentId - Agent to capture
-   * @param scrollOffset - Lines to scroll back from viewport (default: 0)
-   * @returns AnsiOutput or null if not found or not supported.
-   */
-  getAgentSnapshot(agentId: string, scrollOffset?: number): AnsiOutput | null;
-
-  /**
-   * Get the maximum scrollback length for an agent's terminal buffer.
-   *
-   * @returns Number of scrollable lines, or 0 if not supported.
-   */
-  getAgentScrollbackLength(agentId: string): number;
-
-  // ─── Input ──────────────────────────────────────────────────
-
-  /**
-   * Forward input to the currently active agent's PTY stdin.
-   *
-   * @returns true if input was forwarded, false otherwise.
-   */
-  forwardInput(data: string): boolean;
-
-  /**
-   * Write input to a specific agent's PTY stdin.
-   *
-   * @returns true if input was written, false otherwise.
-   */
-  writeToAgent(agentId: string, data: string): boolean;
-
-  // ─── Resize ─────────────────────────────────────────────────
-
-  /**
-   * Resize all agent terminals/panes.
-   */
-  resizeAll(cols: number, rows: number): void;
-
-  // ─── External Session Info ─────────────────────────────────
-
-  /**
-   * Get a user-facing hint for how to attach to the external display session.
-   *
-   * When the backend runs in external mode (e.g., a detached tmux server),
-   * this returns a shell command the user can run to view the agent panes.
-   * Returns null if not applicable (e.g., running inside tmux or iTerm2).
-   */
-  getAttachHint(): string | null;
-}
-
-/**
- * Optional tmux backend configuration.
- */
-export interface TmuxBackendOptions {
-  /** tmux server name for -L (when running outside tmux) */
-  serverName?: string;
-  /** tmux session name to use/create (when running outside tmux) */
-  sessionName?: string;
-  /** tmux window name to use/create (when running outside tmux) */
-  windowName?: string;
-  /** Pane title for this agent */
-  paneTitle?: string;
-  /** Border style for inactive panes (tmux style string, e.g. "fg=blue") */
-  paneBorderStyle?: string;
-  /** Border style for active pane (tmux style string, e.g. "fg=green,bold") */
-  paneActiveBorderStyle?: string;
-  /** Pane border format (default: "#{pane_title}") */
-  paneBorderFormat?: string;
-  /** Pane border status location */
-  paneBorderStatus?: 'top' | 'bottom' | 'off';
-  /** Leader pane width percentage (default: 30) */
-  leaderPaneWidthPercent?: number;
-  /** First split percent when inside tmux (default: 70) */
-  firstSplitPercent?: number;
 }

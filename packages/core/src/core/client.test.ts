@@ -54,7 +54,6 @@ import {
   SessionStartSource,
 } from '../hooks/types.js';
 import type { ModelsConfig } from '../models/modelsConfig.js';
-import { UnauthorizedError } from '../utils/errors.js';
 import { retryWithBackoff } from '../utils/retry.js';
 import {
   CompressionStatus,
@@ -617,7 +616,6 @@ describe('Gemini Client (client.ts)', () => {
       getCodeModeOnly: vi.fn().mockReturnValue(false),
       isTodoWriteEnabled: vi.fn().mockReturnValue(false),
       getStaticSystemPrefix: vi.fn().mockReturnValue(undefined),
-      setStaticSystemPrefix: vi.fn(),
       getFullContext: vi.fn().mockReturnValue(false),
       getSessionId: vi.fn().mockReturnValue('test-session-id'),
       takeActiveTodoReminder: vi.fn().mockReturnValue(undefined),
@@ -645,7 +643,6 @@ describe('Gemini Client (client.ts)', () => {
       takePendingManualPlanExitNotice: vi.fn().mockReturnValue(undefined),
       restorePendingManualPlanExitNotice: vi.fn(),
       getSdkMode: vi.fn().mockReturnValue(false),
-      getExperimentalZedIntegration: vi.fn().mockReturnValue(false),
       isInteractive: vi.fn().mockReturnValue(false),
       getDebugMode: vi.fn().mockReturnValue(false),
       getWorkspaceContext: vi.fn().mockReturnValue({
@@ -678,12 +675,9 @@ describe('Gemini Client (client.ts)', () => {
       // Explicit values are hard caps; the cap tests below set a finite value
       // and rely on hard-cap behavior.
       isMaxToolCallsPerTurnExplicit: vi.fn().mockReturnValue(true),
-      assertCanStartTurn: vi.fn().mockResolvedValue(undefined),
       getChatRecordingService: vi.fn().mockReturnValue(undefined),
       getFileHistoryService: vi.fn().mockReturnValue(mockFileHistoryService),
       getResumedSessionData: vi.fn().mockReturnValue(undefined),
-      getSessionRestoreRuntime: vi.fn().mockReturnValue(undefined),
-      getArenaAgentClient: vi.fn().mockReturnValue(null),
       getManagedAutoMemoryEnabled: vi.fn().mockReturnValue(true),
       isManagedMemoryAvailable: vi.fn().mockReturnValue(true),
       getMemoryRecallMode: vi.fn().mockReturnValue('structured'),
@@ -723,7 +717,6 @@ describe('Gemini Client (client.ts)', () => {
       getFileReadCache: vi.fn().mockReturnValue({
         clear: vi.fn(),
       }),
-      getRestoreAskUserQuestion: vi.fn().mockReturnValue(false),
     } as unknown as Config;
 
     // Real BaseLlmClient routes generateText through mockContentGenerator;
@@ -762,40 +755,6 @@ describe('Gemini Client (client.ts)', () => {
   });
 
   describe('initialize', () => {
-    it('keeps the restored tool boundary through startup reminder refresh', async () => {
-      const result: Content = {
-        role: 'user',
-        parts: [
-          {
-            functionResponse: {
-              id: 'ended',
-              name: 'update_goal',
-              response: {},
-            },
-          },
-        ],
-      };
-      vi.mocked(mockConfig.getSessionRestoreRuntime).mockReturnValue({
-        apiHistory: [result],
-        completedToolCallIds: ['ended'],
-        uiTelemetryEvents: [],
-      } as unknown as ReturnType<Config['getSessionRestoreRuntime']>);
-      const resumedClient = new LlmClient(mockConfig);
-      await resumedClient.initialize();
-      expect(resumedClient.getChat().getHistoryForRecovery()).toEqual([]);
-      await resumedClient.refreshStartupContextReminder();
-      expect(resumedClient.getChat().getHistoryForRecovery()).toEqual([]);
-      const input: Content = {
-        role: 'user',
-        parts: [{ text: 'next request' }],
-      };
-      resumedClient.getChat().addHistory(input);
-      expect(resumedClient.stripOrphanedUserEntriesFromHistory()).toEqual([
-        input,
-      ]);
-      expect(resumedClient.getHistory().at(-1)).toEqual(result);
-    });
-
     it('restores a completed tool boundary from the legacy transcript', async () => {
       const base = {
         sessionId: 'session',
@@ -871,12 +830,9 @@ describe('Gemini Client (client.ts)', () => {
       expect(resumedClient.getHistory().at(-1)).toEqual(result);
     });
 
-    it('initializes from the selective runtime projection without the full transcript', async () => {
-      // Crossing a macrotask boundary is what makes this an oracle for the
-      // `await`: a mock that returns `undefined` (or resolves in the same
-      // tick) leaves a bare call indistinguishable from an awaited one, and
-      // the restored skills' hooks and allow rules have to be in force
-      // before the resumed session takes its first turn.
+    it('does not borrow another session token count during restore without usage', async () => {
+      // Both call sites must finish restoring skills before initialize()
+      // resolves.
       let skillsRestored = false;
       const restoreLoadedSkillsFromHistory = vi.fn(async () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
@@ -888,94 +844,28 @@ describe('Gemini Client (client.ts)', () => {
             ? ({ restoreLoadedSkillsFromHistory } as never)
             : undefined,
       );
-      const seedResumeTokenCountsSpy = vi.spyOn(
-        LlmChat.prototype,
-        'seedResumeTokenCounts',
+      vi.mocked(mockConfig.getResumedSessionData).mockReturnValue({
+        conversation: {
+          sessionId: 'resumed-session-id',
+          projectHash: 'project-hash',
+          startTime: new Date(0).toISOString(),
+          lastUpdated: new Date(0).toISOString(),
+          messages: [],
+        },
+        filePath: '/test/session.jsonl',
+        lastCompletedUuid: null,
+      });
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
+        123_456,
       );
-      const apiHistory = [
-        { role: 'user' as const, parts: [{ text: 'projected history' }] },
-      ];
-      const uiEvent = { type: 'projected-event' };
-      vi.mocked(mockConfig.getSessionRestoreRuntime).mockReturnValue({
-        apiHistory,
-        resumeTokenCounts: {
-          promptTokenCount: 321,
-          outputTokenCount: 45,
-          isEstimated: false,
-        },
-        uiTelemetryEvents: [uiEvent],
-        recording: {
-          lastCompletedUuid: 'record-1',
-          turnParentUuids: [],
-        },
-        goalRecords: [],
-        initialTurn: 0,
-        backgroundNotificationTaskIds: [],
-      } as unknown as ReturnType<Config['getSessionRestoreRuntime']>);
 
       const resumedClient = new LlmClient(mockConfig);
       await resumedClient.initialize();
 
-      expect(resumedClient.getHistory().at(-1)).toEqual(apiHistory[0]);
-      expect(uiTelemetryService.resetSession).toHaveBeenCalledWith(
-        'test-session-id',
-      );
-      expect(uiTelemetryService.addEvent).toHaveBeenCalledWith(
-        uiEvent,
-        'test-session-id',
-      );
-      expect(seedResumeTokenCountsSpy).toHaveBeenCalledWith(321, 45, false);
-      expect(restoreLoadedSkillsFromHistory).toHaveBeenCalledWith(apiHistory);
+      expect(resumedClient.getChat().getLastPromptTokenCount()).toBe(0);
+      expect(resumedClient.getChat().getLastOutputTokenCount()).toBe(0);
       expect(skillsRestored).toBe(true);
     });
-
-    it.each(['selective', 'legacy'])(
-      'does not borrow another session token count during %s restore without usage',
-      async (restore) => {
-        // Both call sites must finish restoring skills before initialize()
-        // resolves.
-        let skillsRestored = false;
-        const restoreLoadedSkillsFromHistory = vi.fn(async () => {
-          await new Promise((resolve) => setTimeout(resolve, 0));
-          skillsRestored = true;
-        });
-        vi.mocked(mockConfig.getToolRegistry().getTool).mockImplementation(
-          (name: string) =>
-            name === ToolNames.SKILL
-              ? ({ restoreLoadedSkillsFromHistory } as never)
-              : undefined,
-        );
-        if (restore === 'selective') {
-          vi.mocked(mockConfig.getSessionRestoreRuntime).mockReturnValue({
-            apiHistory: [
-              { role: 'model', parts: [{ text: 'Saved reply without usage' }] },
-            ],
-            uiTelemetryEvents: [],
-          } as unknown as ReturnType<Config['getSessionRestoreRuntime']>);
-        }
-        vi.mocked(mockConfig.getResumedSessionData).mockReturnValue({
-          conversation: {
-            sessionId: 'resumed-session-id',
-            projectHash: 'project-hash',
-            startTime: new Date(0).toISOString(),
-            lastUpdated: new Date(0).toISOString(),
-            messages: [],
-          },
-          filePath: '/test/session.jsonl',
-          lastCompletedUuid: null,
-        });
-        vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-          123_456,
-        );
-
-        const resumedClient = new LlmClient(mockConfig);
-        await resumedClient.initialize();
-
-        expect(resumedClient.getChat().getLastPromptTokenCount()).toBe(0);
-        expect(resumedClient.getChat().getLastOutputTokenCount()).toBe(0);
-        expect(skillsRestored).toBe(true);
-      },
-    );
 
     it('seeds resumed chat with previous response output token count', async () => {
       const seedResumeTokenCountsSpy = vi.spyOn(
@@ -2240,83 +2130,6 @@ describe('Gemini Client (client.ts)', () => {
     });
   });
 
-  describe('refreshStartupContextReminder', () => {
-    it('removes the startup entry when rebuilding produces no reminder parts', async () => {
-      const currentHistory: Content[] = [
-        {
-          role: 'user',
-          parts: [
-            {
-              text: '<system-reminder>\nold deferred reminder\n</system-reminder>',
-            },
-          ],
-        },
-        { role: 'user', parts: [{ text: 'hello' }] },
-        { role: 'model', parts: [{ text: 'hi' }] },
-      ];
-      const mockChat: Partial<LlmChat> = {
-        getCompletedToolCallIds: vi.fn().mockReturnValue(undefined),
-        getHistory: vi.fn().mockReturnValue(currentHistory),
-        setHistory: vi.fn(),
-      };
-      client['chat'] = mockChat as LlmChat;
-      vi.mocked(getInitialChatHistory).mockResolvedValueOnce([[], []]);
-
-      await client.refreshStartupContextReminder();
-
-      expect(mockChat.setHistory).toHaveBeenCalledWith(
-        currentHistory.slice(1),
-        undefined,
-      );
-    });
-
-    it('removes the full legacy 2-entry prelude, not just the first entry', async () => {
-      // Restored pre-PR sessions store startup context as a
-      // [user(env), model("Got it. Thanks for the context!")] pair, so
-      // getStartupContextLength returns 2. A hardcoded slice(1) would leave
-      // the orphaned model ack behind; slicing by the detected length removes
-      // both legacy entries before re-prepending the fresh prelude.
-      const legacyEnv: Content = {
-        role: 'user',
-        parts: [{ text: 'This is the environment context.' }],
-      };
-      const legacyAck: Content = {
-        role: 'model',
-        parts: [{ text: 'Got it. Thanks for the context!' }],
-      };
-      const currentHistory: Content[] = [
-        legacyEnv,
-        legacyAck,
-        { role: 'user', parts: [{ text: 'hello' }] },
-        { role: 'model', parts: [{ text: 'hi' }] },
-      ];
-      const newPrelude: Content = {
-        role: 'user',
-        parts: [
-          { text: '<system-reminder>\nfresh prelude\n</system-reminder>' },
-        ],
-      };
-      const mockChat: Partial<LlmChat> = {
-        getCompletedToolCallIds: vi.fn().mockReturnValue(undefined),
-        getHistory: vi.fn().mockReturnValue(currentHistory),
-        setHistory: vi.fn(),
-      };
-      client['chat'] = mockChat as LlmChat;
-      vi.mocked(getInitialChatHistory).mockResolvedValueOnce([
-        [newPrelude],
-        [],
-      ]);
-
-      await client.refreshStartupContextReminder();
-
-      // slice(2) drops BOTH legacy entries; slice(1) would have left legacyAck.
-      expect(mockChat.setHistory).toHaveBeenCalledWith(
-        [newPrelude, ...currentHistory.slice(2)],
-        undefined,
-      );
-    });
-  });
-
   describe('startChat — repair orphan tool_use on resume', () => {
     it('synthesizes a functionResponse for a transcript ending in a dangling model[functionCall]', async () => {
       // --resume of a session that crashed (OOM / SIGKILL / process exit)
@@ -2413,90 +2226,6 @@ describe('Gemini Client (client.ts)', () => {
       expect(
         (fr?.functionResponse?.response as { error?: string })?.error,
       ).toMatch(/interrupted/i);
-    });
-
-    it('skips orphan repair for a restorable ask_user_question when restore is on', async () => {
-      vi.mocked(mockConfig.getRestoreAskUserQuestion).mockReturnValue(true);
-
-      await client.startChat([
-        { role: 'user', parts: [{ text: 'pick one' }] },
-        {
-          role: 'model',
-          parts: [
-            {
-              functionCall: {
-                id: 'call_auq_resume',
-                name: 'ask_user_question',
-                args: {
-                  questions: [
-                    {
-                      question: 'Which approach?',
-                      header: 'Approach',
-                      options: [
-                        { label: 'Polling', description: 'Poll the API' },
-                        { label: 'Webhook', description: 'Use a webhook' },
-                      ],
-                    },
-                  ],
-                },
-              },
-            } as never,
-          ],
-        },
-      ]);
-
-      const history = client.getHistory();
-      const danglingIdx = history.findIndex(
-        (h) =>
-          h.role === 'model' &&
-          h.parts?.some((p) => p.functionCall?.id === 'call_auq_resume'),
-      );
-      expect(danglingIdx).toBeGreaterThanOrEqual(0);
-      expect(history[danglingIdx + 1]).toBeUndefined();
-      const hasFunctionResponse = history.some((h) =>
-        h.parts?.some((p) => p.functionResponse?.id === 'call_auq_resume'),
-      );
-      expect(hasFunctionResponse).toBe(false);
-    });
-
-    it('repairs a restorable ask_user_question when restore preservation is suppressed', async () => {
-      vi.mocked(mockConfig.getRestoreAskUserQuestion).mockReturnValue(true);
-      Object.assign(mockConfig, {
-        getPreserveRestorableAskUserQuestion: vi.fn().mockReturnValue(false),
-      });
-
-      await client.startChat([
-        { role: 'user', parts: [{ text: 'pick one' }] },
-        {
-          role: 'model',
-          parts: [
-            {
-              functionCall: {
-                id: 'call_auq_resume',
-                name: 'ask_user_question',
-                args: {
-                  questions: [
-                    {
-                      question: 'Which approach?',
-                      header: 'Approach',
-                      options: [
-                        { label: 'Polling', description: 'Poll the API' },
-                        { label: 'Webhook', description: 'Use a webhook' },
-                      ],
-                    },
-                  ],
-                },
-              },
-            } as never,
-          ],
-        },
-      ]);
-
-      const history = client.getHistory();
-      const hasFunctionResponse = history.some((h) =>
-        h.parts?.some((p) => p.functionResponse?.id === 'call_auq_resume'),
-      );
-      expect(hasFunctionResponse).toBe(true);
     });
 
     it('is a no-op when the resumed transcript has no dangling tool_use', async () => {
@@ -3815,24 +3544,6 @@ describe('Gemini Client (client.ts)', () => {
       expect(
         client.getChat()['generationConfig'].systemInstruction,
       ).not.toContain('Host Git snapshot');
-    });
-
-    it('records the gitStatus-free base as the static system prefix on Config', () => {
-      vi.mocked(getCoreSystemPrompt).mockReturnValueOnce('core base prompt');
-      vi.mocked(getRecentGitStatus).mockReturnValueOnce('Git snapshot A');
-
-      const instruction = (
-        client as unknown as { getMainSessionSystemInstruction: () => string }
-      ).getMainSessionSystemInstruction();
-
-      // The recorded prefix must be exactly the instruction minus the
-      // volatile git tail — that's the boundary the Anthropic converter's
-      // startsWith split relies on for the early cache breakpoint.
-      const recorded = vi
-        .mocked(client['config'].setStaticSystemPrefix)
-        .mock.calls.at(-1)?.[0];
-      expect(recorded).toBeTruthy();
-      expect(instruction).toBe(`${recorded}\n\nGit snapshot A`);
     });
   });
 
@@ -6557,47 +6268,6 @@ describe('Gemini Client (client.ts)', () => {
       expect(history).not.toContain('image-bytes');
       expect(history).toContain('pdf-bytes');
       expect(getCacheSafeParams()?.sessionId).toBe('test-session-id');
-    });
-
-    it.each([
-      SendMessageType.UserQuery,
-      SendMessageType.Cron,
-      SendMessageType.Notification,
-      SendMessageType.Teammate,
-    ])('checks session writer admission before a %s turn', async (type) => {
-      const failure = new Error('writer admission failed');
-      vi.mocked(mockConfig.assertCanStartTurn).mockRejectedValueOnce(failure);
-
-      const stream = client.sendMessageStream(
-        [{ text: 'blocked' }],
-        new AbortController().signal,
-        `prompt-${type}`,
-        { type },
-      );
-
-      await expect(stream.next()).rejects.toBe(failure);
-      expect(mockTurnRunFn).not.toHaveBeenCalled();
-    });
-
-    it('does not re-run session writer admission for a mid-turn hook continuation', async () => {
-      mockTurnRunFn.mockReturnValue(
-        (async function* () {
-          yield { type: LlmEventType.Content, value: 'continued' };
-        })(),
-      );
-
-      const stream = client.sendMessageStream(
-        [{ text: 'continue' }],
-        new AbortController().signal,
-        'prompt-hook',
-        { type: SendMessageType.Hook },
-      );
-      for await (const _ of stream) {
-        // drain
-      }
-
-      expect(mockConfig.assertCanStartTurn).not.toHaveBeenCalled();
-      expect(mockTurnRunFn).toHaveBeenCalled();
     });
 
     // Delivery-stage coverage for the deterministic fast path. The model
@@ -9640,85 +9310,6 @@ describe('Gemini Client (client.ts)', () => {
       expect(discardCalls).toHaveLength(0);
     });
 
-    it('should log abort discard telemetry when arena cancels with a pending prefetch', async () => {
-      mockMemoryManager.recall.mockReturnValue(new Promise(() => {}));
-
-      const mockArenaAgentClient = {
-        checkControlSignal: vi
-          .fn()
-          .mockResolvedValueOnce(null)
-          .mockResolvedValueOnce({ type: 'cancel', reason: 'stop' }),
-        reportCancelled: vi.fn().mockResolvedValue(undefined),
-        reportCompleted: vi.fn().mockResolvedValue(undefined),
-        reportError: vi.fn().mockResolvedValue(undefined),
-        updateStatus: vi.fn().mockResolvedValue(undefined),
-      };
-      vi.mocked(mockConfig.getArenaAgentClient).mockReturnValue(
-        mockArenaAgentClient as unknown as ReturnType<
-          Config['getArenaAgentClient']
-        >,
-      );
-
-      client['chat'] = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-      } as unknown as LlmChat;
-
-      // Turn 1: prefetch fires, tool call preserves it past end-of-turn.
-      mockTurnRunFn.mockReturnValue(
-        (async function* () {
-          yield { type: 'content', value: 'Hello' };
-          yield {
-            type: 'tool_call_request',
-            value: {
-              callId: 'call-1',
-              name: 'foo',
-              args: {},
-              isClientInitiated: false,
-              prompt_id: 'test',
-            },
-          };
-        })(),
-      );
-
-      const stream1 = client.sendMessageStream(
-        [{ text: 'first turn' }],
-        new AbortController().signal,
-        'prompt-id-arena-prefetch-1',
-        { type: SendMessageType.UserQuery },
-      );
-      for await (const _ of stream1) {
-        // consume
-      }
-
-      expect(client['pendingMemoryPrefetch']).toBeDefined();
-
-      // Turn 2: arena control signal cancels before the turn runs.
-      const stream2 = client.sendMessageStream(
-        [{ text: 'tool result' }],
-        new AbortController().signal,
-        'prompt-id-arena-prefetch-2',
-        { type: SendMessageType.ToolResult },
-      );
-      for await (const _ of stream2) {
-        // consume
-      }
-
-      expect(mockArenaAgentClient.reportCancelled).toHaveBeenCalled();
-      expect(logMemoryRecallDelivery).toHaveBeenCalledWith(
-        mockConfig,
-        expect.objectContaining({
-          phase: 'refined',
-          delivery_point: 'discarded',
-          discard_reason: 'abort',
-          strategy: 'none',
-          docs_selected: 0,
-          latency_ms: expect.any(Number),
-        }),
-      );
-      expect(client['pendingMemoryPrefetch']).toBeUndefined();
-    });
-
     it('should log only one terminal event for the same prefetch handle', () => {
       const result = {
         prompt: '## Relevant memory\n\nOne-shot.',
@@ -12241,177 +11832,6 @@ describe('Gemini Client (client.ts)', () => {
           errorType: 'api_error',
         },
       );
-    });
-
-    it('reports a safe actionable Arena category for API errors', async () => {
-      const arenaAgentClient = {
-        checkControlSignal: vi.fn().mockResolvedValue(null),
-        reportCancelled: vi.fn().mockResolvedValue(undefined),
-        reportCompleted: vi.fn().mockResolvedValue(undefined),
-        reportError: vi.fn().mockResolvedValue(undefined),
-        updateStatus: vi.fn().mockResolvedValue(undefined),
-      };
-      vi.mocked(mockConfig.getArenaAgentClient).mockReturnValue(
-        arenaAgentClient as unknown as ReturnType<
-          Config['getArenaAgentClient']
-        >,
-      );
-      mockTurnRunFn.mockReturnValue(
-        (async function* () {
-          yield {
-            type: LlmEventType.Error,
-            value: {
-              error: {
-                message: 'Bearer secret-token in /private/user/path',
-                status: 429,
-              },
-            },
-          };
-        })(),
-      );
-
-      const stream = client.sendMessageStream(
-        [{ text: 'Hi' }],
-        new AbortController().signal,
-        'prompt-id-arena-error',
-      );
-      for await (const _ of stream) {
-        // consume stream
-      }
-
-      expect(arenaAgentClient.reportError).toHaveBeenCalledWith(
-        'Rate limit exceeded',
-      );
-      expect(
-        JSON.stringify(arenaAgentClient.reportError.mock.calls),
-      ).not.toContain('secret-token');
-      expect(mockInteractionTelemetry.endInteractionSpan).toHaveBeenCalledWith(
-        'error',
-        {
-          promptId: 'prompt-id-arena-error',
-          errorMessage: 'unknown error',
-          errorType: 'api_error',
-        },
-      );
-    });
-
-    it('preserves the provider error outcome when Arena reporting fails', async () => {
-      const arenaAgentClient = {
-        checkControlSignal: vi.fn().mockResolvedValue(null),
-        reportCancelled: vi.fn().mockResolvedValue(undefined),
-        reportCompleted: vi.fn().mockResolvedValue(undefined),
-        reportError: vi
-          .fn()
-          .mockRejectedValue(new Error('status write failed')),
-        updateStatus: vi.fn().mockResolvedValue(undefined),
-      };
-      vi.mocked(mockConfig.getArenaAgentClient).mockReturnValue(
-        arenaAgentClient as unknown as ReturnType<
-          Config['getArenaAgentClient']
-        >,
-      );
-      mockTurnRunFn.mockReturnValue(
-        (async function* () {
-          yield {
-            type: LlmEventType.Error,
-            value: {
-              error: { message: 'provider failed', status: 500 },
-            },
-          };
-        })(),
-      );
-
-      const events = await fromAsync(
-        client.sendMessageStream(
-          [{ text: 'Hi' }],
-          new AbortController().signal,
-          'prompt-id-arena-reporting-error',
-        ),
-      );
-
-      expect(events).toEqual([
-        {
-          type: LlmEventType.Error,
-          value: {
-            error: { message: 'provider failed', status: 500 },
-          },
-        },
-      ]);
-      expect(mockInteractionTelemetry.endInteractionSpan).toHaveBeenCalledWith(
-        'error',
-        {
-          promptId: 'prompt-id-arena-reporting-error',
-          errorMessage: 'unknown error',
-          errorType: 'api_error',
-        },
-      );
-    });
-
-    it('reports authentication failures to Arena when Turn rethrows them', async () => {
-      const arenaAgentClient = {
-        checkControlSignal: vi.fn().mockResolvedValue(null),
-        reportCancelled: vi.fn().mockResolvedValue(undefined),
-        reportCompleted: vi.fn().mockResolvedValue(undefined),
-        reportError: vi.fn().mockResolvedValue(undefined),
-        updateStatus: vi.fn().mockResolvedValue(undefined),
-      };
-      vi.mocked(mockConfig.getArenaAgentClient).mockReturnValue(
-        arenaAgentClient as unknown as ReturnType<
-          Config['getArenaAgentClient']
-        >,
-      );
-      mockTurnRunFn.mockImplementationOnce(async function* () {
-        yield* [];
-        throw new UnauthorizedError('Bearer secret-token');
-      });
-
-      await expect(
-        fromAsync(
-          client.sendMessageStream(
-            [{ text: 'Hi' }],
-            new AbortController().signal,
-            'prompt-id-arena-auth-error',
-          ),
-        ),
-      ).rejects.toThrow(UnauthorizedError);
-
-      expect(arenaAgentClient.reportError).toHaveBeenCalledWith(
-        'Authentication failed',
-      );
-      expect(
-        JSON.stringify(arenaAgentClient.reportError.mock.calls),
-      ).not.toContain('secret-token');
-    });
-
-    it('rethrows authentication failures when Arena reporting fails', async () => {
-      const arenaAgentClient = {
-        checkControlSignal: vi.fn().mockResolvedValue(null),
-        reportCancelled: vi.fn().mockResolvedValue(undefined),
-        reportCompleted: vi.fn().mockResolvedValue(undefined),
-        reportError: vi
-          .fn()
-          .mockRejectedValue(new Error('status write failed')),
-        updateStatus: vi.fn().mockResolvedValue(undefined),
-      };
-      vi.mocked(mockConfig.getArenaAgentClient).mockReturnValue(
-        arenaAgentClient as unknown as ReturnType<
-          Config['getArenaAgentClient']
-        >,
-      );
-      mockTurnRunFn.mockImplementationOnce(async function* () {
-        yield* [];
-        throw new UnauthorizedError('Bearer secret-token');
-      });
-
-      await expect(
-        fromAsync(
-          client.sendMessageStream(
-            [{ text: 'Hi' }],
-            new AbortController().signal,
-            'prompt-id-arena-auth-reporting-error',
-          ),
-        ),
-      ).rejects.toThrow(UnauthorizedError);
     });
 
     it('should not call checkNextSpeaker when turn.run() yields a value then an error', async () => {
@@ -15754,20 +15174,20 @@ describe('Gemini Client (client.ts)', () => {
     });
 
     it.each([
-      ['interactive', true, false],
-      ['acp', false, true],
-      ['headless', false, false],
+      ['interactive', true, 'text'],
+      ['acp', false, 'stream-json'],
+      ['headless', false, 'text'],
     ] as const)(
       'should pass %s mode to the core system prompt',
-      async (mode, interactive, acp) => {
+      async (mode, interactive, inputFormat) => {
         const contents = [{ role: 'user', parts: [{ text: 'hello' }] }];
         const abortSignal = new AbortController().signal;
 
         vi.mocked(getCoreSystemPrompt).mockClear();
         vi.mocked(client['config'].isInteractive).mockReturnValue(interactive);
-        vi.mocked(
-          client['config'].getExperimentalZedIntegration,
-        ).mockReturnValue(acp);
+        (
+          client['config'] as unknown as { getInputFormat: () => string }
+        ).getInputFormat = () => inputFormat;
 
         await client.generateContent(contents, {}, abortSignal, SIDE_MODEL);
 

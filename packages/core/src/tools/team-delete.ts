@@ -14,7 +14,7 @@ import { ToolNames, ToolDisplayNames } from './tool-names.js';
 import type { Config } from '../config/config.js';
 import { deleteTeamDirs } from '../agents/team/teamHelpers.js';
 import { disposeInboxLocks } from '../agents/team/mailbox.js';
-import { unregisterLeader } from '../agents/team/leaderPermissionBridge.js';
+
 import { isTeammate } from '../agents/team/identity.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
 
@@ -117,7 +117,6 @@ class TeamDeleteInvocation extends BaseToolInvocation<
 
     this.config.setTeamManager(null);
     this.config.setTeamContext(null);
-    unregisterLeader();
 
     if (fsCleanupError) {
       // State was reset so the session is not wedged, but the cleanup

@@ -283,12 +283,8 @@ export interface DrainOptions {
   timeoutMs?: number;
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-export const EXTRACT_TASK_TYPE = 'managed-auto-memory-extraction' as const;
 export const DREAM_TASK_TYPE = 'managed-auto-memory-dream' as const;
 export const USER_DREAM_TASK_TYPE = 'managed-user-auto-memory-dream' as const;
-export const SKILL_REVIEW_TASK_TYPE = 'managed-skill-extractor' as const;
 export const AUTO_SKILL_THRESHOLD = 20;
 
 export const DEFAULT_AUTO_DREAM_MIN_HOURS = 24;
@@ -2558,9 +2554,3 @@ export class MemoryManager {
     this.dreamLastSessionScanAt.clear();
   }
 }
-
-/**
- * Application-wide singleton. In a fully wired application Config creates its
- * own MemoryManager accessible via `config.getMemoryManager()`.
- */
-export const globalMemoryManager = new MemoryManager();

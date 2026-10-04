@@ -138,9 +138,10 @@ export class SessionApiHistoryAccumulator {
           | undefined;
         const previous = this.lastMaterialRecord;
         const parts = previous?.message?.parts;
-        // ACP records local command input as user and its output as a system
-        // result. Neither belongs in model history. TUI invocations fence off
-        // earlier input, including custom commands submitted to the model.
+        // Older transcripts record local command input as user and its output
+        // as a system result. Neither belongs in model history. TUI
+        // invocations fence off earlier input, including custom commands
+        // submitted to the model.
         if (
           payload?.phase === 'result' &&
           payload.sentToModel !== true &&
@@ -303,13 +304,6 @@ export function isApiHistoryCompressionCandidate(record: ChatRecord): boolean {
     | ChatCompressionRecordPayload
     | undefined;
   return Boolean(payload?.compressedHistory);
-}
-
-export function buildApiHistoryFromConversation(
-  conversation: { messages: readonly ChatRecord[] },
-  options: BuildApiHistoryOptions = {},
-): Content[] {
-  return buildSessionHistoryFromConversation(conversation, options).apiHistory;
 }
 
 export function buildSessionHistoryFromConversation(

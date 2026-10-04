@@ -15,13 +15,11 @@ import {
 } from 'vitest';
 import { createUserContent, type Content } from '@google/genai';
 import {
-  buildAddedMcpToolsReminder,
   buildAddedAgentsReminder,
   buildDeferredToolsReminder,
   buildMcpServerInstructionsReminder,
   buildMcpServerInstructionsReminderFromEntries,
   buildAvailableSkillsReminder,
-  buildAddedSkillsReminder,
   buildChangedAgentsReminder,
   buildChangedMcpToolsReminder,
   buildChangedSkillsReminder,
@@ -37,7 +35,6 @@ import {
   SYSTEM_REMINDER_OPEN,
   SYSTEM_REMINDER_CLOSE,
 } from './environmentContext.js';
-import { prependToFirstTextPart } from '../utils/partUtils.js';
 import type { Config } from '../config/config.js';
 import type { ToolRegistry } from '../tools/tool-registry.js';
 import { ToolNames } from '../tools/tool-names.js';
@@ -851,27 +848,6 @@ describe('startup reminder builders', () => {
     );
   });
 
-  it('renders added MCP tools without bundled tools', () => {
-    const reminder = buildAddedMcpToolsReminder([
-      { name: 'write_report', description: 'Write a report.' },
-      {
-        name: 'mcp__schedule-server__cron_list',
-        description: 'List scheduled jobs.\nSecond line ignored.',
-        serverName: 'schedule-server',
-      },
-    ]);
-
-    expect(reminder).toMatch(/^<system-reminder>[\s\S]*<\/system-reminder>$/);
-    expect(reminder).toContain('became available after startup');
-    expect(reminder).not.toContain('### Bundled');
-    expect(reminder).not.toContain('write_report');
-    expect(reminder).toContain('### MCP servers');
-    expect(reminder).toContain('#### schedule-server');
-    expect(reminder).toContain(
-      '- "mcp__schedule-server__cron_list": "List scheduled jobs."',
-    );
-  });
-
   it('renders MCP server instructions as a separate reminder', () => {
     const reminder = buildMcpServerInstructionsReminder(
       registry({
@@ -946,16 +922,18 @@ describe('isSystemReminderContent', () => {
   // IDE mode merges the reminder into the prompt's text part, so the single
   // part trails the real prompt after the close tag — not structural.
   it('is false for an IDE-merged prompt (close tag mid-string)', () => {
-    const merged = createUserContent(
-      prependToFirstTextPart([{ text: 'what does this do?' }], ide),
-    );
+    const merged = createUserContent([
+      { text: `${ide}\n\nwhat does this do?` },
+    ]);
     expect(merged.parts).toHaveLength(1);
     expect(isSystemReminderContent(merged)).toBe(false);
   });
 
   it('is false for an IDE-merged prompt beside a separate reminder', () => {
-    const parts = prependToFirstTextPart([{ text: 'what does this do?' }], ide);
-    const content = createUserContent([wrap('plan mode'), ...parts]);
+    const content = createUserContent([
+      wrap('plan mode'),
+      { text: `${ide}\n\nwhat does this do?` },
+    ]);
     expect(isSystemReminderContent(content)).toBe(false);
   });
 });
@@ -987,12 +965,9 @@ describe('getStartupContextLength', () => {
   // Empty-prelude session whose first turn is IDE-merged must not be mistaken
   // for a startup reminder.
   it('is 0 for an IDE-merged first turn', () => {
-    const merged = createUserContent(
-      prependToFirstTextPart(
-        [{ text: 'what does this do?' }],
-        wrap('Active file: /repo/foo.ts'),
-      ),
-    );
+    const merged = createUserContent([
+      { text: `${wrap('Active file: /repo/foo.ts')}\n\nwhat does this do?` },
+    ]);
     expect(getStartupContextLength([merged])).toBe(0);
   });
 
@@ -1268,60 +1243,6 @@ describe('buildAvailableSkillsReminder', () => {
     expect(result!.reminder).not.toContain(
       'Second line that should be dropped',
     );
-  });
-});
-
-describe('buildAddedSkillsReminder', () => {
-  it('returns null for empty entries', () => {
-    const result = buildAddedSkillsReminder([]);
-    expect(result).toBeNull();
-  });
-
-  it('returns a system-reminder with newly available skills', () => {
-    const entries: AvailableSkillEntry[] = [
-      { name: 'new-skill', description: 'Just added', level: 'project' },
-    ];
-    const result = buildAddedSkillsReminder(entries);
-    expect(result).not.toBeNull();
-    expect(result).toContain(SYSTEM_REMINDER_OPEN);
-    expect(result).toContain(SYSTEM_REMINDER_CLOSE);
-    expect(result).toContain('<available_skills>');
-    expect(result).toContain('new-skill');
-    expect(result).toContain('became available after startup');
-  });
-
-  it('includes multiple entries', () => {
-    const entries: AvailableSkillEntry[] = [
-      { name: 'skill-a', description: 'First', level: 'user' },
-      { name: 'skill-b', description: 'Second', level: 'project' },
-    ];
-    const result = buildAddedSkillsReminder(entries);
-    expect(result).toContain('skill-a');
-    expect(result).toContain('skill-b');
-  });
-
-  it('preserves descriptions longer than 200 characters', () => {
-    const longDesc = 'A'.repeat(300) + '\nSecond line that should be dropped';
-    const entries: AvailableSkillEntry[] = [
-      { name: 'mcp-skill', description: longDesc },
-    ];
-    const result = buildAddedSkillsReminder(entries);
-    expect(result).not.toBeNull();
-    expect(result).toContain(longDesc);
-  });
-
-  it('preserves multi-line descriptions', () => {
-    const entries: AvailableSkillEntry[] = [
-      {
-        name: 'multiline-skill',
-        description: 'First line only\nDrop this\nAnd this',
-      },
-    ];
-    const result = buildAddedSkillsReminder(entries);
-    expect(result).not.toBeNull();
-    expect(result).toContain('First line only');
-    expect(result).toContain('Drop this');
-    expect(result).toContain('And this');
   });
 });
 

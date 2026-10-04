@@ -163,7 +163,7 @@ describe('workflowsCommand', () => {
     expect(result.content).toContain('Recent');
   });
 
-  it('omits the interactive tip in non_interactive / acp modes', async () => {
+  it('omits the interactive tip in non_interactive mode', async () => {
     const ctx = createMockCommandContext({
       services: {
         config: {
@@ -333,7 +333,7 @@ describe('workflowsCommand', () => {
     expect(pauseMock).toHaveBeenCalledWith('wf_guard');
   });
 
-  it.each(['non_interactive', 'acp'] as const)(
+  it.each(['non_interactive'] as const)(
     'does not expose pause control in %s mode',
     async (executionMode) => {
       const ctx = createMockCommandContext({

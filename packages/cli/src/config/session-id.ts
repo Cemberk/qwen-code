@@ -12,11 +12,6 @@ const INTERNAL_SESSION_ID_REGEX =
 const CALLER_SUPPLIED_SESSION_ID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export type CallerSuppliedSessionIdParseResult =
-  | { kind: 'absent' }
-  | { kind: 'invalid' }
-  | { kind: 'valid'; sessionId: string };
-
 export function isValidSessionId(value: string): boolean {
   return INTERNAL_SESSION_ID_REGEX.test(value);
 }
@@ -29,17 +24,4 @@ export function normalizeSessionIdForLookup(value: string): string {
   return CALLER_SUPPLIED_SESSION_ID_REGEX.test(value)
     ? value.toLowerCase()
     : value;
-}
-
-export function parseCallerSuppliedSessionId(
-  value: unknown,
-): CallerSuppliedSessionIdParseResult {
-  if (value === undefined || value === null) return { kind: 'absent' };
-  if (
-    typeof value !== 'string' ||
-    !CALLER_SUPPLIED_SESSION_ID_REGEX.test(value)
-  ) {
-    return { kind: 'invalid' };
-  }
-  return { kind: 'valid', sessionId: normalizeSessionIdForLookup(value) };
 }

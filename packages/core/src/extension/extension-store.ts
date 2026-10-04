@@ -40,11 +40,6 @@ export interface ExtensionStoreSnapshot {
   extensions: Record<string, ExtensionPolicy>;
 }
 
-export interface ExtensionStoreBatchMutationOutcome {
-  snapshot: ExtensionStoreSnapshot;
-  updated: boolean;
-}
-
 export interface ExtensionIdentity {
   id: string;
   name: string;
@@ -67,21 +62,7 @@ export interface ExtensionStoreOptions {
   enablementPath?: string;
 }
 
-export type ExtensionStoreEmptiness =
-  | { status: 'empty' }
-  | { status: 'installed' | 'unknown'; reason: string };
-
 const STORE_TRANSACTION_DIRS = ['staging', 'rollback', 'transactions'];
-const STORE_FILES = new Set(['state.json', 'state.previous.json', 'lock']);
-// What a write of a state file leaves when it stops before its rename; the
-// store never reads it.
-const STATE_WRITE_LEFTOVER = /^state(?:\.previous)?\.json\.[0-9a-f]{12}\.tmp$/;
-
-// The store names nothing with a leading dot; such entries belong to the file
-// system or its browsers, such as `.DS_Store`.
-function isStoreName(name: string): boolean {
-  return !name.startsWith('.');
-}
 
 export type InitialExtensionActivation =
   | { scope: 'user' }
@@ -162,17 +143,6 @@ function canonicalizeWorkspacePath(workspacePath: string): string {
     return fs.realpathSync.native(resolved);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return resolved;
-    throw error;
-  }
-}
-
-async function readDirectoryIfPresent(
-  directory: string,
-): Promise<string[] | null> {
-  try {
-    return await fsp.readdir(directory);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
     throw error;
   }
 }
@@ -404,185 +374,6 @@ export class ExtensionStore {
       'plugin-data',
       'agent-plugins',
       extensionId,
-    );
-  }
-
-  /**
-   * Whether the installed extension set is provably empty, read without the
-   * store's lock, recovery or initialization and without writing anything.
-   * Evidence that is inconsistent, in flight or changes while it is read is
-   * `unknown`, never `empty`.
-   */
-  async inspectEmptiness(): Promise<ExtensionStoreEmptiness> {
-    try {
-      const before = await this.emptinessFingerprint();
-      const result = await this.inspectEmptinessOnce();
-      if ((await this.emptinessFingerprint()) !== before) {
-        return {
-          status: 'unknown',
-          reason: 'the extension store changed while it was read',
-        };
-      }
-      return result;
-    } catch (error) {
-      return {
-        status: 'unknown',
-        reason:
-          error instanceof ExtensionStoreCorruptError
-            ? 'the extension store state is corrupt'
-            : `the extension store could not be read (${
-                (error as NodeJS.ErrnoException).code ?? 'error'
-              })`,
-      };
-    }
-  }
-
-  private async inspectEmptinessOnce(): Promise<ExtensionStoreEmptiness> {
-    // The manager loads directories only; files there are control files.
-    for (const entry of (await readDirectoryIfPresent(this.extensionsDir)) ??
-      []) {
-      const entryPath = path.join(this.extensionsDir, entry);
-      const stats = await fsp.lstat(entryPath);
-      if (
-        stats.isDirectory() ||
-        (stats.isSymbolicLink() && (await fsp.stat(entryPath)).isDirectory())
-      ) {
-        return {
-          status: 'installed',
-          reason: 'an extension directory is present',
-        };
-      }
-    }
-    const storeEntries = await readDirectoryIfPresent(this.storeDir);
-    for (const entry of (storeEntries ?? []).filter(isStoreName)) {
-      const stats = await fsp.lstat(path.join(this.storeDir, entry));
-      if (STORE_TRANSACTION_DIRS.includes(entry) && stats.isDirectory()) {
-        const contents = await fsp.readdir(path.join(this.storeDir, entry));
-        if (entry === 'transactions') {
-          // Recovery acts only on `.json` journals. It leaves the journals it
-          // quarantined, and temporary files, where they are for good.
-          if (contents.some((name) => name.endsWith('.json'))) {
-            return {
-              status: 'unknown',
-              reason:
-                'an extension store transaction is in progress or awaits recovery',
-            };
-          }
-        } else if (contents.some(isStoreName)) {
-          // An install prepares its staging directory without the lock or a
-          // journal, so nothing removes one it leaves before it commits;
-          // recovery clears only what a journal names.
-          return {
-            status: 'unknown',
-            reason:
-              'an extension install or removal is in progress or was interrupted',
-          };
-        }
-      } else if (
-        !(entry === 'plugin-data' && stats.isDirectory()) &&
-        !(
-          (STORE_FILES.has(entry) || STATE_WRITE_LEFTOVER.test(entry)) &&
-          stats.isFile()
-        )
-      ) {
-        return {
-          status: 'unknown',
-          reason:
-            entry === 'lock.lock'
-              ? 'the extension store is locked'
-              : 'the extension store holds an unexpected entry',
-        };
-      }
-    }
-    const state = await this.readSnapshotUnlocked();
-    let enablement: fs.Stats | undefined;
-    try {
-      enablement = await fsp.stat(this.enablementPath);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-    }
-    if (enablement && !enablement.isFile()) {
-      return {
-        status: 'unknown',
-        reason: 'the extension enablement file is not a regular file',
-      };
-    }
-    let projection: AllExtensionsEnablementConfig;
-    try {
-      projection = await this.readLegacyProjection();
-    } catch (error) {
-      if (!(error instanceof ExtensionStoreCorruptError)) throw error;
-      return {
-        status: 'unknown',
-        reason: 'the extension enablement file is corrupt',
-      };
-    }
-    if (!state) {
-      if (storeEntries?.includes('state.previous.json')) {
-        return {
-          status: 'unknown',
-          reason: 'the extension store state was replaced incompletely',
-        };
-      }
-      return Object.keys(projection).length === 0
-        ? { status: 'empty' }
-        : {
-            status: 'unknown',
-            reason: 'extension enablement exists without a store state',
-          };
-    }
-    if (Object.keys(state.extensions).length > 0) {
-      return {
-        status: 'installed',
-        reason: 'the extension store records extensions',
-      };
-    }
-    // Legacy rules the state keeps for extensions that are not installed wait
-    // for an install of that name; they enable nothing.
-    if (projectionHash(projection) !== state.legacyProjectionHash) {
-      return {
-        status: 'unknown',
-        reason: 'the extension enablement projection needs reconciliation',
-      };
-    }
-    return { status: 'empty' };
-  }
-
-  private async emptinessFingerprint(): Promise<string> {
-    const parts: string[] = [];
-    for (const directory of [
-      this.extensionsDir,
-      this.storeDir,
-      ...STORE_TRANSACTION_DIRS.map((name) => path.join(this.storeDir, name)),
-    ]) {
-      const entries = await readDirectoryIfPresent(directory);
-      parts.push(entries === null ? '-' : [...entries].sort().join('/'));
-    }
-    for (const file of [
-      this.statePath,
-      this.previousStatePath,
-      this.enablementPath,
-    ]) {
-      let stats: fs.BigIntStats | undefined;
-      try {
-        stats = await fsp.stat(file, { bigint: true });
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-      }
-      parts.push(
-        stats
-          ? `${stats.dev}:${stats.ino}:${stats.size}:${stats.mtimeNs}:${stats.ctimeNs}`
-          : '-',
-      );
-    }
-    return parts.join('\n');
-  }
-
-  async ensureInitialized(
-    extensions: readonly ExtensionIdentity[],
-  ): Promise<ExtensionStoreSnapshot> {
-    return await this.withLock(
-      async () => await this.ensureInitializedUnlocked(extensions),
     );
   }
 
@@ -1146,25 +937,6 @@ export class ExtensionStore {
     };
   }
 
-  async setDefaultActivation(
-    identity: ExtensionIdentity,
-    activation: ExtensionActivation,
-  ): Promise<ExtensionStoreSnapshot> {
-    return await this.mutate(identity, (policy) => {
-      policy.defaultActivation = activation;
-    });
-  }
-
-  async setDefaultActivations(
-    identities: readonly ExtensionIdentity[],
-    activation: ExtensionActivation,
-  ): Promise<ExtensionStoreSnapshot> {
-    const outcome = await this.mutateMany(identities, (policy) => {
-      policy.defaultActivation = activation;
-    });
-    return outcome.snapshot;
-  }
-
   async setActivationScope(
     identity: ExtensionIdentity,
     activation: InitialExtensionActivation,
@@ -1207,43 +979,6 @@ export class ExtensionStore {
     return states && Object.hasOwn(states, name) ? states[name]! : null;
   }
 
-  async setSkillWorkspaceOverrides(
-    identity: ExtensionIdentity,
-    workspacePath: string,
-    states: Readonly<Record<string, boolean>>,
-    expectedArtifactGeneration: number,
-    beforeCommit?: () => void,
-  ): Promise<ExtensionStoreSnapshot> {
-    const workspace = canonicalizeWorkspacePath(workspacePath);
-    return await this.mutate(identity, (policy) => {
-      if ((policy.artifactGeneration ?? 0) !== expectedArtifactGeneration) {
-        throw new ExtensionConflictError(
-          `Extension "${identity.name}" changed while its skill states were being prepared.`,
-        );
-      }
-      beforeCommit?.();
-      policy.skillWorkspaceOverrides = {
-        ...policy.skillWorkspaceOverrides,
-        [workspace]: {
-          ...policy.skillWorkspaceOverrides?.[workspace],
-          ...states,
-        },
-      };
-    });
-  }
-
-  async setWorkspaceActivations(
-    identities: readonly ExtensionIdentity[],
-    workspacePath: string,
-    activation: ExtensionActivation,
-  ): Promise<ExtensionStoreSnapshot> {
-    const canonicalWorkspace = canonicalizeWorkspacePath(workspacePath);
-    const outcome = await this.mutateMany(identities, (policy) => {
-      policy.workspaceOverrides[canonicalWorkspace] = activation;
-    });
-    return outcome.snapshot;
-  }
-
   async clearWorkspaceActivation(
     identity: ExtensionIdentity,
     workspacePath: string,
@@ -1251,20 +986,6 @@ export class ExtensionStore {
     return await this.mutate(identity, (policy) => {
       clearWorkspaceActivation(policy, workspacePath);
     });
-  }
-
-  async clearWorkspaceActivations(
-    identities: readonly ExtensionIdentity[],
-    workspacePath: string,
-  ): Promise<ExtensionStoreBatchMutationOutcome> {
-    const canonicalWorkspace = canonicalizeWorkspacePath(workspacePath);
-    return await this.mutateMany(
-      identities,
-      (policy) => {
-        clearWorkspaceActivation(policy, workspacePath, canonicalWorkspace);
-      },
-      false,
-    );
   }
 
   async setLegacyPathActivation(
@@ -1306,94 +1027,6 @@ export class ExtensionStore {
       snapshot.generation += 1;
       await this.writeSnapshotUnlocked(snapshot);
       return snapshot;
-    });
-  }
-
-  private async mutateMany(
-    identities: readonly ExtensionIdentity[],
-    update: (policy: ExtensionPolicy) => void,
-    declareUnknown = true,
-  ): Promise<ExtensionStoreBatchMutationOutcome> {
-    identities.forEach(assertIdentity);
-    if (identities.length === 0) {
-      throw new Error('At least one extension identity is required.');
-    }
-    return await this.withLock(async () => {
-      const existing = await this.readSnapshotUnlocked();
-      const snapshot = existing ?? this.emptySnapshot();
-      const legacy = await this.readLegacyProjection();
-      let legacyForImport = legacy;
-      let legacyForRemainder = legacy;
-      if (
-        existing &&
-        existing.legacyProjectionHash !== projectionHash(legacy)
-      ) {
-        if (await this.legacyProjectionIsNewerThanState()) {
-          for (const policy of Object.values(snapshot.extensions)) {
-            const { rules } = this.importLegacyProjection(
-              findLegacyRules(legacy, policy.name),
-              policy,
-            );
-            if (rules.length > 0) {
-              policy.legacyPathRules = [...rules];
-            } else {
-              delete policy.legacyPathRules;
-            }
-          }
-          legacyForRemainder = legacy;
-        } else {
-          legacyForImport = snapshot.legacyProjectionRemainder ?? {};
-          legacyForRemainder = snapshot.legacyProjectionRemainder ?? {};
-        }
-      }
-      const policies: ExtensionPolicy[] = [];
-      for (const identity of identities) {
-        let policy = snapshot.extensions[identity.id];
-        if (!policy) {
-          const existingByName = Object.values(snapshot.extensions).find(
-            (existing) =>
-              existing.name.toLowerCase() === identity.name.toLowerCase(),
-          );
-          if (existingByName) {
-            policy = existingByName;
-          } else if (!declareUnknown) {
-            continue;
-          } else {
-            const rules = findLegacyRules(legacyForImport, identity.name);
-            policy = {
-              name: identity.name,
-              declarationOnly: true,
-              defaultActivation: 'enabled',
-              workspaceOverrides: {},
-              ...(rules.length > 0 ? { legacyPathRules: [...rules] } : {}),
-            };
-            snapshot.extensions[identity.id] = policy;
-          }
-        }
-        if (
-          !policy.declarationOnly &&
-          policy.artifactGeneration !== undefined &&
-          !(await this.extensionArtifactExists(policy))
-        ) {
-          delete policy.artifactGeneration;
-          delete policy.preserveActivationOnNextInstall;
-          policy.declarationOnly = true;
-        }
-        if (policy.name.toLowerCase() !== identity.name.toLowerCase()) {
-          throw new ExtensionConflictError(
-            `Extension id ${identity.id} belongs to "${policy.name}", not "${identity.name}".`,
-          );
-        }
-        policies.push(policy);
-      }
-      if (policies.length === 0) {
-        return { snapshot, updated: false };
-      }
-      for (const policy of policies) update(policy);
-      this.updateLegacyProjectionRemainder(snapshot, legacyForRemainder);
-      snapshot.generation += 1;
-      await this.writeSnapshotUnlocked(snapshot);
-      return { snapshot, updated: true };
     });
   }
 

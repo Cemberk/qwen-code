@@ -38,7 +38,7 @@ import {
   buildMcpServerInstructionsReminder,
   getInitialChatHistory,
 } from '../core/environmentContext.js';
-import { runWithInvocationContext } from '../utils/invocation-context.js';
+
 import type { PermissionMode, StopHookOutput } from '../hooks/types.js';
 import { approvalModeToPermissionMode } from '../hooks/permission-mode.js';
 import {
@@ -255,7 +255,7 @@ function reconstructHistory(
   }
 
   // Gap detection is intentionally OFF here. Unlike the interactive `/resume`
-  // (sessionService) and ACP replay (HistoryReplayer) paths, this background
+  // (sessionService) path, this background
   // transcript recovery has no surface to render a gap marker on, so detecting
   // gaps only to drop them would be an inconsistent half-measure. The walk
   // truncates at a broken parent link either way; here it just truncates.
@@ -1419,11 +1419,9 @@ export class BackgroundAgentResumeService {
             () => runBody(turnContextState, turnAbortController, fireStartHook),
             normalizeResumedAgentDepth(meta.depth),
           );
-        const invocationRunBody = () =>
-          runWithInvocationContext(undefined, framedRunBody);
         return target.isFork
-          ? runInForkContext(invocationRunBody)
-          : invocationRunBody();
+          ? runInForkContext(framedRunBody)
+          : framedRunBody();
       };
 
       const reportUnexpectedBackgroundError = (error: unknown) => {

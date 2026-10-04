@@ -31,18 +31,6 @@ const SECRET_TOKEN_VALUE_PATTERN =
 
 export type SessionArtifactRetention = 'ephemeral' | 'restorable' | 'pinned';
 
-export type SessionArtifactRestoreState =
-  | 'live'
-  | 'restored'
-  | 'unverified'
-  | 'blocked';
-
-export type SessionArtifactPersistenceWarning =
-  | 'persistence_unavailable'
-  | 'metadata_only_restore'
-  | 'restore_validation_failed'
-  | 'sticky_override_active';
-
 export type PersistedSessionArtifactKind =
   | 'file'
   | 'link'

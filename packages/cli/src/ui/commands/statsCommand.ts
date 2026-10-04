@@ -713,7 +713,7 @@ export const statsCommand: SlashCommand = {
   },
   argumentHint: '[model|tools|skills|daily|monthly|export]',
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
   action: (
     context: CommandContext,
   ): OpenDialogActionReturn | MessageActionReturn | void => {
@@ -767,7 +767,7 @@ export const statsCommand: SlashCommand = {
         return t('Show model-specific usage statistics.');
       },
       kind: CommandKind.BUILT_IN,
-      supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+      supportedModes: ['interactive', 'non_interactive'] as const,
       action: (context: CommandContext): MessageActionReturn | void => {
         if (context.executionMode !== 'interactive') {
           const { metrics } = context.session.stats;
@@ -814,7 +814,7 @@ export const statsCommand: SlashCommand = {
         return t('Show tool-specific usage statistics.');
       },
       kind: CommandKind.BUILT_IN,
-      supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+      supportedModes: ['interactive', 'non_interactive'] as const,
       action: (context: CommandContext): MessageActionReturn | void => {
         if (context.executionMode !== 'interactive') {
           const { metrics } = context.session.stats;
@@ -847,7 +847,7 @@ export const statsCommand: SlashCommand = {
         return t('Show skill-specific usage statistics.');
       },
       kind: CommandKind.BUILT_IN,
-      supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+      supportedModes: ['interactive', 'non_interactive'] as const,
       action: (context: CommandContext): MessageActionReturn | void => {
         if (context.executionMode !== 'interactive') {
           const skills =
@@ -874,7 +874,7 @@ export const statsCommand: SlashCommand = {
       },
       argumentHint: '[YYYY-MM-DD]',
       kind: CommandKind.BUILT_IN,
-      supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+      supportedModes: ['interactive', 'non_interactive'] as const,
       action: (context: CommandContext, args: string) =>
         showTokenUsageStats(context, 'day', args),
     },
@@ -886,7 +886,7 @@ export const statsCommand: SlashCommand = {
       },
       argumentHint: '[YYYY-MM]',
       kind: CommandKind.BUILT_IN,
-      supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+      supportedModes: ['interactive', 'non_interactive'] as const,
       action: (context: CommandContext, args: string) =>
         showTokenUsageStats(context, 'month', args),
     },
@@ -898,7 +898,7 @@ export const statsCommand: SlashCommand = {
       argumentHint:
         '<daily|monthly> [date|month] [--format csv|json] [--output path]',
       kind: CommandKind.BUILT_IN,
-      supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+      supportedModes: ['interactive', 'non_interactive'] as const,
       action: async (
         context: CommandContext,
         args: string,

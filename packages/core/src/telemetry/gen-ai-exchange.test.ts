@@ -5,7 +5,6 @@
  */
 
 import {
-  context,
   ROOT_CONTEXT,
   type Attributes,
   type Context,
@@ -15,9 +14,6 @@ import {
 import { describe, expect, it } from 'vitest';
 import {
   createGenAiExchange,
-  reportAnthropicFollowingRequest,
-  reportAnthropicRequest,
-  reportAnthropicResponse,
   reportOpenAiChunk,
   reportOpenAiRequest,
   reportOpenAiResponse,
@@ -151,51 +147,6 @@ describe('GenAI exchange observer', () => {
     expect(target.attributes['gen_ai.output.messages']).toContain('new');
     expect(target.attributes['gen_ai.output.messages']).not.toContain('old');
     expect(target.attributes['gen_ai.output.messages']).not.toContain('late');
-  });
-
-  it('starts a fallback attempt from its handle after context exit', () => {
-    const target = span();
-    const observed = exchange(target);
-    const streamingAttempt = reportAnthropicRequest(
-      { messages: [{ role: 'user', content: 'initial' }], stream: true },
-      observed.context,
-    );
-    const fallbackAttempt = reportAnthropicFollowingRequest(
-      { messages: [{ role: 'user', content: 'fallback' }] },
-      streamingAttempt,
-    );
-    reportAnthropicResponse(fallbackAttempt, {
-      content: [{ type: 'text', text: 'fallback answer' }],
-      stop_reason: 'end_turn',
-    });
-
-    expect(observed.controller.finalize(true)).toEqual(['end_turn']);
-    expect(target.attributes['gen_ai.input.messages']).toContain('initial');
-    expect(target.attributes['gen_ai.input.messages']).not.toContain(
-      'fallback',
-    );
-    expect(target.attributes['gen_ai.output.messages']).toContain(
-      'fallback answer',
-    );
-  });
-
-  it('does not recover a missing fallback handle from the active context', () => {
-    const target = span();
-    const outer = createGenAiExchange(ROOT_CONTEXT, target, {
-      captureContent: true,
-      sensitiveAttributeMaxLength: 10_000,
-    });
-
-    context.with(outer.context, () => {
-      expect(
-        reportAnthropicFollowingRequest(
-          { messages: [{ role: 'user', content: 'fallback' }] },
-          undefined,
-        ),
-      ).toBeUndefined();
-    });
-
-    expect(target.attributes).toEqual({});
   });
 
   it('consumes an empty first snapshot', () => {

@@ -3364,12 +3364,6 @@ describe('PermissionManager', () => {
       ).toBe('allow');
     });
 
-    it('session deny rules override allow rules', async () => {
-      pm.addSessionAllowRule('run_shell_command');
-      pm.addSessionDenyRule('run_shell_command');
-      expect(await pm.evaluate({ toolName: 'run_shell_command' })).toBe('deny');
-    });
-
     it('a trust-gated allow rule is suspended while the folder is untrusted and restored with trust', async () => {
       // A project skill's `allowedTools` are repository-controlled: they
       // auto-approve only while the folder is trusted, re-read at every
@@ -3471,17 +3465,6 @@ describe('PermissionManager', () => {
           command: 'git commit',
         }),
       ).toBe('ask');
-    });
-
-    it('malformed session deny rule is silently ignored', async () => {
-      pm.addSessionDenyRule('Bash(rm -rf /)*');
-      // Should NOT deny — the malformed rule must not act as catch-all
-      expect(
-        await pm.evaluate({
-          toolName: 'run_shell_command',
-          command: 'git status',
-        }),
-      ).not.toBe('deny');
     });
   });
 
@@ -4037,18 +4020,6 @@ describe('PermissionManager.findMatchingDenyRule', () => {
       command: 'git status',
     });
     expect(result).toBeUndefined();
-  });
-
-  it('matches session deny rules', () => {
-    const pm = new PermissionManager(makeConfig());
-    pm.initialize();
-    pm.addSessionDenyRule('Read(//secret/**)');
-
-    const result = pm.findMatchingDenyRule({
-      toolName: 'read_file',
-      filePath: '/secret/key.pem',
-    });
-    expect(result).toBe('Read(//secret/**)');
   });
 
   it('returns undefined for non-denied tool', () => {

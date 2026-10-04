@@ -67,13 +67,6 @@ export type TrustedFoldersChangeListener = () => void;
 
 const trustedFoldersChangeListeners = new Set<TrustedFoldersChangeListener>();
 
-export function onTrustedFoldersChanged(
-  listener: TrustedFoldersChangeListener,
-): () => void {
-  trustedFoldersChangeListeners.add(listener);
-  return () => trustedFoldersChangeListeners.delete(listener);
-}
-
 function notifyTrustedFoldersChanged(): void {
   for (const listener of trustedFoldersChangeListeners) listener();
 }
@@ -91,7 +84,6 @@ export interface WorkspaceTrustStatus {
     source: WorkspaceTrustSource;
   };
   explicitTrustLevel: TrustLevel | null;
-  requiresDaemonRestartForChanges: true;
 }
 
 export class LoadedTrustedFolders {
@@ -182,14 +174,6 @@ export function loadTrustedFolders(): LoadedTrustedFolders {
     errors,
   );
   return loadedTrustedFolders;
-}
-
-export function saveTrustedFolders(
-  trustedFoldersFile: TrustedFoldersFile,
-): void {
-  writeTrustedFolders(trustedFoldersFile.path, () => ({
-    ...trustedFoldersFile.config,
-  }));
 }
 
 function assertTrustedFoldersConfig(
@@ -353,7 +337,6 @@ export function getWorkspaceTrustStatus(
       folderTrustEnabled: false,
       effective: { state: 'trusted', source: 'disabled' },
       explicitTrustLevel: null,
-      requiresDaemonRestartForChanges: true,
     };
   }
 
@@ -377,7 +360,6 @@ export function getWorkspaceTrustStatus(
       folders.user.config,
       workspaceCwd,
     ),
-    requiresDaemonRestartForChanges: true,
   };
 }
 

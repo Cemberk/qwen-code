@@ -60,29 +60,3 @@ function countNonAsciiChars(text: string): number {
   }
   return count;
 }
-
-export class TextTokenizer {
-  /**
-   * Calculate tokens for text content
-   *
-   * @param text - The text to estimate tokens for
-   * @returns The estimated token count
-   */
-  async calculateTokens(text: string): Promise<number> {
-    return this.calculateTokensSync(text);
-  }
-
-  /**
-   * Calculate tokens for multiple text strings
-   *
-   * @param texts - Array of text strings to estimate tokens for
-   * @returns Array of token counts corresponding to each input text
-   */
-  async calculateTokensBatch(texts: string[]): Promise<number[]> {
-    return texts.map((text) => this.calculateTokensSync(text));
-  }
-
-  private calculateTokensSync(text: string): number {
-    return estimateTextTokens(text);
-  }
-}

@@ -100,13 +100,6 @@ export interface MonitorTask extends TaskBase {
 }
 
 /**
- * @deprecated Renamed to `MonitorTask`. Kept as a one-release type alias
- * for external SDK consumers; will be removed in the release after PR 2
- * lands.
- */
-export type MonitorEntry = MonitorTask;
-
-/**
  * Shape callers pass to {@link MonitorRegistry.register}; the registry
  * derives the shared `TaskBase` envelope (`id`, `kind`, `outputOffset`,
  * `notified`) from these. Callers are responsible for computing

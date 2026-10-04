@@ -10,7 +10,6 @@ import {
   type SandboxStatus,
 } from './sandbox-status.js';
 
-export type BwrapStatus = SandboxStatus;
 export { MAX_STATUS_BYTES, sandboxStatusError };
 export type { SandboxStatus };
 

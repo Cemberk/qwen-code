@@ -13,7 +13,6 @@ import { validateSkillName, type SkillConfig } from '../skills/types.js';
 import type { SubagentConfig, SubagentError } from '../subagents/types.js';
 import type { ClaudeMarketplaceConfig } from './claude-converter.js';
 import type { HookEventName, HookDefinition } from '../hooks/types.js';
-import { Storage } from '../config/storage.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -70,21 +69,15 @@ import { createDebugLogger } from '../utils/debugLogger.js';
 import { refreshExtensionRuntime } from './extension-runtime-refresh.js';
 import {
   ExtensionStore,
-  type ExtensionActivation,
-  type ExtensionActivationResult,
-  type ExtensionIdentity,
   type ExtensionStoreSnapshot,
   type InitialExtensionActivation,
-  type WorkspaceActivation,
 } from './extension-store.js';
 import {
-  AGENT_PLUGIN_MANIFEST,
   getAgentPluginSchemaStatus,
   loadAgentPluginManifest,
   loadAgentPluginMcpServers,
   loadAgentPluginSkills,
 } from './agent-plugins-v1/index.js';
-import { resolveContainedExistingPath } from './agent-plugins-v1/paths.js';
 
 const debugLogger = createDebugLogger('EXTENSIONS');
 
@@ -282,8 +275,6 @@ export interface ExtensionStoreMutationResult extends ExtensionStoreSnapshot {
   updated?: boolean;
 }
 
-export type ExtensionCommitCallback = (generation: number) => void;
-
 export class ExtensionNotUpdatableError extends Error {
   readonly code = 'extension_not_updatable';
 
@@ -384,8 +375,6 @@ export class ExtensionManager {
   private readonly preferencesStore: ExtensionPreferencesStore;
   private readonly extensionStore: ExtensionStore;
   /** See `sourceFingerprint`. `undefined` until the first refresh commits. */
-  private lastSourceFingerprint: string | undefined;
-  private inFlightSourceRevalidation: Promise<boolean> | undefined;
 
   private config?: Config;
   private isWorkspaceTrusted: boolean;
@@ -471,26 +460,6 @@ export class ExtensionManager {
     }
   }
 
-  // ==========================================================================
-  // Enablement functionality (directly implemented)
-  // ==========================================================================
-
-  /**
-   * Validates that override extension names exist in the extensions list.
-   */
-  validateExtensionOverrides(extensions: Extension[]): void {
-    for (const name of this.enabledExtensionNamesOverride) {
-      if (name === 'none') continue;
-      if (
-        !extensions.some(
-          (ext) => ext.config.name.toLowerCase() === name.toLowerCase(),
-        )
-      ) {
-        debugLogger.error(`Extension not found: ${name}`);
-      }
-    }
-  }
-
   /**
    * Determines if an extension is enabled based on its name and the current path.
    */
@@ -544,10 +513,7 @@ export class ExtensionManager {
   async enableExtension(
     name: string,
     scope: SettingScope,
-    cwd?: string,
-    onCommitted?: ExtensionCommitCallback,
   ): Promise<ExtensionStoreMutationResult> {
-    const currentDir = cwd ?? this.workspaceDir;
     if (
       scope === SettingScope.System ||
       scope === SettingScope.SystemDefaults
@@ -567,7 +533,7 @@ export class ExtensionManager {
       if (scope === SettingScope.Workspace) {
         snapshot = await this.extensionStore.setWorkspaceActivation(
           { id: extension.id, name: extension.name },
-          currentDir,
+          this.workspaceDir,
           'enabled',
         );
       } else {
@@ -578,7 +544,6 @@ export class ExtensionManager {
           'enabled',
         );
       }
-      onCommitted?.(snapshot.generation);
       this.applyStoreActivation(snapshot);
       const warning = await this.refreshToolsAfterActivation(name);
       return warning ? { ...snapshot, warnings: [warning] } : snapshot;
@@ -593,10 +558,7 @@ export class ExtensionManager {
   async disableExtension(
     name: string,
     scope: SettingScope,
-    cwd?: string,
-    onCommitted?: ExtensionCommitCallback,
   ): Promise<ExtensionStoreMutationResult> {
-    const currentDir = cwd ?? this.workspaceDir;
     if (
       scope === SettingScope.System ||
       scope === SettingScope.SystemDefaults
@@ -616,7 +578,7 @@ export class ExtensionManager {
       if (scope === SettingScope.Workspace) {
         snapshot = await this.extensionStore.setWorkspaceActivation(
           { id: extension.id, name: extension.name },
-          currentDir,
+          this.workspaceDir,
           'disabled',
         );
       } else {
@@ -627,17 +589,12 @@ export class ExtensionManager {
           'disabled',
         );
       }
-      onCommitted?.(snapshot.generation);
       this.applyStoreActivation(snapshot);
       const warning = await this.refreshToolsAfterActivation(name);
       return warning ? { ...snapshot, warnings: [warning] } : snapshot;
     } finally {
       endMutation();
     }
-  }
-
-  async getExtensionStoreSnapshot(): Promise<ExtensionStoreSnapshot> {
-    return await this.extensionStore.readSnapshot();
   }
 
   getExtensionSkillState(
@@ -672,190 +629,9 @@ export class ExtensionManager {
     };
   }
 
-  async setExtensionSkillStates(
-    extensionId: string,
-    workspacePath: string,
-    updates: ReadonlyArray<{ name: string; state: ExtensionActivation }>,
-    onCommitted?: ExtensionCommitCallback,
-    beforeCommit?: () => void,
-  ): Promise<ExtensionStoreMutationResult> {
-    if (!Array.isArray(updates) || updates.length < 1 || updates.length > 100) {
-      throw new Error('Expected between 1 and 100 skill states.');
-    }
-    const states = new Map<string, boolean>();
-    for (const update of updates) {
-      if (
-        !update ||
-        typeof update.name !== 'string' ||
-        (update.state !== 'enabled' && update.state !== 'disabled')
-      ) {
-        throw new Error('Invalid skill state.');
-      }
-      const name = update.name.trim().toLowerCase();
-      validateSkillName(name);
-      if (states.has(name)) {
-        throw new Error(`Duplicate skill name "${update.name}".`);
-      }
-      states.set(name, update.state === 'enabled');
-    }
-
-    const endMutation = this.beginMutation('setExtensionSkillStates');
-    try {
-      const previous = await this.refreshCacheWithSnapshot();
-      const extension = this.findExtensionById(extensionId);
-      for (const name of states.keys()) {
-        this.getExtensionSkillState(extensionId, name, workspacePath, previous);
-      }
-      const snapshot = await this.extensionStore.setSkillWorkspaceOverrides(
-        { id: extension.id, name: extension.name },
-        workspacePath,
-        Object.fromEntries(states),
-        previous.extensions[extensionId]?.artifactGeneration ?? 0,
-        beforeCommit,
-      );
-      onCommitted?.(snapshot.generation);
-      this.applyStoreActivation(snapshot);
-      try {
-        await this.config
-          ?.getSkillManager()
-          ?.refreshCache({ throwOnError: true });
-      } catch (error) {
-        return {
-          ...snapshot,
-          warnings: [
-            {
-              code: 'extension_runtime_refresh_failed',
-              error: getErrorMessage(error),
-            },
-          ],
-        };
-      }
-      return snapshot;
-    } finally {
-      endMutation();
-    }
-  }
-
-  async getExtensionActivation(
-    extensionId: string,
-    workspacePath: string = this.workspaceDir,
-  ): Promise<ExtensionActivationResult> {
-    const snapshot = await this.extensionStore.readSnapshot();
-    return this.getExtensionActivationFromSnapshot(
-      extensionId,
-      snapshot,
-      workspacePath,
-    );
-  }
-
-  getExtensionActivationFromSnapshot(
-    extensionId: string,
-    snapshot: ExtensionStoreSnapshot,
-    workspacePath: string = this.workspaceDir,
-  ): ExtensionActivationResult {
-    const extension = this.findExtensionById(extensionId);
-    return this.getExtensionActivationForIdentityFromSnapshot(
-      { id: extension.id, name: extension.name },
-      snapshot,
-      workspacePath,
-    );
-  }
-
-  getExtensionActivationForIdentityFromSnapshot(
-    identity: ExtensionIdentity,
-    snapshot: ExtensionStoreSnapshot,
-    workspacePath: string = this.workspaceDir,
-  ): ExtensionActivationResult {
-    const activation = this.extensionStore.getActivation(
-      snapshot,
-      identity.id,
-      identity.name,
-      workspacePath,
-    );
-    if (this.enabledExtensionNamesOverride.length === 0) {
-      return activation;
-    }
-    return {
-      ...activation,
-      effective: this.isEnabled(identity.name) ? 'enabled' : 'disabled',
-      source: 'cli_override',
-    };
-  }
-
-  getExtensionActivationForNameFromSnapshot(
-    name: string,
-    snapshot: ExtensionStoreSnapshot,
-    workspacePath: string = this.workspaceDir,
-  ): ExtensionActivationResult {
-    const entry = Object.entries(snapshot.extensions).find(
-      ([, policy]) => policy.name.toLowerCase() === name.toLowerCase(),
-    );
-    if (!entry) {
-      const cliOverride = this.enabledExtensionNamesOverride.length > 0;
-      return {
-        default: 'enabled',
-        workspace: 'inherit',
-        effective:
-          cliOverride && !this.isEnabled(name) ? 'disabled' : 'enabled',
-        source: cliOverride ? 'cli_override' : 'default',
-      };
-    }
-    const [id, policy] = entry;
-    return this.getExtensionActivationForIdentityFromSnapshot(
-      { id, name: policy.name },
-      snapshot,
-      workspacePath,
-    );
-  }
-
-  async setExtensionDefaultActivation(
-    extensionId: string,
-    activation: ExtensionActivation,
-    onCommitted?: ExtensionCommitCallback,
-  ): Promise<ExtensionStoreMutationResult> {
-    const extension = this.findExtensionById(extensionId);
-    const endMutation = this.beginMutation('setExtensionDefaultActivation');
-    try {
-      const snapshot = await this.extensionStore.setDefaultActivation(
-        { id: extension.id, name: extension.name },
-        activation,
-      );
-      onCommitted?.(snapshot.generation);
-      this.applyStoreActivation(snapshot);
-      const warning = await this.refreshToolsAfterActivation(extension.name);
-      return warning ? { ...snapshot, warnings: [warning] } : snapshot;
-    } finally {
-      endMutation();
-    }
-  }
-
-  async setExtensionDefaultActivations(
-    names: readonly string[],
-    activation: ExtensionActivation,
-    onCommitted?: ExtensionCommitCallback,
-  ): Promise<ExtensionStoreMutationResult> {
-    const endMutation = this.beginMutation('setExtensionDefaultActivations');
-    try {
-      const identities = this.resolveBatchExtensionIdentities(names);
-      const snapshot = await this.extensionStore.setDefaultActivations(
-        identities,
-        activation,
-      );
-      onCommitted?.(snapshot.generation);
-      this.applyStoreActivation(snapshot);
-      const warning = await this.refreshToolsAfterActivation(
-        `${identities.length} extensions`,
-      );
-      return warning ? { ...snapshot, warnings: [warning] } : snapshot;
-    } finally {
-      endMutation();
-    }
-  }
-
   async setExtensionActivationScope(
     extensionId: string,
     activation: InitialExtensionActivation,
-    onCommitted?: ExtensionCommitCallback,
   ): Promise<ExtensionStoreMutationResult> {
     const extension = this.findExtensionById(extensionId);
     const endMutation = this.beginMutation('setExtensionActivationScope');
@@ -864,110 +640,6 @@ export class ExtensionManager {
         { id: extension.id, name: extension.name },
         activation,
       );
-      onCommitted?.(snapshot.generation);
-      this.applyStoreActivation(snapshot);
-      const warning = await this.refreshToolsAfterActivation(extension.name);
-      return warning ? { ...snapshot, warnings: [warning] } : snapshot;
-    } finally {
-      endMutation();
-    }
-  }
-
-  async setExtensionWorkspaceActivation(
-    extensionId: string,
-    workspacePath: string,
-    activation: ExtensionActivation,
-    onCommitted?: ExtensionCommitCallback,
-  ): Promise<ExtensionStoreMutationResult> {
-    const extension = this.findExtensionById(extensionId);
-    const endMutation = this.beginMutation('setExtensionWorkspaceActivation');
-    try {
-      const snapshot = await this.extensionStore.setWorkspaceActivation(
-        { id: extension.id, name: extension.name },
-        workspacePath,
-        activation,
-      );
-      onCommitted?.(snapshot.generation);
-      this.applyStoreActivation(snapshot);
-      const warning = await this.refreshToolsAfterActivation(extension.name);
-      return warning ? { ...snapshot, warnings: [warning] } : snapshot;
-    } finally {
-      endMutation();
-    }
-  }
-
-  async setExtensionWorkspaceActivations(
-    names: readonly string[],
-    workspacePath: string,
-    activation: WorkspaceActivation,
-    onCommitted?: ExtensionCommitCallback,
-  ): Promise<ExtensionStoreMutationResult> {
-    const endMutation = this.beginMutation('setExtensionWorkspaceActivations');
-    try {
-      const identities = this.resolveBatchExtensionIdentities(names);
-      let snapshot: ExtensionStoreSnapshot;
-      let updated = true;
-      if (activation === 'inherit') {
-        const outcome = await this.extensionStore.clearWorkspaceActivations(
-          identities,
-          workspacePath,
-        );
-        snapshot = outcome.snapshot;
-        updated = outcome.updated;
-      } else {
-        snapshot = await this.extensionStore.setWorkspaceActivations(
-          identities,
-          workspacePath,
-          activation,
-        );
-      }
-      if (!updated) {
-        this.applyStoreActivation(snapshot);
-        return { ...snapshot, updated: false };
-      }
-      onCommitted?.(snapshot.generation);
-      this.applyStoreActivation(snapshot);
-      const warning = await this.refreshToolsAfterActivation(
-        `${identities.length} extensions`,
-      );
-      return warning
-        ? { ...snapshot, updated: true, warnings: [warning] }
-        : { ...snapshot, updated: true };
-    } finally {
-      endMutation();
-    }
-  }
-
-  private resolveBatchExtensionIdentities(
-    names: readonly string[],
-  ): ExtensionIdentity[] {
-    const loadedByName = new Map(
-      this.getLoadedExtensions().map((extension) => [
-        extension.name.toLowerCase(),
-        extension,
-      ]),
-    );
-    return names.map((name) => {
-      const loaded = loadedByName.get(name.toLowerCase());
-      return loaded
-        ? { id: loaded.id, name: loaded.name }
-        : { id: hashValue(name.toLowerCase()), name };
-    });
-  }
-
-  async clearExtensionWorkspaceActivation(
-    extensionId: string,
-    workspacePath: string,
-    onCommitted?: ExtensionCommitCallback,
-  ): Promise<ExtensionStoreMutationResult> {
-    const extension = this.findExtensionById(extensionId);
-    const endMutation = this.beginMutation('clearExtensionWorkspaceActivation');
-    try {
-      const snapshot = await this.extensionStore.clearWorkspaceActivation(
-        { id: extension.id, name: extension.name },
-        workspacePath,
-      );
-      onCommitted?.(snapshot.generation);
       this.applyStoreActivation(snapshot);
       const warning = await this.refreshToolsAfterActivation(extension.name);
       return warning ? { ...snapshot, warnings: [warning] } : snapshot;
@@ -1104,11 +776,6 @@ export class ExtensionManager {
     names?: string[];
   }): Promise<ExtensionStoreSnapshot> {
     const requestedNames = options?.names?.filter(Boolean) ?? [];
-    // Captured before the load, not after: an install landing mid-refresh must
-    // leave the committed fingerprint stale so the next check still sees it.
-    // Stamping post-load would mask that change until something else moved.
-    const dirFingerprintBeforeLoad =
-      requestedNames.length === 0 ? this.extensionDirFingerprint() : undefined;
     const { value: extensions, snapshot } =
       await this.extensionStore.readConsistent(async () => {
         let loaded: Extension[];
@@ -1139,206 +806,7 @@ export class ExtensionManager {
     });
     this.extensionCache = nextCache;
     this.applyStoreActivation(snapshot);
-    // Only a full refresh establishes a baseline. A name-filtered refresh leaves
-    // the cache partial, so claiming the whole directory is up to date would let
-    // `refreshCacheIfSourcesChanged` report "unchanged" over a partial set.
-    if (dirFingerprintBeforeLoad !== undefined) {
-      this.lastSourceFingerprint = this.sourceFingerprint(
-        dirFingerprintBeforeLoad,
-      );
-    }
     return snapshot;
-  }
-
-  /**
-   * Loads the extension catalog — identity fields only (id, name, version,
-   * install metadata, activation policy) — and returns it with the store's
-   * snapshot. Skills, commands, agents, hooks, and context files are NOT
-   * loaded, so this costs one manifest read per extension instead of a full
-   * subresource scan. The inclusion set matches the full load exactly: the
-   * manifest head rejects the same manifests the full load's catch rejects.
-   *
-   * Unlike `refreshCacheWithSnapshot`, this touches no manager state: no
-   * `extensionCache` write (the entries carry no subresources, so caching
-   * them would poison a shared manager) and no fingerprint baseline commit
-   * (which would make a later `refreshCacheIfSourcesChanged` on a shared
-   * manager report "unchanged" over a manifest-only cache). That also keeps
-   * the per-request cost down — no fingerprint walk on this path.
-   *
-   * The fingerprint still governs invalidation for full refreshes and is
-   * unaffected by this method: it covers only install metadata and manifests
-   * — never skill files — so a skill-only edit does not change the catalog's
-   * inputs either, which is exactly the desired behavior.
-   */
-  async refreshCatalogSnapshot(options?: {
-    names?: string[];
-  }): Promise<{ snapshot: ExtensionStoreSnapshot; extensions: Extension[] }> {
-    const requestedNames = options?.names?.filter(Boolean) ?? [];
-    const { value: extensions, snapshot } =
-      await this.extensionStore.readConsistent(async () => {
-        // Default: load all extensions from QWEN_HOME-aware user extensions
-        // dir, then filter names from the manifest-only result so a filtered
-        // catalog never falls back to a full subresource load.
-        const loadedAll = await this.loadExtensionsFromExtensionsDir(
-          this.configDir,
-          this.workspaceDir,
-          { manifestOnly: true },
-        );
-        const loaded =
-          requestedNames.length > 0
-            ? loadedAll.filter((extension) =>
-                requestedNames.some(
-                  (name) => name.toLowerCase() === extension.name.toLowerCase(),
-                ),
-              )
-            : loadedAll;
-        return {
-          value: loaded,
-          extensions: loaded.map((extension) => ({
-            id: extension.id,
-            name: extension.name,
-          })),
-        };
-      });
-    return { snapshot, extensions };
-  }
-
-  private static stampPath(target: string, followSymlinks = true): string {
-    try {
-      const stats = followSymlinks ? fs.statSync(target) : fs.lstatSync(target);
-      return `${stats.mtimeMs}:${stats.size}`;
-    } catch {
-      // Absent is a real state and must not collide with any present one —
-      // otherwise deleting the last extension would look unchanged.
-      return '-';
-    }
-  }
-
-  /**
-   * Fingerprints which extension directories exist (install / uninstall) and
-   * each manifest's mtime and size (in-place edits).
-   *
-   * A pure function of on-disk state, deliberately independent of the current
-   * cache, so the same disk yields the same value before and after a refresh.
-   * A refresh never writes these paths, which is what makes it safe to commit
-   * the pre-load value — see `refreshCacheWithSnapshot`.
-   *
-   * Deliberately cheap: one `readdir`, one manifest `stat` per entry, and a
-   * sidecar read for linked entries, where `refreshCache()` parses every
-   * manifest and re-lists every extension skill directory. That difference is
-   * what lets a status read stay self-healing without becoming a directory
-   * scan.
-   *
-   * mtime-and-size is the usual stat-based approximation, so an edit that
-   * preserves both is not detected. That is acceptable here: this is only the
-   * out-of-band safety net — mutations made through the daemon invalidate
-   * explicitly and never rely on it.
-   */
-  private extensionDirFingerprint(): string {
-    let entries: string[];
-    try {
-      entries = fs.readdirSync(this.configDir);
-    } catch {
-      return 'dir:-';
-    }
-    const parts: string[] = [];
-    for (const entry of entries) {
-      const extensionRoot = path.join(this.configDir, entry);
-      const installMetadata = this.loadInstallMetadata(extensionRoot);
-      const effectiveRoot =
-        installMetadata?.type === 'link' &&
-        typeof installMetadata.source === 'string' &&
-        installMetadata.source.length > 0
-          ? installMetadata.source
-          : extensionRoot;
-      const manifestName =
-        getAgentPluginSchemaStatus(effectiveRoot) === 'unrelated'
-          ? EXTENSIONS_CONFIG_FILENAME
-          : AGENT_PLUGIN_MANIFEST;
-      let manifestPath = path.join(effectiveRoot, manifestName);
-      let followManifestSymlink = true;
-      if (manifestName === AGENT_PLUGIN_MANIFEST) {
-        try {
-          manifestPath = resolveContainedExistingPath(
-            effectiveRoot,
-            manifestPath,
-          );
-        } catch {
-          followManifestSymlink = false;
-        }
-      }
-      const stamp = ExtensionManager.stampPath(
-        manifestPath,
-        followManifestSymlink,
-      );
-      // Entries with no manifest are not extensions — notably the enablement
-      // file, which lives in this directory and is created lazily by the store.
-      // Counting them would make the store's own bookkeeping look like an
-      // install and cost one spurious refresh.
-      if (stamp === '-') continue;
-      parts.push(`ext:${entry}:${stamp}`);
-    }
-    // Sorted so directory iteration order cannot make an unchanged set look
-    // moved.
-    return parts.sort().join('|');
-  }
-
-  /**
-   * Fingerprints the enablement file and the store's activation state — where
-   * `enable` / `disable` land.
-   *
-   * Unlike the directory part this is stamped *after* a refresh, because a
-   * refresh writes the store itself. That is safe: store mutations hold the
-   * store lock, so no external write can interleave with the refresh and be
-   * masked by the post-load stamp.
-   */
-  private extensionStoreFingerprint(): string {
-    return [
-      `enablement:${ExtensionManager.stampPath(this.configFilePath)}`,
-      `state:${ExtensionManager.stampPath(
-        path.join(this.extensionStore.storeDir, 'state.json'),
-      )}`,
-    ].join('|');
-  }
-
-  private sourceFingerprint(dirFingerprint: string): string {
-    return `${dirFingerprint}||${this.extensionStoreFingerprint()}`;
-  }
-
-  /**
-   * Refreshes the cache only when the on-disk extension sources moved since the
-   * last refresh. Returns whether a refresh actually ran.
-   *
-   * Extension sources have no watcher (skills do — see
-   * `SkillManager.startWatching`), so read-only consumers that must not scan on
-   * every call use this to stay eventually consistent with `qwen extensions
-   * install` / `enable` / `disable` run outside the process.
-   *
-   * Concurrent callers share one refresh, so a caller can join a refresh that
-   * started just before the change it cares about. That is bounded rather than
-   * lost: the committed baseline is the pre-load fingerprint, so the change is
-   * still visible to the next call.
-   */
-  async refreshCacheIfSourcesChanged(): Promise<boolean> {
-    const inFlight = this.inFlightSourceRevalidation;
-    if (inFlight) return await inFlight;
-    const current = this.sourceFingerprint(this.extensionDirFingerprint());
-    if (this.lastSourceFingerprint === current) return false;
-    const revalidation = (async () => {
-      // `refreshCache` commits the new baseline itself, from its pre-load
-      // fingerprint. A throw leaves the old baseline in place so the next call
-      // retries rather than assuming the refresh landed.
-      await this.refreshCache();
-      return true;
-    })();
-    this.inFlightSourceRevalidation = revalidation;
-    const clear = () => {
-      if (this.inFlightSourceRevalidation === revalidation) {
-        this.inFlightSourceRevalidation = undefined;
-      }
-    };
-    void revalidation.then(clear, clear);
-    return await revalidation;
   }
 
   getLoadedExtensions(): Extension[] {
@@ -1383,14 +851,6 @@ export class ExtensionManager {
     }
 
     return null;
-  }
-
-  async loadExtensionsFromDir(dir: string): Promise<Extension[]> {
-    const storage = new Storage(dir);
-    return this.loadExtensionsFromExtensionsDir(
-      storage.getExtensionsDir(),
-      dir,
-    );
   }
 
   private async loadExtensionsFromExtensionsDir(
@@ -1775,63 +1235,44 @@ export class ExtensionManager {
     requestConsent?: (options?: ExtensionRequestOptions) => Promise<void>,
     requestSetting?: (setting: ExtensionSetting) => Promise<string>,
     cwd?: string,
-    previousExtensionConfig?: ExtensionConfig,
     initialActivation: InitialExtensionActivation = { scope: 'user' },
-    signal?: AbortSignal,
   ): Promise<Extension> {
-    if (!previousExtensionConfig) {
-      const endMutation = this.beginMutation('installExtension');
-      let prepared: PreparedExtensionMutation | undefined;
-      try {
-        prepared = (await this.installExtensionInternal(
-          { ...installMetadata },
-          requestConsent,
-          requestSetting,
-          cwd,
-          undefined,
-          initialActivation,
-          signal,
-          true,
-          false,
-        )) as PreparedExtensionMutation;
-        const committed = await this.commitPreparedExtension(prepared);
-        const warnings = committed.warnings ?? [];
-        if (!committed.extension || warnings.length > 0) {
-          const reloadWarning = committed.warnings?.find(
-            (warning) => warning.code === 'extension_reload_failed',
-          );
-          const firstWarning = reloadWarning ?? warnings[0];
-          const error = new Error(
-            `Extension "${prepared.identity.name}" committed with warnings${
-              firstWarning
-                ? `: ${firstWarning.code}: ${firstWarning.error}`
-                : '.'
-            }`,
-            firstWarning ? { cause: new Error(firstWarning.error) } : undefined,
-          ) as ExtensionCommittedWithWarningsError;
-          error.code = 'extension_committed_with_warnings';
-          error.committed = true;
-          error.identity = committed.identity;
-          error.warnings = warnings;
-          throw error;
-        }
-        return committed.extension;
-      } finally {
-        if (prepared) await this.disposePreparedExtension(prepared);
-        endMutation();
+    const endMutation = this.beginMutation('installExtension');
+    let prepared: PreparedExtensionMutation | undefined;
+    try {
+      prepared = await this.installExtensionInternal(
+        { ...installMetadata },
+        requestConsent,
+        requestSetting,
+        cwd,
+        undefined,
+        initialActivation,
+        undefined,
+      );
+      const committed = await this.commitPreparedExtension(prepared);
+      const warnings = committed.warnings ?? [];
+      if (!committed.extension || warnings.length > 0) {
+        const reloadWarning = committed.warnings?.find(
+          (warning) => warning.code === 'extension_reload_failed',
+        );
+        const firstWarning = reloadWarning ?? warnings[0];
+        const error = new Error(
+          `Extension "${prepared.identity.name}" committed with warnings${
+            firstWarning ? `: ${firstWarning.code}: ${firstWarning.error}` : '.'
+          }`,
+          firstWarning ? { cause: new Error(firstWarning.error) } : undefined,
+        ) as ExtensionCommittedWithWarningsError;
+        error.code = 'extension_committed_with_warnings';
+        error.committed = true;
+        error.identity = committed.identity;
+        error.warnings = warnings;
+        throw error;
       }
+      return committed.extension;
+    } finally {
+      if (prepared) await this.disposePreparedExtension(prepared);
+      endMutation();
     }
-    return (await this.installExtensionInternal(
-      installMetadata,
-      requestConsent,
-      requestSetting,
-      cwd,
-      previousExtensionConfig,
-      initialActivation,
-      signal,
-      false,
-      true,
-    )) as Extension;
   }
 
   private async prepareExtensionUpdateFromState(
@@ -1848,7 +1289,7 @@ export class ExtensionManager {
     const previousConfig = this.loadExtensionConfig({
       extensionDir: extension.path,
     });
-    return (await this.installExtensionInternal(
+    return await this.installExtensionInternal(
       { ...installMetadata },
       undefined,
       undefined,
@@ -1856,9 +1297,7 @@ export class ExtensionManager {
       previousConfig,
       { scope: 'user' },
       signal,
-      true,
-      false,
-    )) as PreparedExtensionMutation;
+    );
   }
 
   private async installExtensionInternal(
@@ -1873,11 +1312,8 @@ export class ExtensionManager {
     previousExtensionConfig: ExtensionConfig | undefined,
     initialActivation: InitialExtensionActivation,
     signal: AbortSignal | undefined,
-    prepareOnly: boolean,
-    emitMutation: boolean,
-  ): Promise<Extension | PreparedExtensionMutation> {
+  ): Promise<PreparedExtensionMutation> {
     const currentDir = cwd ?? this.workspaceDir;
-    let extension: Extension | null;
 
     const isUpdate = !!previousExtensionConfig;
     const expectedArtifactGeneration = previousExtensionConfig
@@ -1893,9 +1329,6 @@ export class ExtensionManager {
     let preparedSettings: PreparedExtensionSettingsMutation | undefined;
 
     let ownershipTransferred = false;
-    const endMutation = emitMutation
-      ? this.beginMutation('installExtension')
-      : () => undefined;
     try {
       if (!this.isWorkspaceTrusted) {
         throw new Error(
@@ -2136,99 +1569,32 @@ export class ExtensionManager {
         }
 
         signal?.throwIfAborted();
-        if (prepareOnly) {
-          const cleanupPaths = [
-            tempDir,
-            convertedSourcePath !== tempDir ? convertedSourcePath : undefined,
-          ].filter((value): value is string => !!value);
-          const prepared: PreparedExtensionMutation = {
-            operation: isUpdate ? 'update' : 'install',
-            identity: { id: extensionId, name: newExtensionName },
-            version: stagedExtension.version,
-            ...(expectedArtifactGeneration === undefined
-              ? {}
-              : { expectedArtifactGeneration }),
-            initialActivation,
-            stagingDirectory: stagingPath,
-            destinationDirectory: destinationPath,
-            cleanupPaths,
-            ...(preparedSettings
-              ? {
-                  commitSettings: preparedSettings.commit,
-                  discardSettings: preparedSettings.discard,
-                }
-              : {}),
-            settingsActivated: false,
-            disposed: false,
-          };
-          ownershipTransferred = true;
-          return prepared;
-        }
-        const snapshot = await this.extensionStore.commitArtifact({
+        const cleanupPaths = [
+          tempDir,
+          convertedSourcePath !== tempDir ? convertedSourcePath : undefined,
+        ].filter((value): value is string => !!value);
+        const prepared: PreparedExtensionMutation = {
           operation: isUpdate ? 'update' : 'install',
           identity: { id: extensionId, name: newExtensionName },
-          stagingDirectory: stagingPath,
-          destinationDirectory: destinationPath,
-          ...(!isUpdate ? { initialActivation } : {}),
+          version: stagedExtension.version,
           ...(expectedArtifactGeneration === undefined
             ? {}
             : { expectedArtifactGeneration }),
-        });
-        await preparedSettings?.commit().catch((error) => {
-          debugLogger.warn(
-            `Extension "${newExtensionName}" settings compatibility cleanup failed: ${getErrorMessage(error)}`,
-          );
-        });
-        preparedSettings = undefined;
-        stagingPath = undefined;
-
-        try {
-          extension = await this.loadExtension(
-            {
-              extensionDir: destinationPath,
-            },
-            { throwOnError: true },
-          );
-          if (!extension) throw new Error('Extension not found after commit.');
-        } catch (reloadError) {
-          this.extensionCache?.delete(newExtensionName);
-          this.applyStoreActivation(snapshot);
-          const warnings = [
-            {
-              code: 'extension_reload_failed',
-              error: getErrorMessage(reloadError),
-            },
-          ];
-          await this.refreshTools().catch((error) => {
-            warnings.push({
-              code: 'extension_runtime_refresh_failed',
-              error: getErrorMessage(error),
-            });
-            debugLogger.warn(
-              `Extension "${newExtensionName}" was committed, but runtime refresh failed: ${getErrorMessage(error)}`,
-            );
-          });
-          const error = new Error(
-            `Extension "${newExtensionName}" committed but could not be reloaded: ${getErrorMessage(reloadError)}`,
-            { cause: reloadError },
-          ) as ExtensionCommittedWithWarningsError;
-          error.code = 'extension_committed_with_warnings';
-          error.committed = true;
-          error.identity = { id: extensionId, name: newExtensionName };
-          error.warnings = warnings;
-          throw error;
-        }
-
-        if (this.extensionCache) {
-          this.extensionCache.set(extension.name, extension);
-        }
-
-        if (this.extensionCache) this.applyStoreActivation(snapshot);
-        await this.refreshTools().catch((error) => {
-          debugLogger.warn(
-            `Extension "${newExtensionName}" was installed, but runtime refresh failed: ${getErrorMessage(error)}`,
-          );
-        });
+          initialActivation,
+          stagingDirectory: stagingPath,
+          destinationDirectory: destinationPath,
+          cleanupPaths,
+          ...(preparedSettings
+            ? {
+                commitSettings: preparedSettings.commit,
+                discardSettings: preparedSettings.discard,
+              }
+            : {}),
+          settingsActivated: false,
+          disposed: false,
+        };
+        ownershipTransferred = true;
+        return prepared;
       } finally {
         if (!ownershipTransferred && preparedSettings) {
           await preparedSettings.discard().catch((error) => {
@@ -2258,7 +1624,6 @@ export class ExtensionManager {
           });
         }
       }
-      return extension;
     } catch (error) {
       if (!newExtensionConfig && localSourcePath) {
         try {
@@ -2280,8 +1645,6 @@ export class ExtensionManager {
         });
       }
       throw error;
-    } finally {
-      endMutation();
     }
   }
 
@@ -2401,8 +1764,6 @@ export class ExtensionManager {
    */
   async uninstallExtension(
     extensionIdentifier: string,
-    isUpdate: boolean,
-    onCommitted?: ExtensionCommitCallback,
   ): Promise<ExtensionStoreMutationResult> {
     const endMutation = this.beginMutation('uninstallExtension');
     try {
@@ -2422,36 +1783,6 @@ export class ExtensionManager {
         extension.installMetadata?.type === 'link'
           ? path.join(this.configDir, extension.name)
           : extension.path,
-        isUpdate,
-        onCommitted,
-      );
-    } finally {
-      endMutation();
-    }
-  }
-
-  async uninstallExtensionById(
-    extensionId: string,
-    isUpdate: boolean,
-    onCommitted?: ExtensionCommitCallback,
-  ): Promise<ExtensionStoreMutationResult> {
-    const endMutation = this.beginMutation('uninstallExtension');
-    try {
-      const snapshot = await this.extensionStore.readSnapshot();
-      const policy = snapshot.extensions[extensionId];
-      if (!policy || policy.declarationOnly) return snapshot;
-      const extension = this.getLoadedExtensions().find(
-        (candidate) => candidate.id === extensionId,
-      );
-      const destinationDirectory =
-        extension && extension.installMetadata?.type !== 'link'
-          ? extension.path
-          : path.join(this.configDir, policy.name);
-      return await this.uninstallExtensionPolicy(
-        { id: extensionId, name: policy.name },
-        destinationDirectory,
-        isUpdate,
-        onCommitted,
       );
     } finally {
       endMutation();
@@ -2461,17 +1792,13 @@ export class ExtensionManager {
   private async uninstallExtensionPolicy(
     identity: { id: string; name: string },
     destinationDirectory: string,
-    isUpdate: boolean,
-    onCommitted?: ExtensionCommitCallback,
   ): Promise<ExtensionStoreMutationResult> {
     const snapshot = await this.extensionStore.commitArtifact({
       operation: 'uninstall',
       identity,
       destinationDirectory,
     });
-    onCommitted?.(snapshot.generation);
     this.extensionCache?.delete(identity.name);
-    if (isUpdate) return snapshot;
     const warnings: NonNullable<ExtensionStoreMutationResult['warnings']> = [];
     try {
       this.preferencesStore.clear(identity.name);
@@ -2496,40 +1823,6 @@ export class ExtensionManager {
       });
     }
     return warnings.length > 0 ? { ...snapshot, warnings } : snapshot;
-  }
-
-  async performWorkspaceExtensionMigration(
-    extensions: Extension[],
-    requestConsent: (options?: ExtensionRequestOptions) => Promise<void>,
-    requestSetting?: (setting: ExtensionSetting) => Promise<string>,
-  ): Promise<string[]> {
-    const failedInstallNames: string[] = [];
-
-    for (const extension of extensions) {
-      try {
-        const installMetadata: ExtensionInstallMetadata = {
-          source: extension.path,
-          type: 'local',
-          originSource: extension.installMetadata?.originSource || 'QwenCode',
-        };
-        await this.installExtension(
-          installMetadata,
-          requestConsent,
-          requestSetting,
-        );
-      } catch (error) {
-        if (
-          isExtensionCommittedWithWarningsError(error) &&
-          !error.warnings.some(
-            (warning) => warning.code === 'extension_reload_failed',
-          )
-        ) {
-          continue;
-        }
-        failedInstallNames.push(extension.config.name);
-      }
-    }
-    return failedInstallNames;
   }
 
   async checkForAllExtensionUpdates(
@@ -2772,7 +2065,7 @@ export function getExtensionId(
   // collapses them into one id and the second install trips the store's
   // id-ownership check (#7568). Suffix the plugin name so each plugin from
   // the same source gets its own id. Installs recorded under the old
-  // repo-only id are re-keyed by ExtensionStore.ensureInitialized.
+  // repo-only id are re-keyed when the extension store initializes.
   if (installMetadata?.pluginName) {
     idValue += `:${installMetadata.pluginName}`;
   }

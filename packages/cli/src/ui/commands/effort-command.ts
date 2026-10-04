@@ -38,7 +38,7 @@ export const effortCommand: SlashCommand = {
   // Enter auto-pick the first one, which we don't want here.
   argumentHint: '[low|medium|high|xhigh|max]',
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
   action: async (
     context: CommandContext,
     actionArgs: string,
@@ -67,7 +67,7 @@ export const effortCommand: SlashCommand = {
 
     const availableTierList = availableTiers.join(', ');
 
-    // No argument: open the interactive picker, or (non-interactive/ACP) report
+    // No argument: open the interactive picker, or (non-interactive) report
     // the current tier and the available options.
     if (!args) {
       if (context.executionMode === 'interactive') {
@@ -113,13 +113,11 @@ export const effortCommand: SlashCommand = {
     // Apply at runtime (takes effect next turn) and persist for future sessions.
     // Provider adapters clamp the tier to what the active model supports.
     applyReasoningEffort(config, tier);
-    if (context.executionPolicy?.persistModelSelection !== false) {
-      settings.setValue(
-        getPersistScopeForModelSelection(settings),
-        'model.reasoningEffort',
-        tier,
-      );
-    }
+    settings.setValue(
+      getPersistScopeForModelSelection(settings),
+      'model.reasoningEffort',
+      tier,
+    );
 
     return {
       type: 'message',

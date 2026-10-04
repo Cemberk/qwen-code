@@ -57,12 +57,7 @@ import { createSessionStartProfiler } from './session-start-profiler.js';
 const debugLogger = createDebugLogger('CLIENT');
 
 // Core modules
-import {
-  LlmChat,
-  type RepairOrphanedToolUseOptions,
-  userContentPushSnapshotKey,
-} from './llm-chat.js';
-import { restorableAskUserQuestionCallIds } from './ask-user-question-restore.js';
+import { LlmChat, userContentPushSnapshotKey } from './llm-chat.js';
 import { getRecentGitStatus } from '../utils/gitUtils.js';
 import {
   assembleSystemPrompt,
@@ -156,11 +151,7 @@ import type { DeferredToolSummary } from '../tools/tool-registry.js';
 import { replayUiTelemetryFromConversation } from '../services/sessionService.js';
 import { buildSessionHistoryFromConversation } from '../services/session-api-history.js';
 import { reportError } from '../utils/errorReporting.js';
-import {
-  getErrorMessage,
-  getErrorType,
-  UnauthorizedError,
-} from '../utils/errors.js';
+import { getErrorMessage, getErrorType } from '../utils/errors.js';
 import { checkNextSpeaker } from '../utils/nextSpeakerChecker.js';
 import { flatMapTextParts } from '../utils/partUtils.js';
 import { promptIdContext } from '../utils/promptIdContext.js';
@@ -360,7 +351,6 @@ type MainSessionPromptConfig = Pick<
   | 'getModel'
   | 'getOutputStyle'
   | 'getCodeModeOnly'
-  | 'getExperimentalZedIntegration'
   | 'getInputFormat'
   | 'isInteractive'
   | 'isTodoWriteEnabled'
@@ -575,32 +565,7 @@ export class LlmClient {
 
     // Check if we're resuming from a previous session
     const resumedSessionData = this.config.getResumedSessionData();
-    const restoreRuntime = this.config.getSessionRestoreRuntime?.();
-    if (restoreRuntime) {
-      this.armTelemetrySwapUndo(sessionId);
-      uiTelemetryService.resetSession(sessionId);
-      for (const event of restoreRuntime.uiTelemetryEvents) {
-        uiTelemetryService.addEvent(event, sessionId);
-      }
-      this.seedRecentCompletedToolNamesFromHistory(restoreRuntime.apiHistory);
-      await this.startChat(
-        restoreRuntime.apiHistory,
-        sessionStartSource ?? SessionStartSource.Resume,
-        signal,
-      );
-      await this.restoreLoadedSkillsFromHistory(restoreRuntime.apiHistory);
-      const chat = this.getChat();
-      chat.setCompletedToolCallIds(restoreRuntime.completedToolCallIds);
-      if (restoreRuntime.resumeTokenCounts) {
-        const counts = restoreRuntime.resumeTokenCounts;
-        uiTelemetryService.setLastPromptTokenCount(counts.promptTokenCount);
-        chat.seedResumeTokenCounts(
-          counts.promptTokenCount,
-          counts.outputTokenCount,
-          counts.isEstimated,
-        );
-      }
-    } else if (resumedSessionData) {
+    if (resumedSessionData) {
       this.armTelemetrySwapUndo(sessionId);
       const resumeTokenCounts = replayUiTelemetryFromConversation(
         resumedSessionData.conversation,
@@ -683,8 +648,8 @@ export class LlmClient {
    * {@link armTelemetrySwapUndo} inside `initialize()`'s replay branches, so
    * it is scoped to the ONE replay this swap performs:
    *
-   * - A replay outside any transaction (process-startup `Config.initialize()`,
-   *   ACP) arms nothing — there is no owning swap to settle it, and a
+   * - A replay outside any transaction (process-startup `Config.initialize()`)
+   *   arms nothing — there is no owning swap to settle it, and a
    *   process-lived undo would let a much later failed swap restore a
    *   process-start snapshot and wipe everything accrued since.
    * - `initialize()` only replays when its private `initializedSessionId`
@@ -877,8 +842,6 @@ export class LlmClient {
    * continuations keep the proposal parked until their final boundary. An
    * aborted turn drops the approval instead of starting a loop the user just
    * cancelled; an abort during dispatch pauses the new Goal.
-   * Host-supported sessions settle after classifying their own protective
-   * exits, so core must leave their single-take proposal latch untouched.
    */
   private async settlePendingGoalProposal(
     turnEnded: boolean,
@@ -887,7 +850,6 @@ export class LlmClient {
     turnKey: string,
     reportFailure: (message: string) => void,
   ): Promise<void> {
-    if (this.config.getGoalProposalHostSupported?.()) return;
     const take = this.config.takePendingGoalProposal;
     if (typeof take !== 'function') return;
     if (!turnEnded && !signal.aborted) return;
@@ -1065,14 +1027,11 @@ export class LlmClient {
    * late real result lands as a second `user[tool_result]` block (orphan
    * because the synthetic already consumed the matching `tool_use`).
    */
-  repairOrphanedToolUseTurnsInHistory(
-    reason?: string,
-    options?: RepairOrphanedToolUseOptions,
-  ): {
+  repairOrphanedToolUseTurnsInHistory(reason?: string): {
     injected: Array<{ callId: string; name: string }>;
     droppedDuplicates: Array<{ callId: string; name: string }>;
   } {
-    const result = this.getChat().repairOrphanedToolUseTurns(reason, options);
+    const result = this.getChat().repairOrphanedToolUseTurns(reason);
     if (result.injected.length > 0) {
       debugLogger.warn(
         `[REPAIR] Synthesized ${result.injected.length} functionResponse(s) ` +
@@ -1885,47 +1844,11 @@ export class LlmClient {
       contextFiles: this.config.getUserMemory(),
       appendPrompt: this.config.getAppendSystemPrompt(),
     };
-    // Record the stable → context layers (everything before the volatile
-    // gitStatus/autoMemory tail) as the cross-session-stable system prefix.
-    // The Anthropic converter splits the outgoing system prompt at this
-    // boundary and puts an early cache breakpoint on the stable part, so
-    // new sessions (different git status) and in-session memory saves
-    // don't re-bill it. Recorded on every rebuild so it tracks
-    // memory/model/mode changes; consumers match via `startsWith` and fail
-    // open when it goes stale.
-    this.config.setStaticSystemPrefix(assembleSystemPrompt(stableLayers));
     return assembleSystemPrompt({
       ...stableLayers,
       gitStatus: this.getCachedGitStatus(),
       autoMemory: this.config.getAutoMemoryPrompt(),
     });
-  }
-
-  async refreshStartupContextReminder(): Promise<void> {
-    if (!this.chat) {
-      return;
-    }
-
-    const currentHistory = this.getChat().getHistory();
-    const startupLength = getStartupContextLength(currentHistory);
-    if (startupLength === 0) {
-      return;
-    }
-
-    // Slice by the detected prelude length, not a hardcoded 1: a restored
-    // legacy session stores startup context as a [user(env), model("Got
-    // it…")] pair (getStartupContextLength === 2), so slice(1) would leave
-    // the orphaned model-ack entry behind when re-prepending the prelude.
-    const remaining = currentHistory.slice(startupLength);
-    const [[startupContext], snapshotEntries] = await getInitialChatHistory(
-      this.config,
-    );
-    this.seedSkillReminderDedupFromSnapshot(snapshotEntries);
-    await this.seedAgentReminderDedupFromCurrent();
-    this.getChat().setHistory(
-      startupContext ? [startupContext, ...remaining] : remaining,
-      this.getChat().getCompletedToolCallIds(),
-    );
   }
 
   /**
@@ -2672,15 +2595,7 @@ export class LlmClient {
       // any pre-send code reading `chat.history` from seeing a malformed
       // shape.)
       profiler.timeSync('orphan_tool_use_repair', () => {
-        const preserveCallIds =
-          (this.config.getPreserveRestorableAskUserQuestion?.() ??
-          this.config.getRestoreAskUserQuestion?.())
-            ? restorableAskUserQuestionCallIds(chat.peekLastHistoryEntry())
-            : undefined;
-        this.repairOrphanedToolUseTurnsInHistory(
-          undefined,
-          preserveCallIds ? { preserveCallIds } : undefined,
-        );
+        this.repairOrphanedToolUseTurnsInHistory();
       });
 
       const sessionStartAdditionalContext = await profiler.time(
@@ -3188,14 +3103,6 @@ export class LlmClient {
         ...(errorType ? { errorType } : {}),
       });
     };
-    if (
-      messageType === SendMessageType.UserQuery ||
-      messageType === SendMessageType.Cron ||
-      messageType === SendMessageType.Notification ||
-      messageType === SendMessageType.Teammate
-    ) {
-      await this.config.assertCanStartTurn();
-    }
     if (
       messageType === SendMessageType.UserQuery &&
       !options?.isConcurrentSideQuery
@@ -4064,20 +3971,6 @@ export class LlmClient {
         !!lastMessage &&
         lastMessage.role === 'model' &&
         (lastMessage.parts?.some((p) => 'functionCall' in p) || false);
-      // Check for arena control signal before starting a new turn
-      const arenaAgentClient = this.config.getArenaAgentClient();
-      if (arenaAgentClient) {
-        const controlSignal = await arenaAgentClient.checkControlSignal();
-        if (controlSignal) {
-          debugLogger.info(
-            `Arena control signal received: ${controlSignal.type} - ${controlSignal.reason}`,
-          );
-          await arenaAgentClient.reportCancelled();
-          this.cancelPendingMemoryPrefetch('abort');
-          endCurrentInteraction('cancelled');
-          return new Turn(this.getChat(), prompt_id);
-        }
-      }
 
       if (
         !hasPendingToolCall &&
@@ -4272,7 +4165,6 @@ export class LlmClient {
               type: LlmEventType.LoopDetected,
               ...(loopType && { value: { loopType } }),
             };
-            await arenaAgentClient?.reportError('Loop detected');
             this.lastApiCompletionTimestamp = Date.now();
             endCurrentInteraction('error', 'loop detected', 'loop_detected');
             this.cancelPendingMemoryPrefetch('no_safe_delivery_point');
@@ -4467,9 +4359,6 @@ export class LlmClient {
               type: LlmEventType.LoopDetected,
               ...(loopType && { value: { loopType } }),
             };
-            if (arenaAgentClient) {
-              await arenaAgentClient.reportError('Loop detected');
-            }
             this.lastApiCompletionTimestamp = Date.now();
             endCurrentInteraction('error', 'loop detected', 'loop_detected');
             this.cancelPendingMemoryPrefetch('no_safe_delivery_point');
@@ -4504,9 +4393,6 @@ export class LlmClient {
               type: LlmEventType.LoopDetected,
               ...(loopType && { value: { loopType } }),
             };
-            if (arenaAgentClient) {
-              await arenaAgentClient.reportError('Loop detected');
-            }
             this.lastApiCompletionTimestamp = Date.now();
             endCurrentInteraction('error', 'loop detected', 'loop_detected');
             // finally cleanup catches this, but cancel explicitly to match
@@ -4515,11 +4401,6 @@ export class LlmClient {
             this.fireLoopDetectedStopFailure(loopType);
             settleMemoryDelivery();
             return turn;
-          }
-          // Update arena status on Finished events — stats are derived
-          // automatically from uiTelemetryService by the reporter.
-          if (arenaAgentClient && event.type === LlmEventType.Finished) {
-            await arenaAgentClient.updateStatus();
           }
 
           if (event.type === LlmEventType.ChatCompressed) {
@@ -4574,26 +4455,6 @@ export class LlmClient {
           }
           yield event;
           if (event.type === LlmEventType.Error) {
-            if (arenaAgentClient) {
-              const status = event.value.error?.status;
-              const arenaError =
-                status === 401 || status === 403
-                  ? 'Authentication failed'
-                  : status === 429
-                    ? 'Rate limit exceeded'
-                    : status !== undefined && status >= 500
-                      ? 'Provider service unavailable'
-                      : status !== undefined
-                        ? `API request failed (${status})`
-                        : 'Provider request failed';
-              try {
-                await arenaAgentClient.reportError(arenaError);
-              } catch {
-                this.config
-                  .getDebugLogger()
-                  .warn('Failed to report Arena provider error');
-              }
-            }
             this.lastApiCompletionTimestamp = Date.now();
             // Sanitize: do not pass raw API error messages to span status.
             endCurrentInteraction('error', 'unknown error', 'api_error');
@@ -4870,8 +4731,7 @@ export class LlmClient {
           // accounting so each continuation gets its own tool-call budget.
           // Without this, a hook chain accumulates every iteration's tool
           // calls into one "turn" and trips TURN_TOOL_CALL_CAP after a handful
-          // of healthy iterations. The ACP daemon path already has these
-          // semantics (fresh DaemonToolLoopState per continuation). Runaway
+          // of healthy iterations. Runaway
           // protection is preserved: the cap still bounds each iteration, and
           // the chain itself is bounded by stopHookBlockingCap.
           this.loopDetector.reset(prompt_id);
@@ -4961,9 +4821,6 @@ export class LlmClient {
           if (!isGoalRuntimeTurn) {
             this.runManagedAutoMemoryBackgroundTasks(managedMemoryType);
           }
-          if (arenaAgentClient) {
-            await arenaAgentClient.reportCompleted();
-          }
           await this.settlePendingGoalProposal(
             true,
             signal,
@@ -5044,16 +4901,6 @@ export class LlmClient {
         if (!isGoalRuntimeTurn) {
           this.runManagedAutoMemoryBackgroundTasks(managedMemoryType);
         }
-
-        if (arenaAgentClient) {
-          // No continuation needed — agent completed its task
-          await arenaAgentClient.reportCompleted();
-        }
-      }
-
-      // Report cancelled to arena when user cancelled mid-stream
-      if (signal?.aborted && arenaAgentClient) {
-        await arenaAgentClient.reportCancelled();
       }
 
       if (!hasToolCalls) {
@@ -5086,21 +4933,6 @@ export class LlmClient {
         getErrorMessage(error),
       )) {
         yield goalEvent;
-      }
-      if (
-        error instanceof UnauthorizedError &&
-        messageType !== SendMessageType.Hook &&
-        messageType !== SendMessageType.Steer
-      ) {
-        try {
-          await this.config
-            .getArenaAgentClient()
-            ?.reportError('Authentication failed');
-        } catch {
-          this.config
-            .getDebugLogger()
-            .warn('Failed to report Arena authentication error');
-        }
       }
       throw error;
     } finally {

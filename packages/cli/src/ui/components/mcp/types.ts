@@ -22,9 +22,6 @@ export const MCP_MANAGEMENT_STEPS = {
   RESOURCE_DETAIL: 'resource-detail',
 } as const;
 
-export type MCPManagementStep =
-  (typeof MCP_MANAGEMENT_STEPS)[keyof typeof MCP_MANAGEMENT_STEPS];
-
 /**
  * MCP服务器显示信息
  */
@@ -103,24 +100,6 @@ export interface MCPResourceDisplayInfo {
   size?: number;
   /** 所属服务器 */
   serverName: string;
-}
-
-/**
- * MCP Prompt显示信息
- */
-export interface MCPPromptDisplayInfo {
-  /** Prompt名称 */
-  name: string;
-  /** Prompt描述 */
-  description?: string;
-  /** 所属服务器 */
-  serverName: string;
-  /** 参数定义 */
-  arguments?: Array<{
-    name: string;
-    description?: string;
-    required?: boolean;
-  }>;
 }
 
 /**

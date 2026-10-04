@@ -26,26 +26,22 @@ export type SystemPromptInteractionMode = 'interactive' | 'headless' | 'acp';
 
 /**
  * Resolve the system-prompt interaction mode from a config. Single source of
- * truth for the ACP > interactive > headless precedence so callers that build
+ * truth for the stream-json > interactive > headless precedence so callers that build
  * the core system prompt (generation and `/context` token estimation) cannot
  * drift apart. Uses a structural type to avoid a hard dependency on the full
  * Config class.
  */
 export function resolveInteractionMode(config: {
-  getExperimentalZedIntegration(): boolean;
   getInputFormat?(): string;
   isInteractive(): boolean;
 }): SystemPromptInteractionMode {
-  // ACP mode must match the runtime definition used by the question/permission
-  // sites (askUserQuestion.ts, enterPlanMode.ts, coreToolScheduler.ts), which
-  // treat a stream-json session as ACP-capable because the host can relay
+  // Must match the runtime definition used by the question/permission sites
+  // (askUserQuestion.ts, enterPlanMode.ts, coreToolScheduler.ts), which treat
+  // a stream-json session as host-relayed because the host can relay
   // questions and responses. Resolving stream-json to 'headless' here would
   // wrongly tell the model to never ask a question while the runtime still
   // allows 'ask_user_question'.
-  if (
-    config.getExperimentalZedIntegration() ||
-    config.getInputFormat?.() === InputFormat.STREAM_JSON
-  ) {
+  if (config.getInputFormat?.() === InputFormat.STREAM_JSON) {
     return 'acp';
   }
   return config.isInteractive() ? 'interactive' : 'headless';
@@ -680,7 +676,6 @@ Interaction mode reminder: ${interaction.questions}
 export function resolveMainSessionOutputStyle(config: {
   getSystemPrompt(): string | undefined;
   getOutputStyle(): OutputStyleDefinition | null | undefined;
-  getExperimentalZedIntegration(): boolean;
   getInputFormat?(): string;
   isInteractive(): boolean;
   isTrustedFolder?(): boolean;

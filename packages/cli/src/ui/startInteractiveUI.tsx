@@ -390,7 +390,6 @@ export async function startInteractiveUI(
       sessionId: config.getSessionId(),
       cwd: config.getTargetDir(),
       qwenVersion: version,
-      kind: 'tui',
     }),
   );
 

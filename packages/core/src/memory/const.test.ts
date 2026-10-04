@@ -11,8 +11,6 @@ import {
   setMemoryFilename,
   getCurrentMemoryFilename,
   getAllMemoryFilenames,
-  getAllGeminiMdFilenames,
-  setGeminiMdFilename,
 } from '../utils/memory-constants.js';
 
 // Mock dependencies
@@ -52,11 +50,5 @@ describe('setMemoryFilename', () => {
     setMemoryFilename(newNames);
     expect(getCurrentMemoryFilename()).toBe('CUSTOM_CONTEXT.md');
     expect(getAllMemoryFilenames()).toEqual(newNames);
-  });
-
-  it('keeps the legacy public names wired to the renamed state', () => {
-    setGeminiMdFilename('LEGACY_NAME.md');
-    expect(getCurrentMemoryFilename()).toBe('LEGACY_NAME.md');
-    expect(getAllGeminiMdFilenames()).toEqual(['LEGACY_NAME.md']);
   });
 });

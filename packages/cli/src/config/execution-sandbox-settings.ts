@@ -157,14 +157,3 @@ export function validateExecutionSandboxSelection(
   }
   return policy;
 }
-
-export function assertExecutionSandboxSupported(
-  settings: SandboxSettingsInput,
-  surface: string,
-): void {
-  if (validateExecutionSandboxSelection(settings)) {
-    throw new InvalidExecutionSandboxConfigError(
-      `tools.executionSandbox does not yet support ${surface}. Use the ordinary CLI or terminal UI.`,
-    );
-  }
-}

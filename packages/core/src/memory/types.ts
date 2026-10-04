@@ -51,12 +51,6 @@ export type AutoMemoryTreeCategoryKey =
 
 export const AUTO_MEMORY_SCHEMA_VERSION = 1;
 
-export interface AutoMemorySourceRef {
-  sessionId?: string;
-  recordedAt: string;
-  messageIds?: string[];
-}
-
 export interface AutoMemoryMetadata {
   version: typeof AUTO_MEMORY_SCHEMA_VERSION;
   createdAt: string;

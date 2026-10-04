@@ -357,7 +357,6 @@ the structured-output contract.
 | `--json-schema` + `--bare`                               | Supported              | `--bare` restricts the registry to `read_file`, `edit`, `run_shell_command`; the synthetic tool is registered alongside that minimal set. |
 | `--json-schema` + `-i`                                   | Rejected at parse time | TUI has no terminal contract for the synthetic tool.                                                                                      |
 | `--json-schema` + `--input-format stream-json`           | Rejected at parse time | Single-shot contract vs. long-lived protocol.                                                                                             |
-| `--json-schema` + `--acp` / `--experimental-acp`         | Rejected at parse time | ACP loop is independent.                                                                                                                  |
 | `--json-schema` + `--prompt-interactive`                 | Rejected at parse time | Same as `-i`.                                                                                                                             |
 | `--json-schema` + no prompt + no piped stdin             | Rejected at parse time | Headless requires a prompt.                                                                                                               |
 

@@ -14,7 +14,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { Config } from '@qwen-code/qwen-code-core';
 import { loadInteractiveCommands } from './slash-dispatch.js';
-import { HELP_DOCS_URL, formatHelpText } from './help-content.js';
 
 describe('original built-in registry', () => {
   it('loads built-in commands without a config (BuiltinCommandLoader)', async () => {
@@ -29,19 +28,6 @@ describe('original built-in registry', () => {
       expect(cmd.hidden).toBeFalsy();
       expect(cmd.userInvocable).not.toBe(false);
     }
-  }, 30000);
-
-  it('help output matches the original dialog content', async () => {
-    const commands = await loadInteractiveCommands(null);
-    const text = formatHelpText(commands);
-    expect(text).toContain('Qwen Code');
-    expect(text).toContain('Shortcuts');
-    expect(text).toContain('↑/↓');
-    expect(text).toContain('Browse built-in commands:');
-    expect(text).toContain('Built-in Commands');
-    expect(text).toContain('/help');
-    expect(text).toContain('/quit');
-    expect(text).toContain(HELP_DOCS_URL);
   }, 30000);
 });
 

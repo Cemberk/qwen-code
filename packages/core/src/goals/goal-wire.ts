@@ -23,7 +23,6 @@ export {
 } from './goal-protocol.js';
 export {
   parseGoalSnapshotV2,
-  parseGoalStateCause,
   parseGoalStateRecordPayloadV2,
 } from './goal-reducer.js';
 export {

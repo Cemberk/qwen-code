@@ -169,7 +169,6 @@ import {
   TOOL_FAILURE_KIND_ATTRIBUTE,
   TOOL_FAILURE_KIND_BACKGROUND_AGENT_DENIED,
   TOOL_FAILURE_KIND_CANCELLED,
-  TOOL_FAILURE_KIND_INVOCATION_GUARD_DENIED,
   TOOL_FAILURE_KIND_NON_INTERACTIVE_DENIED,
   TOOL_FAILURE_KIND_PERMISSION_DENIED,
   TOOL_FAILURE_KIND_PERMISSION_HOOK_DENIED,
@@ -210,11 +209,7 @@ import {
   normalizeParts,
 } from '../services/visionBridge/image-part-utils.js';
 import { bridgeToolResultImages } from '../services/visionBridge/tool-result-vision-bridge.js';
-import {
-  getInvocationContext,
-  runWithInvocationContext,
-} from '../utils/invocation-context.js';
-import { evaluateToolInvocationGuard } from './tool-invocation-guard.js';
+
 import { goalTurnContext } from '../goals/goal-turn-context.js';
 import { goalToolResultProvenance } from '../goals/goal-tool-result-provenance.js';
 import {
@@ -417,8 +412,6 @@ function extractCodeModeToolOutput(parts: Part[]): string {
 const CODE_MODE_BATCH_WINDOW_MS = 5;
 
 const TOOL_SPAN_STATUS_PRE_HOOK_BLOCKED = 'Tool execution blocked by hook';
-const TOOL_SPAN_STATUS_INVOCATION_GUARD_DENIED =
-  'Tool execution blocked by host policy';
 
 const TOOL_SPAN_STATUS_POST_HOOK_STOPPED = 'Tool execution stopped by hook';
 const TOOL_SPAN_STATUS_PERMISSION_DENIED = 'Permission denied for tool';
@@ -902,10 +895,6 @@ export function extractToolFilePaths(
       return out;
   }
 }
-
-export type ConfirmHandler = (
-  toolCall: WaitingToolCall,
-) => Promise<ToolConfirmationOutcome>;
 
 export type OutputUpdateHandler = (
   toolCallId: string,
@@ -2427,9 +2416,8 @@ export class CoreToolScheduler {
    * The setters are intentionally optional:
    * - Existing tools whose invocations do not implement these setters
    *   stay compatible without any change.
-   * - Future contexts (subagent / direct buildAndExecute / non-scheduler
-   *   callers) may invoke this with fewer arguments and still get a
-   *   valid invocation back.
+   * - Future contexts (subagent / non-scheduler callers) may invoke this
+   *   with fewer arguments and still get a valid invocation back.
    * Scheduling and argument rebuilds pass the request's client provenance;
    * a missing origin (including nested code-mode calls) does not opt in.
    */
@@ -3827,7 +3815,6 @@ export class CoreToolScheduler {
              */
             const isNonInteractiveDeny =
               !this.config.isInteractive() &&
-              !this.config.getExperimentalZedIntegration() &&
               this.config.getInputFormat() !== InputFormat.STREAM_JSON;
 
             if (isNonInteractiveDeny) {
@@ -4131,7 +4118,6 @@ export class CoreToolScheduler {
             }
 
             const originalOnConfirm = confirmationDetails.onConfirm;
-            const invocationContext = getInvocationContext();
             let planShellResponseClaimed = false;
             const wrappedConfirmationDetails: ToolCallConfirmationDetails = {
               ...confirmationDetails,
@@ -4145,44 +4131,44 @@ export class CoreToolScheduler {
                 outcome: ToolConfirmationOutcome,
                 payload?: ToolConfirmationPayload,
               ) =>
-                runWithInvocationContext(invocationContext, async () => {
-                  await runInRequestGoalContext(reqInfo, async () => {
-                    if (planShellDecision.classification !== 'not-applicable') {
-                      if (planShellResponseClaimed) return;
-                      planShellResponseClaimed = true;
-                      const currentCall = this.toolCalls.find(
-                        (call) =>
-                          call.request.callId === reqInfo.callId &&
-                          call.status === 'awaiting_approval',
-                      ) as WaitingToolCall | undefined;
-                      if (!currentCall) return;
-                      const approval = await validatePlanModeShellApproval({
-                        config: this.config,
-                        decision: planShellDecision,
-                        requestArgs: currentCall.request.args,
-                        invocationParams: currentCall.invocation
-                          .params as Record<string, unknown>,
-                        signal,
-                        outcome,
-                        payload,
-                      });
-                      await this.handleConfirmationResponse(
-                        reqInfo.callId,
-                        originalOnConfirm,
-                        approval.outcome,
-                        signal,
-                        approval.payload,
-                      );
-                      return;
-                    }
+                runInRequestGoalContext(reqInfo, async () => {
+                  if (planShellDecision.classification !== 'not-applicable') {
+                    if (planShellResponseClaimed) return;
+                    planShellResponseClaimed = true;
+                    const currentCall = this.toolCalls.find(
+                      (call) =>
+                        call.request.callId === reqInfo.callId &&
+                        call.status === 'awaiting_approval',
+                    ) as WaitingToolCall | undefined;
+                    if (!currentCall) return;
+                    const approval = await validatePlanModeShellApproval({
+                      config: this.config,
+                      decision: planShellDecision,
+                      requestArgs: currentCall.request.args,
+                      invocationParams: currentCall.invocation.params as Record<
+                        string,
+                        unknown
+                      >,
+                      signal,
+                      outcome,
+                      payload,
+                    });
                     await this.handleConfirmationResponse(
                       reqInfo.callId,
                       originalOnConfirm,
-                      outcome,
+                      approval.outcome,
                       signal,
-                      payload,
+                      approval.payload,
                     );
-                  });
+                    return;
+                  }
+                  await this.handleConfirmationResponse(
+                    reqInfo.callId,
+                    originalOnConfirm,
+                    outcome,
+                    signal,
+                    payload,
+                  );
                 }),
             };
             this.setStatusInternal(
@@ -4283,7 +4269,7 @@ export class CoreToolScheduler {
       // batchState.callIds stays empty and no finalizeToolSpan call
       // ever fires for this batch. Drop the listener here so the
       // signal doesn't accumulate dead listeners across many such
-      // batches in a daemon session (#4321 review-5 wenshao
+      // batches in a long-lived session (#4321 review-5 wenshao
       // Suggestion).
       if (batchState.callIds.size === 0) {
         signal.removeEventListener('abort', batchState.onAbort);
@@ -4928,7 +4914,6 @@ export class CoreToolScheduler {
   private canPromptForAskBounce(): boolean {
     const isNonInteractive =
       !this.config.isInteractive() &&
-      !this.config.getExperimentalZedIntegration() &&
       this.config.getInputFormat() !== InputFormat.STREAM_JSON;
     if (isNonInteractive) {
       return false;
@@ -5220,52 +5205,6 @@ export class CoreToolScheduler {
           span,
           TOOL_FAILURE_KIND_PRE_HOOK_BLOCKED,
           TOOL_SPAN_STATUS_PRE_HOOK_BLOCKED,
-        );
-        return;
-      }
-    }
-
-    const toolInvocationGuard = this.config.getToolInvocationGuard?.();
-    if (toolInvocationGuard) {
-      const invocationContext = getInvocationContext();
-      const guardDecision = await evaluateToolInvocationGuard(
-        toolInvocationGuard,
-        {
-          callId,
-          toolName: canonicalName,
-          args: invocation.params as Record<string, unknown>,
-          signal,
-          sessionId: this.config.getSessionId(),
-          cwd: this.config.getTargetDir(),
-          ...(invocationContext ? { invocationContext } : {}),
-        },
-      );
-      if (signal.aborted) {
-        const cancelledResponse = createCancelledResponse(
-          scheduledCall.request,
-          'Tool call cancelled before execution.',
-          'not_started',
-        );
-        observeSyntheticProducer(cancelledResponse);
-        this.setStatusInternal(callId, 'cancelled', cancelledResponse);
-        if (this.toolSpans.has(callId)) {
-          setToolSpanCancelled(span);
-        }
-        return;
-      }
-      if (!guardDecision.allowed) {
-        const errorResponse = createErrorResponse(
-          scheduledCall.request,
-          new Error(guardDecision.reason),
-          ToolErrorType.EXECUTION_DENIED,
-          'not_started',
-        );
-        observeSyntheticProducer(errorResponse);
-        this.setStatusInternal(callId, 'error', errorResponse);
-        setToolSpanFailure(
-          span,
-          TOOL_FAILURE_KIND_INVOCATION_GUARD_DENIED,
-          TOOL_SPAN_STATUS_INVOCATION_GUARD_DENIED,
         );
         return;
       }

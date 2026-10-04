@@ -9,10 +9,7 @@ import { ExtensionStorage } from './storage.js';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
-import {
-  EXTENSION_SETTINGS_FILENAME,
-  EXTENSIONS_CONFIG_FILENAME,
-} from './variables.js';
+import { EXTENSION_SETTINGS_FILENAME } from './variables.js';
 import { Storage } from '../config/storage.js';
 
 vi.mock('node:os');
@@ -59,17 +56,6 @@ describe('ExtensionStorage', () => {
       extensionName,
     );
     expect(storage.getExtensionDir()).toBe(expectedDir);
-  });
-
-  it('should return the correct config path', () => {
-    const expectedPath = path.join(
-      mockHomeDir,
-      '.qwen',
-      'extensions',
-      extensionName,
-      EXTENSIONS_CONFIG_FILENAME, // EXTENSIONS_CONFIG_FILENAME
-    );
-    expect(storage.getConfigPath()).toBe(expectedPath);
   });
 
   it('should return the correct env file path', () => {

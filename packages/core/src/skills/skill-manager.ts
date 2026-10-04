@@ -567,25 +567,6 @@ export class SkillManager {
   }
 
   /**
-   * Activate any conditional skills whose `paths:` globs match `filePath`.
-   * Returns the names of skills newly activated by this call. When at least
-   * one skill activates, change listeners are notified and awaited — so by
-   * the time this method resolves, downstream consumers (notably
-   * `SkillTool.refreshSkills` updating validation state) have applied the
-   * new state. Callers can therefore announce the activation in the same
-   * turn without racing against stale validation data.
-   *
-   * The activation registry reference is captured at call entry; if a
-   * concurrent `refreshCache` rebuilds the registry mid-call, this
-   * invocation finishes against the registry it started with, so a
-   * returned name is consistent with the listener state that's about to
-   * be observed.
-   */
-  async matchAndActivateByPath(filePath: string): Promise<string[]> {
-    return this.matchAndActivateByPaths([filePath]);
-  }
-
-  /**
    * Batch variant of {@link matchAndActivateByPath}: activate skills for
    * an array of file paths and fire change listeners exactly once across
    * all of them. Used by `coreToolScheduler` so a single tool call that
@@ -607,11 +588,6 @@ export class SkillManager {
       await this.notifyChangeListeners();
     }
     return Array.from(newlyAcrossPaths);
-  }
-
-  /** Names of all conditional skills activated so far (read-only snapshot). */
-  getActivatedSkillNames(): ReadonlySet<string> {
-    return this.activationRegistry?.getActivatedNames() ?? new Set();
   }
 
   /**
@@ -656,18 +632,6 @@ export class SkillManager {
       this.refreshTimer = null;
     }
     debugLogger.info('Skill directory watchers stopped');
-  }
-
-  /**
-   * Parses a SKILL.md file and returns the configuration.
-   *
-   * @param filePath - Path to the SKILL.md file
-   * @param level - Storage level
-   * @returns SkillConfig
-   * @throws SkillError if parsing fails
-   */
-  parseSkillFile(filePath: string, level: SkillLevel): Promise<SkillConfig> {
-    return this.parseSkillFileInternal(filePath, level);
   }
 
   /**

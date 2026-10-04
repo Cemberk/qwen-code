@@ -22,10 +22,7 @@ describe('ListAgentsTool', () => {
   });
 
   it('reports an empty roster', async () => {
-    const result = await tool.validateBuildAndExecute(
-      {},
-      new AbortController().signal,
-    );
+    const result = await tool.build({}).execute(new AbortController().signal);
 
     expect(tool.name).toBe('list_agents');
     expect(result.llmContent).toBe(
@@ -80,10 +77,7 @@ describe('ListAgentsTool', () => {
       resumeBlockedReason: 'Transcript does not match.',
     });
 
-    const result = await tool.validateBuildAndExecute(
-      {},
-      new AbortController().signal,
-    );
+    const result = await tool.build({}).execute(new AbortController().signal);
 
     expect(JSON.parse(String(result.llmContent))).toEqual({
       agents: [

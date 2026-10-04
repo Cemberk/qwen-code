@@ -36,7 +36,7 @@ vi.mock('../nonInteractiveCliCommands.js', () => ({
   getAvailableCommands: vi
     .fn()
     .mockImplementation(
-      async (_config: unknown, _signal: AbortSignal, mode: string = 'acp') => {
+      async (_config: unknown, _signal: AbortSignal, mode: string) => {
         const allCommands = [
           {
             name: 'help',
@@ -44,7 +44,7 @@ vi.mock('../nonInteractiveCliCommands.js', () => ({
           },
           {
             name: 'commit',
-            supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+            supportedModes: ['interactive', 'non_interactive'] as const,
           },
           {
             name: 'memory',
@@ -52,15 +52,15 @@ vi.mock('../nonInteractiveCliCommands.js', () => ({
           },
           {
             name: 'init',
-            supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+            supportedModes: ['interactive', 'non_interactive'] as const,
           },
           {
             name: 'summary',
-            supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+            supportedModes: ['interactive', 'non_interactive'] as const,
           },
           {
             name: 'compress',
-            supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+            supportedModes: ['interactive', 'non_interactive'] as const,
           },
         ] as const;
 
@@ -473,7 +473,7 @@ describe('buildSystemMessage', () => {
     expect(result.qwen_code_version).toBe('unknown');
   });
 
-  it('should include local commands with ACP supportedModes and prompt commands', async () => {
+  it('should include local commands with non-interactive supportedModes and prompt commands', async () => {
     const result = await buildSystemMessage(
       mockConfig,
       'test-session-id',
@@ -481,8 +481,8 @@ describe('buildSystemMessage', () => {
       settings,
     );
 
-    // Should include: 'commit' (prompt), 'compress', 'init', 'summary' (local+ACP)
-    // Should NOT include: 'help' (local-jsx), 'memory' (local without ACP supportedModes)
+    // Should include: 'commit' (prompt), 'compress', 'init', 'summary' (local, non-interactive)
+    // Should NOT include: 'help' (local-jsx), 'memory' (interactive-only)
     expect(result.slash_commands).toEqual([
       'commit',
       'compress',
@@ -499,7 +499,7 @@ describe('buildSystemMessage', () => {
       settings,
     );
 
-    // 'help' (local-jsx) and 'memory' (local without ACP) should be excluded
+    // 'help' (local-jsx) and 'memory' (interactive-only) should be excluded
     expect(result.slash_commands).not.toContain('help');
     expect(result.slash_commands).not.toContain('memory');
   });

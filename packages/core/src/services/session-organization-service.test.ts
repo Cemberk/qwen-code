@@ -8,10 +8,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import {
-  GROUP_COLOR_OPTIONS,
-  SessionOrganizationService,
-} from './session-organization-service.js';
+import { SessionOrganizationService } from './session-organization-service.js';
 
 describe('SessionOrganizationService', () => {
   let previousRuntimeDir: string | undefined;
@@ -42,160 +39,27 @@ describe('SessionOrganizationService', () => {
     await fs.rm(runtimeDir, { recursive: true, force: true });
   });
 
-  it('starts with no user groups and exposes fixed color options', async () => {
-    const catalog = await service.listGroups();
-
-    expect(catalog.groups).toEqual([]);
-    expect(catalog.colorOptions).toEqual(GROUP_COLOR_OPTIONS);
-  });
-
-  it('creates, updates, and rejects duplicate group names case-insensitively', async () => {
-    const group = await service.createGroup({
-      name: ' Frontend ',
-      color: 'blue',
-    });
-
-    expect(group).toEqual(
-      expect.objectContaining({
-        name: 'Frontend',
-        color: 'blue',
-        order: 0,
-      }),
-    );
-
-    await expect(
-      service.createGroup({ name: 'frontend', color: 'green' }),
-    ).rejects.toMatchObject({ code: 'group_name_conflict' });
-
-    const renamed = await service.updateGroup(group.id, {
-      name: 'UI',
-      color: 'purple',
-      order: 5,
-    });
-
-    expect(renamed).toEqual(
-      expect.objectContaining({
-        id: group.id,
-        name: 'UI',
-        color: 'purple',
-        order: 5,
-      }),
-    );
-  });
-
-  it('accepts and normalizes custom hex colors for named groups', async () => {
-    const group = await service.createGroup({
-      name: 'Custom',
-      color: ' #12ABef ' as never,
-    });
-    expect(group.color).toBe('#12abef');
-
-    const updated = await service.updateGroup(group.id, {
-      color: ' #FEDCBA ' as never,
-    });
-    expect(updated.color).toBe('#fedcba');
-
-    const catalog = await service.listGroups();
-    expect(catalog.groups[0]?.color).toBe('#fedcba');
-    expect(catalog.colorOptions).toEqual(GROUP_COLOR_OPTIONS);
-
-    const restarted = new SessionOrganizationService(cwd);
-    expect((await restarted.listGroups()).groups[0]?.color).toBe('#fedcba');
-  });
-
-  it('rejects invalid group names and colors', async () => {
-    await expect(
-      service.createGroup({ name: 'Bad\tName', color: 'blue' }),
-    ).rejects.toMatchObject({
-      code: 'invalid_group_name',
-      field: 'name',
-    });
-
-    await expect(
-      service.createGroup({ name: 'Bad\u007fName', color: 'blue' }),
-    ).rejects.toMatchObject({
-      code: 'invalid_group_name',
-      field: 'name',
-    });
-
-    await expect(
-      service.createGroup({ name: '\u200b', color: 'blue' }),
-    ).rejects.toMatchObject({
-      code: 'invalid_group_name',
-      field: 'name',
-    });
-
-    await expect(
-      service.createGroup({ name: 'Bad\u202eName', color: 'blue' }),
-    ).rejects.toMatchObject({
-      code: 'invalid_group_name',
-      field: 'name',
-    });
-
-    await expect(
-      service.createGroup({ name: 'Feature', color: 'pink' as never }),
-    ).rejects.toMatchObject({
-      code: 'invalid_group_color',
-      field: 'color',
-    });
-
-    await expect(
-      service.createGroup({ name: 'Short Hex', color: '#abc' }),
-    ).rejects.toMatchObject({
-      code: 'invalid_group_color',
-      field: 'color',
-    });
-  });
-
-  it('assigns new group order after the current maximum order', async () => {
-    const first = await service.createGroup({ name: 'First', color: 'red' });
-    const second = await service.createGroup({
-      name: 'Second',
-      color: 'green',
-    });
-    await service.updateGroup(second.id, { order: 10 });
-    await service.deleteGroup(first.id);
-
-    const third = await service.createGroup({ name: 'Third', color: 'blue' });
-
-    expect(third.order).toBe(11);
-  });
-
-  it('clamps new group order at the maximum safe integer', async () => {
-    const first = await service.createGroup({ name: 'First', color: 'red' });
-    await service.updateGroup(first.id, { order: Number.MAX_SAFE_INTEGER });
-
-    const second = await service.createGroup({
-      name: 'Second',
-      color: 'green',
-    });
-
-    expect(second.order).toBe(Number.MAX_SAFE_INTEGER);
-  });
-
-  it('rejects creating more than 200 groups', async () => {
+  // Groups and pins are only read back from sidecars written by earlier
+  // releases; seed the store file directly.
+  async function writeStore(store: unknown): Promise<void> {
     await fs.mkdir(path.dirname(service.getStorePath()), { recursive: true });
-    await fs.writeFile(
-      service.getStorePath(),
-      JSON.stringify({
-        schemaVersion: 1,
-        groups: Array.from({ length: 200 }, (_, index) => ({
-          id: `group-${index}`,
-          name: `Group ${index}`,
-          color: 'blue',
-          order: index,
-          createdAt: '2026-01-01T00:00:00.000Z',
-          updatedAt: '2026-01-01T00:00:00.000Z',
-        })),
-        sessions: {},
-      }),
-      'utf8',
-    );
+    await fs.writeFile(service.getStorePath(), JSON.stringify(store), 'utf8');
+  }
 
-    await expect(
-      service.createGroup({ name: 'Overflow', color: 'red' }),
-    ).rejects.toMatchObject({ code: 'group_limit_reached' });
+  const pinned = (groupId: string | null = null) => ({
+    groupId,
+    pinnedAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
   });
+
+  const cleanupGroup = {
+    id: 'group-cleanup',
+    name: 'Cleanup',
+    color: 'purple',
+    order: 0,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  };
 
   it('keeps groups with unsupported stored colors by falling back and warning once', async () => {
     await fs.mkdir(path.dirname(service.getStorePath()), { recursive: true });
@@ -223,16 +87,13 @@ describe('SessionOrganizationService', () => {
       'utf8',
     );
 
-    await expect(service.listGroups()).resolves.toEqual({
-      groups: [
-        expect.objectContaining({
-          id: 'group-future',
-          name: 'Future',
-          color: 'blue',
-        }),
-      ],
-      colorOptions: GROUP_COLOR_OPTIONS,
-    });
+    expect((await service.readSnapshot()).groups).toEqual([
+      expect.objectContaining({
+        id: 'group-future',
+        name: 'Future',
+        color: 'blue',
+      }),
+    ]);
     const snapshot = await service.readSnapshot();
     expect(snapshot.sessions.get(sessionIdA)).toEqual(
       expect.objectContaining({
@@ -241,7 +102,7 @@ describe('SessionOrganizationService', () => {
     );
     await new SessionOrganizationService(cwd, (warning) => {
       warnings.push(warning);
-    }).listGroups();
+    }).readSnapshot();
 
     expect(warnings).toEqual([
       'Session group "Future" (id: group-future) uses unsupported color "teal"; using "blue"',
@@ -277,172 +138,15 @@ describe('SessionOrganizationService', () => {
       'utf8',
     );
 
-    await expect(service.listGroups()).resolves.toEqual({
-      groups: [
-        expect.objectContaining({
-          id: 'group-a',
-          name: 'Work',
-        }),
-      ],
-      colorOptions: GROUP_COLOR_OPTIONS,
-    });
+    expect((await service.readSnapshot()).groups).toEqual([
+      expect.objectContaining({
+        id: 'group-a',
+        name: 'Work',
+      }),
+    ]);
     expect(warnings).toEqual([
       'Dropped duplicate session group by name: "work" (id: group-b)',
     ]);
-  });
-
-  it('pins sessions and assigns them to a single custom group', async () => {
-    const group = await service.createGroup({ name: 'Release', color: 'red' });
-
-    const org = await service.updateSessionOrganization(sessionIdA, {
-      isPinned: true,
-      groupId: group.id,
-    });
-
-    expect(org).toEqual(
-      expect.objectContaining({
-        groupId: group.id,
-        isPinned: true,
-      }),
-    );
-    expect(org.pinnedAt).toEqual(expect.any(String));
-
-    const snapshot = await service.readSnapshot();
-    expect(snapshot.sessions.get(sessionIdA)).toEqual(
-      expect.objectContaining({
-        groupId: group.id,
-        isPinned: true,
-      }),
-    );
-  });
-
-  it('unpins a session and clears pinnedAt', async () => {
-    await service.updateSessionOrganization(sessionIdA, { isPinned: true });
-
-    const org = await service.updateSessionOrganization(sessionIdA, {
-      isPinned: false,
-    });
-
-    expect(org).toEqual(
-      expect.objectContaining({
-        groupId: null,
-        isPinned: false,
-      }),
-    );
-    expect(org.pinnedAt).toBeUndefined();
-    const snapshot = await service.readSnapshot();
-    expect(snapshot.sessions.get(sessionIdA)).toEqual(
-      expect.objectContaining({ isPinned: false }),
-    );
-  });
-
-  it('treats an empty session organization update as a no-op', async () => {
-    const pinned = await service.updateSessionOrganization(sessionIdA, {
-      isPinned: true,
-    });
-    const storeBefore = await fs.readFile(service.getStorePath(), 'utf8');
-    await new Promise((resolve) => setTimeout(resolve, 5));
-
-    const org = await service.updateSessionOrganization(sessionIdA, {});
-
-    expect(org).toEqual(pinned);
-    await expect(fs.readFile(service.getStorePath(), 'utf8')).resolves.toBe(
-      storeBefore,
-    );
-  });
-
-  it('rejects unknown group updates and assignments', async () => {
-    await expect(
-      service.updateGroup('missing-group', { name: 'Missing' }),
-    ).rejects.toMatchObject({ code: 'group_not_found', field: 'groupId' });
-
-    await expect(
-      service.updateSessionOrganization(sessionIdA, {
-        groupId: 'missing-group',
-      }),
-    ).rejects.toMatchObject({ code: 'group_not_found', field: 'groupId' });
-  });
-
-  it('deleting a group clears session references without losing pinned state', async () => {
-    const group = await service.createGroup({
-      name: 'Research',
-      color: 'yellow',
-    });
-    await service.updateSessionOrganization(sessionIdA, {
-      isPinned: true,
-      groupId: group.id,
-    });
-    await service.updateSessionOrganization(sessionIdB, { groupId: group.id });
-
-    await service.deleteGroup(group.id);
-
-    const snapshot = await service.readSnapshot();
-    expect(snapshot.groups).toEqual([]);
-    expect(snapshot.sessions.get(sessionIdA)).toEqual(
-      expect.objectContaining({ groupId: null, isPinned: true }),
-    );
-    expect(snapshot.sessions.get(sessionIdB)).toEqual(
-      expect.objectContaining({ groupId: null, isPinned: false }),
-    );
-  });
-
-  it('assigns and clears a quick color grouping tag', async () => {
-    const assigned = await service.updateSessionOrganization(sessionIdA, {
-      color: 'green',
-    });
-    expect(assigned).toEqual(
-      expect.objectContaining({ color: 'green', groupId: null }),
-    );
-
-    const snapshot = await service.readSnapshot();
-    expect(snapshot.sessions.get(sessionIdA)).toEqual(
-      expect.objectContaining({ color: 'green' }),
-    );
-
-    const cleared = await service.updateSessionOrganization(sessionIdA, {
-      color: null,
-    });
-    expect(cleared.color).toBeNull();
-    const afterClear = await service.readSnapshot();
-    expect(afterClear.sessions.get(sessionIdA)?.color).toBeNull();
-  });
-
-  it('rejects unsupported session colors', async () => {
-    await expect(
-      service.updateSessionOrganization(sessionIdA, {
-        color: 'pink' as never,
-      }),
-    ).rejects.toMatchObject({ code: 'invalid_group_color', field: 'color' });
-
-    await expect(
-      service.updateSessionOrganization(sessionIdA, {
-        color: '#12abef' as never,
-      }),
-    ).rejects.toMatchObject({ code: 'invalid_group_color', field: 'color' });
-
-    await expect(
-      service.updateSessionOrganization(sessionIdA, {
-        color: ' blue ' as never,
-      }),
-    ).rejects.toMatchObject({ code: 'invalid_group_color', field: 'color' });
-  });
-
-  it('keeps color, group, and pin independent in the store', async () => {
-    const group = await service.createGroup({ name: 'Docs', color: 'blue' });
-    // Core records exactly the fields provided; it never auto-clears the other
-    // grouping dimension (the UI enforces the single-choice rule explicitly).
-    await service.updateSessionOrganization(sessionIdA, { groupId: group.id });
-    const withColor = await service.updateSessionOrganization(sessionIdA, {
-      color: 'red',
-      isPinned: true,
-    });
-    expect(withColor).toEqual(
-      expect.objectContaining({
-        color: 'red',
-        groupId: group.id,
-        isPinned: true,
-      }),
-    );
   });
 
   it('normalizes unknown stored session colors to null', async () => {
@@ -528,27 +232,17 @@ describe('SessionOrganizationService', () => {
     ]);
   });
 
-  it('treats a malformed sidecar as empty for reads and refuses to overwrite it', async () => {
+  it('treats a malformed sidecar as empty for reads and leaves it untouched on removal', async () => {
     await fs.mkdir(path.dirname(service.getStorePath()), { recursive: true });
     await fs.writeFile(service.getStorePath(), '{not-json', 'utf8');
 
-    await expect(service.listGroups()).resolves.toEqual({
-      groups: [],
-      colorOptions: GROUP_COLOR_OPTIONS,
-    });
+    expect((await service.readSnapshot()).groups).toEqual([]);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain('Failed to read session organization store');
-    await service.listGroups();
+    await service.readSnapshot();
     expect(warnings).toHaveLength(1);
 
-    await expect(
-      service.createGroup({ name: 'Fixed', color: 'orange' }),
-    ).rejects.toMatchObject({
-      code: 'session_organization_store_unreadable',
-    });
-    await expect(
-      service.createGroup({ name: 'Fixed Again', color: 'orange' }),
-    ).rejects.toThrow('Delete the file to reset session organization');
+    await service.removeSession(sessionIdA);
 
     await expect(fs.readFile(service.getStorePath(), 'utf8')).resolves.toBe(
       '{not-json',
@@ -567,10 +261,7 @@ describe('SessionOrganizationService', () => {
       'utf8',
     );
 
-    await expect(service.listGroups()).resolves.toEqual({
-      groups: [],
-      colorOptions: GROUP_COLOR_OPTIONS,
-    });
+    expect((await service.readSnapshot()).groups).toEqual([]);
 
     expect(warnings).toEqual([
       expect.stringContaining(
@@ -580,13 +271,10 @@ describe('SessionOrganizationService', () => {
   });
 
   it('removes a session organization entry from the sidecar', async () => {
-    const group = await service.createGroup({
-      name: 'Cleanup',
-      color: 'purple',
-    });
-    await service.updateSessionOrganization(sessionIdA, {
-      isPinned: true,
-      groupId: group.id,
+    await writeStore({
+      schemaVersion: 1,
+      groups: [cleanupGroup],
+      sessions: { [sessionIdA]: pinned(cleanupGroup.id) },
     });
 
     await service.removeSession(sessionIdA);
@@ -596,7 +284,11 @@ describe('SessionOrganizationService', () => {
   });
 
   it('checks the runtime generation before removing an organization entry', async () => {
-    await service.updateSessionOrganization(sessionIdA, { isPinned: true });
+    await writeStore({
+      schemaVersion: 1,
+      groups: [],
+      sessions: { [sessionIdA]: pinned() },
+    });
     const generationClosed = new Error('generation closed');
 
     await expect(
@@ -610,17 +302,13 @@ describe('SessionOrganizationService', () => {
   });
 
   it('removes multiple session organization entries in one call', async () => {
-    const group = await service.createGroup({
-      name: 'Cleanup',
-      color: 'purple',
-    });
-    await service.updateSessionOrganization(sessionIdA, {
-      isPinned: true,
-      groupId: group.id,
-    });
-    await service.updateSessionOrganization(sessionIdB, {
-      isPinned: true,
-      groupId: group.id,
+    await writeStore({
+      schemaVersion: 1,
+      groups: [cleanupGroup],
+      sessions: {
+        [sessionIdA]: pinned(cleanupGroup.id),
+        [sessionIdB]: pinned(cleanupGroup.id),
+      },
     });
 
     await service.removeSessions([sessionIdA, sessionIdB, sessionIdA]);

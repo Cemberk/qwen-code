@@ -106,7 +106,7 @@ const listCommand: SlashCommand = {
     return t('List all configured hooks');
   },
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
   action: async (
     context: CommandContext,
     _args: string,
@@ -252,7 +252,7 @@ export const hooksCommand: SlashCommand = {
     return t('Manage Qwen Code hooks');
   },
   kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive', 'non_interactive', 'acp'] as const,
+  supportedModes: ['interactive', 'non_interactive'] as const,
   canRunDuringStreaming: true,
   action: async (
     context: CommandContext,

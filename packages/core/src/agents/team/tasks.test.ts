@@ -15,11 +15,9 @@ import {
   deleteTask,
   listTasks,
   resetTaskList,
-  blockTask,
   claimTask,
   releaseOwnedTask,
   unassignTeammateTasks,
-  getAgentStatuses,
   onTasksUpdated,
   notifyTasksUpdated,
   TaskOwnershipError,
@@ -28,6 +26,16 @@ import {
   normalizeTaskId,
 } from './tasks.js';
 import { mockCompromisedLock } from '../../test-utils/mock-compromised-lock.js';
+
+/** Records that `fromId` blocks `toId` on both task files. */
+async function blockTask(
+  teamName: string,
+  fromId: string,
+  toId: string,
+): Promise<void> {
+  await updateTask(teamName, fromId, { addBlocks: [toId] });
+  await updateTask(teamName, toId, { addBlockedBy: [fromId] });
+}
 
 vi.mock('../../config/storage.js', async (importOriginal) => {
   const original =
@@ -824,28 +832,6 @@ describe('tasks', () => {
     });
   });
 
-  // ─── blockTask ─────────────────────────────────────────────
-
-  describe('blockTask', () => {
-    it('sets bidirectional block relationship', async () => {
-      const t1 = await createTask('team', {
-        subject: 'A',
-        description: 'A',
-      });
-      const t2 = await createTask('team', {
-        subject: 'B',
-        description: 'B',
-      });
-
-      await blockTask('team', t1.id, t2.id);
-
-      const a = await getTask('team', t1.id);
-      const b = await getTask('team', t2.id);
-      expect(a!.blocks).toContain(t2.id);
-      expect(b!.blockedBy).toContain(t1.id);
-    });
-  });
-
   // ─── claimTask ─────────────────────────────────────────────
 
   describe('claimTask', () => {
@@ -1054,36 +1040,6 @@ describe('tasks', () => {
 
       const released = await releaseOwnedTask('team', task.id, 'worker');
       expect(released).toBe(false);
-    });
-  });
-
-  // ─── getAgentStatuses ──────────────────────────────────────
-
-  describe('getAgentStatuses', () => {
-    it('returns per-agent task counts', async () => {
-      const t1 = await createTask('team', {
-        subject: 'A',
-        description: 'A',
-      });
-      const t2 = await createTask('team', {
-        subject: 'B',
-        description: 'B',
-      });
-      await claimTask('team', t1.id, 'alice');
-      await claimTask('team', t2.id, 'bob');
-      await updateTask('team', t2.id, {
-        status: 'completed',
-      });
-
-      const statuses = await getAgentStatuses('team');
-      expect(statuses.get('alice')).toEqual({
-        inProgress: 1,
-        completed: 0,
-      });
-      expect(statuses.get('bob')).toEqual({
-        inProgress: 0,
-        completed: 1,
-      });
     });
   });
 

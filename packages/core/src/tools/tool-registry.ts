@@ -60,7 +60,7 @@ const debugLogger = createDebugLogger('TOOL_REGISTRY');
  * The free-text `description` is deliberately excluded. Shipped deferred tools
  * rebuild it from mutable state on every `schema` access — `ReadFileTool`
  * interpolates the effective input modalities — intentionally, so a long-lived
- * ACP process is not stale across a mid-session `/model` switch. Hashing that
+ * session is not stale across a mid-session `/model` switch. Hashing that
  * prose made an unchanged tool's fingerprint drift and refuse a legitimate call
  * whose parameters still matched the reviewed schema.
  */
@@ -226,7 +226,6 @@ Signal: Signal number or \`(none)\` if no signal was received.
 export class ToolRegistry {
   // The tools keyed by tool name as seen by the LLM.
   private tools: Map<string, AnyDeclarativeTool> = new Map();
-  private mcpAppTools = new Map<string, DiscoveredMCPTool>();
   // Lazy tool factories keyed by tool name — resolved on first use.
   private factories: Map<string, ToolFactory> = new Map();
   // In-flight factory promises — ensures concurrent ensureTool() calls for the
@@ -302,9 +301,7 @@ export class ToolRegistry {
 
   /**
    * Returns true when `name` is in the Config's `disabledTools` set, in
-   * which case `registerTool` / `registerFactory` will skip it. This is
-   * the chokepoint for the daemon mutation route at `POST /workspace/
-   * tools/:name/enable {enabled:false}`; both
+   * which case `registerTool` / `registerFactory` will skip it. Both
    * built-ins and MCP-discovered tools flow through `registerTool`, so
    * gating here covers every registration path.
    */
@@ -385,15 +382,6 @@ export class ToolRegistry {
         `Tool "${tool.name}" skipped (post-rename): present in disabledTools set.`,
       );
       return;
-    }
-    if (tool instanceof DiscoveredMCPTool) {
-      if (tool.isAppVisible) {
-        this.mcpAppTools.set(
-          JSON.stringify([tool.serverName, tool.serverToolName]),
-          tool,
-        );
-      }
-      if (!tool.isModelVisible) return;
     }
     this.tools.set(tool.name, tool);
   }
@@ -520,14 +508,6 @@ export class ToolRegistry {
    * that were built with skipDiscovery.
    */
   copyDiscoveredToolsFrom(source: ToolRegistry): void {
-    for (const [key, tool] of source.mcpAppTools) {
-      if (
-        !this.mcpAppTools.has(key) &&
-        !this.isToolDisabled(tool.name, tool.permissionAliases)
-      ) {
-        this.mcpAppTools.set(key, tool);
-      }
-    }
     for (const tool of source.tools.values()) {
       if (
         (tool instanceof DiscoveredTool || tool instanceof DiscoveredMCPTool) &&
@@ -542,7 +522,6 @@ export class ToolRegistry {
   }
 
   private removeDiscoveredTools(): void {
-    this.mcpAppTools.clear();
     for (const tool of this.tools.values()) {
       if (tool instanceof DiscoveredTool || tool instanceof DiscoveredMCPTool) {
         this.tools.delete(tool.name);
@@ -559,9 +538,6 @@ export class ToolRegistry {
    * @param serverName The name of the server to remove tools from.
    */
   removeMcpToolsByServer(serverName: string): void {
-    for (const [key, tool] of this.mcpAppTools) {
-      if (tool.serverName === serverName) this.mcpAppTools.delete(key);
-    }
     for (const [name, tool] of this.tools.entries()) {
       if (tool instanceof DiscoveredMCPTool && tool.serverName === serverName) {
         this.tools.delete(name);
@@ -663,29 +639,6 @@ export class ToolRegistry {
 
     // discover tools using MCP servers, if configured
     await this.mcpClientManager.discoverAllMcpTools(this.config);
-  }
-
-  /**
-   * Discovers tools from project (if available and configured).
-   * Can be called multiple times to update discovered tools.
-   * This will NOT discover tools from the command line, only from MCP servers.
-   */
-  async discoverMcpTools(): Promise<void> {
-    // remove any previously discovered tools
-    this.removeDiscoveredTools();
-
-    this.config.getPromptRegistry().clear();
-    this.config.getResourceRegistry().clear();
-
-    // discover tools using MCP servers, if configured
-    await this.mcpClientManager.discoverAllMcpTools(this.config);
-  }
-
-  /**
-   * Restarts all MCP servers and re-discovers tools.
-   */
-  async restartMcpServers(): Promise<void> {
-    await this.discoverMcpTools();
   }
 
   /**
@@ -977,20 +930,6 @@ export class ToolRegistry {
   }
 
   /**
-   * Marks a deferred tool's reveal as session-setup state that must survive
-   * `/clear` resets: {@link clearRevealedDeferredTools} re-reveals pinned
-   * tools (while still registered and deferred) so the fresh session's
-   * `startChat` → `setTools()` re-declares them. Without a pin, a tool
-   * revealed at session creation silently drops out of the declaration list
-   * on the first `/clear` whenever the budget-based startup preload
-   * withholds it — that preload is all-or-nothing on a schema-size budget
-   * and returns early when preloading is disabled.
-   */
-  pinDeferredToolReveal(name: string): void {
-    this.pinnedDeferredReveals.add(name);
-  }
-
-  /**
    * Removes a single tool from the revealed-deferred set. Used to roll back an
    * explicit reveal when the corresponding declaration refresh fails.
    */
@@ -1215,43 +1154,10 @@ export class ToolRegistry {
   }
 
   /**
-   * Returns an array of tools registered from a specific MCP server.
-   */
-  getToolsByServer(serverName: string): AnyDeclarativeTool[] {
-    const serverTools: AnyDeclarativeTool[] = [];
-    for (const tool of this.tools.values()) {
-      if ((tool as DiscoveredMCPTool)?.serverName === serverName) {
-        serverTools.push(tool);
-      }
-    }
-    return serverTools.sort((a, b) => a.name.localeCompare(b.name));
-  }
-
-  /**
    * Get the definition of a specific tool.
    */
   getTool(name: string): AnyDeclarativeTool | undefined {
     return this.tools.get(name);
-  }
-
-  getMcpAppTool(
-    serverName: string,
-    rawName: string,
-  ): DiscoveredMCPTool | undefined {
-    const tool = this.mcpAppTools.get(JSON.stringify([serverName, rawName]));
-    return tool && !this.isToolDisabled(tool.name, tool.permissionAliases)
-      ? tool
-      : undefined;
-  }
-
-  hasMcpAppResource(serverName: string, uri: string): boolean {
-    return [...this.tools.values(), ...this.mcpAppTools.values()].some(
-      (tool) =>
-        tool instanceof DiscoveredMCPTool &&
-        tool.serverName === serverName &&
-        tool.appResourceUri === uri &&
-        !this.isToolDisabled(tool.name, tool.permissionAliases),
-    );
   }
 
   async readMcpResource(
@@ -1271,7 +1177,6 @@ export class ToolRegistry {
    * This method is idempotent and safe to call multiple times.
    */
   async stop(): Promise<void> {
-    this.mcpAppTools.clear();
     // Wait for any in-flight factory promises to settle before disposing, so
     // that tools which finish loading after stop() is called are still cleaned
     // up rather than leaking their listeners and resources.

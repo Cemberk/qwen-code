@@ -33,9 +33,6 @@ export function normalizeModelIds(modelIdsInput: string): string[] {
     .filter((id, index, array) => id.length > 0 && array.indexOf(id) === index);
 }
 
-/** @deprecated Use normalizeModelIds instead. */
-export const normalizeCustomModelIds = normalizeModelIds;
-
 /**
  * Mask an API key for display: show first 3 and last 4 chars.
  */

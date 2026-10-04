@@ -50,14 +50,17 @@ describe('extension refresh state', () => {
     refreshState.on(AppEvent.ExtensionContentChanged, contentListener);
 
     try {
-      await refreshState.suppressNotifications(async () => {
+      const endSuppression = refreshState.beginSuppression();
+      try {
         expect(
           refreshState.markExtensionsChanged('extension files changed'),
         ).toBe(false);
         expect(
           refreshState.markExtensionContentChanged('extension content changed'),
         ).toBe(false);
-      });
+      } finally {
+        endSuppression();
+      }
 
       expect(refreshState.needsExtensionRefresh()).toBe(false);
       expect(staleListener).not.toHaveBeenCalled();
@@ -73,7 +76,7 @@ describe('extension refresh state', () => {
     refreshState.on(AppEvent.ExtensionRefreshNeeded, listener);
 
     try {
-      await refreshState.suppressNotifications(async () => {});
+      refreshState.beginSuppression()();
       expect(refreshState.markExtensionsChanged('during suppress window')).toBe(
         false,
       );

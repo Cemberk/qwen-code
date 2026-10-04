@@ -10,6 +10,19 @@ import { AuthType } from '../core/contentGenerator.js';
 import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
 import type { ModelProvidersConfig } from './types.js';
 
+// The hot-update callback is a constructor option; these tests install a
+// failing one only after the first switch has succeeded.
+function setOnModelChange(
+  modelsConfig: ModelsConfig,
+  callback: (authType: AuthType) => Promise<void>,
+): void {
+  (
+    modelsConfig as unknown as {
+      onModelChange?: (authType: AuthType) => Promise<void>;
+    }
+  ).onModelChange = callback;
+}
+
 describe('ModelsConfig', () => {
   function deepClone<T>(value: T): T {
     if (value === null || typeof value !== 'object') return value;
@@ -65,7 +78,7 @@ describe('ModelsConfig', () => {
       modelsConfig.getGenerationConfigSources(),
     );
 
-    modelsConfig.setOnModelChange(async () => {
+    setOnModelChange(modelsConfig, async () => {
       throw new Error('hot-update failed');
     });
 
@@ -1701,7 +1714,7 @@ describe('ModelsConfig', () => {
       });
 
       // The snapshot ID has changed because we updated the model
-      const updatedSnapshotId = modelsConfig.getActiveRuntimeModelSnapshotId();
+      const updatedSnapshotId = modelsConfig['activeRuntimeModelSnapshotId'];
       expect(updatedSnapshotId).toBe('$runtime|openai|different-model');
 
       // Create a separate snapshot for the original runtime model
@@ -1859,7 +1872,7 @@ describe('ModelsConfig', () => {
         baseUrl: 'http://127.0.0.1:8022/v1',
       });
 
-      const firstSnapshotId = modelsConfig.getActiveRuntimeModelSnapshotId();
+      const firstSnapshotId = modelsConfig['activeRuntimeModelSnapshotId'];
       expect(firstSnapshotId).toBe('$runtime|openai|model-a');
 
       // Create second snapshot for USE_OPENAI (different model)
@@ -1869,7 +1882,7 @@ describe('ModelsConfig', () => {
         baseUrl: 'http://127.0.0.1:8023/v1',
       });
 
-      const secondSnapshotId = modelsConfig.getActiveRuntimeModelSnapshotId();
+      const secondSnapshotId = modelsConfig['activeRuntimeModelSnapshotId'];
       expect(secondSnapshotId).toBe('$runtime|openai|model-b');
 
       // First snapshot should be cleaned up
@@ -1898,7 +1911,7 @@ describe('ModelsConfig', () => {
       expect(snapshotId).toBeDefined();
 
       // Set up onModelChange to fail
-      modelsConfig.setOnModelChange(async () => {
+      setOnModelChange(modelsConfig, async () => {
         throw new Error('refresh failed');
       });
 

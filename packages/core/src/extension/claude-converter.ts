@@ -1058,57 +1058,6 @@ export function mergeClaudeConfigs(
 }
 
 /**
- * Checks if a config object is in Claude plugin format.
- * @param config Configuration object to check
- * @returns true if config appears to be Claude format
- */
-export function isClaudePluginConfig(
-  extensionDir: string,
-  marketplace: { extensionSource: string; pluginName: string },
-) {
-  const marketplaceConfigFilePath = path.join(
-    extensionDir,
-    '.claude-plugin/marketplace.json',
-  );
-  if (!fs.existsSync(marketplaceConfigFilePath)) {
-    return false;
-  }
-
-  const marketplaceConfigContent = fs.readFileSync(
-    marketplaceConfigFilePath,
-    'utf-8',
-  );
-  const marketplaceConfig = JSON.parse(marketplaceConfigContent);
-
-  if (typeof marketplaceConfig !== 'object' || marketplaceConfig === null) {
-    return false;
-  }
-
-  const marketplaceConfigObj = marketplaceConfig as Record<string, unknown>;
-
-  // Must have name and owner
-  if (
-    typeof marketplaceConfigObj['name'] !== 'string' ||
-    typeof marketplaceConfigObj['owner'] !== 'object'
-  ) {
-    return false;
-  }
-
-  if (!Array.isArray(marketplaceConfigObj['plugins'])) {
-    return false;
-  }
-
-  const marketplacePluginObj = marketplaceConfigObj['plugins'].find(
-    (plugin: ClaudeMarketplacePluginConfig) =>
-      plugin.name === marketplace.pluginName,
-  );
-
-  if (!marketplacePluginObj) return false;
-
-  return true;
-}
-
-/**
  * Resolve plugin source from marketplace plugin configuration.
  * Returns the absolute path to the plugin source directory. Only plugins
  * stored inside the marketplace directory are supported.

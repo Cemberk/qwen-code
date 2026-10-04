@@ -8,7 +8,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Config } from '../config/config.js';
 import {
   cleanSummary,
-  createToolUseSummaryMessage,
   generateToolUseSummary,
   TOOL_USE_SUMMARY_SYSTEM_PROMPT,
   truncateJson,
@@ -158,23 +157,6 @@ describe('cleanSummary', () => {
     expect(cleanSummary('Failed to read files')).toBe('');
     expect(cleanSummary('Sorry, I cannot')).toBe('');
     expect(cleanSummary('Request failed')).toBe('');
-  });
-});
-
-describe('createToolUseSummaryMessage', () => {
-  it('creates a message with generated uuid and timestamp', () => {
-    const msg = createToolUseSummaryMessage('Fixed bug', ['call-1', 'call-2']);
-    expect(msg.type).toBe('tool_use_summary');
-    expect(msg.summary).toBe('Fixed bug');
-    expect(msg.precedingToolUseIds).toEqual(['call-1', 'call-2']);
-    expect(msg.uuid).toMatch(/^[0-9a-f-]{36}$/);
-    expect(msg.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
-  });
-
-  it('generates distinct uuids', () => {
-    const a = createToolUseSummaryMessage('a', []);
-    const b = createToolUseSummaryMessage('b', []);
-    expect(a.uuid).not.toBe(b.uuid);
   });
 });
 

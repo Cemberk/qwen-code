@@ -36,7 +36,9 @@ describe('ResourceRegistry', () => {
       const resource = makeResource('file:///a.txt', 'server-a');
       registry.registerResource(resource);
 
-      expect(registry.getResource('server-a', 'file:///a.txt')).toBe(resource);
+      expect(
+        registry['resources'].get(registry['key']('server-a', 'file:///a.txt')),
+      ).toBe(resource);
     });
 
     it('should NOT collide when two servers advertise the same uri', () => {
@@ -46,8 +48,16 @@ describe('ResourceRegistry', () => {
       registry.registerResource(a);
       registry.registerResource(b);
 
-      expect(registry.getResource('server-a', 'file:///shared.txt')).toBe(a);
-      expect(registry.getResource('server-b', 'file:///shared.txt')).toBe(b);
+      expect(
+        registry['resources'].get(
+          registry['key']('server-a', 'file:///shared.txt'),
+        ),
+      ).toBe(a);
+      expect(
+        registry['resources'].get(
+          registry['key']('server-b', 'file:///shared.txt'),
+        ),
+      ).toBe(b);
       expect(registry.getAllResources()).toHaveLength(2);
     });
 
@@ -58,9 +68,10 @@ describe('ResourceRegistry', () => {
       registry.registerResource(first);
       registry.registerResource(second);
 
-      expect(registry.getResource('server-a', 'file:///a.txt')?.name).toBe(
-        'new',
-      );
+      expect(
+        registry['resources'].get(registry['key']('server-a', 'file:///a.txt'))
+          ?.name,
+      ).toBe('new');
       expect(registry.getAllResources()).toHaveLength(1);
     });
   });
@@ -87,7 +98,9 @@ describe('ResourceRegistry', () => {
   describe('getResource', () => {
     it('should return undefined for an unknown resource', () => {
       expect(
-        registry.getResource('server-a', 'file:///nope.txt'),
+        registry['resources'].get(
+          registry['key']('server-a', 'file:///nope.txt'),
+        ),
       ).toBeUndefined();
     });
   });

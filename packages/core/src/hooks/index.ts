@@ -31,25 +31,17 @@ export { FunctionHookRunner } from './functionHookRunner.js';
 export { SessionHooksManager } from './sessionHooksManager.js';
 export type { SessionHookEntry } from './sessionHooksManager.js';
 export { AsyncHookRegistry, generateHookId } from './asyncHookRegistry.js';
-export {
-  registerSkillHooks,
-  unregisterSkillHooks,
-} from './registerSkillHooks.js';
+export { registerSkillHooks } from './registerSkillHooks.js';
 
 // Export utilities
-export { HOOK_EVENT_DISPLAY, hookEventDisplay } from './hook-event-display.js';
+export { HOOK_EVENT_DISPLAY } from './hook-event-display.js';
 export type { HookEventDisplayMeta } from './hook-event-display.js';
 export {
   DEFAULT_COMMAND_HOOK_TIMEOUT_SECONDS,
   DEFAULT_PROMPT_HOOK_TIMEOUT_SECONDS,
   DEFAULT_FUNCTION_HOOK_TIMEOUT_MS,
-  describeHookTimeout,
   isLegacyMillisecondHookTimeout,
   resolveCommandHookTimeoutMs,
-} from './hook-timeout.js';
-export type {
-  HookTimeoutDescription,
-  HookTimeoutSource,
 } from './hook-timeout.js';
 
 // Export interfaces and enums

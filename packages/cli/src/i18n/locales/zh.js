@@ -59,7 +59,6 @@ export default {
   'MCP "{{name}}" {{state}}.': 'MCP "{{name}}" {{state}}。',
   'MCP servers': 'MCP 服务器',
   'Mark for Update': '标记为待更新',
-  'No extensions or marketplaces added yet.': '尚未添加任何扩展或市场源。',
   'No plugins or MCP servers installed.': '尚未安装任何插件或 MCP 服务器。',
   None: '无',
   'Note: Uninstall permanently removes this extension.':
@@ -115,7 +114,6 @@ export default {
   'toolDisplayName.Advisor': '审查模型',
   'toolDisplayName.Artifact': '制品',
   'toolDisplayName.RecordArtifact': '记录制品',
-  'toolDisplayName.RecordSource': '记录来源',
   'toolDisplayName.ReportFindings': '上报评审发现',
   'toolDisplayName.DisplayImage': '显示图片',
   'toolDisplayName.Skill': '技能',
@@ -128,7 +126,6 @@ export default {
   'toolDisplayName.CronList': '定时任务列表',
   'toolDisplayName.CronDelete': '删除定时任务',
   'toolDisplayName.LoopWakeup': '循环唤醒',
-  'toolDisplayName.CreateSubSession': '创建子会话',
   'toolDisplayName.ListAgents': '列出 Agent',
   'toolDisplayName.TaskCreate': '创建任务',
   'toolDisplayName.TaskUpdate': '更新任务',
@@ -264,8 +261,6 @@ export default {
   'Failed to load skills: {{error}}': '加载技能失败：{{error}}',
   'Failed to save skills configuration: {{error}}':
     '保存技能配置失败：{{error}}',
-  'All available skills are disabled. Edit ~/.qwen/settings.json or .qwen/settings.json (skills.disabled) to re-enable.':
-    '所有可用技能均已禁用。请编辑 ~/.qwen/settings.json 或 .qwen/settings.json（skills.disabled）以重新启用。',
   'Press esc to close.': '按 Esc 关闭。',
   '{{count}} skills · ': '{{count}} 个技能 · ',
   '{{matched}} / {{total}} skills · ': '{{matched}} / {{total}} 个技能 · ',
@@ -797,10 +792,6 @@ export default {
     '您正在安装来自 {{originSource}} 的扩展。某些功能可能无法完美兼容 Qwen Code。',
   'Extension "{{name}}" installed successfully and enabled.':
     '扩展 "{{name}}" 安装成功并已启用。',
-  'The github URL, local path, or marketplace source (marketplace-url:plugin-name) of the extension to install.':
-    '要安装的扩展的 GitHub URL、本地路径或市场源（marketplace-url:plugin-name）。',
-  'Installs an extension from a git repository URL, local path, scoped npm package (@scope/name), or claude marketplace (marketplace-url:plugin-name).':
-    '从 Git 仓库 URL、本地路径、带作用域的 npm 包（@scope/name）或 Claude 市场源（marketplace-url:plugin-name）安装扩展。',
   Description: '描述',
   'Delete Session': '删除会话',
   'Acknowledge the security risks of installing an extension and skip the confirmation prompt.':
@@ -1315,14 +1306,8 @@ export default {
   // ============================================================================
   'Switch the model for this session (--fast for suggestion model, [model-id] to switch immediately).':
     '切换此会话的模型（--fast 可设置建议模型）',
-  'Switch the model for this session (--fast for suggestion model, --voice for voice transcription model, [model-id] to switch immediately).':
-    '切换此会话的模型（--fast 可设置建议模型，--voice 可设置语音转写模型，[model-id] 可立即切换）',
-  'Switch the model for this session (--fast for suggestion model, --voice for voice transcription model, --vision for the vision bridge model, --project to persist to project settings, --global to persist to user settings, [model-id] to switch immediately, or [model-id] [prompt] to run a one-off prompt on another model; the inline prompt is sent verbatim without @file expansion).':
-    '切换此会话的模型（--fast 建议模型，--voice 语音转写模型，--vision 视觉桥接模型，--project 持久化到项目设置，--global 持久化到用户设置，[model-id] 立即切换，或用 [model-id] [prompt] 在另一个模型上运行一次性提示；内联提示按原文发送，不展开 @file）',
   'Switch the model for this session (--fast for suggestion model, --vision for the vision bridge model, --compaction for chat compression model, --project to persist to project settings, --global to persist to user settings, [model-id] to switch immediately, or [model-id] [prompt] to run a one-off prompt on another model; the inline prompt is sent verbatim without @file expansion).':
     '切换此会话的模型（--fast 建议模型，--vision 视觉桥接模型，--compaction 聊天压缩模型，--project 持久化到项目设置，--global 持久化到用户设置，[model-id] 立即切换，或用 [model-id] [prompt] 在另一个模型上运行一次性提示；内联提示按原文发送，不展开 @file）',
-  "Inline one-shot override isn't supported in this mode — run '/model {{model}}' first, then send your prompt.":
-    "此模式不支持内联一次性覆盖——请先运行 '/model {{model}}'，再发送你的提示。",
   "Inline one-shot override can't switch providers. '{{model}}' belongs to a different provider — run '/model {{model}}' first, then send your prompt.":
     "内联一次性覆盖无法切换 provider。'{{model}}' 属于另一个 provider——请先运行 '/model {{model}}'，再发送你的提示。",
   "⚠ '{{model}}' is not a known image-capable model; the vision bridge may fail on images.":
@@ -1347,8 +1332,6 @@ export default {
     '在 settings.modelProviders 中配置模型并确保设置了所需的环境变量。在交互模式下，运行 /auth 配置或切换 provider，或运行 /model --compaction（不带模型参数）从已配置的模型中选择。',
   'No models are configured.': '未配置模型。',
   'Configured models: {{models}}.': '已配置模型：{{models}}。',
-  "Voice model '{{modelName}}' cannot be used for transcription.":
-    "语音模型 '{{modelName}}' 不能用于转写。",
   'Content generator configuration not available.': '内容生成器配置不可用',
   'Authentication type not available.': '认证类型不可用',
   'No models available for the current authentication type ({{authType}}).':
@@ -2012,8 +1995,6 @@ export default {
     'Arena 至少需要 2 个模型。请使用 --models model1,model2 指定。',
   'Arena started with {{count}} agents on task: "{{task}}"\nModels:\n{{modelList}}':
     'Arena 已启动 {{count}} 个智能体处理任务："{{task}}"\n模型：\n{{modelList}}',
-  'Arena panes are running in tmux. Attach with: `{{command}}`':
-    'Arena 面板正在 tmux 中运行。使用以下命令附加：`{{command}}`',
   '[{{label}}] failed: {{error}}': '[{{label}}] 失败：{{error}}',
   'Loading suggestions...': '正在加载建议...',
   'Open the memory manager.': '打开记忆管理器。',
@@ -2171,10 +2152,6 @@ export default {
   '中国 (China)': '中国',
   'No compression needed.': '无需压缩。',
   // Update command
-  'Standalone install detected. Please rerun the standalone installer to update:':
-    '检测到独立安装。请重新运行独立安装程序以更新：',
-  'Unable to auto-update this standalone installation. Please reinstall from:':
-    '无法自动更新此独立安装。请从以下地址重新安装：',
   '⚠️ History gap: earlier conversation was lost before this point (storage interruption) and could not be recovered.':
     '⚠️ 历史记录缺口：此处之前的会话记录已丢失（存储中断），且无法找回。',
 

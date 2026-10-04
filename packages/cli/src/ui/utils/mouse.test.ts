@@ -9,7 +9,6 @@ import {
   parseSGRMouseEvent,
   parseX11MouseEvent,
   parseMouseEvent,
-  isIncompleteMouseSequence,
   enableMouseEvents,
   disableMouseEvents,
 } from './mouse.js';
@@ -112,30 +111,6 @@ describe('parseMouseEvent', () => {
     // SGR is parsed first; X11 would not match this string anyway.
     const result = parseMouseEvent(`${ESC}[<64;1;1M`);
     expect(result?.event.name).toBe('scroll-up');
-  });
-});
-
-describe('isIncompleteMouseSequence', () => {
-  it('returns true for prefixes that could become a sequence', () => {
-    expect(isIncompleteMouseSequence(`${ESC}`)).toBe(true);
-    expect(isIncompleteMouseSequence(`${ESC}[`)).toBe(true);
-    expect(isIncompleteMouseSequence(`${ESC}[<`)).toBe(true);
-    expect(isIncompleteMouseSequence(`${ESC}[<64;10;`)).toBe(true);
-    expect(isIncompleteMouseSequence(`${ESC}[M`)).toBe(true); // X11 needs 3 more bytes
-  });
-
-  it('returns false for complete sequences', () => {
-    expect(isIncompleteMouseSequence(`${ESC}[<64;10;20M`)).toBe(false);
-  });
-
-  it('returns false for clearly non-mouse buffers', () => {
-    expect(isIncompleteMouseSequence('a')).toBe(false);
-    expect(isIncompleteMouseSequence('hello')).toBe(false);
-  });
-
-  it('treats >50-byte unterminated SGR as not-incomplete (garbage guard)', () => {
-    const longGarbage = `${ESC}[<${'1'.repeat(60)}`;
-    expect(isIncompleteMouseSequence(longGarbage)).toBe(false);
   });
 });
 

@@ -156,8 +156,8 @@ export class OpenAILogger {
    * Creates a new OpenAI logger
    * @param customLogDir Optional custom log directory path (supports relative paths, absolute paths, and ~ expansion)
    * @param cwd Optional working directory for resolving relative paths. Defaults to process.cwd().
-   *            In ACP mode, process.cwd() may be '/' (filesystem root), so callers should
-   *            pass the project working directory from Config.getWorkingDir().
+   *            Callers should pass the project working directory from
+   *            Config.getWorkingDir().
    */
   constructor(customLogDir?: string, cwd?: string) {
     this.logDir = resolveOpenAILogDir(customLogDir, cwd);
@@ -225,49 +225,6 @@ export class OpenAILogger {
     } catch (writeError) {
       debugLogger.error('Failed to write OpenAI log file:', writeError);
       throw new Error(`Failed to write OpenAI log file: ${writeError}`);
-    }
-  }
-
-  /**
-   * Get all logged interactions
-   * @param limit Optional limit on the number of log files to return (sorted by most recent first)
-   * @returns Array of log file paths
-   */
-  async getLogFiles(limit?: number): Promise<string[]> {
-    if (!this.initialized) {
-      await this.initialize();
-    }
-
-    try {
-      const files = await fs.readdir(this.logDir);
-      const logFiles = files
-        .filter((file) => file.startsWith('openai-') && file.endsWith('.json'))
-        .map((file) => path.join(this.logDir, file))
-        .sort()
-        .reverse();
-
-      return limit === undefined ? logFiles : logFiles.slice(0, limit);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        return [];
-      }
-      debugLogger.error('Failed to read OpenAI log directory:', error);
-      return [];
-    }
-  }
-
-  /**
-   * Read a specific log file
-   * @param filePath The path to the log file
-   * @returns The log file content
-   */
-  async readLogFile(filePath: string): Promise<unknown> {
-    try {
-      const content = await fs.readFile(filePath, 'utf-8');
-      return JSON.parse(content);
-    } catch (error) {
-      debugLogger.error(`Failed to read log file ${filePath}:`, error);
-      throw new Error(`Failed to read log file: ${error}`);
     }
   }
 }

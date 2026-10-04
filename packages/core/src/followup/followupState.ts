@@ -6,8 +6,7 @@
  * Shared Follow-up Suggestions State Logic
  *
  * Framework-agnostic state management for prompt suggestions,
- * used by the CLI (Ink) follow-up hook; Web Shell's daemon followup hook
- * maintains its own copy.
+ * used by the CLI follow-up hooks.
  */
 
 /**

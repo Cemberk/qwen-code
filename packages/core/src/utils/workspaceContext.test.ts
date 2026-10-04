@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -288,88 +288,6 @@ describe('WorkspaceContext with real filesystem', () => {
     });
   });
 
-  describe('onDirectoriesChanged', () => {
-    it('should call listener when adding a directory', () => {
-      const workspaceContext = new WorkspaceContext(cwd);
-      const listener = vi.fn();
-      workspaceContext.onDirectoriesChanged(listener);
-
-      workspaceContext.addDirectory(otherDir);
-
-      expect(listener).toHaveBeenCalledOnce();
-    });
-
-    it('should not call listener when adding a duplicate directory', () => {
-      const workspaceContext = new WorkspaceContext(cwd);
-      workspaceContext.addDirectory(otherDir);
-      const listener = vi.fn();
-      workspaceContext.onDirectoriesChanged(listener);
-
-      workspaceContext.addDirectory(otherDir);
-
-      expect(listener).not.toHaveBeenCalled();
-    });
-
-    it('should call listener when setting different directories', () => {
-      const workspaceContext = new WorkspaceContext(cwd);
-      const listener = vi.fn();
-      workspaceContext.onDirectoriesChanged(listener);
-
-      workspaceContext.setDirectories([otherDir]);
-
-      expect(listener).toHaveBeenCalledOnce();
-    });
-
-    it('should not call listener when setting same directories', () => {
-      const workspaceContext = new WorkspaceContext(cwd);
-      const listener = vi.fn();
-      workspaceContext.onDirectoriesChanged(listener);
-
-      workspaceContext.setDirectories([cwd]);
-
-      expect(listener).not.toHaveBeenCalled();
-    });
-
-    it('should support multiple listeners', () => {
-      const workspaceContext = new WorkspaceContext(cwd);
-      const listener1 = vi.fn();
-      const listener2 = vi.fn();
-      workspaceContext.onDirectoriesChanged(listener1);
-      workspaceContext.onDirectoriesChanged(listener2);
-
-      workspaceContext.addDirectory(otherDir);
-
-      expect(listener1).toHaveBeenCalledOnce();
-      expect(listener2).toHaveBeenCalledOnce();
-    });
-
-    it('should allow unsubscribing a listener', () => {
-      const workspaceContext = new WorkspaceContext(cwd);
-      const listener = vi.fn();
-      const unsubscribe = workspaceContext.onDirectoriesChanged(listener);
-
-      unsubscribe();
-      workspaceContext.addDirectory(otherDir);
-
-      expect(listener).not.toHaveBeenCalled();
-    });
-
-    it('should not fail if a listener throws an error', () => {
-      const workspaceContext = new WorkspaceContext(cwd);
-      const errorListener = () => {
-        throw new Error('test error');
-      };
-      const listener = vi.fn();
-      workspaceContext.onDirectoriesChanged(errorListener);
-      workspaceContext.onDirectoriesChanged(listener);
-
-      expect(() => {
-        workspaceContext.addDirectory(otherDir);
-      }).not.toThrow();
-      expect(listener).toHaveBeenCalledOnce();
-    });
-  });
-
   describe('getDirectories', () => {
     it('should return a copy of directories array', () => {
       const workspaceContext = new WorkspaceContext(cwd);
@@ -497,72 +415,5 @@ describe('WorkspaceContext removeDirectory', () => {
     const ctx = new WorkspaceContext(cwd);
     const result = ctx.removeDirectory('/non/existent/path');
     expect(result).toBe(false);
-  });
-
-  it('should notify listeners when a directory is removed', () => {
-    const ctx = new WorkspaceContext(cwd);
-    ctx.addDirectory(addedDir);
-
-    const listener = vi.fn();
-    ctx.onDirectoriesChanged(listener);
-
-    ctx.removeDirectory(addedDir);
-    expect(listener).toHaveBeenCalledOnce();
-  });
-
-  it('should not notify listeners when removal fails', () => {
-    const ctx = new WorkspaceContext(cwd);
-
-    const listener = vi.fn();
-    ctx.onDirectoriesChanged(listener);
-
-    ctx.removeDirectory(addedDir); // not in workspace
-    expect(listener).not.toHaveBeenCalled();
-  });
-});
-
-describe('WorkspaceContext isInitialDirectory', () => {
-  let tempDir: string;
-  let cwd: string;
-  let additionalDir: string;
-  let runtimeDir: string;
-
-  beforeEach(() => {
-    tempDir = fs.realpathSync(
-      fs.mkdtempSync(path.join(os.tmpdir(), 'workspace-context-initial-')),
-    );
-    cwd = path.join(tempDir, 'project');
-    additionalDir = path.join(tempDir, 'additional');
-    runtimeDir = path.join(tempDir, 'runtime');
-
-    fs.mkdirSync(cwd, { recursive: true });
-    fs.mkdirSync(additionalDir, { recursive: true });
-    fs.mkdirSync(runtimeDir, { recursive: true });
-  });
-
-  afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  });
-
-  it('should return true for the initial cwd directory', () => {
-    const ctx = new WorkspaceContext(cwd);
-    expect(ctx.isInitialDirectory(cwd)).toBe(true);
-  });
-
-  it('should return false for an additional directory passed at construction', () => {
-    const ctx = new WorkspaceContext(cwd, [additionalDir]);
-    // additionalDirectories are no longer considered 'initial'
-    expect(ctx.isInitialDirectory(additionalDir)).toBe(false);
-  });
-
-  it('should return false for a runtime-added directory', () => {
-    const ctx = new WorkspaceContext(cwd);
-    ctx.addDirectory(runtimeDir);
-    expect(ctx.isInitialDirectory(runtimeDir)).toBe(false);
-  });
-
-  it('should return false for a directory not in the workspace', () => {
-    const ctx = new WorkspaceContext(cwd);
-    expect(ctx.isInitialDirectory('/some/random/path')).toBe(false);
   });
 });

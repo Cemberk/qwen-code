@@ -57,7 +57,7 @@ const MAX_MODEL_FORGET_CANDIDATES = MAX_MODEL_FORGET_CANDIDATES_PER_SCOPE * 2;
 
 /**
  * Per-call deletion ceiling for `forgetManagedAutoMemoryEntries`, the path
- * MemoryManager.forget and ACP take, which deletes without confirmation.
+ * MemoryManager.forget takes, which deletes without confirmation.
  *
  * Deliberately its own literal rather than an alias of the prompt bound: the
  * two happen to agree today, but resizing the model prompt is a cost decision

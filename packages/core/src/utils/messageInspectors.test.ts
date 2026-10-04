@@ -6,7 +6,7 @@
 
 import type { Content } from '@google/genai';
 import { describe, expect, it } from 'vitest';
-import { isFunctionCall, isFunctionResponse } from './messageInspectors.js';
+import { isFunctionResponse } from './messageInspectors.js';
 
 describe('isFunctionResponse', () => {
   it('is true when every user part is a function response', () => {
@@ -26,19 +26,5 @@ describe('isFunctionResponse', () => {
     // [].every(...) is vacuously true, so an empty user turn would otherwise be
     // misread as a function-response turn — it carries no function responses.
     expect(isFunctionResponse({ role: 'user', parts: [] })).toBe(false);
-  });
-});
-
-describe('isFunctionCall', () => {
-  it('is true when every model part is a function call', () => {
-    const content: Content = {
-      role: 'model',
-      parts: [{ functionCall: { name: 'f', args: {} } }],
-    };
-    expect(isFunctionCall(content)).toBe(true);
-  });
-
-  it('is false for a model message with no parts', () => {
-    expect(isFunctionCall({ role: 'model', parts: [] })).toBe(false);
   });
 });

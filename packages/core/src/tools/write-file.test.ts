@@ -14,11 +14,7 @@ import {
   type Mocked,
 } from 'vitest';
 import type { WriteFileToolParams } from './write-file.js';
-import {
-  WriteFileTool,
-  buildRecordArtifactReminder,
-  buildWorkspaceArtifactMetadata,
-} from './write-file.js';
+import { WriteFileTool, buildWorkspaceArtifactMetadata } from './write-file.js';
 import { ToolErrorType } from './tool-error.js';
 import type { FileDiff, ToolEditConfirmationDetails } from './tools.js';
 import { ToolConfirmationOutcome } from './tools.js';
@@ -890,7 +886,6 @@ describe('WriteFileTool', () => {
       expect(writeSpy).toHaveBeenCalledWith({
         path: filePath,
         content: proposedContent,
-        toolWriteOrigin: 'write_file',
         _meta: {
           bom: false,
           encoding: undefined,
@@ -1209,7 +1204,6 @@ describe('WriteFileTool', () => {
       expect(writeSpy).toHaveBeenCalledWith({
         path: filePath,
         content: newContent,
-        toolWriteOrigin: 'write_file',
         _meta: { bom: true, encoding: 'utf-8', lineEnding: 'lf' },
       });
 
@@ -1239,7 +1233,6 @@ describe('WriteFileTool', () => {
       expect(writeSpy).toHaveBeenCalledWith({
         path: filePath,
         content: newContent,
-        toolWriteOrigin: 'write_file',
         _meta: { bom: false, encoding: 'utf-8', lineEnding: 'lf' },
       });
 
@@ -1269,7 +1262,6 @@ describe('WriteFileTool', () => {
       expect(writeSpy).toHaveBeenCalledWith({
         path: filePath,
         content: newContent,
-        toolWriteOrigin: 'write_file',
         _meta: { bom: false, encoding: undefined },
       });
 
@@ -1304,7 +1296,6 @@ describe('WriteFileTool', () => {
       expect(writeSpy).toHaveBeenCalledWith({
         path: filePath,
         content: newContent,
-        toolWriteOrigin: 'write_file',
         _meta: { bom: true, encoding: undefined },
       });
 
@@ -1660,19 +1651,13 @@ describe('workspace artifact metadata guard', () => {
     mockConfigInternal.isRecordArtifactEnabled.mockReturnValue(true);
   });
 
-  // Pins the delegation: buildRecordArtifactReminder must agree with
-  // buildWorkspaceArtifactMetadata. If the reminder is reverted to compute the
-  // path independently (without the safety guard), it would still emit a hint
-  // for this markup-bearing filename while the artifact is correctly skipped,
-  // reintroducing the false "automatically recorded" claim.
-  it('keeps the reminder and the artifact in lockstep when the guard rejects', () => {
+  it('skips artifacts whose filename carries markup', () => {
     const rejected = path.resolve(
       rootDir,
       'reports',
       'chart onerror=alert(1).html',
     );
     expect(buildWorkspaceArtifactMetadata(mockConfig, rejected)).toBeNull();
-    expect(buildRecordArtifactReminder(mockConfig, rejected)).toBeNull();
   });
 
   it('skips artifacts whose workspace path exceeds the store limit', () => {

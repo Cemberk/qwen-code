@@ -11,8 +11,6 @@ import {
   getFunctionCallsFromParts,
   getFunctionCallsAsJson,
   getFunctionCallsFromPartsAsJson,
-  getStructuredResponse,
-  getStructuredResponseFromParts,
   getToolResponseDisplayText,
   TOOL_SUCCEEDED_OUTPUT,
 } from './generateContentResponseUtilities.js';
@@ -222,64 +220,6 @@ describe('generateContentResponseUtilities', () => {
     it('should return undefined if no function calls in parts', () => {
       const parts = [mockTextPart('Hello')];
       expect(getFunctionCallsFromPartsAsJson(parts)).toBeUndefined();
-    });
-  });
-
-  describe('getStructuredResponse', () => {
-    it('should return only text if only text exists', () => {
-      const response = mockResponse([mockTextPart('Hello World')]);
-      expect(getStructuredResponse(response)).toBe('Hello World');
-    });
-    it('should return only function call JSON if only function calls exist', () => {
-      const func = { name: 'testFunc', args: { data: 'payload' } };
-      const response = mockResponse([
-        mockFunctionCallPart(func.name, func.args),
-      ]);
-      const expectedJson = JSON.stringify([func], null, 2);
-      expect(getStructuredResponse(response)).toBe(expectedJson);
-    });
-    it('should return text and function call JSON if both exist', () => {
-      const text = 'Consider this data:';
-      const func = { name: 'processData', args: { item: 42 } };
-      const response = mockResponse([
-        mockTextPart(text),
-        mockFunctionCallPart(func.name, func.args),
-      ]);
-      const expectedJson = JSON.stringify([func], null, 2);
-      expect(getStructuredResponse(response)).toBe(`${text}\n${expectedJson}`);
-    });
-    it('should return undefined if neither text nor function calls exist', () => {
-      const response = mockResponse([]);
-      expect(getStructuredResponse(response)).toBeUndefined();
-    });
-  });
-
-  describe('getStructuredResponseFromParts', () => {
-    it('should return only text if only text exists in parts', () => {
-      const parts = [mockTextPart('Hello World')];
-      expect(getStructuredResponseFromParts(parts)).toBe('Hello World');
-    });
-    it('should return only function call JSON if only function calls exist in parts', () => {
-      const func = { name: 'testFunc', args: { data: 'payload' } };
-      const parts = [mockFunctionCallPart(func.name, func.args)];
-      const expectedJson = JSON.stringify([func], null, 2);
-      expect(getStructuredResponseFromParts(parts)).toBe(expectedJson);
-    });
-    it('should return text and function call JSON if both exist in parts', () => {
-      const text = 'Consider this data:';
-      const func = { name: 'processData', args: { item: 42 } };
-      const parts = [
-        mockTextPart(text),
-        mockFunctionCallPart(func.name, func.args),
-      ];
-      const expectedJson = JSON.stringify([func], null, 2);
-      expect(getStructuredResponseFromParts(parts)).toBe(
-        `${text}\n${expectedJson}`,
-      );
-    });
-    it('should return undefined if neither text nor function calls exist in parts', () => {
-      const parts: Part[] = [];
-      expect(getStructuredResponseFromParts(parts)).toBeUndefined();
     });
   });
 

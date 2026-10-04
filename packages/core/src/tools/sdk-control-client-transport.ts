@@ -150,18 +150,4 @@ export class SdkControlClientTransport {
       this.onclose();
     }
   }
-
-  /**
-   * Check if transport is started
-   */
-  isStarted(): boolean {
-    return this.started;
-  }
-
-  /**
-   * Get server name
-   */
-  getServerName(): string {
-    return this.serverName;
-  }
 }
