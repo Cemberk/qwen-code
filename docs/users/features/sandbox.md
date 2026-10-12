@@ -87,7 +87,7 @@ Your ideal method of sandboxing may differ depending on your platform and your p
 
 Lightweight, built-in sandboxing using `sandbox-exec`.
 
-**Default profile**: `permissive-open` - restricts writes outside the project directory, but allows most other operations and outbound network access.
+**Default profile**: `permissive-closed` - restricts writes outside the project directory, keeps the configuration Qwen Code loads from `~/.qwen` read-only, and allows network connections only to this machine (the local model server included).
 
 **Best for**: Fast, no Docker required, strong guardrails for file writes.
 
@@ -170,21 +170,20 @@ Custom images are user-managed and must already exist locally.
 
 Built-in profiles (set via `SEATBELT_PROFILE` env var):
 
-- `permissive-open` (default): Write restrictions, network allowed
-- `permissive-closed`: Write restrictions, no network
-- `restrictive-open`: Strict restrictions, network allowed
+- `permissive-closed` (default): Write restrictions, nothing listens except the debugger port
+- `permissive-open`: Write restrictions, local servers may listen
 - `restrictive-closed`: Maximum restrictions
+- `restrictive-open`: Strict restrictions, local servers may listen
+
+Every profile allows outbound connections only to this machine: the local model server and other local services are reachable, while every other destination, DNS included, is refused. Inside every profile, the configuration Qwen Code loads from `~/.qwen` is read-only — `settings.json`, `.env`, `trustedFolders.json`, `mcpApprovals.json`, the extension secrets file, and the `extensions`, `skills`, `agents`, `commands`, `workflows`, `rules` and `output-styles` directories — so a sandboxed command cannot add hooks, servers, extensions or permissions that would run later outside the sandbox. (The extension store's bookkeeping in `extension-store/` stays writable, because Qwen Code updates it on every start; it can only switch already-installed extensions on or off.) Change settings from a session started without the sandbox.
+
+Seatbelt cannot tell loopback from the machine's other addresses when a server starts listening, so under the `-open` profiles a server bound to all interfaces is reachable from your local network. The `-closed` profiles allow no listening at all.
 
 > [!tip]
 >
-> Start with `permissive-open`, then tighten to `restrictive-closed` if your workflow still works.
+> Start with `permissive-closed`; switch to `permissive-open` only when the work needs a local server.
 
-### Custom Seatbelt profiles (macOS)
-
-To use a custom Seatbelt profile:
-
-1. Create a file named `.qwen/sandbox-macos-<profile_name>.sb` in your project.
-2. Set `SEATBELT_PROFILE=<profile_name>`.
+Only the built-in profiles exist; any other `SEATBELT_PROFILE` value is an error.
 
 ### Custom Sandbox Flags
 
@@ -253,7 +252,7 @@ For more details on customizing the sandbox, see [Customizing the sandbox enviro
 
 **Network issues**
 
-- Seatbelt: check that the sandbox profile allows network.
+- Seatbelt: every profile allows only connections to this machine; a server started inside the sandbox needs an `-open` profile.
 - Docker/Podman: the container has no network unless `SANDBOX_FLAGS` selects one.
 
 ### Debug mode

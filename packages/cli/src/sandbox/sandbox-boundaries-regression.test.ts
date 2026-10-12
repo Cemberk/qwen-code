@@ -66,4 +66,93 @@ describe('seatbelt profile write grants', () => {
       }
     },
   );
+
+  // Seatbelt applies the last matching rule, so the deny must come after the
+  // write grant for QWEN_DIR.
+  it.each(BUILTIN_SEATBELT_PROFILES)(
+    '%s keeps the config the CLI loads read-only inside the sandbox',
+    (profile) => {
+      const source = readProfile(profile);
+      const grant = source.lastIndexOf('(subpath (param "QWEN_DIR"))');
+      const deny = source.indexOf('(deny file-write*', grant);
+      expect(grant).toBeGreaterThan(0);
+      expect(deny).toBeGreaterThan(grant);
+      const block = source.slice(deny, source.indexOf('\n)', deny));
+      for (const file of [
+        'settings.json',
+        '.env',
+        'trustedFolders.json',
+        'mcpApprovals.json',
+        'extension-secrets-v1.json',
+      ]) {
+        expect(block).toContain(
+          `(literal (string-append (param "QWEN_DIR") "/${file}"))`,
+        );
+      }
+      for (const dir of [
+        'extensions',
+        'skills',
+        'agents',
+        'commands',
+        'workflows',
+        'rules',
+        'output-styles',
+      ]) {
+        expect(block).toContain(
+          `(subpath (string-append (param "QWEN_DIR") "/${dir}"))`,
+        );
+      }
+    },
+  );
+});
+
+function readProfile(profile: string): string {
+  return fs.readFileSync(
+    path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      `sandbox-macos-${profile}.sb`,
+    ),
+    'utf8',
+  );
+}
+
+describe('seatbelt profile network rules', () => {
+  function networkRules(profile: string): string[] {
+    return readProfile(profile)
+      .split('\n')
+      .filter((line) => /^\((?:allow|deny) network/.test(line));
+  }
+
+  it.each(BUILTIN_SEATBELT_PROFILES)(
+    '%s reaches nothing but this machine',
+    (profile) => {
+      const source = readProfile(profile);
+      const rules = networkRules(profile);
+      // Placed after any `(allow default)`, so it is the rule that applies.
+      expect(source.indexOf('(deny network*)')).toBeGreaterThan(
+        source.indexOf('(allow default)'),
+      );
+      expect(rules[0]).toBe('(deny network*)');
+      expect(rules).toContain(
+        '(allow network-outbound (remote ip "localhost:*"))',
+      );
+      for (const rule of rules.slice(1)) {
+        expect(rule).toMatch(/\((?:local|remote) ip "localhost:[*0-9]+"\)\)$/);
+      }
+    },
+  );
+
+  it.each(BUILTIN_SEATBELT_PROFILES.filter((p) => p.endsWith('-closed')))(
+    '%s listens on nothing but the debugger port',
+    (profile) => {
+      expect(
+        networkRules(profile).filter((rule) =>
+          /network-(?:bind|inbound)/.test(rule),
+        ),
+      ).toEqual([
+        '(allow network-bind (local ip "localhost:9229"))',
+        '(allow network-inbound (local ip "localhost:9229"))',
+      ]);
+    },
+  );
 });

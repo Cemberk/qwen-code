@@ -500,15 +500,70 @@ describe('resolveSeatbeltProfileFile', () => {
     }
   });
 
-  it('keeps custom seatbelt profiles under project settings', () => {
-    const bundleDir = path.resolve(path.sep, 'tmp', 'qwen', 'lib');
-    const chunkUrl = pathToFileURL(
-      path.join(bundleDir, 'chunks', 'sandbox-AAAA.js'),
-    ).toString();
+  it('rejects profiles that are not built in instead of loading a project file', async () => {
+    expect(() => resolveSeatbeltProfileFile('project-profile')).toThrow(
+      FatalSandboxError,
+    );
 
-    expect(resolveSeatbeltProfileFile('project-profile', chunkUrl)).toBe(
+    vi.stubEnv('SEATBELT_PROFILE', 'project-profile');
+    const existsSync = vi.spyOn(fs, 'existsSync');
+    await expect(
+      start_sandbox({ command: 'sandbox-exec', image: '' }),
+    ).rejects.toThrow("Unknown macos seatbelt profile 'project-profile'");
+    expect(existsSync).not.toHaveBeenCalledWith(
       path.join(QWEN_DIR, 'sandbox-macos-project-profile.sb'),
     );
+    expect(spawnMock).not.toHaveBeenCalled();
+  });
+
+  it('creates the read-only extensions dir before entering the profile', async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'qwen-seatbelt-'));
+    try {
+      vi.stubEnv('QWEN_HOME', home);
+      vi.stubEnv('QWEN_RUNTIME_DIR', undefined);
+      vi.stubEnv('SEATBELT_PROFILE', undefined);
+      execSyncMock.mockReturnValue(Buffer.from(os.tmpdir()));
+      const child = new EventEmitter();
+      spawnMock.mockImplementationOnce(() => {
+        expect(fs.statSync(path.join(home, 'extensions')).isDirectory()).toBe(
+          true,
+        );
+        return child;
+      });
+      const cliConfig = {
+        getTargetDir: () => process.cwd(),
+        getWorkspaceContext: () => ({ getDirectories: () => [process.cwd()] }),
+      } as unknown as Parameters<typeof start_sandbox>[2];
+
+      const result = start_sandbox(
+        { command: 'sandbox-exec', image: '' },
+        [],
+        cliConfig,
+        [process.execPath, '/path/to/cli.js'],
+      );
+      await vi.waitFor(() => expect(spawnMock).toHaveBeenCalledTimes(1));
+      const [command, args] = spawnMock.mock.calls[0] as [string, string[]];
+      child.emit('close', 0);
+      await expect(result).resolves.toBe(0);
+
+      expect(command).toBe('sandbox-exec');
+      expect(args[args.indexOf('-f') + 1]).toBe(
+        resolveSeatbeltProfileFile('permissive-closed'),
+      );
+      expect(args).toContain(`QWEN_DIR=${fs.realpathSync(home)}`);
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('defaults to the profile that allows no listening', async () => {
+    vi.stubEnv('SEATBELT_PROFILE', undefined);
+    vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+
+    await expect(
+      start_sandbox({ command: 'sandbox-exec', image: '' }),
+    ).rejects.toThrow('sandbox-macos-permissive-closed.sb');
+    expect(process.env['SEATBELT_PROFILE']).toBe('permissive-closed');
   });
 
   it('throws missing file errors with the resolved seatbelt profile path', async () => {

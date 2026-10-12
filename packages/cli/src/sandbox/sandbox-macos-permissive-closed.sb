@@ -24,9 +24,33 @@
     (literal "/dev/null")
 )
 
-;; deny all inbound network traffic EXCEPT on debugger port
-(deny network-inbound)
-(allow network-inbound (local ip "localhost:9229"))
+;; The CLI loads and runs what these hold (hooks, MCP servers, extensions,
+;; environment, trust and approval decisions), also when it later runs
+;; outside the sandbox, so nothing inside the sandbox may change them. The
+;; extension store's bookkeeping (extension-store/) stays writable: the CLI
+;; locks and updates it on every start, and it can only switch extensions
+;; already installed under extensions/ on or off.
+(deny file-write*
+    (literal (string-append (param "QWEN_DIR") "/settings.json"))
+    (literal (string-append (param "QWEN_DIR") "/.env"))
+    (literal (string-append (param "QWEN_DIR") "/trustedFolders.json"))
+    (literal (string-append (param "QWEN_DIR") "/mcpApprovals.json"))
+    (literal (string-append (param "QWEN_DIR") "/extension-secrets-v1.json"))
+    (subpath (string-append (param "QWEN_DIR") "/extensions"))
+    (subpath (string-append (param "QWEN_DIR") "/skills"))
+    (subpath (string-append (param "QWEN_DIR") "/agents"))
+    (subpath (string-append (param "QWEN_DIR") "/commands"))
+    (subpath (string-append (param "QWEN_DIR") "/workflows"))
+    (subpath (string-append (param "QWEN_DIR") "/rules"))
+    (subpath (string-append (param "QWEN_DIR") "/output-styles"))
+)
 
-;; deny all outbound network traffic
-(deny network-outbound)
+;; Network: this machine only. Seatbelt's `localhost` matches the machine's
+;; own addresses, so outbound connections reach the local model server and
+;; other local services but never leave the machine; every other
+;; destination, DNS included, is refused. Nothing listens except the
+;; debugger port.
+(deny network*)
+(allow network-outbound (remote ip "localhost:*"))
+(allow network-bind (local ip "localhost:9229"))
+(allow network-inbound (local ip "localhost:9229"))

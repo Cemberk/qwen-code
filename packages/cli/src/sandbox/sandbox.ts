@@ -75,8 +75,13 @@ export function resolveSeatbeltProfileFile(
   profile: string,
   importMetaUrl = import.meta.url,
 ): string {
+  // Only the shipped profiles exist: a profile file anywhere else (the
+  // project's `.qwen` included) would let whoever wrote it choose the
+  // sandbox's own rules.
   if (!BUILTIN_SEATBELT_PROFILES.includes(profile)) {
-    return path.join(SETTINGS_DIRECTORY_NAME, `sandbox-macos-${profile}.sb`);
+    throw new FatalSandboxError(
+      `Unknown macos seatbelt profile '${profile}'. Use one of: ${BUILTIN_SEATBELT_PROFILES.join(', ')}.`,
+    );
   }
 
   return path.join(
@@ -233,7 +238,7 @@ export async function start_sandbox(
       );
     }
 
-    const profile = (process.env['SEATBELT_PROFILE'] ??= 'permissive-open');
+    const profile = (process.env['SEATBELT_PROFILE'] ??= 'permissive-closed');
     const profileFile = resolveSeatbeltProfileFile(profile);
     if (!fs.existsSync(profileFile)) {
       throw new FatalSandboxError(
@@ -256,6 +261,12 @@ export async function start_sandbox(
     const runtimeDir = Storage.getRuntimeBaseDir();
     fs.mkdirSync(qwenDir, { recursive: true });
     fs.mkdirSync(runtimeDir, { recursive: true });
+    // The profiles keep the extensions directory read-only, and the sandboxed
+    // CLI's extension store expects it to exist, so create it here first.
+    fs.mkdirSync(path.join(qwenDir, 'extensions'), {
+      recursive: true,
+      mode: 0o700,
+    });
 
     const args = [
       '-D',
