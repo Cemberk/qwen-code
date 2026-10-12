@@ -42,7 +42,7 @@ export function resetBackgroundStateForSessionSwitch(config: Config): void {
   // R12 (doudouOUC): abort BEFORE reset — paused runs no longer block
   // the switch (hasRunningEntries() excludes them), and reset() alone
   // would drop their entries without aborting the controllers, leaving
-  // the gated script and its vm context alive indefinitely. The gate
+  // the gated script and its host process alive indefinitely. The gate
   // still blocks running / pausing runs, so only paused entries are
   // cancelled here; the runner's finally still writes their snapshot
   // and telemetry as they settle.

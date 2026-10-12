@@ -169,6 +169,7 @@ export async function planManagedAutoMemoryDreamByAgent(
     allowShell: true,
     includeUserMemory: false,
     protectPinnedMemory: true,
+    shellReadRoots: [transcriptDir],
   });
   const result = await runForkedAgent({
     name: 'managed-auto-memory-dreamer',

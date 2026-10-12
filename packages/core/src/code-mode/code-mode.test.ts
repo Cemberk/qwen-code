@@ -810,6 +810,25 @@ describe('isolated code mode host', () => {
     expect(proto.value).toBe('proto ok');
   });
 
+  it('turns runaway recursion into an error the script can catch', async () => {
+    const result = await executeCodeMode(
+      `function down(n) {
+        try {
+          return down(n + 1);
+        } catch (error) {
+          return 'caught ' + (error instanceof Error) + ' at ' + (n > 100);
+        }
+      }
+      return down(0);`,
+      plan(),
+      runtime(async () => {
+        throw new Error('unused');
+      }),
+      new AbortController().signal,
+    );
+    expect(result.value).toBe('caught true at true');
+  });
+
   it('supports immediate exit without running later statements', async () => {
     const result = await executeCodeMode(
       'text("before"); exit(); text("after")',

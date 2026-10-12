@@ -48,7 +48,8 @@ import {
   type LocalizableString,
 } from './i18n.js';
 import {
-  getEnvContents,
+  ExtensionSettingScope,
+  getScopedEnvContents,
   maybePromptForSettings,
   promptForSetting,
   type PreparedExtensionSettingsMutation,
@@ -1482,10 +1483,13 @@ export class ExtensionManager {
           );
         }
         let previousSettings: Record<string, string> | undefined;
-        if (isUpdate) {
-          previousSettings = await getEnvContents(
+        if (isUpdate && previousExtensionConfig.settings?.length) {
+          // The update rewrites user-scope settings only; workspace values
+          // stay in their own scope.
+          previousSettings = await getScopedEnvContents(
             previousExtensionConfig,
             extensionId,
+            ExtensionSettingScope.USER,
           );
         }
         stagingPath = await this.extensionStore.createStagingDirectory();

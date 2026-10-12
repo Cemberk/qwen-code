@@ -65,7 +65,4 @@ allowBuilds:
   # Type-only devDependency; its install script is never needed.
   '@google/genai': false
   esbuild: true
-  # Not a dependency any more, but the locked vitest entries still resolve it
-  # as an optional peer. Its postinstall only copies a browser service worker.
-  msw: false
   protobufjs: true

@@ -118,7 +118,9 @@ background cleanup, enforce the pinned-file boundary on their write and edit
 tools, including paths that resolve through a symlink into `pinned/`.
 Command-line deletion is closed off too: only the project Dream worker holds a
 shell, and its policy is read-only, while automatic extraction and the
-user-memory Dream worker hold no shell at all. You still control
+user-memory Dream worker hold no shell at all. That shell can read only the
+workspace, the project memory directory and the project's session
+transcripts; any other command is denied. You still control
 these files directly and can remove them with an explicit `/forget` request.
 
 > **Note:** The visible `/dream` slash command runs on the main Agent. It

@@ -11,6 +11,10 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolveBundleDir } from '../../utils/bundlePaths.js';
 import {
+  quickjsHostReadRoot,
+  quickjsHostSpawnArgs,
+} from '../../utils/quickjs-host-permissions.js';
+import {
   encodeWorkflowFrame,
   WorkflowFrameDecoder,
   type WorkflowParentMessage,
@@ -40,6 +44,8 @@ export interface WorkflowHostHandlers {
 function hostCommand(): { command: string; args: string[] } {
   const currentFile = fileURLToPath(import.meta.url);
   if (currentFile.endsWith('.ts')) {
+    // Source runs (tests, dev) only: tsx needs worker threads and cache
+    // writes, so this path runs without the permission model.
     const require = createRequire(import.meta.url);
     return {
       command: process.execPath,
@@ -52,11 +58,16 @@ function hostCommand(): { command: string; args: string[] } {
   }
   const sibling = path.join(path.dirname(currentFile), 'workflow-host.js');
   if (existsSync(sibling)) {
-    return { command: process.execPath, args: [sibling] };
+    return {
+      command: process.execPath,
+      args: quickjsHostSpawnArgs(sibling, quickjsHostReadRoot(import.meta.url)),
+    };
   }
   return {
     command: process.execPath,
-    args: [path.join(resolveBundleDir(import.meta.url), 'workflowHost.js')],
+    args: quickjsHostSpawnArgs(
+      path.join(resolveBundleDir(import.meta.url), 'workflowHost.js'),
+    ),
   };
 }
 

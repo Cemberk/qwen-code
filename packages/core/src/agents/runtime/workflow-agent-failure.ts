@@ -62,8 +62,8 @@ export class WorkflowAgentFailedError extends Error {
 
 /**
  * Duck-typed on `name`: the error crosses the stall wrapper, the dispatch
- * scheduler and (for a fan-out slot) a vm realm boundary, any of which can
- * make `instanceof` unreliable. The registry does the same for
+ * scheduler and (for a script-facing failure) the workflow host's JSON
+ * boundary, any of which can make `instanceof` unreliable. The registry does the same for
  * `WorkflowBudgetExceededError`.
  */
 export function isWorkflowAgentFailedError(

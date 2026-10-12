@@ -29,7 +29,10 @@ import {
 } from './protocol.js';
 
 const MEMORY_LIMIT_BYTES = 64 * 1024 * 1024;
-const STACK_LIMIT_BYTES = 1024 * 1024;
+// Below the point where the WebAssembly frames exhaust Node's own stack, so
+// runaway recursion is a catchable error in the script instead of a crash of
+// the host.
+const STACK_LIMIT_BYTES = 256 * 1024;
 const MAX_LIVE_TIMERS = 1024;
 const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
 

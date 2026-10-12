@@ -542,6 +542,72 @@ describe('createMemoryScopedAgentConfig', () => {
     ).resolves.toBe('allow');
   });
 
+  it('confines the read-only shell to the workspace, memory and its read roots', async () => {
+    const outside = path.join(tempDir, 'outside');
+    const transcripts = path.join(tempDir, 'chats');
+    await fs.mkdir(outside, { recursive: true });
+    await fs.mkdir(transcripts, { recursive: true });
+    await fs.writeFile(path.join(outside, 'secret.txt'), 'secret');
+    await fs.symlink(
+      path.join(outside, 'secret.txt'),
+      path.join(projectRoot, 'link.txt'),
+    );
+    const memoryDir = path.join(getAutoMemoryRoot(projectRoot), 'project');
+    const userMemoryDir = path.join(getUserAutoMemoryRoot(), 'user');
+    const workspace = new WorkspaceContext(projectRoot);
+    const base = { getWorkspaceContext: () => workspace } as unknown as Config;
+    const dream = permissionManager(
+      createMemoryScopedAgentConfig(base, projectRoot, {
+        allowShell: true,
+        includeUserMemory: false,
+        shellReadRoots: [transcripts],
+      }),
+    );
+    const decide = (command: string, cwd = projectRoot) =>
+      dream.evaluate({ toolName: ToolNames.SHELL, command, cwd });
+
+    for (const command of [
+      'ls -la',
+      `ls ${memoryDir}`,
+      `grep -rn "term" ${transcripts}/ --include="*.jsonl" | tail -50`,
+    ]) {
+      await expect(decide(command)).resolves.toBe('allow');
+    }
+    for (const command of [
+      `cat ${path.join(outside, 'secret.txt')}`,
+      'cat link.txt',
+      `ls ${outside}`,
+      `cd ${outside} && cat secret.txt`,
+      `ls ${userMemoryDir}`,
+      'grep -rn term /etc',
+      'cat ~/.ssh/id_rsa',
+    ]) {
+      await expect(decide(command)).resolves.toBe('deny');
+    }
+    await expect(decide('ls', outside)).resolves.toBe('deny');
+
+    const memoryOnly = permissionManager(
+      createMemoryScopedAgentConfig(base, projectRoot, {
+        allowShell: true,
+        restrictReadsToMemoryPaths: true,
+      }),
+    );
+    await expect(
+      memoryOnly.evaluate({
+        toolName: ToolNames.SHELL,
+        command: 'ls -la',
+        cwd: projectRoot,
+      }),
+    ).resolves.toBe('deny');
+    await expect(
+      memoryOnly.evaluate({
+        toolName: ToolNames.SHELL,
+        command: `ls ${userMemoryDir}`,
+        cwd: memoryDir,
+      }),
+    ).resolves.toBe('allow');
+  });
+
   it('keeps the extraction and dream agents reading memory through explicit allows', async () => {
     // Global (not repo-local) memory, which lives outside the workspace.
     vi.stubEnv('QWEN_CODE_MEMORY_LOCAL', '');
@@ -565,6 +631,7 @@ describe('createMemoryScopedAgentConfig', () => {
         allowShell: true,
         includeUserMemory: false,
         protectPinnedMemory: true,
+        shellReadRoots: [path.join(tempDir, 'chats')],
       },
     };
     // The memory roots are outside the workspace, so the tool itself asks.

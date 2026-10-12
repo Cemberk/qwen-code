@@ -185,7 +185,7 @@ The `qwen-extension.json` file contains the configuration for the extension. The
 - `skills`: The directory containing custom skills (default: `skills`). Skills are discovered automatically and become available via the `/skills` command.
 - `agents`: The directory containing custom subagents (default: `agents`). Subagents are `.yaml` or `.md` files that define specialized AI assistants.
 - `workflows`: A directory, or a list of directories and `.js` files, containing workflow scripts (default: `workflows`). See [Custom workflows](#custom-workflows).
-- `settings`: An array of settings that the extension requires. When installing, users will be prompted to provide values for these settings. The values are stored securely and passed to MCP servers as environment variables.
+- `settings`: An array of settings that the extension requires. When installing, users will be prompted to provide values for these settings. The values are stored locally (sensitive ones in an encrypted file). Qwen Code does not currently add them to the environment of the extension's MCP servers.
   - Each setting has the following properties:
     - `name`: Display name for the setting
     - `description`: A description of what this setting is used for
@@ -210,10 +210,10 @@ qwen extensions settings list <extension-name>
 
 Settings can be configured at two levels:
 
-- **User level** (default): Settings apply across all projects (`~/.qwen/.env`)
-- **Workspace level**: Settings apply only to the current project (`.qwen/.env`)
+- **User level** (default): Settings apply across all projects. Non-sensitive values are kept in the extension's own `.env` (`~/.qwen/extensions/<name>/.env`).
+- **Workspace level**: Settings apply only to the current project. They are kept in your user account's settings file (`~/.qwen/extension-secrets-v1.json`), keyed by the project path. Nothing is read from or written into the project.
 
-Workspace settings take precedence over user settings. Sensitive settings are stored in an encrypted file (`~/.qwen/extension-secrets-v1.json`, readable only by your user account) and never displayed in plain text.
+Workspace settings take precedence over user settings. Sensitive settings are stored in the encrypted file (`~/.qwen/extension-secrets-v1.json`, readable only by your user account) and never displayed in plain text. Updating an extension keeps each value in its own scope.
 
 When Qwen Code starts, it loads all the extensions and merges their configurations. If there are any conflicts, the workspace configuration takes precedence.
 

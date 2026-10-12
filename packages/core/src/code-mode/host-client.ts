@@ -12,6 +12,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { CodeModeBindingPlan } from '../tools/code-mode.js';
 import { resolveBundleDir } from '../utils/bundlePaths.js';
 import {
+  quickjsHostReadRoot,
+  quickjsHostSpawnArgs,
+} from '../utils/quickjs-host-permissions.js';
+import {
   CodeModeTurnTerminated,
   type CodeModeToolResult,
   type ToolCallRuntimeContext,
@@ -51,6 +55,8 @@ export class CodeModeExecutionError extends Error {
 function hostCommand(): { command: string; args: string[] } {
   const currentFile = fileURLToPath(import.meta.url);
   if (currentFile.endsWith('.ts')) {
+    // Source runs (tests, dev) only: tsx needs worker threads and cache
+    // writes, so this path runs without the permission model.
     const require = createRequire(import.meta.url);
     return {
       command: process.execPath,
@@ -63,11 +69,16 @@ function hostCommand(): { command: string; args: string[] } {
   }
   const sibling = path.join(path.dirname(currentFile), 'host.js');
   if (existsSync(sibling)) {
-    return { command: process.execPath, args: [sibling] };
+    return {
+      command: process.execPath,
+      args: quickjsHostSpawnArgs(sibling, quickjsHostReadRoot(import.meta.url)),
+    };
   }
   return {
     command: process.execPath,
-    args: [path.join(resolveBundleDir(import.meta.url), 'codeModeHost.js')],
+    args: quickjsHostSpawnArgs(
+      path.join(resolveBundleDir(import.meta.url), 'codeModeHost.js'),
+    ),
   };
 }
 

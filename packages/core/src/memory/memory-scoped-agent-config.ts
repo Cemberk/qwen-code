@@ -18,7 +18,7 @@ import type {
 import { ToolNames } from '../tools/tool-names.js';
 import {
   commandInvokesGit,
-  isShellCommandReadOnlyASTInDirectory,
+  isShellCommandReadOnlyWithinWorkspace,
 } from '../utils/shellAstParser.js';
 import {
   AUTO_MEMORY_PINNED_DIRNAME,
@@ -45,6 +45,11 @@ export interface MemoryScopedAgentConfigOptions {
   includeUserMemory?: boolean;
   protectPinnedMemory?: boolean;
   restrictReadsToMemoryPaths?: boolean;
+  /**
+   * Directories the read-only shell may read besides the memory roots and,
+   * unless reads are restricted to memory, the workspace.
+   */
+  shellReadRoots?: readonly string[];
 }
 
 interface PinnedMemoryRoot {
@@ -296,8 +301,44 @@ function isWithinRootCaseInsensitive(filePath: string, root: string): boolean {
   return isWithinRoot(filePath.toLowerCase(), root.toLowerCase());
 }
 
+/**
+ * Whether the read-only shell may read `candidate`: inside the memory roots,
+ * `opts.shellReadRoots`, or (unless reads are restricted to memory) the
+ * workspace. Symlinks are resolved first.
+ */
+function isShellReadWithinScope(
+  candidate: string,
+  config: Config,
+  projectRoot: string,
+  opts: Required<MemoryScopedAgentConfigOptions>,
+): boolean {
+  if (
+    isAllowedMemoryPath(candidate, projectRoot, {
+      includeProjectMemory: opts.includeProjectMemory,
+      includeUserMemory: opts.includeUserMemory,
+    })
+  ) {
+    return true;
+  }
+  const resolved = realpathExistingOrNew(candidate);
+  if (!resolved) return false;
+  if (
+    opts.shellReadRoots.some((root) =>
+      isWithinRoot(resolved, realpathOrResolved(root)),
+    )
+  ) {
+    return true;
+  }
+  if (opts.restrictReadsToMemoryPaths) return false;
+  const workspace = config.getWorkspaceContext?.();
+  return workspace
+    ? workspace.isPathWithinWorkspace(candidate)
+    : isWithinRoot(resolved, realpathOrResolved(projectRoot));
+}
+
 async function evaluateScopedDecision(
   ctx: PermissionCheckContext,
+  config: Config,
   projectRoot: string,
   opts: Required<MemoryScopedAgentConfigOptions>,
   pinnedRoots: readonly PinnedMemoryRoot[],
@@ -311,9 +352,11 @@ async function evaluateScopedDecision(
       if (!trustedFolder && (await commandInvokesGit(ctx.command))) {
         return 'deny';
       }
-      const isReadOnly = await isShellCommandReadOnlyASTInDirectory(
+      // Background agents cannot ask, so a read outside the scope is denied.
+      const isReadOnly = await isShellCommandReadOnlyWithinWorkspace(
         ctx.command,
         ctx.cwd ?? projectRoot,
+        (p) => isShellReadWithinScope(p, config, projectRoot, opts),
       );
       return isReadOnly ? 'allow' : 'deny';
     }
@@ -429,6 +472,7 @@ export function createMemoryScopedAgentConfig(
     includeUserMemory: options.includeUserMemory ?? true,
     protectPinnedMemory: options.protectPinnedMemory ?? false,
     restrictReadsToMemoryPaths: options.restrictReadsToMemoryPaths ?? false,
+    shellReadRoots: options.shellReadRoots ?? [],
   };
   const pinnedRoots = opts.protectPinnedMemory
     ? createPinnedMemoryRoots(
@@ -459,6 +503,7 @@ export function createMemoryScopedAgentConfig(
     async evaluate(ctx: PermissionCheckContext): Promise<PermissionDecision> {
       const scopedDecision = await evaluateScopedDecision(
         ctx,
+        config,
         projectRoot,
         opts,
         pinnedRoots,

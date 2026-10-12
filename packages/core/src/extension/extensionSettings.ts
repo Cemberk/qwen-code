@@ -12,7 +12,6 @@ import * as path from 'node:path';
 import { ExtensionStorage } from './storage.js';
 import type { ExtensionConfig } from './extensionManager.js';
 import prompts from 'prompts';
-import { EXTENSION_SETTINGS_FILENAME } from './variables.js';
 import { FileTokenStorage } from '../mcp/token-storage/file-token-storage.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
 import { atomicWriteFile, atomicWriteJSON } from '../utils/atomicFileWrite.js';
@@ -155,15 +154,11 @@ const getSecretStorageName = (
   return base;
 };
 
-const getEnvFilePath = (
-  extensionName: string,
-  scope: ExtensionSettingScope,
-): string => {
-  if (scope === ExtensionSettingScope.WORKSPACE) {
-    return path.join(process.cwd(), EXTENSION_SETTINGS_FILENAME);
-  }
-  return new ExtensionStorage(extensionName).getEnvFilePath();
-};
+// Only user-scope values use a `.env` file. Workspace-scope values, sensitive
+// or not, live in the user's encrypted settings file under the workspace's
+// service name, so nothing is read from or written into the project.
+const getEnvFilePath = (extensionName: string): string =>
+  new ExtensionStorage(extensionName).getEnvFilePath();
 
 export async function maybePromptForSettings(
   extensionConfig: ExtensionConfig,
@@ -192,8 +187,7 @@ export async function maybePromptForSettings(
   // We assume user scope here because we don't have a way to ask the user for scope during the initial setup.
   // The user can change the scope later using the `settings set` command.
   const scope = ExtensionSettingScope.USER;
-  const envFilePath =
-    envFilePathOverride ?? getEnvFilePath(extensionName, scope);
+  const envFilePath = envFilePathOverride ?? getEnvFilePath(extensionName);
   const selectorPath = getSettingsSelectorPath(
     extensionName,
     envFilePathOverride,
@@ -366,11 +360,18 @@ export async function getScopedEnvContents(
   const storage = new FileTokenStorage(
     getSecretStorageName(extensionName, extensionId, scope),
   );
-  const selector =
-    scope === ExtensionSettingScope.USER
-      ? await readSettingsSelector(extensionName)
-      : undefined;
-  const envFilePath = getEnvFilePath(extensionName, scope);
+  if (scope === ExtensionSettingScope.WORKSPACE) {
+    const workspaceEnv: Record<string, string> = {};
+    for (const setting of extensionConfig.settings ?? []) {
+      const value = await storage.getSecret(setting.envVar);
+      if (value !== null) {
+        workspaceEnv[setting.envVar] = value;
+      }
+    }
+    return workspaceEnv;
+  }
+  const selector = await readSettingsSelector(extensionName);
+  const envFilePath = getEnvFilePath(extensionName);
   let customEnv: Record<string, string> = {};
   if (fsSync.existsSync(envFilePath)) {
     const envFile = fsSync.readFileSync(envFilePath, 'utf-8');
@@ -407,28 +408,6 @@ export async function getScopedEnvContents(
   return customEnv;
 }
 
-export async function getEnvContents(
-  extensionConfig: ExtensionConfig,
-  extensionId: string,
-): Promise<Record<string, string>> {
-  if (!extensionConfig.settings || extensionConfig.settings.length === 0) {
-    return Promise.resolve({});
-  }
-
-  const userSettings = await getScopedEnvContents(
-    extensionConfig,
-    extensionId,
-    ExtensionSettingScope.USER,
-  );
-  const workspaceSettings = await getScopedEnvContents(
-    extensionConfig,
-    extensionId,
-    ExtensionSettingScope.WORKSPACE,
-  );
-
-  return { ...userSettings, ...workspaceSettings };
-}
-
 export async function updateSetting(
   extensionConfig: ExtensionConfig,
   extensionId: string,
@@ -457,7 +436,7 @@ export async function updateSetting(
 
   const newValue = await requestSetting(settingToUpdate);
 
-  if (settingToUpdate.sensitive) {
+  if (settingToUpdate.sensitive || scope === ExtensionSettingScope.WORKSPACE) {
     const storage = new FileTokenStorage(
       getSecretStorageName(extensionName, extensionId, scope),
     );
@@ -483,9 +462,9 @@ export async function updateSetting(
     return;
   }
 
-  // For non-sensitive settings, we need to read the existing .env file,
+  // For non-sensitive user settings, we need to read the existing .env file,
   // update the value, and write it back, preserving any other values.
-  const envFilePath = getEnvFilePath(extensionName, scope);
+  const envFilePath = getEnvFilePath(extensionName);
   let envContent = '';
   if (fsSync.existsSync(envFilePath)) {
     envContent = await fs.readFile(envFilePath, 'utf-8');

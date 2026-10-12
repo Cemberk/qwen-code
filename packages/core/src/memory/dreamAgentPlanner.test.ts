@@ -311,6 +311,7 @@ describe('dreamAgentPlanner', () => {
   });
 
   it('can read transcripts while keeping writes project-memory-only', async () => {
+    Storage.setRuntimeBaseDir(path.join(tempDir, 'runtime'));
     vi.mocked(runForkedAgent).mockResolvedValue({
       status: 'completed',
       filesTouched: [],
@@ -328,6 +329,21 @@ describe('dreamAgentPlanner', () => {
         filePath: getTranscriptDir(projectRoot),
       }),
     ).resolves.toBe('default');
+    // The read-only shell reaches the transcripts but nothing outside.
+    await expect(
+      pm.evaluate({
+        toolName: ToolNames.SHELL,
+        command: `grep -rn "term" ${getTranscriptDir(projectRoot)}/ --include="*.jsonl" | tail -50`,
+        cwd: projectRoot,
+      }),
+    ).resolves.toBe('allow');
+    await expect(
+      pm.evaluate({
+        toolName: ToolNames.SHELL,
+        command: `cat ${path.join(tempDir, 'outside.txt')}`,
+        cwd: projectRoot,
+      }),
+    ).resolves.toBe('deny');
     await expect(
       pm.evaluate({
         toolName: ToolNames.WRITE_FILE,

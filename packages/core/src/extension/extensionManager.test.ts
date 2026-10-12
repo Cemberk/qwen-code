@@ -13,6 +13,11 @@ import {
   EXTENSIONS_CONFIG_FILENAME,
 } from './variables.js';
 import { ExtensionStorage } from './storage.js';
+import {
+  ExtensionSettingScope,
+  getScopedEnvContents,
+  updateSetting,
+} from './extensionSettings.js';
 import { QWEN_DIR } from '../config/storage.js';
 import {
   ExtensionManager,
@@ -2143,6 +2148,69 @@ describe('extension tests', () => {
   });
 
   describe('updateExtension', () => {
+    it('keeps workspace-scoped settings out of user scope across an update', async () => {
+      const sourcePath = path.join(tempWorkspaceDir, 'settings-source');
+      const writeSource = (version: string) => {
+        fs.mkdirSync(sourcePath, { recursive: true });
+        fs.writeFileSync(
+          path.join(sourcePath, EXTENSIONS_CONFIG_FILENAME),
+          JSON.stringify({
+            name: 'settings-ext',
+            version,
+            settings: [
+              { name: 'Endpoint', description: 'd', envVar: 'ENDPOINT' },
+            ],
+          }),
+        );
+      };
+      writeSource('1.0.0');
+      const projectEnv = path.join(tempWorkspaceDir, '.env');
+      fs.writeFileSync(projectEnv, 'ENDPOINT=from-project\n');
+      const manager = createExtensionManager();
+      await manager.refreshCache();
+      const installed = await manager.installExtension(
+        { type: 'local', source: sourcePath },
+        async () => {},
+        async () => 'user-value',
+      );
+      await updateSetting(
+        installed.config,
+        installed.id,
+        'ENDPOINT',
+        async () => 'workspace-value',
+        ExtensionSettingScope.WORKSPACE,
+      );
+
+      writeSource('1.0.1');
+      const updateInfo = await manager.updateExtension(
+        installed,
+        ExtensionUpdateState.UPDATE_AVAILABLE,
+        () => {},
+      );
+
+      expect(updateInfo?.updatedVersion).toBe('1.0.1');
+      const updated = manager
+        .getLoadedExtensions()
+        .find((extension) => extension.id === installed.id)!;
+      await expect(
+        getScopedEnvContents(
+          updated.config,
+          updated.id,
+          ExtensionSettingScope.USER,
+        ),
+      ).resolves.toEqual({ ENDPOINT: 'user-value' });
+      await expect(
+        getScopedEnvContents(
+          updated.config,
+          updated.id,
+          ExtensionSettingScope.WORKSPACE,
+        ),
+      ).resolves.toEqual({ ENDPOINT: 'workspace-value' });
+      expect(fs.readFileSync(projectEnv, 'utf8')).toBe(
+        'ENDPOINT=from-project\n',
+      );
+    });
+
     it('rejects a stale update after the artifact changes', async () => {
       const archivePath = path.join(tempWorkspaceDir, 'stale-update.zip');
       fs.writeFileSync(archivePath, 'archive');

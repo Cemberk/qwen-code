@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {
-  getEnvContents,
   maybePromptForSettings,
   promptForSetting,
   type ExtensionSetting,
@@ -805,15 +804,23 @@ describe('extensionSettings', () => {
       });
     });
 
-    it('should return combined contents from workspace .env and secret storage for WORKSPACE scope', async () => {
-      const workspaceEnvPath = path.join(
-        tempWorkspaceDir,
-        EXTENSION_SETTINGS_FILENAME,
+    it("reads WORKSPACE values from the user's settings store, never the project .env", async () => {
+      await fsPromises.writeFile(
+        path.join(tempWorkspaceDir, EXTENSION_SETTINGS_FILENAME),
+        'VAR1=from-project\nSENSITIVE_VAR=from-project\nOTHER=from-project',
       );
-      await fsPromises.writeFile(workspaceEnvPath, 'VAR1=workspace-value1');
+      await expect(
+        getScopedEnvContents(
+          config,
+          extensionId,
+          ExtensionSettingScope.WORKSPACE,
+        ),
+      ).resolves.toEqual({});
+
       const workspaceSecrets = new FileTokenStorage(
         `Qwen Code Extensions test-ext 12345 ${tempWorkspaceDir}`,
       );
+      await workspaceSecrets.setSecret('VAR1', 'workspace-value1');
       await workspaceSecrets.setSecret('SENSITIVE_VAR', 'workspace-secret');
 
       const contents = await getScopedEnvContents(
@@ -876,48 +883,6 @@ describe('extensionSettings', () => {
     });
   });
 
-  describe('getEnvContents (merged)', () => {
-    const config: ExtensionConfig = {
-      name: 'test-ext',
-      version: '1.0.0',
-      settings: [
-        { name: 's1', description: 'd1', envVar: 'VAR1' },
-        { name: 's2', description: 'd2', envVar: 'VAR2', sensitive: true },
-        { name: 's3', description: 'd3', envVar: 'VAR3' },
-      ],
-    };
-    const extensionId = '12345';
-
-    it('should merge user and workspace settings, with workspace taking precedence', async () => {
-      // User settings
-      const userEnvPath = path.join(extensionDir, EXTENSION_SETTINGS_FILENAME);
-      await fsPromises.writeFile(
-        userEnvPath,
-        'VAR1=user-value1\nVAR3=user-value3',
-      );
-      await userSecrets.setSecret('VAR2', 'user-secret2');
-
-      // Workspace settings
-      const workspaceEnvPath = path.join(
-        tempWorkspaceDir,
-        EXTENSION_SETTINGS_FILENAME,
-      );
-      await fsPromises.writeFile(workspaceEnvPath, 'VAR1=workspace-value1');
-      const workspaceSecrets = new FileTokenStorage(
-        `Qwen Code Extensions test-ext ${extensionId} ${tempWorkspaceDir}`,
-      );
-      await workspaceSecrets.setSecret('VAR2', 'workspace-secret2');
-
-      const contents = await getEnvContents(config, extensionId);
-
-      expect(contents).toEqual({
-        VAR1: 'workspace-value1',
-        VAR2: 'workspace-secret2',
-        VAR3: 'user-value3',
-      });
-    });
-  });
-
   describe('updateSetting', () => {
     const config: ExtensionConfig = {
       name: 'test-ext',
@@ -960,7 +925,7 @@ describe('extensionSettings', () => {
       );
     });
 
-    it('should update a non-sensitive setting in WORKSPACE scope', async () => {
+    it("stores a non-sensitive WORKSPACE setting in the user's settings store", async () => {
       mockRequestSetting.mockResolvedValue('new-workspace-value');
 
       await updateSetting(
@@ -971,9 +936,19 @@ describe('extensionSettings', () => {
         ExtensionSettingScope.WORKSPACE,
       );
 
-      const expectedEnvPath = path.join(tempWorkspaceDir, '.env');
-      const actualContent = await fsPromises.readFile(expectedEnvPath, 'utf-8');
-      expect(actualContent).toContain('VAR1=new-workspace-value');
+      const workspaceSecrets = new FileTokenStorage(
+        `Qwen Code Extensions test-ext 12345 ${tempWorkspaceDir}`,
+      );
+      expect(await workspaceSecrets.getSecret('VAR1')).toBe(
+        'new-workspace-value',
+      );
+      expect(fs.readdirSync(tempWorkspaceDir)).toEqual([]);
+      await expect(
+        getScopedEnvContents(config, '12345', ExtensionSettingScope.WORKSPACE),
+      ).resolves.toEqual({ VAR1: 'new-workspace-value' });
+      await expect(
+        getScopedEnvContents(config, '12345', ExtensionSettingScope.USER),
+      ).resolves.toEqual({ VAR1: 'value1', VAR2: 'value2' });
     });
 
     it('should update a sensitive setting in USER scope', async () => {
@@ -1103,37 +1078,30 @@ describe('extensionSettings', () => {
       });
     });
 
-    it('should leave existing, unmanaged .env variables intact when updating in WORKSPACE scope', async () => {
-      // Setup a pre-existing .env file in the workspace with unmanaged variables
+    it("never touches the project's .env when updating in WORKSPACE scope", async () => {
       const workspaceEnvPath = path.join(tempWorkspaceDir, '.env');
       const originalEnvContent =
-        'PROJECT_VAR_1=value_1\nPROJECT_VAR_2=value_2\nVAR1=original-value'; // VAR1 is managed by extension
+        '# project settings\nPROJECT_VAR_1=value_1\nVAR1=original-value\n';
       await fsPromises.writeFile(workspaceEnvPath, originalEnvContent);
 
-      // Simulate updating an extension-managed non-sensitive setting
-      mockRequestSetting.mockResolvedValue('updated-value');
-      await updateSetting(
-        config,
-        '12345',
-        'VAR1',
-        mockRequestSetting,
-        ExtensionSettingScope.WORKSPACE,
+      for (const setting of ['VAR1', 'VAR2']) {
+        mockRequestSetting.mockResolvedValue(`updated-${setting}`);
+        await updateSetting(
+          config,
+          '12345',
+          setting,
+          mockRequestSetting,
+          ExtensionSettingScope.WORKSPACE,
+        );
+      }
+
+      expect(await fsPromises.readFile(workspaceEnvPath, 'utf-8')).toBe(
+        originalEnvContent,
       );
-
-      // Read the .env file after update
-      const actualContent = await fsPromises.readFile(
-        workspaceEnvPath,
-        'utf-8',
-      );
-
-      // Assert that original variables are intact and extension variable is updated
-      expect(actualContent).toContain('PROJECT_VAR_1=value_1');
-      expect(actualContent).toContain('PROJECT_VAR_2=value_2');
-      expect(actualContent).toContain('VAR1=updated-value');
-
-      // Ensure no other unexpected changes or deletions
-      const lines = actualContent.split('\n').filter((line) => line.length > 0);
-      expect(lines).toHaveLength(3); // Should only have the three variables
+      expect(fs.readdirSync(tempWorkspaceDir)).toEqual(['.env']);
+      await expect(
+        getScopedEnvContents(config, '12345', ExtensionSettingScope.WORKSPACE),
+      ).resolves.toEqual({ VAR1: 'updated-VAR1', VAR2: 'updated-VAR2' });
     });
   });
 });
