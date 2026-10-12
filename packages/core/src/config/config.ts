@@ -3602,7 +3602,13 @@ export class Config {
     // directly would cause launches from a monorepo subdirectory to
     // scan `<subdir>/.qwen/worktrees/` — which never exists — and the
     // sweep would silently be a no-op forever.
-    if (!this.shellExecutionSandbox && !this.getBareMode()) {
+    // The sweep runs `git status` / `git worktree remove` in directories a
+    // repository can ship, so it only runs in trusted folders.
+    if (
+      !this.shellExecutionSandbox &&
+      !this.getBareMode() &&
+      this.isTrustedFolder()
+    ) {
       void (async () => {
         try {
           // Resolve the repo top-level FIRST. The previous code bailed

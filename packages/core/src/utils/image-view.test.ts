@@ -182,7 +182,14 @@ describe('image views', () => {
 
   it('reports decode_failed for a corrupt canonical image', async () => {
     const filePath = path.join(root, 'corrupt.png');
-    await fs.writeFile(filePath, 'not a real png');
+    // A PNG signature with nothing decodable after it.
+    await fs.writeFile(
+      filePath,
+      Buffer.concat([
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        Buffer.from('not a real png'),
+      ]),
+    );
 
     await expect(renderImageOverview(filePath, signal)).rejects.toMatchObject({
       code: 'decode_failed',

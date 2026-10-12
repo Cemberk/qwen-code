@@ -1271,7 +1271,7 @@ export async function runNonInteractive(
               }
 
               if (outputFormat === OutputFormat.TEXT) {
-                process.stdout.write(`${message}\n`);
+                process.stdout.write(`${sanitizeTerminalText(message)}\n`);
               }
               bindGoalHost();
               activeGoalTurn = queuedGoalTurns.shift();

@@ -50,8 +50,6 @@ import {
   V2_CONTAINER_KEYS,
 } from './migration/versions/v1-to-v2-shared.js';
 import {
-  ENV_CORRUPTED_PATH,
-  ENV_WAS_RECOVERED,
   getHomeEnvFallbackVars,
   loadEnvironment,
   preResolveHomeEnvOverrides,
@@ -71,8 +69,6 @@ import { readConfigFile } from './read-config-file.js';
 
 export {
   DEFAULT_EXCLUDED_ENV_VARS,
-  ENV_CORRUPTED_PATH,
-  ENV_WAS_RECOVERED,
   getHomeEnvFallbackVars,
   loadEnvironment,
   preResolveHomeEnvOverrides,
@@ -540,8 +536,6 @@ export class LoadedSettings {
     isTrusted: boolean,
     migratedInMemoryScopes: Set<SettingScope>,
     migrationWarnings: string[] = [],
-    corruptedPath: string | undefined = undefined,
-    wasRecovered: boolean = false,
     workspaceSettingsActive: boolean = true,
   ) {
     this.system = system;
@@ -551,8 +545,6 @@ export class LoadedSettings {
     this.isTrusted = isTrusted;
     this.migratedInMemoryScopes = migratedInMemoryScopes;
     this.migrationWarnings = migrationWarnings;
-    this.corruptedPath = corruptedPath;
-    this.wasRecovered = wasRecovered;
     this.workspaceSettingsActive = workspaceSettingsActive;
     this._merged = this.computeMergedSettings();
   }
@@ -564,10 +556,7 @@ export class LoadedSettings {
   readonly isTrusted: boolean;
   readonly migratedInMemoryScopes: Set<SettingScope>;
   readonly migrationWarnings: string[];
-  readonly corruptedPath: string | undefined;
-  readonly wasRecovered: boolean;
   readonly workspaceSettingsActive: boolean;
-  corruptionDialogDismissed: boolean = false;
 
   private _merged: Settings;
 
@@ -810,8 +799,6 @@ export function createMinimalSettings(): LoadedSettings {
     false,
     new Set(),
     [],
-    undefined,
-    false,
   );
 }
 
@@ -857,14 +844,11 @@ function detectQwenHomeRedirectWithoutMigration(
   );
 }
 
-export const CORRUPTED_SUFFIX = '.corrupted';
-
 /**
  * Load and merge settings from all scopes:
  * System Defaults → User (~/.qwen/settings.json) → Workspace → System.
  */
 export interface LoadSettingsOptions {
-  consumeCorruptionEnvVars?: boolean;
   skipLoadEnvironment?: boolean;
   skipWorkspaceSettings?: boolean;
   workspaceTrusted?: boolean;
@@ -872,12 +856,8 @@ export interface LoadSettingsOptions {
 
 export function loadSettings(
   workspaceDir: string = process.cwd(),
-  consumeCorruptionEnvVars: boolean | LoadSettingsOptions = true,
+  opts: LoadSettingsOptions = {},
 ): LoadedSettings {
-  const opts: LoadSettingsOptions =
-    typeof consumeCorruptionEnvVars === 'object'
-      ? consumeCorruptionEnvVars
-      : { consumeCorruptionEnvVars };
   return readSettingsLayers(workspaceDir, opts);
 }
 
@@ -906,7 +886,7 @@ function readSettingsLayers(
   // return the post-bootstrap value.
   if (!snapshot) preResolveHomeEnvOverrides();
   // A malformed operator file cannot silently reset a confinement policy.
-  // Validate literals before environment substitution and corruption recovery.
+  // Validate literals before environment substitution.
   const operatorSandbox = snapshot
     ? undefined
     : readOperatorSandboxSettings().tools?.executionSandbox;
@@ -951,8 +931,6 @@ function readSettingsLayers(
     settings: Settings;
     rawJson?: string;
     migrationWarnings?: string[];
-    corruptedPath?: string;
-    wasRecovered?: boolean;
   } => {
     try {
       const content = snapshot
@@ -962,84 +940,19 @@ function readSettingsLayers(
           : undefined;
       if (content !== undefined) {
         let rawSettings: unknown;
-        // Carry corruption state through to the final return so it
-        // can be attached after the migration pipeline runs.
-        const corruptedPath = `${filePath}${CORRUPTED_SUFFIX}`;
-        let corruptedSaved = false;
-        let recoveredFromEnvVar: boolean | null = null;
-
         try {
           rawSettings = JSON.parse(stripJsonComments(stripUtf8Bom(content)));
         } catch (parseError: unknown) {
           if (snapshot || scope !== SettingScope.Workspace || operatorSandbox)
             throw parseError;
-          // ===== JSON parse failed — enter corruption recovery =====
-          // Strategy: save corrupted file as .corrupted → reset to empty →
-          // show dialog in UI. Never crash due to a corrupted settings file.
-          //
-          // Note: there is no on-disk `.orig` backup to recover from. Writes go
-          // through `writeWithBackupSync`, which uses `.orig` only as an
-          // in-flight safety net and removes it on success — so it never
-          // lingers in the user's directory (see writeWithBackup.ts).
-
-          // Step 1: copy corrupted file to .corrupted for reference
-          // MUST guarantee .corrupted exists so onExit can restore it.
-          // Use copy (not rename) — the file must stay on disk so that
-          // child processes spawned by relaunchAppInChildProcess() can
-          // enter the existsSync block where env-var propagation is checked.
-          debugLogger.warn(
-            `Settings file ${filePath} has invalid JSON (${getErrorMessage(parseError)}). Resetting to empty settings.`,
-          );
-
-          try {
-            fs.copyFileSync(filePath, corruptedPath);
-            corruptedSaved = true;
-          } catch (copyError) {
-            debugLogger.warn(
-              `Failed to copy corrupted file: ${getErrorMessage(copyError)}`,
-            );
-          }
-
-          // Step 2: no recoverable content — start with empty settings
-          if (!rawSettings) {
-            const warningMsg = `Settings file ${filePath} has invalid JSON. Your settings have been reset.`;
-            debugLogger.warn(warningMsg);
-            if (corruptedSaved) {
-              // Clear the original file so the settings UI shows empty settings
-              // instead of the corrupted content.
-              try {
-                fs.writeFileSync(filePath, '{}', 'utf-8');
-              } catch {
-                /* ignore — settings are already empty in memory */
-              }
-            }
-            return {
-              settings: {},
-              migrationWarnings: [],
-              corruptedPath: corruptedSaved ? corruptedPath : undefined,
-              wasRecovered: false,
-            };
-          }
-        }
-
-        // Propagate corruption state from parent process via env vars.
-        // relaunchAppInChildProcess() spawns a child that re-reads
-        // settings.json (already valid after parent recovered it). The
-        // env vars preserve the corruption marker across the boundary.
-        // Only apply to user scope since that's where corruption is detected.
-        // Clear env vars after reading so subsequent loadSettings calls
-        // don't re-trigger this path.
-        const envCorruptedPath = process.env[ENV_CORRUPTED_PATH];
-        if (
-          (opts.consumeCorruptionEnvVars ?? true) &&
-          envCorruptedPath &&
-          envCorruptedPath === corruptedPath &&
-          scope === SettingScope.User
-        ) {
-          corruptedSaved = true;
-          recoveredFromEnvVar = process.env[ENV_WAS_RECOVERED] === '1';
-          delete process.env[ENV_CORRUPTED_PATH];
-          delete process.env[ENV_WAS_RECOVERED];
+          // Loading never writes: a repository can ship this file (and
+          // links next to it), so it is reported and ignored in memory only.
+          return {
+            settings: {},
+            migrationWarnings: [
+              `Ignoring workspace settings file ${filePath}: invalid JSON (${getErrorMessage(parseError)}).`,
+            ],
+          };
         }
 
         if (
@@ -1077,9 +990,10 @@ function readSettingsLayers(
         }
         let migrationWarnings: string[] | undefined;
 
+        // Migrations apply in memory. Only the user's own settings file is
+        // rewritten on disk; workspace and system files never are.
         const persistSettingsObject = (warningPrefix: string) => {
-          if (snapshot) return;
-          if (operatorSandbox && scope === SettingScope.Workspace) return;
+          if (snapshot || scope !== SettingScope.User) return;
           try {
             // Use sync mode to remove deprecated keys (zombie key prevention)
             // while preserving comments and formatting from the original file.
@@ -1100,10 +1014,6 @@ function readSettingsLayers(
           }
         };
 
-        // Execute migrations even on recovered settings — the migrated data
-        // must persist. The disk-write branches below (version normalization)
-        // are guarded by !corruptedSaved to avoid creating .orig backups
-        // of freshly-reset settings.
         if (needsMigration(settingsObject)) {
           const migrationResult = runMigrations(settingsObject, scope);
           if (migrationResult.executedMigrations.length > 0) {
@@ -1113,10 +1023,7 @@ function readSettingsLayers(
             >;
             migrationWarnings = migrationResult.warnings;
             persistSettingsObject('Error migrating settings file on disk');
-          } else if (
-            (hasLegacyNumericVersion || hasInvalidVersion) &&
-            !corruptedSaved
-          ) {
+          } else if (hasLegacyNumericVersion || hasInvalidVersion) {
             // Migration was deemed needed but nothing executed. Normalize version metadata
             // to avoid repeated no-op checks on startup.
             settingsObject[SETTINGS_VERSION_KEY] = SETTINGS_VERSION;
@@ -1126,14 +1033,12 @@ function readSettingsLayers(
             persistSettingsObject('Error normalizing settings version on disk');
           }
         } else if (
-          (!hasVersionKey || hasInvalidVersion || hasLegacyNumericVersion) &&
-          !corruptedSaved
+          !hasVersionKey ||
+          hasInvalidVersion ||
+          hasLegacyNumericVersion
         ) {
           // No migration needed/executable, but version metadata is missing or invalid.
           // Normalize it to current version to avoid repeated startup work.
-          // Skip if we just recovered from corruption — the next startup will
-          // handle normalization, avoiding an unnecessary writeWithBackupSync
-          // that would create a .orig file from the freshly reset settings.
           settingsObject[SETTINGS_VERSION_KEY] = SETTINGS_VERSION;
           persistSettingsObject('Error normalizing settings version on disk');
         }
@@ -1146,17 +1051,11 @@ function readSettingsLayers(
           );
         }
 
-        // Attach corruption state propagated from the parent via env vars.
-        const result: ReturnType<typeof loadAndMigrate> = {
+        return {
           settings: settingsObject as Settings,
           rawJson: content,
           migrationWarnings: migrationWarnings ?? [],
         };
-        if (corruptedSaved) {
-          result.corruptedPath = corruptedPath;
-          result.wasRecovered = recoveredFromEnvVar ?? false;
-        }
-        return result;
       }
     } catch (error: unknown) {
       settingsErrors.push({
@@ -1328,8 +1227,6 @@ function readSettingsLayers(
     isTrusted,
     migratedInMemoryScopes,
     allMigrationWarnings,
-    userResult.corruptedPath,
-    userResult.wasRecovered ?? false,
     workspaceSettingsActive,
   );
 }

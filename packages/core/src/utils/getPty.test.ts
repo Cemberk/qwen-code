@@ -8,13 +8,15 @@ import { describe, expect, it, vi } from 'vitest';
 import { getPty, loadPty } from './getPty.js';
 
 // `@lydell/node-pty` is vendored in this repo's node_modules, so a plain
-// import resolves on the build host and the "neither backend loaded" arm would
-// never run. Fail it the way a broken prebuild does, and let the genuinely
-// absent `node-pty` specifier fail on its own, so both messages in the reason
-// are produced by the code under test rather than supplied by the test.
+// import resolves on the build host and the "no backend loaded" arm would
+// never run. Fail it the way a broken prebuild does.
 vi.mock('@lydell/node-pty', () => {
   throw new Error('native module failed to dlopen: pty.node');
 });
+
+// A loadable `node-pty` on the module path would be native code from outside
+// the lockfile; loadPty must never fall back to it.
+vi.mock('node-pty', () => ({ spawn: vi.fn() }));
 
 // getPty.ts branches on `'bun' in process.versions`; this mirrors the marker
 // Desktop's Bun build carries without touching the real descriptor.
@@ -67,21 +69,12 @@ describe('getPty', () => {
     }
   });
 
-  it('joins both backend failures into the reason of the call that saw them', async () => {
+  it('reports the backend failure without falling back to node-pty', async () => {
     const { impl, loadError } = await loadPty();
 
     expect(impl).toBeNull();
-    // Both imports failed, both messages reported, in the order they were
-    // tried, joined into one sentence — not collapsed to the first failure.
-    // (vitest wraps the mocked import's rejection, so match the inner message
-    // this module produced.)
-    const failures = [loadError].flatMap((reason) =>
-      (reason ?? '').split('; '),
-    );
-    expect(failures).toHaveLength(2);
-    expect(failures[0]).toMatch(/native module failed to dlopen: pty\.node/);
-    expect(failures[1]).toMatch(/node-pty/);
-    // ...and not another arm's reason.
+    // vitest wraps the mocked import's rejection, so match the inner message.
+    expect(loadError).toMatch(/native module failed to dlopen: pty\.node/);
     expect(loadError).not.toMatch(/Bun runtime/);
   });
 

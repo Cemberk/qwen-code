@@ -1780,6 +1780,28 @@ describe('fileUtils', () => {
       expect(JSON.stringify(result.llmContent)).not.toContain('inlineData');
     });
 
+    // D11: libvips decodes whatever loader the bytes match, so only a GIF
+    // signature may reach sharp; a .gif holding another format is omitted.
+    it('omits a .gif file that is not a GIF without decoding it', async () => {
+      const { default: sharp } = await import('sharp');
+      const filePath = path.join(tempRootDir, 'disguised.gif');
+      actualNodeFs.writeFileSync(
+        filePath,
+        await sharp({
+          create: { width: 1, height: 1, channels: 3, background: '#000' },
+        })
+          .png()
+          .toBuffer(),
+      );
+      mockMimeGetType.mockReturnValue('image/gif');
+
+      const result = await processSingleFileContent(filePath, mockConfig);
+
+      expect(result.error).toBeUndefined();
+      expect(JSON.stringify(result.llmContent)).not.toContain('inlineData');
+      expect(String(result.llmContent)).toContain('could not be decoded');
+    });
+
     it('keeps corrupt GIF bytes inline for the vision bridge', async () => {
       const filePath = path.join(tempRootDir, 'broken.gif');
       const bytes = Buffer.from('not a real gif');

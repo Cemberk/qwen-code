@@ -26,6 +26,7 @@ import { MCP_APPROVALS_FILENAME } from '../config/mcpApprovals.js';
 import { BWRAP_MIGRATION_MESSAGE } from '../config/execution-sandbox-settings.js';
 import { randomBytes } from 'node:crypto';
 import { writeStderrLine } from '../utils/stdioHelpers.js';
+import { SANDBOX_STDIN_ENV } from '../utils/readStdin.js';
 import { parseSandboxImageName } from '../utils/sandboxImageName.js';
 import { isContainerPathWithinWorkdir } from '../utils/sandbox-path.js';
 import { parseSandboxMountSpec } from '../utils/sandboxMounts.js';
@@ -561,7 +562,12 @@ export async function start_sandbox(
   // Values that may be secrets are passed by name: the runtime reads them
   // from its own environment, so they never appear on its command line.
   const sandboxProcessEnv: NodeJS.ProcessEnv = { ...process.env };
-  for (const name of ['OPENAI_API_KEY', 'OPENAI_BASE_URL', 'OPENAI_MODEL']) {
+  for (const name of [
+    'OPENAI_API_KEY',
+    'OPENAI_BASE_URL',
+    'OPENAI_MODEL',
+    SANDBOX_STDIN_ENV,
+  ]) {
     if (process.env[name]) {
       args.push('--env', name);
     }

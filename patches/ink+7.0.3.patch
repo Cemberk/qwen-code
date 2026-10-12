@@ -110,6 +110,154 @@ index be49354..14215f0 100644
      return hidePrefix + returnToBottom + cursorSuffix;
  };
  /**
+diff --git a/node_modules/ink/build/devtools-window-polyfill.d.ts b/node_modules/ink/build/devtools-window-polyfill.d.ts
+deleted file mode 100644
+index cb0ff5c..0000000
+--- a/node_modules/ink/build/devtools-window-polyfill.d.ts
++++ /dev/null
+@@ -1 +0,0 @@
+-export {};
+diff --git a/node_modules/ink/build/devtools-window-polyfill.js b/node_modules/ink/build/devtools-window-polyfill.js
+deleted file mode 100644
+index 21460e8..0000000
+--- a/node_modules/ink/build/devtools-window-polyfill.js
++++ /dev/null
+@@ -1,68 +0,0 @@
+-// Ignoring missing types error to avoid adding another dependency for this hack to work
+-import ws from 'ws';
+-// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+-const customGlobal = globalThis;
+-// These things must exist before importing `react-devtools-core`
+-// Using ||= intentionally to set falsy values, not just null/undefined
+-// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+-customGlobal.WebSocket ||= ws;
+-// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+-customGlobal.window ||= globalThis;
+-// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+-customGlobal.self ||= globalThis;
+-// Filter out Ink's internal components from devtools for a cleaner view.
+-// Also, ince `react-devtools-shared` package isn't published on npm, we can't
+-// use its types, that's why there are hard-coded values in `type` fields below.
+-// See https://github.com/facebook/react/blob/edf6eac8a181860fd8a2d076a43806f1237495a1/packages/react-devtools-shared/src/types.js#L24
+-customGlobal.window.__REACT_DEVTOOLS_COMPONENT_FILTERS__ = [
+-    {
+-        // ComponentFilterElementType
+-        type: 1,
+-        // ElementTypeHostComponent
+-        value: 7,
+-        isEnabled: true,
+-    },
+-    {
+-        // ComponentFilterDisplayName
+-        type: 2,
+-        value: 'InternalApp',
+-        isEnabled: true,
+-        isValid: true,
+-    },
+-    {
+-        // ComponentFilterDisplayName
+-        type: 2,
+-        value: 'InternalAppContext',
+-        isEnabled: true,
+-        isValid: true,
+-    },
+-    {
+-        // ComponentFilterDisplayName
+-        type: 2,
+-        value: 'InternalStdoutContext',
+-        isEnabled: true,
+-        isValid: true,
+-    },
+-    {
+-        // ComponentFilterDisplayName
+-        type: 2,
+-        value: 'InternalStderrContext',
+-        isEnabled: true,
+-        isValid: true,
+-    },
+-    {
+-        // ComponentFilterDisplayName
+-        type: 2,
+-        value: 'InternalStdinContext',
+-        isEnabled: true,
+-        isValid: true,
+-    },
+-    {
+-        // ComponentFilterDisplayName
+-        type: 2,
+-        value: 'InternalFocusContext',
+-        isEnabled: true,
+-        isValid: true,
+-    },
+-];
+-//# sourceMappingURL=devtools-window-polyfill.js.map
+\ No newline at end of file
+diff --git a/node_modules/ink/build/devtools-window-polyfill.js.map b/node_modules/ink/build/devtools-window-polyfill.js.map
+deleted file mode 100644
+index aaf1e07..0000000
+--- a/node_modules/ink/build/devtools-window-polyfill.js.map
++++ /dev/null
+@@ -1 +0,0 @@
+-{"version":3,"file":"devtools-window-polyfill.js","sourceRoot":"","sources":["../src/devtools-window-polyfill.ts"],"names":[],"mappings":"AAAA,wFAAwF;AACxF,OAAO,EAAE,MAAM,IAAI,CAAC;AAEpB,mEAAmE;AACnE,MAAM,YAAY,GAAG,UAAiB,CAAC;AAEvC,iEAAiE;AACjE,uEAAuE;AAEvE,wEAAwE;AACxE,YAAY,CAAC,SAAS,KAAK,EAAE,CAAC;AAE9B,wEAAwE;AACxE,YAAY,CAAC,MAAM,KAAK,UAAU,CAAC;AAEnC,wEAAwE;AACxE,YAAY,CAAC,IAAI,KAAK,UAAU,CAAC;AAEjC,yEAAyE;AACzE,8EAA8E;AAC9E,gFAAgF;AAChF,sIAAsI;AACtI,YAAY,CAAC,MAAM,CAAC,oCAAoC,GAAG;IAC1D;QACC,6BAA6B;QAC7B,IAAI,EAAE,CAAC;QACP,2BAA2B;QAC3B,KAAK,EAAE,CAAC;QACR,SAAS,EAAE,IAAI;KACf;IACD;QACC,6BAA6B;QAC7B,IAAI,EAAE,CAAC;QACP,KAAK,EAAE,aAAa;QACpB,SAAS,EAAE,IAAI;QACf,OAAO,EAAE,IAAI;KACb;IACD;QACC,6BAA6B;QAC7B,IAAI,EAAE,CAAC;QACP,KAAK,EAAE,oBAAoB;QAC3B,SAAS,EAAE,IAAI;QACf,OAAO,EAAE,IAAI;KACb;IACD;QACC,6BAA6B;QAC7B,IAAI,EAAE,CAAC;QACP,KAAK,EAAE,uBAAuB;QAC9B,SAAS,EAAE,IAAI;QACf,OAAO,EAAE,IAAI;KACb;IACD;QACC,6BAA6B;QAC7B,IAAI,EAAE,CAAC;QACP,KAAK,EAAE,uBAAuB;QAC9B,SAAS,EAAE,IAAI;QACf,OAAO,EAAE,IAAI;KACb;IACD;QACC,6BAA6B;QAC7B,IAAI,EAAE,CAAC;QACP,KAAK,EAAE,sBAAsB;QAC7B,SAAS,EAAE,IAAI;QACf,OAAO,EAAE,IAAI;KACb;IACD;QACC,6BAA6B;QAC7B,IAAI,EAAE,CAAC;QACP,KAAK,EAAE,sBAAsB;QAC7B,SAAS,EAAE,IAAI;QACf,OAAO,EAAE,IAAI;KACb;CACD,CAAC"}
+\ No newline at end of file
+diff --git a/node_modules/ink/build/devtools.d.ts b/node_modules/ink/build/devtools.d.ts
+deleted file mode 100644
+index 5c83016..0000000
+--- a/node_modules/ink/build/devtools.d.ts
++++ /dev/null
+@@ -1 +0,0 @@
+-import './devtools-window-polyfill.js';
+diff --git a/node_modules/ink/build/devtools.js b/node_modules/ink/build/devtools.js
+deleted file mode 100644
+index 5acc3d1..0000000
+--- a/node_modules/ink/build/devtools.js
++++ /dev/null
+@@ -1,36 +0,0 @@
+-/* eslint-disable import-x/order */
+-// eslint-disable-next-line import-x/no-unassigned-import
+-import './devtools-window-polyfill.js';
+-import WebSocket from 'ws';
+-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+-// @ts-expect-error
+-import devtools from 'react-devtools-core';
+-const isDevToolsReachable = async () => new Promise(resolve => {
+-    const socket = new WebSocket('ws://localhost:8097');
+-    const timeout = setTimeout(() => {
+-        socket.terminate();
+-        resolve(false);
+-    }, 2000);
+-    // Don't let the timeout keep the process alive on its own
+-    timeout.unref();
+-    socket.on('open', () => {
+-        clearTimeout(timeout);
+-        socket.terminate();
+-        resolve(true);
+-    });
+-    socket.on('error', () => {
+-        clearTimeout(timeout);
+-        socket.terminate();
+-        resolve(false);
+-    });
+-});
+-if (await isDevToolsReachable()) {
+-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+-    devtools.initialize();
+-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+-    devtools.connectToDevTools();
+-}
+-else {
+-    console.warn('DEV is set to true, but the React DevTools server is not running. Start it with:\n\n$ npx react-devtools\n');
+-}
+-//# sourceMappingURL=devtools.js.map
+\ No newline at end of file
+diff --git a/node_modules/ink/build/devtools.js.map b/node_modules/ink/build/devtools.js.map
+deleted file mode 100644
+index 9024e83..0000000
+--- a/node_modules/ink/build/devtools.js.map
++++ /dev/null
+@@ -1 +0,0 @@
+-{"version":3,"file":"devtools.js","sourceRoot":"","sources":["../src/devtools.ts"],"names":[],"mappings":"AAAA,mCAAmC;AAEnC,yDAAyD;AACzD,OAAO,+BAA+B,CAAC;AAEvC,OAAO,SAAS,MAAM,IAAI,CAAC;AAE3B,6DAA6D;AAC7D,mBAAmB;AACnB,OAAO,QAAQ,MAAM,qBAAqB,CAAC;AAE3C,MAAM,mBAAmB,GAAG,KAAK,IAAsB,EAAE,CACxD,IAAI,OAAO,CAAC,OAAO,CAAC,EAAE;IACrB,MAAM,MAAM,GAAG,IAAI,SAAS,CAAC,qBAAqB,CAAC,CAAC;IAEpD,MAAM,OAAO,GAAG,UAAU,CAAC,GAAG,EAAE;QAC/B,MAAM,CAAC,SAAS,EAAE,CAAC;QACnB,OAAO,CAAC,KAAK,CAAC,CAAC;IAChB,CAAC,EAAE,IAAI,CAAC,CAAC;IACT,0DAA0D;IAC1D,OAAO,CAAC,KAAK,EAAE,CAAC;IAEhB,MAAM,CAAC,EAAE,CAAC,MAAM,EAAE,GAAG,EAAE;QACtB,YAAY,CAAC,OAAO,CAAC,CAAC;QACtB,MAAM,CAAC,SAAS,EAAE,CAAC;QACnB,OAAO,CAAC,IAAI,CAAC,CAAC;IACf,CAAC,CAAC,CAAC;IAEH,MAAM,CAAC,EAAE,CAAC,OAAO,EAAE,GAAG,EAAE;QACvB,YAAY,CAAC,OAAO,CAAC,CAAC;QACtB,MAAM,CAAC,SAAS,EAAE,CAAC;QACnB,OAAO,CAAC,KAAK,CAAC,CAAC;IAChB,CAAC,CAAC,CAAC;AACJ,CAAC,CAAC,CAAC;AAEJ,IAAI,MAAM,mBAAmB,EAAE,EAAE,CAAC;IACjC,6DAA6D;IAC5D,QAAgB,CAAC,UAAU,EAAE,CAAC;IAC/B,6DAA6D;IAC5D,QAAgB,CAAC,iBAAiB,EAAE,CAAC;AACvC,CAAC;KAAM,CAAC;IACP,OAAO,CAAC,IAAI,CACX,4GAA4G,CAC5G,CAAC;AACH,CAAC"}
+\ No newline at end of file
 diff --git a/node_modules/ink/build/frame-controller.d.ts b/node_modules/ink/build/frame-controller.d.ts
 new file mode 100644
 index 0000000..c294036
@@ -204,7 +352,7 @@ index 0000000..745a4ba
 +export const getFrameController = (stdout) => instances.get(stdout)?.frameController;
 +//# sourceMappingURL=frame-controller.js.map
 diff --git a/node_modules/ink/build/hooks/use-box-metrics.js b/node_modules/ink/build/hooks/use-box-metrics.js
-index c4386e4..753a9b4 100644
+index c4386e4..891d1a0 100644
 --- a/node_modules/ink/build/hooks/use-box-metrics.js
 +++ b/node_modules/ink/build/hooks/use-box-metrics.js
 @@ -1,4 +1,4 @@
@@ -375,7 +523,7 @@ index cc849f0..25d6b33 100644
  //# sourceMappingURL=index.js.map
 \ No newline at end of file
 diff --git a/node_modules/ink/build/ink.js b/node_modules/ink/build/ink.js
-index ef659f3..1beca9b 100644
+index ef659f3..e83370d 100644
 --- a/node_modules/ink/build/ink.js
 +++ b/node_modules/ink/build/ink.js
 @@ -17,6 +17,7 @@ import { hideCursorEscape, showCursorEscape } from './cursor-helpers.js';
@@ -407,7 +555,18 @@ index ef659f3..1beca9b 100644
          this.rootNode.onStaticChange = this.handleStaticChange;
          this.log = logUpdate.create(options.stdout, {
              incremental: options.incrementalRendering,
-@@ -317,7 +325,16 @@ export default class Ink {
+@@ -237,10 +245,6 @@ export default class Ink {
+         // Unmount when process exits
+         this.unsubscribeExit = signalExit(this.unmount, { alwaysLast: false });
+         this.setAlternateScreen(Boolean(options.alternateScreen));
+-        if (process.env['DEV'] === 'true') {
+-            // @ts-expect-error outdated types
+-            reconciler.injectIntoDevTools();
+-        }
+         if (options.patchConsole) {
+             this.patchConsole();
+         }
+@@ -317,7 +321,16 @@ export default class Ink {
              this.nextRenderCommit = undefined;
          }
          const startTime = performance.now();
@@ -425,7 +584,7 @@ index ef659f3..1beca9b 100644
          this.options.onRender?.({ renderTime: performance.now() - startTime });
          // If <Static> output isn't empty, it means new children have been added to it
          const hasStaticOutput = staticOutput && staticOutput !== '\n';
-@@ -642,6 +659,7 @@ export default class Ink {
+@@ -642,6 +655,7 @@ export default class Ink {
          this.alternateScreen = this.resolveAlternateScreenOption(enabled, this.interactive);
          if (this.alternateScreen) {
              this.writeBestEffort(this.options.stdout, ansiEscapes.enterAlternativeScreen);
@@ -433,7 +592,7 @@ index ef659f3..1beca9b 100644
              this.writeBestEffort(this.options.stdout, hideCursorEscape);
          }
      }
-@@ -688,6 +706,7 @@ export default class Ink {
+@@ -688,6 +702,7 @@ export default class Ink {
          return this.nextRenderCommit.promise;
      }
      renderInteractiveFrame(output, outputHeight, staticOutput) {
@@ -441,7 +600,7 @@ index ef659f3..1beca9b 100644
          const hasStaticOutput = staticOutput !== '';
          const isTty = this.options.stdout.isTTY;
          // Detect fullscreen: output fills or exceeds terminal height.
-@@ -707,7 +726,7 @@ export default class Ink {
+@@ -707,7 +722,7 @@ export default class Ink {
              if (sync) {
                  this.options.stdout.write(bsu);
              }
@@ -945,10 +1104,34 @@ index c763b77..bfd3d08 100644
      }
  }
 diff --git a/node_modules/ink/build/reconciler.js b/node_modules/ink/build/reconciler.js
-index 5b4a9d7..25cc017 100644
+index 5b4a9d7..8c84289 100644
 --- a/node_modules/ink/build/reconciler.js
 +++ b/node_modules/ink/build/reconciler.js
-@@ -53,6 +53,25 @@ const cleanupYogaNode = (node) => {
+@@ -6,23 +6,6 @@ import Yoga from 'yoga-layout';
+ import { createContext, version as reactVersion } from 'react';
+ import { createTextNode, appendChildNode, insertBeforeNode, removeChildNode, emitLayoutListeners, setStyle, setTextNodeValue, createNode, setAttribute, } from './dom.js';
+ import applyStyles from './styles.js';
+-// We need to conditionally perform devtools connection to avoid
+-// accidentally breaking other third-party code.
+-// See https://github.com/vadimdemedes/ink/issues/384
+-// See https://github.com/vadimdemedes/ink/issues/648
+-if (process.env['DEV'] === 'true') {
+-    // Intentionally no warning when the package is missing.
+-    // DEV may be set for other reasons; devtools is opt-in via installing the package.
+-    let isDevtoolsInstalled = false;
+-    try {
+-        import.meta.resolve('react-devtools-core');
+-        isDevtoolsInstalled = true;
+-    }
+-    catch { }
+-    if (isDevtoolsInstalled) {
+-        await import('./devtools.js');
+-    }
+-}
+ const diff = (before, after) => {
+     if (before === after) {
+         return;
+@@ -53,6 +36,25 @@ const cleanupYogaNode = (node) => {
      node?.unsetMeasureFunc();
      node?.freeRecursive();
  };
@@ -974,7 +1157,7 @@ index 5b4a9d7..25cc017 100644
  let currentUpdatePriority = NoEventPriority;
  let currentRootNode;
  async function loadPackageJson() {
-@@ -212,13 +231,10 @@ export default createReconciler({
+@@ -212,13 +214,10 @@ export default createReconciler({
      appendChildToContainer: appendChildNode,
      insertInContainerBefore: insertBeforeNode,
      removeChildFromContainer(node, removeNode) {
@@ -990,7 +1173,7 @@ index 5b4a9d7..25cc017 100644
      },
      commitUpdate(node, _type, oldProps, newProps) {
          if (currentRootNode && node.internal_static) {
-@@ -254,13 +270,10 @@ export default createReconciler({
+@@ -254,13 +253,10 @@ export default createReconciler({
          setTextNodeValue(node, newText);
      },
      removeChild(node, removeNode) {

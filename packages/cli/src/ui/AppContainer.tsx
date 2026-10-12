@@ -3573,8 +3573,7 @@ export const AppContainer = (props: AppContainerProps) => {
     isDiffDialogOpen ||
     isSkillReviewDialogOpen ||
     bgTasksDialogOpen ||
-    showWorktreeExitDialog ||
-    !!(settings.corruptedPath && !settings.corruptionDialogDismissed);
+    showWorktreeExitDialog;
   dialogsVisibleRef.current = dialogsVisible;
 
   const shouldShowStickyTodos =

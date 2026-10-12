@@ -124,11 +124,11 @@ export class MemoryDiagnosticsDumper {
         suggestion: this.getSuggestion(trigger),
         collectionComplete: false,
       };
-      fs.writeFileSync(
-        filePath,
-        JSON.stringify(minimalPayload, null, 2),
-        'utf8',
-      );
+      // Owner-only, like every other session artifact (R052/R130/R142).
+      fs.writeFileSync(filePath, JSON.stringify(minimalPayload, null, 2), {
+        encoding: 'utf8',
+        mode: 0o600,
+      });
 
       debugLogger.info(
         `Phase 1 diagnostics written to ${filePath} (trigger=${trigger}, dump #${dumpNumber})`,
@@ -149,7 +149,10 @@ export class MemoryDiagnosticsDumper {
         suggestion: this.getSuggestion(trigger),
         collectionComplete: true,
       };
-      fs.writeFileSync(filePath, JSON.stringify(fullPayload, null, 2), 'utf8');
+      fs.writeFileSync(filePath, JSON.stringify(fullPayload, null, 2), {
+        encoding: 'utf8',
+        mode: 0o600,
+      });
 
       debugLogger.info(
         `Phase 2 diagnostics written to ${filePath} (trigger=${trigger}, dump #${dumpNumber})`,
@@ -169,7 +172,7 @@ export class MemoryDiagnosticsDumper {
   private ensureDiagnosticsDir(): string {
     const projectDir = this.config.storage.getProjectDir();
     const diagnosticsDir = path.join(projectDir, 'diagnostics');
-    fs.mkdirSync(diagnosticsDir, { recursive: true });
+    fs.mkdirSync(diagnosticsDir, { recursive: true, mode: 0o700 });
     return diagnosticsDir;
   }
 

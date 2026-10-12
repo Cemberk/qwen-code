@@ -41,8 +41,6 @@ import {
 } from './config/config.js';
 import type { DnsResolutionOrder } from './config/settings.js';
 import {
-  ENV_CORRUPTED_PATH,
-  ENV_WAS_RECOVERED,
   createMinimalSettings,
   getSettingsWarnings,
   loadSettings,
@@ -70,7 +68,7 @@ import {
   runExitCleanup,
 } from './utils/cleanup.js';
 import { AppEvent, appEvents } from './utils/events.js';
-import { readStdin } from './utils/readStdin.js';
+import { readStdin, SANDBOX_STDIN_ENV } from './utils/readStdin.js';
 import {
   profileCheckpoint,
   recordStartupEvent,
@@ -112,11 +110,6 @@ interface RuntimeLspClient {
 
 interface RuntimeLspConfig {
   reinitializeLsp?: () => Promise<RuntimeLspReinitializeResult | undefined>;
-}
-
-function clearCorruptionEnvVars(): void {
-  delete process.env[ENV_CORRUPTED_PATH];
-  delete process.env[ENV_WAS_RECOVERED];
 }
 
 export function validateDnsResolutionOrder(
@@ -446,12 +439,6 @@ export async function main() {
       'tools.executionSandbox does not yet support worktree management, LSP, MCP or extensions.',
     );
   }
-  // Propagate corruption state to child process via env vars so
-  // relaunchAppInChildProcess() doesn't lose the marker.
-  if (settings.corruptedPath) {
-    process.env[ENV_CORRUPTED_PATH] = settings.corruptedPath;
-    process.env[ENV_WAS_RECOVERED] = settings.wasRecovered ? '1' : '0';
-  }
   if (!executionSandboxSettings) await cleanupCheckpoints();
   // Performance checkpoint
   profileCheckpoint('after_load_settings');
@@ -462,15 +449,6 @@ export async function main() {
   const settingsWarnings = getSettingsWarnings(settings);
   for (const warning of settingsWarnings) {
     writeStderrLine(warning);
-  }
-  // Corruption notification no longer goes through migrationWarnings —
-  // check corruptedPath directly to keep stderr visible in relaunch.
-  if (settings.corruptedPath) {
-    writeStderrLine(
-      'Warning: Settings file had invalid JSON and was reset. ' +
-        'A copy of the corrupted file has been saved at: ' +
-        settings.corruptedPath,
-    );
   }
 
   if (argv.listExtensions) {
@@ -589,28 +567,9 @@ export async function main() {
         stdinData = await readStdin();
       }
 
-      // This function is a copy of the one from sandbox.ts
-      // It is moved here to decouple sandbox.ts from the CLI's argument structure.
-      const injectStdinIntoArgs = (
-        args: string[],
-        stdinData?: string,
-      ): string[] => {
-        const finalArgs = [...args];
-        if (stdinData) {
-          const promptIndex = finalArgs.findIndex(
-            (arg) => arg === '--prompt' || arg === '-p',
-          );
-          if (promptIndex > -1 && finalArgs.length > promptIndex + 1) {
-            // If there's a prompt argument, prepend stdin to it
-            finalArgs[promptIndex + 1] =
-              `${stdinData}\n\n${finalArgs[promptIndex + 1]}`;
-          } else {
-            // If there's no prompt argument, add stdin as the prompt
-            finalArgs.push('--prompt', stdinData);
-          }
-        }
-        return finalArgs;
-      };
+      // The piped prompt reaches the child through a private environment
+      // variable, never its argv (visible to every local user via `ps`).
+      if (stdinData) process.env[SANDBOX_STDIN_ENV] = stdinData;
 
       const injectSandboxSessionIdIntoArgs = (
         args: string[],
@@ -641,11 +600,8 @@ export async function main() {
 
       const sessionId = partialConfig.getSessionId();
       const sandboxArgs = sessionId
-        ? injectSandboxSessionIdIntoArgs(
-            injectStdinIntoArgs(process.argv, stdinData),
-            sessionId,
-          )
-        : injectStdinIntoArgs(process.argv, stdinData);
+        ? injectSandboxSessionIdIntoArgs(process.argv, sessionId)
+        : process.argv;
 
       await relaunchOnExitCode(() =>
         start_sandbox(sandboxConfig, memoryArgs, partialConfig, sandboxArgs),
@@ -668,7 +624,6 @@ export async function main() {
       // Interactive and streaming modes keep a supervisor for in-session
       // restarts. A one-shot prompt can replace this already-loaded process.
       await relaunchAppInChildProcess(memoryArgs, [], {
-        afterSpawn: clearCorruptionEnvVars,
         childEnv: getRelaunchEnvProvenance(),
         environmentChangedSinceBoot: hasLoadedEnvironmentValues(),
         replaceProcess:
@@ -1121,15 +1076,8 @@ export async function main() {
           extensionRefreshState,
         },
       );
-      // Clean up corruption env vars so subsequent relaunch children
-      // and subprocesses don't inherit stale state.
-      clearCorruptionEnvVars();
       return;
     }
-
-    // Also clean up env vars for non-interactive paths so that
-    // subprocesses don't inherit stale state.
-    clearCorruptionEnvVars();
 
     // Non-interactive: defer finalize until after `config.initialize()` runs
     // so MCP discovery events (mcp_first_tool_registered, mcp_all_servers_settled,

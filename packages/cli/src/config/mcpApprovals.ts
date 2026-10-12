@@ -319,6 +319,7 @@ export async function saveMcpApprovals(file: {
     }
     await atomicWriteFile(file.path, JSON.stringify(file.config, null, 2), {
       mode: 0o600,
+      noFollow: true,
     });
   } catch (error) {
     writeStderrLine('Error saving MCP approvals file.');

@@ -3797,10 +3797,10 @@ export class CoreToolScheduler {
               continue;
             }
 
-            // AUTO_EDIT mode: auto-approve edit-like and info tools
+            // AUTO_EDIT mode: auto-approve workspace edits only
             if (
               !requiresUserInteraction &&
-              isAutoEditApproved(approvalMode, confirmationDetails)
+              isAutoEditApproved(approvalMode, confirmationDetails, this.config)
             ) {
               this.setToolCallOutcome(
                 reqInfo.callId,

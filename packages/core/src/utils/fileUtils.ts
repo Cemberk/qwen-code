@@ -1704,6 +1704,11 @@ export async function processSingleFileContent(
           const sharpModule = await import('sharp').catch(() => undefined);
           if (sharpModule) {
             try {
+              // Only a GIF signature reaches sharp: libvips would otherwise
+              // pick any loader (SVG, PDF, …) the bytes match.
+              if (contentBuffer.subarray(0, 4).toString('latin1') !== 'GIF8') {
+                throw new Error('not a GIF');
+              }
               await sharpModule
                 .default(contentBuffer, {
                   failOn: 'error',

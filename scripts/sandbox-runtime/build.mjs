@@ -47,7 +47,7 @@ const common = {
   format: 'esm',
   target: 'node22',
   metafile: true,
-  external: ['@lydell/node-pty', 'node-pty', 'sharp'],
+  external: ['@lydell/node-pty', 'sharp'],
   inject: [path.join(root, 'scripts/esbuild-shims.js')],
   define: {
     'process.env.NODE_ENV': '"production"',

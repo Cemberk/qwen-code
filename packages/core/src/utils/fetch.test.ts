@@ -8,28 +8,48 @@ import { once } from 'node:events';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import type { Agent } from 'undici';
+
+// fetchWithPolicy sends through undici's own fetch over a plain Agent, never
+// the global fetch (which can honour proxy variables). Tests swap that fetch.
+const undici = vi.hoisted(() => ({
+  fetch: vi.fn(),
+  realFetch: undefined as unknown as (...args: unknown[]) => unknown,
+}));
+vi.mock('undici', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('undici')>();
+  undici.realFetch = actual.fetch as (...args: unknown[]) => unknown;
+  return {
+    ...actual,
+    fetch: (...args: unknown[]) =>
+      undici.fetch.getMockImplementation()
+        ? undici.fetch(...args)
+        : undici.realFetch(...args),
+  };
+});
+
 import { FetchError, fetchWithPolicy } from './fetch.js';
 
-describe('fetchWithPolicy', () => {
-  const realFetch = globalThis.fetch;
+function restoreFetch(): void {
+  undici.fetch.mockReset();
+}
 
-  afterEach(() => {
-    globalThis.fetch = realFetch;
-  });
+describe('fetchWithPolicy', () => {
+  afterEach(restoreFetch);
 
   const opts = { timeoutMs: 5000, maxBytes: 1000 };
 
   function stubFetch(
     handler: (url: string, init?: RequestInit) => Response | Promise<Response>,
   ): void {
-    globalThis.fetch = vi.fn(
+    undici.fetch.mockImplementation(
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = typeof input === 'string' ? input : input.toString();
         const signal = init?.signal;
         if (signal?.aborted) throw signal.reason ?? new Error('aborted');
         return handler(url, init);
       },
-    ) as typeof fetch;
+    );
   }
 
   it('returns the response body and status without following redirects', async () => {
@@ -44,10 +64,16 @@ describe('fetchWithPolicy', () => {
     expect(result.status).toBe(200);
     expect(result.contentType).toBe('text/plain');
     expect(result.body.toString()).toBe('hello');
-    expect(globalThis.fetch).toHaveBeenCalledWith(
+    expect(undici.fetch).toHaveBeenCalledWith(
       'http://127.0.0.1:8080/x',
       expect.objectContaining({ redirect: 'error' }),
     );
+    // E4: an explicit plain Agent, so HTTP_PROXY / NODE_USE_ENV_PROXY never
+    // route the request.
+    const { Agent: RealAgent } =
+      await vi.importActual<typeof import('undici')>('undici');
+    const init = undici.fetch.mock.calls[0][1] as { dispatcher?: Agent };
+    expect(init.dispatcher).toBeInstanceOf(RealAgent);
   });
 
   it('rejects oversized responses via Content-Length before reading', async () => {
@@ -132,9 +158,7 @@ describe('fetchWithPolicy', () => {
 });
 
 describe('fetchWithPolicy host policy', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
+  afterEach(restoreFetch);
 
   it.each([
     'https://example.com/models',
@@ -147,7 +171,7 @@ describe('fetchWithPolicy host policy', () => {
     'not a url',
   ])('rejects %s before any request is made', async (url) => {
     const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
+    undici.fetch.mockImplementation(fetchMock);
 
     await expect(
       fetchWithPolicy(url, { timeoutMs: 1000, maxBytes: 1024 }),
@@ -161,7 +185,7 @@ describe('fetchWithPolicy host policy', () => {
     'http://localhost:11434/v1/models',
   ])('fetches loopback URL %s', async (url) => {
     const fetchMock = vi.fn(async () => new Response('ok'));
-    vi.stubGlobal('fetch', fetchMock);
+    undici.fetch.mockImplementation(fetchMock);
 
     const result = await fetchWithPolicy(url, {
       timeoutMs: 1000,
@@ -173,22 +197,18 @@ describe('fetchWithPolicy host policy', () => {
 });
 
 describe('fetchWithPolicy retry', () => {
-  const realFetch = globalThis.fetch;
-
-  afterEach(() => {
-    globalThis.fetch = realFetch;
-  });
+  afterEach(restoreFetch);
 
   const opts = { timeoutMs: 10_000, maxBytes: 1000 };
 
   it('retries once on 403 and returns the successful second response', async () => {
     let calls = 0;
-    globalThis.fetch = vi.fn(async () => {
+    undici.fetch.mockImplementation(async () => {
       calls++;
       return calls === 1
         ? new Response('blocked', { status: 403 })
         : new Response('recovered', { status: 200 });
-    }) as typeof fetch;
+    });
 
     const result = await fetchWithPolicy('http://127.0.0.1:8080/flaky', opts);
     expect(calls).toBe(2);
@@ -198,12 +218,12 @@ describe('fetchWithPolicy retry', () => {
 
   it('retries once on 429 and returns the successful second response', async () => {
     let calls = 0;
-    globalThis.fetch = vi.fn(async () => {
+    undici.fetch.mockImplementation(async () => {
       calls++;
       return calls === 1
         ? new Response('rate limited', { status: 429 })
         : new Response('recovered', { status: 200 });
-    }) as typeof fetch;
+    });
 
     const result = await fetchWithPolicy('http://127.0.0.1:8080/limited', opts);
     expect(calls).toBe(2);
@@ -213,10 +233,10 @@ describe('fetchWithPolicy retry', () => {
 
   it('returns the original 403 when the retry also fails', async () => {
     let calls = 0;
-    globalThis.fetch = vi.fn(async () => {
+    undici.fetch.mockImplementation(async () => {
       calls++;
       return new Response('blocked', { status: 403 });
-    }) as typeof fetch;
+    });
 
     const result = await fetchWithPolicy('http://127.0.0.1:8080/blocked', opts);
     expect(calls).toBe(2);
@@ -227,7 +247,7 @@ describe('fetchWithPolicy retry', () => {
     'retries once on transient network errors (%s)',
     async (code) => {
       let calls = 0;
-      globalThis.fetch = vi.fn(async () => {
+      undici.fetch.mockImplementation(async () => {
         calls++;
         if (calls === 1) {
           const err = new TypeError('fetch failed') as TypeError & {
@@ -237,7 +257,7 @@ describe('fetchWithPolicy retry', () => {
           throw err;
         }
         return new Response('ok', { status: 200 });
-      }) as typeof fetch;
+      });
 
       const result = await fetchWithPolicy('http://127.0.0.1:8080/reset', opts);
       expect(calls).toBe(2);
@@ -247,10 +267,10 @@ describe('fetchWithPolicy retry', () => {
 
   it('does not retry deterministic statuses like 404', async () => {
     let calls = 0;
-    globalThis.fetch = vi.fn(async () => {
+    undici.fetch.mockImplementation(async () => {
       calls++;
       return new Response('nope', { status: 404 });
-    }) as typeof fetch;
+    });
 
     const result = await fetchWithPolicy('http://127.0.0.1:8080/missing', opts);
     expect(calls).toBe(1);
@@ -259,7 +279,7 @@ describe('fetchWithPolicy retry', () => {
 
   it('does not retry non-transient network errors', async () => {
     let calls = 0;
-    globalThis.fetch = vi.fn(async () => {
+    undici.fetch.mockImplementation(async () => {
       calls++;
       const err = new TypeError('fetch failed') as TypeError & {
         cause?: unknown;
@@ -268,7 +288,7 @@ describe('fetchWithPolicy retry', () => {
         code: 'CERT_HAS_EXPIRED',
       });
       throw err;
-    }) as typeof fetch;
+    });
 
     await expect(
       fetchWithPolicy('http://127.0.0.1:8080/tls', opts),
@@ -278,17 +298,13 @@ describe('fetchWithPolicy retry', () => {
 });
 
 describe('fetchWithPolicy retry abort handling', () => {
-  const realFetch = globalThis.fetch;
-
-  afterEach(() => {
-    globalThis.fetch = realFetch;
-  });
+  afterEach(restoreFetch);
 
   const opts = { timeoutMs: 10_000, maxBytes: 1000 };
 
   it('retries once on undici socket errors (UND_ERR_SOCKET)', async () => {
     let calls = 0;
-    globalThis.fetch = vi.fn(async () => {
+    undici.fetch.mockImplementation(async () => {
       calls++;
       if (calls === 1) {
         const err = new TypeError('fetch failed') as TypeError & {
@@ -300,7 +316,7 @@ describe('fetchWithPolicy retry abort handling', () => {
         throw err;
       }
       return new Response('ok', { status: 200 });
-    }) as typeof fetch;
+    });
 
     const result = await fetchWithPolicy('http://127.0.0.1:8080/reset', opts);
     expect(calls).toBe(2);
@@ -310,10 +326,10 @@ describe('fetchWithPolicy retry abort handling', () => {
   it('propagates caller abort over the original 403 during the retry window', async () => {
     const controller = new AbortController();
     let calls = 0;
-    globalThis.fetch = vi.fn(async () => {
+    undici.fetch.mockImplementation(async () => {
       calls++;
       return new Response('blocked', { status: 403 });
-    }) as typeof fetch;
+    });
     setTimeout(() => controller.abort(new Error('user cancelled')), 100);
 
     await expect(
@@ -326,9 +342,9 @@ describe('fetchWithPolicy retry abort handling', () => {
   });
 
   it('propagates timeout over the original 403 during the retry window', async () => {
-    globalThis.fetch = vi.fn(
+    undici.fetch.mockImplementation(
       async () => new Response('blocked', { status: 403 }),
-    ) as typeof fetch;
+    );
 
     // 200ms budget expires inside the 500ms retry delay.
     await expect(

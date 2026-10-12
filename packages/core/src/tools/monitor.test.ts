@@ -137,7 +137,10 @@ vi.mock('../utils/shell-utils.js', async (importOriginal) => {
 
 const mockIsShellCommandReadOnlyAST = vi.hoisted(() => vi.fn());
 const mockExtractCommandRules = vi.hoisted(() => vi.fn());
-vi.mock('../utils/shellAstParser.js', () => ({
+vi.mock('../utils/shellAstParser.js', async (importOriginal) => ({
+  commandInvokesGit: (
+    await importOriginal<typeof import('../utils/shellAstParser.js')>()
+  ).commandInvokesGit,
   isShellCommandReadOnlyWithinWorkspace: mockIsShellCommandReadOnlyAST,
   extractCommandRules: mockExtractCommandRules,
 }));
@@ -638,6 +641,29 @@ describe('MonitorTool', () => {
       });
 
       await expect(invocation.getDefaultPermission()).resolves.toBe('ask');
+    });
+
+    // X2: the wrapper binary (any path) runs, not the read-only inner script.
+    it.each([`./bash -c 'tail -f app.log'`, `/bin/bash -c 'tail -f app.log'`])(
+      'asks for the wrapped read-only command %s',
+      async (command) => {
+        mockIsShellCommandReadOnlyAST.mockResolvedValue(true);
+        const invocation = createInvocation({ command });
+
+        await expect(invocation.getDefaultPermission()).resolves.toBe('ask');
+      },
+    );
+
+    it('asks for read-only git in an untrusted folder', async () => {
+      mockIsShellCommandReadOnlyAST.mockResolvedValue(true);
+      (
+        mockConfig as unknown as { isTrustedFolder: () => boolean }
+      ).isTrustedFolder = () => false;
+      const gitLog = createInvocation({ command: 'git log -n 5' });
+      const tail = createInvocation({ command: 'tail -f app.log' });
+
+      await expect(gitLog.getDefaultPermission()).resolves.toBe('ask');
+      await expect(tail.getDefaultPermission()).resolves.toBe('allow');
     });
 
     it('allows read-only monitor commands by default', async () => {

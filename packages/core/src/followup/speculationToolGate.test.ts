@@ -58,6 +58,27 @@ describe('speculationToolGate', () => {
       expect(result.action).toBe('redirect');
     });
 
+    it.each([ApprovalMode.AUTO_EDIT, ApprovalMode.AUTO])(
+      'hits boundary for protected paths in %s mode',
+      async (mode) => {
+        for (const file_path of [
+          '.git/hooks/pre-commit',
+          'package.json',
+          '.qwen/settings.json',
+          '.zshrc',
+        ]) {
+          const result = await evaluateToolCall(
+            ToolNames.WRITE_FILE,
+            { file_path, content: 'x' },
+            overlayFs,
+            mode,
+            testDir,
+          );
+          expect(result.action).toBe('boundary');
+        }
+      },
+    );
+
     it('redirects write_file in yolo mode', async () => {
       const result = await evaluateToolCall(
         ToolNames.WRITE_FILE,
@@ -118,6 +139,22 @@ describe('speculationToolGate', () => {
         ApprovalMode.DEFAULT,
       );
       expect(result.action).toBe('allow');
+    });
+
+    // X1/X2: speculation classifies the command as it runs, wrapper and all.
+    it.each([
+      "BASH_ENV=./x.sh bash -c 'ls'",
+      "./bash -c 'ls'",
+      "bash -c 'ls'",
+      'FOO=1 ls',
+    ])('hits boundary for the wrapped or env-prefixed %s', async (command) => {
+      const result = await evaluateToolCall(
+        ToolNames.SHELL,
+        { command },
+        overlayFs,
+        ApprovalMode.DEFAULT,
+      );
+      expect(result.action).toBe('boundary');
     });
 
     it('hits boundary for non-read-only shell commands', async () => {

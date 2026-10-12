@@ -73,8 +73,6 @@ describe('App', () => {
 
   const mockSettings = {
     merged: {},
-    corruptedPath: undefined,
-    wasRecovered: false,
   } as LoadedSettings;
 
   const mockUIActions = {

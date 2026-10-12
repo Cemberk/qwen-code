@@ -39,7 +39,8 @@ const APPROVAL_MODES = [
 const APPROVAL_MODE_DESCRIPTIONS: Record<`${ApprovalMode}`, string> = {
   plan: 'Analyze only, do not modify files or execute commands',
   default: 'Require approval for file edits or shell commands',
-  'auto-edit': 'Automatically approve file edits',
+  'auto-edit':
+    'Automatically approve file edits inside the workspace (not git hooks, package scripts, settings or shell rc files)',
   auto: 'LLM classifier auto-approves safe actions, blocks risky ones',
   yolo: 'Automatically approve all tools',
 };

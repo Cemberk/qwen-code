@@ -695,6 +695,7 @@ describe('Gemini Client (client.ts)', () => {
       getJsonSchema: vi.fn().mockReturnValue(undefined),
       getDisableAllHooks: vi.fn().mockReturnValue(true),
       getExecutionEnvironment: vi.fn().mockReturnValue(undefined),
+      isTrustedFolder: vi.fn().mockReturnValue(true),
       getStopHookBlockingCap: vi.fn().mockReturnValue(8),
       getArenaManager: vi.fn().mockReturnValue(null),
       getMessageBus: vi.fn().mockReturnValue(undefined),
@@ -3521,6 +3522,20 @@ describe('Gemini Client (client.ts)', () => {
 
       expect(getRecentGitStatus).not.toHaveBeenCalled();
       expect(listSubagents).not.toHaveBeenCalled();
+    });
+
+    it('collects no git snapshot in an untrusted folder', async () => {
+      vi.mocked(mockConfig.isTrustedFolder).mockReturnValue(false);
+      vi.mocked(getRecentGitStatus).mockClear();
+      vi.mocked(getRecentGitStatus).mockReturnValue('Untrusted Git snapshot');
+
+      await client.startChat();
+      await client.refreshSystemInstruction();
+
+      expect(getRecentGitStatus).not.toHaveBeenCalled();
+      expect(
+        client.getChat()['generationConfig'].systemInstruction,
+      ).not.toContain('Untrusted Git snapshot');
     });
 
     it('skips host Git snapshots throughout a sandboxed shell session', async () => {

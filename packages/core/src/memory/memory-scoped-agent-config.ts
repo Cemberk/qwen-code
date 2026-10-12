@@ -16,8 +16,10 @@ import type {
   PermissionDecision,
 } from '../permissions/types.js';
 import { ToolNames } from '../tools/tool-names.js';
-import { isShellCommandReadOnlyASTInDirectory } from '../utils/shellAstParser.js';
-import { stripShellWrapper } from '../utils/shell-utils.js';
+import {
+  commandInvokesGit,
+  isShellCommandReadOnlyASTInDirectory,
+} from '../utils/shellAstParser.js';
 import {
   AUTO_MEMORY_PINNED_DIRNAME,
   getAutoMemoryRoot,
@@ -299,14 +301,18 @@ async function evaluateScopedDecision(
   projectRoot: string,
   opts: Required<MemoryScopedAgentConfigOptions>,
   pinnedRoots: readonly PinnedMemoryRoot[],
+  trustedFolder: boolean,
 ): Promise<PermissionDecision> {
   switch (ctx.toolName) {
     case ToolNames.SHELL: {
       if (!opts.allowShell || !ctx.command) {
         return 'deny';
       }
+      if (!trustedFolder && (await commandInvokesGit(ctx.command))) {
+        return 'deny';
+      }
       const isReadOnly = await isShellCommandReadOnlyASTInDirectory(
-        stripShellWrapper(ctx.command),
+        ctx.command,
         ctx.cwd ?? projectRoot,
       );
       return isReadOnly ? 'allow' : 'deny';
@@ -456,6 +462,7 @@ export function createMemoryScopedAgentConfig(
         projectRoot,
         opts,
         pinnedRoots,
+        config.isTrustedFolder?.() !== false,
       );
       if (!basePm) {
         return scopedDecision;

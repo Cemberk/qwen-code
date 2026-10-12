@@ -9,6 +9,9 @@ import type { Mock } from 'vitest';
 import type { ConfigParameters } from './config.js';
 import { Config } from './config.js';
 import * as fs from 'node:fs';
+import * as fsPromises from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { recordStartupEvent } from '../utils/startupEventSink.js';
 
 vi.mock('node:fs', async (importOriginal) => {
@@ -468,6 +471,42 @@ describe('Config safe mode', () => {
         'config_initialize_tool_warmup_start',
         'config_initialize_tool_warmup_end',
       ]);
+    });
+  });
+
+  // The startup sweep runs git in directories a repository can ship.
+  describe('stale worktree sweep', () => {
+    it.each([
+      [true, 1],
+      [false, 0],
+    ])('trusted=%s runs the sweep %i time(s)', async (trusted, calls) => {
+      const { cleanupStaleAgentWorktrees } = await import(
+        '../services/worktreeCleanup.js'
+      );
+      const root = await fsPromises.mkdtemp(
+        path.join(os.tmpdir(), 'wt-sweep-'),
+      );
+      await fsPromises.mkdir(path.join(root, '.qwen', 'worktrees'), {
+        recursive: true,
+      });
+      try {
+        const config = new Config({
+          ...baseParams,
+          safeMode: true,
+          cwd: root,
+          targetDir: root,
+          folderTrust: true,
+          trustedFolder: trusted,
+        });
+        await config.initialize();
+        await vi.waitFor(() =>
+          expect(cleanupStaleAgentWorktrees).toHaveBeenCalledTimes(calls),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(cleanupStaleAgentWorktrees).toHaveBeenCalledTimes(calls);
+      } finally {
+        await fsPromises.rm(root, { recursive: true, force: true });
+      }
     });
   });
 });

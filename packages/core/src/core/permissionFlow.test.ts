@@ -352,15 +352,9 @@ describe('evaluatePermissionFlow', () => {
   // calls `pm.evaluate()` only when `pm.hasRelevantRules()` is true, and the
   // comment fast path makes that gate false for a comment-bearing command — so
   // the shipped verdict is L3's `ShellToolInvocation.getDefaultPermission()`.
-  // That method gates substitution on the raw command but classifies
-  // `stripShellWrapper(command)`, and for a wrapper shape the strip discards the
-  // comment along with the wrapper: `bash -c "ls" # ; rm -rf /tmp/x` strips to
-  // `ls`, the AST reads it as read-only, and L3 returns `allow` where the merge
-  // base returned `deny` citing `Bash(rm *)`. Not a bypass — Bash never executes
-  // the post-`#` text — but it is the layer that decides, and `pm.evaluate`
-  // structurally cannot observe it. Reverting `splitCommandForRules` to
-  // `splitCompoundCommand` restores `deny` and reds this test.
-  it('collapses a wrapper-shaped commented command to the L3 read-only allow under a deny rule', async () => {
+  // L3 never classifies the inner script of a shell wrapper (the wrapper and
+  // its environment are what runs), so `bash -c "ls" # ; rm -rf /tmp/x` asks.
+  it('asks for a wrapper-shaped commented command under a deny rule', async () => {
     const command = 'bash -c "ls" # ; rm -rf /tmp/x';
     const pm = new PermissionManager({
       getPermissionsAllow: () => undefined,
@@ -388,8 +382,8 @@ describe('evaluatePermissionFlow', () => {
       { command },
     );
 
-    expect(result.defaultPermission).toBe('allow');
-    expect(result.finalPermission).toBe('allow');
+    expect(result.defaultPermission).toBe('ask');
+    expect(result.finalPermission).toBe('ask');
   });
 });
 
@@ -604,39 +598,65 @@ describe('isPlanModeBlocked', () => {
 });
 
 describe('isAutoEditApproved', () => {
-  const mockConfirmationDetails = (type: string): ToolCallConfirmationDetails =>
-    ({ type }) as unknown as ToolCallConfirmationDetails;
+  const workspace = '/ws';
+  const config = {
+    getWorkspaceContext: () => ({
+      isPathWithinWorkspace: (p: string) =>
+        p === workspace || p.startsWith(`${workspace}/`),
+    }),
+  } as unknown as Config;
+  const details = (type: string, filePath?: string) =>
+    ({ type, filePath }) as unknown as ToolCallConfirmationDetails;
 
-  it('should auto-approve edit-type tools in AUTO_EDIT mode', () => {
+  it('auto-approves an edit inside the workspace in AUTO_EDIT mode', () => {
     expect(
       isAutoEditApproved(
         ApprovalMode.AUTO_EDIT,
-        mockConfirmationDetails('edit'),
+        details('edit', '/ws/src/a.ts'),
+        config,
       ),
     ).toBe(true);
   });
 
-  it('should auto-approve info-type tools in AUTO_EDIT mode', () => {
+  // T8: AUTO_EDIT used to approve every edit/info confirmation.
+  it.each([
+    [
+      'an info confirmation (skill, cron_create, workflow, artifact)',
+      'info',
+      undefined,
+    ],
+    ['an edit outside the workspace', 'edit', '/home/u/.qwen/settings.json'],
+    ['a shell rc file outside the workspace', 'edit', '/home/u/.zshrc'],
+    ['a shell rc file inside the workspace', 'edit', '/ws/.zshrc'],
+    ['a git hook', 'edit', '/ws/.git/hooks/pre-commit'],
+    ['git config', 'edit', '/ws/.git/config'],
+    ['a husky hook', 'edit', '/ws/.husky/pre-commit'],
+    ['package scripts', 'edit', '/ws/package.json'],
+    ['workspace settings', 'edit', '/ws/.qwen/settings.json'],
+    ['a relative path', 'edit', 'src/a.ts'],
+  ])('does not auto-approve %s', (_name, type, filePath) => {
     expect(
       isAutoEditApproved(
         ApprovalMode.AUTO_EDIT,
-        mockConfirmationDetails('info'),
+        details(type, filePath),
+        config,
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('should not auto-approve exec-type tools in AUTO_EDIT mode', () => {
     expect(
-      isAutoEditApproved(
-        ApprovalMode.AUTO_EDIT,
-        mockConfirmationDetails('exec'),
-      ),
+      isAutoEditApproved(ApprovalMode.AUTO_EDIT, details('exec'), config),
     ).toBe(false);
   });
 
   it('should not auto-approve in non-AUTO_EDIT mode', () => {
     expect(
-      isAutoEditApproved(ApprovalMode.DEFAULT, mockConfirmationDetails('edit')),
+      isAutoEditApproved(
+        ApprovalMode.DEFAULT,
+        details('edit', '/ws/src/a.ts'),
+        config,
+      ),
     ).toBe(false);
   });
 });

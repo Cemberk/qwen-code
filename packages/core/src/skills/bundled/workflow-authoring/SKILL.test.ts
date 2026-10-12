@@ -167,7 +167,7 @@ describe('bundled workflow-authoring skill', () => {
   it.each([
     // The sandbox itself.
     ['async IIFE'],
-    ['`node:vm` sandbox'],
+    ['QuickJS sandbox in a separate process'],
     // meta: the full contract, including the field the approval dialog prints.
     ['optionally `whenToUse` and `phases: [{ title, detail? }]`'],
     // whenToUse: what it does for a workflow an extension ships.

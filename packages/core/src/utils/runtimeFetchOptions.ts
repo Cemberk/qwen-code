@@ -70,9 +70,8 @@ export function detectRuntime(): Runtime {
  * Runtime fetch options for the OpenAI SDK.
  */
 export type OpenAIRuntimeFetchOptions = {
-  fetchOptions?: {
-    dispatcher?: Dispatcher;
-    timeout?: false;
+  fetchOptions: {
+    dispatcher: Dispatcher;
   };
   // Pinned so the dispatcher and fetch share a single undici version — Node's
   // built-in fetch (newer undici) rejects a dispatcher from the bundled undici
@@ -87,12 +86,10 @@ export type OpenAIRuntimeFetchOptions = {
  */
 function withRedirectError<F extends (...args: never[]) => unknown>(
   fetchImpl: F,
-  extraInit: Record<string, unknown> = {},
 ): typeof globalThis.fetch {
   return ((input: RequestInfo | URL, init?: RequestInit) =>
     (fetchImpl as unknown as typeof globalThis.fetch)(input, {
       ...init,
-      ...extraInit,
       redirect: 'error',
     } as RequestInit)) as typeof globalThis.fetch;
 }
@@ -100,21 +97,15 @@ function withRedirectError<F extends (...args: never[]) => unknown>(
 let sharedDispatcher: Dispatcher | undefined;
 
 /**
- * Build runtime-specific fetch options for the OpenAI SDK.
- *
- * Node: a cached undici Agent with disabled header/body timeouts, so the SDK
- * `timeout` controls the total request time and undici's 300s default
- * bodyTimeout never aborts a long-running request to a local server.
- * Bun: its built-in fetch with the 300s timeout disabled.
+ * Build fetch options for the OpenAI SDK: undici's own fetch over a cached
+ * plain Agent, on every runtime. A plain Agent never consults proxy
+ * variables (HTTP_PROXY, NODE_USE_ENV_PROXY, …), which Node's and Bun's
+ * global fetch can honour, so loopback traffic always goes straight to the
+ * local server. Header/body timeouts are disabled: the SDK `timeout` controls
+ * the total request time, and undici's 300s default bodyTimeout must never
+ * abort a long-running request to a local server.
  */
 export function buildRuntimeFetchOptions(): OpenAIRuntimeFetchOptions {
-  if (detectRuntime() === 'bun') {
-    return {
-      fetchOptions: { timeout: false },
-      fetch: withRedirectError(globalThis.fetch, { timeout: false }),
-    };
-  }
-
   const { Agent, fetch: undiciFetch } = requireUndici();
   sharedDispatcher ??= new Agent({
     headersTimeout: 0,

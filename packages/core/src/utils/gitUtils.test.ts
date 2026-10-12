@@ -119,7 +119,8 @@ describe('getRecentGitStatus', () => {
       expect.objectContaining({
         cwd: process.cwd(),
         encoding: 'utf8',
-        env: expect.objectContaining({ LC_ALL: 'C' }),
+        // E1: a partial clone must not lazily fetch from its remote.
+        env: expect.objectContaining({ LC_ALL: 'C', GIT_NO_LAZY_FETCH: '1' }),
         stdio: ['pipe', 'pipe', 'pipe'],
         timeout: 5000,
       }),
@@ -141,6 +142,7 @@ describe('getRecentGitStatus', () => {
       expect.objectContaining({
         cwd: process.cwd(),
         encoding: 'utf8',
+        env: expect.objectContaining({ GIT_NO_LAZY_FETCH: '1' }),
         stdio: ['pipe', 'pipe', 'pipe'],
         timeout: 5000,
       }),

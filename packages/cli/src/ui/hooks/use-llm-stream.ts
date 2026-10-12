@@ -126,6 +126,7 @@ import {
 } from './useReactToolScheduler.js';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { isAutoEditApproved } from '@qwen-code/qwen-code-core/core/permissionFlow.js';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import { t } from '../../i18n/index.js';
@@ -4759,10 +4760,15 @@ export const useLlmStream = (
           },
         );
 
-        // For AUTO_EDIT mode, only approve edit tools (edit/replace, write_file, notebook_edit)
+        // For AUTO_EDIT mode, only approve what AUTO_EDIT itself would:
+        // workspace edits outside the protected persistence paths.
         if (newApprovalMode === ApprovalMode.AUTO_EDIT) {
           awaitingApprovalCalls = awaitingApprovalCalls.filter((call) =>
-            EDIT_TOOL_NAMES.has(call.request.name),
+            isAutoEditApproved(
+              ApprovalMode.AUTO_EDIT,
+              call.confirmationDetails,
+              config,
+            ),
           );
         }
 
@@ -4783,7 +4789,7 @@ export const useLlmStream = (
         }
       }
     },
-    [toolCalls],
+    [toolCalls, config],
   );
 
   const handleCompletedTools = useCallback(

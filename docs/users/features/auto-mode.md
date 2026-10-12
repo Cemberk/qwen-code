@@ -358,8 +358,9 @@ It only shows once per user-settings file. After dismissal,
 
 **How is this different from Auto-Edit?**
 
-Auto-Edit auto-approves file edits and nothing else — shell commands
-still ask. Auto Mode uses a classifier to also auto-approve safe shell
+Auto-Edit auto-approves file edits inside the workspace (excluding the
+same protected persistence and settings paths) and nothing else — shell
+commands and every other tool still ask. Auto Mode uses a classifier to also auto-approve safe shell
 commands and other tool calls while still blocking risky ones.
 
 **How is this different from YOLO?**

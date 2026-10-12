@@ -81,9 +81,10 @@ A script must be deterministic so a resume replays the same call sequence.
 `args`, or stamp the result after the workflow returns. A script that calls any
 of them is refused before it starts, so none of its agents runs first.
 
-Scripts run in a `node:vm` sandbox with no filesystem, shell, network, or
-environment access. All I/O happens through the prompts you give the agents, so
-say explicitly what each one should read and whether it may edit files.
+Scripts run in a QuickJS sandbox in a separate process, with no filesystem,
+shell, network, timer, or environment access; only data crosses between the
+script and Qwen Code. All I/O happens through the prompts you give the agents,
+so say explicitly what each one should read and whether it may edit files.
 
 ## agent() options
 
@@ -227,7 +228,8 @@ at its index.
   `QWEN_CODE_MAX_WORKFLOW_SECONDS` (applied as given). A fan-out near the agent
   cap will not fit inside the default cap.
 - 30 seconds for the script's synchronous code before its first `await`, with
-  no override. A synchronous loop that runs longer is aborted.
+  no override, and the same for each synchronous stretch after an `await`. A
+  synchronous loop that runs longer is aborted.
 - Per subagent attempt: 50 turns (`QWEN_CODE_WORKFLOW_AGENT_MAX_TURNS`, clamped
   to 500) and 10 minutes (`QWEN_CODE_WORKFLOW_AGENT_MAX_MINUTES`, clamped
   to 100). Raise them for legitimately long work rather than letting agents

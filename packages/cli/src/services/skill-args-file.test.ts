@@ -18,6 +18,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join, isAbsolute, relative, resolve } from 'node:path';
 import {
+  skillArgsBaseDir,
   skillArgsPath,
   writeSkillArgs,
   clearSkillArgs,
@@ -25,14 +26,19 @@ import {
 
 let dir: string;
 let cwd: string;
+let runtimeDir: string | undefined;
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'skill-args-'));
   cwd = process.cwd();
+  runtimeDir = process.env['QWEN_RUNTIME_DIR'];
+  process.env['QWEN_RUNTIME_DIR'] = join(dir, 'runtime');
   process.chdir(dir);
 });
 afterEach(() => {
   process.chdir(cwd);
+  if (runtimeDir === undefined) delete process.env['QWEN_RUNTIME_DIR'];
+  else process.env['QWEN_RUNTIME_DIR'] = runtimeDir;
   rmSync(dir, { recursive: true, force: true });
 });
 
@@ -63,7 +69,7 @@ describe('writeSkillArgs', () => {
     // `.._.._etc_passwd`, and those dots are harmless once the separators are
     // gone. The property is that the *resolved* path is still inside the temp
     // directory, which is what a traversal would break.
-    const inside = resolve('.qwen', 'tmp');
+    const inside = skillArgsBaseDir();
     const rel = relative(inside, resolve(path));
     expect(rel.startsWith('..')).toBe(false);
     expect(isAbsolute(rel)).toBe(false);
@@ -74,7 +80,19 @@ describe('writeSkillArgs', () => {
     // fixture would reach the real filesystem root, so assert on the fixture's
     // own tree — the traversal, had it worked, would have created these.)
     expect(existsSync(join(dir, 'etc'))).toBe(false);
-    expect(existsSync(join(dir, '.qwen', 'etc'))).toBe(false);
+    expect(existsSync(join(dir, 'runtime', 'etc'))).toBe(false);
+  });
+
+  // F1: the arguments can carry a token; they must never land in the
+  // workspace, where `git add .` would pick them up.
+  it('writes outside the workspace, in an owner-only runtime directory', () => {
+    const path = writeSkillArgs('review', '6771 --token sk-x')!;
+    const rel = relative(dir, path);
+    expect(rel.startsWith(join('runtime', 'tmp', 'skill-args'))).toBe(true);
+    expect(existsSync(join(dir, '.qwen'))).toBe(false);
+    if (process.platform !== 'win32') {
+      expect(statSync(dirname(path)).mode & 0o777).toBe(0o700);
+    }
   });
 
   it('scopes the path to the session, and derives the same path both sides', () => {
@@ -149,8 +167,8 @@ describe('writeSkillArgs', () => {
       const victim = join(dir, 'victim');
       mkdirSync(victim, { recursive: true });
       writeFileSync(join(victim, 'qwen-skill-args-review.txt'), 'precious');
-      mkdirSync(join(dir, '.qwen', 'tmp'), { recursive: true });
-      symlinkSync(victim, join(dir, '.qwen', 'tmp', 's-attacker'));
+      mkdirSync(skillArgsBaseDir(), { recursive: true });
+      symlinkSync(victim, join(skillArgsBaseDir(), 's-attacker'));
 
       expect(writeSkillArgs('review', '6771 --comment')).toBeNull();
       expect(

@@ -10,7 +10,6 @@ import {
   type WorkflowCallTrace,
 } from '../workflow-correlation.js';
 import { randomBytes } from 'node:crypto';
-import { AsyncLocalStorage } from 'node:async_hooks';
 import * as os from 'node:os';
 import {
   deriveApprovalModeConfig,
@@ -29,6 +28,7 @@ import type {
   WorkflowAgentOpts,
   WorkflowAgentResult,
   WorkflowBudget,
+  WorkflowDependencyContext,
   WorkflowMeta,
   WorkflowOrchestratorEmitter,
 } from './workflow-sandbox.js';
@@ -464,6 +464,7 @@ export type WorkflowAgentDispatch = (
 export type WorkflowCountedDispatch = (
   prompt: string,
   opts: WorkflowAgentOpts,
+  context: WorkflowDependencyContext,
   workflowCallId?: string,
 ) => Promise<WorkflowAgentResult | null>;
 
@@ -1916,9 +1917,9 @@ export class WorkflowOrchestrator {
     // Signal threading: createProductionDispatch closure-captures a signal
     // for subagent.execute cancellation. P2 additionally derives a per-run
     // scheduler from req.abortOnTimeout?.signal so wall-clock abort drains
-    // queued dispatches promptly. Sync-loop protection is the 30s vm
-    // timeout in workflow-sandbox.ts; async-loop cancellation flows through
-    // dispatch's subagent.execute path.
+    // queued dispatches promptly. Sync-loop protection is the 30s
+    // synchronous-evaluation interrupt in the workflow host process;
+    // async-loop cancellation flows through dispatch's subagent.execute path.
     //
     // P4b: callers (`WorkflowTool`) may pre-generate `runId` and pass it
     // in so they can register the run with `WorkflowRunRegistry` BEFORE
@@ -1969,17 +1970,18 @@ export class WorkflowOrchestrator {
     let dispatchTraceCount = 0;
     const emitter = req.emitter;
     const budget = req.budget;
-    const dependencyContext = new AsyncLocalStorage<{ tails: string[] }>();
+    // Each dispatch depends on the tail of the branch that issued it (see
+    // SandboxOptions.dependencies) and becomes that branch's new tail.
     const issueDispatchTrace = (
       prompt: string,
       opts: WorkflowAgentOpts,
+      context: WorkflowDependencyContext,
       cached = false,
       workflowCallId?: string,
     ): string => {
       const id = `dispatch-${(dispatchTraceCount += 1)}`;
-      const store = dependencyContext.getStore();
-      const dependsOn = Array.from(new Set(store?.tails ?? []));
-      if (store) store.tails = [id];
+      const dependsOn = Array.from(new Set(context.tails));
+      context.tails = [id];
       try {
         emitter?.dispatchQueued?.({
           id,
@@ -2027,6 +2029,7 @@ export class WorkflowOrchestrator {
     const countedDispatch: WorkflowCountedDispatch = async (
       prompt,
       opts,
+      context,
       workflowCallId,
     ) => {
       assertExecutionOpen();
@@ -2074,6 +2077,7 @@ export class WorkflowOrchestrator {
             const dispatchId = issueDispatchTrace(
               prompt,
               opts,
+              context,
               true,
               workflowCallId,
             );
@@ -2197,6 +2201,7 @@ export class WorkflowOrchestrator {
       const dispatchId = issueDispatchTrace(
         prompt,
         opts,
+        context,
         false,
         workflowCallId,
       );
@@ -2395,9 +2400,6 @@ export class WorkflowOrchestrator {
         );
     };
 
-    const parallelImpl = makeParallelImpl(signal, dependencyContext);
-    const pipelineImpl = makePipelineImpl(signal, dependencyContext);
-
     // P-nested: build the host-side `workflow(nameOrRef, args)` impl. Only
     // wired at the top level (when a resolver is provided). The nested
     // sandbox shares THIS run's countedDispatch (so agentCount cap + budget
@@ -2420,7 +2422,8 @@ export class WorkflowOrchestrator {
       ? async (
           nameOrRef: string | { scriptPath: string },
           nestedArgs: unknown,
-          stepId?: string,
+          stepId: string | undefined,
+          context: WorkflowDependencyContext,
         ): Promise<unknown> => {
           const call: WorkflowCallTrace = {
             id: `workflow-call-${++workflowCallCount}`,
@@ -2448,12 +2451,11 @@ export class WorkflowOrchestrator {
             if (resolved.name) call.workflowName = resolved.name;
             nestedSandbox = createWorkflowSandbox({
               args: nestedArgs,
-              runId,
               // Each sandbox closes over its own call, including parallel and cached dispatches.
-              dispatch: (prompt, opts) =>
-                countedDispatch(prompt, opts, call.id),
-              parallel: parallelImpl,
-              pipeline: pipelineImpl,
+              dispatch: (prompt, opts, dispatchContext) =>
+                countedDispatch(prompt, opts, dispatchContext, call.id),
+              // The nested run's dispatches chain from the calling branch.
+              dependencies: context,
               abortOnTimeout: req.abortOnTimeout,
               emitter,
               budget,
@@ -2490,10 +2492,7 @@ export class WorkflowOrchestrator {
     const sandbox = createWorkflowSandbox({
       args: req.args,
       maxWallClockMs: req.maxWallClockMs,
-      runId,
       dispatch: countedDispatch,
-      parallel: parallelImpl,
-      pipeline: pipelineImpl,
       workflow: workflowImpl,
       abortOnTimeout: req.abortOnTimeout,
       emitter,
@@ -2504,9 +2503,7 @@ export class WorkflowOrchestrator {
     try {
       let result: unknown;
       try {
-        result = await dependencyContext.run({ tails: [] }, () =>
-          sandbox.run(req.script),
-        );
+        result = await sandbox.run(req.script);
       } finally {
         executionClosed = true;
         await replayBarrier;
@@ -2521,12 +2518,8 @@ export class WorkflowOrchestrator {
     } catch (err) {
       // T19 (PR #4732 R1): preserve phases and logs accumulated before the
       // script failed so the caller can surface them in the error display.
-      // We only carry primitive strings across the boundary — no host-realm
-      // Error instance — to avoid reintroducing the T1 escape vector.
-      //
-      // Cross-realm `instanceof Error` is false for vm-realm Error objects,
-      // so duck-type on `.message` instead. `String(vmError)` would coerce
-      // to "Error: <msg>" which is the wrong shape for a clean message.
+      // Duck-type on `.message`: `String(error)` would coerce to
+      // "Error: <msg>", which is the wrong shape for a clean message.
       throw new WorkflowExecutionError(
         extractErrorMessage(err),
         sandbox.getPhases(),
@@ -2537,262 +2530,7 @@ export class WorkflowOrchestrator {
   }
 }
 
-/**
- * Settle a batch of thunks into a position-aligned `Array<T|null>` —
- * errors-as-data: a thunk or admitted agent that rejects becomes `null` at
- * its index, never collapsing the batch.
- * `Promise.resolve().then(t)` funnels a synchronously-throwing thunk into the
- * rejection path. Cancellation and run-level dispatch gates reject the whole
- * batch because no later agent call can succeed under either condition.
- * Concurrency is bounded at the dispatch layer (scheduler.run in countedDispatch),
- * not here — so nesting a parallel()/pipeline() inside a thunk cannot deadlock.
- *
- * Abort responsiveness: this function awaits `Promise.allSettled` which only
- * settles after every thunk settles. That is NOT a long wait in practice
- * because the dispatch signal (workflow-orchestrator.ts countedDispatch +
- * createProductionDispatch) is threaded through to `subagent.execute(ctx,
- * signal)`, so each in-flight thunk reacts to abort and rejects promptly. The
- * scheduler's separate `addEventListener('abort')` listener drains the
- * not-yet-started queued thunks instantly. So the apparent "wait for all to
- * complete" is in reality "wait for all to reach an abort-aware rejection",
- * which fires immediately after the signal — not after each subagent's full
- * 10-min internal timeout.
- */
-async function settleToNullArray(
-  thunks: Array<() => Promise<unknown>>,
-  signal?: AbortSignal,
-): Promise<unknown[]> {
-  const settled = await Promise.allSettled(
-    thunks.map((t) => Promise.resolve().then(t)),
-  );
-  // Use DOMException('AbortError') for consistency with the scheduler's
-  // abort path so HOST-side callers seeing this rejection directly can
-  // classify it via isAbortError() (utils/errors.ts). NOTE: this name is
-  // NOT preserved across the vm boundary — vmAsync (workflow-sandbox.ts)
-  // re-throws the script-visible rejection as a fresh vm-realm `new
-  // Error(msg)`, and the orchestrator's outer catch then wraps it as
-  // WorkflowExecutionError. So isAbortError() at the WorkflowTool layer
-  // returns false either way; the DOMException is purely a host-internal
-  // consistency choice, not a script-observable one.
-  if (signal?.aborted)
-    throw new DOMException('Workflow run aborted.', 'AbortError');
-  const visitedReasons = new WeakSet<object>();
-  const findRunFailureReason = (reason: unknown): unknown | undefined => {
-    if (reason === null || typeof reason !== 'object') return undefined;
-    if (visitedReasons.has(reason)) return undefined;
-    visitedReasons.add(reason);
-    try {
-      if ((reason as { __wfRunFailure?: unknown }).__wfRunFailure === true) {
-        return reason;
-      }
-      const errors = (reason as { errors?: unknown })?.errors;
-      if (!Array.isArray(errors)) return undefined;
-      for (const error of errors) {
-        const runFailure = findRunFailureReason(error);
-        if (runFailure !== undefined) return runFailure;
-      }
-    } catch {
-      return undefined;
-    }
-    return undefined;
-  };
-  for (const result of settled) {
-    if (result.status !== 'rejected') continue;
-    const runFailure = findRunFailureReason(result.reason);
-    if (runFailure !== undefined) throw runFailure;
-  }
-  // Errors-as-data: a rejected thunk becomes null at its index. Log the
-  // discarded rejection reason at debug level so operators investigating a
-  // workflow that returned unexpected nulls can disambiguate between (a) a
-  // dispatch failure (rate limit / model outage), (b) a pipeline stage
-  // exception, and (c) a non-JSON-serializable thunk
-  // return — all of which surface as the same `null` to the script by
-  // design. The log line is the only operator-side signal of which path
-  // fired; the contract to the script stays opaque.
-  return settled.map((r, i) => {
-    if (r.status === 'fulfilled') return r.value;
-    const reason = r.reason as { message?: unknown };
-    debugLogger.warn(
-      `Workflow thunk at index ${i} rejected: ${String(reason?.message ?? r.reason)}`,
-    );
-    return null;
-  });
-}
-
-/**
- * Build the host-side `parallel(thunks)` impl. Each thunk is a vm-realm
- * function whose agent() calls throttle through the per-run concurrency window
- * at the dispatch layer. A thunk that rejects, or resolves to a non-JSON-
- * serializable value, becomes `null` at its index (errors-as-data). `parallel()`
- * itself rejects when given invalid arguments (non-array / non-function
- * element), when the run is aborted, or when a token/agent-cap or container
- * policy gate refuses a dispatch. The sandbox wrapper revives the result array
- * into the vm realm (per-element JSON round-trip) — this host array never
- * reaches the script directly.
- */
-function makeParallelImpl(
-  signal: AbortSignal | undefined,
-  dependencyContext: AsyncLocalStorage<{ tails: string[] }>,
-): (thunks: Array<() => Promise<unknown>>) => Promise<unknown[]> {
-  return (thunks) => {
-    if (!Array.isArray(thunks)) {
-      return Promise.reject(
-        new Error(
-          'parallel() expects an array of thunks (functions returning promises).',
-        ),
-      );
-    }
-    for (const t of thunks) {
-      if (typeof t !== 'function') {
-        return Promise.reject(
-          new Error(
-            'parallel() expects an array of functions, not values — wrap each ' +
-              'call: parallel([() => agent(...), () => agent(...)]).',
-          ),
-        );
-      }
-    }
-    const parent = dependencyContext.getStore();
-    const inheritedTails = parent?.tails ?? [];
-    const branches = thunks.map((thunk) => {
-      const store = { tails: [...inheritedTails] };
-      return {
-        store,
-        thunk: () => dependencyContext.run(store, thunk),
-      };
-    });
-    return settleToNullArray(
-      branches.map(({ thunk }) => thunk),
-      signal,
-    ).then((result) => {
-      if (parent && branches.length > 0) {
-        parent.tails = mergeFanoutTails(
-          parent.tails,
-          inheritedTails,
-          branches.flatMap(({ store }) => store.tails),
-        );
-      }
-      return result;
-    });
-  };
-}
-
-/**
- * Build the host-side `pipeline(items, ...stages)` impl as parallel-of-chains.
- *
- * Each item becomes one chain that runs the stages in sequence — staggered,
- * with NO barrier between stages, so item A can be in stage 3 while item B is
- * still in stage 1. Stage callbacks receive `(prev, item, idx)`; the first
- * stage's `prev` is the item itself. An ordinary stage error, a `null`, or a
- * non-JSON-serializable value drops that item to `null` and skips its remaining
- * stages, leaving other items unaffected. A token/agent-cap refusal rejects
- * the batch. Concurrency is bounded at the dispatch layer, and the result array
- * shares parallel()'s per-element vm-realm revival.
- */
-function makePipelineImpl(
-  signal: AbortSignal | undefined,
-  dependencyContext: AsyncLocalStorage<{ tails: string[] }>,
-): (
-  items: unknown[],
-  ...stages: Array<
-    (prev: unknown, item: unknown, idx: number) => Promise<unknown>
-  >
-) => Promise<unknown[]> {
-  return (items, ...stages) => {
-    if (!Array.isArray(items)) {
-      return Promise.reject(
-        new Error(
-          'pipeline() expects an array of items as its first argument.',
-        ),
-      );
-    }
-    for (const s of stages) {
-      if (typeof s !== 'function') {
-        return Promise.reject(
-          new Error(
-            'pipeline() stages must be functions: ' +
-              'pipeline(items, item => ..., result => ...).',
-          ),
-        );
-      }
-    }
-    const parent = dependencyContext.getStore();
-    const inheritedTails = parent?.tails ?? [];
-    const branches = items.map((item, idx) => {
-      const store = { tails: [...inheritedTails] };
-      return {
-        store,
-        thunk: () =>
-          dependencyContext.run(store, () =>
-            runPipelineChain(item, idx, stages),
-          ),
-      };
-    });
-    return settleToNullArray(
-      branches.map(({ thunk }) => thunk),
-      signal,
-    ).then((result) => {
-      if (parent && branches.length > 0) {
-        parent.tails = mergeFanoutTails(
-          parent.tails,
-          inheritedTails,
-          branches.flatMap(({ store }) => store.tails),
-        );
-      }
-      return result;
-    });
-  };
-}
-
-function mergeFanoutTails(
-  currentParentTails: readonly string[],
-  inheritedTails: readonly string[],
-  branchTails: readonly string[],
-): string[] {
-  const inherited = new Set(inheritedTails);
-  // A dispatching branch always ends on its fresh dispatch id; a branch that
-  // never dispatched still carries its inherited seed. Merging that seed back
-  // would re-inject ancestor ids as redundant transitive dependsOn edges —
-  // unless no branch dispatched at all, where the inherited tails must pass
-  // through unchanged (same contract as an empty fan-out).
-  const newBranchTails = branchTails.filter((tail) => !inherited.has(tail));
-  const merged =
-    newBranchTails.length > 0
-      ? [
-          ...newBranchTails,
-          ...currentParentTails.filter((tail) => !inherited.has(tail)),
-        ]
-      : currentParentTails;
-  return Array.from(new Set(merged));
-}
-
-/**
- * Run one item through every stage in order. `null` is the universal drop
- * sentinel: a stage that returns `null` (or throws — surfaced as a rejection
- * that the batch maps to `null`) short-circuits the rest of the chain.
- */
-async function runPipelineChain(
-  item: unknown,
-  idx: number,
-  stages: Array<
-    (prev: unknown, item: unknown, idx: number) => Promise<unknown>
-  >,
-): Promise<unknown> {
-  let prev: unknown = item;
-  for (const stage of stages) {
-    if (prev === null) break;
-    prev = await stage(prev, item, idx);
-  }
-  return prev;
-}
-
-/**
- * Duck-typed message extraction. `instanceof Error` is realm-local; vm-realm
- * Errors raised inside the sandbox are NOT instances of host Error from the
- * orchestrator's perspective, so the standard `err instanceof Error ?
- * err.message : String(err)` pattern produces "Error: msg" via toString().
- * This helper falls back to the .message property regardless of realm.
- */
+/** Duck-typed message extraction: falls back to `.message` on any object. */
 function extractErrorMessage(err: unknown): string {
   if (err && typeof err === 'object' && 'message' in err) {
     const m = (err as { message: unknown }).message;

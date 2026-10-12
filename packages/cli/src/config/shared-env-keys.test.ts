@@ -63,17 +63,39 @@ describe('PROJECT_ENV_HARDCODED_EXCLUSIONS', () => {
     expect(PROJECT_ENV_HARDCODED_EXCLUSIONS).toContain('NODE_EXTRA_CA_CERTS');
   });
 
-  // The compile-cache keys stay settable from project files: a
-  // project-configured V8 cache dir is a pinned feature (#7594, tests in
-  // both loaders), and Node validates cache entries against the source, so
-  // a poisoned/shared dir degrades to cache misses.
-  it('keeps compile-cache keys out of the hardcoded exclusions', () => {
-    expect(PROJECT_ENV_HARDCODED_EXCLUSIONS).not.toContain(
-      'NODE_COMPILE_CACHE',
-    );
-    expect(PROJECT_ENV_HARDCODED_EXCLUSIONS).not.toContain(
-      'QWEN_CODE_PENDING_COMPILE_CACHE',
-    );
+  // Phase 9 (X4/T7/T9): a project `.env` or settings.env must not set
+  // variables that load or run code, or redirect tools at a config that can.
+  it.each([
+    'RIPGREP_CONFIG_PATH',
+    'SHELLOPTS',
+    'BASHOPTS',
+    'PS4',
+    'PROMPT_COMMAND',
+    'ENV',
+    'GIT_DIR',
+    'GIT_WORK_TREE',
+    'QWEN_CODE_PENDING_COMPILE_CACHE',
+    'NODE_COMPILE_CACHE',
+    'GIO_EXTRA_MODULES',
+    'GIO_MODULE_DIR',
+    'EDITOR',
+    'VISUAL',
+    'PAGER',
+    'GIT_PAGER',
+    'LESS',
+    'LD_LIBRARY_PATH',
+    'DYLD_LIBRARY_PATH',
+    'PERL5OPT',
+    'RUBYOPT',
+    'PYTHONHOME',
+    'JAVA_TOOL_OPTIONS',
+    'DOTNET_STARTUP_HOOKS',
+    'YARN_RC_FILENAME',
+    'KUBECONFIG',
+    'AWS_CONFIG_FILE',
+  ])('excludes %s', (key) => {
+    expect(isHardcodedProjectEnvExclusion(key)).toBe(true);
+    expect(isHardcodedProjectEnvExclusion(key.toLowerCase())).toBe(true);
   });
 
   // DEV selects dev-harness behavior; only the dev harness stamps it into

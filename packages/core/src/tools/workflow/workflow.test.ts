@@ -167,7 +167,7 @@ describe('WorkflowTool', () => {
       'QWEN_CODE_MAX_WORKFLOW_SECONDS',
       'resumeFromRunId',
       '/workflows',
-      'node:vm sandbox',
+      'QuickJS sandbox in a separate process',
     ]) {
       expect(description).toContain(anchor);
     }
@@ -1472,9 +1472,9 @@ await agent('scan package.json')
 
   // P3 (PR #5xxx): schema mode end-to-end through WorkflowTool. The
   // dispatch returns the validated structured payload as an object; the
-  // sandbox revives it per-call into the vm realm; the script reads it
-  // as a vm-realm object; safeStringifyResult JSON-stringifies it for the
-  // LLM. A regression in any layer of that chain would surface here.
+  // sandbox hands it to the script as JSON data; the script reads it as its
+  // own object; safeStringifyResult JSON-stringifies it for the LLM. A
+  // regression in any layer of that chain would surface here.
   it('execute() runs agent({schema}) end-to-end and returns the revived object', async () => {
     const tool = new WorkflowTool(fakeConfig(), {
       dispatch: async (prompt, opts) => {
@@ -1498,11 +1498,10 @@ await agent('scan package.json')
   });
 
   // PR #4947 R2 T8 (qwen-code-ci-bot): pipeline() through WorkflowTool
-  // exercises a vm wrapper path that is structurally distinct from parallel's
-  // single-argument call — pipeline uses `callPipeline.apply(null, arguments)`
-  // and `[items].concat(stages)` to spread the variadic stage list
-  // (workflow-sandbox.ts pipeline wrapper). A regression in the vm-to-host
-  // stage forwarding would not be caught by the parallel E2E test above.
+  // exercises a path that is structurally distinct from parallel's
+  // single-argument call — pipeline spreads a variadic stage list
+  // (workflow-guest.ts pipeline wrapper). A regression in the stage
+  // forwarding would not be caught by the parallel E2E test above.
   it('execute() runs pipeline() end-to-end and returns the revived array', async () => {
     const tool = new WorkflowTool(fakeConfig(), {
       dispatch: async () => 'unused',
@@ -2707,6 +2706,8 @@ await agent('scan package.json')
       expect(text).toContain(`Use /workflows ${runId}`);
       await expect(fs.stat(result.journalPath!)).resolves.toBeDefined();
 
+      // The script starts in its own host process, after the launch returns.
+      await vi.waitFor(() => expect(resolveDispatch).toBeDefined());
       resolveDispatch?.('done');
       await config.getWorkflowRunRegistry!()!['handles'].get(runId)!.completion;
     });

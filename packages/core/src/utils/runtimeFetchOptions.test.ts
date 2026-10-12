@@ -137,6 +137,33 @@ describe('buildRuntimeFetchOptions (node runtime)', () => {
   );
 });
 
+// E5: Bun's global fetch honours HTTP_PROXY, so Bun gets the same undici
+// fetch and plain Agent as Node.
+describe('buildRuntimeFetchOptions under Bun', () => {
+  beforeEach(() => {
+    resetDispatcherCache();
+    mockUndiciFetch.mockReset();
+  });
+
+  it('uses the undici Agent and fetch, not the global fetch', async () => {
+    const versions = process.versions as Record<string, string>;
+    versions['bun'] = '1.2.0';
+    try {
+      mockUndiciFetch.mockResolvedValue(new Response('ok'));
+      const result = buildRuntimeFetchOptions();
+      expect(getDispatcherOptions(result)).toEqual({
+        headersTimeout: 0,
+        bodyTimeout: 0,
+        keepAliveTimeout: 60_000,
+      });
+      await result.fetch('http://127.0.0.1:11434/v1/models');
+      expect(mockUndiciFetch).toHaveBeenCalledTimes(1);
+    } finally {
+      delete versions['bun'];
+    }
+  });
+});
+
 describe('TLS verification', () => {
   const saved = process.env['NODE_TLS_REJECT_UNAUTHORIZED'];
 

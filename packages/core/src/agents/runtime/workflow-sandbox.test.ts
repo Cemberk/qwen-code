@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
+import type { ChildProcess } from 'node:child_process';
 import {
   stripExportMeta,
   extractAndStripMeta,
@@ -14,6 +15,23 @@ import {
 } from './workflow-sandbox.js';
 import { WorkflowDispatchScheduler } from './workflow-dispatch-scheduler.js';
 import { expectWithinLatencyBudget } from '../../test-utils/latency-budget.js';
+
+// Records every host process the sandbox spawns, so tests can check that
+// none outlives its run.
+const { hostProcesses } = vi.hoisted(() => ({
+  hostProcesses: [] as ChildProcess[],
+}));
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>();
+  return {
+    ...actual,
+    spawn: (...args: Parameters<typeof actual.spawn>) => {
+      const child = actual.spawn(...args);
+      hostProcesses.push(child);
+      return child;
+    },
+  };
+});
 
 describe('stripExportMeta', () => {
   it('returns input unchanged when no export meta present', () => {
@@ -1232,18 +1250,20 @@ describe('createWorkflowSandbox security', () => {
         new Promise<string>((resolve) => {
           finish = resolve;
         }),
-      maxWallClockMs: 200,
+      maxWallClockMs: 600,
       scheduler,
     });
-    // Consume most of the budget BEFORE pausing; only the banked
-    // remainder may fire after resume.
+    // Consume about a third of the budget BEFORE pausing; only the banked
+    // remainder may fire after resume. The watchdog arms when the host
+    // reports ready, a little before the dispatch arrives, so the margins
+    // leave room for scheduling jitter.
     const run = sandbox.run(`await agent('a'); return new Promise(() => {});`);
     await vi.waitFor(() => expect(finish).toBeDefined());
-    await new Promise((resolve) => setTimeout(resolve, 120));
+    await new Promise((resolve) => setTimeout(resolve, 200));
     expect(scheduler.pause()).toBe(true);
     finish?.('done');
     await vi.waitFor(() => expect(scheduler.snapshot().state).toBe('paused'));
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 600));
     let settled = false;
     void run.catch(() => {
       settled = true;
@@ -1253,12 +1273,11 @@ describe('createWorkflowSandbox security', () => {
 
     scheduler.resume();
     const resumedAt = Date.now();
-    await expect(run).rejects.toThrow(/exceeded 200 ms of active time/);
-    // The banked remainder (~80 ms) fires promptly; a fresh full budget
-    // (200 ms) would overshoot the upper bound, and a pause-duration
-    // deduction would fire before the lower bound.
-    expectWithinLatencyBudget(Date.now() - resumedAt, 150);
-    expect(Date.now() - resumedAt).toBeGreaterThan(40);
+    await expect(run).rejects.toThrow(/exceeded 600 ms of active time/);
+    // The banked remainder (~400 ms) fires well before a fresh full budget
+    // (600 ms) would, and a pause-duration deduction would fire at once.
+    expectWithinLatencyBudget(Date.now() - resumedAt, 550);
+    expect(Date.now() - resumedAt).toBeGreaterThan(150);
   });
 
   it('survives a second pause after resume without burning banked budget', async () => {
@@ -1321,16 +1340,21 @@ describe('createWorkflowSandbox security', () => {
     // returns false while stuck in `pausing`, so the backstop could not
     // re-arm from that state).
     const scheduler = new WorkflowDispatchScheduler(1);
+    let dispatched = false;
     const sandbox = createWorkflowSandbox({
       args: undefined,
       // Route through the scheduler like the orchestrator does so the
       // hung thunk counts as in-flight and the pause parks in `pausing`.
-      dispatch: () => scheduler.run(() => new Promise<string>(() => {})),
+      dispatch: () =>
+        scheduler.run(() => {
+          dispatched = true;
+          return new Promise<string>(() => {});
+        }),
       maxWallClockMs: 100,
       scheduler,
     });
     const run = sandbox.run(`await agent('a');`);
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await vi.waitFor(() => expect(dispatched).toBe(true));
     expect(scheduler.pause()).toBe(true);
     expect(scheduler.snapshot().state).toBe('pausing');
     await expect(run).rejects.toThrow(/exceeded 100 ms of active time/);
@@ -1341,8 +1365,7 @@ describe('createWorkflowSandbox security', () => {
     // emits no scheduler transition. Before the abort arm, settlement
     // depended on the watchdog re-arming with its banked remainder — the
     // user watched a cancelled run refuse to end for up to that long. Now
-    // the abort settles the run immediately; the re-arm stays as a backstop.
-    vi.useFakeTimers();
+    // the abort settles the run immediately.
     const scheduler = new WorkflowDispatchScheduler(1);
     const abortOnTimeout = new AbortController();
     let finish: ((value: string) => void) | undefined;
@@ -1352,7 +1375,7 @@ describe('createWorkflowSandbox security', () => {
         new Promise<string>((resolve) => {
           finish = resolve;
         }),
-      maxWallClockMs: 200,
+      maxWallClockMs: 60_000,
       scheduler,
       abortOnTimeout,
     });
@@ -1361,25 +1384,16 @@ describe('createWorkflowSandbox security', () => {
     const settlement = run.catch(() => {
       settled = true;
     });
-    try {
-      await vi.advanceTimersByTimeAsync(0);
-      expect(finish).toBeDefined();
-      await vi.advanceTimersByTimeAsync(120);
-      expect(scheduler.pause()).toBe(true);
-      finish?.('done');
-      await vi.advanceTimersByTimeAsync(0);
-      expect(scheduler.snapshot().state).toBe('paused');
+    await vi.waitFor(() => expect(finish).toBeDefined());
+    expect(scheduler.pause()).toBe(true);
+    finish?.('done');
+    await vi.waitFor(() => expect(scheduler.snapshot().state).toBe('paused'));
 
-      abortOnTimeout.abort();
-      await vi.advanceTimersByTimeAsync(0);
-      expect(settled).toBe(true);
-      await expect(run).rejects.toThrow(/aborted \(cancelled\)/);
-    } finally {
-      abortOnTimeout.abort();
-      await vi.runAllTimersAsync();
-      await settlement;
-      vi.useRealTimers();
-    }
+    abortOnTimeout.abort();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(settled).toBe(true);
+    await expect(run).rejects.toThrow(/aborted \(cancelled\)/);
+    await settlement;
   });
 
   it('settles a run cancelled mid-pausing before the post-abort drain lands', async () => {
@@ -1409,7 +1423,7 @@ describe('createWorkflowSandbox security', () => {
       try { await agent('a'); } catch {}
       return new Promise(() => {});
     `);
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await vi.waitFor(() => expect(finishDispatch).toBeDefined());
     expect(scheduler.pause()).toBe(true);
     expect(scheduler.snapshot().state).toBe('pausing');
 
@@ -1485,11 +1499,13 @@ describe('createWorkflowSandbox security', () => {
     // a `finally` inside the script still executes — cleanup the author
     // wrote is not skipped just because the user stopped waiting.
     const controller = new AbortController();
+    let dispatched = false;
     const sandbox = createWorkflowSandbox({
       args: undefined,
       abortOnTimeout: controller,
       dispatch: () =>
         new Promise<string>((_, reject) => {
+          dispatched = true;
           controller.signal.addEventListener(
             'abort',
             () => reject(new Error('dispatch aborted')),
@@ -1501,7 +1517,7 @@ describe('createWorkflowSandbox security', () => {
       try { await agent('a'); }
       finally { log('cleanup ran'); }
     `);
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await vi.waitFor(() => expect(dispatched).toBe(true));
     controller.abort();
     await expect(run).rejects.toThrow(/aborted \(cancelled\)/);
     await vi.waitFor(() =>
@@ -1549,30 +1565,27 @@ describe('createWorkflowSandbox security', () => {
     expect(['undefined', 'threw', 'no-iterator']).toContain(result);
   });
 
-  // FIX-F (Round 4 UP Critical): an un-injected sandbox exposes stub-throwing
-  // parallel/pipeline globals so a model-authored script gets a clear
-  // "unavailable" error rather than `ReferenceError: parallel is not defined`
-  // (which the model would misdiagnose as a bug in its own script). In
-  // production the orchestrator always injects real impls; these stubs only
-  // fire for a bare sandbox constructed without them.
-  it('parallel() throws an availability error rather than ReferenceError when not injected', async () => {
+  // parallel() and pipeline() are combinators over agent() that run inside
+  // the script's own runtime — thunks and stages are script functions, so
+  // they cannot be handed to the host — and every sandbox has them.
+  it('parallel() runs in a sandbox without an orchestrator', async () => {
     const sandbox = createWorkflowSandbox({
       args: undefined,
       dispatch: async () => 'ignored',
     });
     await expect(
       sandbox.run(`return parallel([() => agent("a")]);`),
-    ).rejects.toThrow(/parallel\(\) is unavailable/);
+    ).resolves.toEqual(['ignored']);
   });
 
-  it('pipeline() throws an availability error rather than ReferenceError when not injected', async () => {
+  it('pipeline() runs in a sandbox without an orchestrator', async () => {
     const sandbox = createWorkflowSandbox({
       args: undefined,
       dispatch: async () => 'ignored',
     });
     await expect(
       sandbox.run(`return pipeline([1, 2], x => x, x => x);`),
-    ).rejects.toThrow(/pipeline\(\) is unavailable/);
+    ).resolves.toEqual([1, 2]);
   });
 
   it('workflow() throws "unavailable" when no workflow impl is injected (bare sandbox / nesting limit)', async () => {
@@ -1630,14 +1643,10 @@ describe('createWorkflowSandbox security', () => {
     );
   });
 
-  // FIX-H (Round 5 ARCH I1/I2/I3): injection seams for parallel/pipeline/
-  // budget. These regression tests guard the contract: P2/P5 will provide
-  // real implementations via SandboxOptions without modifying sandbox source.
-  it('opts.parallel overrides the throwing stub when provided', async () => {
+  it('parallel() resolves thunks to a position-aligned array', async () => {
     const sandbox = createWorkflowSandbox({
       args: undefined,
       dispatch: async () => 'ignored',
-      parallel: async (thunks) => Promise.all(thunks.map((t) => t())),
     });
     const result = await sandbox.run(`
       return await parallel([async () => 1, async () => 2, async () => 3]);
@@ -1645,21 +1654,10 @@ describe('createWorkflowSandbox security', () => {
     expect(result).toEqual([1, 2, 3]);
   });
 
-  it('opts.pipeline overrides the throwing stub when provided', async () => {
+  it('pipeline() runs each item through the stages', async () => {
     const sandbox = createWorkflowSandbox({
       args: undefined,
       dispatch: async () => 'ignored',
-      pipeline: async (items, ...stages) => {
-        const out: unknown[] = [];
-        for (let i = 0; i < items.length; i++) {
-          let cur: unknown = items[i];
-          for (const stage of stages) {
-            cur = await stage(cur, items[i], i);
-          }
-          out.push(cur);
-        }
-        return out;
-      },
     });
     const result = await sandbox.run(`
       return await pipeline([1, 2, 3], async (x) => x * 10);
@@ -1667,19 +1665,13 @@ describe('createWorkflowSandbox security', () => {
     expect(result).toEqual([10, 20, 30]);
   });
 
-  // SECURITY (PR #4732 P2): the host parallel/pipeline impl resolves with a
-  // HOST-realm array. vmAsync's resolve path is verbatim, so without the
-  // in-realm JSON revival the RESOLVED array's prototype chain reaches the
-  // host Function constructor — `out.constructor.constructor('return process')()`
-  // would leak host process. The pre-P2 escape test only probed the *Promise*
-  // (vm-realm via vmAsync), NOT the resolved array — this is the uncovered gap.
-  // These tests FAIL against a verbatim wrapper and PASS with revival.
+  // SECURITY (PR #4732 P2): the RESOLVED arrays of parallel() / pipeline(),
+  // and the objects inside them, must stay script-side values whose
+  // constructor chain cannot reach the host `process`.
   it('parallel() RESOLVED array cannot reach host process (revived in-realm)', async () => {
     const sandbox = createWorkflowSandbox({
       args: undefined,
       dispatch: async () => 'ok',
-      // host impl returns a plain HOST array on purpose.
-      parallel: async (thunks) => Promise.all(thunks.map((t) => t())),
     });
     const result = await sandbox.run(`
       const out = await parallel([async () => 1, async () => 2]);
@@ -1696,7 +1688,6 @@ describe('createWorkflowSandbox security', () => {
     const sandbox = createWorkflowSandbox({
       args: undefined,
       dispatch: async () => 'ok',
-      parallel: async (thunks) => Promise.all(thunks.map((t) => t())),
     });
     const result = await sandbox.run(`
       const out = await parallel([async () => ({ k: 'v' })]);
@@ -1713,17 +1704,6 @@ describe('createWorkflowSandbox security', () => {
     const sandbox = createWorkflowSandbox({
       args: undefined,
       dispatch: async () => 'ok',
-      pipeline: async (items, ...stages) => {
-        const out: unknown[] = [];
-        for (let i = 0; i < items.length; i++) {
-          let cur: unknown = items[i];
-          for (const stage of stages) {
-            cur = await stage(cur, items[i], i);
-          }
-          out.push(cur);
-        }
-        return out;
-      },
     });
     const result = await sandbox.run(`
       const out = await pipeline([1, 2], async (x) => x * 10);
@@ -2088,6 +2068,287 @@ describe('createWorkflowSandbox security', () => {
     // phase repeating after a different one is appended again.
     expect(sandbox.getPhases()).toEqual(['Search', 'Verify', 'Search']);
   });
+});
+
+// The script runs in QuickJS inside a separate host process. These pin the
+// two escapes the node:vm sandbox allowed, both reproduced end to end:
+//  (a) a host bridge function threw a host-realm error into the script, so
+//      `e.constructor.constructor('return process')()` reached the host
+//      `process` (and from there `child_process`);
+//  (b) host code called methods on script-controlled objects, so overriding
+//      `Promise.prototype.then` / `Array.prototype.map` inside the script
+//      captured host callbacks whose constructor chain reached `process`.
+// Every probe below answers 'object' on the node:vm implementation.
+describe('workflow guest isolation', () => {
+  const PROBE = `
+    function hostProbe(value) {
+      try {
+        return String(value.constructor.constructor('return typeof process')());
+      } catch (e) {
+        return 'threw';
+      }
+    }
+  `;
+
+  it('a caught bridge error does not hand the script the host process', async () => {
+    const sandbox = createWorkflowSandbox({
+      args: undefined,
+      dispatch: async () => 'ok',
+    });
+    const result = await sandbox.run(`
+      try { log(Object.create(null)); return 'no throw'; } catch (e) {
+        const p = e.constructor.constructor(
+          'return typeof process === "object" ? process : null')();
+        if (!p) return 'guest only';
+        const cp = p.getBuiltinModule('node:child_process');
+        return 'HOST ' + String(cp.execFileSync('/usr/bin/id', ['-u'])).trim();
+      }
+    `);
+    expect(result).toBe('guest only');
+  });
+
+  it('errors from every script-facing function stay inside the guest', async () => {
+    const sandbox = createWorkflowSandbox({
+      args: undefined,
+      dispatch: async () => 'ok',
+      workflow: async () => 'nested',
+    });
+    const result = (await sandbox.run(`${PROBE}
+      const probes = {};
+      const thrown = {
+        log: () => log(Object.create(null)),
+        phase: () => phase(Object.create(null)),
+        console: () => console.log(Object.create(null)),
+        logProxy: () =>
+          log(new Proxy({}, { get() { throw new Error('trap'); } })),
+        logToPrimitive: () =>
+          log({ [Symbol.toPrimitive]() { throw new TypeError('prim'); } }),
+        budget: () => budget.spent(),
+      };
+      for (const name of Object.keys(thrown)) {
+        try { thrown[name](); probes[name] = 'no-throw'; }
+        catch (e) { probes[name] = hostProbe(e); }
+      }
+      const rejected = {
+        agentOpts: () =>
+          agent('x', { schema: { toJSON() { throw new Error('toJSON'); } } }),
+        agentBigInt: () => agent('x', { label: 1n }),
+        agentUnknown: () => agent('x', { nope: true }),
+        workflowRef: () => workflow(Symbol('ref')),
+        workflowArgs: () => workflow('child', { n: 1n }),
+        parallelArg: () => parallel(Object.create(null)),
+        pipelineArg: () => pipeline(Object.create(null)),
+      };
+      for (const name of Object.keys(rejected)) {
+        try { await rejected[name](); probes[name] = 'resolved'; }
+        catch (e) { probes[name] = hostProbe(e); }
+      }
+      return probes;
+    `)) as Record<string, string>;
+    expect(Object.keys(result)).toHaveLength(13);
+    for (const [name, outcome] of Object.entries(result)) {
+      expect([name, outcome]).toEqual([name, 'undefined']);
+    }
+  });
+
+  it('the script sees no host globals', async () => {
+    const sandbox = createWorkflowSandbox({
+      args: undefined,
+      dispatch: async () => 'ok',
+    });
+    const result = await sandbox.run(`
+      return {
+        process: typeof process,
+        globalProcess: typeof globalThis.process,
+        require: typeof require,
+        module: typeof module,
+        fetch: typeof fetch,
+        Buffer: typeof Buffer,
+        setTimeout: typeof setTimeout,
+        WebAssembly: typeof WebAssembly,
+        SharedArrayBuffer: typeof SharedArrayBuffer,
+        hostPost: typeof __wfPost,
+        functionProcess: typeof Function('return typeof process')(),
+      };
+    `);
+    expect(result).toEqual({
+      process: 'undefined',
+      globalProcess: 'undefined',
+      require: 'undefined',
+      module: 'undefined',
+      fetch: 'undefined',
+      Buffer: 'undefined',
+      setTimeout: 'undefined',
+      WebAssembly: 'undefined',
+      SharedArrayBuffer: 'undefined',
+      hostPost: 'undefined',
+      functionProcess: 'string',
+    });
+  });
+
+  it('values handed to the script keep their constructor chains in the guest', async () => {
+    const sandbox = createWorkflowSandbox({
+      args: { nested: [{ k: 1 }] },
+      dispatch: async (prompt) => {
+        if (prompt === 'fail') throw new Error('dispatch-boom');
+        return { structured: [prompt] };
+      },
+      workflow: async () => ({ nested: { result: true } }),
+      budget: { total: 10, spent: () => 1, remaining: () => 9 },
+    });
+    const result = await sandbox.run(`${PROBE}
+      const probes = {
+        global: hostProbe(globalThis),
+        args: hostProbe(args.nested[0]),
+        agentResult: hostProbe((await agent('x', { schema: {} })).structured),
+        agentPromise: hostProbe(agent('y')),
+        workflowResult: hostProbe((await workflow('child')).nested),
+        parallelResult: hostProbe((await parallel([() => ({ a: 1 })]))[0]),
+        pipelineResult: hostProbe(await pipeline([1], (x) => [x])),
+        budget: hostProbe(budget.remaining),
+      };
+      try { await agent('fail'); } catch (e) { probes.dispatchError = hostProbe(e); }
+      return probes;
+    `);
+    expect(Object.values(result as object)).toEqual(
+      new Array(9).fill('undefined'),
+    );
+  });
+
+  it('prototype overrides inside the script capture nothing from the host', async () => {
+    const sandbox = createWorkflowSandbox({
+      args: ['p', 'q'],
+      dispatch: async (prompt) => {
+        if (prompt === 'fail') throw new Error('fail-boom');
+        return 'r:' + prompt;
+      },
+    });
+    const result = await sandbox.run(`${PROBE}
+      const seen = [];
+      // Index loops: the helper must not trip the overrides it installs.
+      const record = (site, values) => {
+        for (let i = 0; i < values.length; i++) {
+          const v = values[i];
+          if (v !== null && v !== undefined) seen.push(site + ':' + hostProbe(v));
+        }
+      };
+      const nativeThen = Promise.prototype.then;
+      Promise.prototype.then = function (onFulfilled, onRejected) {
+        record('then', [this, onFulfilled, onRejected]);
+        return nativeThen.call(this, onFulfilled, onRejected);
+      };
+      const nativeMap = Array.prototype.map;
+      Array.prototype.map = function (fn, thisArg) {
+        record('map', [this, fn]);
+        return nativeMap.call(this, fn, thisArg);
+      };
+      const nativeIterator = Array.prototype[Symbol.iterator];
+      Array.prototype[Symbol.iterator] = function () {
+        record('iterator', [this]);
+        return nativeIterator.call(this);
+      };
+      const getters = ['then', 'toJSON', 'message', 'errors'];
+      for (let i = 0; i < getters.length; i++) {
+        const name = getters[i];
+        Object.defineProperty(Object.prototype, name, {
+          configurable: true,
+          get() { record(name, [this]); return undefined; },
+        });
+      }
+      const single = await agent('a');
+      const fanned = await parallel([() => agent('b'), async () => agent('c')]);
+      const staged = await pipeline(args, (item) => agent(item), (r) => r + '!');
+      let failure;
+      try { await agent('fail'); } catch (e) { failure = e.message; }
+      for (let i = 0; i < getters.length; i++) delete Object.prototype[getters[i]];
+      Promise.prototype.then = nativeThen;
+      Array.prototype.map = nativeMap;
+      Array.prototype[Symbol.iterator] = nativeIterator;
+      return {
+        single, fanned, staged, failure,
+        leaked: seen.filter((entry) => !entry.endsWith(':undefined')),
+        probed: seen.length > 0,
+      };
+    `);
+    expect(result).toEqual({
+      single: 'r:a',
+      fanned: ['r:b', 'r:c'],
+      staged: ['r:p!', 'r:q!'],
+      failure: 'fail-boom',
+      leaked: [],
+      probed: true,
+    });
+  });
+
+  it('bounds a script hung in synchronous code after its first await', async () => {
+    const sandbox = createWorkflowSandbox({
+      args: undefined,
+      dispatch: async () => 'ok',
+      maxWallClockMs: 300,
+    });
+    await expect(
+      sandbox.run(`await agent('a'); while (true) {}`),
+    ).rejects.toThrow(/exceeded 300 ms of active time/);
+  });
+
+  // The host process is per run and must not outlive it.
+  it('leaves no host process behind once a run settles', async () => {
+    const before = hostProcesses.length;
+    const exited = (child: ChildProcess) =>
+      child.exitCode !== null || child.signalCode !== null;
+    const make = (maxWallClockMs?: number) =>
+      createWorkflowSandbox({
+        args: undefined,
+        dispatch: async () => 'ok',
+        maxWallClockMs,
+      });
+    await make().run(`await agent('a'); return 1;`);
+    await expect(make().run(`throw new Error('x');`)).rejects.toThrow('x');
+    await expect(
+      make(200).run(`return new Promise(() => {});`),
+    ).rejects.toThrow(/exceeded 200 ms/);
+    // Cancelled while a dispatch is in flight: the host stays only until
+    // the dispatch's teardown rejection has reached the script.
+    const controller = new AbortController();
+    let dispatched = false;
+    const cancelled = createWorkflowSandbox({
+      args: undefined,
+      abortOnTimeout: controller,
+      dispatch: () =>
+        new Promise<string>((_, reject) => {
+          dispatched = true;
+          controller.signal.addEventListener('abort', () =>
+            reject(new Error('aborted')),
+          );
+        }),
+    }).run(`await agent('a');`);
+    await vi.waitFor(() => expect(dispatched).toBe(true));
+    controller.abort();
+    await expect(cancelled).rejects.toThrow(/aborted \(cancelled\)/);
+    const settledHosts = hostProcesses.slice(before);
+    expect(settledHosts).toHaveLength(4);
+    await vi.waitFor(() => expect(settledHosts.every(exited)).toBe(true));
+
+    // A dispatch that never settles cannot hold the host past the drain grace.
+    const stuckController = new AbortController();
+    let stuckDispatched = false;
+    const stuck = createWorkflowSandbox({
+      args: undefined,
+      abortOnTimeout: stuckController,
+      dispatch: () => {
+        stuckDispatched = true;
+        return new Promise<string>(() => {});
+      },
+    }).run(`await agent('a');`);
+    await vi.waitFor(() => expect(stuckDispatched).toBe(true));
+    stuckController.abort();
+    await expect(stuck).rejects.toThrow(/aborted \(cancelled\)/);
+    const stuckHost = hostProcesses[before + 4]!;
+    expect(exited(stuckHost)).toBe(false);
+    await vi.waitFor(() => expect(stuckHost.signalCode).toBe('SIGKILL'), {
+      timeout: 15_000,
+    });
+  }, 30_000);
 });
 
 describe('createWorkflowSandbox primitives', () => {
@@ -2471,12 +2732,15 @@ describe('createWorkflowSandbox primitives', () => {
 
   // R11-3: await / Promise.resolve adoption of an ObservedPromise
   // attaches through the observed then with the adopting promise's
-  // native capability pair. Adoption consumes (clearing a recorded
-  // verdict) but is NOT handling: the rejection transfers into the
-  // (unobserved) adopting promise, and the run-level escape hook
-  // surfaces forgotten transfers instead of letting them escape with
-  // no log, alarm, or telemetry.
-  it('mirrors a forgotten dispatch failure inside an async wrapper (adoption escape)', async () => {
+  // native capability pair. Adoption consumes the result but is NOT
+  // handling: the rejection transfers into the adopting promise. Under
+  // node:vm a forgotten transfer surfaced as a host-process
+  // unhandledRejection the sandbox hooked and mirrored. The script now runs
+  // in QuickJS, which exposes no rejection tracker to the host, so the
+  // adopting promise is unobservable: a forgotten await inside an async
+  // wrapper leaves no mirror line — the documented gap of the mirror — and
+  // nothing reaches the host process either.
+  it('keeps a forgotten dispatch failure inside an async wrapper off the host process', async () => {
     const sandbox = createWorkflowSandbox({
       args: undefined,
       dispatch: () => Promise.reject(new Error('kaboom')),
@@ -2487,24 +2751,20 @@ describe('createWorkflowSandbox primitives', () => {
     };
     process.on('unhandledRejection', onUnhandled);
     try {
-      await sandbox.run(
-        `async function step() { await agent('x'); } step(); return 'done';`,
-      );
+      await expect(
+        sandbox.run(
+          `async function step() { await agent('x'); } step(); return 'done';`,
+        ),
+      ).resolves.toBe('done');
       await new Promise((resolve) => setTimeout(resolve, 10));
     } finally {
       process.off('unhandledRejection', onUnhandled);
     }
-    expect(sandbox.getLogs()).toEqual([
-      'dispatch failed (rejection not handled): kaboom',
-    ]);
-    // The escape event itself cannot be cancelled from inside the
-    // sandbox (the adopting promise is unreachable), so a host-level
-    // listener still observes it — capture it here so it cannot leak
-    // into the test runner.
-    expect(unhandled.length).toBeGreaterThan(0);
+    expect(unhandled).toEqual([]);
+    expect(sandbox.getLogs()).toEqual([]);
   });
 
-  it('mirrors every forgotten dispatch failure in an adoption fan-out', async () => {
+  it('keeps every forgotten dispatch failure in an adoption fan-out off the host process', async () => {
     const sandbox = createWorkflowSandbox({
       args: undefined,
       dispatch: (prompt: string) => Promise.reject(new Error(prompt + '-boom')),
@@ -2515,17 +2775,17 @@ describe('createWorkflowSandbox primitives', () => {
     };
     process.on('unhandledRejection', onUnhandled);
     try {
-      await sandbox.run(
-        `[1, 2].map(async (i) => { await agent('x' + i); }); return 'done';`,
-      );
+      await expect(
+        sandbox.run(
+          `[1, 2].map(async (i) => { await agent('x' + i); }); return 'done';`,
+        ),
+      ).resolves.toBe('done');
       await new Promise((resolve) => setTimeout(resolve, 10));
     } finally {
       process.off('unhandledRejection', onUnhandled);
     }
-    expect(sandbox.getLogs()).toEqual([
-      'dispatch failed (rejection not handled): x1-boom',
-      'dispatch failed (rejection not handled): x2-boom',
-    ]);
+    expect(unhandled).toEqual([]);
+    expect(sandbox.getLogs()).toEqual([]);
   });
 
   it('does not mirror a dispatch failure the script awaits at the top level', async () => {
@@ -2580,9 +2840,11 @@ describe('createWorkflowSandbox primitives', () => {
       dispatch: () => Promise.reject(new Error('any-boom')),
     });
     await sandbox.run(`Promise.any([agent('a'), agent('b')]); return 'done';`);
-    expect(sandbox.getLogs()).toEqual([
-      'dispatch failed (result not consumed): All promises were rejected',
-    ]);
+    // The AggregateError's own message is the engine's (QuickJS leaves it
+    // empty); the attribution is what this pins.
+    const logs = sandbox.getLogs();
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatch(/^dispatch failed \(result not consumed\): /);
   });
 
   it('dedupes one failed dispatch fanned out into N unconsumed branches', async () => {
@@ -2941,18 +3203,38 @@ describe('createWorkflowSandbox primitives', () => {
 
   // ── Compilation ──────────────────────────────────────────────────────
   describe('compileWorkflowScript', () => {
-    it('compiles a body and hands back its meta', () => {
-      const { script, meta } = compileWorkflowScript(
+    it('compiles a body and hands back its meta', async () => {
+      const { source, meta } = await compileWorkflowScript(
         "export const meta = { name: 'n', description: 'd' }\nawait agent('x');",
       );
-      expect(script).toBeDefined();
+      expect(source).toContain("await agent('x');");
       expect(meta?.name).toBe('n');
     });
 
-    it('throws on a body that does not parse', () => {
-      expect(() => compileWorkflowScript("const x: string = 'a';")).toThrow(
+    it('throws on a body that does not parse', async () => {
+      await expect(
+        compileWorkflowScript("const x: string = 'a';"),
+      ).rejects.toThrow(SyntaxError);
+    });
+
+    // Nesting deep enough to run the parser out of Node's stack is refused,
+    // and the engine it may have left inconsistent is not reused.
+    it('refuses a body nested too deeply to parse, then keeps checking', async () => {
+      const nested = `return ${'['.repeat(100_000)}${']'.repeat(100_000)};`;
+      await expect(compileWorkflowScript(nested)).rejects.toThrow();
+      await expect(
+        compileWorkflowScript("await agent('x');"),
+      ).resolves.toMatchObject({ meta: null });
+      await expect(compileWorkflowScript('await agent(')).rejects.toThrow(
         SyntaxError,
       );
+    });
+
+    // Parsing is all the check does: nothing in the script runs.
+    it('does not execute the script it checks', async () => {
+      await expect(
+        compileWorkflowScript('throw new Error("ran"); while (true) {}'),
+      ).resolves.toMatchObject({ meta: null });
     });
 
     // The body runs in strict mode, so an undeclared assignment throws
@@ -2981,9 +3263,9 @@ describe('createWorkflowSandbox primitives', () => {
   });
 
   describe('describeWorkflowCompileError', () => {
-    function renderFor(source: string): string {
+    async function renderFor(source: string): Promise<string> {
       try {
-        compileWorkflowScript(source);
+        await compileWorkflowScript(source);
       } catch (e) {
         return describeWorkflowCompileError(
           e,
@@ -2993,20 +3275,22 @@ describe('createWorkflowSandbox primitives', () => {
       throw new Error('expected the source to fail compilation');
     }
 
-    // The wrapper shifts every body line by one, so V8's own line number is
-    // one more than the author's. Reporting the raw number sends them to the
-    // wrong line, which is worse than reporting none.
-    it('reports the line number the author wrote, not the wrapped one', () => {
-      const rendered = renderFor("await agent('a');\nconst x: string = 1;");
+    // The wrapper shifts every body line by one, so the parser's own line
+    // number is one more than the author's. Reporting the raw number sends
+    // them to the wrong line, which is worse than reporting none.
+    it('reports the line number the author wrote, not the wrapped one', async () => {
+      const rendered = await renderFor(
+        "await agent('a');\nconst x: string = 1;",
+      );
       expect(rendered).toContain('line 2');
       expect(rendered).not.toContain('workflow.js');
       expect(rendered).toContain(
-        'SyntaxError: Missing initializer in const declaration',
+        'SyntaxError: missing initializer for const variable',
       );
     });
 
-    it('preserves author line numbers after a multiline meta block', () => {
-      const rendered = renderFor(`export const meta = {
+    it('preserves author line numbers after a multiline meta block', async () => {
+      const rendered = await renderFor(`export const meta = {
   name: 'n',
   description: 'd',
 }
@@ -3021,8 +3305,8 @@ const x: string = 1;`);
       ['lone CR', '\r'],
     ])(
       'preserves author line numbers after a meta block with %s separators',
-      (_name, separator) => {
-        const rendered = renderFor(
+      async (_name, separator) => {
+        const rendered = await renderFor(
           [
             'export const meta = {',
             "  name: 'n',",
@@ -3036,58 +3320,58 @@ const x: string = 1;`);
       },
     );
 
-    it('does not attribute a closing-wrapper error to the author', () => {
-      const rendered = renderFor('await agent(');
+    it('does not attribute a closing-wrapper error to the author', async () => {
+      const rendered = await renderFor('await agent(');
       expect(rendered).toContain('unmatched or incomplete syntax');
       expect(rendered).toContain('braces');
-      expect(rendered).not.toContain("Unexpected token '}'");
+      expect(rendered).not.toContain("'}'");
       expect(rendered).not.toContain('line 2');
       expect(rendered).not.toContain('})()');
     });
 
-    it('carries the offending source line and a caret under it', () => {
-      const rendered = renderFor('const x: string = 1;');
+    it('carries the offending source line and a caret under it', async () => {
+      const rendered = await renderFor('const x: string = 1;');
       const lines = rendered.split('\n');
       expect(lines[1]).toContain('const x');
       expect(lines[2]).toContain('^');
       // The caret has to sit under the source line, not float past its end.
-      expect(lines[2].indexOf('^')).toBeLessThanOrEqual(lines[1].length);
+      expect(lines[2].indexOf('^')).toBe(lines[1].indexOf(': string'));
     });
 
-    it('windows a long line while keeping the caret aligned', () => {
+    it('windows a long line while keeping the caret aligned', async () => {
       const padding = 'y'.repeat(300);
-      const rendered = renderFor(
+      const rendered = await renderFor(
         `const a = '${padding}'; const x: string = 1;`,
       );
       const lines = rendered.split('\n');
       expect(lines[1].length).toBeLessThan(120);
       expect(lines[1]).toContain('…');
       expect(lines[2]).toContain('^');
-      expect(lines[2].indexOf('^')).toBe(lines[1].indexOf('x: string'));
+      expect(lines[2].indexOf('^')).toBe(lines[1].indexOf(': string'));
     });
 
-    it('preserves a multi-column V8 caret on a long line', () => {
-      const padding = 'y'.repeat(120);
-      const rendered = renderFor(`const pad = '${padding}'; const x = 123abc;`);
+    it('keeps the caret aligned past characters outside the BMP', async () => {
+      const rendered = await renderFor("const s = '😀é'; const x = 123abc;");
       const lines = rendered.split('\n');
-      expect(lines[1]).toContain('123abc');
-      expect(lines[2]).toContain('^^^');
-      expect(lines[2].indexOf('^^^')).toBe(lines[1].indexOf('123abc'));
+      expect(lines[2].indexOf('^')).toBe(lines[1].indexOf('123abc'));
     });
 
-    it('keeps an author source line that begins with at', () => {
-      const rendered = renderFor('    at work();');
+    it('keeps an author source line that begins with at', async () => {
+      const rendered = await renderFor('    at work();');
       expect(rendered).toContain('line 1');
       expect(rendered).toContain('    at work();');
-      expect(rendered).toContain('^^^^');
-      expect(rendered).toContain("Unexpected identifier 'work'");
+      expect(rendered).toContain("SyntaxError: expecting ';'");
+      const lines = rendered.split('\n');
+      expect(lines[2].indexOf('^')).toBe(lines[1].indexOf('work'));
     });
 
-    it('omits a long source frame when V8 provides no caret', () => {
-      const rendered = renderFor(`const value = ${'a'.repeat(1100)}@;`);
-      expect(rendered).toContain('line 1');
-      expect(rendered).toContain('SyntaxError: Invalid or unexpected token');
-      expect(rendered).not.toContain('const value');
+    it('windows a very long source line around the caret', async () => {
+      const rendered = await renderFor(`const value = ${'a'.repeat(1100)}@;`);
+      const lines = rendered.split('\n');
+      expect(lines[0]).toBe('line 1');
+      expect(lines[1]).toContain('@');
+      expect(lines[1]).not.toContain('const value');
+      expect(lines[2].indexOf('^')).toBe(lines[1].indexOf('@'));
     });
 
     it('falls back to the plain message when there is no source frame', () => {

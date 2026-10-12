@@ -18,6 +18,7 @@
  * `invocation.getConfirmationDetails()`.
  */
 
+import path from 'node:path';
 import type { AnyToolInvocation } from '../tools/tools.js';
 import type { Config } from '../config/config.js';
 import { ApprovalMode } from '../config/approval-mode.js';
@@ -26,6 +27,7 @@ import {
   buildPermissionCheckContext,
   evaluatePermissionRules,
 } from './permission-helpers.js';
+import { isAutoModeProtectedWritePath } from '../permissions/autoMode.js';
 import { parseRule } from '../permissions/rule-parser.js';
 import type { PermissionDecision } from '../permissions/types.js';
 import type { ToolCallConfirmationDetails } from '../tools/tools.js';
@@ -214,18 +216,31 @@ export function isPlanModeBlocked(
 }
 
 /**
- * Check if AUTO_EDIT mode auto-approves the tool.
+ * Check if AUTO_EDIT mode auto-approves the tool: only an `edit`
+ * confirmation for a file inside the workspace that is not a persistence or
+ * self-modification path (git hooks/config, package scripts, shell rc files,
+ * Qwen settings/instructions — the same exclusions AUTO's accept-edits fast
+ * path applies). Everything else, including `info` confirmations (skills,
+ * cron jobs, workflows, artifacts), asks.
  *
  * This must be called AFTER getting confirmationDetails because it needs
  * `confirmationDetails.type`.
  */
 export function isAutoEditApproved(
   approvalMode: ApprovalMode,
-  confirmationDetails?: ToolCallConfirmationDetails,
+  confirmationDetails: ToolCallConfirmationDetails | undefined,
+  config: Pick<Config, 'getWorkspaceContext'>,
 ): boolean {
+  if (
+    approvalMode !== ApprovalMode.AUTO_EDIT ||
+    confirmationDetails?.type !== 'edit'
+  ) {
+    return false;
+  }
+  const { filePath } = confirmationDetails;
   return (
-    approvalMode === ApprovalMode.AUTO_EDIT &&
-    (confirmationDetails?.type === 'edit' ||
-      confirmationDetails?.type === 'info')
+    path.isAbsolute(filePath) &&
+    !isAutoModeProtectedWritePath(filePath) &&
+    config.getWorkspaceContext().isPathWithinWorkspace(filePath)
   );
 }

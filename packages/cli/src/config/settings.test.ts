@@ -66,8 +66,6 @@ import {
   SETTINGS_VERSION_KEY,
   resetHomeEnvBootstrapForTesting,
   resetEnvironmentTrackingForTesting,
-  ENV_CORRUPTED_PATH,
-  ENV_WAS_RECOVERED,
 } from './settings.js';
 import {
   WORKSPACE_RESTRICTED_ROOT_SETTINGS,
@@ -2033,10 +2031,8 @@ describe('Settings Loading and Merging', () => {
       expect(() => loadSettings(MOCK_WORKSPACE_DIR)).toThrow(
         /Cannot read operator sandbox policy/,
       );
-      expect(fs.copyFileSync).toHaveBeenCalledWith(
-        USER_SETTINGS_PATH,
-        `${USER_SETTINGS_PATH}.corrupted`,
-      );
+      // Loading never writes, not even a copy of the malformed file.
+      expect(fs.copyFileSync).not.toHaveBeenCalled();
       expect(fs.writeFileSync).not.toHaveBeenCalledWith(
         USER_SETTINGS_PATH,
         '{}',
@@ -2086,6 +2082,46 @@ describe('Settings Loading and Merging', () => {
       },
     );
 
+    // X3/F9: an untrusted repo's .qwen/settings.json (plus links beside it)
+    // must not make loading write anything.
+    it('ignores invalid workspace JSON in memory without writing', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) =>
+          p === MOCK_WORKSPACE_SETTINGS_PATH
+            ? '{ not json'
+            : JSON.stringify({ $version: SETTINGS_VERSION }),
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      expect(settings.workspace.settings).toEqual({});
+      expect(settings.migrationWarnings.join('\n')).toContain(
+        `Ignoring workspace settings file ${MOCK_WORKSPACE_SETTINGS_PATH}`,
+      );
+      expect(fs.copyFileSync).not.toHaveBeenCalled();
+      expect(fs.writeFileSync).not.toHaveBeenCalled();
+      expect(fs.renameSync).not.toHaveBeenCalled();
+    });
+
+    it('migrates workspace and system settings in memory only', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) =>
+          p === MOCK_WORKSPACE_SETTINGS_PATH || p === getSystemSettingsPath()
+            ? JSON.stringify({ ui: { theme: 'dark' } })
+            : JSON.stringify({ $version: SETTINGS_VERSION }),
+      );
+      const mockFn = jsoncEditor.updateSettingsFilePreservingFormat as Mock;
+      mockFn.mockClear();
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      expect(settings.workspace.settings.$version).toBe(SETTINGS_VERSION);
+      expect(mockFn).not.toHaveBeenCalled();
+      expect(fs.writeFileSync).not.toHaveBeenCalled();
+    });
+
     it('should still fail closed when preserving malformed settings fails', () => {
       (mockFsExistsSync as Mock).mockReturnValue(true);
       (fs.readFileSync as Mock).mockImplementation(
@@ -2104,102 +2140,6 @@ describe('Settings Loading and Merging', () => {
         '{}',
         'utf-8',
       );
-    });
-
-    describe('corruption env var propagation', () => {
-      afterEach(() => {
-        delete process.env[ENV_CORRUPTED_PATH];
-        delete process.env[ENV_WAS_RECOVERED];
-      });
-
-      it('should propagate corruptedPath/wasRecovered from env vars', () => {
-        (mockFsExistsSync as Mock).mockImplementation(
-          (p: fs.PathLike) => p === USER_SETTINGS_PATH,
-        );
-        (fs.readFileSync as Mock).mockImplementation(() => '{}');
-        process.env[ENV_CORRUPTED_PATH] = `${USER_SETTINGS_PATH}.corrupted`;
-        process.env[ENV_WAS_RECOVERED] = '1';
-
-        const result = loadSettings(MOCK_WORKSPACE_DIR);
-        expect(result.corruptedPath).toBe(`${USER_SETTINGS_PATH}.corrupted`);
-        expect(result.wasRecovered).toBe(true);
-      });
-
-      it('should delete env vars after reading so subsequent calls do not re-trigger', () => {
-        (mockFsExistsSync as Mock).mockImplementation(
-          (p: fs.PathLike) => p === USER_SETTINGS_PATH,
-        );
-        (fs.readFileSync as Mock).mockImplementation(() => '{}');
-        process.env[ENV_CORRUPTED_PATH] = `${USER_SETTINGS_PATH}.corrupted`;
-        process.env[ENV_WAS_RECOVERED] = '0';
-
-        loadSettings(MOCK_WORKSPACE_DIR);
-        expect(process.env[ENV_CORRUPTED_PATH]).toBeUndefined();
-        expect(process.env[ENV_WAS_RECOVERED]).toBeUndefined();
-      });
-
-      it('should only consume env vars for SettingScope.User', () => {
-        (mockFsExistsSync as Mock).mockImplementation((p: fs.PathLike) => {
-          const s = p.toString();
-          return s === USER_SETTINGS_PATH || s === MOCK_WORKSPACE_SETTINGS_PATH;
-        });
-        (fs.readFileSync as Mock).mockImplementation(() => '{}');
-        process.env[ENV_CORRUPTED_PATH] = `${USER_SETTINGS_PATH}.corrupted`;
-        process.env[ENV_WAS_RECOVERED] = '1';
-
-        const result = loadSettings(MOCK_WORKSPACE_DIR);
-
-        // env vars consumed in User scope — scope guard exercised
-        expect(process.env[ENV_CORRUPTED_PATH]).toBeUndefined();
-        expect(process.env[ENV_WAS_RECOVERED]).toBeUndefined();
-        expect(result.corruptedPath).toBeDefined();
-      });
-
-      it('should map wasRecovered="0" to false', () => {
-        (mockFsExistsSync as Mock).mockImplementation(
-          (p: fs.PathLike) => p === USER_SETTINGS_PATH,
-        );
-        (fs.readFileSync as Mock).mockImplementation(() => '{}');
-        process.env[ENV_CORRUPTED_PATH] = `${USER_SETTINGS_PATH}.corrupted`;
-        process.env[ENV_WAS_RECOVERED] = '0';
-
-        const result = loadSettings(MOCK_WORKSPACE_DIR);
-        expect(result.wasRecovered).toBe(false);
-      });
-
-      it('should not consume env vars when consumeCorruptionEnvVars=false', () => {
-        (mockFsExistsSync as Mock).mockImplementation(
-          (p: fs.PathLike) => p === USER_SETTINGS_PATH,
-        );
-        (fs.readFileSync as Mock).mockImplementation(() => '{}');
-        process.env[ENV_CORRUPTED_PATH] = `${USER_SETTINGS_PATH}.corrupted`;
-        process.env[ENV_WAS_RECOVERED] = '1';
-
-        loadSettings(MOCK_WORKSPACE_DIR, false);
-        // env vars should remain untouched so child processes can still read them
-        expect(process.env[ENV_CORRUPTED_PATH]).toBe(
-          `${USER_SETTINGS_PATH}.corrupted`,
-        );
-        expect(process.env[ENV_WAS_RECOVERED]).toBe('1');
-      });
-
-      it('should reject mismatched ENV_CORRUPTED_PATH', () => {
-        (mockFsExistsSync as Mock).mockImplementation(
-          (p: fs.PathLike) => p === USER_SETTINGS_PATH,
-        );
-        (fs.readFileSync as Mock).mockImplementation(() => '{}');
-        process.env[ENV_CORRUPTED_PATH] = '/some/other/path.corrupted';
-        process.env[ENV_WAS_RECOVERED] = '1';
-
-        const result = loadSettings(MOCK_WORKSPACE_DIR);
-
-        // Guard rejected — corruptedPath not propagated
-        expect(result.corruptedPath).toBeUndefined();
-        // Env vars not consumed because guard failed
-        expect(process.env[ENV_CORRUPTED_PATH]).toBe(
-          '/some/other/path.corrupted',
-        );
-      });
     });
 
     it('should resolve environment variables in user settings', () => {

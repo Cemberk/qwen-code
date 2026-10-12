@@ -1606,7 +1606,12 @@ describe('ToolRegistry', () => {
         rootCommand: 'test-tool',
       });
       // AUTO_EDIT only auto-approves edit/info confirmations.
-      expect(isAutoEditApproved(ApprovalMode.AUTO_EDIT, details)).toBe(false);
+      expect(
+        isAutoEditApproved(ApprovalMode.AUTO_EDIT, details, {
+          getWorkspaceContext: () =>
+            ({ isPathWithinWorkspace: () => true }) as never,
+        }),
+      ).toBe(false);
     });
   });
 

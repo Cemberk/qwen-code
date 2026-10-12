@@ -104,6 +104,8 @@ describe('package asset scripts', () => {
     'sandboxBwrapRelay.js',
     'sandboxLandlockRelay.js',
     'sandboxFileWorker.js',
+    'codeModeHost.js',
+    'workflowHost.js',
   ])('fails packaging when the published %s is missing', (missingArtifact) => {
     const rootDir = createFixtureRoot();
     createBundleArtifacts(rootDir);
@@ -652,6 +654,8 @@ describe('package asset scripts', () => {
     writeFile(rootDir, 'dist/sandboxBwrapRelay.js', '');
     writeFile(rootDir, 'dist/sandboxLandlockRelay.js', '');
     writeFile(rootDir, 'dist/sandboxFileWorker.js', '');
+    writeFile(rootDir, 'dist/codeModeHost.js', '');
+    writeFile(rootDir, 'dist/workflowHost.js', '');
     mkdirSync(path.join(rootDir, 'dist', 'vendor'), { recursive: true });
     mkdirSync(path.join(rootDir, 'dist', 'bundled', 'qc-helper', 'docs'), {
       recursive: true,

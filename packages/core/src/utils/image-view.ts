@@ -230,6 +230,16 @@ async function prepareImageBuffer(
     );
   }
 
+  // libvips picks its loader from the bytes; its SVG, PDF, TIFF, HEIF and
+  // other loaders are a far larger surface than the three formats rendered
+  // here, so only a matching PNG/JPEG/WebP signature ever reaches sharp.
+  if (sniffBoundableImageMime(bytes) === null) {
+    throw new ImageViewError(
+      'unsupported_image',
+      `Unsupported image. Expected a static PNG, JPEG, or WebP image: ${label}`,
+    );
+  }
+
   let metadata: Metadata;
   try {
     metadata = await sharp(bytes, {

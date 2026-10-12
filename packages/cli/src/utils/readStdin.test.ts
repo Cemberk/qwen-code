@@ -16,6 +16,18 @@ const mockStdin = {
   destroy: vi.fn(),
 };
 
+describe('readStdin sandbox handover', () => {
+  it('returns the prompt handed over by the sandbox launcher once', async () => {
+    process.env['QWEN_CODE_SANDBOX_STDIN'] = 'piped prompt';
+    try {
+      await expect(readStdin()).resolves.toBe('piped prompt');
+      expect(process.env['QWEN_CODE_SANDBOX_STDIN']).toBeUndefined();
+    } finally {
+      delete process.env['QWEN_CODE_SANDBOX_STDIN'];
+    }
+  });
+});
+
 describe('readStdin', () => {
   let originalStdin: typeof process.stdin;
   let onReadableHandler: () => void;

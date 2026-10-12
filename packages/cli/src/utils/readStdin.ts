@@ -22,7 +22,20 @@ function takeUtf8Prefix(value: string, maxBytes: number): string {
   return value.slice(0, end);
 }
 
+/**
+ * Carries a piped prompt from the parent into a sandboxed child, which cannot
+ * re-read the parent's already-consumed stdin. An environment value is only
+ * visible to the user's own processes, unlike argv, which `ps` shows to
+ * every local user.
+ */
+export const SANDBOX_STDIN_ENV = 'QWEN_CODE_SANDBOX_STDIN';
+
 export async function readStdin(): Promise<string> {
+  const handedOver = process.env[SANDBOX_STDIN_ENV];
+  if (handedOver !== undefined) {
+    delete process.env[SANDBOX_STDIN_ENV];
+    return handedOver;
+  }
   const MAX_STDIN_SIZE = 8 * 1024 * 1024; // 8MB
   return new Promise((resolve, reject) => {
     let data = '';

@@ -169,7 +169,7 @@ You can review each proposed change and approve or reject it individually.
 
 Auto-Edit Mode instructs Qwen Code to automatically approve file edits while requiring manual approval for shell commands, ideal for accelerating development workflows while maintaining system safety.
 
-Auto-approved edit tools include `edit`, `write_file`, and `notebook_edit`.
+Auto-approved edit tools include `edit`, `write_file`, and `notebook_edit`, and only for files inside the workspace. Edits that can change what runs later still ask: files outside the workspace, git hooks and config (`.git/`, `.husky/`), `package.json`, `.npmrc`, Makefiles and other task-runner files, CI workflows, shell startup files (`.bashrc`, `.zshrc`, `.profile`, `.envrc`, …), Qwen settings, rules, commands, agents, skills, hooks and context files (`QWEN.md`, `AGENTS.md`). Every other tool that asks for approval — skills, cron jobs, workflows, artifacts, shell commands — still asks in Auto-Edit Mode.
 
 ### When to use Auto-Accept Edits Mode
 

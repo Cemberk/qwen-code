@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { wasmLoader } from 'esbuild-plugin-wasm';
+import { external } from './scripts/esbuild-externals.js';
 
 let esbuild;
 try {
@@ -54,18 +55,6 @@ const wasmBinaryPlugin = {
     });
   },
 };
-
-const external = [
-  '@lydell/node-pty',
-  'node-pty',
-  '@lydell/node-pty-darwin-arm64',
-  '@lydell/node-pty-darwin-x64',
-  '@lydell/node-pty-linux-arm64',
-  '@lydell/node-pty-linux-x64',
-  '@lydell/node-pty-win32-arm64',
-  '@lydell/node-pty-win32-x64',
-  'sharp',
-];
 
 // Name of the directory under `dist/` that esbuild emits shared chunks into.
 // MUST stay in sync with `BUNDLE_CHUNK_DIR` in
@@ -186,6 +175,22 @@ const codeModeHostBuild = esbuild.build({
   keepNames: true,
 });
 
+// Workflow scripts run in this QuickJS host process, spawned per run by
+// `workflow-host-client.ts` as `dist/workflowHost.js`.
+const workflowHostBuild = esbuild.build({
+  entryPoints: ['packages/core/src/agents/runtime/workflow-host.ts'],
+  bundle: true,
+  outfile: 'dist/workflowHost.js',
+  platform: 'node',
+  format: 'esm',
+  target: 'node22',
+  packages: 'bundle',
+  inject: [path.resolve(__dirname, 'scripts/esbuild-shims.js')],
+  banner: { js: `"use strict";` },
+  write: true,
+  keepNames: true,
+});
+
 const sandboxWorkersBuild = esbuild.build({
   entryPoints: {
     sandboxBwrapRelay: 'packages/core/src/sandbox/bwrap-relay.ts',
@@ -199,7 +204,13 @@ const sandboxWorkersBuild = esbuild.build({
   target: 'node22',
 });
 
-Promise.all([mainBuild, workerBuild, codeModeHostBuild, sandboxWorkersBuild])
+Promise.all([
+  mainBuild,
+  workerBuild,
+  codeModeHostBuild,
+  workflowHostBuild,
+  sandboxWorkersBuild,
+])
   .then(([{ metafile }]) => {
     if (process.env.DEV === 'true') {
       writeFileSync('./dist/esbuild.json', JSON.stringify(metafile, null, 2));

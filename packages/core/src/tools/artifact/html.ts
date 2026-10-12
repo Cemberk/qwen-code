@@ -45,8 +45,9 @@ function escapeForTitle(s: string): string {
  *
  * This is a deliberately simple scanner, not a full HTML/CSS/JS parser: it
  * catches the common mistakes (full-document wrappers, CDN scripts, external
- * stylesheets/fonts/images, JS network calls, protocol-relative URLs). The
- * generated wrapper also adds a browser CSP as a second no-egress guard.
+ * stylesheets/fonts/images, JS network calls, navigation, protocol-relative
+ * URLs). It is defence in depth: the sandboxed viewer from
+ * {@link wrapArtifactHtml} is the actual no-egress boundary.
  */
 export function validateSelfContained(fragment: string): string | null {
   if (!fragment.trim()) {
@@ -93,12 +94,22 @@ export function validateSelfContained(fragment: string): string | null {
     return `Artifact must be self-contained — found browser network egress (${truncate(extScript[0])}). Embed data in the artifact instead of fetching it at runtime.`;
   }
 
-  const metaRefresh =
-    /<meta\b[^>]*http-equiv\s*=\s*["']?refresh["']?[^>]*\burl\s*=\s*(?:https?:)?\/\//i.exec(
+  const navigation =
+    /(?:^|[^\w$.])location\s*=(?!=)/i.exec(scan) ??
+    /\b(?:top|parent|opener|self|window|document|globalThis)\s*\.\s*location\b/i.exec(
       scan,
-    );
-  if (metaRefresh) {
-    return `Artifact must be self-contained — found a meta refresh redirect (${truncate(metaRefresh[0])}).`;
+    ) ??
+    /<meta\b[^>]*http-equiv\s*=\s*["']?refresh/i.exec(scan) ??
+    /<base\b/i.exec(scan) ??
+    // Any <link>: the CSP leaves nothing for one to load, and Chrome runs
+    // rel=prerender/preconnect/dns-prefetch below the CSP — a rel value
+    // spelled with character references would slip past a rel check.
+    /<link\b/i.exec(scan) ??
+    /<script\b[^>]*\btype\s*=\s*["']?speculationrules/i.exec(scan) ??
+    /\bserviceWorker\s*\.\s*register\b/i.exec(scan) ??
+    /\b(?:webkit)?RTCPeerConnection\b/i.exec(scan);
+  if (navigation) {
+    return `Artifact must be self-contained — found page navigation or network setup (${truncate(navigation[0])}). Artifacts cannot redirect, prefetch, register workers, or open peer connections.`;
   }
 
   // External CSS via @import or url(...) (fonts, background images, etc.).
@@ -123,25 +134,86 @@ function truncate(s: string, max = 60): string {
 }
 
 /**
- * Wraps a body-only fragment into a complete, responsive, self-contained HTML
- * document with the given title and a baseline CSS reset.
+ * Policy of the viewer page. The srcdoc artifact frame inherits it, so it is
+ * also the artifact's policy.
+ *
+ * Scripts are disabled (`script-src 'none'` and no `allow-scripts` sandbox
+ * token). With scripts, two vectors stay open with no nameable mechanism that
+ * closes them across browsers: a frame can open an `RTCPeerConnection` to a
+ * STUN/TURN server (CSP does not govern ICE and a sandboxed frame keeps WebRTC)
+ * and a script can navigate its own frame to a remote URL. Without scripts,
+ * every battery vector collapses to a declarative one that CSP or the sandbox
+ * blocks. Artifacts are therefore static HTML/CSS/SVG only.
+ */
+export const ARTIFACT_CSP = [
+  "default-src 'none'",
+  "script-src 'none'",
+  "style-src 'unsafe-inline'",
+  'img-src data:',
+  'font-src data:',
+  'media-src data:',
+  "connect-src 'none'",
+  "frame-src 'none'",
+  "child-src 'none'",
+  "worker-src 'none'",
+  "object-src 'none'",
+  "manifest-src 'none'",
+  "form-action 'none'",
+  "base-uri 'none'",
+].join('; ');
+
+/**
+ * Empty sandbox: an opaque origin with no scripts, forms, popups, top
+ * navigation, same-origin access, modals or downloads.
+ */
+export const ARTIFACT_SANDBOX = '';
+
+function escapeForAttribute(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
+ * Builds the published page: a fixed, script-free viewer that renders the
+ * body-only fragment inside a sandboxed srcdoc iframe. The fragment only ever
+ * appears attribute-escaped, so it cannot add markup to the viewer itself.
  */
 export function wrapArtifactHtml(
   bodyFragment: string,
   title: string | undefined,
 ): string {
-  const safeTitle = escapeForTitle(sanitizeArtifactTitle(title));
-  return `<!doctype html>
+  const cleanTitle = sanitizeArtifactTitle(title);
+  const safeTitle = escapeForTitle(cleanTitle);
+  const artifactDocument = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="x-dns-prefetch-control" content="off">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; media-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'; sandbox allow-scripts;">
-<title>${safeTitle}</title>
 <style>${CSS_RESET}</style>
 </head>
 <body>
 ${bodyFragment}
+</body>
+</html>
+`;
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="${ARTIFACT_CSP}">
+<meta http-equiv="x-dns-prefetch-control" content="off">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${safeTitle}</title>
+<style>html,body{margin:0;height:100%}iframe{display:block;width:100%;height:100%;border:0}</style>
+</head>
+<body>
+<iframe sandbox="${ARTIFACT_SANDBOX}" title="${escapeForAttribute(cleanTitle)}" srcdoc="${escapeForAttribute(artifactDocument)}"></iframe>
 </body>
 </html>
 `;

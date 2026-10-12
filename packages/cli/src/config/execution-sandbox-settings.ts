@@ -103,17 +103,8 @@ function readOperatorSettingsScopes(): SandboxSettingsInput[] {
       }
       return parsed as SandboxSettingsInput;
     } catch (error) {
-      let backupPath: string | undefined;
-      if (file === userSettingsPath) {
-        try {
-          backupPath = `${file}.corrupted`;
-          fs.copyFileSync(file, backupPath);
-        } catch {
-          backupPath = undefined;
-        }
-      }
       throw new InvalidExecutionSandboxConfigError(
-        `Cannot read operator sandbox policy from ${file}: ${String(error)}${backupPath ? `. A copy was saved to ${backupPath}` : ''}`,
+        `Cannot read operator sandbox policy from ${file}: ${String(error)}`,
       );
     }
   });

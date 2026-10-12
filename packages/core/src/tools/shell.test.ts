@@ -5965,6 +5965,65 @@ describe('ShellTool', () => {
       expect(permission).toBe('ask');
     });
 
+    // X1/X2: the shell runs the wrapper with its environment, so the inner
+    // script must never be what is classified as read-only.
+    it.each([
+      "BASH_ENV=./x.sh bash -c 'ls'",
+      "./bash -c 'ls'",
+      "bash -c 'ls'",
+      "/tmp/repo/sh -lc 'cat README.md'",
+      'env BASH_ENV=./x.sh bash -c ls',
+      "SHELLOPTS=xtrace PS4='$(id)' bash -c 'ls'",
+      'FOO=1 ls',
+    ])('asks for the wrapped or env-prefixed command %s', async (command) => {
+      const invocation = shellTool.build({ command, is_background: false });
+
+      expect(await invocation.getDefaultPermission()).toBe('ask');
+    });
+
+    // Git runs only in trusted folders: a repo's own .git/config can make
+    // even `git status` run a clean filter.
+    it.each([
+      'git status',
+      'git log -n 5',
+      'ls && git diff',
+      'cd src && git log',
+    ])(
+      'asks for the read-only git command %s in an untrusted folder',
+      async (command) => {
+        (
+          mockConfig as unknown as { isTrustedFolder: () => boolean }
+        ).isTrustedFolder = () => false;
+        const invocation = shellTool.build({ command, is_background: false });
+
+        expect(await invocation.getDefaultPermission()).toBe('ask');
+      },
+    );
+
+    it('still allows read-only non-git commands in an untrusted folder', async () => {
+      (
+        mockConfig as unknown as { isTrustedFolder: () => boolean }
+      ).isTrustedFolder = () => false;
+      const invocation = shellTool.build({
+        command: 'ls -la',
+        is_background: false,
+      });
+
+      expect(await invocation.getDefaultPermission()).toBe('allow');
+    });
+
+    it('lists every inner command of a wrapper in the confirmation', async () => {
+      const invocation = shellTool.build({
+        command: "./bash -c 'ls && npm test'",
+        is_background: false,
+      });
+
+      const details = (await invocation.getConfirmationDetails(
+        new AbortController().signal,
+      )) as { rootCommand: string };
+      expect(details.rootCommand).toBe('ls, npm');
+    });
+
     it('asks for backtick env-prefix substitution inside a bash wrapper', async () => {
       const invocation = shellTool.build({
         command: `FOO=\`whoami\` bash -c 'ls -la'`,

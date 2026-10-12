@@ -94,7 +94,10 @@ describe('ArtifactTool', () => {
     const html = await fs.readFile(published!, 'utf8');
     expect(html).toMatch(/^<!doctype html>/i);
     expect(html).toContain('<title>My Report</title>');
-    expect(html).toContain('<h1>Report</h1>');
+    // The fragment is embedded, escaped, inside the sandboxed viewer iframe.
+    expect(html).toContain('<iframe sandbox="" ');
+    expect(html).toContain('&lt;h1&gt;Report&lt;/h1&gt;');
+    expect(html).not.toContain('<h1>Report</h1>');
   });
 
   it('redeploys the same source path to the same url', async () => {
@@ -108,8 +111,8 @@ describe('ArtifactTool', () => {
     expect(second.resultFilePaths?.[0]).toBe(first.resultFilePaths?.[0]);
 
     const html = await fs.readFile(second.resultFilePaths![0], 'utf8');
-    expect(html).toContain('<p>v2</p>');
-    expect(html).not.toContain('<p>v1</p>');
+    expect(html).toContain('&lt;p&gt;v2&lt;/p&gt;');
+    expect(html).not.toContain('&lt;p&gt;v1&lt;/p&gt;');
     expect(second.artifacts?.[0]?.metadata?.['qwen.published.sha256']).not.toBe(
       first.artifacts?.[0]?.metadata?.['qwen.published.sha256'],
     );

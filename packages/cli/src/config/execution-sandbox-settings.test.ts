@@ -158,9 +158,7 @@ describe('operator execution sandbox policy', () => {
       'Cannot read operator sandbox policy',
     );
     expect(fs.readFileSync(user, 'utf8')).toBe('{"tools":{"executionSandbox":');
-    expect(fs.readFileSync(`${user}.corrupted`, 'utf8')).toBe(
-      '{"tools":{"executionSandbox":',
-    );
+    expect(fs.existsSync(`${user}.corrupted`)).toBe(false);
   });
   it.each([
     ['system defaults', () => defaults],
@@ -201,7 +199,7 @@ describe('operator execution sandbox policy', () => {
       expect(load).toThrow(error);
     }
     expect(fs.readFileSync(user, 'utf8')).toBe(truncated);
-    expect(fs.readFileSync(`${user}.corrupted`, 'utf8')).toBe(truncated);
+    expect(fs.existsSync(`${user}.corrupted`)).toBe(false);
   });
   it.each([
     ['system defaults', () => defaults],

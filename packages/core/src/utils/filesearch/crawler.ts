@@ -7,7 +7,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
-import { fdir } from 'fdir';
 import type { Ignore } from './ignore.js';
 import * as cache from './crawlCache.js';
 
@@ -16,7 +15,7 @@ export interface CrawlOptions {
   crawlDirectory: string;
   // The project's root directory, for path relativity.
   cwd: string;
-  // The fdir maxDepth option.
+  // How many directory levels below crawlDirectory to list (0 = its entries).
   maxDepth?: number;
   // Maximum number of file entries to return. Prevents OOM on very large trees.
   maxFiles?: number;
@@ -656,23 +655,6 @@ function isValidIgnorePath(relativePath: string): boolean {
     !relativePath.startsWith('../') &&
     !relativePath.includes('/../')
   );
-}
-
-/** Relative path from crawl root for ignore checks; avoids symlink canonicalization (fdir hot path). */
-function toFdirExcludeRelativePath(
-  crawlDirectory: string,
-  dirPath: string,
-): string | null {
-  const base = path.resolve(crawlDirectory);
-  const absoluteCandidate = path.isAbsolute(dirPath)
-    ? dirPath
-    : path.join(base, dirPath);
-  let rel = path.relative(base, absoluteCandidate);
-  rel = toPosixPath(rel);
-  if (!rel || rel.startsWith('..') || path.posix.isAbsolute(rel)) {
-    return null;
-  }
-  return isValidIgnorePath(rel) ? rel : null;
 }
 
 function getEntryDepth(entry: string): number {
@@ -1315,7 +1297,8 @@ async function crawlWithRipgrep(
   cwd: string,
   options: CrawlOptions,
 ): Promise<{ success: boolean; files: string[] }> {
-  const rgArgs = ['--files', '--no-require-git', '--hidden'];
+  // --no-config: a RIPGREP_CONFIG_PATH config can make rg run programs.
+  const rgArgs = ['--no-config', '--files', '--no-require-git', '--hidden'];
   if (options.useGitignore === false) {
     rgArgs.push('--no-ignore');
   }
@@ -1380,62 +1363,66 @@ async function crawlWithRipgrep(
   return { success: true, files: limitedResults };
 }
 
-async function crawlWithFdir(options: CrawlOptions): Promise<string[]> {
+async function crawlWithDirectoryWalk(
+  options: CrawlOptions,
+): Promise<string[]> {
   const relativeToCrawlDir = getPosixRelative(
     options.cwd,
     options.crawlDirectory,
   );
+  const dirFilter = options.ignore.getDirectoryFilter();
+  const fileFilter = options.ignore.getFileFilter();
+
+  // Lists `dir` (crawl-root relative, '' or ending in '/'). Symlinks are listed
+  // as files and never followed; unreadable directories are skipped. Ignored
+  // directories are pruned here, while the cwd-relative rules and `maxFiles`
+  // are applied by the caller, matching git/rg.
+  const walk = async (dir: string, depth: number): Promise<string[]> => {
+    if (depth < 0) return [];
+    let entries: fs.Dirent[];
+    try {
+      entries = await fs.promises.readdir(
+        path.join(options.crawlDirectory, dir),
+        { withFileTypes: true },
+      );
+    } catch {
+      return [];
+    }
+    const rows: string[] = [];
+    const subdirectories: Array<Promise<string[]>> = [];
+    for (const entry of entries) {
+      const relativePath = dir + entry.name;
+      if (entry.isFile() || entry.isSymbolicLink()) {
+        const cwdRelative = path.posix.join(relativeToCrawlDir, relativePath);
+        if (isValidIgnorePath(cwdRelative) && !fileFilter(cwdRelative)) {
+          rows.push(relativePath);
+        }
+      } else if (entry.isDirectory() && !dirFilter(`${relativePath}/`)) {
+        rows.push(`${relativePath}/`);
+        subdirectories.push(walk(`${relativePath}/`, depth - 1));
+      }
+    }
+    for (const nested of await Promise.all(subdirectories)) {
+      rows.push(...nested);
+    }
+    return rows;
+  };
 
   let results: string[];
   try {
-    const dirFilter = options.ignore.getDirectoryFilter();
-    const fileFilter = options.ignore.getFileFilter();
-    const api = new fdir()
-      .withRelativePaths()
-      .withDirs()
-      .withPathSeparator('/')
-      .exclude((_excludedName: string, dirPath: string) => {
-        const relativePath = toFdirExcludeRelativePath(
-          options.crawlDirectory,
-          dirPath,
-        );
-        if (!relativePath) {
-          return false;
-        }
-        return dirFilter(`${relativePath}/`);
-      })
-      .filter((filePath: string, isDirectory: boolean) => {
-        if (isDirectory) return true;
-        const cwdRelative = path.posix.join(relativeToCrawlDir, filePath);
-        if (!isValidIgnorePath(cwdRelative)) {
-          return false;
-        }
-        return !fileFilter(cwdRelative);
-      });
-
-    if (options.maxDepth !== undefined) {
-      api.withMaxDepth(options.maxDepth);
-    }
-
-    // Do not pass `maxFiles` into fdir: it caps raw walk entries (often
-    // directories first), which can yield no file paths. `crawl()` applies
-    // `applyMaxFilesLimit` after this path, matching git/rg semantics.
-
-    results = await api.crawl(options.crawlDirectory).withPromise();
+    results = await walk('', options.maxDepth ?? Infinity);
   } catch {
     return [];
   }
 
-  // fdir `withDirs()` already emits directory rows with trailing slashes. Do not
-  // run `buildResultsFromFileSet` here — it would duplicate every directory
-  // (it also synthesizes parents from file paths). Git/rg only list files and
-  // need that helper; fdir does not.
-  const mapped = results
-    .filter((p) => p.length > 0 && p !== '.')
-    .map((p) => path.posix.join(relativeToCrawlDir, p));
+  // The walk already emits directory rows with trailing slashes. Do not run
+  // `buildResultsFromFileSet` here — it would duplicate every directory (it
+  // also synthesizes parents from file paths). Git/rg only list files and need
+  // that helper.
+  const mapped = results.map((p) => path.posix.join(relativeToCrawlDir, p));
 
   // Align with git/rg: include the crawl root as a directory row when it is not
-  // the project cwd (fdir walks inside `crawlDirectory` and never emits that row).
+  // the project cwd (the walk lists inside `crawlDirectory`, never that row).
   if (relativeToCrawlDir !== '.') {
     const rootDir = relativeToCrawlDir.endsWith('/')
       ? relativeToCrawlDir
@@ -1547,24 +1534,27 @@ export async function crawl(options: CrawlOptions): Promise<string[]> {
     return results;
   }
 
-  // Ripgrep failed — fdir is the slowest crawl path (including non-git trees).
+  // Ripgrep failed — the directory walk is the slowest crawl path (including
+  // non-git trees).
   // eslint-disable-next-line no-console -- operator-visible crawl strategy degradation
-  console.warn('[crawler] falling back to fdir (ripgrep unavailable)');
+  console.warn(
+    '[crawler] falling back to a directory walk (ripgrep unavailable)',
+  );
 
-  const relativeToCrawlDirForFdir = getPosixRelative(
+  const relativeToCrawlDirForWalk = getPosixRelative(
     options.cwd,
     options.crawlDirectory,
   );
-  let fdirResults = await crawlWithFdir(options);
-  fdirResults = applyFilters(fdirResults, options, relativeToCrawlDirForFdir);
+  let walkResults = await crawlWithDirectoryWalk(options);
+  walkResults = applyFilters(walkResults, options, relativeToCrawlDirForWalk);
   // Match git/rg list shape (`'.'` first) so `maxFiles` caps the same row count
   // (including `.`) as the tracked-file paths.
-  if (fdirResults.length === 0) {
-    fdirResults = ['.'];
-  } else if (fdirResults[0] !== '.') {
-    fdirResults = ['.', ...fdirResults];
+  if (walkResults.length === 0) {
+    walkResults = ['.'];
+  } else if (walkResults[0] !== '.') {
+    walkResults = ['.', ...walkResults];
   }
-  const limitedResults = applyMaxFilesLimit(fdirResults, options.maxFiles);
+  const limitedResults = applyMaxFilesLimit(walkResults, options.maxFiles);
   updateChangeState(stateKey, options.crawlDirectory, limitedResults);
   recordRebuild(stateKey);
 

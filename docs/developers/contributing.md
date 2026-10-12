@@ -225,33 +225,6 @@ DEBUG=1 qwen
 
 **Note:** If you have `DEBUG=true` in a project's `.env` file, it won't affect `qwen` due to automatic exclusion. Use `.qwen/.env` files for `qwen`-specific debug settings.
 
-### React DevTools
-
-To debug the CLI's React-based UI, you can use React DevTools. Ink, the library used for the CLI's interface, is compatible with React DevTools version 4.x.
-
-1.  **Start the Qwen Code application in development mode:**
-
-    ```bash
-    DEV=true npm start
-    ```
-
-2.  **Install and run React DevTools version 4.28.5 (or the latest compatible 4.x version):**
-
-    You can either install it globally:
-
-    ```bash
-    npm install -g react-devtools@4.28.5
-    react-devtools
-    ```
-
-    Or run it directly using npx:
-
-    ```bash
-    npx react-devtools@4.28.5
-    ```
-
-    Your running CLI application should then connect to React DevTools.
-
 ## Sandboxing
 
 > TBD

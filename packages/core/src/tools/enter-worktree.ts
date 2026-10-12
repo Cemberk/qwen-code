@@ -4,9 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ToolResult } from './tools.js';
+import type {
+  ToolCallConfirmationDetails,
+  ToolExecuteConfirmationDetails,
+  ToolResult,
+} from './tools.js';
 import { BaseDeclarativeTool, BaseToolInvocation, Kind } from './tools.js';
 import type { Config } from '../config/config.js';
+import type { PermissionDecision } from '../permissions/types.js';
 import { ToolDisplayNames, ToolNames } from './tool-names.js';
 import {
   GitWorktreeService,
@@ -65,6 +70,30 @@ class EnterWorktreeInvocation extends BaseToolInvocation<
     return this.params.name
       ? `Enter worktree "${this.params.name}"`
       : 'Enter a new worktree';
+  }
+
+  /**
+   * `git worktree add` checks files out, which runs the repository's own
+   * `post-checkout` hook and smudge/clean filters, so it always asks — as
+   * an exec confirmation, which AUTO_EDIT never auto-approves.
+   */
+  override async getDefaultPermission(): Promise<PermissionDecision> {
+    return 'ask';
+  }
+
+  override async getConfirmationDetails(
+    _abortSignal: AbortSignal,
+  ): Promise<ToolCallConfirmationDetails> {
+    const details: ToolExecuteConfirmationDetails = {
+      type: 'exec',
+      title: this.getDescription(),
+      command: 'git worktree add (runs the repository checkout hooks)',
+      rootCommand: 'git',
+      onConfirm: async () => {
+        // No-op: persistence handled by coreToolScheduler via PM rules.
+      },
+    };
+    return details;
   }
 
   async execute(_signal: AbortSignal): Promise<ToolResult> {

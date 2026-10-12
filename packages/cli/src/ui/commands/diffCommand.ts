@@ -20,6 +20,9 @@ import { t } from '../../i18n/index.js';
 import { type DiffRenderModel, type DiffRenderRow } from '../types.js';
 import { sanitizeFilenameForDisplay } from '../utils/textUtils.js';
 
+export const UNTRUSTED_DIFF_MESSAGE =
+  '/diff is unavailable in an untrusted folder: git can run programs the repository configures (filters, hooks). Trust this folder with /trust to use it.';
+
 async function diffAction(
   context: CommandContext,
 ): Promise<MessageActionReturn | OpenDialogActionReturn | void> {
@@ -38,6 +41,14 @@ async function diffAction(
       messageType: 'error',
       content:
         'Diff preview unavailable in tool sandbox. Run git diff through the Shell tool.',
+    };
+  }
+
+  if (!config.isTrustedFolder()) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: UNTRUSTED_DIFF_MESSAGE,
     };
   }
 

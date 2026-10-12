@@ -12,6 +12,7 @@ import {
   type ResultOptions,
 } from './BaseJsonOutputAdapter.js';
 import { observeHeadlessJsonToolResultWire } from '../tool-result-boundary-diagnostics.js';
+import { sanitizeTerminalText } from '../../ui/utils/textUtils.js';
 
 /**
  * JSON output adapter that collects all messages and emits them
@@ -121,10 +122,14 @@ export class JsonOutputAdapter
     this.messages.push(resultMessage);
 
     if (this.config.getOutputFormat() === 'text') {
+      // Model text goes straight to the terminal: escape sequences in it
+      // (OSC 8 links, OSC 52 clipboard writes, …) must not reach it raw.
       if (resultMessage.is_error) {
-        process.stderr.write(`${resultMessage.error?.message || ''}\n`);
+        process.stderr.write(
+          `${sanitizeTerminalText(resultMessage.error?.message || '')}\n`,
+        );
       } else {
-        process.stdout.write(`${resultMessage.result}\n`);
+        process.stdout.write(`${sanitizeTerminalText(resultMessage.result)}\n`);
       }
     } else {
       // Emit the entire messages array as JSON (includes all main agent + subagent messages)

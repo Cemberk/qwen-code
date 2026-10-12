@@ -158,6 +158,17 @@ vi.mock('./utils/events.js', async (importOriginal) => {
   };
 });
 
+const pipedStdin = vi.hoisted(() => ({
+  value: undefined as string | undefined,
+}));
+vi.mock('./utils/readStdin.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./utils/readStdin.js')>();
+  return {
+    ...actual,
+    readStdin: vi.fn(async () => pipedStdin.value ?? actual.readStdin()),
+  };
+});
+
 vi.mock('./sandbox/sandbox.js', () => ({
   sandbox_command: vi.fn(() => ''), // Default to no sandbox command
   start_sandbox: vi.fn(() => Promise.resolve()), // Mock as an async function that resolves
@@ -1334,6 +1345,42 @@ describe('llm.tsx main function', () => {
     expect(idx).not.toBe(-1);
     expect(sandboxArgs[idx + 1]).toBe(sessionId);
     expect(sandboxArgs).not.toContain('--session-id');
+  });
+
+  // F8: a piped prompt never rides on the sandbox child's argv, which `ps`
+  // shows every local user; it travels in a private environment variable.
+  it('hands a piped prompt to the sandbox child outside argv', async () => {
+    const originalIsTTY = Object.getOwnPropertyDescriptor(
+      process.stdin,
+      'isTTY',
+    );
+    Object.defineProperty(process.stdin, 'isTTY', {
+      value: false,
+      configurable: true,
+    });
+    pipedStdin.value = 'SECRET-PIPED-PROMPT';
+    try {
+      const sandboxArgs = await runSandboxRelaunch([
+        'node',
+        'script.js',
+        '--debug',
+        '-p',
+        'hello',
+      ]);
+
+      expect(sandboxArgs.join('\n')).not.toContain('SECRET-PIPED-PROMPT');
+      expect(process.env['QWEN_CODE_SANDBOX_STDIN']).toBe(
+        'SECRET-PIPED-PROMPT',
+      );
+    } finally {
+      pipedStdin.value = undefined;
+      delete process.env['QWEN_CODE_SANDBOX_STDIN'];
+      if (originalIsTTY) {
+        Object.defineProperty(process.stdin, 'isTTY', originalIsTTY);
+      } else {
+        delete (process.stdin as { isTTY?: unknown }).isTTY;
+      }
+    }
   });
 
   it('does not pass an empty session ID into the sandbox child process', async () => {

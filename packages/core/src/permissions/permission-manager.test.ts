@@ -1991,6 +1991,92 @@ describe('PermissionManager', () => {
       });
     });
 
+    // An allow rule covers the literal command only (T4): substitution or a
+    // leading env assignment the rule does not spell out runs code the rule
+    // never named.
+    describe('allow rules cover the literal command only', () => {
+      const evaluateWith = async (rule: string, command: string) => {
+        const pm2 = new PermissionManager(
+          makeConfig({ permissionsAllow: [rule] }),
+        );
+        pm2.initialize();
+        return pm2.evaluate({ toolName: 'run_shell_command', command });
+      };
+
+      it.each([
+        ['Bash(echo hi:*)', 'echo hi $(touch MARK_SUBST)'],
+        ['Bash(echo hi *)', 'echo hi `touch MARK_SUBST`'],
+        ['Bash(cat *)', 'cat <(touch MARK_SUBST)'],
+        ['Bash(echo *)', 'echo x > >(sh)'],
+        ['Bash(git *)', 'git log $(touch MARK_SUBST)'],
+      ])('%s does not allow %s', async (rule, command) => {
+        expect(await evaluateWith(rule, command)).toBe('ask');
+      });
+
+      it.each([
+        ['Bash(node *)', 'NODE_OPTIONS=--require=./evil.js node -e 1'],
+        ['Bash(node:*)', 'NODE_OPTIONS=--require=./evil.js node -e 1'],
+        ['Bash(git *)', 'GIT_EXTERNAL_DIFF=./x.sh git diff'],
+        ['Bash(ls *)', 'BASH_ENV=./x.sh ls'],
+      ])('%s does not allow env-prefixed %s', async (rule, command) => {
+        expect(await evaluateWith(rule, command)).toBe('ask');
+      });
+
+      it('allows an env prefix the rule spells out', async () => {
+        expect(
+          await evaluateWith('Bash(FOO=1 node *)', 'FOO=1 node x.js'),
+        ).toBe('allow');
+      });
+
+      it('still allows the plain command', async () => {
+        expect(await evaluateWith('Bash(node *)', 'node -e 1')).toBe('allow');
+        expect(await evaluateWith('Bash(echo hi:*)', 'echo hi there')).toBe(
+          'allow',
+        );
+      });
+
+      it('a tool-wide allow still covers everything', async () => {
+        expect(await evaluateWith('Bash', 'echo $(date)')).toBe('allow');
+        expect(await evaluateWith('Bash(*)', 'FOO=1 node x.js')).toBe('allow');
+      });
+    });
+
+    it.each([
+      "BASH_ENV=./x.sh bash -c 'ls'",
+      "./bash -c 'ls'",
+      "bash -c 'ls'",
+      "/bin/sh -c 'cat README.md'",
+      'FOO=1 ls',
+    ])(
+      'never resolves the wrapped or env-prefixed %s to allow',
+      async (command) => {
+        expect(
+          await pm.evaluate({ toolName: 'run_shell_command', command }),
+        ).toBe('ask');
+      },
+    );
+
+    it('asks for read-only git in an untrusted folder', async () => {
+      const pm2 = new PermissionManager(
+        makeConfig({
+          permissionsAllow: ['Bash(ls *)'],
+          isTrustedFolder: () => false,
+        }),
+      );
+      pm2.initialize();
+      for (const command of ['git status', 'ls && git log -n 3']) {
+        expect(
+          await pm2.evaluate({ toolName: 'run_shell_command', command }),
+        ).toBe('ask');
+      }
+      expect(
+        await pm2.evaluate({
+          toolName: 'run_shell_command',
+          command: 'ls -la',
+        }),
+      ).toBe('allow');
+    });
+
     it('isCommandAllowed delegates to evaluate', async () => {
       expect(await pm.isCommandAllowed('git commit')).toBe('allow');
       expect(await pm.isCommandAllowed('rm -rf /')).toBe('deny');
@@ -2053,10 +2139,12 @@ describe('PermissionManager', () => {
       ).toBe('allow');
     });
 
-    it('Monitor(...) allow rule matches wrapped monitor invocations', async () => {
+    // The wrapper (any path) and its flags run, not only the inner script
+    // the rule names, so a wrapped monitor command always asks.
+    it('Monitor(...) allow rule does not cover wrapped monitor invocations', async () => {
       const pm2 = new PermissionManager(
         makeConfig({
-          permissionsAllow: ['Monitor(tail -f *)'],
+          permissionsAllow: ['Monitor(tail -f *)', 'Bash(ls *)'],
         }),
       );
       pm2.initialize();
@@ -2065,7 +2153,10 @@ describe('PermissionManager', () => {
           toolName: 'monitor',
           command: `/bin/bash --noprofile -c 'tail -f /var/log/app.log &'`,
         }),
-      ).toBe('allow');
+      ).toBe('ask');
+      expect(
+        await pm2.evaluate({ toolName: 'monitor', command: `./bash -c 'ls'` }),
+      ).toBe('ask');
     });
 
     it('asks by default for wrapped commands with environment prefixes', async () => {

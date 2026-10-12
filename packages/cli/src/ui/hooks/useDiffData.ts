@@ -43,7 +43,11 @@ export interface CurrentDiffData {
  */
 export function useDiffData(cwd: string | undefined): CurrentDiffData {
   const config = useContext(ConfigContext);
-  const sandboxed = Boolean(config?.getShellExecutionSandbox?.());
+  // Untrusted folders never reach here through /diff; refuse anyway, since
+  // git can run programs the repository configures.
+  const sandboxed =
+    Boolean(config?.getShellExecutionSandbox?.()) ||
+    config?.isTrustedFolder?.() === false;
   const [result, setResult] = useState<GitDiffResult | null>(null);
   const [hunks, setHunks] = useState<Map<string, Hunk[]>>(new Map());
   const [loading, setLoading] = useState(true);

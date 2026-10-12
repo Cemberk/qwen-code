@@ -35,6 +35,17 @@ describe('textUtils', () => {
         expect(escapeAnsiCtrlCodes(text2)).toBe(expected2);
       });
 
+      // E6: 8-bit C1 controls open sequences by themselves (OSC U+009D,
+      // CSI U+009B) and JSON.stringify leaves them raw.
+      it('escapes single-byte C1 control sequences visibly', () => {
+        expect(
+          escapeAnsiCtrlCodes('a\u009d8;;http://x\u009cb \u009b31mc\u0085d'),
+        ).toBe('a\\u009d8;;http://x\\u009cb \\u009b31mc\\u0085d');
+        expect(escapeAnsiCtrlCodes({ text: '\u009d52;c;Zm9v\u009c' })).toEqual({
+          text: '\\u009d52;c;Zm9v\\u009c',
+        });
+      });
+
       it('should not change a string with no ANSI codes', () => {
         const text = 'Hello, world!';
         expect(escapeAnsiCtrlCodes(text)).toBe(text);

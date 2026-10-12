@@ -10,6 +10,12 @@ allowedTools:
 
 Use this skill before producing a chart, dashboard, map, or data visualization.
 
+Published Artifacts are static: no JavaScript runs and there is no network
+access (they render in a locked-down sandboxed iframe). For a chart inside an
+Artifact, use inline SVG or HTML/CSS — not D3, Plotly, Recharts, Chart.js, or
+any runtime library. Runtime-JS and image-based (matplotlib) charts are for
+other destinations, not Artifacts.
+
 ## Workflow
 
 1. Identify the analytic task: comparison, trend, distribution, relationship,

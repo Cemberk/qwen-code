@@ -35,7 +35,7 @@ const result = await build({
   platform: 'node',
   format: 'esm',
   target: 'node22',
-  external: ['@lydell/node-pty', 'node-pty'],
+  external: ['@lydell/node-pty'],
   banner: {
     js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);",
   },

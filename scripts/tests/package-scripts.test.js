@@ -807,7 +807,7 @@ describe('package scripts', () => {
     );
   });
 
-  it('skips build/bundle/husky but still generates git-commit info when CI builds explicitly', () => {
+  it('skips husky but still generates git-commit info when QWEN_SKIP_PREPARE is set', () => {
     const packageJson = readPackageJson();
 
     expect(packageJson.scripts.prepare).toBe('node scripts/prepare.js');
@@ -855,10 +855,10 @@ describe('package scripts', () => {
       );
 
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain('Skipping prepare');
+      expect(result.stdout).toContain('Skipping Husky');
       // git-commit info is still generated so a later per-workspace build or
       // typecheck (e.g. the review tooling's) doesn't fail on the missing
-      // module; the heavy build/bundle/husky are skipped.
+      // module.
       expect(readFileSync(logFile, 'utf8').trim().split(/\r?\n/)).toEqual([
         'npm run generate',
       ]);
@@ -867,7 +867,7 @@ describe('package scripts', () => {
     }
   });
 
-  it('runs prepare steps in order when CI does not skip prepare', () => {
+  it('installs hooks and generates git-commit info without building on install', () => {
     const binDir = mkdtempSync(path.join(tmpdir(), 'qwen-prepare-bin-'));
     const logFile = path.join(binDir, 'commands.log');
 
@@ -910,10 +910,10 @@ describe('package scripts', () => {
       );
 
       expect(result.status).toBe(0);
+      // A build or bundle would run on every install; both are explicit steps.
       expect(readFileSync(logFile, 'utf8').trim().split(/\r?\n/)).toEqual([
         'husky',
-        'npm run build',
-        'npm run bundle',
+        'npm run generate',
       ]);
     } finally {
       rmSync(binDir, { recursive: true, force: true });
@@ -980,7 +980,7 @@ describe('package scripts', () => {
           path.join(binDir, 'npm.cmd'),
           [
             '@echo(npm %*>>"%PREPARE_LOG_FILE%"',
-            '@if "%1 %2"=="run build" exit /b 7',
+            '@if "%1 %2"=="run generate" exit /b 7',
             '@exit /b 0',
             '',
           ].join('\r\n'),
@@ -995,7 +995,7 @@ describe('package scripts', () => {
           [
             '#!/bin/sh',
             'echo "npm $*" >> "$PREPARE_LOG_FILE"',
-            'if [ "$1 $2" = "run build" ]; then exit 7; fi',
+            'if [ "$1 $2" = "run generate" ]; then exit 7; fi',
             '',
           ].join('\n'),
         );
@@ -1020,15 +1020,78 @@ describe('package scripts', () => {
 
       expect(result.status).toBe(7);
       expect(result.stderr).toContain(
-        'prepare: npm run build exited with status 7',
+        'prepare: npm run generate exited with status 7',
       );
       expect(readFileSync(logFile, 'utf8').trim().split(/\r?\n/)).toEqual([
         'husky',
-        'npm run build',
+        'npm run generate',
       ]);
     } finally {
       rmSync(binDir, { recursive: true, force: true });
     }
+  });
+
+  it('fails a build instead of installing missing dependencies', () => {
+    // A copy, so the missing node_modules is the fixture's, not the repo's.
+    const fixtureRoot = mkdtempSync(path.join(tmpdir(), 'qwen-build-'));
+    const binDir = path.join(fixtureRoot, 'bin');
+    const logFile = path.join(fixtureRoot, 'commands.log');
+    mkdirSync(path.join(fixtureRoot, 'scripts'));
+    mkdirSync(binDir);
+    writeFileSync(
+      path.join(fixtureRoot, 'package.json'),
+      '{ "type": "module" }\n',
+    );
+    copyFileSync(
+      path.join(root, 'scripts/build.js'),
+      path.join(fixtureRoot, 'scripts/build.js'),
+    );
+    writeFileSync(logFile, '');
+
+    try {
+      for (const command of ['corepack', 'npm', 'pnpm']) {
+        if (process.platform === 'win32') {
+          writeFileSync(
+            path.join(binDir, `${command}.cmd`),
+            `@echo(${command} %*>>"%BUILD_LOG_FILE%"\r\n`,
+          );
+        } else {
+          writeFileSync(
+            path.join(binDir, command),
+            `#!/bin/sh\necho "${command} $*" >> "$BUILD_LOG_FILE"\n`,
+          );
+          chmodSync(path.join(binDir, command), 0o755);
+        }
+      }
+
+      const result = spawnSync(
+        process.execPath,
+        [path.join(fixtureRoot, 'scripts/build.js')],
+        {
+          cwd: fixtureRoot,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ''}`,
+            BUILD_LOG_FILE: logFile,
+          },
+        },
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('node_modules is missing');
+      expect(readFileSync(logFile, 'utf8')).toBe('');
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('disables the npm update check for commands run in this repository', () => {
+    const settings = readFileSync(path.join(root, '.npmrc'), 'utf8')
+      .split(/\r?\n/)
+      .map((line) => line.trim());
+
+    expect(settings).toContain('update-notifier=false');
   });
 
   it.skipIf(process.platform === 'win32')(

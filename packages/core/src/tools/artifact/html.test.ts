@@ -6,6 +6,8 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+  ARTIFACT_CSP,
+  ARTIFACT_SANDBOX,
   MAX_ARTIFACT_BYTES,
   sanitizeArtifactTitle,
   validateSelfContained,
@@ -134,31 +136,105 @@ describe('artifact html helpers', () => {
     ])('rejects javascript URIs %s', (frag) => {
       expect(validateSelfContained(frag)).toMatch(/javascript: URI/i);
     });
+
+    // Navigation/egress constructs the hardened validator rejects as defence in
+    // depth (the sandboxed viewer is the real boundary). Each of these PASSED
+    // the HEAD validator, so these cases fail on the old code.
+    it.each([
+      "<script>location = 'http://127.0.0.1/x'</script>",
+      "<script>window.location = 'http://127.0.0.1/x'</script>",
+      "<script>document.location = 'http://127.0.0.1/x'</script>",
+      "<script>top.location = 'http://127.0.0.1/x'</script>",
+      "<script>parent.location.href = 'http://127.0.0.1/x'</script>",
+      '<meta http-equiv="refresh" content="5">',
+      '<base href="/app/">',
+      '<link rel="dns-prefetch" href="//cdn.example">',
+      '<link rel="preconnect" href="//cdn.example">',
+      '<link rel="prefetch" href="/x">',
+      '<link rel="prerender" href="/x">',
+      '<link rel="modulepreload" href="/x.js">',
+      '<link rel="&#112;rerender" href="/x">',
+      '<LINK REL=icon href="data:,">',
+      '<script type="speculationrules">{"prefetch":[]}</script>',
+      '<script>navigator.serviceWorker.register("/sw.js")</script>',
+      '<script>new RTCPeerConnection()</script>',
+      '<script>new webkitRTCPeerConnection()</script>',
+    ])('rejects navigation/egress construct %s', (frag) => {
+      expect(validateSelfContained(frag)).toMatch(/self-contained/i);
+    });
   });
 
-  describe('wrapArtifactHtml', () => {
-    it('produces a complete document with doctype, title and body', () => {
+  describe('ARTIFACT_CSP / ARTIFACT_SANDBOX', () => {
+    // These directives/tokens are what close the egress battery; they fail on
+    // the HEAD policy (script-src 'unsafe-inline', sandbox allow-scripts).
+    it('disables scripts and remote loads', () => {
+      expect(ARTIFACT_CSP).toContain("script-src 'none'");
+      expect(ARTIFACT_CSP).toContain("default-src 'none'");
+      expect(ARTIFACT_CSP).toContain("connect-src 'none'");
+      expect(ARTIFACT_CSP).toContain("frame-src 'none'");
+      expect(ARTIFACT_CSP).toContain("child-src 'none'");
+      expect(ARTIFACT_CSP).toContain("object-src 'none'");
+      expect(ARTIFACT_CSP).toContain("form-action 'none'");
+      expect(ARTIFACT_CSP).toContain("base-uri 'none'");
+      expect(ARTIFACT_CSP).toContain('img-src data:');
+      // Inline <style> is allowed; inline/remote script is not.
+      expect(ARTIFACT_CSP).not.toContain("script-src 'unsafe-inline'");
+    });
+
+    it('uses an empty (no allow-scripts) iframe sandbox', () => {
+      expect(ARTIFACT_SANDBOX).toBe('');
+    });
+  });
+
+  describe('wrapArtifactHtml viewer', () => {
+    it('is a script-free viewer embedding a sandboxed srcdoc iframe', () => {
       const html = wrapArtifactHtml('<h1>Hi</h1>', 'My Page');
       expect(html).toMatch(/^<!doctype html>/i);
       expect(html).toContain('<title>My Page</title>');
-      expect(html).toContain('<h1>Hi</h1>');
-      expect(html).toContain('viewport');
+      expect(html).toContain(`content="${ARTIFACT_CSP}"`);
+      expect(html).toContain('x-dns-prefetch-control');
+      // The viewer document itself carries no script.
+      expect(html).not.toMatch(/<script/i);
+      // Exactly one iframe, sandbox attribute present and empty.
+      expect(html.match(/<iframe\b/gi)).toHaveLength(1);
+      expect(html).toContain('<iframe sandbox="" ');
+      expect(html).not.toContain('allow-scripts');
+      expect(html).not.toContain('allow-top-navigation');
+      expect(html).not.toContain('allow-popups');
+      expect(html).not.toContain('allow-forms');
+      expect(html).not.toContain('allow-same-origin');
+      expect(html).not.toContain('allow-modals');
+      expect(html).not.toContain('allow-downloads');
     });
 
-    it('adds a CSP that blocks network egress', () => {
-      const html = wrapArtifactHtml('<p>x</p>', 'My Page');
-      expect(html).toContain('Content-Security-Policy');
-      expect(html).toContain("connect-src 'none'");
-      expect(html).toContain("default-src 'none'");
-      expect(html).toContain("form-action 'none'");
-      expect(html).toContain("base-uri 'none'");
-      expect(html).toContain("frame-ancestors 'none'");
-      expect(html).toContain('sandbox allow-scripts');
+    it('carries the artifact only inside the escaped srcdoc', () => {
+      const html = wrapArtifactHtml('<h1>Report</h1>', 'My Page');
+      // Raw fragment markup never appears in the viewer document itself.
+      expect(html).not.toContain('<h1>Report</h1>');
+      expect(html).toContain('srcdoc="');
+      expect(html).toContain('&lt;h1&gt;Report&lt;/h1&gt;');
     });
 
-    it('escapes the title', () => {
-      const html = wrapArtifactHtml('<p>x</p>', 'a<b>&c');
-      expect(html).toContain('<title>a&lt;b&gt;&amp;c</title>');
+    it('a quote / </iframe> / & in the artifact cannot break out', () => {
+      const html = wrapArtifactHtml(
+        '</iframe>"><script>bad()</script> A&B',
+        'T',
+      );
+      // Nothing in the fragment reaches the viewer as live markup.
+      expect(html).not.toContain('</iframe>"><script>');
+      expect(html).not.toMatch(/<script[^>]*>bad\(\)/);
+      // One opening + one closing iframe tag only (the viewer's own).
+      expect(html.match(/<iframe\b/gi)).toHaveLength(1);
+      expect(html.match(/<\/iframe>/gi)).toHaveLength(1);
+      expect(html).toContain('&lt;/iframe&gt;');
+      expect(html).toContain('&quot;&gt;&lt;script&gt;');
+      expect(html).toContain('A&amp;B');
+    });
+
+    it('escapes the title in both element and attribute contexts', () => {
+      const html = wrapArtifactHtml('<p>x</p>', 'a<b>&"c');
+      expect(html).toContain('<title>a&lt;b&gt;&amp;"c</title>');
+      expect(html).toContain('title="a&lt;b&gt;&amp;&quot;c"');
     });
 
     it('uses the default title when none given', () => {

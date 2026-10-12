@@ -2897,6 +2897,52 @@ describe('CoreToolScheduler', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
+  // T8: AUTO_EDIT approves workspace edits only; an `info` confirmation
+  // (skill, cron_create, workflow, artifact) still asks.
+  it('does not let AUTO_EDIT approve an info tool', async () => {
+    const execute = vi.fn().mockResolvedValue({
+      llmContent: 'executed',
+      returnDisplay: 'executed',
+    });
+    const tool = new MockTool({
+      name: 'plain_info',
+      getDefaultPermission: async () => 'ask',
+      getConfirmationDetails: async () => ({
+        type: 'info',
+        title: 'Create cron job',
+        prompt: 'Approve?',
+        onConfirm: vi.fn(),
+      }),
+      execute,
+    });
+    const onToolCallsUpdate = vi.fn();
+    const { scheduler } = createSchedulerForLegacyToolTests({
+      toolsByName: new Map([[tool.name, tool]]),
+      approvalMode: ApprovalMode.AUTO_EDIT,
+      onToolCallsUpdate,
+    });
+
+    await scheduler.schedule(
+      [
+        {
+          callId: 'plain-info',
+          name: tool.name,
+          args: {},
+          isClientInitiated: false,
+          prompt_id: 'prompt-plain-info',
+        },
+      ],
+      new AbortController().signal,
+    );
+
+    expect(
+      onToolCallsUpdate.mock.calls
+        .flatMap((call) => call[0] as ToolCall[])
+        .some((call) => call.status === 'awaiting_approval'),
+    ).toBe(true);
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it('does not auto-approve an interaction-required sibling after ProceedAlways', async () => {
     let siblingWouldOtherwiseAllow = false;
     const firstExecute = vi.fn().mockResolvedValue({

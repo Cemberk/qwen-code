@@ -15,6 +15,8 @@
  * write tools hit boundary — no silent writes without user consent.
  */
 
+import path from 'node:path';
+import { isAutoModeProtectedWritePath } from '../permissions/autoMode.js';
 import { ToolNames } from '../tools/tool-names.js';
 import {
   classifyShellCommandSafety,
@@ -79,6 +81,17 @@ export async function evaluateToolCall(
 
   // Write tools — only redirect to overlay if approval mode permits auto-edits
   if (WRITE_TOOLS.has(toolName)) {
+    // AUTO_EDIT and AUTO never auto-approve persistence or self-modification
+    // paths (git hooks, package scripts, settings, …); speculation must not
+    // write them either.
+    const filePath = typeof args['file_path'] === 'string' && args['file_path'];
+    if (
+      approvalMode !== ApprovalMode.YOLO &&
+      filePath &&
+      isAutoModeProtectedWritePath(path.resolve(cwd ?? process.cwd(), filePath))
+    ) {
+      return { action: 'boundary', reason: `protected_path:${toolName}` };
+    }
     if (
       approvalMode === ApprovalMode.AUTO_EDIT ||
       approvalMode === ApprovalMode.AUTO ||

@@ -176,7 +176,6 @@ export default tseslint.config(
             'react-dom/client',
             'mime/lite',
             'yargs/**',
-            'msw/node',
             '**/generated/**',
             './styles/tailwind.css',
             './styles/App.css',

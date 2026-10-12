@@ -422,7 +422,7 @@ describe('crawler', () => {
 
       await crawl(options);
       expect(crawlSpy).toHaveBeenCalledTimes(2);
-      // fdir should not have been called a second time.
+      // The tree should not have been listed a second time.
       // We can't spy on it directly, but we can check the cache was hit.
       const canonicalDir = path
         .resolve(options.crawlDirectory)
@@ -1162,7 +1162,7 @@ describe('crawler', () => {
       expect(results).toContain('trailing.txt ');
     });
 
-    it('should fall back to fdir when not in a git repo and ripgrep unavailable', async () => {
+    it('should fall back to a directory walk when not in a git repo and ripgrep unavailable', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       __setCommandRunnerForTests(async (command) => {
@@ -1201,9 +1201,72 @@ describe('crawler', () => {
           (c[0] as string).startsWith('[crawler] falling back to'),
       );
       expect(degradationWarns.map((c) => c[0])).toEqual([
-        '[crawler] falling back to fdir (ripgrep unavailable)',
+        '[crawler] falling back to a directory walk (ripgrep unavailable)',
       ]);
       warnSpy.mockRestore();
+    });
+
+    it('should prune ignored directories, honour maxDepth and not follow symlinks in the directory walk', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      __setCommandRunnerForTests(async () => ({ success: false, lines: [] }));
+
+      tmpDir = await createTmpDir({
+        '.qwenignore': 'build/\n*.log\n',
+        'top.js': '',
+        'skip.log': '',
+        build: ['out.js'],
+        src: ['a.js', { deep: ['b.js', { deeper: ['c.js'] }] }],
+        outside: ['target.js'],
+      });
+      await fs.symlink(
+        path.join(tmpDir, 'outside'),
+        path.join(tmpDir, 'src', 'link'),
+        'junction',
+      );
+
+      const ignore = loadIgnoreRules({
+        projectRoot: tmpDir,
+        useGitignore: false,
+        useQwenignore: true,
+        ignoreDirs: [],
+      });
+      const crawlSrc = (maxDepth?: number) =>
+        crawl({
+          crawlDirectory: path.join(tmpDir, 'src'),
+          cwd: tmpDir,
+          ignore,
+          maxDepth,
+          cache: false,
+          cacheTtl: 0,
+        });
+
+      expect((await crawlSrc()).sort()).toEqual(
+        [
+          '.',
+          'src/',
+          'src/a.js',
+          'src/deep/',
+          'src/deep/b.js',
+          'src/deep/deeper/',
+          'src/deep/deeper/c.js',
+          'src/link',
+        ].sort(),
+      );
+      expect((await crawlSrc(0)).sort()).toEqual(
+        ['.', 'src/', 'src/a.js', 'src/deep/', 'src/link'].sort(),
+      );
+
+      const rootRows = await crawl({
+        crawlDirectory: tmpDir,
+        cwd: tmpDir,
+        ignore,
+        cache: false,
+        cacheTtl: 0,
+      });
+      expect(rootRows).toContain('top.js');
+      expect(rootRows).not.toContain('skip.log');
+      expect(rootRows).not.toContain('build/');
+      expect(rootRows).not.toContain('build/out.js');
     });
 
     it('should respect maxDepth on git ls-files path', async () => {
@@ -1353,6 +1416,8 @@ describe('crawler', () => {
       expect(results).toContain('keep.txt');
       expect(rgArgsSeen).toHaveLength(1);
       expect(rgArgsSeen[0]).toContain('--no-ignore');
+      // X4/D1: never read a RIPGREP_CONFIG_PATH config (it can set --pre).
+      expect(rgArgsSeen[0][0]).toBe('--no-config');
     });
 
     it('should omit --no-ignore on ripgrep when useGitignore is true (default)', async () => {
@@ -1507,8 +1572,8 @@ describe('crawler', () => {
       warnSpy.mockRestore();
     });
 
-    it('should warn on git→rg→fdir degradation when git listing then rg fail', async () => {
-      tmpDir = await createTmpDir({ 'only-fdir.js': '' });
+    it('should warn on git→rg→walk degradation when git listing then rg fail', async () => {
+      tmpDir = await createTmpDir({ 'only-walk.js': '' });
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       __setCommandRunnerForTests(async (command, args) => {
@@ -1547,7 +1612,7 @@ describe('crawler', () => {
         cacheTtl: 0,
       });
 
-      expect(results).toContain('only-fdir.js');
+      expect(results).toContain('only-walk.js');
       const degradationCalls = warnSpy.mock.calls
         .map((c) => c[0])
         .filter(
@@ -1556,7 +1621,7 @@ describe('crawler', () => {
         );
       expect(degradationCalls).toEqual([
         '[crawler] falling back to ripgrep (git ls-files unavailable)',
-        '[crawler] falling back to fdir (ripgrep unavailable)',
+        '[crawler] falling back to a directory walk (ripgrep unavailable)',
       ]);
       warnSpy.mockRestore();
     });

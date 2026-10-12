@@ -6,6 +6,15 @@
 
 import * as fs from 'node:fs';
 
+function lstatIfExists(filePath: string): fs.Stats | undefined {
+  try {
+    return fs.lstatSync(filePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
+
 /**
  * Options for writeWithBackup function.
  */
@@ -71,35 +80,39 @@ export function writeWithBackupSync(
   const backupPath = `${targetPath}${backupSuffix}`;
   let backupCreated = false;
 
-  // Clean up any existing temp file from previous failed attempts
+  // Settings files can live in a repository's .qwen/ directory, where a
+  // planted symlink would redirect this write to any file the user can write.
+  // Nothing here follows a link: the target must not be one, and the temp
+  // file is created exclusively.
+  const targetStat = lstatIfExists(targetPath);
+  if (targetStat?.isSymbolicLink()) {
+    throw new Error(`Refusing to write '${targetPath}': it is a symbolic link`);
+  }
+
+  // Clean up a leftover temp file (or link) from a previous failed attempt
   try {
-    if (fs.existsSync(tempPath)) {
-      fs.unlinkSync(tempPath);
-    }
+    if (!fs.lstatSync(tempPath).isDirectory()) fs.unlinkSync(tempPath);
   } catch (_e) {
     // Ignore cleanup errors
   }
 
   try {
+    if (targetStat?.isDirectory()) {
+      throw new Error(
+        `Cannot write to '${targetPath}' because it is a directory`,
+      );
+    }
+
     // Step 1: Write to temporary file
-    fs.writeFileSync(tempPath, content, { encoding, flush: true, mode: 0o600 });
+    fs.writeFileSync(tempPath, content, {
+      encoding,
+      flush: true,
+      mode: 0o600,
+      flag: 'wx',
+    });
 
     // Step 2: If target exists, back it up
-    if (fs.existsSync(targetPath)) {
-      // Check if target is a directory - we can't write to a directory
-      const targetStat = fs.statSync(targetPath);
-      if (targetStat.isDirectory()) {
-        // Clean up temp file before throwing
-        try {
-          fs.unlinkSync(tempPath);
-        } catch (_e) {
-          // Ignore cleanup error
-        }
-        throw new Error(
-          `Cannot write to '${targetPath}' because it is a directory`,
-        );
-      }
-
+    if (targetStat) {
       try {
         fs.renameSync(targetPath, backupPath);
         backupCreated = true;

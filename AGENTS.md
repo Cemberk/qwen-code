@@ -77,12 +77,11 @@ root.
 packages (`@qwen-code/web-templates`) through
 their built `dist/` output, and
 `packages/core` tests import the package's own entry
-(`@qwen-code/qwen-code-core`), which also resolves into `dist/`. A plain
-`corepack pnpm install --frozen-lockfile` already builds them via the
-`prepare` script, but a worktree that shares the main checkout's
-`node_modules` (or a deep-cleaned copy) does not have them. If any
-prerequisite is missing, a vitest `globalSetup` guard stops the run and names
-the fix; build once from the repository root:
+(`@qwen-code/qwen-code-core`), which also resolves into `dist/`. Installing
+dependencies does not build them (the `prepare` script only installs the Git
+hooks and generates the git-commit info). If any prerequisite is missing, a
+vitest `globalSetup` guard stops the run and names the fix; build once from
+the repository root:
 
 ```bash
 npm run build
@@ -93,9 +92,9 @@ pnpm version pinned in `packageManager` (`corepack pnpm install
 --frozen-lockfile`); scripts still run through `npm run`. An additional Git
 worktree can use `node scripts/setup-worktree.js`, which runs the same install
 from a shared store (≈ 99 MiB on copy-on-write filesystems such as APFS, btrfs,
-and XFS with reflink; ≈ 1.2 GiB on ext4) and skips the `prepare` build, so run
-`npm run build` before package tests. When dependencies change, edit the
-manifest, run `corepack pnpm install` (or `corepack pnpm add`), and commit
+and XFS with reflink; ≈ 1.2 GiB on ext4); run `npm run build` before package
+tests. When dependencies change, edit the manifest, run
+`corepack pnpm install` (or `corepack pnpm add`), and commit
 `pnpm-lock.yaml`; every CI install runs with `--frozen-lockfile`, so a
 lockfile that no longer matches the manifests fails the build.
 

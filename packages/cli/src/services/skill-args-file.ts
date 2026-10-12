@@ -36,11 +36,18 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { createDebugLogger, sessionIdContext } from '@qwen-code/qwen-code-core';
+import { Storage } from '@qwen-code/qwen-code-core/config/storage.js';
 
 const debugLogger = createDebugLogger('SKILL_ARGS_FILE');
 
-/** Where a skill finds the arguments it was invoked with. */
-export const SKILL_ARGS_DIR = join('.qwen', 'tmp');
+/**
+ * Where a skill finds the arguments it was invoked with: the runtime temp
+ * directory under the owner-only Qwen home, never the workspace, where the
+ * arguments (which can carry a token) could be committed.
+ */
+export function skillArgsBaseDir(): string {
+  return join(Storage.getGlobalTempDir(), 'skill-args');
+}
 
 /** A component safe to put in a filename. */
 function safe(s: string): string {
@@ -77,8 +84,8 @@ export function currentSessionId(): string {
  */
 export function skillArgsDir(sessionId: string = currentSessionId()): string {
   return sessionId
-    ? join(SKILL_ARGS_DIR, `s-${safe(sessionId)}`)
-    : SKILL_ARGS_DIR;
+    ? join(skillArgsBaseDir(), `s-${safe(sessionId)}`)
+    : skillArgsBaseDir();
 }
 
 /**
@@ -113,7 +120,7 @@ export function writeSkillArgs(skillName: string, args: string): string | null {
   const path = skillArgsPath(skillName);
   try {
     const dir = skillArgsDir();
-    mkdirSync(dir, { recursive: true });
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
     // `O_NOFOLLOW` protects the final filename, but not the parent: a symlinked
     // `s-<session>` directory — `s-attacker -> victim/` — redirects the write
     // into `victim/qwen-skill-args-review.txt`, truncating an arbitrary

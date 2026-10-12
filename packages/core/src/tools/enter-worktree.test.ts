@@ -302,6 +302,19 @@ describe('EnterWorktreeTool metadata', () => {
   });
 });
 
+describe('EnterWorktreeTool default permission', () => {
+  // `git worktree add` runs the repository's post-checkout hook and filters.
+  it("always returns 'ask' with an exec confirmation", async () => {
+    const tool = new EnterWorktreeTool(makeMockConfig());
+    const inv = tool.build({ name: 'foo' });
+    expect(await inv.getDefaultPermission()).toBe('ask');
+    const details = await inv.getConfirmationDetails(
+      new AbortController().signal,
+    );
+    expect(details.type).toBe('exec');
+  });
+});
+
 describe('ExitWorktreeTool default permission', () => {
   it("returns 'ask' when action is 'remove'", async () => {
     const tool = new ExitWorktreeTool(makeMockConfig());

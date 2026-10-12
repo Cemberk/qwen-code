@@ -15674,91 +15674,55 @@ describe('useLlmStream', () => {
       expect(mockOnConfirm).not.toHaveBeenCalled();
     });
 
-    it('should only auto-approve edit tools when switching to AUTO_EDIT mode', async () => {
-      const mockOnConfirmReplace = vi.fn().mockResolvedValue(undefined);
-      const mockOnConfirmWrite = vi.fn().mockResolvedValue(undefined);
-      const mockOnConfirmRead = vi.fn().mockResolvedValue(undefined);
-
+    it('should only auto-approve workspace edits when switching to AUTO_EDIT mode', async () => {
+      const workspace = '/auto-edit-ws';
+      const call = (
+        callId: string,
+        name: string,
+        confirmationDetails: Record<string, unknown>,
+      ) =>
+        ({
+          request: {
+            callId,
+            name,
+            args: {},
+            isClientInitiated: false,
+            prompt_id: 'prompt-id-1',
+          },
+          status: 'awaiting_approval',
+          responseSubmittedToLlm: false,
+          confirmationDetails: {
+            onConfirm: vi.fn().mockResolvedValue(undefined),
+            onCancel: vi.fn(),
+            ...confirmationDetails,
+          },
+          tool: { name, displayName: name, build: vi.fn() } as any,
+          invocation: {
+            getDescription: () => 'Mock description',
+          } as unknown as AnyToolInvocation,
+        }) as unknown as TrackedWaitingToolCall;
+      const edit = (filePath: string) => ({
+        type: 'edit',
+        title: 'Edit',
+        fileName: filePath.split('/').pop(),
+        filePath,
+        fileDiff: '',
+        originalContent: '',
+        newContent: 'x',
+      });
       const awaitingApprovalToolCalls: TrackedToolCall[] = [
-        {
-          request: {
-            callId: 'call1',
-            name: 'replace',
-            args: { old_string: 'old', new_string: 'new' },
-            isClientInitiated: false,
-            prompt_id: 'prompt-id-1',
-          },
-          status: 'awaiting_approval',
-          responseSubmittedToLlm: false,
-          confirmationDetails: {
-            onConfirm: mockOnConfirmReplace,
-            onCancel: vi.fn(),
-            message: 'Replace text?',
-            displayedText: 'Replace old with new',
-          },
-          tool: {
-            name: 'replace',
-            displayName: 'replace',
-            description: 'Replace text',
-            build: vi.fn(),
-          } as any,
-          invocation: {
-            getDescription: () => 'Mock description',
-          } as unknown as AnyToolInvocation,
-        } as unknown as TrackedWaitingToolCall,
-        {
-          request: {
-            callId: 'call2',
-            name: 'write_file',
-            args: { path: '/test/new.txt', content: 'content' },
-            isClientInitiated: false,
-            prompt_id: 'prompt-id-1',
-          },
-          status: 'awaiting_approval',
-          responseSubmittedToLlm: false,
-          confirmationDetails: {
-            onConfirm: mockOnConfirmWrite,
-            onCancel: vi.fn(),
-            message: 'Write file?',
-            displayedText: 'Write to /test/new.txt',
-          },
-          tool: {
-            name: 'write_file',
-            displayName: 'write_file',
-            description: 'Write file',
-            build: vi.fn(),
-          } as any,
-          invocation: {
-            getDescription: () => 'Mock description',
-          } as unknown as AnyToolInvocation,
-        } as unknown as TrackedWaitingToolCall,
-        {
-          request: {
-            callId: 'call3',
-            name: 'read_file',
-            args: { path: '/test/file.txt' },
-            isClientInitiated: false,
-            prompt_id: 'prompt-id-1',
-          },
-          status: 'awaiting_approval',
-          responseSubmittedToLlm: false,
-          confirmationDetails: {
-            onConfirm: mockOnConfirmRead,
-            onCancel: vi.fn(),
-            message: 'Read file?',
-            displayedText: 'Read /test/file.txt',
-          },
-          tool: {
-            name: 'read_file',
-            displayName: 'read_file',
-            description: 'Read file',
-            build: vi.fn(),
-          } as any,
-          invocation: {
-            getDescription: () => 'Mock description',
-          } as unknown as AnyToolInvocation,
-        } as unknown as TrackedWaitingToolCall,
+        call('replace', 'replace', edit(`${workspace}/src/a.ts`)),
+        call('write', 'write_file', edit(`${workspace}/new.txt`)),
+        call('hook', 'write_file', edit(`${workspace}/.git/hooks/x`)),
+        call('pkg', 'edit', edit(`${workspace}/package.json`)),
+        call('rc', 'edit', edit(`${workspace}/.zshrc`)),
+        call('outside', 'write_file', edit('/elsewhere/o.txt')),
+        call('skill', 'skill', { type: 'info', title: 'Skill', prompt: 'x' }),
       ];
+      mockConfig.getWorkspaceContext = vi.fn(() => ({
+        isPathWithinWorkspace: (p: string) =>
+          p === workspace || p.startsWith(`${workspace}/`),
+      })) as unknown as Config['getWorkspaceContext'];
 
       const { result } = renderTestHook(awaitingApprovalToolCalls);
 
@@ -15766,18 +15730,15 @@ describe('useLlmStream', () => {
         await result.current.handleApprovalModeChange(ApprovalMode.AUTO_EDIT);
       });
 
-      // Only replace and write_file should be auto-approved
-      expect(mockOnConfirmReplace).toHaveBeenCalledTimes(1);
-      expect(mockOnConfirmReplace).toHaveBeenCalledWith(
-        ToolConfirmationOutcome.ProceedOnce,
-      );
-      expect(mockOnConfirmWrite).toHaveBeenCalledTimes(1);
-      expect(mockOnConfirmWrite).toHaveBeenCalledWith(
-        ToolConfirmationOutcome.ProceedOnce,
-      );
-
-      // read_file should not be auto-approved
-      expect(mockOnConfirmRead).not.toHaveBeenCalled();
+      const approved = awaitingApprovalToolCalls
+        .filter(
+          (c) =>
+            vi.mocked(
+              (c as TrackedWaitingToolCall).confirmationDetails.onConfirm,
+            ).mock.calls.length > 0,
+        )
+        .map((c) => c.request.callId);
+      expect(approved).toEqual(['replace', 'write']);
     });
 
     it('should not auto-approve any tools when switching to REQUIRE_CONFIRMATION mode', async () => {

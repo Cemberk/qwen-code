@@ -378,7 +378,7 @@ export class WorkflowRunner {
         registry?.get(runId)?.workflowName;
 
       try {
-        scriptMeta = compileWorkflowScript(script).meta;
+        scriptMeta = (await compileWorkflowScript(script)).meta;
       } catch (error) {
         throw new WorkflowScriptNotLaunchedError(
           describeWorkflowCompileError(
@@ -899,9 +899,9 @@ export class WorkflowRunner {
 }
 
 /**
- * Duck-typed extraction so vm-realm Errors (raised inside the sandbox)
- * don't coerce to "Error: <msg>" via toString(). See workflow-orchestrator.ts
- * for the matching helper on the orchestrator side.
+ * Duck-typed extraction so errors don't coerce to "Error: <msg>" via
+ * toString(). See workflow-orchestrator.ts for the matching helper on the
+ * orchestrator side.
  */
 function extractErrorMessage(error: unknown): string {
   if (error && typeof error === 'object' && 'message' in error) {

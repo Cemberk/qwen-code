@@ -265,7 +265,7 @@ export async function ensureRipgrepHealthy(
   try {
     const { stdout, code } = await execCommand(
       selection.command,
-      ['--version'],
+      ['--no-config', '--version'],
       {
         timeout: RIPGREP_TEST_TIMEOUT_MS,
       },
@@ -497,7 +497,9 @@ async function runRipgrepOnce(
     try {
       child = execFile(
         selection.command,
-        args,
+        // RIPGREP_CONFIG_PATH can name a config whose `--pre=<program>`
+        // ripgrep runs for every file it searches.
+        ['--no-config', ...args],
         {
           maxBuffer: RIPGREP_BUFFER_LIMIT,
           timeout: wslTimeout(),

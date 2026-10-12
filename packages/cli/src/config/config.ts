@@ -1469,9 +1469,11 @@ export async function loadCliConfig(
     'output-language.md',
   );
 
+  // The project file is a prompt, so like output styles it is read only from
+  // a trusted workspace.
   let outputLanguageFilePath: string | undefined;
   if (!bareMode && !safeMode) {
-    if (fs.existsSync(projectOutputLanguagePath)) {
+    if (trustedFolder && fs.existsSync(projectOutputLanguagePath)) {
       outputLanguageFilePath = projectOutputLanguagePath;
     } else if (fs.existsSync(globalOutputLanguagePath)) {
       outputLanguageFilePath = globalOutputLanguagePath;

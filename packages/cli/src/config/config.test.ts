@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as fs from 'fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -143,10 +144,6 @@ vi.mock('os', async (importOriginal) => {
     homedir: vi.fn(() => '/mock/home/user'),
   };
 });
-
-vi.mock('open', () => ({
-  default: vi.fn(),
-}));
 
 vi.mock('read-package-up', () => ({
   readPackageUp: vi.fn(() =>
@@ -1737,6 +1734,32 @@ describe('loadCliConfig', () => {
       expect(ServerConfig.loadOutputStyleCatalog).toHaveBeenCalledWith({
         projectRoot: workspace,
       });
+    });
+
+    // T6: the project output-language.md is a prompt, read only from a
+    // trusted workspace (like project output styles).
+    it('reads the project output-language.md only from a trusted workspace', async () => {
+      const workspace = process.cwd();
+      const projectFile = path.join(workspace, '.qwen', 'output-language.md');
+      const existsSync = vi.mocked(fs.existsSync);
+      const previous = existsSync.getMockImplementation();
+      existsSync.mockImplementation(
+        (p) => p.toString() === projectFile || (previous?.(p) ?? false),
+      );
+      try {
+        process.argv = ['node', 'script.js'];
+        const argv = await parseArguments();
+
+        distrustWorkspace(workspace);
+        const untrusted = await loadCliConfig({}, argv, workspace);
+        expect(untrusted.getOutputLanguageFilePath()).not.toBe(projectFile);
+
+        distrustWorkspace('/some/other/repo');
+        const trusted = await loadCliConfig({}, argv, workspace);
+        expect(trusted.getOutputLanguageFilePath()).toBe(projectFile);
+      } finally {
+        if (previous) existsSync.mockImplementation(previous);
+      }
     });
 
     it.each(['--safe-mode', '--bare'])(

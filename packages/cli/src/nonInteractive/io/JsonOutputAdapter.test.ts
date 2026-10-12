@@ -470,6 +470,28 @@ describe('JsonOutputAdapter', () => {
       expect(output).toBe('Custom summary text\n');
     });
 
+    // E6: model text printed in `-p` text mode reaches the terminal, so an
+    // OSC 8 hyperlink / OSC 52 clipboard write in it must not stay live.
+    it('neutralizes terminal escape sequences in text mode', () => {
+      vi.mocked(mockConfig.getOutputFormat).mockReturnValue(OutputFormat.TEXT);
+
+      adapter.emitResult({
+        isError: false,
+        summary:
+          'see \u001b]8;;http://127.0.0.1:9/x\u0007here\u001b]8;;\u0007' +
+          ' \u009d52;c;Zm9v\u009c done\u0007',
+        durationMs: 1000,
+        apiDurationMs: 800,
+        numTurns: 1,
+      });
+
+      const output = stdoutWriteSpy.mock.calls[0][0] as string;
+      // eslint-disable-next-line no-control-regex
+      expect(output).not.toMatch(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/);
+      expect(output).toContain('here');
+      expect(output.endsWith('done\n')).toBe(true);
+    });
+
     it('should handle empty error message in text mode', () => {
       const stderrWriteSpy = vi
         .spyOn(process.stderr, 'write')

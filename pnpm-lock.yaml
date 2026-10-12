@@ -120,9 +120,6 @@ importers:
       mock-fs:
         specifier: ^5.5.0
         version: 5.5.0
-      msw:
-        specifier: ^2.10.4
-        version: 2.10.4(@types/node@20.19.1)(typescript@5.8.3)
       patch-package:
         specifier: ^8.0.1
         version: 8.0.1
@@ -132,9 +129,6 @@ importers:
       prettier:
         specifier: ^3.5.3
         version: 3.6.1
-      react-devtools-core:
-        specifier: ^6.1.5
-        version: 6.1.5
       semver:
         specifier: ^7.7.2
         version: 7.8.5
@@ -424,9 +418,6 @@ importers:
       fast-levenshtein:
         specifier: ^2.0.6
         version: 2.0.6
-      fdir:
-        specifier: ^6.4.6
-        version: 6.5.0(picomatch@4.0.5)
       fzf:
         specifier: ^0.5.2
         version: 0.5.2
@@ -527,9 +518,6 @@ importers:
       '@types/yauzl':
         specifier: ^2.9.1
         version: 2.10.3
-      msw:
-        specifier: ^2.3.4
-        version: 2.10.4(@types/node@20.19.1)(typescript@5.8.3)
       tree-sitter-wasms:
         specifier: ^0.1.13
         version: 0.1.13

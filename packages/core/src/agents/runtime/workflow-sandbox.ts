@@ -6,7 +6,8 @@
 
 /**
  * Strip a leading `export const meta = { ... }` declaration from a workflow
- * script. Required because Node's vm script mode rejects ES module syntax.
+ * script. Required because the script body runs as a function body, where
+ * ES module syntax does not parse.
  *
  * P1 does not use meta semantically; it is removed so that Claude-Code-trained
  * models whose first line is `export const meta = {...}` do not produce a
@@ -198,51 +199,113 @@ export function extractAndStripMeta(source: string): {
   return { stripped, meta };
 }
 
-/** Filename V8 attributes the compiled workflow body to, in errors and stacks. */
-const WORKFLOW_SCRIPT_FILENAME = 'workflow.js';
-
-/**
- * Wrap a stripped script body in the async IIFE the vm actually executes.
- *
- * `'use strict'` shares its line with the arrow deliberately. The wrapper
- * already shifts every body line number by one, and putting the directive on
- * its own line would shift them by two — so the directive costs nothing in
- * error legibility. Strict mode matters here because the body is
- * model-authored: in sloppy mode an undeclared assignment silently creates a
- * property on the sandbox global instead of throwing, which turns a typo into
- * state that outlives the statement that made it.
- */
-function wrapWorkflowBody(strippedSource: string): string {
-  return `(async () => {'use strict';\n${strippedSource}\n})()`;
+/** A body that does not parse, located in the source the author wrote. */
+class WorkflowSyntaxError extends SyntaxError {
+  constructor(
+    message: string,
+    readonly source: string,
+    /**
+     * UTF-16 offset of the error in `source`: negative on the opening
+     * wrapper, past its end on the closing one.
+     */
+    readonly index: number,
+  ) {
+    super(message);
+    this.name = 'SyntaxError';
+  }
 }
 
+/** Every JavaScript line terminator; QuickJS's own line count sees only LF. */
+const LINE_TERMINATOR = /\r\n|[\n\r\u2028\u2029]/;
+
+let quickJsModule: Promise<QuickJSWASMModule> | undefined;
+
 /**
- * Parse `export const meta`, strip it, and compile the remaining body.
+ * Parse `export const meta`, strip it, and syntax-check the remaining body.
  *
  * Exported so the pre-launch gate in `WorkflowRunner.start` and the run itself
- * compile through one function rather than two lookalikes. Throws exactly what
+ * check through one function rather than two lookalikes. Throws exactly what
  * either step would throw: `extractAndStripMeta`'s errors for a malformed meta
- * literal, and V8's `SyntaxError` for a body that does not parse. The compile
- * copy masks the meta declaration instead of deleting it so V8's source lines
- * still match the author's original script.
+ * literal, and a `SyntaxError` for a body that does not parse. The check is
+ * the parser of the engine the script runs in — QuickJS, compiled to
+ * WebAssembly — in compile-only mode, so nothing in the script executes.
+ *
+ * Returns the body a run executes: the meta declaration masked rather than
+ * deleted, and CR / CRLF folded to LF (which JavaScript does to template
+ * literals anyway), so the engine's line numbers match the author's script.
  */
-export function compileWorkflowScript(scriptSource: string): {
-  script: vm.Script;
+export async function compileWorkflowScript(scriptSource: string): Promise<{
+  source: string;
   meta: WorkflowMeta | null;
-} {
+}> {
   const { stripped, meta } = extractAndStripMeta(scriptSource);
   const bounds = findMetaBlockBounds(scriptSource);
-  const compilable = bounds
-    ? scriptSource.slice(0, bounds.exportIdx) +
-      scriptSource
-        .slice(bounds.exportIdx, bounds.afterMeta)
-        .replace(/[^\r\n\u2028\u2029]/g, ' ') +
-      scriptSource.slice(bounds.afterMeta)
-    : stripped;
-  const script = new vm.Script(wrapWorkflowBody(compilable), {
-    filename: WORKFLOW_SCRIPT_FILENAME,
-  });
-  return { script, meta };
+  const source = (
+    bounds
+      ? scriptSource.slice(0, bounds.exportIdx) +
+        scriptSource
+          .slice(bounds.exportIdx, bounds.afterMeta)
+          .replace(/[^\r\n\u2028\u2029]/g, ' ') +
+        scriptSource.slice(bounds.afterMeta)
+      : stripped
+  ).replace(/\r\n?/g, '\n');
+  // Loaded on first use: Workflows are off by default, and the engine is
+  // large enough to keep out of the startup path.
+  quickJsModule ??= Promise.all([
+    import('@jitl/quickjs-singlefile-mjs-release-sync'),
+    import('quickjs-emscripten-core'),
+  ]).then(([variant, core]) =>
+    core.newQuickJSWASMModuleFromVariant(variant.default),
+  );
+  const runtime = (await quickJsModule).newRuntime();
+  runtime.setMemoryLimit(64 * 1024 * 1024);
+  runtime.setMaxStackSize(256 * 1024);
+  const context = runtime.newContext();
+  const wrapped = wrapWorkflowBody(source);
+  let compiled: ReturnType<typeof context.evalCode>;
+  try {
+    compiled = context.evalCode(wrapped, WORKFLOW_SCRIPT_FILENAME, {
+      compileOnly: true,
+    });
+  } catch (error) {
+    // The engine itself failed — deeply nested source can run its parser out
+    // of Node's stack — and may be left inconsistent, so it is discarded and
+    // the next check loads a fresh one.
+    quickJsModule = undefined;
+    throw error;
+  }
+  try {
+    if (compiled.error) {
+      const dumped = context.dump(compiled.error) as {
+        name?: unknown;
+        message?: unknown;
+        stack?: unknown;
+      } | null;
+      compiled.error.dispose();
+      const message = String(dumped?.message ?? dumped);
+      if (dumped?.name !== 'SyntaxError') throw new Error(message);
+      const at = /workflow\.js:(\d+):(\d+)/.exec(String(dumped.stack ?? ''));
+      if (!at) throw new SyntaxError(message);
+      // QuickJS reports a 1-based line (counting LF only) and a 1-based
+      // column in code points; turn them into an offset in the author's body.
+      const lines = wrapped.split('\n');
+      const line = Number(at[1]);
+      let offset = Array.from(lines[line - 1] ?? '')
+        .slice(0, Number(at[2]) - 1)
+        .join('').length;
+      for (let i = 0; i < line - 1; i++) offset += lines[i]!.length + 1;
+      throw new WorkflowSyntaxError(
+        message,
+        source,
+        offset - (wrapped.indexOf('\n') + 1),
+      );
+    }
+    compiled.value.dispose();
+  } finally {
+    context.dispose();
+    runtime.dispose();
+  }
+  return { source, meta };
 }
 
 /**
@@ -260,51 +323,43 @@ function workflowCancelledError(): Error {
 const COMPILE_ERROR_LINE_WIDTH = 80;
 
 /**
- * Turn a compile failure into something a script author can act on.
+ * Turn a compile failure into something a script author can act on: the
+ * author's line number, the offending line with a caret under the column the
+ * parser stopped at, and the parser's message. Lines are counted the way the
+ * author's editor does, over every line terminator, and never include the
+ * IIFE wrapper.
  *
- * V8 already builds the useful part — the offending source line with a caret
- * under the exact column — and puts it at the head of `error.stack`, ahead of
- * the host frames. Reuse it rather than reconstructing a caret from column
- * numbers, then fix the one thing it gets wrong for our purposes: the line
- * number counts the IIFE wrapper, so `workflow.js:2` is the script's line 1.
- *
- * Falls back to the bare message when the stack carries no source frame.
+ * Falls back to the bare message when the error carries no location.
  */
 export function describeWorkflowCompileError(
   error: unknown,
   authorLineCount: number,
 ): string {
   const err = error instanceof Error ? error : new Error(String(error));
-  const stack = typeof err.stack === 'string' ? err.stack : '';
-  const frame: string[] = [];
-  for (const line of stack.split('\n')) {
-    if (frame.length >= 3 && /^\s+at\s/.test(line)) break;
-    frame.push(line);
-  }
-
-  const header = frame[0] ?? '';
-  const match = /^.*?:(\d+)$/.exec(header);
-  if (frame.length < 3 || !match) {
+  if (!(err instanceof WorkflowSyntaxError) || err.index < 0) {
     return err.message;
   }
 
-  // Undo the wrapper's one-line offset. A later line is on the closing wrapper,
-  // so describe the author's incomplete ending instead of naming our token.
-  const bodyLine = Number(match[1]) - 1;
-  if (bodyLine < 1) return err.message;
-  if (bodyLine > authorLineCount) {
+  const linesBefore = err.source.slice(0, err.index).split(LINE_TERMINATOR);
+  const bodyLine = linesBefore.length;
+  // An error on the closing wrapper is the author's incomplete ending;
+  // describe that instead of naming our token.
+  if (err.index > err.source.length || bodyLine > authorLineCount) {
     return (
       'The script ends with unmatched or incomplete syntax. Check ' +
       'parentheses, brackets, braces, quotes, and template literals near the end.'
     );
   }
 
-  const rendered = clampSourceFrame(frame[1] ?? '', frame[2] ?? '');
-  const tail = frame
-    .slice(3)
-    .filter((l) => l.trim().length > 0)
-    .join('\n');
-  return [`line ${bodyLine}`, rendered, tail].filter(Boolean).join('\n');
+  const column = linesBefore[bodyLine - 1]!.length;
+  const sourceLine = err.source
+    .slice(err.index - column)
+    .split(LINE_TERMINATOR)[0]!;
+  return [
+    `line ${bodyLine}`,
+    clampSourceFrame(sourceLine, `${' '.repeat(column)}^`),
+    `SyntaxError: ${err.message}`,
+  ].join('\n');
 }
 
 /**
@@ -442,7 +497,7 @@ import {
   readWorkflowStepId,
   type WorkflowCallTrace,
 } from '../workflow-correlation.js';
-import * as vm from 'node:vm';
+import type { QuickJSWASMModule } from 'quickjs-emscripten-core';
 import { createDebugLogger } from '../../utils/debugLogger.js';
 import {
   normalizeReasoningEffort,
@@ -456,6 +511,17 @@ import {
 import { stripAnsiAndControl } from '../../utils/textUtils.js';
 import { parseWorkflowMetaLiteral } from './workflow-meta-literal.js';
 import type { WorkflowDispatchScheduler } from './workflow-dispatch-scheduler.js';
+import { isWorkflowRunLevelError } from './workflow-agent-failure.js';
+import {
+  startWorkflowHost,
+  type WorkflowHostConnection,
+} from './workflow-host-client.js';
+import {
+  WORKFLOW_SCRIPT_FILENAME,
+  wrapWorkflowBody,
+  type WorkflowBudgetSnapshot,
+  type WorkflowErrorData,
+} from './workflow-protocol.js';
 
 // Shared with workflow-orchestrator (avoids a duplicate createDebugLogger
 // instance with the same 'WORKFLOW' namespace). Re-exported so orchestrator
@@ -476,7 +542,7 @@ const ARGS_MAX_DEPTH = 64;
  *
  * The named fields below are explicitly recognised. P1 throws for unsupported
  * fields (`schema`, `model`, `isolation`, `agentType`) rather than silently
- * dropping them. The runtime allowlist enforced in the vm-realm init script
+ * dropping them. The runtime allowlist enforced in the guest runtime
  * additionally throws on ANY field not in the known set — catching typos
  * like `scema` before they reach dispatch.
  */
@@ -550,9 +616,7 @@ export interface WorkflowAgentOpts {
  * verbatim). P3 widens to also allow a JSON-serializable object — the
  * validated arguments of the subagent's `structured_output` call when
  * `agent({schema})` is used. Strings remain the no-schema return shape;
- * the sandbox's `agent` wrapper revives object returns into the vm realm
- * per-call so a host-realm prototype escape (T1/T8/T14) cannot ride the
- * structured payload back into a script.
+ * it reaches the script as JSON data, never as an object reference.
  */
 export type WorkflowAgentResult = string | object;
 
@@ -579,8 +643,8 @@ export interface WorkflowBudget {
  * P4b: host-side live-event channel for the orchestrator and sandbox to
  * notify external consumers (typically the `WorkflowRunRegistry`) when
  * a phase boundary or agent dispatch happens, or when the script logs
- * something. Every method is host-realm (called from sandbox closures
- * and `countedDispatch`) — no vm-realm bridge concerns.
+ * something. Every method is called on the host side (from the sandbox's
+ * message handling and `countedDispatch`), never from script code.
  *
  * All methods are no-ops by default — implementations are free to
  * implement only the events they care about.
@@ -630,39 +694,31 @@ export interface WorkflowOrchestratorEmitter {
   resumeRespawn?(line: string): void;
 }
 
+/**
+ * A branch of the run's dependency graph: `tails` are the dispatch ids the
+ * next dispatch issued in this branch depends on. The array is replaced,
+ * never mutated, so fan-out branches can share their parent's snapshot.
+ */
+export interface WorkflowDependencyContext {
+  tails: readonly string[];
+}
+
 export interface SandboxOptions {
   /** Value bound to the `args` global inside the script. */
   args: unknown;
-  /**
-   * The owning run's id. Stamped onto every dispatch rejection that
-   * crosses the vm boundary so the adoption-escape hook (see `run()`)
-   * attributes a process-level unhandledRejection to THIS run when
-   * multiple runs share one process (background runs). Omitted by
-   * bare-sandbox tests.
-   */
-  runId?: string;
   /**
    * Function called by the script's `agent(prompt, opts)` global. Returns the
    * agent's final text, or `null` when that agent failed on its own terms
    * (turn/time cap, model error, stall, or no structured result) —
    * the same value a fan-out slot has always carried for a missing agent.
+   * `context` is the dependency-graph branch that issued the call.
    * Injected so tests can mock without spawning an LLM.
    */
   dispatch: (
     prompt: string,
     opts: WorkflowAgentOpts,
+    context: WorkflowDependencyContext,
   ) => Promise<WorkflowAgentResult | null>;
-  /**
-   * Forward-compatibility injection seams for P2 (parallel / pipeline) and
-   * P5 (budget). When omitted the sandbox falls back to throwing stubs.
-   */
-  parallel?: (thunks: Array<() => Promise<unknown>>) => Promise<unknown[]>;
-  pipeline?: (
-    items: unknown[],
-    ...stages: Array<
-      (prev: unknown, item: unknown, idx: number) => Promise<unknown>
-    >
-  ) => Promise<unknown[]>;
   /**
    * Host-side `workflow(nameOrRef, args)` implementation. When provided, the
    * sandbox exposes the `workflow` global that resolves a saved workflow
@@ -676,14 +732,31 @@ export interface SandboxOptions {
   workflow?: (
     nameOrRef: string | { scriptPath: string },
     args: unknown,
-    stepId?: string,
+    stepId: string | undefined,
+    context: WorkflowDependencyContext,
   ) => Promise<unknown>;
+  /**
+   * The dependency-graph branch the script's top level runs in; defaults to
+   * a fresh root. A nested workflow is handed its caller's branch so its
+   * dispatches chain from it. `parallel()` / `pipeline()` fork one branch per
+   * thunk / item and merge the branches' tails back when the batch settles.
+   *
+   * The script runs in another process with no async-context tracking, so a
+   * call is attributed to the branch whose synchronous code issued it, or —
+   * after an `await` — to the branch of the `agent()` / `workflow()` result
+   * whose settlement resumed it. Code resumed by anything else (`await null`,
+   * a promise the script built itself) is attributed to whichever settlement
+   * resumed the script, and a call from a branch whose batch has already
+   * settled falls back to this root branch.
+   */
+  dependencies?: WorkflowDependencyContext;
   budget?: WorkflowBudget;
   /**
    * T23 (PR #4732 R2): async wall-clock cap (ms) covering the entire script
-   * including awaits. The vm `timeout` option only covers the synchronous
-   * portion; once the IIFE yields its first `await`, the watchdog is
-   * disarmed and `return new Promise(() => {})` would hang forever.
+   * including awaits, from the moment its host process is ready. Each
+   * synchronous stretch is separately capped at
+   * `WORKFLOW_SYNC_EVALUATION_TIMEOUT_MS`; this cap catches what that cannot,
+   * like `return new Promise(() => {})`.
    *
    * Defaults to 30 minutes, override via `QWEN_CODE_MAX_WORKFLOW_SECONDS`
    * env var, or pass an explicit value here (tests use small values for
@@ -740,8 +813,8 @@ export interface SandboxOptions {
 /**
  * T23 (PR #4732 R2): default async wall-clock cap. The wall clock is a
  * 0-token-hang backstop, NOT a precise cost cap: it bounds patterns like an
- * in-script `await new Promise(() => {})` that the vm timeout cannot reach.
- * For genuine cost control, use the env-overridable per-run cap
+ * in-script `await new Promise(() => {})` that the synchronous-evaluation
+ * timeout cannot reach. For genuine cost control, use the env-overridable per-run cap
  * (`QWEN_CODE_MAX_WORKFLOW_AGENTS`) and concurrency window
  * (`QWEN_CODE_MAX_WORKFLOW_CONCURRENCY`). 30 minutes is set generously
  * enough that typical workflows never see it but a hang doesn't waste
@@ -753,8 +826,9 @@ const DEFAULT_MAX_WALL_CLOCK_MS = 30 * 60 * 1000;
 
 /**
  * How long the script's synchronous code may run before its first `await`
- * returns control. Exported so the authoring reference's statement of it is
- * pinned to this value.
+ * returns control — and likewise each later synchronous stretch, since the
+ * host interrupts any one that runs longer. Exported so the authoring
+ * reference's statement of it is pinned to this value.
  */
 export const WORKFLOW_SYNC_EVALUATION_TIMEOUT_MS = 30_000;
 
@@ -856,10 +930,9 @@ export interface WorkflowSandbox {
 
 /**
  * Validate `args` without mutating it. Throws on functions, BigInts, circular
- * references, and nesting beyond `ARGS_MAX_DEPTH`. The actual sandbox `args`
- * global is built INSIDE the vm context via `JSON.parse` so it inherits
- * vm-realm prototypes — this validation just gates what we hand to JSON
- * stringification.
+ * references, and nesting beyond `ARGS_MAX_DEPTH`. The script's `args`
+ * global is parsed from the JSON text inside the guest — this validation
+ * just gates what we hand to JSON stringification.
  */
 function validateArgs(
   val: unknown,
@@ -900,6 +973,243 @@ function validateArgs(
   }
 }
 
+/** How long the host process may take to start before the run fails. */
+const WORKFLOW_HOST_STARTUP_GRACE_MS = 30_000;
+
+/**
+ * After a run settles, how long its host process may keep running to deliver
+ * what is still in flight — a cancelled script's own `finally` blocks, a late
+ * rejection the run log mirrors — before it is killed.
+ */
+const WORKFLOW_HOST_DRAIN_GRACE_MS = 10_000;
+
+/** Deepest result nesting the host accepts back from the script. */
+const MAX_RESULT_DEPTH = 1001;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function invalidHostMessage(): Error {
+  return new Error('The workflow host sent an invalid message.');
+}
+
+function requireString(value: unknown): string {
+  if (typeof value !== 'string') throw invalidHostMessage();
+  return value;
+}
+
+function requireId(value: unknown): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 0) {
+    throw invalidHostMessage();
+  }
+  return value as number;
+}
+
+/**
+ * Merge a settled fan-out's branch tails back into the branch that issued it.
+ * A dispatching branch always ends on its fresh dispatch id; a branch that
+ * never dispatched still carries its inherited seed. Merging that seed back
+ * would re-inject ancestor ids as redundant transitive dependsOn edges —
+ * unless no branch dispatched at all, where the inherited tails must pass
+ * through unchanged (same contract as an empty fan-out).
+ */
+function mergeFanoutTails(
+  currentParentTails: readonly string[],
+  inheritedTails: readonly string[],
+  branchTails: readonly string[],
+): string[] {
+  const inherited = new Set(inheritedTails);
+  const newBranchTails = branchTails.filter((tail) => !inherited.has(tail));
+  const merged =
+    newBranchTails.length > 0
+      ? [
+          ...newBranchTails,
+          ...currentParentTails.filter((tail) => !inherited.has(tail)),
+        ]
+      : currentParentTails;
+  return Array.from(new Set(merged));
+}
+
+/**
+ * Rebuild a script's return value from the guest's tagged encoding
+ * (`encodeResult` in `workflow-guest.ts`): plain JSON for primitives, and a
+ * tagged array for everything else. Every object is built here, from data.
+ */
+function decodeWorkflowValue(encoded: unknown): unknown {
+  const seen = new Map<number, unknown>();
+  const unreadable = (message: unknown) => ({
+    toJSON(): never {
+      throw new Error(String(message));
+    },
+  });
+  const entriesOf = (payload: unknown): unknown[] => {
+    if (!Array.isArray(payload)) throw invalidHostMessage();
+    return payload;
+  };
+  const pairOf = (entry: unknown): [unknown, unknown] => {
+    if (!Array.isArray(entry) || entry.length !== 2) throw invalidHostMessage();
+    return [entry[0], entry[1]];
+  };
+  const decode = (node: unknown, depth: number): unknown => {
+    if (node === null || typeof node !== 'object') return node;
+    if (depth > MAX_RESULT_DEPTH || !Array.isArray(node)) {
+      throw invalidHostMessage();
+    }
+    const [tag, id, payload, extra] = node as unknown[];
+    switch (tag) {
+      case 'u':
+        return undefined;
+      case 'n':
+        if (id === 'NaN' || id === 'Infinity' || id === '-Infinity') {
+          return Number(id);
+        }
+        throw invalidHostMessage();
+      case 'b':
+        if (typeof id === 'string' && /^-?\d+$/.test(id)) return BigInt(id);
+        throw invalidHostMessage();
+      case 'x':
+        return unreadable(id);
+      case 'r':
+        if (typeof id === 'number' && seen.has(id)) return seen.get(id);
+        throw invalidHostMessage();
+      default:
+        break;
+    }
+    if (typeof id !== 'number' || seen.has(id)) throw invalidHostMessage();
+    switch (tag) {
+      case 'e': {
+        const error = new Error(typeof extra === 'string' ? extra : '');
+        if (typeof payload === 'string') error.name = payload;
+        seen.set(id, error);
+        return error;
+      }
+      case 'a': {
+        const items: unknown[] = [];
+        seen.set(id, items);
+        for (const item of entriesOf(payload)) {
+          items.push(decode(item, depth + 1));
+        }
+        return items;
+      }
+      case 'm': {
+        const map = new Map<unknown, unknown>();
+        seen.set(id, map);
+        for (const entry of entriesOf(payload)) {
+          const [key, value] = pairOf(entry);
+          map.set(decode(key, depth + 1), decode(value, depth + 1));
+        }
+        return map;
+      }
+      case 's': {
+        const set = new Set<unknown>();
+        seen.set(id, set);
+        for (const item of entriesOf(payload)) set.add(decode(item, depth + 1));
+        return set;
+      }
+      case 'o': {
+        const object: Record<string, unknown> = {};
+        seen.set(id, object);
+        for (const entry of entriesOf(payload)) {
+          const [key, value] = pairOf(entry);
+          if (typeof key !== 'string') throw invalidHostMessage();
+          // defineProperty, not assignment: a "__proto__" key stays data.
+          if (Array.isArray(value) && value[0] === 'x') {
+            const message = String(value[1]);
+            Object.defineProperty(object, key, {
+              enumerable: true,
+              configurable: true,
+              get() {
+                throw new Error(message);
+              },
+            });
+          } else {
+            Object.defineProperty(object, key, {
+              value: decode(value, depth + 1),
+              enumerable: true,
+              writable: true,
+              configurable: true,
+            });
+          }
+        }
+        return object;
+      }
+      default:
+        throw invalidHostMessage();
+    }
+  };
+  return decode(encoded, 0);
+}
+
+interface FanOut {
+  parent: WorkflowDependencyContext;
+  inherited: readonly string[];
+  /** Created on first use, so a branch that never dispatches costs nothing. */
+  branches: Map<number, WorkflowDependencyContext>;
+}
+
+/**
+ * Normalize the options of one `agent()` call: the JSON copy the script
+ * produced is validated here, and effort aliases, built-in tool display
+ * names, order and duplicates are folded so equivalent spellings share one
+ * resume key. Throws with the message the script sees.
+ */
+function normalizeAgentOptions(raw: unknown): WorkflowAgentOpts {
+  const agentOpts = (isRecord(raw) ? { ...raw } : {}) as WorkflowAgentOpts;
+  if (agentOpts.effort !== undefined) {
+    const tier =
+      typeof agentOpts.effort === 'string'
+        ? normalizeReasoningEffort(agentOpts.effort)
+        : undefined;
+    if (tier === undefined) {
+      throw new Error(
+        `agent({effort}): unknown effort tier ${stripAnsiAndControl(
+          JSON.stringify(agentOpts.effort),
+        )}. Known tiers are: ${REASONING_EFFORT_TIERS.join(', ')}.`,
+      );
+    }
+    agentOpts.effort = tier;
+  }
+  const isToolNameList = (value: unknown): value is string[] =>
+    Array.isArray(value) &&
+    value.every(
+      (name) =>
+        typeof name === 'string' && name.length > 0 && name === name.trim(),
+    );
+  if (agentOpts.disallowedTools !== undefined) {
+    if (!isToolNameList(agentOpts.disallowedTools)) {
+      throw new Error(
+        "agent({disallowedTools}): must be an array of non-empty tool-name strings without surrounding whitespace, e.g. ['run_shell_command', 'write_file'].",
+      );
+    }
+    const denied = [
+      ...new Set(agentOpts.disallowedTools.map(canonicalAgentToolName)),
+    ].sort();
+    if (denied.length === 0) delete agentOpts.disallowedTools;
+    else agentOpts.disallowedTools = denied;
+  }
+  // An empty allowlist would leave the agent nothing to call, so unlike an
+  // empty deny list it is refused rather than dropped.
+  if (agentOpts.tools !== undefined) {
+    if (!isToolNameList(agentOpts.tools) || agentOpts.tools.length === 0) {
+      throw new Error(
+        "agent({tools}): must be a non-empty array of tool-name strings without surrounding whitespace, e.g. ['run_shell_command', 'read_file']. Omit tools to keep every tool.",
+      );
+    }
+    const allowed: string[] = [];
+    for (const name of agentOpts.tools) {
+      const problem = describeAgentToolAllowEntryProblem(name);
+      if (problem !== null) {
+        throw new Error(`agent({tools}): ${stripAnsiAndControl(problem)}`);
+      }
+      const canonical = canonicalAgentToolName(name);
+      if (!allowed.includes(canonical)) allowed.push(canonical);
+    }
+    agentOpts.tools = allowed.sort();
+  }
+  return agentOpts;
+}
+
 export function createWorkflowSandbox(opts: SandboxOptions): WorkflowSandbox {
   const phases: string[] = [];
   const logs: string[] = [];
@@ -912,18 +1222,17 @@ export function createWorkflowSandbox(opts: SandboxOptions): WorkflowSandbox {
     }
   };
 
-  const safeLog = (msg: unknown, notify = true): void => {
+  const safeLog = (line: string, notify = true): void => {
     if (logs.length < MAX_LOG_LINES) {
-      const line = String(msg);
       logs.push(line);
       // P4b: emit to host-side subscriber (registry). Defensive try/catch
       // because a subscriber error must not interrupt script execution
       // — the script body has no business knowing about UI plumbing.
       if (notify) emitLog(line);
     } else if (logs.length === MAX_LOG_LINES) {
-      const line = `[workflow log truncated at ${MAX_LOG_LINES} lines]`;
-      logs.push(line);
-      if (notify) emitLog(line);
+      const marker = `[workflow log truncated at ${MAX_LOG_LINES} lines]`;
+      logs.push(marker);
+      if (notify) emitLog(marker);
     }
   };
 
@@ -933,7 +1242,7 @@ export function createWorkflowSandbox(opts: SandboxOptions): WorkflowSandbox {
       // registry mirror (same rule at its boundary) compare the same value:
       // titles colliding only after ANSI/control stripping or the 200-char
       // cap previously diverged the two phase surfaces of the same run.
-      const t = stripAnsiAndControl(String(title)).slice(0, 200) || 'phase';
+      const t = stripAnsiAndControl(title).slice(0, 200) || 'phase';
       // R7 (wenshao): collapse consecutive identical titles so the
       // sandbox is the single source of truth for the phase list.
       // Without this, `outcome.phases` (terminal `returnDisplay` JSON)
@@ -941,9 +1250,8 @@ export function createWorkflowSandbox(opts: SandboxOptions): WorkflowSandbox {
       // (live UI / `/workflows` detail) was deduped by the registry's
       // own `onPhaseStarted` collapse — the same run showed different
       // phase counts in the terminal output vs the live UI. The
-      // `agent({phase})` wrapper already dedups (see the `__b.lastPhase()`
-      // check); this brings the bare `phase()` global into the same
-      // contract.
+      // `agent({phase})` path already dedups against the last entry;
+      // this brings the bare `phase()` global into the same contract.
       if (phases[phases.length - 1] === t) return;
       phases.push(t);
       // P4b: emit to host-side subscriber. Same defensive try/catch as
@@ -965,1245 +1273,447 @@ export function createWorkflowSandbox(opts: SandboxOptions): WorkflowSandbox {
   // drops the function key.
   if (opts.args !== undefined) validateArgs(opts.args);
   const argsJson = opts.args === undefined ? null : JSON.stringify(opts.args);
+  const maxWallClockMs = resolveMaxWallClockMs(opts);
+  const signal = opts.abortOnTimeout?.signal;
 
-  // Unconsumed-rejection mirror bookkeeping (see `observeDispatch` in the
-  // init script below). The verdict is deferred to run settlement: an entry
-  // recorded at rejection-settlement time is cleared if the script still
-  // consumes the promise afterwards (a delayed `await` / `.catch`), and
-  // only still-uncleared entries are flushed into the run log in `run()`'s
-  // `finally`. A rejection whose root the script attached a rejection
-  // handler to anywhere in the chain is never mirrored — the script had a
-  // chance to surface it itself. Keys are opaque ids; the bridge contract
-  // only allows primitives across, so the vm side passes ids and strings.
-  //
-  // All four are reset at the top of `run()`: the bookkeeping is per-run,
-  // and latching it for the sandbox's lifetime would let a second `run()`
-  // on the same sandbox bypass the deferred-verdict design entirely (every
-  // rejection would take the post-settlement immediate-mirror path).
-  // Per-root mirror state. rejectionHandled: the script attached a
-  // visible rejection handler — the strongest "never mirror" marker.
-  // adoptedOut: a native adoption attach (await / Promise.resolve / a
-  // returned thenable) consumed the root; the rejection's fate then
-  // rides the (unobserved) adopting promise, so the flush defers
-  // forwarded sibling entries to the adopting chain — handled there
-  // they need no signal, forgotten there the escape hook provides one.
-  const unconsumedRoots = new Map<
-    number,
-    { rejectionHandled: boolean; adoptedOut: boolean }
-  >();
-  interface UnconsumedRejectionEntry {
-    rootId: number;
-    isRoot: boolean;
-    dispatchFailed: boolean;
-    msg: string;
-  }
-  const unconsumedRejections = new Map<number, UnconsumedRejectionEntry>();
-  let nextUnconsumedId = 1;
-  let unconsumedSettled = false;
-  // Per-run dedupe keys (rootId + msg) shared by the flush and the
-  // adoption-escape hook in run(): one failed dispatch fanned out into
-  // N unconsumed branches is one failure and must surface as exactly
-  // one log line, whichever surface reports it first (R11-11).
-  let mirroredEscapeKeys = new Set<string>();
-
-  // Precise attribution: 'dispatch failed' only when the root dispatch
-  // itself rejected (marked at the vm boundary), '(result not consumed)'
-  // only when the root was never attached to.
-  const unconsumedRejectionLine = (rec: UnconsumedRejectionEntry): string => {
-    if (rec.dispatchFailed) {
-      return rec.isRoot
-        ? 'dispatch failed (result not consumed): ' + rec.msg
-        : 'dispatch failed (rejection not handled): ' + rec.msg;
+  // spent()/remaining() are synchronous in the script, so the host sends a
+  // fresh snapshot with every settlement; the script only ever runs right
+  // after one.
+  const budgetSnapshot = (): WorkflowBudgetSnapshot | undefined => {
+    const budget = opts.budget;
+    if (!budget) return undefined;
+    try {
+      const remaining = budget.remaining();
+      return {
+        total: budget.total,
+        spent: budget.spent(),
+        remaining: Number.isFinite(remaining) ? remaining : null,
+      };
+    } catch (e) {
+      debugLogger.warn('Workflow budget snapshot failed:', e);
+      return undefined;
     }
-    // The root WAS attached to in every shape that reaches this branch
-    // (a derived node exists only because the root was attached), so
-    // '(result not consumed)' contradicts the attribution contract —
-    // '(rejection not handled)' matches the sibling non-root branch.
-    return 'script handler failed (rejection not handled): ' + rec.msg;
   };
 
-  // FIX-Round1-T1/T8/T14: build EVERY sandbox global inside the vm-realm
-  // via the init script below. Host-realm objects (Promises returned by host
-  // async functions, Error objects thrown by host code) leak the host Function
-  // constructor through their prototype chains:
-  //   `agent("x").constructor.constructor("return process")()` (T8, success path)
-  //   `try { throw new Error } catch(e) { e.constructor.constructor(...)() }` (T1)
-  // The fix is to NEVER expose a host object across the vm boundary. Instead
-  // we expose a primitive bridge (functions and strings) on globalThis,
-  // delete it as the first init action, and have the init script build vm-realm
-  // wrappers that internally call the bridge but only return / throw vm-realm
-  // values.
-  const bridge = {
-    argsJson,
-    pushPhase: safePhase,
-    pushLog: safeLog,
-    lastPhase: () => phases[phases.length - 1],
-    hostAgent: (
-      prompt: string,
-      agentOpts: WorkflowAgentOpts,
-      stepId: unknown,
-    ) => {
-      const validatedStepId = readWorkflowStepId(stepId);
-      const hostOpts = { ...agentOpts };
-      delete hostOpts.stepId;
-      if (validatedStepId !== undefined) hostOpts.stepId = validatedStepId;
-      return opts.dispatch(prompt, hostOpts);
-    },
-    // Effort tiers are resolved host-side so the sandbox accepts exactly the
-    // aliases `/effort` does without a second copy of the alias table. Takes
-    // and returns primitives only.
-    normalizeEffort: (raw: unknown): string | null =>
-      typeof raw === 'string' ? (normalizeReasoningEffort(raw) ?? null) : null,
-    effortTiers: REASONING_EFFORT_TIERS.join(', '),
-    // A built-in tool named by its display name or a legacy alias becomes its
-    // tool name, so both spellings share one resume key; any other entry comes
-    // back as given for the host to judge. Used for both disallowedTools and
-    // tools. Primitives only.
-    canonicalToolName: (raw: unknown): string | null =>
-      typeof raw === 'string' ? canonicalAgentToolName(raw) : null,
-    // Why a tools entry cannot name a tool to allow (a pattern, a whole MCP
-    // server, exec), already stripped of control characters, or null.
-    // Primitives only.
-    toolAllowEntryProblem: (raw: unknown): string | null => {
-      if (typeof raw !== 'string') return null;
-      const problem = describeAgentToolAllowEntryProblem(raw);
-      return problem === null ? null : stripAnsiAndControl(problem);
-    },
-    // JSON.stringify escapes only C0: strip DEL / C1 (incl. NEL) from a
-    // script-controlled echo so it cannot fragment a rejection message.
-    sanitizeForMessage: (raw: unknown): string =>
-      typeof raw === 'string' ? stripAnsiAndControl(raw) : '',
-    // PR #4947 R2 T7 (qwen-code-ci-bot): host-side log hook for reviveInRealm's
-    // catch path. Mirrors the rejection-logging in settleToNullArray so an
-    // operator running with debug logging can distinguish "thunk rejected"
-    // (settleToNullArray.warn) from "thunk resolved to a non-JSON-serializable
-    // value" (this warn). Receives only primitive strings/numbers — the bridge
-    // contract forbids host objects crossing back to the script.
-    logRevivalFailure: (idx: number, reason: string): void => {
-      debugLogger.warn(
-        `Workflow result revival failed at index ${idx}: ${reason}; ` +
-          `slot set to null (non-JSON-serializable thunk return).`,
-      );
-    },
-    // --- Unconsumed-rejection mirror bookkeeping ---
-    wfRegisterRoot: (): number => {
-      const id = nextUnconsumedId++;
-      unconsumedRoots.set(id, { rejectionHandled: false, adoptedOut: false });
-      return id;
-    },
-    wfMarkRejectionHandled: (rootId: number): void => {
-      const root = unconsumedRoots.get(rootId);
-      if (root) root.rejectionHandled = true;
-    },
-    wfIsRootHandled: (rootId: number): boolean =>
-      unconsumedRoots.get(rootId)?.rejectionHandled === true,
-    wfMarkAdopted: (rootId: number): void => {
-      const root = unconsumedRoots.get(rootId);
-      if (root) root.adoptedOut = true;
-    },
-    runId: opts.runId ?? '',
-    wfReportUnconsumed: (
-      rootId: number,
-      isRoot: boolean,
-      dispatchFailed: boolean,
-      msg: string,
-    ): number => {
-      if (unconsumedSettled) {
-        // Post-settlement rejection: the script can no longer consume it
-        // (the run's finally already flushed), so mirror it immediately.
-        const rec: UnconsumedRejectionEntry = {
-          rootId,
-          isRoot,
-          dispatchFailed,
-          msg,
-        };
-        const rootState = unconsumedRoots.get(rootId);
-        if (
-          !rootState?.rejectionHandled &&
-          !(dispatchFailed && rootState?.adoptedOut)
-        ) {
-          safeLog(unconsumedRejectionLine(rec));
+  // What the script learns about a failed request: the message, and whether
+  // it is teardown or a run-level failure, which decide how fan-outs and the
+  // unconsumed-rejection mirror treat it. Teardown is matched on the error
+  // NAME (the scheduler's AbortError), never the message text, plus any
+  // rejection once the run's abort has fired: the dominant cancellation path
+  // rejects with a plain Error ('did not complete (terminate mode:
+  // CANCELLED).').
+  const errorData = (error: unknown): WorkflowErrorData => {
+    let message: string;
+    let name: unknown;
+    try {
+      const raw = isRecord(error) ? error['message'] : undefined;
+      message = raw != null ? String(raw) : String(error);
+      name = isRecord(error) ? error['name'] : undefined;
+    } catch {
+      message = '[unserializable rejection value]';
+    }
+    return {
+      message,
+      ...(typeof name === 'string' ? { name } : {}),
+      ...(isWorkflowRunLevelError(error) ? { runFailure: true } : {}),
+      ...(name === 'AbortError' || signal?.aborted ? { abort: true } : {}),
+    };
+  };
+
+  const execute = (source: string): Promise<unknown> =>
+    new Promise<unknown>((resolve, reject) => {
+      const root: WorkflowDependencyContext = opts.dependencies ?? {
+        tails: [],
+      };
+      const fanOuts = new Map<number, FanOut>();
+      const outstanding = new Set<number>();
+      let ready = false;
+      let settled = false;
+      let outcome:
+        | { ok: true; value: unknown }
+        | { ok: false; error: Error }
+        | undefined;
+      let flushInFlight = false;
+      let settlesSinceFlush = 0;
+      let watchdog: WallClockWatchdog | undefined;
+      let wallClockFired = false;
+      let drainTimer: ReturnType<typeof setTimeout> | undefined;
+
+      const send = (body: string | { type: 'abort' | 'flush' }): void => {
+        if (!host.alive) return;
+        try {
+          host.send(body);
+        } catch (e) {
+          debugLogger.warn('Workflow host message could not be sent:', e);
         }
-        return 0;
-      }
-      const id = nextUnconsumedId++;
-      unconsumedRejections.set(id, { rootId, isRoot, dispatchFailed, msg });
-      return id;
-    },
-    wfClearUnconsumed: (id: number): void => {
-      unconsumedRejections.delete(id);
-    },
-    // R10-1: teardown discrimination cannot key on the error name alone.
-    // The dominant in-flight cancellation path (controller.abort() →
-    // subagent returns terminateMode=CANCELLED → runSingleDispatch throws
-    // a PLAIN Error) never produces an 'AbortError', so the mirror would
-    // log a spurious dispatch failure for a correctly-cancelled run. Once
-    // the run's abort signal has fired, the run is already settling as
-    // cancelled / timed-out — every rejection still crossing the boundary
-    // is teardown noise regardless of its shape.
-    isRunAborted: (): boolean => opts.abortOnTimeout?.signal.aborted === true,
-    // The truthy flags distinguish "injected" from "default stub" inside the
-    // init script without leaking the host function itself when not used.
-    hasParallel: !!opts.parallel,
-    hasPipeline: !!opts.pipeline,
-    hasWorkflow: !!opts.workflow,
-    hasBudget: !!opts.budget,
-    hostParallel: opts.parallel,
-    hostPipeline: opts.pipeline,
-    hostWorkflow: (
-      ref: string | { scriptPath: string },
-      args: unknown,
-      stepId: unknown,
-    ) => {
-      const validated = readWorkflowStepId(stepId);
-      return validated === undefined
-        ? opts.workflow!(ref, args)
-        : opts.workflow!(ref, args, validated);
-    },
-    budgetTotal: opts.budget ? opts.budget.total : null,
-    hostBudgetSpent: opts.budget ? opts.budget.spent.bind(opts.budget) : null,
-    hostBudgetRemaining: opts.budget
-      ? opts.budget.remaining.bind(opts.budget)
-      : null,
-  };
+      };
 
-  // T22 (PR #4732 R2): sever the host Object.prototype on both the
-  // bridge AND the sandboxGlobals container. Without this,
-  // `globalThis.constructor.constructor("return process")()` inside the
-  // sandbox reaches the host Object → host Function → host process,
-  // bypassing every other vm-realm hardening measure in this file.
-  // PoC confirmed leak prior to fix; regression covered by
-  // "globalThis.constructor cannot reach host process".
-  Object.setPrototypeOf(bridge, null);
-  const sandboxGlobals: { __workflowBridge: typeof bridge } = Object.assign(
-    Object.create(null) as { __workflowBridge: typeof bridge },
-    { __workflowBridge: bridge },
-  );
-  const ctx = vm.createContext(sandboxGlobals);
+      // Once the run has settled, keep the host only while it has requests
+      // in flight; a flush acknowledged with nothing sent since means every
+      // consequence of the last result has reached this side.
+      const release = (): void => {
+        if (!settled || !host.alive || outstanding.size > 0 || flushInFlight) {
+          return;
+        }
+        flushInFlight = true;
+        settlesSinceFlush = 0;
+        send({ type: 'flush' });
+      };
 
-  // FIX-D + FIX-Round1: build Math, Date, args, all async/sync globals,
-  // and the console object entirely inside the vm-realm. After this init
-  // script completes, `globalThis.__workflowBridge` is deleted so the user
-  // script cannot reach it.
-  vm.runInContext(
-    `(() => {
-      const __b = globalThis.__workflowBridge;
-      delete globalThis.__workflowBridge;
+      // Pause-aware watchdog: suspend only while the scheduler is `paused` —
+      // once truly idle, the run must neither burn budget it will need after
+      // resume nor be killed mid-pause (resume would then be impossible).
+      // During `pausing` the backstop stays armed: an in-flight dispatch is
+      // typically still executing real work. (An abort settles the run and
+      // stops the watchdog, so no transition after it matters.)
+      const stopWatchingState = opts.scheduler?.onStateChange(({ state }) => {
+        if (state === 'paused') watchdog?.pause();
+        else watchdog?.resume();
+      });
 
-      // --- Math (vm-realm, random throws) ---
-      const realMath = Math;
-      const safeMath = Object.create(null);
-      for (const k of Object.getOwnPropertyNames(realMath)) {
-        if (k === 'random' || k === 'constructor') continue;
-        safeMath[k] = realMath[k];
-      }
-      safeMath.random = () => {
-        throw new Error(
-          'Math.random() is unavailable in workflow scripts (breaks resume). ' +
-          'For N independent samples, include the index in the agent label or prompt.'
+      const startupTimer = setTimeout(
+        () =>
+          failHost(
+            new Error(
+              `The workflow host did not start within ${WORKFLOW_HOST_STARTUP_GRACE_MS} ms.`,
+            ),
+          ),
+        WORKFLOW_HOST_STARTUP_GRACE_MS,
+      );
+      startupTimer.unref?.();
+
+      const finish = (error: Error | undefined, value?: unknown): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(startupTimer);
+        watchdog?.stop();
+        stopWatchingState?.();
+        if (error) reject(error);
+        else resolve(value);
+        if (!host.alive) return;
+        // A run that ends before its script started must not start it.
+        if (!ready) {
+          host.kill();
+          return;
+        }
+        host.unref();
+        drainTimer = setTimeout(
+          () => host.kill(),
+          WORKFLOW_HOST_DRAIN_GRACE_MS,
+        );
+        drainTimer.unref?.();
+        release();
+      };
+
+      const failHost = (error: unknown): void => {
+        host.kill();
+        finish(error instanceof Error ? error : new Error(String(error)));
+      };
+
+      // Cancellation settles the run now, not when the wall clock runs out.
+      // The host is told so the script's teardown rejections are not
+      // mirrored as failures, and it keeps running briefly so the script's
+      // own `finally` blocks still run as its dispatches reject.
+      const onAbort = (): void => {
+        send({ type: 'abort' });
+        // The watchdog aborts the controller itself on the way to rejecting
+        // with the timeout; that abort is not a cancellation.
+        if (!wallClockFired) finish(workflowCancelledError());
+      };
+      signal?.addEventListener('abort', onAbort, { once: true });
+
+      const contextFor = (
+        group: unknown,
+        branch: unknown,
+      ): WorkflowDependencyContext => {
+        const fanOut =
+          typeof group === 'number' ? fanOuts.get(group) : undefined;
+        if (!fanOut || typeof branch !== 'number') return root;
+        let context = fanOut.branches.get(branch);
+        if (!context) {
+          context = { tails: fanOut.inherited };
+          fanOut.branches.set(branch, context);
+        }
+        return context;
+      };
+
+      const settleRequest = (id: number, ok: boolean, payload: unknown) => {
+        outstanding.delete(id);
+        const budget = budgetSnapshot();
+        let body: string;
+        if (ok) {
+          try {
+            body = JSON.stringify({
+              type: 'settle',
+              id,
+              ok,
+              value: payload,
+              budget,
+            });
+          } catch (e) {
+            debugLogger.warn(
+              `Workflow result revival failed at index 0: ${String(
+                (e as Error)?.message ?? e,
+              )}; slot set to null (non-JSON-serializable thunk return).`,
+            );
+            body = JSON.stringify({
+              type: 'settle',
+              id,
+              ok,
+              value: null,
+              budget,
+            });
+          }
+        } else {
+          body = JSON.stringify({
+            type: 'settle',
+            id,
+            ok,
+            error: errorData(payload),
+            budget,
+          });
+        }
+        if (host.alive) {
+          settlesSinceFlush += 1;
+          try {
+            host.send(body);
+          } catch (e) {
+            // A result past the frame limit still settles the request.
+            send(
+              JSON.stringify({
+                type: 'settle',
+                id,
+                ok: false,
+                error: errorData(e),
+                budget,
+              }),
+            );
+          }
+        }
+        release();
+      };
+
+      // Every request is answered exactly once; work() runs synchronously so
+      // requests reach the dispatch layer in the order the script issued them.
+      const respond = (id: number, work: () => Promise<unknown>): void => {
+        outstanding.add(id);
+        let result: Promise<unknown>;
+        try {
+          result = Promise.resolve(work());
+        } catch (error) {
+          result = Promise.reject(error);
+        }
+        void result.then(
+          (value) => settleRequest(id, true, value),
+          (error: unknown) => settleRequest(id, false, error),
         );
       };
-      globalThis.Math = safeMath;
 
-      // --- Date (vm-realm function that throws on any access) ---
-      const dateMsg = 'Date.now() / new Date() are unavailable in workflow ' +
-        'scripts (breaks resume). Stamp results after the workflow returns, ' +
-        'or pass timestamps via args.';
-      const safeDate = function Date() { throw new Error(dateMsg); };
-      safeDate.now = () => { throw new Error(dateMsg); };
-      safeDate.UTC = () => { throw new Error(dateMsg); };
-      safeDate.parse = () => { throw new Error(dateMsg); };
-      Object.setPrototypeOf(safeDate, null);
-      Object.defineProperty(safeDate, 'constructor', {
-        value: undefined, writable: false, configurable: false,
-      });
-      globalThis.Date = safeDate;
-
-      // --- args (parsed via vm-realm JSON → vm-realm objects/arrays) ---
-      // FIX-Round1-T2: vm-realm arrays keep their vm-realm Array.prototype,
-      // so for...of, .map, .forEach, spread, destructuring all work — and
-      // their inherited methods' constructors are vm-realm Function, which
-      // cannot reach host process.
-      globalThis.args = __b.argsJson === null ? undefined : JSON.parse(__b.argsJson);
-
-      // --- Wrap a host async function so it returns a vm-realm Promise ---
-      // FIX-Round1-T1/T8/T14: success and failure both cross the boundary
-      // as vm-realm values: resolve with the host's value (a primitive
-      // string for dispatch; vm-realm arrays for parallel/pipeline because
-      // those wrappers will produce vm-realm results); reject with a
-      // freshly-constructed vm-realm Error so e.constructor.constructor
-      // stays in the vm realm.
-      // Dispatch promises are ObservedPromise instances (a vm-realm
-      // Promise subclass). Its then override marks the result consumed
-      // and re-attaches the teardown observer to the derived promise, so
-      // script-derived chains (agent(...).then(...), await, and the
-      // ELEMENTS of static-combinator aggregates — everything that
-      // funnels through then) stay observed at every depth. The
-      // AGGREGATES of Promise.all/race/any are built by the native
-      // statics and never pass through the observed then, so those
-      // statics are wrapped explicitly below (observeAggregate).
-      // Without this, a correctly-cancelled run holding a pending derived
-      // chain fired a process-level unhandledRejection even though the
-      // bare dispatch promise was observed.
-      //
-      // Unconsumed rejections of an observed node are recorded through
-      // the bridge and mirrored into the run log at run settlement (a
-      // later consumption clears the record first) — a dispatch refused
-      // at the entry gate (budget / agent cap) or failing mid-run reaches
-      // no other surface, so without the mirror the failure leaves no
-      // log, alarm, or telemetry.
-      function mapDispatchError(hostErr) {
-        var msg;
-        try {
-          msg = (hostErr && hostErr.message != null)
-            ? String(hostErr.message)
-            : String(hostErr);
-        } catch (e) {
-          msg = '[unserializable rejection value]';
-        }
-        const vmErr = new Error(msg);
-        // Teardown discrimination at the host boundary — before the error
-        // is flattened into a vm-realm Error. Two shapes count as
-        // teardown: an error NAMED 'AbortError' (the scheduler's
-        // abortError() DOMException), and ANY rejection that crosses
-        // after the run's abort signal has fired — the dominant
-        // cancellation path rejects with a plain Error ('did not complete
-        // (terminate mode: CANCELLED).'), which a name-only match would
-        // mirror as a spurious dispatch failure on a correctly-cancelled
-        // run. Matching the name here (rather than the message text)
-        // still suppresses teardown noise without swallowing genuine
-        // failures whose message merely contains 'aborted' (e.g. a
-        // network-layer 'connection aborted by peer').
-        var isAbort = false;
-        try {
-          isAbort = !!(hostErr && hostErr.name === 'AbortError');
-        } catch (e) {
-          isAbort = false;
-        }
-        if (isAbort || __b.isRunAborted()) vmErr.__wfAbort = true;
-        var isRunFailure = false;
-        try {
-          isRunFailure = !!(hostErr && (
-            hostErr.__wfRunFailure === true ||
-            hostErr.name === 'WorkflowBudgetExceededError' ||
-            hostErr.name === 'WorkflowAgentCapExceededError'
-          ));
-        } catch (e) {
-          isRunFailure = false;
-        }
-        if (isRunFailure) vmErr.__wfRunFailure = true;
-        vmErr.__wfDispatchFailed = true;
-        return vmErr;
-      }
-      function readFlag(value, name) {
-        try {
-          return !!(value && value[name]);
-        } catch (e) {
-          return false;
-        }
-      }
-      function observeDispatch(promise) {
-        // Direct native-then call: routing through ObservedPromise.then
-        // would mark the promise consumed and recurse the observer. The
-        // observer body must be exception-safe on ANY rejection value:
-        // a script handler can throw an exotic value (a message getter
-        // that throws, a Proxy with throwing traps), and an observer
-        // killed mid-body would turn the very rejection it watches into
-        // a process-level unhandledRejection — the exact failure class
-        // the observer exists to remove.
-        Promise.prototype.then.call(promise, undefined, function (err) {
-          if (promise.__wfConsumed) return;
-          // R11-30: also suppress on the run-level abort state, not just
-          // the rejection's own marker — a wrapped Promise.any aggregate
-          // rejects with a natively built AggregateError that carries
-          // neither marker, so teardown rejections of a correctly-
-          // cancelled run would still be mirrored when it is unconsumed.
-          if (readFlag(err, '__wfAbort') || __b.isRunAborted()) return;
-          var dispatchFailed = readFlag(err, '__wfDispatchFailed');
-          var errors = null;
-          try {
-            if (err && Array.isArray(err.errors)) errors = err.errors;
-          } catch (e) {
-            errors = null;
-          }
-          if (!dispatchFailed && errors) {
-            // R11-4: Promise.any rejects with a fresh vm-realm
-            // AggregateError carrying no flags; the element errors are
-            // reachable on .errors with their markers preserved. Derive
-            // the attribution from the causes instead of blaming the
-            // script for a dispatch failure.
-            for (var i = 0; i < errors.length; i++) {
-              if (readFlag(errors[i], '__wfDispatchFailed')) {
-                dispatchFailed = true;
-                break;
-              }
-            }
-          }
-          // R11-15: cross-root suppression — aggregate roots track
-          // rejectionHandled independently of their elements' roots, so
-          // a forwarded dispatch failure whose originating element root
-          // the script already handled must not mirror from the
-          // aggregate. The element rootId is stamped in vmAsync;
-          // Promise.all/race forward the element's own reason,
-          // Promise.any surfaces them on .errors.
-          try {
-            var sourceIds = [];
-            if (err && err.__wfRootId) {
-              sourceIds.push(err.__wfRootId);
-            } else if (errors) {
-              for (var j = 0; j < errors.length; j++) {
-                if (errors[j] && errors[j].__wfRootId) {
-                  sourceIds.push(errors[j].__wfRootId);
-                }
-              }
-            }
-            for (var k = 0; k < sourceIds.length; k++) {
-              if (
-                sourceIds[k] !== promise.__wfRootId &&
-                __b.wfIsRootHandled(sourceIds[k])
-              ) {
-                return;
-              }
-            }
-          } catch (e) {
-            // A throwing exotic value must not kill the observer; fall
-            // through and mirror conservatively.
-          }
-          var msg;
-          try {
-            msg = String(err && err.message != null ? err.message : err);
-          } catch (e) {
-            msg = '[unserializable rejection value]';
-          }
-          promise.__wfUnconsumedId = __b.wfReportUnconsumed(
-            promise.__wfRootId,
-            promise.__wfIsRoot === true,
-            dispatchFailed,
-            msg,
-          );
-        });
-      }
-      // R11-3: await / Promise.resolve / returning a thenable from a
-      // handler adopts an ObservedPromise through this then with the
-      // adopting promise's capability (resolve, reject) pair — native
-      // functions, indistinguishable from real handlers by arity. They
-      // are detected by the native toString signature. Adoption
-      // CONSUMES the result (a delayed adoption clears a recorded
-      // verdict exactly like a delayed await) but is NOT a rejection
-      // handler: the rejection transfers into the adopting promise —
-      // typically an async wrapper's implicit promise, which is a plain
-      // vm-realm Promise the mirror cannot observe. Marking adoption as
-      // handling would silently disarm the mirror for the forgotten-
-      // await failure class; the run-level escape hook in the host
-      // surfaces those escapes instead. Bound script functions also
-      // stringify as native code; misreading one as adoption only
-      // forgoes the rejectionHandled marking, never native semantics.
-      function isAdoptionAttach(handler) {
-        try {
-          return (
-            typeof handler === 'function' &&
-            Function.prototype.toString
-              .call(handler)
-              .indexOf('[native code]') !== -1
-          );
-        } catch (e) {
-          return false;
-        }
-      }
-      class ObservedPromise extends Promise {
-        then(onFulfilled, onRejected) {
-          // R11-26: introspect the handler BEFORE any state mutation.
-          // The read is guarded because a script-supplied handler can
-          // be exotic (a revoked Proxy wrapping a function, a throwing
-          // accessor) — an unguarded read made .then() throw
-          // synchronously, something native then never does, leaving
-          // the promise marked consumed with no handler attached.
-          var rethrows = false;
-          try {
-            rethrows = !!(onRejected && onRejected.__wfRethrows);
-          } catch (e) {
-            rethrows = false;
-          }
-          this.__wfConsumed = true;
-          // An attached rejection handler means the script can surface the
-          // root rejection itself; the mirror stays silent for it. The
-          // finally override below routes through this then with marked
-          // rethrow combinators — those re-raise the rejection instead of
-          // handling it, so they must NOT set the flag (marking them
-          // handled would silently drop a fire-and-forget
-          // agent(...).finally(...) failure). Adoption attaches count
-          // as consumption only, never handling (see isAdoptionAttach):
-          // they mark adoptedOut so forwarded sibling entries defer to
-          // the adopting chain / escape hook instead of mirroring.
-          if (isAdoptionAttach(onRejected)) {
-            __b.wfMarkAdopted(this.__wfRootId);
-          } else if (typeof onRejected === 'function' && !rethrows) {
-            __b.wfMarkRejectionHandled(this.__wfRootId);
-          }
-          // A delayed consumption clears a verdict recorded at
-          // rejection-settlement time, so a late-but-real await is not
-          // misreported as unconsumed.
-          if (this.__wfUnconsumedId !== undefined) {
-            __b.wfClearUnconsumed(this.__wfUnconsumedId);
-            this.__wfUnconsumedId = undefined;
-          }
-          const derived = super.then(onFulfilled, onRejected);
-          derived.__wfRootId = this.__wfRootId;
-          observeDispatch(derived);
-          return derived;
-        }
-        finally(onFinally) {
-          // Native Promise.prototype.finally calls the observed then with
-          // two function combinators, indistinguishable there from a real
-          // then(f, g) — which would mark the root rejection handled even
-          // though finally rethrows it. Implement finally through the
-          // observed then with an explicitly-marked rethrow combinator so
-          // the mirror stays armed for finally-only chains.
-          if (typeof onFinally !== 'function') {
-            return this.then(undefined, undefined);
-          }
-          const onRethrow = function (err) {
-            return Promise.resolve(onFinally()).then(function () {
-              throw err;
-            });
-          };
-          onRethrow.__wfRethrows = true;
-          return this.then(
-            function (value) {
-              return Promise.resolve(onFinally()).then(function () {
-                return value;
-              });
-            },
-            onRethrow,
-          );
-        }
-      }
-      // --- Static combinators: observe the aggregate promise ---
-      // Promise.all/race/any build their aggregate via the native static;
-      // it never passes through the observed then, so a fire-and-forget
-      // aggregate holding a failed dispatch would escape the run-log
-      // mirror. While the run is live the host's adoption-escape hook
-      // (R11-3) still catches and mirrors the process-level
-      // unhandledRejection — a round-14 A/B confirmed that hook, not
-      // this wrap, is the live-run backstop — but only with the coarse
-      // '(rejection not handled)' wording, and once the run's hook is
-      // detached nothing in the sandbox catches the escape. R14-A:
-      // wrapping the statics gives each aggregate its own observer, so
-      // consumption tracking works through the aggregate's own observed
-      // then (await / .catch / .then marks it handled) and the mirror
-      // itself classifies the rejection; the elements still funnel
-      // through the then override via the native static's internal
-      // attach, so they stay marked consumed.
-      function observeAggregate(nativeAggregate) {
-        const rootId = __b.wfRegisterRoot();
-        const observed = new ObservedPromise(function (resolve, reject) {
-          Promise.prototype.then.call(nativeAggregate, resolve, reject);
-        });
-        observed.__wfRootId = rootId;
-        observed.__wfIsRoot = true;
-        observeDispatch(observed);
-        return observed;
-      }
-      const nativePromiseAll = Promise.all;
-      const nativePromiseRace = Promise.race;
-      const nativePromiseAny = Promise.any;
-      // R11-16: a static called on a script-defined Promise subclass
-      // must honor the species contract and return a subclass instance,
-      // so non-default receivers bypass observation (their elements
-      // still funnel through the observed then, and a fire-and-forget
-      // dispatch failure escaping such an aggregate is still caught by
-      // the host's adoption-escape hook via its stamped markers).
-      Promise.all = function (items) {
-        if (this !== Promise) return nativePromiseAll.call(this, items);
-        return observeAggregate(nativePromiseAll.call(this, items));
-      };
-      Promise.race = function (items) {
-        if (this !== Promise) return nativePromiseRace.call(this, items);
-        return observeAggregate(nativePromiseRace.call(this, items));
-      };
-      Promise.any = function (items) {
-        if (this !== Promise) return nativePromiseAny.call(this, items);
-        return observeAggregate(nativePromiseAny.call(this, items));
-      };
-      function vmAsync(hostFn) {
-        return function (...vmArgs) {
-          const rootId = __b.wfRegisterRoot();
-          const p = new ObservedPromise(function (resolve, reject) {
-            function rejectMapped(hostErr) {
-              const vmErr = mapDispatchError(hostErr);
-              // Stamp the originating root and run BEFORE the error can
-              // be forwarded into aggregate promises: the observer's
-              // cross-root suppression (R11-15) reads __wfRootId and
-              // the host's adoption-escape hook (R11-3) attributes by
-              // __wfRunId.
-              try {
-                vmErr.__wfRootId = rootId;
-                vmErr.__wfRunId = __b.runId;
-              } catch (e) {}
-              reject(vmErr);
-            }
-            try {
-              const hostPromise = hostFn.apply(null, vmArgs);
-              hostPromise.then(
-                function (value) { resolve(value); },
-                rejectMapped
+      const handle = (message: Record<string, unknown>): void => {
+        switch (message['type']) {
+          case 'ready': {
+            if (settled) return;
+            ready = true;
+            clearTimeout(startupTimer);
+            watchdog = new WallClockWatchdog(maxWallClockMs, () => {
+              // T40 (PR #4732 R4): abort the linked controller BEFORE
+              // rejecting so in-flight subagents see the cancellation and
+              // stop. A timeout is not a cancellation, and it has to be
+              // reported as the timeout it is.
+              wallClockFired = true;
+              opts.abortOnTimeout?.abort();
+              finish(
+                new Error(
+                  `Workflow execution exceeded ${maxWallClockMs} ms of active time (paused time is not counted). ` +
+                    'Override via SandboxOptions.maxWallClockMs or QWEN_CODE_MAX_WORKFLOW_SECONDS env var.',
+                ),
               );
-            } catch (hostErr) {
-              rejectMapped(hostErr);
+            });
+            // A sandbox started while the scheduler is ALREADY `paused` never
+            // receives a `paused` transition, so seed the current state.
+            if (opts.scheduler?.snapshot().state === 'paused') {
+              watchdog.pause();
             }
-          });
-          p.__wfRootId = rootId;
-          p.__wfIsRoot = true;
-          observeDispatch(p);
-          return p;
-        };
-      }
-
-      // --- phase / log ---
-      globalThis.phase = function phase(title) {
-        __b.pushPhase(String(title));
-      };
-      globalThis.log = function log(msg) {
-        __b.pushLog(msg);
-      };
-
-      // --- console (object with hardened methods, all in vm-realm) ---
-      const safeConsole = Object.create(null);
-      safeConsole.log = function () {
-        const parts = [];
-        for (let i = 0; i < arguments.length; i++) parts.push(String(arguments[i]));
-        __b.pushLog(parts.join(' '));
-      };
-      safeConsole.warn = safeConsole.log;
-      safeConsole.error = safeConsole.log;
-      globalThis.console = safeConsole;
-
-      // --- agent (with runtime allowlist + named throws, all vm-realm) ---
-      // FIX-Round1-T13: throw on any opts key not in the allowlist — catches
-      // typos like { scema: ... } that previously slipped through the
-      // [key:string]: unknown index signature.
-      const KNOWN_AGENT_OPTS = ['stepId', 'label', 'phase', 'schema', 'model', 'effort', 'isolation', 'agentType', 'stallMs', 'workingDir', 'disallowedTools', 'tools'];
-      globalThis.agent = vmAsync(function (prompt, agentOpts) {
-        agentOpts = agentOpts || {};
-        const keys = Object.keys(agentOpts);
-        for (let i = 0; i < keys.length; i++) {
-          const k = keys[i];
-          if (KNOWN_AGENT_OPTS.indexOf(k) === -1) {
-            throw new Error(
-              "agent({" + k + "}): unknown option. " +
-              "Known options are: " + KNOWN_AGENT_OPTS.join(', ') + "."
-            );
+            return;
           }
+          case 'log':
+            safeLog(requireString(message['line']));
+            return;
+          case 'phase':
+            safePhase(requireString(message['title']));
+            return;
+          case 'debug':
+            debugLogger.warn(
+              stripAnsiAndControl(requireString(message['message'])).slice(
+                0,
+                2000,
+              ),
+            );
+            return;
+          case 'agent': {
+            const context = contextFor(message['group'], message['branch']);
+            const { prompt, phase } = message;
+            const rawOpts = message['opts'];
+            respond(requireId(message['id']), () => {
+              const agentOpts = normalizeAgentOptions(rawOpts);
+              // Recorded only once every option gate has passed, so a call
+              // its options rejected leaves no phase that dispatched nothing.
+              if (
+                typeof phase === 'string' &&
+                phase.length > 0 &&
+                phases[phases.length - 1] !== phase
+              ) {
+                safePhase(phase);
+              }
+              const stepId = readWorkflowStepId(agentOpts.stepId);
+              delete agentOpts.stepId;
+              if (stepId !== undefined) agentOpts.stepId = stepId;
+              return opts.dispatch(prompt as string, agentOpts, context);
+            });
+            return;
+          }
+          case 'workflow': {
+            const context = contextFor(message['group'], message['branch']);
+            const workflow = opts.workflow;
+            respond(requireId(message['id']), () => {
+              if (!workflow) throw new Error('workflow() is unavailable here.');
+              return workflow(
+                message['ref'] as string | { scriptPath: string },
+                message['args'],
+                readWorkflowStepId(message['stepId']),
+                context,
+              );
+            });
+            return;
+          }
+          case 'fork': {
+            const parent = contextFor(
+              message['parentGroup'],
+              message['parentBranch'],
+            );
+            fanOuts.set(requireId(message['group']), {
+              parent,
+              inherited: parent.tails,
+              branches: new Map(),
+            });
+            return;
+          }
+          case 'join': {
+            const group = requireId(message['group']);
+            const fanOut = fanOuts.get(group);
+            fanOuts.delete(group);
+            if (fanOut && message['merge'] === true) {
+              fanOut.parent.tails = mergeFanoutTails(
+                fanOut.parent.tails,
+                fanOut.inherited,
+                [...fanOut.branches.entries()]
+                  .sort(([a], [b]) => a - b)
+                  .flatMap(([, context]) => context.tails),
+              );
+            }
+            return;
+          }
+          case 'done': {
+            if (settled || outcome) return;
+            if (message['ok'] === true) {
+              outcome = {
+                ok: true,
+                value: decodeWorkflowValue(message['value']),
+              };
+            } else {
+              const data = message['error'];
+              if (!isRecord(data)) throw invalidHostMessage();
+              const error = new Error(requireString(data['message']));
+              if (typeof data['name'] === 'string') error.name = data['name'];
+              if (data['runFailure'] === true) {
+                Object.assign(error, { __wfRunFailure: true });
+              }
+              outcome = { ok: false, error };
+            }
+            // One macrotask lets dispatch rejections already settling on this
+            // side reach the script before the unconsumed-rejection verdict.
+            setImmediate(() => {
+              if (settled || flushInFlight) return;
+              flushInFlight = true;
+              settlesSinceFlush = 0;
+              send({ type: 'flush' });
+            });
+            return;
+          }
+          case 'flushed': {
+            const completed = outcome;
+            if (!settled && completed) {
+              if (completed.ok) finish(undefined, completed.value);
+              else finish(completed.error);
+            }
+            flushInFlight = false;
+            if (settled && outstanding.size === 0 && settlesSinceFlush === 0) {
+              host.kill();
+            } else {
+              release();
+            }
+            return;
+          }
+          case 'error':
+            failHost(new Error(requireString(message['message'])));
+            return;
+          default:
+            throw invalidHostMessage();
         }
-        // P3: schema + model + agentType + isolation are all wired through
-        // createProductionDispatch → SubagentManager.createAgentHeadless.
-        // The dispatch surfaces descriptive errors for "agent type not found",
-        // "isolation:'remote' is not available in this build", parent-dirty
-        // refuse, worktree creation failures, and StructuredOutput contract
-        // violations ("completed without calling StructuredOutput after 2
-        // in-conversation nudges").
-        if (
-          agentOpts.isolation !== undefined &&
-          agentOpts.isolation !== 'worktree' &&
-          agentOpts.isolation !== 'remote'
-        ) {
-          throw new Error(
-            "agent({isolation: '" + agentOpts.isolation + "'}): unknown isolation mode. " +
-            "Known modes are: 'worktree', 'remote'."
+      };
+
+      // Declared last: every handler above runs only once the host is up.
+      const host: WorkflowHostConnection = startWorkflowHost({
+        onMessage: (body) => {
+          try {
+            const message: unknown = JSON.parse(body);
+            if (!isRecord(message)) throw invalidHostMessage();
+            handle(message);
+          } catch (error) {
+            failHost(error);
+          }
+        },
+        onExit: (detail) => {
+          clearTimeout(drainTimer);
+          signal?.removeEventListener('abort', onAbort);
+          finish(
+            new Error(
+              `The workflow host stopped before the script finished. ${detail}`,
+            ),
           );
-        }
-        // NOTE: this init script is a host-side template literal — no
-        // backticks anywhere below, in code or comments.
-        //
-        // A non-number stallMs is silently dropped downstream and the
-        // default watchdog applies, contradicting "0 disables the watchdog"
-        // — refuse it loudly like the other option gates.
-        if (agentOpts.stallMs !== undefined && (typeof agentOpts.stallMs !== 'number' || !Number.isFinite(agentOpts.stallMs))) {
-          throw new Error("agent({stallMs}): must be a finite number of milliseconds (0 disables the watchdog).");
-        }
-        // workingDir pins the agent to a worktree the CALLER already owns;
-        // isolation creates and reaps one. Asking for both is a contradiction
-        // about who owns the directory's lifetime, so name it here rather than
-        // silently letting one win.
-        if (agentOpts.workingDir !== undefined) {
-          if (typeof agentOpts.workingDir !== 'string' || agentOpts.workingDir.trim().length === 0) {
-            throw new Error(
-              "agent({workingDir}): must be a non-empty string naming an existing " +
-              "git worktree of this repository."
-            );
-          }
-          if (agentOpts.isolation !== undefined) {
-            throw new Error(
-              "agent({workingDir, isolation}): incompatible options. workingDir " +
-              "pins the agent to a worktree you already own; isolation creates " +
-              "a fresh one and removes it afterwards. Pass one."
-            );
-          }
-        }
-        // SECURITY (P3 R2 self-review): user-script-controlled agentOpts
-        // cross the vm/host boundary verbatim via vmAsync's hostFn.apply.
-        // A Proxy / inherited-getter / non-plain object in agentOpts.schema
-        // would let host-side code (SyntheticOutputTool constructor + AJV
-        // compile) trigger user-controlled trap handlers that execute with
-        // the host realm's full surface. Revive agentOpts through JSON
-        // round-trip BEFORE crossing so the host only ever sees vm-realm
-        // plain objects with vm-realm prototypes. Same mechanism that
-        // makes args + parallel/pipeline results safe.
-        var safeOpts;
-        try {
-          safeOpts = JSON.parse(JSON.stringify(agentOpts));
-        } catch (e) {
-          throw new Error(
-            "agent() opts contain a non-JSON-serializable value: " +
-            String(e && e.message != null ? e.message : e)
-          );
-        }
-        // effort, disallowedTools and tools are validated on the REVIVED
-        // copy: that is the object the host dispatch and the resume key see,
-        // so a getter cannot show one value here and hand another to the
-        // dispatch. All three are normalized in place (an effort alias becomes
-        // its tier; a tool list has built-in display names mapped to tool
-        // names and is sorted and de-duplicated) so equivalent spellings share
-        // one resume key.
-        if (safeOpts.effort !== undefined) {
-          var tier = __b.normalizeEffort(safeOpts.effort);
-          if (tier === null) {
-            throw new Error(
-              "agent({effort}): unknown effort tier " + __b.sanitizeForMessage(JSON.stringify(safeOpts.effort)) + ". " +
-              "Known tiers are: " + __b.effortTiers + "."
-            );
-          }
-          safeOpts.effort = tier;
-        }
-        if (safeOpts.disallowedTools !== undefined) {
-          var denied = safeOpts.disallowedTools;
-          if (
-            !Array.isArray(denied) ||
-            denied.some(function (name) {
-              return typeof name !== 'string' || name.length === 0 || name !== name.trim();
-            })
-          ) {
-            throw new Error(
-              "agent({disallowedTools}): must be an array of non-empty tool-name strings " +
-              "without surrounding whitespace, e.g. ['run_shell_command', 'write_file']."
-            );
-          }
-          var uniqueDenied = [];
-          for (var d = 0; d < denied.length; d++) {
-            var deniedName = __b.canonicalToolName(denied[d]);
-            if (uniqueDenied.indexOf(deniedName) === -1) uniqueDenied.push(deniedName);
-          }
-          uniqueDenied.sort();
-          if (uniqueDenied.length === 0) {
-            delete safeOpts.disallowedTools;
-          } else {
-            safeOpts.disallowedTools = uniqueDenied;
-          }
-        }
-        // An empty allowlist would leave the agent nothing to call, so unlike
-        // an empty deny list it is refused rather than dropped.
-        if (safeOpts.tools !== undefined) {
-          var allowed = safeOpts.tools;
-          if (
-            !Array.isArray(allowed) ||
-            allowed.length === 0 ||
-            allowed.some(function (name) {
-              return typeof name !== 'string' || name.length === 0 || name !== name.trim();
-            })
-          ) {
-            throw new Error(
-              "agent({tools}): must be a non-empty array of tool-name strings " +
-              "without surrounding whitespace, e.g. ['run_shell_command', 'read_file']. " +
-              "Omit tools to keep every tool."
-            );
-          }
-          var uniqueAllowed = [];
-          for (var a = 0; a < allowed.length; a++) {
-            var problem = __b.toolAllowEntryProblem(allowed[a]);
-            if (problem !== null) {
-              throw new Error("agent({tools}): " + problem);
-            }
-            var allowedName = __b.canonicalToolName(allowed[a]);
-            if (uniqueAllowed.indexOf(allowedName) === -1) uniqueAllowed.push(allowedName);
-          }
-          uniqueAllowed.sort();
-          safeOpts.tools = uniqueAllowed;
-        }
-        // The phase is recorded only once every option gate above has passed,
-        // so a call its options rejected leaves no phase that dispatched
-        // nothing.
-        if (typeof agentOpts.phase === 'string' && agentOpts.phase.length > 0) {
-          if (__b.lastPhase() !== agentOpts.phase) {
-            __b.pushPhase(agentOpts.phase);
-          }
-        }
-        // SECURITY (PR #4947 R1 wenshao, extended for P3): vmAsync's resolve
-        // path is verbatim (no re-wrap of resolved values). Host-realm
-        // strings cross the boundary harmlessly because primitives have no
-        // prototype identity. But P3's schema-mode dispatch returns the
-        // validated structured_output args as a host-realm OBJECT --
-        // handing that to the script reopens the T1/T8/T14 escape:
-        // result.constructor.constructor("return process")() would walk
-        // the host Object.prototype chain to the host Function
-        // constructor. Per-call JSON revival inside this vm runInContext
-        // block makes the returned object carry vm-realm prototypes (same
-        // mechanism as parallel/pipeline reviveInRealm and the args
-        // global revival). The fallback to null on a non-serializable
-        // resolve mirrors the errors-as-data convention parallel/pipeline
-        // already use for individual slot failures.
-        // R3 review (wenshao T3 [Suggestion]): the null fallback below is
-        // a SECURITY backstop, not a contract path. In schema mode the
-        // host return is the validated args of a structured_output tool
-        // call -- LLM tool_call payloads are always JSON-serializable
-        // (the model sends them through the OpenAI tool-call protocol
-        // which serializes through JSON itself) and SyntheticOutputTool's
-        // AJV validation runs over the parsed JSON, so a non-serializable
-        // host return is unreachable in production schema mode. The
-        // sentinel preserves the errors-as-data convention parallel /
-        // pipeline already use for individual slot failures, and stays as
-        // residual defense for any future dispatch path whose return
-        // value isn't a tool_call payload. logRevivalFailure surfaces
-        // the actionable detail (slot 0 + the error string) to operators
-        // so a real trigger in production isn't silent.
-        return __b.hostAgent(prompt, safeOpts, safeOpts.stepId).then(function (value) {
-          if (value === null || typeof value !== 'object') {
-            return value;
-          }
-          try {
-            return JSON.parse(JSON.stringify(value));
-          } catch (e) {
-            __b.logRevivalFailure(0, String(e && e.message != null ? e.message : e));
-            return null;
-          }
-        });
+        },
       });
-
-      // --- parallel / pipeline ---
-      // SECURITY (PR #4732 P2): the host impl resolves with a HOST-realm array.
-      // vmAsync's resolve path is verbatim (it does NOT re-wrap resolved
-      // values), so handing that host array to the script would reopen the
-      // T1/T8/T14 escape: result.constructor.constructor('return process')()
-      // walks the host Array.prototype chain to the host Function constructor.
-      // We revive the array INSIDE the vm realm with JSON.parse(JSON.stringify)
-      // -- the same mechanism that makes the args global safe (see the args
-      // revival above) -- so the value the script sees has vm-realm prototypes
-      // whose constructors can't reach host process. Agent results are JSON
-      // strings (and null slots), so the round-trip is lossless for P2.
-      //
-      // EAD-1 (P2 self-review): revive PER-ELEMENT, not the whole array in one
-      // JSON.stringify. A single slot whose VALUE is non-serializable (a thunk
-      // that returns a BigInt or a circular object) must become null at its
-      // index -- it must NOT throw on the whole array and destroy every sibling
-      // result, which would defeat errors-as-data for return values. The outer
-      // [] is built in-realm here, so the result keeps vm-realm prototypes.
-      //
-      // SECURITY (PR #4947 R1 wenshao): reviveInRealm MUST remain inside this
-      // vm init runInContext block. JSON, Array, Object here are vm-realm
-      // globals; extracting this function to a host-side utility (e.g. a
-      // shared utils/jsonRevive.ts) would resolve those references against
-      // the HOST realm, silently reopening the T1/T8/T14 escape that the
-      // revival is designed to prevent. The textual identity to a host-side
-      // util is exactly the trap.
-      function reviveInRealm(hostArr) {
-        const out = [];
-        for (let i = 0; i < hostArr.length; i++) {
-          try {
-            out[i] = JSON.parse(JSON.stringify(hostArr[i]));
-          } catch (e) {
-            // Cross to host realm for debug logging. The bridge function
-            // accepts only primitive strings/numbers; the error message is
-            // coerced to a String here so no vm-realm Error object crosses.
-            __b.logRevivalFailure(i, String(e?.message ?? e));
-            out[i] = null;
-          }
-        }
-        return out;
-      }
-      if (__b.hasParallel) {
-        const callParallel = vmAsync(function (thunks) {
-          return __b.hostParallel(thunks);
-        });
-        globalThis.parallel = function parallel(thunks) {
-          return callParallel(thunks).then(reviveInRealm);
-        };
-      } else {
-        globalThis.parallel = function parallel() {
-          return new Promise(function (_, reject) {
-            reject(new Error(
-              'parallel() is unavailable: this sandbox was created without a ' +
-              'parallel implementation. The orchestrator injects one; a bare ' +
-              'sandbox has no concurrent-dispatch capability.'
-            ));
-          });
-        };
-      }
-      if (__b.hasPipeline) {
-        const callPipeline = vmAsync(function (items) {
-          const stages = [];
-          for (let i = 1; i < arguments.length; i++) stages.push(arguments[i]);
-          return __b.hostPipeline.apply(null, [items].concat(stages));
-        });
-        globalThis.pipeline = function pipeline() {
-          return callPipeline.apply(null, arguments).then(reviveInRealm);
-        };
-      } else {
-        globalThis.pipeline = function pipeline() {
-          return new Promise(function (_, reject) {
-            reject(new Error(
-              'pipeline() is unavailable: this sandbox was created without a ' +
-              'pipeline implementation. The orchestrator injects one; a bare ' +
-              'sandbox has no staggered multi-stage capability.'
-            ));
-          });
-        };
-      }
-      // --- workflow (nested, single-level) ---
-      // Mirrors agent(): args cross vm→host verbatim (safe direction), the
-      // single result is revived back into the vm realm via JSON round-trip
-      // (same T1/T8/T14 escape defense as agent / parallel / pipeline). The
-      // host impl resolves a saved workflow and runs it sharing this run's
-      // agent-count cap + token budget. When __b.hasWorkflow is false, the
-      // sandbox is either bare (no resolver wired) OR is itself a nested
-      // workflow — in both cases workflow() must throw, which is how the
-      // single-level nesting limit is enforced (a nested sandbox is created
-      // without a workflow impl, so its workflow() lands in the else branch).
-      if (__b.hasWorkflow) {
-        const callWorkflow = vmAsync(function (nameOrRef, wfArgs, wfOpts) {
-          if (wfOpts !== undefined && (wfOpts === null || typeof wfOpts !== 'object' || Array.isArray(wfOpts) || Object.keys(wfOpts).some(function (key) { return key !== 'stepId'; }))) {
-            throw new Error('workflow() options must be an object containing only stepId.');
-          }
-          const stepId = wfOpts === undefined ? undefined : wfOpts.stepId;
-          // Sanitize args through a JSON round-trip BEFORE crossing so the
-          // host only ever sees vm-realm plain objects (same defense as
-          // agent()'s safeOpts). nameOrRef may be a string or {scriptPath}.
-          var safeRef;
-          var safeArgs;
-          try {
-            safeRef = nameOrRef === undefined
-              ? undefined
-              : JSON.parse(JSON.stringify(nameOrRef));
-            safeArgs = wfArgs === undefined
-              ? undefined
-              : JSON.parse(JSON.stringify(wfArgs));
-          } catch (e) {
-            throw new Error(
-              'workflow() received a non-JSON-serializable argument: ' +
-              String(e && e.message != null ? e.message : e)
-            );
-          }
-          return __b.hostWorkflow(safeRef, safeArgs, stepId).then(function (value) {
-            if (value === null || typeof value !== 'object') {
-              return value;
-            }
-            try {
-              return JSON.parse(JSON.stringify(value));
-            } catch (e) {
-              __b.logRevivalFailure(0, String(e && e.message != null ? e.message : e));
-              return null;
-            }
-          });
-        });
-        globalThis.workflow = function workflow(nameOrRef, wfArgs, wfOpts) {
-          return callWorkflow(nameOrRef, wfArgs, wfOpts);
-        };
-      } else {
-        globalThis.workflow = function workflow() {
-          return new Promise(function (_, reject) {
-            reject(new Error(
-              "workflow() is unavailable here. Either this sandbox was created " +
-              "without a saved-workflow resolver, or this script is already " +
-              "running as a nested workflow — workflow() nesting is limited to " +
-              "a single level (a workflow cannot call another workflow that " +
-              "itself calls workflow())."
-            ));
-          });
-        };
-      }
-
-      // --- budget ---
-      const safeBudget = Object.create(null);
-      Object.defineProperty(safeBudget, 'total', {
-        value: __b.budgetTotal,
-        writable: false, configurable: false,
-      });
-      if (__b.hasBudget) {
-        Object.defineProperty(safeBudget, 'spent', {
-          value: function spent() { return __b.hostBudgetSpent(); },
-          writable: false, configurable: false,
-        });
-        Object.defineProperty(safeBudget, 'remaining', {
-          value: function remaining() { return __b.hostBudgetRemaining(); },
-          writable: false, configurable: false,
-        });
-      } else {
-        Object.defineProperty(safeBudget, 'spent', {
-          value: function spent() {
-            throw new Error(
-              'budget.spent() is not supported in P1. Token tracking is scheduled for P5.'
-            );
-          },
-          writable: false, configurable: false,
-        });
-        Object.defineProperty(safeBudget, 'remaining', {
-          value: function remaining() {
-            throw new Error(
-              'budget.remaining() is not supported in P1. Token tracking is scheduled for P5.'
-            );
-          },
-          writable: false, configurable: false,
-        });
-      }
-      globalThis.budget = safeBudget;
-    })();`,
-    ctx,
-    { filename: 'workflow-sandbox-init.js' },
-  );
-
-  const maxWallClockMs = resolveMaxWallClockMs(opts);
-
-  // Flush still-unconsumed rejection entries into the run log. Called from
-  // `run()`'s finally: the one-macrotask yield lets rejection observers
-  // queued behind the script's settlement microtasks land before the
-  // verdict. When no dispatch root was ever registered the yield is skipped
-  // — dispatch-free runs keep their settlement free of timer dependencies
-  // (load-bearing for fake-timer tests of the wall-clock backstop).
-  const flushUnconsumedRejections = async (): Promise<void> => {
-    unconsumedSettled = true;
-    if (nextUnconsumedId === 1) return;
-    await new Promise<void>((resolve) => {
-      setImmediate(resolve);
-    });
-    for (const rec of unconsumedRejections.values()) {
-      // Contract: a rejection whose root the script attached a
-      // rejection handler to anywhere in the chain is never mirrored —
-      // regardless of attribution (R11-14). A forwarded dispatch
-      // rejection whose root was adopted out defers to the adopting
-      // chain too (see unconsumedRoots): handled there it needs no
-      // signal, forgotten there the escape hook provides it, deduped
-      // by the shared key below.
-      const rootState = unconsumedRoots.get(rec.rootId);
-      if (rootState?.rejectionHandled) {
-        continue;
-      }
-      if (rec.dispatchFailed && rootState?.adoptedOut) {
-        continue;
-      }
-      const key = rec.rootId + '\u0000' + rec.msg;
-      if (mirroredEscapeKeys.has(key)) continue;
-      mirroredEscapeKeys.add(key);
-      safeLog(unconsumedRejectionLine(rec));
-    }
-    // Clear after flushing so a subsequent flush (a reused sandbox's next
-    // run) does not re-log entries this run already reported.
-    unconsumedRejections.clear();
-  };
-
-  // R11-3: adoption (await / Promise.resolve / returning a thenable
-  // from a handler) forwards a root rejection into the adopting
-  // promise — typically an async wrapper's implicit promise, a plain
-  // vm-realm Promise the mirror cannot observe. When the script never
-  // handles that promise, Node fires a process-level
-  // 'unhandledRejection' carrying the marked vm-realm error; this hook
-  // mirrors those escapes into the run log while the run is live, so a
-  // forgotten dispatch failure no longer loses its only log / alarm /
-  // telemetry surface. Roots whose rejection the script handled stay
-  // silent here too (the contract keys on the root, same as the flush).
-  // The hook is installed per run() and matches only this run's stamped
-  // rejections, so concurrent runs don't log into each other. Known
-  // limits: a rejection landing after this run's flush (a fire-and-
-  // forget dispatch outliving the run) escapes as before, and the event
-  // itself cannot be cancelled from inside the sandbox — a host with
-  // its own unhandledRejection listener still observes it.
-  const hookRunId = opts.runId ?? '';
-  const adoptionEscapeHook = (
-    reason: unknown,
-    _promise: Promise<unknown>,
-  ): void => {
-    try {
-      if (!reason || typeof reason !== 'object') return;
-      const marked = reason as {
-        __wfDispatchFailed?: unknown;
-        __wfRunId?: unknown;
-        __wfRootId?: unknown;
-        message?: unknown;
-      };
-      if (marked.__wfDispatchFailed !== true) return;
-      if (String(marked.__wfRunId ?? '') !== hookRunId) return;
-      const rootId =
-        typeof marked.__wfRootId === 'number' ? marked.__wfRootId : undefined;
-      if (
-        rootId !== undefined &&
-        unconsumedRoots.get(rootId)?.rejectionHandled
-      ) {
-        return;
-      }
-      let msg: string;
       try {
-        msg = marked.message != null ? String(marked.message) : String(reason);
-      } catch {
-        msg = '[unserializable rejection value]';
+        host.send({
+          type: 'start',
+          source,
+          args: argsJson,
+          workflow: opts.workflow !== undefined,
+          budget: budgetSnapshot() ?? null,
+          maxLogLines: MAX_LOG_LINES,
+          syncTimeoutMs: WORKFLOW_SYNC_EVALUATION_TIMEOUT_MS,
+        });
+      } catch (error) {
+        failHost(error);
       }
-      const key = String(rootId ?? '') + '\u0000' + msg;
-      if (mirroredEscapeKeys.has(key)) return;
-      mirroredEscapeKeys.add(key);
-      safeLog('dispatch failed (rejection not handled): ' + msg);
-    } catch (e) {
-      debugLogger.warn('adoptionEscapeHook failed:', e);
-    }
-  };
+    });
 
   let extractedMeta: WorkflowMeta | null = null;
   return {
     async run(scriptSource: string): Promise<unknown> {
-      // R10-7: the unconsumed-rejection bookkeeping is per-run. Reset it
-      // here (not just in flush) so a second run() on the same sandbox
-      // starts from the same clean slate as a fresh sandbox — otherwise
-      // the first run's flush latches unconsumedSettled for the sandbox's
-      // lifetime and every later rejection takes the immediate-mirror
-      // path, bypassing the deferred verdict.
-      unconsumedSettled = false;
-      unconsumedRoots.clear();
-      unconsumedRejections.clear();
-      nextUnconsumedId = 1;
-      mirroredEscapeKeys = new Set();
-
-      let watchdog: WallClockWatchdog | undefined;
-      let stopWatchingState: (() => void) | undefined;
-      let rearmWatchdogOnAbort: (() => void) | undefined;
-      let settleOnAbort: (() => void) | undefined;
-      let wallClockFired = false;
-      process.on('unhandledRejection', adoptionEscapeHook);
-      try {
-        // P4: extract `export const meta = {...}` once before the body runs.
-        // The stripped source is what the vm executes; the meta object is
-        // surfaced via `getMeta()` after the run (or after a malformed-meta
-        // throw, in which case the caller's catch block sees a clear error).
-        //
-        // Compilation goes through the same exported helper the pre-launch
-        // gate calls. Sharing the function is the whole point: a gate that
-        // compiled the script even slightly differently from the run would
-        // wave through something that then fails after the run is registered,
-        // which is the failure the gate exists to prevent.
-        const { script, meta } = compileWorkflowScript(scriptSource);
-        extractedMeta = meta;
-        // A run cancelled before its script started must not start it: the
-        // registry pre-registers the run and shares this controller, so a
-        // user cancel can land before `run()` is entered.
-        if (opts.abortOnTimeout?.signal.aborted) {
-          throw workflowCancelledError();
-        }
-        // 30s sync wall-clock cap inside vm — covers `while(true){}` style
-        // synchronous loops only. Once the IIFE hits its first `await`,
-        // `runInContext` returns and this timer is disarmed.
-        const runOpts: vm.RunningScriptOptions = {
-          timeout: WORKFLOW_SYNC_EVALUATION_TIMEOUT_MS,
-        };
-        const result = script.runInContext(ctx, runOpts) as Promise<unknown>;
-
-        // T23 (PR #4732 R2): async wall-clock cap covers everything past the
-        // first await — `return new Promise(() => {})`, async infinite loops,
-        // hung network calls — none of which the vm timeout or future P5
-        // budget can stop (a 0-token hang spends no budget). Permanent
-        // defense-in-depth; default 30 min, env-tunable.
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          watchdog = new WallClockWatchdog(maxWallClockMs, () => {
-            // T40 (PR #4732 R4): abort linked controller BEFORE rejecting so
-            // in-flight subagents see the cancellation and stop. Order
-            // matters: rejecting first then aborting would race the
-            // caller's finally block. The abort arm below must let this
-            // abort through untouched — a timeout is not a cancellation,
-            // and it has to be reported as the timeout it is.
-            wallClockFired = true;
-            opts.abortOnTimeout?.abort();
-            reject(
-              new Error(
-                `Workflow execution exceeded ${maxWallClockMs} ms of active time (paused time is not counted). ` +
-                  'Override via SandboxOptions.maxWallClockMs or QWEN_CODE_MAX_WORKFLOW_SECONDS env var.',
-              ),
-            );
-          });
-        });
-        // Pause-aware watchdog: suspend only while the scheduler is
-        // `paused` — once truly idle, the run must neither burn budget it
-        // will need after resume nor be killed mid-pause (resume would
-        // then be impossible). During `pausing` the backstop stays armed:
-        // an in-flight dispatch is typically still executing real work.
-        // Known edge: an in-flight dispatch parked on a tool approval
-        // waits on the user, not on real work, yet still burns budget
-        // until it is answered — see the `scheduler` option docs.
-        // Note the suspension assumes the script is idle while paused
-        // (blocked at a dispatch gate); ungated script awaits still run
-        // and are not covered by the backstop until resume. Once the run
-        // is aborted the watchdog must stay armed: a draining in-flight
-        // dispatch can still land a `pausing` → `paused` transition after
-        // the abort, and re-suspending would orphan a hung script.
-        const aborted = (): boolean =>
-          opts.abortOnTimeout?.signal.aborted === true;
-        stopWatchingState = opts.scheduler?.onStateChange(({ state }) => {
-          if (state === 'paused' && !aborted()) watchdog?.pause();
-          else watchdog?.resume();
-        });
-        // A nested sandbox created while the scheduler is ALREADY `paused`
-        // never receives a `paused` transition (the subscription only sees
-        // future transitions), so seed the current state — otherwise the
-        // watchdog stays armed and kills the nested run mid-pause.
-        if (opts.scheduler?.snapshot().state === 'paused' && !aborted()) {
-          watchdog?.pause();
-        }
-        // Belt to the abort arm's braces below: `registry.cancel()` aborts
-        // this controller, but `abortPending()` emits no state transition,
-        // so a pause-suspended watchdog would otherwise stay suspended.
-        // Re-arm it with the banked remainder so the wall clock keeps
-        // bounding the run independently of the abort arm.
-        rearmWatchdogOnAbort = (): void => watchdog?.resume();
-        opts.abortOnTimeout?.signal.addEventListener(
-          'abort',
-          rearmWatchdogOnAbort,
-          { once: true },
-        );
-        // Cancellation settles the run now, not when the wall clock runs
-        // out. Without this arm a script that is not currently blocked on a
-        // dispatch — sitting in ungated `await`s, or simply hung — keeps the
-        // run open until the banked remainder of the clock expires, and the
-        // user watches a cancelled run refuse to end. The script's own
-        // promise is left to settle by itself: its dispatches see the
-        // aborted signal and reject, so its `finally` blocks still run, and
-        // `Promise.race` keeps a handler attached so that later rejection
-        // is never an unhandled one.
-        const abortPromise = new Promise<never>((_, reject) => {
-          const signal = opts.abortOnTimeout?.signal;
-          if (!signal) return;
-          settleOnAbort = (): void => {
-            // The watchdog aborts the controller itself on the way to
-            // rejecting with the timeout; that abort is not a cancellation.
-            if (!wallClockFired) reject(workflowCancelledError());
-          };
-          signal.addEventListener('abort', settleOnAbort, { once: true });
-        });
-        return await Promise.race([result, timeoutPromise, abortPromise]);
-      } finally {
-        if (rearmWatchdogOnAbort) {
-          opts.abortOnTimeout?.signal.removeEventListener(
-            'abort',
-            rearmWatchdogOnAbort,
-          );
-        }
-        if (settleOnAbort) {
-          opts.abortOnTimeout?.signal.removeEventListener(
-            'abort',
-            settleOnAbort,
-          );
-        }
-        stopWatchingState?.();
-        watchdog?.stop();
-        // R11-10: the flush shares the finally that wraps the ENTIRE
-        // run body, so a synchronous throw before the race — most
-        // notably runInContext's 30s sync vm timeout, which precedes
-        // it — still surfaces already-queued mirror entries instead of
-        // discarding them with the per-run sandbox.
-        await flushUnconsumedRejections();
-        process.off('unhandledRejection', adoptionEscapeHook);
-      }
+      // P4: extract `export const meta = {...}` once before the body runs.
+      // Compilation goes through the same exported helper the pre-launch
+      // gate calls. Sharing the function is the whole point: a gate that
+      // compiled the script even slightly differently from the run would
+      // wave through something that then fails after the run is registered,
+      // which is the failure the gate exists to prevent.
+      const { source, meta } = await compileWorkflowScript(scriptSource);
+      extractedMeta = meta;
+      // A run cancelled before its script started must not start it: the
+      // registry pre-registers the run and shares this controller, so a
+      // user cancel can land before `run()` is entered.
+      if (signal?.aborted) throw workflowCancelledError();
+      return execute(source);
     },
     getPhases: () => [...phases],
     getLogs: () => [...logs],

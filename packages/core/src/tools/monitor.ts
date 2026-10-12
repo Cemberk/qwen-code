@@ -40,6 +40,7 @@ import {
   getCommandRoot,
   getShellConfiguration,
   hasUnsafeMonitorBackgroundOperator,
+  isShellWrapperOrEnvPrefixed,
   normalizeMonitorCommand as normalizeMonitorShellCommand,
   splitCommands,
 } from '../utils/shell-utils.js';
@@ -51,6 +52,7 @@ import {
 } from '../services/monitorRegistry.js';
 import { MAX_CONCURRENT_MONITORS } from '../services/monitorRegistry.js';
 import {
+  commandInvokesGit,
   extractCommandRules,
   isShellCommandReadOnlyWithinWorkspace,
 } from '../utils/shellAstParser.js';
@@ -173,6 +175,9 @@ class MonitorToolInvocation extends BaseToolInvocation<
 
   override async getDefaultPermission(): Promise<PermissionDecision> {
     if (this.config.getShellExecutionSandbox?.()) return 'ask';
+    // The wrapper (any path) and its environment run, not only the inner
+    // script that safetyCommand describes.
+    if (isShellWrapperOrEnvPrefixed(this.params.command)) return 'ask';
     const normalized = normalizeMonitorShellCommand(this.params.command);
     const command = normalized.safetyCommand;
     const cwd =
@@ -202,10 +207,16 @@ class MonitorToolInvocation extends BaseToolInvocation<
   }
 
   /** A read outside the workspace asks, as in the shell tool. */
-  private isReadOnlyWithinWorkspace(
+  private async isReadOnlyWithinWorkspace(
     command: string,
     cwd: string,
   ): Promise<boolean> {
+    if (
+      this.config.isTrustedFolder?.() === false &&
+      (await commandInvokesGit(command))
+    ) {
+      return false;
+    }
     const workspace = this.config.getWorkspaceContext();
     return isShellCommandReadOnlyWithinWorkspace(command, cwd, (p) =>
       workspace.isPathWithinWorkspace(p),

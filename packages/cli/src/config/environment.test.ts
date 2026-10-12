@@ -361,20 +361,22 @@ describe('relaunch environment provenance', () => {
 });
 
 describe('loadEnvironment', () => {
-  it('preserves settings.env compile cache over the pending default', () => {
+  // T7: a cache directory of code the CLI loads is not a settings.env value.
+  it('ignores a settings.env compile cache', () => {
     const workspace = makeWorkspace();
     process.env['QWEN_CODE_PENDING_COMPILE_CACHE'] = '/tmp/generated-cache';
 
     loadEnvironment(
       testSettings({
         env: {
-          NODE_COMPILE_CACHE: '/tmp/operator-cache',
+          NODE_COMPILE_CACHE: '/tmp/repo-cache',
+          QWEN_CODE_PENDING_COMPILE_CACHE: '/tmp/repo-cache',
         },
       }),
       workspace,
     );
 
-    expect(process.env['NODE_COMPILE_CACHE']).toBe('/tmp/operator-cache');
+    expect(process.env['NODE_COMPILE_CACHE']).toBe('/tmp/generated-cache');
     expect(process.env['QWEN_CODE_PENDING_COMPILE_CACHE']).toBeUndefined();
   });
 
@@ -865,21 +867,35 @@ describe('loadEnvironment', () => {
     expect(process.env['RUNTIME_DOTENV']).toBe('allowed');
   });
 
-  // ENV is sourced only by interactive sh, while the shell tool spawns
-  // non-interactive `bash -c`, and `ENV=production` is a mainstream
-  // application convention — so ENV is not loader-class and the .env load
-  // applies it.
-  it('applies ENV from a project .env on load', () => {
+  // ENV is sourced by interactive and POSIX-mode sh, so like the other
+  // shell-startup keys (SHELLOPTS, PS4, …) a project .env cannot set it.
+  it('does not apply shell-startup or tool-redirect keys from a project .env', () => {
     resetEnvironmentTrackingForTesting();
     const workspace = makeWorkspace();
     const envPath = path.join(workspace, '.env');
     fs.writeFileSync(
       envPath,
-      ['ENV=production', 'RUNTIME_DOTENV=allowed', ''].join('\n'),
+      [
+        'ENV=production',
+        'SHELLOPTS=xtrace',
+        'PS4=$(touch MARK)',
+        'RIPGREP_CONFIG_PATH=./rg.cfg',
+        'GIT_DIR=./.evil-git',
+        'RUNTIME_DOTENV=allowed',
+        '',
+      ].join('\n'),
     );
 
     loadEnvironment(testSettings({}), workspace);
-    expect(process.env['ENV']).toBe('production');
+    for (const key of [
+      'ENV',
+      'SHELLOPTS',
+      'PS4',
+      'RIPGREP_CONFIG_PATH',
+      'GIT_DIR',
+    ]) {
+      expect(process.env[key]).toBeUndefined();
+    }
     expect(process.env['RUNTIME_DOTENV']).toBe('allowed');
   });
 
@@ -962,9 +978,8 @@ describe('loadEnvironment', () => {
     // The full loader never takes the daemon token from settings.env — the
     // case variant must not slip the gate either.
     expect(process.env['qwen_server_token']).toBeUndefined();
-    // The .env load applies the lowercase twin as a distinct POSIX variable
-    // (on Windows the twin IS the uppercase variable).
-    expect(process.env['ld_library_path']).toBe('/workspace-a/first');
+    // Library search paths are project-excluded in every spelling.
+    expect(process.env['ld_library_path']).toBeUndefined();
   });
 
   // Sandbox selection, host-side proxy commands, and process-wide cache/temp

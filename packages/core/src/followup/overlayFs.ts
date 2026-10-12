@@ -10,10 +10,18 @@
  * or the real filesystem.
  */
 
-import { mkdir, mkdtemp, copyFile, rm } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  copyFile,
+  rm,
+  lstat,
+  readFile,
+} from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join, dirname, relative, isAbsolute } from 'node:path';
+import { join, dirname, relative, isAbsolute, sep } from 'node:path';
 import { tmpdir } from 'node:os';
+import { atomicWriteFile } from '../utils/atomicFileWrite.js';
 
 /**
  * Copy-on-write overlay filesystem for speculation safety.
@@ -83,8 +91,14 @@ export class OverlayFs {
     for (const [rel, overlayPath] of this.writtenFiles) {
       const realPath = join(this.realCwd, rel);
       try {
+        // A symlink anywhere below cwd (planted while speculating, or
+        // already in the repo) would carry the copy outside the workspace.
+        if (await this.hasSymlinkComponent(rel)) continue;
         await mkdir(dirname(realPath), { recursive: true });
-        await copyFile(overlayPath, realPath);
+        if (await this.hasSymlinkComponent(rel)) continue;
+        await atomicWriteFile(realPath, await readFile(overlayPath), {
+          noFollow: true,
+        });
         applied.push(realPath);
       } catch {
         // Best-effort — ignore errors and continue
@@ -92,6 +106,19 @@ export class OverlayFs {
     }
 
     return applied;
+  }
+
+  private async hasSymlinkComponent(rel: string): Promise<boolean> {
+    let current = this.realCwd;
+    for (const part of rel.split(sep)) {
+      current = join(current, part);
+      try {
+        if ((await lstat(current)).isSymbolicLink()) return true;
+      } catch {
+        return false; // the rest of the path does not exist yet
+      }
+    }
+    return false;
   }
 
   /**

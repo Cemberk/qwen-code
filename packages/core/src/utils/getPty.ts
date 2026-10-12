@@ -9,7 +9,7 @@ import { getErrorMessage } from './errors.js';
 export type PtyImplementation = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   module: any;
-  name: 'lydell-node-pty' | 'node-pty';
+  name: 'lydell-node-pty';
 } | null;
 
 export interface PtyLoadResult {
@@ -47,19 +47,8 @@ export const loadPty = async (): Promise<PtyLoadResult> => {
     const lydell = '@lydell/node-pty';
     const module = await import(lydell);
     return { impl: { module, name: 'lydell-node-pty' }, loadError: null };
-  } catch (lydellError) {
-    try {
-      const nodePty = 'node-pty';
-      const module = await import(nodePty);
-      return { impl: { module, name: 'node-pty' }, loadError: null };
-    } catch (nodePtyError) {
-      return {
-        impl: null,
-        loadError: [lydellError, nodePtyError]
-          .map((error) => getErrorMessage(error))
-          .join('; '),
-      };
-    }
+  } catch (error) {
+    return { impl: null, loadError: getErrorMessage(error) };
   }
 };
 

@@ -222,6 +222,13 @@ export const __getTextUtilsCacheSizes = (): {
 
 const regex = ansiRegex();
 
+// Single-byte C1 controls (U+0080-U+009F) open sequences on their own in
+// terminals that honour 8-bit controls — OSC (U+009D) hyperlinks and
+// clipboard writes, DCS, APC — and JSON.stringify leaves them raw, so they
+// are escaped visibly like the ESC-prefixed forms above.
+const C1_CONTROL_CHAR = /[\u0080-\u009f]/;
+const C1_CONTROL_CHARS_REGEX = /[\u0080-\u009f]/g;
+
 // Bare C0 control bytes (plus DEL / C1) that `escapeAnsiCtrlCodes` (ansi-regex)
 // leaves untouched because they carry no ESC prefix — BEL \x07, BS \x08,
 // VT \x0b, FF \x0c, CR \x0d, SO \x0e, SI \x0f, etc. TAB (\x09) and LF (\x0a)
@@ -264,14 +271,17 @@ export function sanitizeTerminalText(value: string): string {
  */
 export function escapeAnsiCtrlCodes<T>(obj: T): T {
   if (typeof obj === 'string') {
-    if (obj.search(regex) === -1) {
+    if (obj.search(regex) === -1 && !C1_CONTROL_CHAR.test(obj)) {
       return obj; // No changes return original string
     }
 
     regex.lastIndex = 0; // needed for global regex
-    return obj.replace(regex, (match) =>
-      JSON.stringify(match).slice(1, -1),
-    ) as T;
+    return obj
+      .replace(regex, (match) => JSON.stringify(match).slice(1, -1))
+      .replace(
+        C1_CONTROL_CHARS_REGEX,
+        (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`,
+      ) as T;
   }
 
   if (obj === null || typeof obj !== 'object') {

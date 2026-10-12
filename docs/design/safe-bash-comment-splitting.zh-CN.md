@@ -47,7 +47,7 @@
 
 在仅配置 deny 规则的情况下，快速路径还会把含注释命令的判定从 `deny` 变为 `ask`。配置 `deny: ['Bash(rm *)']`（无 allow 规则）时，`echo 'a' # comment ; rm -rf /tmp/x` 在 merge base 上会被硬拦截，因为无注释感知的切分把 `rm -rf /tmp/x` 暴露成独立 segment；而这里整条命令保持为一个 segment，于是 `findMatchingDenyRule` 与 `hasRelevantRules` 都为空，判定落到工具默认的 `ask`。这正是本修复的预期方向——Bash 只执行注释前的 `echo`，关于 `rm` 的规则无可匹配——并且无法在不破坏「允许的 `echo` 判定为 `allow`」这条验收标准的前提下回退：任何在隐藏 segment 命中 deny 时就退出的门禁，在 allow+deny 的情况下同样会退出。
 
-兜底来自 L3，而不是 L4。只有当 `hasRelevantRules` 为真时 `evaluatePermissionRules` 才会走到 `pm.evaluate()`，而折叠正是让它变为假的原因，所以生产上真正生效的判定是 `ShellToolInvocation.getDefaultPermission()`。对 shell wrapper 形态而言它是 `allow` 而不是 `ask`：`getDefaultPermission` 用原始命令做 substitution 门禁，却对 `stripShellWrapper(command)` 做只读分类，而这个 strip 会把注释连同 wrapper 一起去掉——`bash -c "ls" # ; rm -rf /tmp/x` 得到 `ls`，AST 判为只读。于是在 `deny: ['Bash(rm *)']` 下该命令会直接自动执行，没有对话框、也不引用任何规则，而 merge base 返回的是引用 `Bash(rm *)` 的 `deny`。这不是绕过，因为 Bash 不会执行 `#` 之后的文本；但下文「残留风险」分析也覆盖不到这一类——这里根本没有 `ask`、也没有对话框。该分层在 `permissionFlow.test.ts` 里以 flow 级测试钉住，因为 `pm.evaluate` 在结构上观察不到它。
+兜底来自 L3，而不是 L4。只有当 `hasRelevantRules` 为真时 `evaluatePermissionRules` 才会走到 `pm.evaluate()`，而折叠正是让它变为假的原因，所以生产上真正生效的判定是 `ShellToolInvocation.getDefaultPermission()`。对 shell wrapper 形态而言它同样是 `ask`：`getDefaultPermission` 从不对 shell wrapper 的内层脚本做只读分类，因为真正执行的是 wrapper 程序及其环境变量，所以 `bash -c "ls" # ; rm -rf /tmp/x` 会进入确认对话框。该分层在 `permissionFlow.test.ts` 里以 flow 级测试钉住，因为 `pm.evaluate` 在结构上观察不到它。
 
 残留风险位于该 `ask` 的另一侧。现在落到的确认对话框仍使用旧的、无注释感知的切分器（见上文「非目标」，由 #11882 负责），所以对这条命令它会把 Bash 永远不会执行的 `rm -rf /tmp/x` 列为可确认子命令，并由 `extractCommandRules('rm -rf /tmp/x')` 得到 `permissionRules: ['Bash(rm *)']`。因此点一次「Always allow」就会把一条宽泛的 `Bash(rm *)` allow 规则持久化进 `settings.json`，而这完全由注释内的文本驱动。这条被铸出的规则只有在操作者自己的 deny 至少与 `extractCommandRules` 推导出的规则同样宽时才保持惰性——对 `rm -rf /tmp/x` 就是 `Bash(rm *)`。实测在同样宽泛的 `deny: ['Bash(rm *)']` 下，`rm -rf /tmp/x` 仍判定为 `deny`；但在更窄的 `deny: ['Bash(rm -rf *)']` 下，仅 deny 配置返回的是 `ask`，而一旦这次点击保存了 `allow: ['Bash(rm *)']`，被铸出的 allow 就会立即且永久地压过操作者更窄的 deny：`rm -r ./src` 与 `rm ./build` 直接判定为 `allow`，不弹任何确认，也无需修改配置。在 #11882 收敛对话框切分器之前，依赖 deny-only 配置的操作者应把含注释命令上被提议的 `Bash(...)` allow 规则视为不可信，而不是把它当成对 shell 实际执行内容的描述。
 
@@ -58,5 +58,5 @@
 - 多行命令、包含 substitution 语法的命令，以及注释前存在 operator 的命令保持旧的保守切分。
 - 首个非空白字符是 `#` 的命令（无论位于下标 0 还是在前导空格/制表符之后，也无论注释文本里是否还有第二个位于词边界的 `#`）同样保持旧的保守切分，因此显式 `deny` 规则仍能匹配注释之后的文本。
 - `monitor` 命令中只存在于 wrapper 内层引号里的 `#` 仍会切分，因此 spawned 命令真正执行的分隔符不会被当成注释吞掉。
-- 在仅配置 deny 规则的情况下，同一条命令判定为 `ask` 而非 `deny`。这是有意钉住的行为，不是偶然结果：`ask` 落到的对话框仍会用旧切分器提议规则（见「风险与约束」）。该结论对应的是普通形态在 `PermissionManager.evaluate` 这一层的判定；shell wrapper 形态会在其上一层经 L3 的 `getDefaultPermission` 判定为 `allow`，并由 flow 级测试单独钉住。
+- 在仅配置 deny 规则的情况下，同一条命令判定为 `ask` 而非 `deny`。这是有意钉住的行为，不是偶然结果：`ask` 落到的对话框仍会用旧切分器提议规则（见「风险与约束」）。该结论对应的是普通形态在 `PermissionManager.evaluate` 这一层的判定；shell wrapper 形态会在其上一层经 L3 的 `getDefaultPermission` 判定为 `ask`，并由 flow 级测试单独钉住。
 - 现有 permission-manager 测试、格式化、lint、typecheck 和 build 检查通过。

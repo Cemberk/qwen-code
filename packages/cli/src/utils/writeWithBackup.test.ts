@@ -88,6 +88,37 @@ describe('writeWithBackup', () => {
       expect(fs.existsSync(`${targetPath}.orig`)).toBe(false);
     });
 
+    // F9: a repository's .qwen/ can plant links next to settings.json.
+    it('refuses to write through a symlinked target', () => {
+      const victim = path.join(tempDir, 'victim.txt');
+      fs.writeFileSync(victim, 'untouched');
+      const targetPath = path.join(tempDir, 'settings.json');
+      fs.symlinkSync(victim, targetPath);
+
+      expect(() => writeWithBackupSync(targetPath, '{}')).toThrow(
+        /symbolic link/,
+      );
+      expect(fs.readFileSync(victim, 'utf-8')).toBe('untouched');
+      expect(fs.lstatSync(targetPath).isSymbolicLink()).toBe(true);
+    });
+
+    it('does not follow a link planted at the temp path', () => {
+      const created = path.join(tempDir, 'created-by-link.txt');
+      const existing = path.join(tempDir, 'existing.txt');
+      fs.writeFileSync(existing, 'untouched');
+      const targetPath = path.join(tempDir, 'settings.json');
+      fs.writeFileSync(targetPath, '{"a":1}');
+
+      fs.symlinkSync(created, `${targetPath}.tmp`);
+      writeWithBackupSync(targetPath, '{"a":2}');
+      expect(fs.existsSync(created)).toBe(false);
+
+      fs.symlinkSync(existing, `${targetPath}.tmp`);
+      writeWithBackupSync(targetPath, '{"a":3}');
+      expect(fs.readFileSync(existing, 'utf-8')).toBe('untouched');
+      expect(fs.readFileSync(targetPath, 'utf-8')).toBe('{"a":3}');
+    });
+
     it('should clean up temp file on failure', () => {
       const targetPath = path.join(tempDir, 'test-file.txt');
       const tempPath = `${targetPath}.tmp`;

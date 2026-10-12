@@ -567,6 +567,16 @@ function trimBashEdgeSeparators(command: string): string {
   return command.slice(start, end);
 }
 
+/**
+ * True when `command` starts with env assignments followed by a shell
+ * wrapper, or with a shell wrapper (`bash -c`, `./bash -c`, `/x/sh -lc`, …).
+ * What runs is then the wrapper with that environment, not the inner
+ * script, so the inner script must never be what an approval judges.
+ */
+export function isShellWrapperOrEnvPrefixed(command: string): boolean {
+  return stripShellWrapper(command) !== trimBashEdgeSeparators(command);
+}
+
 export function stripShellWrapper(command: string): string {
   const trimmed = trimBashEdgeSeparators(command);
   let rest = trimmed;

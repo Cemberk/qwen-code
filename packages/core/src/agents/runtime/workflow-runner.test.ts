@@ -2413,9 +2413,8 @@ describe('WorkflowRunner', () => {
   });
 
   it('classifies the internal wall-clock timeout as failed', async () => {
-    vi.useFakeTimers();
     const originalTimeout = process.env['QWEN_CODE_MAX_WORKFLOW_SECONDS'];
-    process.env['QWEN_CODE_MAX_WORKFLOW_SECONDS'] = '1';
+    process.env['QWEN_CODE_MAX_WORKFLOW_SECONDS'] = '0.2';
     try {
       const timedOut = configWithRegistry();
       const observed = observeSettlement(timedOut.registry);
@@ -2428,7 +2427,6 @@ describe('WorkflowRunner', () => {
         dispatch: async () => 'unused',
       });
 
-      await vi.advanceTimersByTimeAsync(1_000);
       const result = await handle.completion;
       expect(result.ok).toBe(false);
       expect(timedOut.registry.get(handle.runId)?.status).toBe('failed');
@@ -2437,7 +2435,6 @@ describe('WorkflowRunner', () => {
       expect(writeWorkflowSnapshotMock).toHaveBeenCalledOnce();
       expect(logWorkflowRunMock).toHaveBeenCalledOnce();
     } finally {
-      vi.useRealTimers();
       if (originalTimeout === undefined) {
         delete process.env['QWEN_CODE_MAX_WORKFLOW_SECONDS'];
       } else {
@@ -2505,7 +2502,7 @@ describe('WorkflowRunner', () => {
         (e: unknown) => e as Error,
       );
 
-      // Line 2 of the script, not line 3 of the wrapped source the vm sees.
+      // Line 2 of the script, not line 3 of the wrapped source QuickJS sees.
       expect(error.message).toContain('line 2');
       expect(error.message).toContain('^');
       expect(error.message).toContain('plain JavaScript');
@@ -2579,7 +2576,7 @@ describe('WorkflowRunner', () => {
       for (const source of fixtures) {
         let compileThrew = false;
         try {
-          compileWorkflowScript(source);
+          await compileWorkflowScript(source);
         } catch {
           compileThrew = true;
         }

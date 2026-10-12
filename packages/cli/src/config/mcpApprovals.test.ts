@@ -71,6 +71,16 @@ describe('mcpApprovals (hash-bound approval store)', () => {
     );
   });
 
+  it('does not write through a symlinked approvals file', async () => {
+    const victim = path.join(dir, 'victim.txt');
+    fs.writeFileSync(victim, 'untouched');
+    fs.symlinkSync(victim, path.join(dir, MCP_APPROVALS_FILENAME));
+
+    await loadMcpApprovals().setState(projectRoot, 'slack', server, 'approved');
+
+    expect(fs.readFileSync(victim, 'utf-8')).toBe('untouched');
+  });
+
   it('writes the file with the documented shape', async () => {
     await loadMcpApprovals().setState(projectRoot, 'slack', server, 'approved');
     const onDisk = JSON.parse(

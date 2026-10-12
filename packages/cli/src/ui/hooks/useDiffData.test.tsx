@@ -34,4 +34,18 @@ describe('useDiffData sandbox', () => {
     expect(fetchGitDiff).not.toHaveBeenCalled();
     expect(fetchGitDiffHunks).not.toHaveBeenCalled();
   });
+
+  it('does not spawn host Git in an untrusted folder', async () => {
+    const config = {
+      getShellExecutionSandbox: () => undefined,
+      isTrustedFolder: () => false,
+    } as unknown as Config;
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <ConfigContext.Provider value={config}>{children}</ConfigContext.Provider>
+    );
+    const { result } = renderHook(() => useDiffData('/workspace'), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(fetchGitDiff).not.toHaveBeenCalled();
+    expect(fetchGitDiffHunks).not.toHaveBeenCalled();
+  });
 });

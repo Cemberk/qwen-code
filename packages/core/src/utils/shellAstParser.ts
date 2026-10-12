@@ -1405,6 +1405,32 @@ function redirectStaysWithin(redirect: SyntaxNode, scope: PathScope): boolean {
 }
 
 /**
+ * Whether `command` runs `git` anywhere. Even read-only git subcommands run
+ * programs a repository's own `.git/config` names (clean filters, textconv,
+ * hooks), so in an untrusted folder no git command is auto-allowed. Errs
+ * toward true when the command cannot be parsed.
+ */
+export async function commandInvokesGit(command: string): Promise<boolean> {
+  if (!/git/i.test(command)) return false;
+  if (parserInitFailed) return true;
+  try {
+    const tree = await parseShellCommand(command);
+    try {
+      return (
+        tree.rootNode.hasError ||
+        collectDescendants(tree.rootNode, new Set(['command'])).some(
+          (node) => getCommandName(node) === 'git',
+        )
+      );
+    } finally {
+      tree.delete();
+    }
+  } catch {
+    return true;
+  }
+}
+
+/**
  * Whether `command` is read-only (see {@link isShellCommandReadOnlyASTInDirectory})
  * and every path it can read, run in `cwd`, satisfies `isWithin` (the
  * workspace check). Anything this cannot determine counts as outside:

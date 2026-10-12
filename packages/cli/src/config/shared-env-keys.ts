@@ -5,12 +5,10 @@
  */
 import { writeStderrLineSafe } from '../utils/stdioHelpers.js';
 import { PRIVATE_RELAUNCH_ENV_PROVENANCE } from '../utils/env-provenance.js';
+import { SANDBOX_STDIN_ENV } from '../utils/readStdin.js';
 export { PRIVATE_RELAUNCH_ENV_PROVENANCE };
 
 export const DEFAULT_EXCLUDED_ENV_VARS = ['DEBUG', 'DEBUG_MODE'];
-
-export const ENV_CORRUPTED_PATH = 'QWEN_CODE_SETTINGS_CORRUPTED_PATH';
-export const ENV_WAS_RECOVERED = 'QWEN_CODE_SETTINGS_WAS_RECOVERED';
 
 // QWEN_HOME and QWEN_RUNTIME_DIR control where global state (settings, OAuth
 // credentials, installation IDs, etc.) is written. A project `.env` must never
@@ -35,8 +33,6 @@ export const PROJECT_ENV_HARDCODED_EXCLUSIONS = [
   // This points to a host temp file that carries build warnings. A project
   // `.env` must not redirect it to an arbitrary file to read or delete.
   'QWEN_CODE_WARNINGS_FILE',
-  ENV_CORRUPTED_PATH,
-  ENV_WAS_RECOVERED,
   // Project memory routing is frozen process-wide before workspace env files
   // load, so only the operator's launch environment or CLI flag may set it.
   'QWEN_CODE_MEMORY_PROJECT_SCOPE',
@@ -218,6 +214,72 @@ export const PROJECT_ENV_HARDCODED_EXCLUSIONS = [
   // stamps it into the launch env, so a project file must not set it.
   'DEV',
   PRIVATE_RELAUNCH_ENV_PROVENANCE,
+  // The sandbox launcher's piped-prompt handover: a file must not inject a
+  // prompt.
+  SANDBOX_STDIN_ENV,
+  // Everything below loads or runs code, or redirects a tool at a config
+  // that can, when a session subprocess (or the CLI) starts. The operator's
+  // launch environment and home `.env` stay trusted.
+  //
+  // ripgrep reads RIPGREP_CONFIG_PATH, whose `--pre=<program>` it runs for
+  // every searched file (the CLI also passes --no-config).
+  'RIPGREP_CONFIG_PATH',
+  // bash: SHELLOPTS/BASHOPTS turn on xtrace (or other options) in every
+  // `bash -c`, and PS4 is then expanded — command substitution included —
+  // before each traced command. PROMPT_COMMAND and PS0-PS2 run in
+  // interactive shells; ENV is sourced by interactive or POSIX-mode sh;
+  // FPATH is zsh's autoload function path.
+  'SHELLOPTS',
+  'BASHOPTS',
+  'PS0',
+  'PS1',
+  'PS2',
+  'PS4',
+  'PROMPT_COMMAND',
+  'ENV',
+  'FPATH',
+  // GIT_DIR / GIT_COMMON_DIR / GIT_WORK_TREE / GIT_CONFIG choose the repository
+  // (and so the config whose filters, hooks and helpers git runs).
+  'GIT_DIR',
+  'GIT_COMMON_DIR',
+  'GIT_WORK_TREE',
+  'GIT_CONFIG',
+  // Pagers run as programs, and LESS='+!cmd' makes less run a shell command.
+  'PAGER',
+  'GIT_PAGER',
+  'MANPAGER',
+  'LESS',
+  // Node's compile cache: the launcher-internal pending value is promoted to
+  // NODE_COMPILE_CACHE, a directory of code caches the CLI then loads.
+  'QWEN_CODE_PENDING_COMPILE_CACHE',
+  'NODE_COMPILE_CACHE',
+  // GLib's GIO module search path (libvips, used by sharp, embeds GIO):
+  // modules found there are dlopen()ed.
+  'GIO_EXTRA_MODULES',
+  'GIO_MODULE_DIR',
+  // Shared-library search paths load attacker libraries into any program.
+  // (They stay out of the inherited-loader scrub below, see its comment.)
+  'LD_LIBRARY_PATH',
+  'DYLD_LIBRARY_PATH',
+  'DYLD_FALLBACK_LIBRARY_PATH',
+  'DYLD_FRAMEWORK_PATH',
+  'DYLD_FALLBACK_FRAMEWORK_PATH',
+  // Language startup hooks: each makes the interpreter or VM load an
+  // attacker module, agent or site directory at startup.
+  'PERL5OPT',
+  'RUBYOPT',
+  'PYTHONHOME',
+  'PYTHONUSERBASE',
+  'JAVA_TOOL_OPTIONS',
+  '_JAVA_OPTIONS',
+  'JDK_JAVA_OPTIONS',
+  'DOTNET_STARTUP_HOOKS',
+  // Config files that name programs to run: yarn's yarnPath, kubectl exec
+  // credential plugins, the AWS CLI's credential_process.
+  'YARN_RC_FILENAME',
+  'YARN_YARN_PATH',
+  'KUBECONFIG',
+  'AWS_CONFIG_FILE',
 ];
 
 // Windows env lookup is case-insensitive, so exact-case membership would let
@@ -298,6 +360,7 @@ export function isOperatorOnlyEnvKey(key: string): boolean {
 // Sandbox markers stay inherited.
 const PRIVATE_PROVENANCE_ENV_KEYS: ReadonlySet<string> = new Set([
   PRIVATE_RELAUNCH_ENV_PROVENANCE.toLowerCase(),
+  SANDBOX_STDIN_ENV.toLowerCase(),
   'sandbox',
   'sandbox_enforcement',
 ]);
@@ -321,13 +384,11 @@ export const HOME_ENV_BOOTSTRAP_KEYS = [
 // spawned interpreter or OS loader execute an attacker-chosen file.
 // LD_LIBRARY_PATH/DYLD_LIBRARY_PATH (library *search* paths) and ENV
 // (sourced only by interactive sh, while the shell tool spawns
-// non-interactive `bash -c`) are not here: scrubbing them breaks mainstream
-// toolchains (conda/CUDA library dirs, `ENV=production` app conventions)
-// for every session subprocess, and their hijack residue is the same class
-// as the PATH-prefix follow-up tracked out of #8653. They stay reload-only
-// in RELOAD_EXCLUDED_KEYS. Runtime-specific search paths for other
-// interpreters (PYTHONPATH, JAVA_TOOL_OPTIONS, …) are the same tradeoff and
-// are deferred with it.
+// non-interactive `bash -c`) are not here: scrubbing them from the inherited
+// launch environment breaks mainstream toolchains (conda/CUDA library dirs,
+// `ENV=production` app conventions) for every session subprocess. A project
+// `.env` / settings.env still cannot set them (PROJECT_ENV_HARDCODED_EXCLUSIONS),
+// nor the other interpreters' startup hooks (JAVA_TOOL_OPTIONS, PERL5OPT, …).
 //
 // This denylist intentionally does NOT move into core `sanitizeChildEnv`:
 // per-server `mcpServers[].env` and per-hook `hooks[].env` are explicit,

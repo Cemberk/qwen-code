@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { OverlayFs } from './overlayFs.js';
-import { writeFile, readFile, mkdir, rm } from 'node:fs/promises';
+import { writeFile, readFile, mkdir, rm, symlink } from 'node:fs/promises';
 import { existsSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -145,6 +145,43 @@ describe('OverlayFs', () => {
       const content = await readFile(newFile, 'utf-8');
       expect(content).toBe('new file content');
     });
+
+    // T10: a symlink below cwd must not carry the copy-back outside it.
+    it.each(['dir', 'file'])(
+      'does not write through a symlinked %s',
+      async (kind) => {
+        const outside = join(tmpdir(), `overlay-outside-${randomUUID()}`);
+        await mkdir(outside, { recursive: true });
+        try {
+          const target =
+            kind === 'dir'
+              ? join(testDir, 'linked', 'victim.txt')
+              : join(testDir, 'victim.txt');
+          const overlayPath = await overlay.redirectWrite(target);
+          await writeFile(overlayPath, 'speculated');
+          if (kind === 'dir') {
+            await symlink(outside, join(testDir, 'linked'));
+          } else {
+            await writeFile(join(outside, 'victim.txt'), 'untouched');
+            await symlink(
+              join(outside, 'victim.txt'),
+              join(testDir, 'victim.txt'),
+            );
+          }
+
+          expect(await overlay.applyToReal()).toEqual([]);
+          if (kind === 'dir') {
+            expect(existsSync(join(outside, 'victim.txt'))).toBe(false);
+          } else {
+            expect(await readFile(join(outside, 'victim.txt'), 'utf-8')).toBe(
+              'untouched',
+            );
+          }
+        } finally {
+          await rm(outside, { recursive: true, force: true });
+        }
+      },
+    );
 
     it('returns empty array when no files written', async () => {
       const applied = await overlay.applyToReal();

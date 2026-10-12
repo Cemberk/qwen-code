@@ -517,6 +517,29 @@ describe('createMemoryScopedAgentConfig', () => {
         command: 'touch bad',
       }),
     ).resolves.toBe('deny');
+    for (const command of [
+      "BASH_ENV=./x.sh bash -c 'ls'",
+      "./bash -c 'ls'",
+      'FOO=1 ls',
+    ]) {
+      await expect(
+        enabled.evaluate({ toolName: ToolNames.SHELL, command }),
+      ).resolves.toBe('deny');
+    }
+
+    const untrusted = permissionManager(
+      createMemoryScopedAgentConfig(
+        { isTrustedFolder: () => false } as unknown as Config,
+        projectRoot,
+        { allowShell: true },
+      ),
+    );
+    await expect(
+      untrusted.evaluate({ toolName: ToolNames.SHELL, command: 'git log' }),
+    ).resolves.toBe('deny');
+    await expect(
+      untrusted.evaluate({ toolName: ToolNames.SHELL, command: 'ls -la' }),
+    ).resolves.toBe('allow');
   });
 
   it('keeps the extraction and dream agents reading memory through explicit allows', async () => {

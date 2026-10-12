@@ -464,6 +464,7 @@ describe('ripgrepUtils', () => {
 
       expect(childProcessMock.execFile).toHaveBeenCalledTimes(2);
       expect(childProcessMock.execFile.mock.calls[1][1]).toEqual([
+        '--no-config',
         '--json',
         '--threads',
         '1',
@@ -659,6 +660,7 @@ describe('ripgrepUtils', () => {
 
       expect(childProcessMock.execFile).toHaveBeenCalledTimes(2);
       expect(childProcessMock.execFile.mock.calls[1][1]).toEqual([
+        '--no-config',
         '--json',
         '--threads',
         '1',
@@ -815,7 +817,7 @@ describe('ripgrepUtils', () => {
       await expect(canUseRipgrep(true)).rejects.toThrow('bundled rg broken');
       expect(execCommand).toHaveBeenCalledWith(
         'rg',
-        ['--version'],
+        ['--no-config', '--version'],
         expect.anything(),
       );
     });
@@ -851,6 +853,11 @@ describe('ripgrepUtils', () => {
         },
       });
       expect(childProcessMock.execFile.mock.calls[0][0]).toBe('rg');
+      // X4/D1: RIPGREP_CONFIG_PATH must never feed rg flags like --pre.
+      expect(childProcessMock.execFile.mock.calls[0][1]).toEqual([
+        '--no-config',
+        '--version',
+      ]);
     });
 
     it('reports the bundled failure when no system rg is installed', async () => {

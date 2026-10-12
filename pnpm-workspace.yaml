@@ -64,15 +64,8 @@ overrides:
 allowBuilds:
   # Type-only devDependency; its install script is never needed.
   '@google/genai': false
-  '@qwen-code/qwen-code-core@file:packages/core': true
   esbuild: true
-  # Darwin-only optional dependency whose install script is only
-  # `node-gyp rebuild`; the macOS smoke install reports no ignored build for
-  # it, so false records the behaviour pnpm already has. The consequence is
-  # that a macOS pnpm worktree runs the prebuilt binding shipped in the
-  # tarball, and where that is missing, vite, tsx, rollup, playwright and
-  # tailwindcss's nested chokidar fall back to fs.watch. All of them are
-  # build and test tooling, never shipped runtime.
-  fsevents: false
-  msw: true
+  # Not a dependency any more, but the locked vitest entries still resolve it
+  # as an optional peer. Its postinstall only copies a browser service worker.
+  msw: false
   protobufjs: true

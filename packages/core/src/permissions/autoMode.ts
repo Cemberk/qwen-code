@@ -151,6 +151,9 @@ const PERSISTENCE_PATH_PATTERNS: readonly RegExp[] = Object.freeze([
   /(^|\/)\.?justfile$/, // just task runner
   /(^|\/)taskfile\.ya?ml$/, // go-task
   /(^|\/)\.github\/workflows\//, // CI workflow definitions
+  // shell startup files run on the next shell; .envrc on the next `cd` (direnv)
+  /(^|\/)\.(bashrc|bash_profile|bash_login|bash_logout|profile|zshrc|zshenv|zprofile|zlogin|zlogout|envrc)$/,
+  /(^|\/)\.config\/fish\/config\.fish$/,
 ]);
 
 const SELF_MODIFICATION_PATH_PATTERNS: readonly RegExp[] = Object.freeze([

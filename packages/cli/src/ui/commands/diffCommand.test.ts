@@ -31,6 +31,7 @@ function makeContextWithCwd(cwd = '/tmp/repo'): CommandContext {
       config: {
         getWorkingDir: () => cwd,
         getProjectRoot: () => cwd,
+        isTrustedFolder: () => true,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any,
     },
@@ -44,6 +45,7 @@ function makeInteractiveContext(cwd = '/tmp/repo'): CommandContext {
       config: {
         getWorkingDir: () => cwd,
         getProjectRoot: () => cwd,
+        isTrustedFolder: () => true,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any,
     },
@@ -77,6 +79,21 @@ describe('diffCommand', () => {
     },
   );
 
+  it.each(['interactive', 'non_interactive'] as const)(
+    'refuses to run git in an untrusted folder in %s mode',
+    async (executionMode) => {
+      const context = makeContextWithCwd();
+      context.executionMode = executionMode;
+      context.services.config!.isTrustedFolder = () => false;
+      expect(await diffCommand.action!(context, '')).toMatchObject({
+        type: 'message',
+        messageType: 'error',
+        content: expect.stringContaining('untrusted folder'),
+      });
+      expect(mockFetchGitDiff).not.toHaveBeenCalled();
+    },
+  );
+
   it('errors when config is unavailable', async () => {
     if (!diffCommand.action) throw new Error('Command has no action');
     const noConfigContext = createMockCommandContext();
@@ -96,6 +113,7 @@ describe('diffCommand', () => {
         config: {
           getWorkingDir: () => '',
           getProjectRoot: () => '',
+          isTrustedFolder: () => true,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any,
       },

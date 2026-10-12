@@ -50,12 +50,14 @@ export interface ArtifactToolParams {
   title?: string;
 }
 
-const DESCRIPTION = `Publishes a self-contained HTML page as an interactive Artifact on local disk and optionally opens it in the browser depending on settings. Use it to turn session output into a durable, interactive page — a PR walkthrough, an architecture tour, a project dashboard.
+const DESCRIPTION = `Publishes a self-contained HTML page as an Artifact on local disk and optionally opens it in the browser depending on settings. Use it to turn session output into a durable page — a PR walkthrough, an architecture tour, a project dashboard.
+
+STATIC ONLY: the page is shown in a sandbox with no JavaScript and no network, and <script> is rejected. Draw charts and diagrams with HTML/CSS and inline SVG, not D3/Chart.js or other runtime JS.
 
 Workflow:
 - Write the page to a file first (via Write/Edit), then call Artifact with that file's absolute path.
 - Write a BODY-ONLY fragment: no <!doctype>, <html>, <head>, or <body> tags — they are added at publish time, along with a minimal CSS reset.
-- Self-contained only: inline all CSS and JS; embed images/fonts as data: URIs. No external scripts, stylesheets, fonts, or remote images.
+- Self-contained only: inline all CSS; embed images/fonts as data: URIs. No scripts, external stylesheets, fonts, or remote images.
 - Responsive: relative units, flex/grid, max-width:100% on media; wide content (tables, diagrams, code) scrolls inside its own overflow-x:auto container.
 - Set a concise \`title\` — it names the browser tab.
 
@@ -248,7 +250,7 @@ class ArtifactToolInvocation extends BaseToolInvocation<
         },
       },
     ];
-    const llmContent = `Published artifact "${title}" to ${url}. Open this URL to view the latest interactive page. Re-run Artifact with the same file path to update it.`;
+    const llmContent = `Published artifact "${title}" to ${url}. Open this URL to view the latest page. Re-run Artifact with the same file path to update it.`;
     return {
       llmContent,
       returnDisplay: `Published artifact **${title}**\n\n${url}`,

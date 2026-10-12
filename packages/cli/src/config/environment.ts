@@ -25,11 +25,7 @@ import {
 import { publishPendingCompileCache } from './compile-cache.js';
 import { writeStderrLineSafe } from '../utils/stdioHelpers.js';
 
-export {
-  DEFAULT_EXCLUDED_ENV_VARS,
-  ENV_CORRUPTED_PATH,
-  ENV_WAS_RECOVERED,
-} from './shared-env-keys.js';
+export { DEFAULT_EXCLUDED_ENV_VARS } from './shared-env-keys.js';
 import type { Settings } from './settingsSchema.js';
 
 export const SETTINGS_DIRECTORY_NAME = QWEN_DIR;

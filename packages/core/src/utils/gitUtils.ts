@@ -66,6 +66,10 @@ export const NO_EXEC_CONFIG = NO_EXEC_CONFIG_SETTINGS.flatMap((setting) => [
   setting,
 ]) as readonly string[];
 
+// In a partial clone git fetches missing objects from the promisor remote on
+// demand; the startup snapshot must never touch the network.
+const NO_LAZY_FETCH_ENV = { GIT_NO_LAZY_FETCH: '1' } as const;
+
 // Bound the read: these files are one short line, never megabytes.
 const MAX_GIT_METADATA_BYTES = 4096;
 
@@ -308,7 +312,7 @@ export function getRecentGitStatus(cwd: string): string | null {
       {
         cwd,
         encoding: 'utf8',
-        env: { ...process.env, LC_ALL: 'C' },
+        env: { ...process.env, ...NO_LAZY_FETCH_ENV, LC_ALL: 'C' },
         stdio: ['pipe', 'pipe', 'pipe'],
         timeout: GIT_STATUS_TIMEOUT_MS,
       },
@@ -334,6 +338,7 @@ export function getRecentGitStatus(cwd: string): string | null {
       {
         cwd,
         encoding: 'utf8',
+        env: { ...process.env, ...NO_LAZY_FETCH_ENV },
         stdio: ['pipe', 'pipe', 'pipe'],
         timeout: GIT_STATUS_TIMEOUT_MS,
       },

@@ -5,6 +5,7 @@
  */
 
 import {
+  allowPatternCoversCommand,
   parseRules,
   parseRule,
   matchesRule,
@@ -16,9 +17,14 @@ import {
 import type { PathMatchContext } from './rule-parser.js';
 import { extractShellOperationsAcrossCommand } from './shell-semantics.js';
 import type { ShellOperation } from './shell-semantics.js';
-import { isShellCommandReadOnlyWithinWorkspace } from '../utils/shellAstParser.js';
+import {
+  commandInvokesGit,
+  isShellCommandReadOnlyWithinWorkspace,
+} from '../utils/shellAstParser.js';
 import {
   getShellConfiguration,
+  hasShellSubstitution,
+  isShellWrapperOrEnvPrefixed,
   normalizeMonitorCommand,
 } from '../utils/shell-utils.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
@@ -84,6 +90,29 @@ const DECISION_PRIORITY: Readonly<Record<PermissionDecision, number>> = {
  * therefore keeps the conservative splitter, and stays covered by `Bash(...)`
  * rules through it.
  */
+/**
+ * An allow rule covers the shell command it names, literally: command or
+ * process substitution, or leading env assignments the rule does not spell
+ * out, run code the rule never named, so they fall back to asking. Only a
+ * tool-wide rule (`Bash`, `Bash(*)`) covers substitution.
+ */
+function allowRuleCoversCommand(
+  rule: PermissionRule,
+  toolName: string,
+  command: string | undefined,
+): boolean {
+  if (
+    command === undefined ||
+    !SHELL_TOOL_NAMES.has(toolName) ||
+    !rule.specifier ||
+    rule.specifier === '*'
+  ) {
+    return true;
+  }
+  if (hasShellSubstitution(command)) return false;
+  return allowPatternCoversCommand(rule.specifier, command);
+}
+
 function splitCommandForRules(command: string, toolName: string): string[] {
   if (
     toolName !== 'run_shell_command' ||
@@ -363,6 +392,13 @@ export class PermissionManager {
    * @returns A PermissionDecision indicating how to handle this tool call.
    */
   async evaluate(ctx: PermissionCheckContext): Promise<PermissionDecision> {
+    // Monitor commands are matched in their unwrapped form, but the wrapper
+    // and its environment are what runs: nothing may allow such a command
+    // without asking.
+    const wrapperRuns =
+      ctx.toolName === 'monitor' &&
+      ctx.command !== undefined &&
+      isShellWrapperOrEnvPrefixed(ctx.command);
     ctx = this.normalizePermissionContext(ctx);
     const { command, toolName } = ctx;
 
@@ -400,9 +436,13 @@ export class PermissionManager {
     if (command !== undefined) {
       const subCommands = splitCommandForRules(command, toolName);
       if (subCommands.length > 1) {
-        bashDecision = await this.evaluateCompoundCommand(ctx, subCommands);
+        bashDecision = await this.evaluateCompoundCommand(
+          ctx,
+          subCommands,
+          wrapperRuns,
+        );
       } else {
-        bashDecision = this.evaluateSingle(ctx);
+        bashDecision = this.evaluateSingle(ctx, wrapperRuns);
         // For shell commands, resolve 'default' to actual permission via AST
         // analysis so the caller always sees a concrete verdict.
         if (
@@ -410,10 +450,12 @@ export class PermissionManager {
           SHELL_TOOL_NAMES.has(toolName) &&
           command !== undefined
         ) {
-          bashDecision = await this.resolveDefaultPermission(
-            command,
-            ctx.cwd ?? this.config.getCwd?.(),
-          );
+          bashDecision = wrapperRuns
+            ? 'ask'
+            : await this.resolveDefaultPermission(
+                command,
+                ctx.cwd ?? this.config.getCwd?.(),
+              );
         }
       }
     } else {
@@ -444,7 +486,10 @@ export class PermissionManager {
    *      `extractShellOperationsAcrossCommand` — allows Read/Edit/Write rules
    *      to match equivalent shell commands (e.g. `cat` → Read).
    */
-  private evaluateSingle(ctx: PermissionCheckContext): PermissionDecision {
+  private evaluateSingle(
+    ctx: PermissionCheckContext,
+    wrapperRuns = false,
+  ): PermissionDecision {
     const {
       toolName,
       toolAliases,
@@ -494,11 +539,17 @@ export class PermissionManager {
         if (matchesRule(rule, ...matchArgs, 'canonical')) return 'ask';
       }
       // Priority 3: allow rules
+      if (wrapperRuns) return 'default';
       for (const rule of [
         ...this.activeSessionAllowRules(),
         ...this.persistentRules.allow,
       ]) {
-        if (matchesRule(rule, ...matchArgs)) return 'allow';
+        if (
+          matchesRule(rule, ...matchArgs) &&
+          allowRuleCoversCommand(rule, toolName, command)
+        ) {
+          return 'allow';
+        }
       }
       return 'default';
     })();
@@ -616,6 +667,7 @@ export class PermissionManager {
   private async evaluateCompoundCommand(
     ctx: PermissionCheckContext,
     subCommands: string[],
+    wrapperRuns = false,
   ): Promise<PermissionDecision> {
     // Type for resolved decisions (excludes 'default' since it's resolved)
     type ResolvedDecision = 'allow' | 'ask' | 'deny';
@@ -635,17 +687,19 @@ export class PermissionManager {
         ...ctx,
         command: subCmd,
       };
-      const rawDecision = this.evaluateSingle(subCtx);
+      const rawDecision = this.evaluateSingle(subCtx, wrapperRuns);
 
       // Resolve 'default' to actual permission using AST analysis
       // (same logic as ShellToolInvocation.getDefaultPermission)
       const decision: ResolvedDecision =
-        rawDecision === 'default'
-          ? await this.resolveDefaultPermission(
-              changesDirectory ? ctx.command! : subCmd,
-              ctx.cwd ?? this.config.getCwd?.(),
-            )
-          : (rawDecision as ResolvedDecision);
+        rawDecision !== 'default'
+          ? (rawDecision as ResolvedDecision)
+          : wrapperRuns
+            ? 'ask'
+            : await this.resolveDefaultPermission(
+                changesDirectory ? ctx.command! : subCmd,
+                ctx.cwd ?? this.config.getCwd?.(),
+              );
 
       if (PRIORITY[decision] > PRIORITY[mostRestrictive]) {
         mostRestrictive = decision;
@@ -685,6 +739,12 @@ export class PermissionManager {
     const workspace = this.config.getWorkspaceContext?.();
     if (!cwd || !workspace) return 'ask';
     try {
+      if (
+        this.config.isTrustedFolder?.() === false &&
+        (await commandInvokesGit(command))
+      ) {
+        return 'ask';
+      }
       if (
         await isShellCommandReadOnlyWithinWorkspace(command, cwd, (p) =>
           workspace.isPathWithinWorkspace(p),

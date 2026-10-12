@@ -7,6 +7,10 @@
 import { getErrorMessage } from './errors.js';
 import { getLocalBaseUrlError } from './local-base-url.js';
 import { delay } from './retry.js';
+import {
+  buildRuntimeFetchOptions,
+  preloadRuntimeFetchModule,
+} from './runtimeFetchOptions.js';
 
 export class FetchError extends Error {
   constructor(
@@ -154,11 +158,16 @@ async function fetchPolicyAttempt(
 
   let response: Response;
   try {
-    response = await fetch(url, {
+    // The model client's undici fetch and plain Agent: proxy variables
+    // never apply to these loopback requests.
+    await preloadRuntimeFetchModule();
+    const runtime = buildRuntimeFetchOptions();
+    response = await runtime.fetch(url, {
       signal,
       headers: options.headers,
       redirect: 'error',
-    });
+      ...runtime.fetchOptions,
+    } as RequestInit);
   } catch (error) {
     return wrapAbort(error);
   }

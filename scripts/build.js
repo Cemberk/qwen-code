@@ -25,12 +25,13 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 
-// Install if node_modules was removed (e.g. via npm run clean or scripts/clean.js)
+// A build never installs: an install can reach the package registry.
 if (!existsSync(join(root, 'node_modules'))) {
-  execSync('corepack pnpm install --frozen-lockfile', {
-    stdio: 'inherit',
-    cwd: root,
-  });
+  console.error(
+    'build: node_modules is missing. Install dependencies first ' +
+      '(corepack pnpm install --frozen-lockfile --offline), then re-run the build.',
+  );
+  process.exit(1);
 }
 
 // build all workspaces/packages in dependency order

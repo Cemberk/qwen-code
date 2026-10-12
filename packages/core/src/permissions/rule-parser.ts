@@ -1090,10 +1090,15 @@ export function splitCompoundCommand(command: string): string[] {
 export function matchesCommandPattern(
   pattern: string,
   command: string,
+  stripAssignments = true,
 ): boolean {
   // This function matches a single pattern against a single simple command.
   // Compound command splitting is handled by the caller (PermissionManager).
-  const normalizedCommand = stripLeadingVariableAssignments(command);
+  // A pattern that spells out env assignments is matched as written.
+  const normalizedCommand =
+    stripAssignments && !ENV_ASSIGNMENT_REGEX.test(pattern)
+      ? stripLeadingVariableAssignments(command)
+      : command.trim();
 
   // Special case: lone `*` matches any single command
   if (pattern === '*') {
@@ -1266,6 +1271,22 @@ function escapeRegex(s: string): string {
 }
 
 const ENV_ASSIGNMENT_REGEX = /^[A-Za-z_][A-Za-z0-9_]*=/;
+
+/**
+ * Whether an allow rule's command pattern vouches for `command` as written.
+ * Leading env assignments (`NODE_OPTIONS=--require=x node …`) the pattern
+ * does not spell out change what runs, so they are not covered. Command
+ * substitution is checked by the caller.
+ */
+export function allowPatternCoversCommand(
+  pattern: string,
+  command: string,
+): boolean {
+  if (pattern === '*' || !ENV_ASSIGNMENT_REGEX.test(command.trim())) {
+    return true;
+  }
+  return matchesCommandPattern(pattern, command, false);
+}
 
 function stripLeadingVariableAssignments(command: string): string {
   const trimmed = command.trim();

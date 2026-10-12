@@ -79,12 +79,16 @@ describe('MemoryDiagnosticsDumper', () => {
       path.join('/tmp/test-project', 'diagnostics') + path.sep,
     );
     expect(result!.filePath).toContain('memory-test-ses');
+    // F3: owner-only directory and files.
     expect(fs.mkdirSync).toHaveBeenCalledWith(
       expect.stringContaining('diagnostics'),
-      { recursive: true },
+      { recursive: true, mode: 0o700 },
     );
     // Two-phase write: Phase 1 (minimal) + Phase 2 (full)
     expect(fs.writeFileSync).toHaveBeenCalledTimes(2);
+    for (const call of vi.mocked(fs.writeFileSync).mock.calls) {
+      expect(call[2]).toEqual({ encoding: 'utf8', mode: 0o600 });
+    }
 
     const phase1Content = JSON.parse(
       vi.mocked(fs.writeFileSync).mock.calls[0][1] as string,

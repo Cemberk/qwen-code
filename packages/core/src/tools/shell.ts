@@ -64,6 +64,7 @@ import {
   getCommandRoots,
   getShellConfiguration,
   hasShellSubstitution,
+  isShellWrapperOrEnvPrefixed,
   SHELL_SELF_KILL_REJECTION,
   type ShellConfiguration,
   type ShellType,
@@ -74,6 +75,7 @@ import { parse, type ControlOperator } from 'shell-quote';
 import { createDebugLogger } from '../utils/debugLogger.js';
 import { checkPriorRead, StructuredToolError } from './priorReadEnforcement.js';
 import {
+  commandInvokesGit,
   isShellCommandReadOnlyWithinWorkspace,
   extractCommandRules,
 } from '../utils/shellAstParser.js';
@@ -1364,7 +1366,8 @@ export class ShellToolInvocation extends BaseToolInvocation<
     if (
       this.config.getShellExecutionSandbox?.() ||
       this.params.is_background ||
-      LEADING_ENV_ASSIGNMENT_RE.test(this.params.command)
+      LEADING_ENV_ASSIGNMENT_RE.test(this.params.command) ||
+      isShellWrapperOrEnvPrefixed(this.params.command)
     ) {
       return null;
     }
@@ -1691,29 +1694,27 @@ export class ShellToolInvocation extends BaseToolInvocation<
    * AST-based permission check for the shell command.
    * - Substitution-bearing commands (any form, including inside an
    *   env-prefix wrapper that `stripShellWrapper` would discard) → 'ask'
-   * - Read-only commands (via AST analysis) → 'allow'
+   * - Shell wrappers and env-prefixed wrappers → 'ask'
+   * - Read-only commands (via AST analysis of the command as it runs) → 'allow'
    * - All other commands → 'ask'
    */
   override async getDefaultPermission(): Promise<PermissionDecision> {
     if (this.config.getShellExecutionSandbox?.()) return 'ask';
-    // Gate on the RAW command before `stripShellWrapper` runs.
-    // `stripShellWrapper` drops leading env-assignment tokens AND
-    // unwraps `bash -c '...'` to its inner script — so for
-    // `FOO=$(curl evil) bash -c 'echo ok'` the stripped form is just
-    // `echo ok`, which the AST classifies as read-only. Without this
-    // gate the command auto-executes silently with no confirmation
-    // dialog and no warning. See PR #4386 R6 (cid 3298521039).
     if (hasShellSubstitution(this.params.command)) {
       return 'ask';
     }
-
-    const command = stripShellWrapper(this.params.command);
+    // `BASH_ENV=./x.sh bash -c 'ls'` and `./bash -c 'ls'` run the
+    // environment / the wrapper binary, not just the inner `ls`, so only
+    // the unwrapped command itself may be classified as read-only.
+    if (isShellWrapperOrEnvPrefixed(this.params.command)) {
+      return 'ask';
+    }
 
     // AST-based read-only detection; a read outside the workspace asks.
     try {
       if (
         await this.isReadOnlyWithinWorkspace(
-          command,
+          this.params.command.trim(),
           this.params.directory || this.config.getTargetDir(),
         )
       ) {
@@ -1726,10 +1727,16 @@ export class ShellToolInvocation extends BaseToolInvocation<
     return 'ask';
   }
 
-  private isReadOnlyWithinWorkspace(
+  private async isReadOnlyWithinWorkspace(
     command: string,
     cwd: string,
   ): Promise<boolean> {
+    if (
+      this.config.isTrustedFolder?.() === false &&
+      (await commandInvokesGit(command))
+    ) {
+      return false;
+    }
     const workspace = this.config.getWorkspaceContext();
     return isShellCommandReadOnlyWithinWorkspace(command, cwd, (p) =>
       workspace.isPathWithinWorkspace(p),
@@ -1793,11 +1800,14 @@ export class ShellToolInvocation extends BaseToolInvocation<
       }
     }
 
-    // Split compound command and filter out already-allowed (read-only) sub-commands
+    // Split compound command and filter out already-allowed (read-only)
+    // sub-commands. Inside a wrapper nothing is already allowed: the
+    // wrapper (and its environment) is what runs.
     const subCommands = splitCommands(command);
+    const wrapped = isShellWrapperOrEnvPrefixed(this.params.command);
     const confirmableSubCommands: string[] = [];
     for (const sub of subCommands) {
-      if (this.config.getShellExecutionSandbox?.()) {
+      if (this.config.getShellExecutionSandbox?.() || wrapped) {
         confirmableSubCommands.push(sub);
         continue;
       }

@@ -515,6 +515,87 @@ describe('WorkflowOrchestrator', () => {
     expect(new Set(ids.values()).size).toBe(7);
   });
 
+  // The script runs in another process, so a branch is carried explicitly
+  // with every request instead of through async context: a call issued after
+  // an await is attributed to the branch whose agent() result resumed it.
+  it('attributes calls resumed by a branch result to that branch', async () => {
+    const orchestrator = new WorkflowOrchestrator(
+      async (prompt) => `mock:${prompt}`,
+    );
+    const queued: Array<{ id: string; label?: string; dependsOn: string[] }> =
+      [];
+    await orchestrator.run({
+      script: `
+        await agent('root', { label: 'root' });
+        await parallel([
+          async () => {
+            await agent('a1', { label: 'a1' });
+            return agent('a2', { label: 'a2' });
+          },
+          () => agent('b1', { label: 'b1' }).then(() =>
+            agent('b2', { label: 'b2' }),
+          ),
+        ]);
+        await agent('after', { label: 'after' });
+      `,
+      args: undefined,
+      scheduler: new WorkflowDispatchScheduler(2),
+      emitter: { dispatchQueued: (event) => queued.push(event) },
+    });
+    const labelById = new Map(queued.map((event) => [event.id, event.label]));
+    const dependsOn = (label: string) =>
+      queued
+        .find((event) => event.label === label)!
+        .dependsOn.map((id) => labelById.get(id));
+    expect(dependsOn('a1')).toEqual(['root']);
+    expect(dependsOn('a2')).toEqual(['a1']);
+    expect(dependsOn('b1')).toEqual(['root']);
+    expect(dependsOn('b2')).toEqual(['b1']);
+    expect(dependsOn('after')).toEqual(['a2', 'b2']);
+  });
+
+  // The script cannot capture host functions by overriding builtins: under
+  // node:vm, settleToNullArray's `thunks.map(...)` and the host's adoption of
+  // a thunk's promise handed host callbacks to the script's overrides.
+  it('keeps host callbacks out of script prototype overrides during fan-out', async () => {
+    const orchestrator = new WorkflowOrchestrator(
+      async (prompt) => `mock:${prompt}`,
+    );
+    const outcome = await orchestrator.run({
+      script: `
+        const leaked = [];
+        const probe = (site, value) => {
+          try {
+            const reached = value.constructor.constructor('return typeof process')();
+            if (reached !== 'undefined') leaked.push(site);
+          } catch (e) {}
+        };
+        const nativeThen = Promise.prototype.then;
+        Promise.prototype.then = function (onFulfilled, onRejected) {
+          probe('then', onFulfilled);
+          probe('then', onRejected);
+          return nativeThen.call(this, onFulfilled, onRejected);
+        };
+        const nativeMap = Array.prototype.map;
+        Array.prototype.map = function (fn, thisArg) {
+          probe('map', fn);
+          return nativeMap.call(this, fn, thisArg);
+        };
+        const fanned = await parallel([() => agent('a'), async () => agent('b')]);
+        const staged = await pipeline(['c'], (item) => agent(item));
+        Promise.prototype.then = nativeThen;
+        Array.prototype.map = nativeMap;
+        return { fanned, staged, leaked };
+      `,
+      args: undefined,
+    });
+    expect(outcome.result).toEqual({
+      fanned: ['mock:a', 'mock:b'],
+      staged: ['mock:c'],
+      leaked: [],
+    });
+  });
+
   it.each(['parallel', 'pipeline'] as const)(
     'preserves newer parent dependencies when an un-awaited %s settles',
     async (kind) => {
@@ -3317,9 +3398,13 @@ describe('WorkflowOrchestrator P2 — parallel() / pipeline() / caps', () => {
     it('parallel() rejects when aborted MID-FLIGHT (after dispatches started)', async () => {
       const ac = new AbortController();
       let dispatched = 0;
+      // Dispatches stay in flight until after the abort, so the run cannot
+      // finish first however slowly the test is scheduled.
+      let release!: () => void;
+      const released = new Promise<void>((r) => (release = r));
       const orchestrator = new WorkflowOrchestrator(async () => {
         dispatched++;
-        await new Promise((r) => setTimeout(r, 40));
+        await released;
         return 'ok';
       });
       const p = orchestrator.run({
@@ -3330,7 +3415,9 @@ describe('WorkflowOrchestrator P2 — parallel() / pipeline() / caps', () => {
         abortOnTimeout: ac,
       });
       // Abort once at least one dispatch is in flight.
-      setTimeout(() => ac.abort(), 10);
+      await vi.waitFor(() => expect(dispatched).toBeGreaterThan(0));
+      ac.abort();
+      release();
       await expect(p).rejects.toThrow(/abort/i);
       expect(dispatched).toBeGreaterThan(0);
     }, 10_000);

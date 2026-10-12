@@ -65,6 +65,8 @@ function verifyBundleArtifacts(rootDir, distDir) {
     path.join(distDir, 'sandboxBwrapRelay.js'),
     path.join(distDir, 'sandboxLandlockRelay.js'),
     path.join(distDir, 'sandboxFileWorker.js'),
+    path.join(distDir, 'codeModeHost.js'),
+    path.join(distDir, 'workflowHost.js'),
     path.join(distDir, 'vendor'),
     path.join(distDir, 'bundled', 'qc-helper', 'docs'),
   ];
@@ -221,6 +223,7 @@ function writeDistPackageJson(rootDir, distDir) {
       // in-thread AsyncFzf path on big workspaces in npm-installed CLIs.
       'fzfWorker.js',
       'codeModeHost.js',
+      'workflowHost.js',
       'sandboxBwrapRelay.js',
       'sandboxLandlockRelay.js',
       'sandboxFileWorker.js',
