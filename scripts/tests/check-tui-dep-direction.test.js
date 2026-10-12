@@ -59,8 +59,6 @@ describe('bannedFamily', () => {
     ['@solid/meta', 'solid'],
     ['@react-aria/button', 'react'],
     ['@react-spring/web', 'react'],
-    ['@opentui/core', '@opentui'],
-    ['@opentui', '@opentui'],
   ])('bans %s as the %s family', (spec, family) => {
     expect(bannedFamily(spec)).toBe(family);
   });
@@ -91,7 +89,7 @@ describe('findImports', () => {
           "import type { ReactNode } from 'react';",
           "import 'solid-js/web';",
           "export * as inkUtils from 'ink-testing-library';",
-          "export type { Props } from '@opentui/core';",
+          "export type { Props } from 'ink-link';",
           "export { Box } from 'ink';",
           "const lazy = await import('@solidjs/router');",
           "const legacy = require('react-dom');",
@@ -103,7 +101,7 @@ describe('findImports', () => {
       'import:react',
       'import:solid-js/web',
       'export-from:ink-testing-library',
-      'export-from:@opentui/core',
+      'export-from:ink-link',
       'export-from:ink',
       'dynamic-import:@solidjs/router',
       'require:react-dom',
@@ -135,10 +133,8 @@ describe('findImports', () => {
   });
 
   it('finds a dynamic import inside template-literal interpolation', () => {
-    const source = ["const loaded = `${await import('@opentui/core')}`;"].join(
-      '\n',
-    );
-    expect(specs(source)).toEqual(['dynamic-import:@opentui/core']);
+    const source = ["const loaded = `${await import('solid-js')}`;"].join('\n');
+    expect(specs(source)).toEqual(['dynamic-import:solid-js']);
   });
 
   it('detects import-type queries (type X = import("...").Y)', () => {
@@ -147,13 +143,13 @@ describe('findImports', () => {
         [
           'type Node = import("react").ReactNode;',
           "type Box = import('ink').Box['props'];",
-          'type Core = import(`@opentui/core`).TuiApp;',
+          'type Spinner = import(`ink-spinner`).Spinner;',
         ].join('\n'),
       ),
     ).toEqual([
       'import-type:react',
       'import-type:ink',
-      'import-type:@opentui/core',
+      'import-type:ink-spinner',
     ]);
   });
 
@@ -220,14 +216,14 @@ describe('findImports', () => {
           "vi.mock('ink');",
           "vi.doMock('react');",
           "await vi.importActual('solid-js');",
-          "await vi.importMock('@opentui/core');",
+          "await vi.importMock('react-dom');",
         ].join('\n'),
       ),
     ).toEqual([
       'vi.mock:ink',
       'vi.doMock:react',
       'vi.importActual:solid-js',
-      'vi.importMock:@opentui/core',
+      'vi.importMock:react-dom',
     ]);
   });
 

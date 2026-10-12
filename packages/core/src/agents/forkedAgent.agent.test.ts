@@ -266,6 +266,32 @@ describe('runForkedAgent (AgentHeadless path) bound-tool isolation', () => {
     expect(captured.config!.getApprovalMode()).toBe(ApprovalMode.YOLO);
   });
 
+  it('stays in PLAN under a PLAN parent', async () => {
+    const parent = new ConfigImpl({
+      ...baseParams,
+      approvalMode: ApprovalMode.PLAN,
+    });
+    const parentRegistry = await parent.createToolRegistry(undefined, {
+      skipDiscovery: true,
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (parent as any).toolRegistry = parentRegistry;
+
+    const { captured, restore } = captureAgentHeadlessConfig();
+    try {
+      await runForkedAgent({
+        name: 'test-fork',
+        systemPrompt: 'You are a test fork.',
+        taskPrompt: 'do the task',
+        config: parent,
+      });
+    } finally {
+      restore();
+    }
+
+    expect(captured.config!.getApprovalMode()).toBe(ApprovalMode.PLAN);
+  });
+
   it('strips internal tags from completed finalText', async () => {
     const parent = new ConfigImpl(baseParams);
     const parentRegistry = await parent.createToolRegistry(undefined, {

@@ -138,7 +138,7 @@ vi.mock('../utils/shell-utils.js', async (importOriginal) => {
 const mockIsShellCommandReadOnlyAST = vi.hoisted(() => vi.fn());
 const mockExtractCommandRules = vi.hoisted(() => vi.fn());
 vi.mock('../utils/shellAstParser.js', () => ({
-  isShellCommandReadOnlyASTInDirectory: mockIsShellCommandReadOnlyAST,
+  isShellCommandReadOnlyWithinWorkspace: mockIsShellCommandReadOnlyAST,
   extractCommandRules: mockExtractCommandRules,
 }));
 
@@ -643,10 +643,28 @@ describe('MonitorTool', () => {
     it('allows read-only monitor commands by default', async () => {
       mockIsShellCommandReadOnlyAST.mockResolvedValueOnce(true);
       const invocation = createInvocation({
-        command: 'tail -f /tmp/app.log',
+        command: 'tail -f app.log',
       });
 
       await expect(invocation.getDefaultPermission()).resolves.toBe('allow');
+    });
+
+    it('checks read-only monitor commands against the workspace directories', async () => {
+      mockIsShellCommandReadOnlyAST.mockResolvedValueOnce(false);
+      mockIsPathWithinWorkspace.mockReturnValueOnce(false);
+      const invocation = createInvocation({
+        command: 'tail -f /var/log/system.log',
+      });
+
+      await expect(invocation.getDefaultPermission()).resolves.toBe('ask');
+      const [command, cwd, isWithin] =
+        mockIsShellCommandReadOnlyAST.mock.calls.at(-1)!;
+      expect(command).toBe('tail -f /var/log/system.log');
+      expect(cwd).toBe('/test/dir');
+      expect(isWithin('/var/log/system.log')).toBe(false);
+      expect(mockIsPathWithinWorkspace).toHaveBeenCalledWith(
+        '/var/log/system.log',
+      );
     });
 
     it('surfaces a command-substitution warning via getConfirmationDetails (issue #4093)', async () => {

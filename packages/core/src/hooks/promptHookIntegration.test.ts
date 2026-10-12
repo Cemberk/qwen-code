@@ -6,10 +6,17 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { HookRunner } from './hookRunner.js';
-import { HookEventName, HookType, PermissionMode } from './types.js';
+import { HookAggregator } from './hookAggregator.js';
+import {
+  createHookOutput,
+  HookEventName,
+  HookType,
+  PermissionMode,
+} from './types.js';
 import type {
   HookDefinition,
   PromptHookConfig,
+  PreToolUseHookOutput,
   PreToolUseInput,
 } from './types.js';
 import type { Config } from '../config/config.js';
@@ -180,7 +187,7 @@ describe('Prompt Hook Integration', () => {
       expect(callArg.model).toBe('qwen-max');
     });
 
-    it('should fail-open when LLM returns invalid response', async () => {
+    it('should block the tool call when LLM returns invalid response', async () => {
       // Mock invalid LLM response
       mockGenerateContent.mockResolvedValue({
         candidates: [
@@ -204,12 +211,26 @@ describe('Prompt Hook Integration', () => {
         input,
       );
 
-      // Fail-open: invalid response defaults to allow
-      expect(result.success).toBe(true);
-      expect(result.output?.decision).toBe('allow');
+      // Fail-closed: an undecidable PreToolUse hook blocks the call, and the
+      // aggregated result is a clean block (not a runner failure, which the
+      // PreToolUse trigger would treat as no decision).
+      expect(result.outcome).toBe('blocking');
+      const aggregated = new HookAggregator().aggregateResults(
+        [result],
+        HookEventName.PreToolUse,
+      );
+      expect(aggregated.success).toBe(true);
+      expect(
+        (
+          createHookOutput(
+            'PreToolUse',
+            aggregated.finalOutput!,
+          ) as PreToolUseHookOutput
+        ).isDenied(),
+      ).toBe(true);
     });
 
-    it('should handle LLM API errors gracefully', async () => {
+    it('should block the tool call when the LLM call fails', async () => {
       mockGenerateContent.mockRejectedValue(new Error('API rate limit'));
 
       const hookConfig = createPromptHookConfig('Check: $ARGUMENTS');
@@ -221,8 +242,20 @@ describe('Prompt Hook Integration', () => {
         input,
       );
 
-      // Errors are non-blocking (fail-open)
-      expect(result.success).toBe(false);
+      expect(result.outcome).toBe('blocking');
+      expect(result.output?.decision).toBe('block');
+      expect(result.output?.reason).toContain('API rate limit');
+    });
+
+    it('should not block a Stop hook when the LLM call fails', async () => {
+      mockGenerateContent.mockRejectedValue(new Error('API rate limit'));
+
+      const result = await hookRunner.executeHook(
+        createPromptHookConfig('Check: $ARGUMENTS'),
+        HookEventName.Stop,
+        createPreToolUseInput('Bash', { command: 'ls' }),
+      );
+
       expect(result.outcome).toBe('non_blocking_error');
       expect(result.output?.continue).toBe(true);
     });
@@ -319,7 +352,7 @@ describe('Prompt Hook Integration', () => {
   });
 
   describe('Timeout Handling', () => {
-    it('should report a timeout when LLM is slow', async () => {
+    it('should block the tool call when the LLM is too slow', async () => {
       mockGenerateContent.mockImplementation(
         () =>
           new Promise((resolve) => {
@@ -349,7 +382,8 @@ describe('Prompt Hook Integration', () => {
       );
 
       expect(result.success).toBe(false);
-      expect(result.outcome).toBe('timeout');
+      expect(result.outcome).toBe('blocking');
+      expect(result.output?.reason).toContain('timed out');
     }, 10000);
   });
 });

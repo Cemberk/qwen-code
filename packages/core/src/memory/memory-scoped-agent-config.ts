@@ -50,15 +50,19 @@ interface PinnedMemoryRoot {
   resolvedPath: string | undefined;
 }
 
+const READ_TOOLS: ReadonlySet<string> = new Set([
+  ToolNames.READ_FILE,
+  ToolNames.GREP,
+  ToolNames.GLOB,
+  ToolNames.LS,
+]);
+
 function isScopedTool(
   toolName: string,
   opts: Required<MemoryScopedAgentConfigOptions>,
 ): boolean {
   return (
-    (opts.restrictReadsToMemoryPaths &&
-      (toolName === ToolNames.READ_FILE ||
-        toolName === ToolNames.GREP ||
-        toolName === ToolNames.LS)) ||
+    (opts.restrictReadsToMemoryPaths && READ_TOOLS.has(toolName)) ||
     toolName === ToolNames.EDIT ||
     toolName === ToolNames.WRITE_FILE ||
     toolName === ToolNames.SHELL
@@ -309,14 +313,19 @@ async function evaluateScopedDecision(
     }
     case ToolNames.READ_FILE:
     case ToolNames.GREP:
+    case ToolNames.GLOB:
     case ToolNames.LS:
-      if (!opts.restrictReadsToMemoryPaths) return 'default';
-      return isAllowedMemoryPath(ctx.filePath, projectRoot, {
-        includeProjectMemory: opts.includeProjectMemory,
-        includeUserMemory: opts.includeUserMemory,
-      })
-        ? 'allow'
-        : 'deny';
+      // The read tools ask for anything outside the workspace, so reads of
+      // the memory roots this agent maintains are allowed explicitly here.
+      if (
+        isAllowedMemoryPath(ctx.filePath, projectRoot, {
+          includeProjectMemory: opts.includeProjectMemory,
+          includeUserMemory: opts.includeUserMemory,
+        })
+      ) {
+        return 'allow';
+      }
+      return opts.restrictReadsToMemoryPaths ? 'deny' : 'default';
     case ToolNames.EDIT:
     case ToolNames.WRITE_FILE: {
       const resolvedCandidate = ctx.filePath
@@ -363,6 +372,9 @@ function getScopedDenyRule(
     case ToolNames.GREP:
       if (!opts.restrictReadsToMemoryPaths) return undefined;
       return `ManagedAutoMemory(grep_search: only within ` + `${allowedRoots})`;
+    case ToolNames.GLOB:
+      if (!opts.restrictReadsToMemoryPaths) return undefined;
+      return `ManagedAutoMemory(glob: only within ` + `${allowedRoots})`;
     case ToolNames.LS:
       if (!opts.restrictReadsToMemoryPaths) return undefined;
       return (
@@ -423,7 +435,9 @@ export function createMemoryScopedAgentConfig(
   const scopedPm: MemoryScopedPermissionManager = {
     hasRelevantRules(ctx: PermissionCheckContext): boolean {
       return (
-        isScopedTool(ctx.toolName, opts) || !!basePm?.hasRelevantRules(ctx)
+        isScopedTool(ctx.toolName, opts) ||
+        READ_TOOLS.has(ctx.toolName) ||
+        !!basePm?.hasRelevantRules(ctx)
       );
     },
     hasMatchingAskRule(ctx: PermissionCheckContext): boolean {

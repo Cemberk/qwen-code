@@ -29,12 +29,6 @@ const HANDSHAKE_PATH = fileURLToPath(
 const PTY_LAUNCHER_PATH = fileURLToPath(
   new URL('../fixtures/wrappers/pty-launcher.mjs', import.meta.url),
 );
-const OFFLINE_SCENARIO = fileURLToPath(
-  new URL(
-    '../fixtures/scenarios/opentui-noflicker-offline.scenario.json',
-    import.meta.url,
-  ),
-);
 
 const fixtureCommand = (...flags) => ({
   argv: [...EMITTER, ...flags],
@@ -213,32 +207,6 @@ test('expectBaseFailure rejects a both-pass of the same commands', async () => {
     );
     assert.equal(defective.outcome, 'base-fails-fixed-passes');
     assert.equal(defective.harnessPass, true);
-  });
-});
-
-test('the offline gate requires its base fixture to keep showing a defect', async () => {
-  await withWorkdir(async (work) => {
-    // bun is only needed for the real fixed side, so both cases override it
-    // with a clean emitter: tightening this gate must not make it red either.
-    const fixture = JSON.parse(await readFile(OFFLINE_SCENARIO, 'utf8'));
-    const clean = fixtureCommand('--frames', '1', '--sync').argv;
-    const defective = await runScenarios({
-      paths: [OFFLINE_SCENARIO],
-      outDir: join(work, 'defective'),
-      baseOverride: fixture.commands.base.argv,
-      fixedOverride: clean,
-    });
-    assert.equal(defective.scenarios[0].outcome, 'base-fails-fixed-passes');
-    assert.equal(defective.overall, 'pass');
-
-    const healed = await runScenarios({
-      paths: [OFFLINE_SCENARIO],
-      outDir: join(work, 'healed'),
-      baseOverride: clean,
-      fixedOverride: clean,
-    });
-    assert.equal(healed.scenarios[0].outcome, 'both-pass');
-    assert.equal(healed.overall, 'fail');
   });
 });
 

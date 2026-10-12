@@ -8,7 +8,7 @@
  * Framework-neutral agent-loop stream events and render-ready history items
  * shared by renderer bindings.
  *
- * This module must not import react / solid / ink / @opentui — the rule is
+ * This module must not import react / solid / ink — the rule is
  * enforced by `scripts/check-tui-dep-direction.mjs` (wired into CI via
  * `npm run check:tui-dep-direction`).
  */

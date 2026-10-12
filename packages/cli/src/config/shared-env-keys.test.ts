@@ -16,15 +16,8 @@ import {
 
 describe('PROJECT_ENV_HARDCODED_EXCLUSIONS', () => {
   // Security guard: a project `.env` must never be able to disable TLS
-  // certificate verification. Removing this key would let an untrusted repo
-  // silently turn off MITM protection for all API connections.
-  it('excludes QWEN_TLS_INSECURE so a project .env cannot disable TLS', () => {
-    expect(PROJECT_ENV_HARDCODED_EXCLUSIONS).toContain('QWEN_TLS_INSECURE');
-  });
-
-  // isTlsVerificationDisabled() also honors NODE_TLS_REJECT_UNAUTHORIZED=0, and
-  // the initial .env load only consults this list, so it must be blocked here
-  // too — otherwise a project .env could bypass TLS via the Node-native var.
+  // certificate verification. Node honors NODE_TLS_REJECT_UNAUTHORIZED=0
+  // process-wide, and the initial .env load only consults this list.
   it('excludes NODE_TLS_REJECT_UNAUTHORIZED so a project .env cannot disable TLS', () => {
     expect(PROJECT_ENV_HARDCODED_EXCLUSIONS).toContain(
       'NODE_TLS_REJECT_UNAUTHORIZED',
@@ -196,14 +189,6 @@ describe('PROJECT_ENV_HARDCODED_EXCLUSIONS', () => {
     }
   });
 
-  // git's editor fallback chain ($VISUAL/$EDITOR) and the CLI's own
-  // useLaunchEditor spawn these like the blocked GIT_EDITOR; CPython executes
-  // PYTHONSTARTUP at interactive startup; the CLI execs $BROWSER via
-  // openBrowserSecurely. Each is an exec redirect from a project .env.
-  it('excludes the OpenTUI native library location', () => {
-    expect(isHardcodedProjectEnvExclusion('OTUI_ASSET_ROOT')).toBe(true);
-  });
-
   it('excludes proxy routing in every spelling', () => {
     for (const key of [
       'HTTP_PROXY',
@@ -220,6 +205,10 @@ describe('PROJECT_ENV_HARDCODED_EXCLUSIONS', () => {
     }
   });
 
+  // git's editor fallback chain ($VISUAL/$EDITOR) and the CLI's own
+  // useLaunchEditor spawn these like the blocked GIT_EDITOR; CPython executes
+  // PYTHONSTARTUP at interactive startup; the CLI execs $BROWSER via
+  // openBrowserSecurely. Each is an exec redirect from a project .env.
   it('excludes the editor, startup, and browser exec-redirect keys', () => {
     for (const key of ['VISUAL', 'EDITOR', 'PYTHONSTARTUP', 'BROWSER']) {
       expect(PROJECT_ENV_HARDCODED_EXCLUSIONS).toContain(key);

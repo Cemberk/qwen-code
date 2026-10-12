@@ -7,10 +7,12 @@
 import type { FunctionDeclaration } from '@google/genai';
 import type {
   AnyDeclarativeTool,
+  ToolCallConfirmationDetails,
   ToolResult,
   ToolResultDisplay,
   ToolInvocation,
 } from './tools.js';
+import type { PermissionDecision } from '../permissions/types.js';
 import { Kind, BaseDeclarativeTool, BaseToolInvocation } from './tools.js';
 import { type Config, matchesAnyServerPattern } from '../config/config.js';
 import { spawn } from 'node:child_process';
@@ -27,7 +29,7 @@ import type { EventEmitter } from 'node:events';
 import { createDebugLogger } from '../utils/debugLogger.js';
 import { sanitizeChildEnv } from '../utils/sanitize-child-env.js';
 import { normalizePathEnvForWindows } from '../utils/windowsPath.js';
-import type { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
+import type { ReadResourceResult } from '@modelcontextprotocol/client';
 import { normalizeMcpToolName } from '../utils/tool-name-utils.js';
 import { CHARS_PER_TOKEN } from '../services/tokenEstimation.js';
 import {
@@ -88,6 +90,28 @@ class DiscoveredToolInvocation extends BaseToolInvocation<
 
   getDescription(): string {
     return safeJsonStringify(this.params);
+  }
+
+  /**
+   * A discovered tool runs the user's tool-call command, so like an untrusted
+   * MCP tool it asks before every call unless a permission rule allows it.
+   */
+  override async getDefaultPermission(): Promise<PermissionDecision> {
+    return 'ask';
+  }
+
+  override async getConfirmationDetails(
+    _abortSignal: AbortSignal,
+  ): Promise<ToolCallConfirmationDetails> {
+    return {
+      type: 'exec',
+      title: 'Confirm Discovered Tool Execution',
+      command: `${this.config.getToolCallCommand()} ${this.toolName}`,
+      rootCommand: this.toolName,
+      onConfirm: async () => {
+        // No-op: persistence is handled by coreToolScheduler via PM rules
+      },
+    };
   }
 
   async execute(

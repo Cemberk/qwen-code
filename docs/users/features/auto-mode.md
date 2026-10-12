@@ -155,9 +155,14 @@ de-duplicated.
 
 ### Classify all shell commands
 
-By default, read-only shell commands (`ls`, `cat`, `git status`, …) are
-auto-approved without invoking the classifier — the permission system
-detects them as safe at layer 3 and skips the classifier entirely. Set
+By default, read-only shell commands (`ls`, `cat`, `git status`, …) that
+read only inside the workspace directories (including
+`--include-directories`) are auto-approved without invoking the classifier —
+the permission system detects them as safe at layer 3 and skips the
+classifier entirely. A read-only command that names a path outside the
+workspace, or one whose paths cannot be determined (`~`, variables, globs,
+`..` escapes, a `cd` out of the workspace), is treated like any other
+command. Set
 `classifyAllShell` to `true` to force **every** shell command through
 the classifier, including read-only ones:
 

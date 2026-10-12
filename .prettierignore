@@ -24,8 +24,3 @@ junit.xml
 pnpm-lock.yaml
 Thumbs.db
 packages/cli/src/services/insight/templates/insightTemplate.ts
-# The rest of eslint.config.js's global ignores, for the same reasons it
-# gives. scripts/codemod/fixtures is the load-bearing one: those files are
-# "intentionally non-idiomatic ink input/output", so normalising them to
-# house style would corrupt the very data the codemod tests assert on.
-scripts/codemod/fixtures/

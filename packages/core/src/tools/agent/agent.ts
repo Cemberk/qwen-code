@@ -109,6 +109,7 @@ import {
 import { createDebugLogger } from '../../utils/debugLogger.js';
 import { PermissionMode } from '../../hooks/types.js';
 import { approvalModeToPermissionMode } from '../../hooks/permission-mode.js';
+import { resolveAgentApprovalMode } from '../../config/approval-mode.js';
 import type { StopHookOutput } from '../../hooks/types.js';
 import {
   appendStopHookBlockingCapWarning,
@@ -398,70 +399,19 @@ function runInBackgroundDescription(teamEnabled: boolean): string {
 }
 
 /**
- * Resolves the effective permission mode for a sub-agent.
- *
- * Rules (matching claw-code):
- * - Permissive parent modes (yolo, auto-edit) always win
- * - Otherwise, the agent definition's mode applies if set
- * - Default fallback is auto-edit (sub-agents need autonomy)
+ * Resolves the effective permission mode for a sub-agent: the less
+ * permissive of the agent definition's mode and the parent's (see
+ * {@link resolveAgentApprovalMode}). The subagent-only `bubble` mode runs
+ * as Default (tool calls require confirmation); the background launch path
+ * is what turns deny into surface-to-parent.
  */
 export function resolveSubagentApprovalMode(
   parentApprovalMode: ApprovalMode,
   agentApprovalMode?: string,
-  isTrustedFolder?: boolean,
 ): PermissionMode {
-  // Permissive parent modes always win. AUTO is permissive in the sense
-  // that the sub-agent should inherit classifier-mediated approval rather
-  // than degrading to DEFAULT (which would force every sub-agent tool call
-  // through manual confirmation — unusable in headless sub-agent contexts).
-  if (
-    parentApprovalMode === ApprovalMode.YOLO ||
-    parentApprovalMode === ApprovalMode.AUTO_EDIT ||
-    parentApprovalMode === ApprovalMode.AUTO
-  ) {
-    return approvalModeToPermissionMode(parentApprovalMode);
-  }
-
-  // The subagent-only `bubble` mode is not an ApprovalMode enum member; it
-  // resolves to Default run behavior (tool calls require confirmation). The
-  // background launch path is what turns deny into surface-to-parent. Handle
-  // it explicitly rather than relying on approvalModeToPermissionMode's
-  // `default:` fall-through, so adding a real ApprovalMode.BUBBLE later can't
-  // silently change this.
-  if (agentApprovalMode === BUBBLE_APPROVAL_MODE) {
-    return PermissionMode.Default;
-  }
-
-  // Agent definition's mode applies if set
-  if (agentApprovalMode) {
-    const resolved = approvalModeToPermissionMode(
-      agentApprovalMode as ApprovalMode,
-    );
-    // Privileged modes require trusted folder. AUTO is privileged because
-    // its LLM classifier can auto-approve shell / network / agent calls
-    // without user prompts; allowing an untrusted-repo sub-agent definition
-    // to opt into AUTO would let the repo silently grant itself classifier-
-    // mediated automation.
-    if (
-      !isTrustedFolder &&
-      (resolved === PermissionMode.Yolo ||
-        resolved === PermissionMode.AutoEdit ||
-        resolved === PermissionMode.Auto)
-    ) {
-      return approvalModeToPermissionMode(parentApprovalMode);
-    }
-    return resolved;
-  }
-
-  // Default: match parent mode. In plan mode, stay in plan.
-  // In default mode in trusted folders, auto-edit for autonomy.
-  if (parentApprovalMode === ApprovalMode.PLAN) {
-    return PermissionMode.Plan;
-  }
-  if (isTrustedFolder) {
-    return PermissionMode.AutoEdit;
-  }
-  return approvalModeToPermissionMode(parentApprovalMode);
+  return approvalModeToPermissionMode(
+    resolveAgentApprovalMode(parentApprovalMode, agentApprovalMode),
+  );
 }
 
 /**
@@ -3196,7 +3146,6 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
       const resolvedMode = resolveSubagentApprovalMode(
         this.config.getApprovalMode(),
         subagentConfig.approvalMode,
-        this.config.isTrustedFolder(),
       );
       const resolvedApprovalMode = permissionModeToApprovalMode(resolvedMode);
       // ALWAYS produce a child Config via an overlay, even when the

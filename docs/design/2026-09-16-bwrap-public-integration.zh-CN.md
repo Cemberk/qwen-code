@@ -6,7 +6,7 @@
 
 2026-09-19 更新的实现候选。本次变更是 bwrap 交付的第三阶段：叠加在 runtime 集成阶段之上，开放 CLI 配置边界并退役整 CLI bwrap。已合并的执行底座继续提供传输与生命周期能力。Landlock 和公开 Linux x64/aarch64 验收 workflow 分别留到后续独立变更。
 
-首个公开入口支持普通 headless CLI 和两套终端 UI。受支持的直接 shell 入口与内置工具必须共享不可变 runtime 策略。不支持的集成明确拒绝：带委托文件系统/会话执行的 ACP/serve、web terminal、可执行扩展/hooks/discovery/MCP/LSP、自动 worktree 管理、外部 agents 和推测文件合并。仅隐藏模型工具声明不能证明集成安全。这收窄统一设计的首个公开前端契约：ACP/serve 需要完整的 selected-runtime 与委托契约才可启用；在此之前必须拒绝新策略，不能在宿主执行。
+首个公开入口支持普通 headless CLI 和交互式终端 UI。受支持的直接 shell 入口与内置工具必须共享不可变 runtime 策略。不支持的集成明确拒绝：带委托文件系统/会话执行的 ACP/serve、web terminal、可执行扩展/hooks/discovery/MCP/LSP、自动 worktree 管理、外部 agents 和推测文件合并。仅隐藏模型工具声明不能证明集成安全。这收窄统一设计的首个公开前端契约：ACP/serve 需要完整的 selected-runtime 与委托契约才可启用；在此之前必须拒绝新策略，不能在宿主执行。
 
 ## 操作者策略与迁移
 
@@ -18,7 +18,7 @@
 
 ## 执行与前端边界
 
-Ink/OpenTUI `!`、提示词 shell 插值及 Monitor 接入 runtime shell executor。不再为了检测 cwd 变化而创建宿主临时文件；受约束命令继续无状态。模型 Shell 和 Read/Write/Edit 保留已验证的 worker 与传输。只有策略在全部构造/恢复路径保持不变时，才准入嵌套 Code Mode/agents；在设置前拒绝自定义 executor、hooks、MCP 添加及 worktree/working-dir 越界。未迁移的写入/进程工具不注册，直接调用未支持 adapter 也拒绝。
+Ink `!`、提示词 shell 插值及 Monitor 接入 runtime shell executor。不再为了检测 cwd 变化而创建宿主临时文件；受约束命令继续无状态。模型 Shell 和 Read/Write/Edit 保留已验证的 worker 与传输。只有策略在全部构造/恢复路径保持不变时，才准入嵌套 Code Mode/agents；在设置前拒绝自定义 executor、hooks、MCP 添加及 worktree/working-dir 越界。未迁移的写入/进程工具不注册，直接调用未支持 adapter 也拒绝。
 
 非 bare 初始化必须在启动前抑制未支持的宿主副作用：推测合并、仓库 hook/worktree 清理、自动 skill/team-memory Git 操作、扩展发现和可执行 hooks。UI 渲染不能在宿主执行模型选择的 Mermaid/图片 helper。自定义状态栏命令与 GitHub 查询接入 runtime shell 或在此模式禁用。纯内存渲染及受保护认证/会话/历史记账继续属于可信 runtime。
 

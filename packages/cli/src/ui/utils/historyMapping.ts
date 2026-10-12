@@ -16,10 +16,9 @@ import { isSlashCommand } from './commandUtils.js';
 
 /**
  * TUI rewind's binding of the shared user-prompt classifier. Deliberately
- * module-private: `isUserTextContent` below is the only door to this rule, and
- * the OpenTUI parity path reaches it by importing that function. Exporting the
- * options would let a caller compose `isApiUserPrompt(x, …)` directly and
- * re-create the per-surface twin this consolidation removes.
+ * module-private: `isUserTextContent` below is the only door to this rule.
+ * Exporting the options would let a caller compose `isApiUserPrompt(x, …)`
+ * directly and re-create the per-surface twin this consolidation removes.
  */
 const TUI_API_USER_PROMPT_OPTIONS: ApiUserPromptOptions = {
   excludeClearedMediaPlaceholders: true,

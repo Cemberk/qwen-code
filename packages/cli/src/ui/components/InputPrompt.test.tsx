@@ -1366,7 +1366,7 @@ describe('InputPrompt', () => {
       unmount();
     });
 
-    it('should show the native clipboard error only once across remounts', async () => {
+    it('should show the clipboard unavailable error only once across remounts', async () => {
       const addItem = vi.fn();
       const clipboardUnavailableShownRef = { current: false };
       mockedUseUIState.mockReturnValue({
@@ -1410,7 +1410,7 @@ describe('InputPrompt', () => {
       expect(addItem).toHaveBeenCalledWith(
         {
           type: 'error',
-          text: 'Clipboard image paste is unavailable because the native clipboard module could not be loaded. Reinstall Qwen Code or use the npm installation method.',
+          text: 'Clipboard image paste is unavailable because the system clipboard could not be read.',
         },
         expect.any(Number),
       );

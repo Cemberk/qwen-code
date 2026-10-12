@@ -319,17 +319,16 @@ Use the optional `approvalMode` frontmatter field to control how a subagent's to
 
 - `default`: Tools require interactive approval (same as the main session default)
 - `plan`: Analyze-only mode — the agent plans but does not execute changes
-- `auto-edit`: Tools are auto-approved without prompting (recommended for most agents)
+- `auto-edit`: File edits are auto-approved without prompting
 - `yolo`: All tools auto-approved, including potentially destructive ones
-- `bubble`: Background-agent tool approvals are surfaced in the parent session
+- `bubble`: Runs like `default`; background-agent tool approvals are surfaced in the parent session
 
-If you omit this field, the subagent's permission mode is determined automatically:
+A subagent never runs more permissively than the session that starts it:
 
-- If the parent session is in **yolo** or **auto-edit** mode, the subagent inherits that mode. A permissive parent stays permissive.
-- If the parent session is in **plan** mode, the subagent stays in plan mode. An analyze-only session cannot mutate files through a delegated agent.
-- If the parent session is in **default** mode (in a trusted folder), the subagent gets **auto-edit** so it can work autonomously.
+- If you omit this field, the subagent runs in the parent session's mode.
+- If you set it, the subagent runs in the less permissive of its own mode and the parent's (plan < default < auto-edit / auto < yolo). For example, a subagent with `approvalMode: yolo` runs in default mode under a default-mode parent, and a subagent with `approvalMode: plan` runs in plan mode under a yolo parent. `auto-edit` and `auto` each approve calls the other would ask about, so an agent declaring one under a parent in the other runs in default mode.
 
-When you do set `approvalMode`, the parent's permissive modes still take priority. For example, if the parent is in yolo mode, a subagent with `approvalMode: plan` will still run in yolo mode.
+The same rule applies to resumed background agents, workflow agents, team and arena agents, and agents from extensions or converted Claude plugins (`permissionMode: bypassPermissions` maps to `yolo` and is capped the same way).
 
 ```
 ---
@@ -838,7 +837,7 @@ Always follow these standards:
 ## Security Considerations
 
 - **Tool Restrictions**: Use `tools` to limit which tools a subagent can access, or `disallowedTools` to block specific tools while inheriting everything else
-- **Permission Mode**: Subagents inherit their parent's permission mode by default. Plan-mode sessions cannot escalate to auto-edit through delegated agents. Privileged modes (auto-edit, yolo) are blocked in untrusted folders.
+- **Permission Mode**: Subagents run in their parent's permission mode by default and never in a more permissive one, whatever their definition declares.
 - **Model Selection**: A subagent with an explicit `model:` (or `model: fast`)
   sends its model requests to the local server configured for that model in
   `modelProviders.openai`. Every model server is on loopback; there is no routing

@@ -52,7 +52,7 @@ import {
 import { MAX_CONCURRENT_MONITORS } from '../services/monitorRegistry.js';
 import {
   extractCommandRules,
-  isShellCommandReadOnlyASTInDirectory,
+  isShellCommandReadOnlyWithinWorkspace,
 } from '../utils/shellAstParser.js';
 import { getCurrentAgentId } from '../agents/runtime/agent-context.js';
 import { getShellContextEnvVars } from '../services/shellContextEnv.js';
@@ -191,11 +191,7 @@ class MonitorToolInvocation extends BaseToolInvocation<
     // Bash(...) — see comment in getConfirmationDetails); only the
     // substitution-deny half is removed.
     try {
-      const isReadOnly = await isShellCommandReadOnlyASTInDirectory(
-        command,
-        cwd,
-      );
-      if (isReadOnly) {
+      if (await this.isReadOnlyWithinWorkspace(command, cwd)) {
         return 'allow';
       }
     } catch (e) {
@@ -203,6 +199,17 @@ class MonitorToolInvocation extends BaseToolInvocation<
     }
 
     return 'ask';
+  }
+
+  /** A read outside the workspace asks, as in the shell tool. */
+  private isReadOnlyWithinWorkspace(
+    command: string,
+    cwd: string,
+  ): Promise<boolean> {
+    const workspace = this.config.getWorkspaceContext();
+    return isShellCommandReadOnlyWithinWorkspace(command, cwd, (p) =>
+      workspace.isPathWithinWorkspace(p),
+    );
   }
 
   override async getConfirmationDetails(
@@ -225,7 +232,7 @@ class MonitorToolInvocation extends BaseToolInvocation<
       let isReadOnly = false;
       try {
         if (!this.config.getShellExecutionSandbox?.())
-          isReadOnly = await isShellCommandReadOnlyASTInDirectory(sub, cwd);
+          isReadOnly = await this.isReadOnlyWithinWorkspace(sub, cwd);
       } catch (e) {
         // Conservative fallback: if AST analysis fails, keep the sub-command
         // in the confirmation scope instead of accidentally dropping it.

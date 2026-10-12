@@ -457,7 +457,7 @@ call_C: attemptStart_C, ttftMs_C, ... (closure)
 
 Per-call locals never overlap. Stream chunks are detected against the local `attemptStart` of each call. Span attributes are set at each call's own `endLLMRequestSpan`.
 
-`AsyncLocalStorageContextManager` (registered by NodeSDK at `sdk.ts:273`) already ensures the active OTel context — and thus the parent span passed to `startLLMRequestSpan` — is correct per fiber.
+`AsyncLocalStorageContextManager` (registered by the tracer provider's `register()` in `sdk-impl.ts`) already ensures the active OTel context — and thus the parent span passed to `startLLMRequestSpan` — is correct per fiber.
 
 ## Files to change
 

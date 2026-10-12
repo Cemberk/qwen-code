@@ -31,7 +31,6 @@ import {
   isBareMode,
   isSafeModeEnv,
   isToolEnabled,
-  isTlsVerificationDisabled,
   SchemaValidator,
   type ConfigParameters,
   type MCPServerConfig,
@@ -166,7 +165,6 @@ export interface CliArgs {
   openaiApiKey: string | undefined;
   openaiBaseUrl: string | undefined;
   openaiLoggingDir: string | undefined;
-  insecure?: boolean | undefined;
   includeDirectories: string[] | undefined;
   screenReader: boolean | undefined;
   inputFormat?: string | undefined;
@@ -553,7 +551,6 @@ export async function parseArguments(): Promise<CliArgs> {
     .option('debug', TOP_LEVEL_GLOBAL_OPTIONS.debug)
     .option('bare', TOP_LEVEL_GLOBAL_OPTIONS.bare)
     .option('safe-mode', TOP_LEVEL_GLOBAL_OPTIONS['safe-mode'])
-    .option('insecure', TOP_LEVEL_GLOBAL_OPTIONS.insecure)
     .option('chat-recording', TOP_LEVEL_GLOBAL_OPTIONS['chat-recording'])
     .command(DEFAULT_COMMAND, DEFAULT_COMMAND_DESC, (yargsInstance: Argv) =>
       yargsInstance
@@ -1427,34 +1424,6 @@ export async function loadCliConfig(
   }
   const safeMode =
     argv.safeMode !== undefined ? argv.safeMode : isSafeModeEnv();
-
-  // Surface `--insecure` as an env var so it reaches the undici dispatcher
-  // layer (which controls TLS verification) without threading a flag through
-  // every content generator and the preconnect path. Resolution there ORs this
-  // with QWEN_TLS_INSECURE / NODE_TLS_REJECT_UNAUTHORIZED=0.
-  if (argv.insecure) {
-    process.env['QWEN_TLS_INSECURE'] = '1';
-  }
-  // When opting out of TLS verification, also set NODE_TLS_REJECT_UNAUTHORIZED
-  // process-wide. The custom undici dispatcher handles the Node path, but this
-  // makes the opt-out effective on runtimes it does not cover (Bun), and
-  // surfaces a single explicit warning. Skipped when the user already set it,
-  // since Node emits its own warning in that case.
-  if (
-    isTlsVerificationDisabled() &&
-    process.env['NODE_TLS_REJECT_UNAUTHORIZED'] !== '0'
-  ) {
-    process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0';
-    // The setting is process-wide, so the blast radius is every outbound HTTPS
-    // connection (model API, MCP servers, and child processes that
-    // inherit the env), not just model calls. Log to the debug file too, so the
-    // state is discoverable after the terminal scrollback is gone.
-    const tlsWarning =
-      'TLS certificate verification is disabled (--insecure / QWEN_TLS_INSECURE). All HTTPS connections in this process (API calls, MCP servers, child processes) are vulnerable to man-in-the-middle attacks.';
-    debugLogger.warn(tlsWarning);
-    // eslint-disable-next-line no-console
-    console.error(`WARNING: ${tlsWarning}`);
-  }
 
   // Set runtime output directory from settings (env var QWEN_RUNTIME_DIR
   // is auto-detected inside getRuntimeBaseDir() at each call site).

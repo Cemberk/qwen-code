@@ -19,8 +19,8 @@ export default {
 
   'User level': 'User level',
   'Project level': 'Project level',
-  'Clipboard image paste is unavailable because the native clipboard module could not be loaded. Reinstall Qwen Code or use the npm installation method.':
-    'Clipboard image paste is unavailable because the native clipboard module could not be loaded. Reinstall Qwen Code or use the npm installation method.',
+  'Clipboard image paste is unavailable because the system clipboard could not be read.':
+    'Clipboard image paste is unavailable because the system clipboard could not be read.',
 
   // ==========================================================================
   // Extensions manager dialog (Installed / Discover / Sources tabs)
@@ -600,12 +600,6 @@ export default {
   active: 'active',
   disabled: 'disabled',
   enabled: 'enabled',
-  'disabled (bare mode)': 'disabled (bare mode)',
-  'disabled (safe mode)': 'disabled (safe mode)',
-  'disabled (disableAllHooks)': 'disabled (disableAllHooks)',
-  'disabled (folder not trusted)': 'disabled (folder not trusted)',
-  'disabled (turned off for this session)':
-    'disabled (turned off for this session)',
   'View Details': 'View Details',
   'Update failed:': 'Update failed:',
   'Updating {{name}}...': 'Updating {{name}}...',
@@ -968,18 +962,7 @@ export default {
   'No hook config selected': 'No hook config selected',
   'To modify or remove this hook, edit settings.json directly or ask Qwen to help.':
     'To modify or remove this hook, edit settings.json directly or ask Qwen to help.',
-  'Safe mode is on, so no hooks run in this session.':
-    'Safe mode is on, so no hooks run in this session.',
-  'Bare mode is on, so no hooks run in this session.':
-    'Bare mode is on, so no hooks run in this session.',
-  'All hooks are disabled by the disableAllHooks setting.':
-    'All hooks are disabled by the disableAllHooks setting.',
-  'Timeout:': 'Timeout:',
-  'Status message:': 'Status message:',
   'Options:': 'Options:',
-  'Skill:': 'Skill:',
-  'runs in background': 'runs in background',
-  sequential: 'sequential',
   // Hooks - Disabled Step
   'Hook Configuration - Disabled': 'Hook Configuration - Disabled',
   'All hooks are currently disabled. You have {{count}} that are not running.':
@@ -1516,7 +1499,6 @@ export default {
   ' (this project)': ' (this project)',
   ' (global)': ' (global)',
   'API Key': 'API Key',
-  '(default)': '(default)',
   '(not set)': '(not set)',
   Modality: 'Modality',
   'Context Window': 'Context Window',
@@ -2243,7 +2225,6 @@ export default {
   m: 'm',
 
   // Stats Dashboard — keyboard hints (not translated)
-  'tab \xB7 esc': 'tab \xB7 esc',
   'tab \xB7 r dates \xB7 \u2190\u2192 month \xB7 esc':
     'tab \xB7 r dates \xB7 \u2190\u2192 month \xB7 esc',
   'tab \xB7 r dates \xB7 esc': 'tab \xB7 r dates \xB7 esc',

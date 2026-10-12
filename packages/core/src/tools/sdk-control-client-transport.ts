@@ -20,7 +20,7 @@
 import {
   isJSONRPCRequest,
   type JSONRPCMessage,
-} from '@modelcontextprotocol/sdk/types.js';
+} from '@modelcontextprotocol/client';
 import { createDebugLogger } from '../utils/debugLogger.js';
 
 const debugLogger = createDebugLogger('MCP_SDK_TRANSPORT');
@@ -43,7 +43,7 @@ export interface SdkControlClientTransportOptions {
 /**
  * MCP Client Transport for SDK MCP servers
  *
- * Implements the @modelcontextprotocol/sdk Transport interface to enable
+ * Implements the @modelcontextprotocol/client Transport interface to enable
  * CLI's MCP client to connect to SDK MCP servers via the control plane.
  */
 export class SdkControlClientTransport {

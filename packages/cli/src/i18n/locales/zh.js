@@ -18,8 +18,8 @@ export default {
 
   'User level': '用户级',
   'Project level': '项目级',
-  'Clipboard image paste is unavailable because the native clipboard module could not be loaded. Reinstall Qwen Code or use the npm installation method.':
-    '剪贴板图片粘贴不可用，因为原生剪贴板模块加载失败。请重新安装 Qwen Code，或改用 npm 安装方式。',
+  'Clipboard image paste is unavailable because the system clipboard could not be read.':
+    '剪贴板图片粘贴不可用，因为无法读取系统剪贴板。',
 
   // ==========================================================================
   // Extensions manager dialog (Installed / Discover / Sources tabs)
@@ -947,18 +947,7 @@ export default {
   'No hook config selected': '未选择 Hook 配置',
   'To modify or remove this hook, edit settings.json directly or ask Qwen to help.':
     '要修改或删除此 Hook，请直接编辑 settings.json 或询问 Qwen。',
-  'Safe mode is on, so no hooks run in this session.':
-    '安全模式已开启，本会话不会运行任何 Hook。',
-  'Bare mode is on, so no hooks run in this session.':
-    '精简模式已开启，本会话不会运行任何 Hook。',
-  'All hooks are disabled by the disableAllHooks setting.':
-    '所有 Hook 已被 disableAllHooks 设置禁用。',
-  'Timeout:': '超时：',
-  'Status message:': '状态消息：',
   'Options:': '选项：',
-  'Skill:': '技能：',
-  'runs in background': '后台运行',
-  sequential: '顺序执行',
   // Hooks - Disabled Step
   'Hook Configuration - Disabled': 'Hook 配置 - 已禁用',
   'All hooks are currently disabled. You have {{count}} that are not running.':
@@ -1197,11 +1186,6 @@ export default {
   Disable: '禁用',
   disabled: '已禁用',
   enabled: '已启用',
-  'disabled (bare mode)': '已禁用（精简模式）',
-  'disabled (safe mode)': '已禁用（安全模式）',
-  'disabled (disableAllHooks)': '已禁用（disableAllHooks）',
-  'disabled (folder not trusted)': '已禁用（文件夹未受信任）',
-  'disabled (turned off for this session)': '已禁用（本会话中已关闭）',
   'Error:': '错误：',
   tool: '工具',
   tools: '个工具',
@@ -1447,7 +1431,6 @@ export default {
   ' (this project)': '（当前项目）',
   ' (global)': '（全局）',
   'API Key': 'API Key',
-  '(default)': '(默认)',
   '(not set)': '(未设置)',
   Modality: '模态',
   'Context Window': '上下文窗口',
@@ -2054,7 +2037,6 @@ export default {
   m: '分',
 
   // Stats Dashboard — keyboard hints (not translated)
-  'tab \xB7 esc': 'tab \xB7 esc',
   'tab \xB7 r dates \xB7 \u2190\u2192 month \xB7 esc':
     'tab \xB7 r dates \xB7 \u2190\u2192 month \xB7 esc',
   'tab \xB7 r dates \xB7 esc': 'tab \xB7 r dates \xB7 esc',

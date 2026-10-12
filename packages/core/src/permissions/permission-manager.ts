@@ -16,10 +16,7 @@ import {
 import type { PathMatchContext } from './rule-parser.js';
 import { extractShellOperationsAcrossCommand } from './shell-semantics.js';
 import type { ShellOperation } from './shell-semantics.js';
-import {
-  isShellCommandReadOnlyAST,
-  isShellCommandReadOnlyASTInDirectory,
-} from '../utils/shellAstParser.js';
+import { isShellCommandReadOnlyWithinWorkspace } from '../utils/shellAstParser.js';
 import {
   getShellConfiguration,
   normalizeMonitorCommand,
@@ -151,6 +148,11 @@ export interface PermissionManagerConfig {
   getProjectRoot?(): string;
   /** Current working directory (for resolving path patterns). */
   getCwd?(): string;
+  /**
+   * The workspace directories. A read-only shell command resolves to 'allow'
+   * only when every path it reads is inside them; without this, to 'ask'.
+   */
+  getWorkspaceContext?(): { isPathWithinWorkspace(path: string): boolean };
   /**
    * Live folder trust. Read on every permission decision for the session
    * allow rules a project skill granted (`trustGated`): those apply only
@@ -672,18 +674,22 @@ export class PermissionManager {
    * "relevant" rules for the surrounding compound command.
    *
    * @param command - The shell command to analyze.
-   * @returns 'allow' for read-only, 'ask' otherwise.
+   * @returns 'allow' for read-only commands that read only inside the
+   *   workspace, 'ask' otherwise.
    */
   private async resolveDefaultPermission(
     command: string,
     cwd?: string,
   ): Promise<'allow' | 'ask'> {
     if (this.config.getShellExecutionSandbox?.()) return 'ask';
+    const workspace = this.config.getWorkspaceContext?.();
+    if (!cwd || !workspace) return 'ask';
     try {
-      const isReadOnly = cwd
-        ? await isShellCommandReadOnlyASTInDirectory(command, cwd)
-        : await isShellCommandReadOnlyAST(command);
-      if (isReadOnly) {
+      if (
+        await isShellCommandReadOnlyWithinWorkspace(command, cwd, (p) =>
+          workspace.isPathWithinWorkspace(p),
+        )
+      ) {
         return 'allow';
       }
     } catch (e) {

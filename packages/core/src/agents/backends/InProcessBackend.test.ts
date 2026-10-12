@@ -373,32 +373,65 @@ describe('InProcessBackend', () => {
     expect(registries.size).toBe(0);
   });
 
-  it('restores approval override cleanup when per-agent setup fails', async () => {
+  it('never runs a spawned agent more permissively than its parent', async () => {
     const restoreDangerousRules = vi.fn();
     const stripDangerousRulesForAutoMode = vi.fn();
     const parentConfig = createMockConfig() as unknown as {
-      createToolRegistry: ReturnType<typeof vi.fn>;
+      getApprovalMode: ReturnType<typeof vi.fn>;
       getPermissionManager: ReturnType<typeof vi.fn>;
     };
-    parentConfig.createToolRegistry.mockRejectedValueOnce(
-      new Error('registry boom'),
-    );
     parentConfig.getPermissionManager.mockReturnValue({
       restoreDangerousRules,
       stripDangerousRulesForAutoMode,
     });
     const localBackend = new InProcessBackend(parentConfig as never);
     await localBackend.init();
+    const MockAgentCore = AgentCore as unknown as ReturnType<typeof vi.fn>;
+    const spawnedMode = async (
+      agentId: string,
+      requested: ApprovalMode,
+    ): Promise<ApprovalMode> => {
+      const config = createSpawnConfig(agentId);
+      config.inProcess!.approvalMode = requested;
+      config.inProcess!.initialTask = undefined;
+      await localBackend.spawnAgent(config);
+      const { runtimeContext } = destructureAgentCoreCall(
+        MockAgentCore.mock.calls.at(-1)!,
+      );
+      return (runtimeContext as unknown as Config).getApprovalMode();
+    };
 
-    const config = createSpawnConfig('agent-1');
-    config.inProcess!.approvalMode = ApprovalMode.AUTO;
-
-    await expect(localBackend.spawnAgent(config)).rejects.toThrow(
-      'registry boom',
+    expect(await spawnedMode('agent-1', ApprovalMode.AUTO)).toBe(
+      ApprovalMode.DEFAULT,
     );
-    expect(stripDangerousRulesForAutoMode).toHaveBeenCalledTimes(1);
-    expect(restoreDangerousRules).toHaveBeenCalledTimes(1);
+    expect(await spawnedMode('agent-2', ApprovalMode.YOLO)).toBe(
+      ApprovalMode.DEFAULT,
+    );
+    expect(await spawnedMode('agent-3', PLAN_MODE)).toBe(PLAN_MODE);
+    parentConfig.getApprovalMode.mockReturnValue(ApprovalMode.YOLO);
+    expect(await spawnedMode('agent-4', ApprovalMode.AUTO_EDIT)).toBe(
+      ApprovalMode.AUTO_EDIT,
+    );
+    expect(stripDangerousRulesForAutoMode).not.toHaveBeenCalled();
+    localBackend.stopAll();
+    expect(restoreDangerousRules).not.toHaveBeenCalled();
   });
+
+  // A spawned agent never starts above its parent, but a teammate can still
+  // switch itself into AUTO (Shift+Tab), which takes a child-only lease.
+  async function spawnThenEnterAuto(
+    localBackend: InProcessBackend,
+    agentId: string,
+  ): Promise<void> {
+    const config = createSpawnConfig(agentId);
+    config.inProcess!.initialTask = undefined;
+    await localBackend.spawnAgent(config);
+    const MockAgentCore = AgentCore as unknown as ReturnType<typeof vi.fn>;
+    const { runtimeContext } = destructureAgentCoreCall(
+      MockAgentCore.mock.calls.at(-1)!,
+    );
+    (runtimeContext as unknown as Config).setApprovalMode(ApprovalMode.AUTO);
+  }
 
   it('keeps dangerous rules stripped until the last AUTO child exits', async () => {
     const restoreDangerousRules = vi.fn();
@@ -413,15 +446,8 @@ describe('InProcessBackend', () => {
     const localBackend = new InProcessBackend(parentConfig as never);
     await localBackend.init();
 
-    const first = createSpawnConfig('agent-1');
-    first.inProcess!.approvalMode = ApprovalMode.AUTO;
-    first.inProcess!.initialTask = undefined;
-    const second = createSpawnConfig('agent-2');
-    second.inProcess!.approvalMode = ApprovalMode.AUTO;
-    second.inProcess!.initialTask = undefined;
-
-    await localBackend.spawnAgent(first);
-    await localBackend.spawnAgent(second);
+    await spawnThenEnterAuto(localBackend, 'agent-1');
+    await spawnThenEnterAuto(localBackend, 'agent-2');
 
     expect(stripDangerousRulesForAutoMode).toHaveBeenCalledTimes(1);
     localBackend.stopAgent('agent-1');
@@ -447,15 +473,8 @@ describe('InProcessBackend', () => {
     const localBackend = new InProcessBackend(parentConfig as never);
     await localBackend.init();
 
-    const first = createSpawnConfig('agent-1');
-    first.inProcess!.approvalMode = ApprovalMode.AUTO;
-    first.inProcess!.initialTask = undefined;
-    const second = createSpawnConfig('agent-2');
-    second.inProcess!.approvalMode = ApprovalMode.AUTO;
-    second.inProcess!.initialTask = undefined;
-
-    await localBackend.spawnAgent(first);
-    await localBackend.spawnAgent(second);
+    await spawnThenEnterAuto(localBackend, 'agent-1');
+    await spawnThenEnterAuto(localBackend, 'agent-2');
     parentMode = ApprovalMode.AUTO;
     localBackend.stopAgent('agent-1');
     parentMode = DEFAULT_MODE;
@@ -590,6 +609,9 @@ describe('InProcessBackend', () => {
 
     const config = createSpawnConfig('agent-1');
     config.inProcess!.approvalMode = ApprovalMode.AUTO_EDIT;
+    (
+      parentConfig['getApprovalMode'] as ReturnType<typeof vi.fn>
+    ).mockReturnValue(ApprovalMode.YOLO);
     await backendWithParentMode.spawnAgent(config);
 
     const MockAgentCore = AgentCore as unknown as ReturnType<typeof vi.fn>;

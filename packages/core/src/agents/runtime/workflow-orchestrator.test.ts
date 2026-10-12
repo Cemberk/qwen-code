@@ -3910,6 +3910,39 @@ describe('WorkflowOrchestrator P3 — agentType / model / isolation / schema', (
     }
   });
 
+  it.each([
+    ['yolo', 'default', 'default'],
+    ['plan', 'yolo', 'plan'],
+    ['auto-edit', 'auto', 'default'],
+    ['bubble', 'auto-edit', 'default'],
+    [undefined, 'auto-edit', 'auto-edit'],
+  ] as const)(
+    'runs an agentType declaring %s under a %s session in %s mode',
+    async (declared, parent, expected) => {
+      const { config, calls } = fakeConfigWithMgr({
+        findSubagentByName: async () => ({
+          name: 'declared-mode',
+          description: 'Declares an approval mode',
+          systemPrompt: 'Complete the task.',
+          level: 'session',
+          approvalMode: declared,
+        }),
+        onCreate: async () => ({ finalText: 'done', terminateMode: 'GOAL' }),
+      });
+      Object.assign(config, {
+        getApprovalMode: () => parent as ApprovalMode,
+        getPrePlanMode: () => 'default' as ApprovalMode,
+      });
+      await expect(
+        createProductionDispatch(config)('do work', {
+          agentType: 'declared-mode',
+        }),
+      ).resolves.toBe('done');
+      expect(calls).toHaveLength(1);
+      expect(calls[0].runtimeContext.getApprovalMode()).toBe(expected);
+    },
+  );
+
   it('agentType resolves SubagentConfig and routes through createAgentHeadless', async () => {
     const { config, calls } = fakeConfigWithMgr({
       findSubagentByName: async () => ({

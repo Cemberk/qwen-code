@@ -66,7 +66,6 @@ export default tseslint.config(
       'dist/**',
       'demo/**/dist/**',
       '.qwen/**',
-      'scripts/codemod/fixtures/**', // codemod test data; intentionally non-idiomatic ink input/output
     ],
   },
   eslint.configs.recommended,

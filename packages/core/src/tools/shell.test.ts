@@ -5900,6 +5900,47 @@ describe('ShellTool', () => {
       expect(permission).toBe('allow');
     });
 
+    it.each([
+      'cat /etc/passwd',
+      'ls ~/.ssh',
+      'cat ../outside.txt',
+      'cat $HOME/.bashrc',
+      'cd /etc && ls',
+      'grep -r token /var/log',
+    ])(
+      'asks for the read-only command %s that reads outside the workspace',
+      async (command) => {
+        const invocation = shellTool.build({ command, is_background: false });
+
+        expect(await invocation.getDefaultPermission()).toBe('ask');
+      },
+    );
+
+    it('allows a read-only command reading an --include-directories directory', async () => {
+      (mockConfig.getWorkspaceContext as Mock).mockReturnValue(
+        createMockWorkspaceContext('/test/dir', ['/another/workspace']),
+      );
+      const invocation = shellTool.build({
+        command: 'cat /another/workspace/notes.md',
+        is_background: false,
+      });
+
+      expect(await invocation.getDefaultPermission()).toBe('allow');
+    });
+
+    it('lists an outside read in the confirmation even when it is read-only', async () => {
+      const invocation = shellTool.build({
+        command: 'ls && cat /etc/passwd',
+        is_background: false,
+      });
+
+      expect(await invocation.getDefaultPermission()).toBe('ask');
+      const details = (await invocation.getConfirmationDetails(
+        new AbortController().signal,
+      )) as { rootCommand: string };
+      expect(details.rootCommand).toBe('cat');
+    });
+
     // Regression coverage for PR #4386 round 6 (cid 3298521039): the
     // env-prefix wrapper substitution bypass. `getDefaultPermission`
     // calls `stripShellWrapper(this.params.command)` BEFORE the AST

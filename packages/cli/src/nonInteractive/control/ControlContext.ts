@@ -10,11 +10,10 @@
  * Layer 1 of the control plane architecture. Provides shared, session-scoped
  * state for all controllers and services, eliminating the need for prop
  * drilling. Mutable fields are intentionally exposed so controllers can track
- * runtime state (e.g. permission mode, active MCP clients).
+ * runtime state (e.g. permission mode, SDK MCP servers).
  */
 
-import type { Config, MCPServerConfig } from '@qwen-code/qwen-code-core';
-import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import type { Config } from '@qwen-code/qwen-code-core';
 import type { StreamJsonOutputAdapter } from '../io/StreamJsonOutputAdapter.js';
 import type { PermissionMode } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
@@ -38,7 +37,6 @@ export interface IControlContext {
   permissionMode: PermissionMode;
   sdkCanUseToolTimeoutMs?: number;
   sdkMcpServers: Set<string>;
-  mcpClients: Map<string, { client: Client; config: MCPServerConfig }>;
   inputClosed: boolean;
 
   onInterrupt?: () => void;
@@ -65,7 +63,6 @@ export class ControlContext implements IControlContext {
   permissionMode: PermissionMode;
   sdkCanUseToolTimeoutMs?: number;
   sdkMcpServers: Set<string>;
-  mcpClients: Map<string, { client: Client; config: MCPServerConfig }>;
   inputClosed: boolean;
 
   onInterrupt?: () => void;
@@ -91,7 +88,6 @@ export class ControlContext implements IControlContext {
     this.settings = options.settings;
     this.permissionMode = options.permissionMode || 'default';
     this.sdkMcpServers = new Set();
-    this.mcpClients = new Map();
     this.inputClosed = false;
     this.onInterrupt = options.onInterrupt;
     this.onContinueLastTurn = options.onContinueLastTurn;

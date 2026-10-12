@@ -16,11 +16,9 @@ import {
   resolveAndValidatePath,
   formatDisplayPath,
   resolvePath,
-  isSubpath,
   unescapePath,
 } from '../utils/paths.js';
 
-import { getMemoryBaseDir } from '../memory/paths.js';
 import { getErrorMessage, isNodeError } from '../utils/errors.js';
 import { isGitRepository, NO_EXEC_CONFIG } from '../utils/gitUtils.js';
 import type { Config } from '../config/config.js';
@@ -96,10 +94,7 @@ class GrepToolInvocation extends BaseToolInvocation<
       this.config.getTargetDir(),
       this.params.path,
     );
-    if (
-      workspaceContext.isPathWithinWorkspace(resolvedPath) ||
-      isSubpath(getMemoryBaseDir(), resolvedPath)
-    ) {
+    if (workspaceContext.isPathWithinWorkspace(resolvedPath)) {
       return 'allow';
     }
     return 'ask';

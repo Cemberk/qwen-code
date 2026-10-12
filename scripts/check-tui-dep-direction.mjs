@@ -1,17 +1,15 @@
 #!/usr/bin/env node
 /**
- * Dependency-direction architecture check for the OpenTUI migration
- * (tracking QwenLM/qwen-code#8662).
+ * Dependency-direction architecture check for the TUI layers.
  *
  * Rules:
  *   1. packages/core/src must stay framework-neutral — no imports of ink,
- *      react, solid, or @opentui/*, and nothing that reaches into
- *      packages/cli (relative paths or the cli package's own bare name).
+ *      react, or solid, and nothing that reaches into packages/cli
+ *      (relative paths or the cli package's own bare name).
  *   2. packages/cli/src/ui/model (framework-neutral streaming state) must
- *      not import react, solid, ink, or @opentui/* either, and must be
- *      self-contained — no relative import may resolve outside the
- *      directory, so no framework-dependent sibling can leak in through a
- *      relative path.
+ *      not import react, solid, or ink either, and must be self-contained
+ *      — no relative import may resolve outside the directory, so no
+ *      framework-dependent sibling can leak in through a relative path.
  *
  * Usage:  node scripts/check-tui-dep-direction.mjs
  * Exit 0 = all rules hold; exit 1 = violations found (or the scan itself
@@ -311,9 +309,6 @@ function bannedFamily(spec) {
   ) {
     return 'solid';
   }
-  if (spec.startsWith('@opentui/') || spec === '@opentui') {
-    return '@opentui';
-  }
   return null;
 }
 
@@ -442,9 +437,7 @@ function main() {
   );
   if (!uiModelEnumeration) return;
 
-  stdout.write(
-    'TUI dependency-direction check (OpenTUI migration Phase 0)\n\n',
-  );
+  stdout.write('TUI dependency-direction check\n\n');
 
   let failed = false;
   const results = [

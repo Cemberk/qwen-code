@@ -73,8 +73,8 @@ export interface SubagentConfig {
    * Optional permission mode for this subagent.
    * Controls how tool calls are approved during execution.
    * Valid values: 'default', 'plan', 'auto-edit', 'yolo', 'bubble'.
-   * If omitted, the resolved mode depends on the parent's mode
-   * (permissive parent modes win; otherwise defaults to 'auto-edit').
+   * The agent runs in the less permissive of this mode and the parent's
+   * (see `resolveAgentApprovalMode`); if omitted, in the parent's mode.
    *
    * `'bubble'` is a subagent-only mode (not a session-level ApprovalMode):
    * it runs like 'default' (tool calls require confirmation), but when the

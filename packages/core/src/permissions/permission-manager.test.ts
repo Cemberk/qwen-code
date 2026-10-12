@@ -1720,6 +1720,12 @@ function makeConfig(
     getProjectRoot: () => opts.projectRoot ?? '/project',
     getCwd: () => opts.cwd ?? '/project',
     getApprovalMode: () => opts.approvalMode ?? 'default',
+    getWorkspaceContext: () => ({
+      isPathWithinWorkspace: (p: string) => {
+        const root = opts.projectRoot ?? '/project';
+        return p === root || p.startsWith(`${root}/`);
+      },
+    }),
   };
 }
 
@@ -1852,6 +1858,40 @@ describe('PermissionManager', () => {
           command: 'rm -rf /',
         }),
       ).toBe('deny');
+    });
+
+    it('resolves a read-only command that reads outside the workspace to ask', async () => {
+      expect(
+        await pm.evaluate({
+          toolName: 'run_shell_command',
+          command: 'cat /etc/passwd',
+          cwd: '/project',
+        }),
+      ).toBe('ask');
+      // A relevant allow rule on one part never lets the outside read through.
+      const withRule = new PermissionManager(
+        makeConfig({ permissionsAllow: ['Bash(git status)'] }),
+      );
+      withRule.initialize();
+      expect(
+        await withRule.isCommandAllowed(
+          'git status && cat ~/.ssh/id_rsa',
+          '/project',
+        ),
+      ).toBe('ask');
+      expect(
+        await withRule.isCommandAllowed(
+          'git status && cat README.md',
+          '/project',
+        ),
+      ).toBe('allow');
+    });
+
+    it('resolves read-only commands to ask without workspace directories', async () => {
+      const { getWorkspaceContext: _omit, ...withoutWorkspace } = makeConfig();
+      const manager = new PermissionManager(withoutWorkspace);
+      manager.initialize();
+      expect(await manager.isCommandAllowed('ls', '/project')).toBe('ask');
     });
 
     it('resolves default to allow for readonly commands, ask for others', async () => {

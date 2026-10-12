@@ -7,8 +7,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PromptHookRunner } from './promptHookRunner.js';
 import { DEFAULT_PROMPT_HOOK_TIMEOUT_SECONDS } from './hook-timeout.js';
-import { HookEventName, HookType } from './types.js';
-import type { PromptHookConfig, HookInput } from './types.js';
+import { createHookOutput, HookEventName, HookType } from './types.js';
+import type {
+  PromptHookConfig,
+  HookInput,
+  PermissionRequestHookOutput,
+  PreToolUseHookOutput,
+} from './types.js';
 import type { Config } from '../config/config.js';
 import { FinishReason, type GenerateContentResponse } from '@google/genai';
 
@@ -254,24 +259,6 @@ describe('PromptHookRunner', () => {
       expect(result.output?.decision).toBe('allow');
     });
 
-    it('should handle invalid JSON response (fail-open)', async () => {
-      const mockResponse = createMockResponse('This is not JSON');
-      mockGenerateContent.mockResolvedValue(mockResponse);
-
-      const config = createMockConfig();
-      const input = createMockInput();
-
-      const result = await promptRunner.execute(
-        config,
-        HookEventName.PreToolUse,
-        input,
-      );
-
-      // Fail-open: invalid response defaults to allow
-      expect(result.success).toBe(true);
-      expect(result.output?.decision).toBe('allow');
-    });
-
     it('should handle empty response', async () => {
       const mockResponse = createMockResponse('');
       mockGenerateContent.mockResolvedValue(mockResponse);
@@ -281,7 +268,7 @@ describe('PromptHookRunner', () => {
 
       const result = await promptRunner.execute(
         config,
-        HookEventName.PreToolUse,
+        HookEventName.PostToolUse,
         input,
       );
 
@@ -310,7 +297,7 @@ describe('PromptHookRunner', () => {
 
       const result = await promptRunner.execute(
         config,
-        HookEventName.PreToolUse,
+        HookEventName.PostToolUse,
         input,
       );
 
@@ -334,7 +321,7 @@ describe('PromptHookRunner', () => {
 
       const result = await promptRunner.execute(
         config,
-        HookEventName.PreToolUse,
+        HookEventName.PostToolUse,
         input,
       );
 
@@ -359,7 +346,7 @@ describe('PromptHookRunner', () => {
 
       const result = await promptRunner.execute(
         config,
-        HookEventName.PreToolUse,
+        HookEventName.PostToolUse,
         input,
       );
 
@@ -384,7 +371,7 @@ describe('PromptHookRunner', () => {
       try {
         const execution = promptRunner.execute(
           createMockConfig({ model: 'qwen-max', timeout: 0.1 }),
-          HookEventName.PreToolUse,
+          HookEventName.PostToolUse,
           createMockInput(),
         );
 
@@ -463,11 +450,11 @@ describe('PromptHookRunner', () => {
 
       const result = await promptRunner.execute(
         config,
-        HookEventName.PreToolUse,
+        HookEventName.PostToolUse,
         input,
       );
 
-      // LLM errors are non-blocking (fail-open)
+      // On an event that gates nothing, LLM errors are non-blocking
       expect(result.success).toBe(false);
       expect(result.outcome).toBe('non_blocking_error');
       expect(result.output?.continue).toBe(true);
@@ -645,6 +632,113 @@ describe('PromptHookRunner', () => {
     });
   });
 
+  describe('fail closed', () => {
+    const gatingEvents = [
+      HookEventName.PreToolUse,
+      HookEventName.PermissionRequest,
+      HookEventName.UserPromptSubmit,
+      HookEventName.UserPromptExpansion,
+    ];
+    const failures: Array<[string, () => void, number | undefined]> = [
+      [
+        'the model output is not JSON',
+        () =>
+          mockGenerateContent.mockResolvedValue(
+            createMockResponse('Sure, looks fine to me'),
+          ),
+        undefined,
+      ],
+      [
+        'the model output does not match the format',
+        () =>
+          mockGenerateContent.mockResolvedValue(
+            createMockResponse('{"allow": "yes"}'),
+          ),
+        undefined,
+      ],
+      [
+        'the model call fails',
+        () => mockGenerateContent.mockRejectedValue(new Error('LLM API error')),
+        undefined,
+      ],
+      [
+        'the hook times out',
+        () => mockGenerateContent.mockReturnValue(new Promise(() => {})),
+        0.05,
+      ],
+    ];
+
+    for (const eventName of gatingEvents) {
+      it.each(failures)(
+        `blocks ${eventName} when %s`,
+        async (_label, arrange, timeout) => {
+          arrange();
+          const result = await promptRunner.execute(
+            createMockConfig({ name: 'guard', timeout }),
+            eventName,
+            createMockInput({ hook_event_name: eventName }),
+          );
+
+          expect(result.outcome).toBe('blocking');
+          expect(result.error).toBeUndefined();
+          expect(result.output?.decision).toBe('block');
+          expect(result.output?.reason).toContain(
+            'Blocked because prompt hook "guard" could not decide',
+          );
+        },
+      );
+    }
+
+    it('denies the permission request itself on a PermissionRequest failure', async () => {
+      mockGenerateContent.mockResolvedValue(createMockResponse('not json'));
+      const result = await promptRunner.execute(
+        createMockConfig(),
+        HookEventName.PermissionRequest,
+        createMockInput({ hook_event_name: 'PermissionRequest' }),
+      );
+
+      expect(
+        (
+          createHookOutput(
+            'PermissionRequest',
+            result.output!,
+          ) as PermissionRequestHookOutput
+        ).getPermissionDecision()?.behavior,
+      ).toBe('deny');
+    });
+
+    it('denies a PreToolUse call through the PreToolUse decision', async () => {
+      mockGenerateContent.mockResolvedValue(createMockResponse('not json'));
+      const result = await promptRunner.execute(
+        createMockConfig(),
+        HookEventName.PreToolUse,
+        createMockInput(),
+      );
+
+      expect(
+        (
+          createHookOutput('PreToolUse', result.output!) as PreToolUseHookOutput
+        ).isDenied(),
+      ).toBe(true);
+    });
+
+    it.each([HookEventName.Stop, HookEventName.SubagentStop])(
+      'never makes the agent keep working on %s',
+      async (eventName) => {
+        for (const [, arrange, timeout] of failures) {
+          arrange();
+          const result = await promptRunner.execute(
+            createMockConfig({ timeout }),
+            eventName,
+            createMockInput({ hook_event_name: eventName }),
+          );
+          expect(result.outcome).not.toBe('blocking');
+          expect(result.output?.decision).toBeUndefined();
+        }
+      },
+    );
+  });
+
   describe('outcome', () => {
     /** A generateContent that settles only when its request is aborted. */
     const rejectOnRequestAbort = (message: string) =>
@@ -664,7 +758,7 @@ describe('PromptHookRunner', () => {
 
         const execution = promptRunner.execute(
           createMockConfig({ timeout: 0.1 }),
-          HookEventName.PreToolUse,
+          HookEventName.PostToolUse,
           createMockInput(),
         );
         await vi.advanceTimersByTimeAsync(100);
@@ -685,7 +779,7 @@ describe('PromptHookRunner', () => {
 
         const execution = promptRunner.execute(
           createMockConfig({ timeout: 0.1 }),
-          HookEventName.PreToolUse,
+          HookEventName.PostToolUse,
           createMockInput(),
         );
         await vi.advanceTimersByTimeAsync(100);
@@ -722,7 +816,7 @@ describe('PromptHookRunner', () => {
 
       const result = await promptRunner.execute(
         createMockConfig(),
-        HookEventName.PreToolUse,
+        HookEventName.PostToolUse,
         createMockInput(),
         new AbortController().signal,
       );
@@ -735,7 +829,7 @@ describe('PromptHookRunner', () => {
 
       const result = await promptRunner.execute(
         createMockConfig(),
-        HookEventName.PreToolUse,
+        HookEventName.PostToolUse,
         createMockInput(),
       );
 
@@ -751,7 +845,7 @@ describe('PromptHookRunner', () => {
       mockGenerateContent.mockReturnValue(new Promise(() => {}));
       let settled = false;
       const execution = promptRunner
-        .execute(config, HookEventName.PreToolUse, createMockInput())
+        .execute(config, HookEventName.PostToolUse, createMockInput())
         .then((result) => {
           settled = true;
           return result;
@@ -792,7 +886,7 @@ describe('PromptHookRunner', () => {
       const started = Date.now();
       const result = await promptRunner.execute(
         createMockConfig({ timeout: -1 }),
-        HookEventName.PreToolUse,
+        HookEventName.PostToolUse,
         createMockInput(),
       );
       expect(result.outcome).toBe('timeout');

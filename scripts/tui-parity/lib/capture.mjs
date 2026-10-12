@@ -201,7 +201,7 @@ export function capture(command, options = {}) {
     let child = null;
     let nonce = null;
     if (tty === 'script') {
-      // script(1)-based PTY: some renderers (OpenTUI) accept a script-allocated
+      // script(1)-based PTY: some renderers accept a script-allocated
       // PTY but not the node-pty backend. Route through spawnScriptPty so the
       // argv form follows the platform (the trailing-positional form below
       // only works on BSD script(1); util-linux rejects it).

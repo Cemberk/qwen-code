@@ -10,15 +10,15 @@
  * Hot-path modules (`loggers.ts`, `session-tracing.ts`) statically gate every
  * telemetry call on `isTelemetrySdkInitialized()`, so this module must stay
  * cheap: its only runtime `@opentelemetry/*` dependency is `@opentelemetry/api`.
- * All heavy SDK assembly (NodeSDK, instrumentations, and the outfile
+ * All heavy SDK assembly (providers, instrumentations, and the outfile
  * exporters) lives in `sdk-impl.ts` and is loaded via dynamic `import()` only
  * when telemetry is actually enabled.
  */
 
 import { DiagLogLevel, diag } from '@opentelemetry/api';
 import type { DiagLogger } from '@opentelemetry/api';
-import type { NodeSDK } from '@opentelemetry/sdk-node';
 import type { TelemetryRuntimeConfig } from './runtime-config.js';
+import type { StartedTelemetrySdk } from './sdk-impl.js';
 import { initializeMetrics } from './metrics.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
 import { createSessionRootContext } from './tracer.js';
@@ -47,43 +47,10 @@ diag.setLogger(createTelemetryDiagLogger(), DiagLogLevel.WARN);
 // (2s) and overall (5s) timeouts, so this value is effectively unreachable there.
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
-let sdk: NodeSDK | undefined;
+let sdk: StartedTelemetrySdk | undefined;
 let telemetryInitialized = false;
 let telemetryInitPromise: Promise<void> | undefined;
 let telemetryShutdownPromise: Promise<void> | undefined;
-
-const OTEL_EXPORTER_ENV_VARS = [
-  'OTEL_TRACES_EXPORTER',
-  'OTEL_LOGS_EXPORTER',
-  'OTEL_METRICS_EXPORTER',
-] as const;
-
-function startSdkWithExplicitExporters(currentSdk: NodeSDK): void {
-  const previousValues = new Map<
-    (typeof OTEL_EXPORTER_ENV_VARS)[number],
-    string | undefined
-  >();
-  for (const name of OTEL_EXPORTER_ENV_VARS) {
-    previousValues.set(name, process.env[name]);
-    delete process.env[name];
-  }
-
-  try {
-    // qwen-code supplies explicit file exporters for every signal. Prevent
-    // sdk-node's OTEL_*_EXPORTER auto-configuration from constructing a
-    // network exporter (the bundled CLI intentionally omits those packages).
-    currentSdk.start();
-  } finally {
-    for (const name of OTEL_EXPORTER_ENV_VARS) {
-      const previousValue = previousValues.get(name);
-      if (previousValue === undefined) {
-        delete process.env[name];
-      } else {
-        process.env[name] = previousValue;
-      }
-    }
-  }
-}
 
 export function isTelemetrySdkInitialized(): boolean {
   return telemetryInitialized;
@@ -107,10 +74,8 @@ export function initializeTelemetry(
       // rejecting.
       const { startTelemetrySdk } = await import('./sdk-impl.js');
       if (telemetryInitialized) return;
-      const started = await startTelemetrySdk(config);
-      if (!started) return;
-      sdk = started.sdk;
-      startSdkWithExplicitExporters(sdk);
+      sdk = await startTelemetrySdk(config);
+      if (!sdk) return;
       debugLogger.debug('OpenTelemetry SDK started successfully.');
       telemetryInitialized = true;
       const sessionId = config.getSessionId();
@@ -163,8 +128,8 @@ export function shutdownTelemetry(): Promise<void> {
     }
     if (!telemetryInitialized || !sdk) {
       // The awaited init did not finish initializing (telemetry disabled, no
-      // outfile, or `sdk.start()` threw). Clear the promise we just set
-      // so a later real shutdown isn't short-circuited by this stale no-op.
+      // outfile, or `startTelemetrySdk()` threw). Clear the promise we just
+      // set so a later real shutdown isn't short-circuited by this stale no-op.
       telemetryShutdownPromise = undefined;
       return;
     }

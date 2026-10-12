@@ -44,5 +44,5 @@
     "requireExitCodeZero": true
   },
   "proves": "Under identical scenario parameters (terminal size, timeout, input, and the --frames comparison parameter validated equal on both sides), the fixed-side stream contains zero full-screen clears (ESC[2J/ESC[3J/RIS), zero duplicate live-output event markers (OSC 697), and balanced DEC 2026 synchronised-output begin/end pairs around every frame, while the base side exhibits all three defects. Incremental line erase stays within the configured budget.",
-  "doesNotProve": "Visual pixel parity, real Ink or OpenTUI product behavior (deterministic fixture emitters stand in for the real CLIs; fixture captures waive the native PTY contract), latency or throughput characteristics, behavior under a real PTY or alternate fonts/locales, and any model-driven UI path."
+  "doesNotProve": "Visual pixel parity, real CLI product behavior (deterministic fixture emitters stand in for the real CLIs; fixture captures waive the native PTY contract), latency or throughput characteristics, behavior under a real PTY or alternate fonts/locales, and any model-driven UI path."
 }

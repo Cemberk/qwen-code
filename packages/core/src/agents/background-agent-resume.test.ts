@@ -1744,7 +1744,7 @@ describe('BackgroundAgentResumeService', () => {
   // setup (writeAgentMeta + fs.writeFileSync + Promise resolution chain),
   // exceeding vitest's 5s default. Raise the per-test timeout so the
   // legitimate slow-runner case doesn't fail the suite.
-  it('downgrades persisted privileged approval modes when folder trust is revoked', async () => {
+  it('never resumes an agent more permissively than the resuming session', async () => {
     const sessionId = 'session-untrusted';
     const agentId = 'agent-untrusted';
     const metaPath = getAgentMetaPath(tempDir, sessionId, agentId);
@@ -1807,8 +1807,6 @@ describe('BackgroundAgentResumeService', () => {
     });
 
     const { service, subagentManager } = createService();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (service as any).config.isTrustedFolder = () => false;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (service as any).config.getApprovalMode = () => 'default';
     subagentManager.createAgentHeadless = createAgentHeadless;
@@ -1902,6 +1900,8 @@ describe('BackgroundAgentResumeService', () => {
       model: 'configured-model',
       approvalMode: undefined,
     });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (service as any).config.getApprovalMode = () => 'auto-edit';
     subagentManager.createAgentHeadless = createAgentHeadless;
 
     const resumed = await service.resumeBackgroundAgent(agentId, 'continue');
@@ -2943,10 +2943,12 @@ describe('BackgroundAgentResumeService', () => {
     expect(registry.get(agentId)?.error).toBeUndefined();
     expect(createSpy).not.toHaveBeenCalled();
     expect(stubToolRegistry.stop).toHaveBeenCalledTimes(1);
+    // The persisted AUTO mode is capped at the DEFAULT parent's, so no
+    // child-only AUTO lease is ever taken.
     expect(
       permissionManager.stripDangerousRulesForAutoMode,
-    ).toHaveBeenCalledTimes(1);
-    expect(permissionManager.restoreDangerousRules).toHaveBeenCalledTimes(1);
+    ).not.toHaveBeenCalled();
+    expect(permissionManager.restoreDangerousRules).not.toHaveBeenCalled();
     createSpy.mockRestore();
   });
 

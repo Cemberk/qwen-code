@@ -6,7 +6,7 @@
 
 import { randomUUID } from 'node:crypto';
 import type { Part } from '@google/genai';
-import type { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
+import type { ReadResourceResult } from '@modelcontextprotocol/client';
 
 /**
  * Cap injected resource text so a misbehaving/hostile MCP server can't blow the

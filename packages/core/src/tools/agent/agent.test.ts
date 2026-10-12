@@ -6131,7 +6131,7 @@ describe('AgentTool', () => {
       expect(mockHookSystem.fireSubagentStartEvent).toHaveBeenCalledWith(
         expect.stringContaining('file-search-'),
         'file-search',
-        PermissionMode.AutoEdit,
+        PermissionMode.Default,
         // Foreground subagents now run with a composed signal (so the
         // dialog can cancel just this child) — the hook receives the
         // composed signal, not the caller-supplied one.
@@ -6330,7 +6330,7 @@ describe('AgentTool', () => {
         '/test/transcript',
         'Task completed successfully',
         false,
-        PermissionMode.AutoEdit,
+        PermissionMode.Default,
         // Foreground subagents now run with a composed signal.
         expect.any(AbortSignal),
       );
@@ -6377,7 +6377,7 @@ describe('AgentTool', () => {
         '/test/transcript',
         'Task completed successfully',
         true,
-        PermissionMode.AutoEdit,
+        PermissionMode.Default,
         // Foreground subagents now run with a composed signal.
         expect.any(AbortSignal),
       );
@@ -7120,9 +7120,12 @@ describe('AgentTool', () => {
     });
 
     it.each([
-      [ApprovalMode.DEFAULT, 'auto', ApprovalMode.AUTO],
+      [ApprovalMode.DEFAULT, 'auto', ApprovalMode.DEFAULT],
+      [ApprovalMode.DEFAULT, 'yolo', ApprovalMode.DEFAULT],
       [ApprovalMode.AUTO, undefined, ApprovalMode.AUTO],
-      [ApprovalMode.DEFAULT, undefined, ApprovalMode.AUTO_EDIT],
+      [ApprovalMode.AUTO, 'auto', ApprovalMode.AUTO],
+      [ApprovalMode.DEFAULT, undefined, ApprovalMode.DEFAULT],
+      [ApprovalMode.YOLO, 'auto-edit', ApprovalMode.AUTO_EDIT],
     ] as const)(
       'resolves parent=%s override=%s to %s at the child runtime',
       async (parentMode, approvalMode, expectedMode) => {
@@ -7153,12 +7156,10 @@ describe('AgentTool', () => {
         const childConfig = vi.mocked(mockSubagentManager.createAgentHeadless)
           .mock.calls[0]?.[1];
         expect(childConfig?.getApprovalMode()).toBe(expectedMode);
-        const autoOverrideCount =
-          parentMode !== ApprovalMode.AUTO && expectedMode === ApprovalMode.AUTO
-            ? 1
-            : 0;
-        expect(strip).toHaveBeenCalledTimes(autoOverrideCount);
-        expect(restore).toHaveBeenCalledTimes(autoOverrideCount);
+        // The child never starts in AUTO unless the parent is already in it,
+        // so no child-only AUTO lease is taken.
+        expect(strip).not.toHaveBeenCalled();
+        expect(restore).not.toHaveBeenCalled();
       },
     );
 
@@ -7655,36 +7656,6 @@ describe('AgentTool', () => {
       expect(mockRegistry.registerResidentAgent).not.toHaveBeenCalled();
     });
 
-    it('does not retain an agent that needs a child-only AUTO permission lease', async () => {
-      let releaseExecution: (() => void) | undefined;
-      vi.mocked(mockAgent.execute).mockImplementation(
-        () =>
-          new Promise<void>((resolve) => {
-            releaseExecution = resolve;
-          }),
-      );
-      vi.mocked(mockSubagentManager.loadSubagent).mockResolvedValue({
-        ...bgSubagent,
-        approvalMode: 'auto',
-      });
-      const invocation = (
-        agentTool as AgentToolWithProtectedMethods
-      ).createInvocation({
-        description: 'Run classified work',
-        prompt: 'Inspect the helper',
-        subagent_type: 'monitor',
-      });
-
-      await invocation.execute();
-      vi.mocked(config.getApprovalMode).mockReturnValue(ApprovalMode.AUTO);
-      releaseExecution?.();
-      await vi.waitFor(() => {
-        expect(mockRegistry.complete).toHaveBeenCalled();
-        expect(mockSubagentDispose).toHaveBeenCalledOnce();
-      });
-      expect(mockRegistry.registerResidentAgent).not.toHaveBeenCalled();
-    });
-
     it('disposes an idle AUTO resident if the parent leaves AUTO mode', async () => {
       vi.mocked(config.getApprovalMode).mockReturnValue(ApprovalMode.AUTO);
       vi.mocked(mockSubagentManager.loadSubagent).mockResolvedValue({
@@ -8019,7 +7990,7 @@ describe('AgentTool', () => {
         ),
         'Monitor done',
         false,
-        PermissionMode.AutoEdit,
+        PermissionMode.Default,
         undefined,
       );
       expect(mockAgent.execute).not.toHaveBeenCalled();
@@ -8129,7 +8100,7 @@ describe('AgentTool', () => {
           ),
           'Monitor done',
           false,
-          PermissionMode.AutoEdit,
+          PermissionMode.Default,
           expect.any(AbortSignal),
         );
       });
@@ -8361,7 +8332,7 @@ describe('AgentTool', () => {
           agentType: 'file-search',
           description: 'Search files',
           persistedCliFlags: expect.objectContaining({
-            approvalMode: 'auto-edit',
+            approvalMode: 'default',
             bare: false,
             sandbox: null,
             screenReader: false,
@@ -8853,102 +8824,90 @@ describe('findBackgroundedAncestorAgentId', () => {
 });
 
 describe('resolveSubagentApprovalMode', () => {
-  it('should return yolo when parent is yolo, regardless of agent config', () => {
-    expect(resolveSubagentApprovalMode(ApprovalMode.YOLO, 'plan', true)).toBe(
+  it('runs in the parent mode when the agent declares none', () => {
+    expect(resolveSubagentApprovalMode(ApprovalMode.PLAN)).toBe(
+      PermissionMode.Plan,
+    );
+    expect(resolveSubagentApprovalMode(ApprovalMode.DEFAULT)).toBe(
+      PermissionMode.Default,
+    );
+    expect(resolveSubagentApprovalMode(ApprovalMode.AUTO_EDIT)).toBe(
+      PermissionMode.AutoEdit,
+    );
+    expect(resolveSubagentApprovalMode(ApprovalMode.AUTO)).toBe(
+      PermissionMode.Auto,
+    );
+    expect(resolveSubagentApprovalMode(ApprovalMode.YOLO)).toBe(
       PermissionMode.Yolo,
     );
-    expect(
-      resolveSubagentApprovalMode(ApprovalMode.YOLO, undefined, false),
-    ).toBe(PermissionMode.Yolo);
   });
 
-  it('should return auto-edit when parent is auto-edit, regardless of agent config', () => {
-    expect(
-      resolveSubagentApprovalMode(ApprovalMode.AUTO_EDIT, 'plan', true),
-    ).toBe(PermissionMode.AutoEdit);
-    expect(
-      resolveSubagentApprovalMode(ApprovalMode.AUTO_EDIT, 'default', false),
-    ).toBe(PermissionMode.AutoEdit);
-  });
-
-  it('should respect agent-declared mode when parent is default and folder is trusted', () => {
-    expect(
-      resolveSubagentApprovalMode(ApprovalMode.DEFAULT, 'plan', true),
-    ).toBe(PermissionMode.Plan);
-    expect(
-      resolveSubagentApprovalMode(ApprovalMode.DEFAULT, 'auto-edit', true),
-    ).toBe(PermissionMode.AutoEdit);
-    expect(
-      resolveSubagentApprovalMode(ApprovalMode.DEFAULT, 'yolo', true),
-    ).toBe(PermissionMode.Yolo);
-  });
-
-  it('should block privileged agent-declared modes in untrusted folders', () => {
-    expect(
-      resolveSubagentApprovalMode(ApprovalMode.DEFAULT, 'auto-edit', false),
-    ).toBe(PermissionMode.Default);
-    expect(
-      resolveSubagentApprovalMode(ApprovalMode.DEFAULT, 'yolo', false),
-    ).toBe(PermissionMode.Default);
-  });
-
-  it('should allow non-privileged agent-declared modes in untrusted folders', () => {
-    expect(
-      resolveSubagentApprovalMode(ApprovalMode.DEFAULT, 'plan', false),
-    ).toBe(PermissionMode.Plan);
-    expect(
-      resolveSubagentApprovalMode(ApprovalMode.DEFAULT, 'default', false),
-    ).toBe(PermissionMode.Default);
-  });
-
-  it('should default to plan when parent is plan and no agent config', () => {
-    expect(
-      resolveSubagentApprovalMode(ApprovalMode.PLAN, undefined, true),
-    ).toBe(PermissionMode.Plan);
-    expect(
-      resolveSubagentApprovalMode(ApprovalMode.PLAN, undefined, false),
-    ).toBe(PermissionMode.Plan);
-  });
-
-  it('should allow agent-declared mode to override plan parent', () => {
-    expect(
-      resolveSubagentApprovalMode(ApprovalMode.PLAN, 'auto-edit', true),
-    ).toBe(PermissionMode.AutoEdit);
-  });
-
-  it('should default to auto-edit when parent is default and folder is trusted', () => {
-    expect(
-      resolveSubagentApprovalMode(ApprovalMode.DEFAULT, undefined, true),
-    ).toBe(PermissionMode.AutoEdit);
-  });
-
-  it('should default to parent mode when parent is default and folder is untrusted', () => {
-    expect(
-      resolveSubagentApprovalMode(ApprovalMode.DEFAULT, undefined, false),
-    ).toBe(PermissionMode.Default);
-  });
-
-  it('should resolve the subagent-only "bubble" mode to Default (confirmation required)', () => {
-    // `bubble` is not a privileged mode — it requires confirmation like
-    // `default`, so it resolves to Default in both trusted and untrusted
-    // folders (the background launch path is what flips deny → surface).
-    expect(
-      resolveSubagentApprovalMode(ApprovalMode.DEFAULT, 'bubble', true),
-    ).toBe(PermissionMode.Default);
-    expect(
-      resolveSubagentApprovalMode(ApprovalMode.DEFAULT, 'bubble', false),
-    ).toBe(PermissionMode.Default);
-  });
-
-  it('should let a permissive parent win over a "bubble" subagent mode', () => {
-    // Consistent with every other mode: a yolo/auto-edit parent wins, so a
-    // bubble agent under such a parent runs permissively (and never bubbles,
-    // since no confirmation is ever requested).
-    expect(resolveSubagentApprovalMode(ApprovalMode.YOLO, 'bubble', true)).toBe(
-      PermissionMode.Yolo,
+  it('never runs more permissively than the parent', () => {
+    expect(resolveSubagentApprovalMode(ApprovalMode.DEFAULT, 'yolo')).toBe(
+      PermissionMode.Default,
     );
-    expect(
-      resolveSubagentApprovalMode(ApprovalMode.AUTO_EDIT, 'bubble', true),
-    ).toBe(PermissionMode.AutoEdit);
+    expect(resolveSubagentApprovalMode(ApprovalMode.DEFAULT, 'auto-edit')).toBe(
+      PermissionMode.Default,
+    );
+    expect(resolveSubagentApprovalMode(ApprovalMode.DEFAULT, 'auto')).toBe(
+      PermissionMode.Default,
+    );
+    expect(resolveSubagentApprovalMode(ApprovalMode.PLAN, 'auto-edit')).toBe(
+      PermissionMode.Plan,
+    );
+    expect(resolveSubagentApprovalMode(ApprovalMode.PLAN, 'default')).toBe(
+      PermissionMode.Plan,
+    );
+    expect(resolveSubagentApprovalMode(ApprovalMode.AUTO_EDIT, 'yolo')).toBe(
+      PermissionMode.AutoEdit,
+    );
+    expect(resolveSubagentApprovalMode(ApprovalMode.AUTO, 'yolo')).toBe(
+      PermissionMode.Auto,
+    );
+  });
+
+  it('applies a declared mode that is less permissive than the parent', () => {
+    expect(resolveSubagentApprovalMode(ApprovalMode.YOLO, 'plan')).toBe(
+      PermissionMode.Plan,
+    );
+    expect(resolveSubagentApprovalMode(ApprovalMode.YOLO, 'auto-edit')).toBe(
+      PermissionMode.AutoEdit,
+    );
+    expect(resolveSubagentApprovalMode(ApprovalMode.AUTO_EDIT, 'default')).toBe(
+      PermissionMode.Default,
+    );
+    expect(resolveSubagentApprovalMode(ApprovalMode.DEFAULT, 'plan')).toBe(
+      PermissionMode.Plan,
+    );
+  });
+
+  it('resolves auto-edit against auto (neither bounds the other) to default', () => {
+    expect(resolveSubagentApprovalMode(ApprovalMode.AUTO, 'auto-edit')).toBe(
+      PermissionMode.Default,
+    );
+    expect(resolveSubagentApprovalMode(ApprovalMode.AUTO_EDIT, 'auto')).toBe(
+      PermissionMode.Default,
+    );
+  });
+
+  it('runs the subagent-only "bubble" mode as Default, capped by the parent', () => {
+    expect(resolveSubagentApprovalMode(ApprovalMode.DEFAULT, 'bubble')).toBe(
+      PermissionMode.Default,
+    );
+    expect(resolveSubagentApprovalMode(ApprovalMode.YOLO, 'bubble')).toBe(
+      PermissionMode.Default,
+    );
+    expect(resolveSubagentApprovalMode(ApprovalMode.AUTO_EDIT, 'bubble')).toBe(
+      PermissionMode.Default,
+    );
+    expect(resolveSubagentApprovalMode(ApprovalMode.PLAN, 'bubble')).toBe(
+      PermissionMode.Plan,
+    );
+  });
+
+  it('treats an unknown declared mode as Default', () => {
+    expect(resolveSubagentApprovalMode(ApprovalMode.YOLO, 'bogus')).toBe(
+      PermissionMode.Default,
+    );
   });
 });

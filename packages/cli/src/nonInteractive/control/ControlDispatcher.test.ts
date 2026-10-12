@@ -44,7 +44,6 @@ function createMockContext(debugMode: boolean = false): IControlContext {
     settings: createMinimalSettings(),
     permissionMode: 'default',
     sdkMcpServers: new Set<string>(),
-    mcpClients: new Map(),
     inputClosed: false,
   };
 }

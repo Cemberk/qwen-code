@@ -19,6 +19,7 @@ import {
   installSessionWorkflowRevisionWriteThrough,
   type Config,
 } from '../../config/config.js';
+import { resolveAgentApprovalMode } from '../../config/approval-mode.js';
 import {
   createWorkflowSandbox,
   debugLogger,
@@ -1295,15 +1296,24 @@ async function runOverridePath(
     installSessionWorkflowRevisionWriteThrough(effectiveContext, config);
   }
 
-  if (effectiveContext !== config) {
-    // Layer an approval profile over the derived dispatch context (as
-    // agent.ts does) so approval-mode transitions on it stay child-local
-    // instead of hitting the bare-derived-Config guard. Initial mode equals
-    // the base mode, so no AUTO strip is acquired and cleanup stays a
-    // no-op unless the dispatch itself transitions into AUTO.
+  // An agent type's declared mode applies only where it is less permissive
+  // than the session's.
+  const dispatchApprovalMode = resolveAgentApprovalMode(
+    config.getApprovalMode(),
+    augmented.approvalMode,
+  );
+  if (
+    effectiveContext !== config ||
+    dispatchApprovalMode !== config.getApprovalMode()
+  ) {
+    // Layer an approval profile over the dispatch context (as agent.ts
+    // does) so approval-mode transitions on it stay child-local instead of
+    // hitting the bare-derived-Config guard. The initial mode never exceeds
+    // the base mode, so no AUTO strip is acquired and cleanup stays a no-op
+    // unless the dispatch itself transitions into AUTO.
     const approvalHandle = deriveApprovalModeConfig(
       effectiveContext,
-      config.getApprovalMode(),
+      dispatchApprovalMode,
     );
     approvalCleanup = approvalHandle.cleanup;
     effectiveContext = approvalHandle.config;

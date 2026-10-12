@@ -74,7 +74,7 @@ import { parse, type ControlOperator } from 'shell-quote';
 import { createDebugLogger } from '../utils/debugLogger.js';
 import { checkPriorRead, StructuredToolError } from './priorReadEnforcement.js';
 import {
-  isShellCommandReadOnlyASTInDirectory,
+  isShellCommandReadOnlyWithinWorkspace,
   extractCommandRules,
 } from '../utils/shellAstParser.js';
 import {
@@ -1709,13 +1709,14 @@ export class ShellToolInvocation extends BaseToolInvocation<
 
     const command = stripShellWrapper(this.params.command);
 
-    // AST-based read-only detection
+    // AST-based read-only detection; a read outside the workspace asks.
     try {
-      const isReadOnly = await isShellCommandReadOnlyASTInDirectory(
-        command,
-        this.params.directory || this.config.getTargetDir(),
-      );
-      if (isReadOnly) {
+      if (
+        await this.isReadOnlyWithinWorkspace(
+          command,
+          this.params.directory || this.config.getTargetDir(),
+        )
+      ) {
         return 'allow';
       }
     } catch (e) {
@@ -1723,6 +1724,16 @@ export class ShellToolInvocation extends BaseToolInvocation<
     }
 
     return 'ask';
+  }
+
+  private isReadOnlyWithinWorkspace(
+    command: string,
+    cwd: string,
+  ): Promise<boolean> {
+    const workspace = this.config.getWorkspaceContext();
+    return isShellCommandReadOnlyWithinWorkspace(command, cwd, (p) =>
+      workspace.isPathWithinWorkspace(p),
+    );
   }
 
   /**
@@ -1792,7 +1803,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
       }
       let isReadOnly = false;
       try {
-        isReadOnly = await isShellCommandReadOnlyASTInDirectory(sub, cwd);
+        isReadOnly = await this.isReadOnlyWithinWorkspace(sub, cwd);
       } catch {
         // conservative: treat unknown commands as requiring confirmation
       }

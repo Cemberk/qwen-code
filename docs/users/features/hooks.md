@@ -143,6 +143,8 @@ The LLM must return JSON with the following structure:
 | `reason`            | Required when `ok` is `false`. Shown to the model to explain the block     |
 | `additionalContext` | Optional. Additional context to inject into the conversation when allowing |
 
+**When the hook cannot decide:** if the model's reply is not JSON in this format, or the model call fails or times out, a prompt hook on `PreToolUse`, `PermissionRequest`, `UserPromptSubmit` or `UserPromptExpansion` blocks the tool call, permission request or prompt, with a reason naming the hook and the failure. On `Stop`, `SubagentStop` and every other event a failed prompt hook blocks nothing, so the agent is never kept working on a result the hook could not judge.
+
 **Supported Events:**
 
 Prompt hooks can be used with most hook events, including:

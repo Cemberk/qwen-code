@@ -39,9 +39,6 @@ describe('Interactive Mode', () => {
   });
 
   async function runInteractiveWithFakeModel() {
-    // The seed must fit the 80x30 pty viewport: under the OpenTUI renderer
-    // off-screen rows never reach the pty stream waitForText polls, so a
-    // seed longer than the viewport hides its own end marker (#11191).
     fakeServer = await startFakeOpenAIServer(({ requestIndex }) => ({
       content:
         requestIndex === 0

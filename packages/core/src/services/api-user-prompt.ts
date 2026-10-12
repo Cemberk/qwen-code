@@ -37,7 +37,7 @@ export interface ApiUserPromptOptions {
 
 /**
  * The single classifier for "this API history entry is a user prompt", shared
- * by every rewind surface (TUI, OpenTUI).
+ * by every rewind surface.
  *
  * A user prompt is a `user` entry that is neither a tool result
  * (`functionResponse`) nor a structural `<system-reminder>` entry. A genuine

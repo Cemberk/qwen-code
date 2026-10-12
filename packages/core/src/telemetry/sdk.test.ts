@@ -5,7 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { diag, ROOT_CONTEXT } from '@opentelemetry/api';
+import { diag, metrics, ROOT_CONTEXT } from '@opentelemetry/api';
+import { logs } from '@opentelemetry/api-logs';
 import type { Config } from '../config/config.js';
 import {
   initializeTelemetry,
@@ -13,7 +14,18 @@ import {
   shutdownTelemetry,
   refreshSessionContext,
 } from './sdk.js';
-import { NodeSDK } from '@opentelemetry/sdk-node';
+import {
+  BatchSpanProcessor,
+  NodeTracerProvider,
+} from '@opentelemetry/sdk-trace-node';
+import {
+  BatchLogRecordProcessor,
+  LoggerProvider,
+} from '@opentelemetry/sdk-logs';
+import {
+  MeterProvider,
+  PeriodicExportingMetricReader,
+} from '@opentelemetry/sdk-metrics';
 
 import { promises as fs } from 'node:fs';
 import {
@@ -39,7 +51,9 @@ function expectOtelDebugLogLine(
   );
 }
 
-vi.mock('@opentelemetry/sdk-node');
+vi.mock('@opentelemetry/sdk-trace-node');
+vi.mock('@opentelemetry/sdk-logs');
+vi.mock('@opentelemetry/sdk-metrics');
 vi.mock('@opentelemetry/instrumentation-http');
 vi.mock('@opentelemetry/instrumentation-undici');
 vi.mock('./file-exporters.js');
@@ -73,6 +87,22 @@ import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
 import { UndiciInstrumentation } from '@opentelemetry/instrumentation-undici';
 import { sessionIdContext } from '../utils/sessionIdContext.js';
 
+// Keep the mocked providers out of the process-wide OTel globals.
+vi.spyOn(metrics, 'setGlobalMeterProvider').mockReturnValue(true);
+vi.spyOn(logs, 'setGlobalLoggerProvider').mockImplementation((p) => p);
+
+function getTracerProviderConfig() {
+  return vi.mocked(NodeTracerProvider).mock.calls[0]![0]!;
+}
+
+function getResourceAttributes(): Record<string, string> {
+  return (
+    getTracerProviderConfig().resource as {
+      attributes: Record<string, string>;
+    }
+  ).attributes;
+}
+
 describe('Telemetry SDK', () => {
   let mockConfig: Config;
 
@@ -99,12 +129,9 @@ describe('Telemetry SDK', () => {
 
   async function getSessionIdSpanProcessor() {
     await initializeTelemetry(mockConfig);
-    const constructorCall = vi.mocked(NodeSDK).mock.calls[0]![0]! as {
-      spanProcessors?: Array<{
-        onStart: (span: unknown, parentContext: unknown) => void;
-      }>;
+    return getTracerProviderConfig().spanProcessors![0]! as unknown as {
+      onStart: (span: unknown, parentContext: unknown) => void;
     };
-    return constructorCall.spanProcessors![0]!;
   }
 
   function createSessionSpan(attributes: Record<string, unknown> = {}) {
@@ -156,15 +183,63 @@ describe('Telemetry SDK', () => {
     );
   });
 
-  it('writes every signal to the telemetry outfile', async () => {
-    await initializeTelemetry(mockConfig);
+  it('writes every signal only to the telemetry outfile', async () => {
+    vi.stubEnv('OTEL_TRACES_EXPORTER', 'otlp');
+    vi.stubEnv('OTEL_LOGS_EXPORTER', 'console');
+    vi.stubEnv('OTEL_METRICS_EXPORTER', 'prometheus');
+    try {
+      await initializeTelemetry(mockConfig);
+    } finally {
+      vi.unstubAllEnvs();
+    }
 
     expect(FileSpanExporter).toHaveBeenCalledWith(TELEMETRY_OUTFILE);
     expect(FileLogExporter).toHaveBeenCalledWith(TELEMETRY_OUTFILE);
     expect(FileMetricExporter).toHaveBeenCalledWith(TELEMETRY_OUTFILE);
-    expect(NodeSDK.prototype.start).toHaveBeenCalled();
-    expect(NodeSDK).toHaveBeenCalledWith(
-      expect.objectContaining({ autoDetectResources: false }),
+    const spanProcessors = getTracerProviderConfig().spanProcessors!;
+    expect(spanProcessors).toHaveLength(2);
+    expect(spanProcessors[1]).toBe(
+      vi.mocked(BatchSpanProcessor).mock.instances[0],
+    );
+    expect(BatchSpanProcessor).toHaveBeenCalledWith(
+      vi.mocked(FileSpanExporter).mock.instances[0],
+    );
+    expect(LoggerProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        processors: [vi.mocked(BatchLogRecordProcessor).mock.instances[0]],
+      }),
+    );
+    expect(BatchLogRecordProcessor).toHaveBeenCalledWith({
+      exporter: vi.mocked(FileLogExporter).mock.instances[0],
+    });
+    expect(MeterProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        readers: [vi.mocked(PeriodicExportingMetricReader).mock.instances[0]],
+      }),
+    );
+    expect(PeriodicExportingMetricReader).toHaveBeenCalledWith({
+      exporter: vi.mocked(FileMetricExporter).mock.instances[0],
+      exportIntervalMillis: 10000,
+    });
+  });
+
+  it('registers every provider globally with the same synchronous resource', async () => {
+    await initializeTelemetry(mockConfig);
+
+    const { resource } = getTracerProviderConfig();
+    expect(resource!.asyncAttributesPending).toBe(false);
+    expect(NodeTracerProvider.prototype.register).toHaveBeenCalledTimes(1);
+    expect(MeterProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ resource }),
+    );
+    expect(metrics.setGlobalMeterProvider).toHaveBeenCalledWith(
+      vi.mocked(MeterProvider).mock.instances[0],
+    );
+    expect(LoggerProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ resource }),
+    );
+    expect(logs.setGlobalLoggerProvider).toHaveBeenCalledWith(
+      vi.mocked(LoggerProvider).mock.instances[0],
     );
   });
 
@@ -173,8 +248,42 @@ describe('Telemetry SDK', () => {
 
     await initializeTelemetry(mockConfig);
 
-    expect(NodeSDK).not.toHaveBeenCalled();
+    expect(NodeTracerProvider).not.toHaveBeenCalled();
     expect(isTelemetrySdkInitialized()).toBe(false);
+  });
+
+  it('does not start the SDK when OTEL_SDK_DISABLED is set', async () => {
+    vi.stubEnv('OTEL_SDK_DISABLED', 'true');
+    try {
+      await initializeTelemetry(mockConfig);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+
+    expect(NodeTracerProvider).not.toHaveBeenCalled();
+    expect(FileSpanExporter).not.toHaveBeenCalled();
+    expect(isTelemetrySdkInitialized()).toBe(false);
+  });
+
+  it('reads the log record limits from the OTel environment', async () => {
+    vi.stubEnv('OTEL_LOGRECORD_ATTRIBUTE_COUNT_LIMIT', '');
+    vi.stubEnv('OTEL_ATTRIBUTE_COUNT_LIMIT', '64');
+    vi.stubEnv('OTEL_LOGRECORD_ATTRIBUTE_VALUE_LENGTH_LIMIT', '512');
+    vi.stubEnv('OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT', '1024');
+    try {
+      await initializeTelemetry(mockConfig);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+
+    expect(LoggerProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        logRecordLimits: {
+          attributeCountLimit: 64,
+          attributeValueLengthLimit: 512,
+        },
+      }),
+    );
   });
 
   it.each([
@@ -204,7 +313,7 @@ describe('Telemetry SDK', () => {
       try {
         await initializeTelemetry(mockConfig);
 
-        expect(NodeSDK).toHaveBeenCalledWith(
+        expect(NodeTracerProvider).toHaveBeenCalledWith(
           expect.objectContaining({
             spanLimits: { attributeValueLengthLimit: expected },
           }),
@@ -233,8 +342,8 @@ describe('Telemetry SDK', () => {
         initializeTelemetry(mockConfig),
       ]);
 
-      expect(NodeSDK).toHaveBeenCalledTimes(1);
-      expect(NodeSDK.prototype.start).toHaveBeenCalledTimes(1);
+      expect(NodeTracerProvider).toHaveBeenCalledTimes(1);
+      expect(NodeTracerProvider.prototype.register).toHaveBeenCalledTimes(1);
       // One shared init means one settle-time catch-up, even with concurrent
       // callers.
       expect(emitSessionStart).toHaveBeenCalledTimes(1);
@@ -248,94 +357,16 @@ describe('Telemetry SDK', () => {
       expect(
         vi.mocked(emitSessionStart).mock.invocationCallOrder[0],
       ).toBeGreaterThan(
-        vi.mocked(NodeSDK.prototype.start).mock.invocationCallOrder[0],
+        vi.mocked(logs.setGlobalLoggerProvider).mock.invocationCallOrder[0],
       );
-    });
-
-    it('ignores external exporter selectors while starting explicit exporters', async () => {
-      const exporterEnv = {
-        OTEL_TRACES_EXPORTER: 'console',
-        OTEL_LOGS_EXPORTER: 'none',
-        OTEL_METRICS_EXPORTER: 'otlp',
-      } as const;
-      const previousValues = Object.fromEntries(
-        Object.keys(exporterEnv).map((name) => [name, process.env[name]]),
-      );
-      Object.assign(process.env, exporterEnv);
-      expect(isTelemetrySdkInitialized()).toBe(false);
-      let startCalled = false;
-      const observedDuringStart: Record<string, string | undefined> = {};
-
-      vi.mocked(NodeSDK.prototype.start).mockImplementationOnce(() => {
-        startCalled = true;
-        for (const name of Object.keys(exporterEnv)) {
-          observedDuringStart[name] = process.env[name];
-        }
-      });
-
-      try {
-        await initializeTelemetry(mockConfig);
-        expect(startCalled).toBe(true);
-        // Assert here, not inside the mocked start(): initializeTelemetry
-        // catches start() failures, so an assertion thrown there would be
-        // swallowed as an init failure and the test would still pass.
-        for (const name of Object.keys(exporterEnv)) {
-          expect(observedDuringStart[name]).toBeUndefined();
-          expect(process.env[name]).toBe(
-            exporterEnv[name as keyof typeof exporterEnv],
-          );
-        }
-      } finally {
-        for (const name of Object.keys(exporterEnv)) {
-          const previousValue = previousValues[name];
-          if (previousValue === undefined) {
-            delete process.env[name];
-          } else {
-            process.env[name] = previousValue;
-          }
-        }
-      }
-    });
-
-    it('restores external exporter selectors when sdk.start() throws', async () => {
-      const exporterEnv = {
-        OTEL_TRACES_EXPORTER: 'console',
-        OTEL_LOGS_EXPORTER: 'none',
-        OTEL_METRICS_EXPORTER: 'otlp',
-      } as const;
-      const previousValues = Object.fromEntries(
-        Object.keys(exporterEnv).map((name) => [name, process.env[name]]),
-      );
-      Object.assign(process.env, exporterEnv);
-
-      vi.mocked(NodeSDK.prototype.start).mockImplementationOnce(() => {
-        throw new Error('start failed');
-      });
-
-      try {
-        await initializeTelemetry(mockConfig);
-        expect(isTelemetrySdkInitialized()).toBe(false);
-        for (const name of Object.keys(exporterEnv)) {
-          expect(process.env[name]).toBe(
-            exporterEnv[name as keyof typeof exporterEnv],
-          );
-        }
-      } finally {
-        for (const name of Object.keys(exporterEnv)) {
-          const previousValue = previousValues[name];
-          if (previousValue === undefined) {
-            delete process.env[name];
-          } else {
-            process.env[name] = previousValue;
-          }
-        }
-      }
     });
 
     it('clears the in-flight promise so a failed init can be retried', async () => {
-      vi.mocked(NodeSDK.prototype.start).mockImplementationOnce(() => {
-        throw new Error('start failed');
-      });
+      vi.mocked(NodeTracerProvider.prototype.register).mockImplementationOnce(
+        () => {
+          throw new Error('start failed');
+        },
+      );
 
       // A failed init must resolve (never reject) and leave telemetry off so a
       // later call can retry rather than reusing a poisoned single-flight promise.
@@ -343,7 +374,7 @@ describe('Telemetry SDK', () => {
       expect(isTelemetrySdkInitialized()).toBe(false);
 
       // The retry succeeds: reaching `initialized === true` requires the
-      // continuation to have run `sdk.start()` again on a fresh SDK.
+      // continuation to have started a fresh SDK.
       await initializeTelemetry(mockConfig);
       expect(isTelemetrySdkInitialized()).toBe(true);
     });
@@ -357,15 +388,19 @@ describe('Telemetry SDK', () => {
 
       await Promise.all([initPromise, shutdownPromise]);
 
-      expect(NodeSDK.prototype.start).toHaveBeenCalledTimes(1);
-      expect(NodeSDK.prototype.shutdown).toHaveBeenCalledTimes(1);
+      expect(NodeTracerProvider.prototype.register).toHaveBeenCalledTimes(1);
+      expect(NodeTracerProvider.prototype.shutdown).toHaveBeenCalledTimes(1);
+      expect(LoggerProvider.prototype.shutdown).toHaveBeenCalledTimes(1);
+      expect(MeterProvider.prototype.shutdown).toHaveBeenCalledTimes(1);
       expect(isTelemetrySdkInitialized()).toBe(false);
     });
 
     it('clears the shutdown promise when it races an init that fails to start', async () => {
-      vi.mocked(NodeSDK.prototype.start).mockImplementationOnce(() => {
-        throw new Error('start failed');
-      });
+      vi.mocked(NodeTracerProvider.prototype.register).mockImplementationOnce(
+        () => {
+          throw new Error('start failed');
+        },
+      );
 
       const initPromise = initializeTelemetry(mockConfig);
       const shutdownPromise = shutdownTelemetry();
@@ -376,7 +411,7 @@ describe('Telemetry SDK', () => {
       // stale shutdown promise that short-circuits a later real teardown.
       await initializeTelemetry(mockConfig);
       await shutdownTelemetry();
-      expect(NodeSDK.prototype.shutdown).toHaveBeenCalledTimes(1);
+      expect(NodeTracerProvider.prototype.shutdown).toHaveBeenCalledTimes(1);
       expect(isTelemetrySdkInitialized()).toBe(false);
     });
 
@@ -391,12 +426,14 @@ describe('Telemetry SDK', () => {
       expect(
         mockEndAllInteractionSpans.mock.invocationCallOrder[0],
       ).toBeLessThan(
-        vi.mocked(NodeSDK.prototype.shutdown).mock.invocationCallOrder[0],
+        vi.mocked(NodeTracerProvider.prototype.shutdown).mock
+          .invocationCallOrder[0],
       );
       expect(
         vi.mocked(emitSessionEnd).mock.invocationCallOrder[0],
       ).toBeLessThan(
-        vi.mocked(NodeSDK.prototype.shutdown).mock.invocationCallOrder[0],
+        vi.mocked(LoggerProvider.prototype.shutdown).mock
+          .invocationCallOrder[0],
       );
     });
 
@@ -514,19 +551,17 @@ describe('Telemetry SDK', () => {
   it('should set service.version to the application version, not Node.js version', async () => {
     await initializeTelemetry(mockConfig);
 
-    const constructorCall = vi.mocked(NodeSDK).mock.calls[0]![0]!;
-    const resource = constructorCall.resource as {
-      attributes: Record<string, string>;
-    };
-    expect(resource.attributes['service.version']).toBe('1.0.0-test');
-    expect(resource.attributes['service.version']).not.toBe(process.version);
+    expect(getResourceAttributes()['service.version']).toBe('1.0.0-test');
+    expect(getResourceAttributes()['service.version']).not.toBe(
+      process.version,
+    );
   });
 
   it('should complete shutdown within timeout when SDK shutdown hangs', async () => {
     vi.useFakeTimers();
-    const shutdownSpy = vi
-      .spyOn(NodeSDK.prototype, 'shutdown')
-      .mockReturnValue(new Promise<void>(() => {}));
+    vi.mocked(NodeTracerProvider.prototype.shutdown).mockReturnValueOnce(
+      new Promise<void>(() => {}),
+    );
     const diagWarnSpy = vi.spyOn(diag, 'warn').mockImplementation(() => {});
     try {
       await initializeTelemetry(mockConfig);
@@ -543,31 +578,24 @@ describe('Telemetry SDK', () => {
         expect.stringContaining('Telemetry shutdown timed out'),
       );
     } finally {
-      shutdownSpy.mockRestore();
       diagWarnSpy.mockRestore();
       vi.useRealTimers();
     }
   });
 
   it('should complete shutdown normally when SDK resolves before timeout', async () => {
-    const shutdownSpy = vi
-      .spyOn(NodeSDK.prototype, 'shutdown')
-      .mockResolvedValue();
-    try {
-      await initializeTelemetry(mockConfig);
+    vi.mocked(NodeTracerProvider.prototype.shutdown).mockResolvedValueOnce();
+    await initializeTelemetry(mockConfig);
 
-      await shutdownTelemetry();
+    await shutdownTelemetry();
 
-      expect(isTelemetrySdkInitialized()).toBe(false);
-    } finally {
-      shutdownSpy.mockRestore();
-    }
+    expect(isTelemetrySdkInitialized()).toBe(false);
   });
 
   it('should log error when sdk.shutdown() rejects', async () => {
-    const shutdownSpy = vi
-      .spyOn(NodeSDK.prototype, 'shutdown')
-      .mockReturnValue(Promise.reject(new Error('shutdown failed')));
+    vi.mocked(LoggerProvider.prototype.shutdown).mockRejectedValueOnce(
+      new Error('shutdown failed'),
+    );
     const diagErrorSpy = vi.spyOn(diag, 'error').mockImplementation(() => {});
     try {
       await initializeTelemetry(mockConfig);
@@ -580,7 +608,6 @@ describe('Telemetry SDK', () => {
         expect.any(Error),
       );
     } finally {
-      shutdownSpy.mockRestore();
       diagErrorSpy.mockRestore();
     }
   });
@@ -589,21 +616,10 @@ describe('Telemetry SDK', () => {
     vi.spyOn(mockConfig, 'getCliVersion').mockImplementation(() => undefined);
     await initializeTelemetry(mockConfig);
 
-    const constructorCall = vi.mocked(NodeSDK).mock.calls[0]![0]!;
-    const resource = constructorCall.resource as {
-      attributes: Record<string, string>;
-    };
-    expect(resource.attributes['service.version']).toBe('unknown');
+    expect(getResourceAttributes()['service.version']).toBe('unknown');
   });
 
   describe('Resource attributes', () => {
-    function getResourceAttributes(): Record<string, string> {
-      const constructorCall = vi.mocked(NodeSDK).mock.calls[0]![0]!;
-      return (
-        constructorCall.resource as { attributes: Record<string, string> }
-      ).attributes;
-    }
-
     it('does not place session.id on the Resource', async () => {
       await initializeTelemetry(mockConfig);
       expect(getResourceAttributes()['session.id']).toBeUndefined();
@@ -718,9 +734,8 @@ describe('Telemetry SDK', () => {
 
   describe('Outbound trace-context propagation', () => {
     function getTextMapPropagator(): unknown {
-      const constructorCall = vi.mocked(NodeSDK).mock.calls[0]![0]!;
-      return (constructorCall as { textMapPropagator?: unknown })
-        .textMapPropagator;
+      return vi.mocked(NodeTracerProvider.prototype.register).mock.calls[0]![0]!
+        .propagator;
     }
 
     it('installs a no-op TextMapPropagator', async () => {
@@ -747,22 +762,21 @@ describe('Telemetry SDK', () => {
   });
 
   describe('Instrumentations', () => {
-    function getInstrumentations(): unknown[] {
-      const constructorCall = vi.mocked(NodeSDK).mock.calls[0]![0]!;
-      return (constructorCall.instrumentations ?? []) as unknown[];
-    }
-
-    it('registers both HttpInstrumentation and UndiciInstrumentation', async () => {
+    it('creates both instrumentations after the meter provider is registered', async () => {
       await initializeTelemetry(mockConfig);
-      const instrumentations = getInstrumentations();
-      // The mocks make HttpInstrumentation / UndiciInstrumentation auto-mocked
-      // classes; instance-of checks against the mocked class still work.
+
+      // Instrumentations take their meter from the global meter provider when
+      // constructed; created earlier, their HTTP metrics would be dropped.
+      const meterRegistration = vi.mocked(metrics.setGlobalMeterProvider).mock
+        .invocationCallOrder[0]!;
+      expect(HttpInstrumentation).toHaveBeenCalledTimes(1);
+      expect(UndiciInstrumentation).toHaveBeenCalledTimes(1);
       expect(
-        instrumentations.some((i) => i instanceof HttpInstrumentation),
-      ).toBe(true);
+        vi.mocked(HttpInstrumentation).mock.invocationCallOrder[0],
+      ).toBeGreaterThan(meterRegistration);
       expect(
-        instrumentations.some((i) => i instanceof UndiciInstrumentation),
-      ).toBe(true);
+        vi.mocked(UndiciInstrumentation).mock.invocationCallOrder[0],
+      ).toBeGreaterThan(meterRegistration);
     });
 
     it('constructs the instrumentations without request-ignore hooks', async () => {

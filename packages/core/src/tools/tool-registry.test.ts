@@ -33,6 +33,7 @@ import {
 } from './mcp-client.js';
 import { ToolErrorType } from './tool-error.js';
 import { ToolMode } from './code-mode.js';
+import { isAutoEditApproved } from '../core/permissionFlow.js';
 
 vi.mock('node:fs');
 
@@ -1584,6 +1585,28 @@ describe('ToolRegistry', () => {
       const invocation = tool.build(params);
       const description = invocation.getDescription();
       expect(description).toBe(JSON.stringify(params));
+    });
+
+    it('asks before running, like an untrusted MCP tool', async () => {
+      vi.spyOn(config, 'getToolCallCommand').mockReturnValue('my-call');
+      const invocation = new DiscoveredTool(
+        config,
+        'test-tool',
+        'A test tool',
+        {},
+      ).build({});
+
+      expect(await invocation.getDefaultPermission()).toBe('ask');
+      const details = await invocation.getConfirmationDetails(
+        new AbortController().signal,
+      );
+      expect(details).toMatchObject({
+        type: 'exec',
+        command: 'my-call test-tool',
+        rootCommand: 'test-tool',
+      });
+      // AUTO_EDIT only auto-approves edit/info confirmations.
+      expect(isAutoEditApproved(ApprovalMode.AUTO_EDIT, details)).toBe(false);
     });
   });
 

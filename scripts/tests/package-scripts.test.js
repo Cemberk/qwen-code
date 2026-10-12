@@ -25,8 +25,6 @@ import { parse, stringify } from 'yaml';
 import { hooks as pnpmHooks, workspacePackageNames } from '../../.pnpmfile.mjs';
 import { getPinnedPnpmPackage } from '../pnpm-package.js';
 
-import { getWorkflowJob } from './workflow-helpers.js';
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../..');
 const huskyTestEnv = {
@@ -793,96 +791,6 @@ describe('package scripts', () => {
     } finally {
       rmSync(binDir, { recursive: true, force: true });
     }
-  });
-
-  it('smoke-tests the real worktree bootstrap on every supported host', () => {
-    const workflow = parse(
-      readWorkflow('.github/workflows/pnpm-worktree-smoke.yml'),
-    );
-    const job = workflow.jobs.install;
-
-    expect(job.strategy.matrix.os).toEqual([
-      'ubuntu-latest',
-      'macos-latest',
-      'windows-latest',
-    ]);
-    expect(job.strategy['fail-fast']).toBe(false);
-    expect(
-      job.steps.find(
-        (step) => step.name === 'Install frozen pnpm worktree dependencies',
-      )?.run,
-    ).toBe('node scripts/setup-worktree.js');
-
-    // The pnpm linker only materializes declared dependencies, so a
-    // workspace import that npm's hoisting hides breaks typecheck and tests
-    // in the bootstrapped tree; resolve one through a declaring workspace.
-    const resolveCheck = job.steps.find(
-      (step) => step.name === 'Verify workspace links resolve',
-    );
-    expect(resolveCheck?.run).toContain(
-      '@qwen-code/qwen-code-core/package.json',
-    );
-    expect(resolveCheck?.run).toContain('packages/cli');
-
-    // `git diff --exit-code` misses untracked files; the install must leave
-    // the porcelain output empty on every host, including Windows (hence
-    // the explicit POSIX shell).
-    const cleanCheck = job.steps.find(
-      (step) => step.name === 'Ensure bootstrap keeps the worktree clean',
-    );
-    expect(cleanCheck?.shell).toBe('bash');
-    expect(cleanCheck?.run).toContain('git status --porcelain');
-
-    // The checks only mean anything after the install; pin the order.
-    const stepNames = job.steps.map((step) => step.name);
-    expect(
-      stepNames.indexOf('Install frozen pnpm worktree dependencies'),
-    ).toBeLessThan(stepNames.indexOf('Verify workspace links resolve'));
-    expect(stepNames.indexOf('Verify workspace links resolve')).toBeLessThan(
-      stepNames.indexOf('Ensure bootstrap keeps the worktree clean'),
-    );
-
-    // A post-merge run is the only witness of a regression on main, so
-    // consecutive merges must not cancel each other.
-    expect(workflow.concurrency['cancel-in-progress']).toBe(
-      "${{ github.event_name == 'pull_request' }}",
-    );
-
-    // Substring check on the raw job text: an exact `step.run` match is
-    // bypassed by any other spelling of a build step (block scalar,
-    // compound command).
-    const installJob = getWorkflowJob(
-      readWorkflow('.github/workflows/pnpm-worktree-smoke.yml'),
-      'install',
-    );
-    expect(installJob).not.toContain('npm run build');
-    expect(installJob).not.toContain('node scripts/build.js');
-  });
-
-  it('runs the pnpm smoke workflow when a dependency input changes', () => {
-    const workflow = parse(
-      readWorkflow('.github/workflows/pnpm-worktree-smoke.yml'),
-    );
-    // The install validates pnpm-lock.yaml against the workspace manifests,
-    // so these are the inputs that can change its result.
-    const expectedPaths = [
-      '.github/workflows/pnpm-worktree-smoke.yml',
-      '.npmrc',
-      '.pnpmfile.mjs',
-      'package.json',
-      'packages/*/package.json',
-      'patches/**',
-      'packages/core/scripts/postinstall.js',
-      'pnpm-lock.yaml',
-      'pnpm-workspace.yaml',
-      'scripts/generate-git-commit-info.js',
-      'scripts/prepare.js',
-      'scripts/pnpm-package.js',
-      'scripts/setup-worktree.js',
-    ];
-
-    expect(workflow.on.pull_request.paths).toEqual(expectedPaths);
-    expect(workflow.on.push.paths).toEqual(expectedPaths);
   });
 
   it('defines a release test script that disables workspace coverage', () => {

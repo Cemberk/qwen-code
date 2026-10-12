@@ -555,7 +555,6 @@ export * from './utils/retry.js';
 export * from './utils/ripgrepUtils.js';
 export {
   detectRuntime,
-  isTlsVerificationDisabled,
   preloadRuntimeFetchModule,
 } from './utils/runtimeFetchOptions.js';
 export * from './utils/process-liveness.js';
@@ -563,7 +562,6 @@ export * from './utils/runtimeStatus.js';
 export * from './utils/schemaValidator.js';
 export * from './utils/sessionIdContext.js';
 export * from './utils/secure-browser-launcher.js';
-export { initParser as initShellAstParser } from './utils/shellAstParser.js';
 export * from './utils/shell-utils.js';
 export * from './utils/subagentGenerator.js';
 export * from './utils/symlink.js';
@@ -625,13 +623,6 @@ export {
   hookEventSupportsMatcher,
 } from './hooks/index.js';
 export type { HookRegistryEntry, SessionHookEntry } from './hooks/index.js';
-export { buildHooksListing } from './hooks/hooks-listing.js';
-export type {
-  HooksListing,
-  HooksListingDisabledReason,
-  HooksListingOrigin,
-  HooksListingRow,
-} from './hooks/hooks-listing.js';
 export {
   DEFAULT_STOP_HOOK_BLOCK_CAP,
   STOP_HOOK_BLOCK_CAP_ENV,

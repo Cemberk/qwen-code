@@ -9,8 +9,7 @@ import { t } from '../i18n/index.js';
 
 /**
  * One-line summary of what an extension ships, for the extension detail
- * views. The Ink view and the OpenTUI dialog both call this, so the two
- * surfaces cannot drift apart.
+ * views.
  */
 export function extensionComponentsSummary(extension: Extension): string {
   const parts: string[] = [];

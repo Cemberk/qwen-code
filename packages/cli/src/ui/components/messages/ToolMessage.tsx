@@ -1179,9 +1179,7 @@ export function formatInlineToolArgs(
 }
 
 /**
- * The `ui.showToolCallArgs` row over an already-serialized `json`, so a renderer
- * that carries the call's arguments as text (OpenTUI's `tool-args` event) draws
- * the same row as this one rather than keeping a second copy of the policy.
+ * The `ui.showToolCallArgs` row over an already-serialized `json`.
  *
  * Skipped when `description` already IS the args JSON: MCP invocations return
  * `safeJsonStringify(params)` from `getDescription()`, so rendering both would

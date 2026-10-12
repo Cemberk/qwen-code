@@ -1084,12 +1084,6 @@ export default {
   Enable: 'Ativar',
   disabled: 'desativado',
   enabled: 'ativado',
-  'disabled (bare mode)': 'desativado (modo mínimo)',
-  'disabled (safe mode)': 'desativado (modo seguro)',
-  'disabled (disableAllHooks)': 'desativado (disableAllHooks)',
-  'disabled (folder not trusted)': 'desativado (pasta não confiável)',
-  'disabled (turned off for this session)':
-    'desativado (desligado nesta sessão)',
   Reconnect: 'Reconectar',
   'View tools': 'Ver ferramentas',
   'Source:': 'Fonte:',
@@ -1203,7 +1197,6 @@ export default {
   // ============================================================================
   'Select Model': 'Selecionar Modelo',
   'API Key': 'API Key',
-  '(default)': '(padrão)',
   '(not set)': '(não definido)',
   Modality: 'Modalidade',
   'Context Window': 'Janela de Contexto',
@@ -1938,7 +1931,6 @@ export default {
   'Show usage statistics dashboard.': 'Exibir painel de estatísticas de uso.',
 
   // Stats Dashboard — keyboard hints (not translated)
-  'tab \xB7 esc': 'tab \xB7 esc',
   'tab \xB7 r dates \xB7 \u2190\u2192 month \xB7 esc':
     'tab \xB7 r dates \xB7 \u2190\u2192 month \xB7 esc',
   'tab \xB7 r dates \xB7 esc': 'tab \xB7 r dates \xB7 esc',

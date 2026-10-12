@@ -4,6 +4,10 @@
 - **Status**: implemented
 - **Date**: 2026-07-19
 - **Depends on**: #7182 (TUI module removal), the metafile audit below
+- **Later change**: the OTLP exporters and `@opentelemetry/sdk-node` have
+  since been removed. `sdk-impl.ts` builds the tracer, logger and meter
+  providers directly and writes only to the telemetry outfile, so the gRPC,
+  OTLP and protobuf packages below are no longer dependencies.
 
 ## Problem
 

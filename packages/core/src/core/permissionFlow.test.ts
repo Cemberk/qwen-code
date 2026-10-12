@@ -376,6 +376,10 @@ describe('evaluatePermissionFlow', () => {
 
     const config = mockConfig({
       getPermissionManager: vi.fn().mockReturnValue(pm),
+      getWorkspaceContext: vi.fn().mockReturnValue({
+        isPathWithinWorkspace: (p: string) =>
+          p === '/test' || p.startsWith('/test/'),
+      }),
     });
     const result = await evaluatePermissionFlow(
       config,

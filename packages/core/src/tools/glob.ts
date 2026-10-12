@@ -14,10 +14,8 @@ import {
   resolveAndValidatePath,
   formatDisplayPath,
   resolvePath,
-  isSubpath,
   unescapePath,
 } from '../utils/paths.js';
-import { getMemoryBaseDir } from '../memory/paths.js';
 import { type Config } from '../config/config.js';
 import type { PermissionDecision } from '../permissions/types.js';
 import {
@@ -130,10 +128,7 @@ class GlobToolInvocation extends BaseToolInvocation<
       this.config.getTargetDir(),
       this.params.path,
     );
-    if (
-      workspaceContext.isPathWithinWorkspace(resolvedPath) ||
-      isSubpath(getMemoryBaseDir(), resolvedPath)
-    ) {
+    if (workspaceContext.isPathWithinWorkspace(resolvedPath)) {
       return 'allow';
     }
     return 'ask';

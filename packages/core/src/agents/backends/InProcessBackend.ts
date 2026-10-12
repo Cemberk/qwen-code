@@ -20,6 +20,7 @@ import {
   type Config,
   type DerivedApprovalModeConfigHooks,
 } from '../../config/config.js';
+import { resolveAgentApprovalMode } from '../../config/approval-mode.js';
 import { Storage } from '../../config/storage.js';
 import { type ContentGenerator } from '../../core/contentGenerator.js';
 import type { RuntimeContentGeneratorView } from '../runtime/agent-context.js';
@@ -473,12 +474,13 @@ async function createPerAgentConfig(
   // ones spawned with an explicit mode: tools bind to this config, and
   // teammate mode switches (Shift+Tab) plus "Proceed always" confirmations
   // call `setApprovalMode` on it — which the derived-Config guard rejects
-  // unless an approval profile owns the transition. When no mode was
-  // requested, snapshot the base's current mode: the initial mode equals
-  // the base mode, so no AUTO strip is acquired and cleanup stays a no-op.
+  // unless an approval profile owns the transition. A requested mode never
+  // exceeds the base's current mode; when none was requested, snapshot the
+  // base's mode: the initial mode equals the base mode, so no AUTO strip is
+  // acquired and cleanup stays a no-op.
   const approvalHandle = deriveApprovalModeConfig(
     base,
-    approvalMode ?? base.getApprovalMode(),
+    resolveAgentApprovalMode(base.getApprovalMode(), approvalMode),
     { hooks: approvalModeHooks },
   );
   const handle = deriveAgentConfig(approvalHandle.config, cwd, {

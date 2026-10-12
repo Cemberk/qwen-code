@@ -33,7 +33,7 @@ All of the following are required:
 - The session is interactive — the CLI never generates suggestions in its own non-interactive or SDK mode
 - The model has completed its response (not during streaming)
 - There are no errors in the most recent response
-- No confirmation dialogs are pending (e.g., shell confirmation, permissions). One renderer reads that state directly; the other gates on its own pending tool calls and cannot see a shell dialog opened mid-turn, so a suggestion can still be generated behind one. Nothing is displayed in that case — the composer is unmounted while the dialog is up — so what it costs is that turn's generation call, not a suggestion you can act on by mistake.
+- No confirmation dialogs are pending (e.g., shell confirmation, permissions)
 
 Suggestions are automatically dismissed when:
 

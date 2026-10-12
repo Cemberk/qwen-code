@@ -42,6 +42,7 @@ import {
   type RuntimeContentGeneratorView,
 } from './runtime/agent-context.js';
 import { ApprovalMode, type Config } from '../config/config.js';
+import { resolveAgentApprovalMode } from '../config/approval-mode.js';
 import { LlmChat, StreamEventType } from '../core/llm-chat.js';
 import { FunctionCallingConfigMode } from '../core/genai-compat.js';
 import { createRuntimeContentGeneratorView } from '../models/content-generator-config.js';
@@ -671,9 +672,10 @@ export async function runForkedAgent(
   // ── AgentHeadless path ────────────────────────────────────────────────────
   // Forked agents run in the background with no UI that could answer a
   // permission prompt. They run in YOLO only when the parent session already
-  // does; otherwise in DEFAULT with prompts auto-denied, so anything the parent
-  // would have asked about is refused while calls the scoped permission
-  // manager explicitly allows (e.g. memory-path writes) still proceed.
+  // does, in PLAN under a PLAN parent, and otherwise in DEFAULT with prompts
+  // auto-denied, so anything the parent would have asked about is refused
+  // while calls the scoped permission manager explicitly allows (e.g.
+  // memory-path writes) still proceed.
   //
   // `createApprovalModeOverride` rebuilds the tool registry on the wrapper
   // Config so core file tools (`EditTool` / `WriteFileTool` /
@@ -687,10 +689,11 @@ export async function runForkedAgent(
   // (memory extraction / dream agent) compose correctly: the wrapper's
   // bound tools resolve `this.config.getPermissionManager()` through the
   // prototype chain to the scoped wrapper's own override.
+  const parentApprovalMode = params.config.getApprovalMode();
   const forkApprovalMode =
-    params.config.getApprovalMode() === ApprovalMode.YOLO
+    parentApprovalMode === ApprovalMode.YOLO
       ? ApprovalMode.YOLO
-      : ApprovalMode.DEFAULT;
+      : resolveAgentApprovalMode(parentApprovalMode, ApprovalMode.DEFAULT);
   const { config: agentConfig, cleanup: restoreParentPM } =
     await createApprovalModeOverride(params.config, forkApprovalMode);
   stampBackgroundPromptPolicy(agentConfig, false);

@@ -30,9 +30,7 @@ This guide provides solutions to common issues and debugging tips, including top
 
 - **Error: `Connection error. (cause: fetch failed)` against a self-signed endpoint**
   - **Cause:** You are pointing Qwen Code at a self-hosted server (for example a local model behind `https://`) whose TLS certificate is self-signed, so Node.js rejects it.
-  - **Solution:** Prefer trusting the certificate by setting `NODE_EXTRA_CA_CERTS` to the absolute path of its CA certificate file. If that is not practical in a trusted lab/private network, skip verification with the `--insecure` flag (or `QWEN_TLS_INSECURE=1`):
-    - Example: `qwen --insecure --openai-base-url https://localhost:8443/v1 ...`
-    - **Warning:** Disabling verification removes protection against man-in-the-middle attacks. Only use it for endpoints you fully trust.
+  - **Solution:** Trust the certificate by setting `NODE_EXTRA_CA_CERTS` to the absolute path of its CA certificate file, or serve the local endpoint over plain `http://` on loopback. Qwen Code has no option to skip certificate verification.
 
 - **Issue: Unable to display UI after authentication failure**
   - **Cause:** If authentication fails after selecting an authentication type, the `security.auth.selectedType` setting may be persisted in `settings.json`. On restart, the CLI may get stuck trying to authenticate with the failed auth type and fail to display the UI.

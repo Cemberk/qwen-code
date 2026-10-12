@@ -34,7 +34,7 @@ The existing notification channel starts a model response and consumes tokens; t
 
 In the ink renderer, interactive saved workflow commands keep their script-path/name-only choice, arguments, approvals, foreground progress, and cancellation. Headless and ACP commands retain prompt expansion. Code-mode nested calls return to their parent; ordinary model calls do not gain notifications. No public tool schema, configuration option, or persisted-schema migration is added. Snapshot serialization is unchanged: native Error, Map, and Set contents are not preserved by its plain JSON serializer. This repair preserves those values in notifications and model-facing and displayed tool results; it does not add snapshot persistence for their contents.
 
-OpenTUI's separate unwired `schedule_tool` handler and a new persisted-result viewer in workflow history remain outside this change. Both authoring skills scope slash-command guidance to ink and advise asking the model to call `Workflow({ name: '<name>' })` in OpenTUI.
+A new persisted-result viewer in workflow history remains outside this change.
 
 ## Validation
 

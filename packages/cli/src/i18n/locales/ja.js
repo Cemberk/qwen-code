@@ -846,11 +846,6 @@ export default {
   Enable: '有効化',
   disabled: '無効',
   enabled: '有効',
-  'disabled (bare mode)': '無効（ベアモード）',
-  'disabled (safe mode)': '無効（セーフモード）',
-  'disabled (disableAllHooks)': '無効（disableAllHooks）',
-  'disabled (folder not trusted)': '無効（フォルダーが信頼されていません）',
-  'disabled (turned off for this session)': '無効（このセッションでオフ）',
   Reconnect: '再接続',
   'View tools': 'ツールを表示',
   'Status:': 'ステータス:',
@@ -1635,7 +1630,6 @@ export default {
   'Persist the model selection to the user settings (global scope)':
     'モデルの選択をユーザー設定に永続化（グローバルスコープ）',
   'API Key': 'API Key',
-  '(default)': '(デフォルト)',
   '(not set)': '(未設定)',
   'Command Format Migration': 'コマンド形式の移行',
   'Found {{count}} TOML command file:':
@@ -1727,7 +1721,6 @@ export default {
   'Show usage statistics dashboard.': '使用統計ダッシュボードを表示する。',
 
   // Stats Dashboard — keyboard hints (not translated)
-  'tab \xB7 esc': 'tab \xB7 esc',
   'tab \xB7 r dates \xB7 \u2190\u2192 month \xB7 esc':
     'tab \xB7 r dates \xB7 \u2190\u2192 month \xB7 esc',
   'tab \xB7 r dates \xB7 esc': 'tab \xB7 r dates \xB7 esc',

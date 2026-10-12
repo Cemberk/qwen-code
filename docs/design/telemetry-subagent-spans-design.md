@@ -46,7 +46,7 @@ Today every `AgentTool.execute` invocation runs under the parent's `qwen-code.in
 | LangSmith — 25,000 runs / trace cap                                                                                    | Long agent sessions force trace splitting eventually; favors hybrid traceId design.                                                                                                                                                                                                                                          |
 | [Sentry — distributed tracing](https://docs.sentry.io/concepts/key-terms/tracing/distributed-tracing/)                 | "Child transactions may outlive the transactions containing their parent spans" — child-with-outliving-life is supported.                                                                                                                                                                                                    |
 | claude-code (Anthropic)                                                                                                | Has subagent hierarchy in local Perfetto JSON file only; OTel export is flat. No portable code.                                                                                                                                                                                                                              |
-| opencode (sst/opencode)                                                                                                | Uses `@effect/opentelemetry` auto-instrumentation; explicit `context.with(trace.setSpan(active, span), fn)` for `withRunSpan`. **Validates the context.with isolation pattern.** Their warning about manual `AsyncLocalStorageContextManager` registration doesn't apply — qwen-code's `NodeSDK` registers it automatically. |
+| opencode (sst/opencode)                                                                                                | Uses `@effect/opentelemetry` auto-instrumentation; explicit `context.with(trace.setSpan(active, span), fn)` for `withRunSpan`. **Validates the context.with isolation pattern.** Their warning about manual `AsyncLocalStorageContextManager` registration doesn't apply — qwen-code's tracer provider `register()` does it. |
 
 ## Design — six decisions, each justified
 
@@ -422,7 +422,7 @@ qwen-code.interaction                         [traceId=T0]
          └─ ...                               [traceId=T1, may emit hours later]
 ```
 
-`context.with(span, runX)` for each of A, B, C runs concurrently. `AsyncLocalStorageContextManager` (already auto-registered by NodeSDK at `sdk.ts:273`) scopes per fiber; no cross-talk. Each subagent's child LLM / tool / hook spans see `span` via `context.active()` inside their own async chain.
+`context.with(span, runX)` for each of A, B, C runs concurrently. `AsyncLocalStorageContextManager` (already auto-registered by the tracer provider's `register()` in `sdk-impl.ts`) scopes per fiber; no cross-talk. Each subagent's child LLM / tool / hook spans see `span` via `context.active()` inside their own async chain.
 
 Fork (C) is a separate trace — its child spans inherit `traceId=T1` even when emitted across multiple subsequent interactions of the parent session. ARMS query by `session.id` returns both T0 and T1; the Link from T1's root → C's invoking `qwen-code.tool` span provides explicit navigation.
 

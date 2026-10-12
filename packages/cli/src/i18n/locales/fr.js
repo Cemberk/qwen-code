@@ -430,12 +430,6 @@ export default {
   active: 'actif',
   disabled: 'désactivé',
   enabled: 'activé',
-  'disabled (bare mode)': 'désactivé (mode minimal)',
-  'disabled (safe mode)': 'désactivé (mode sécurisé)',
-  'disabled (disableAllHooks)': 'désactivé (disableAllHooks)',
-  'disabled (folder not trusted)': 'désactivé (dossier non approuvé)',
-  'disabled (turned off for this session)':
-    'désactivé (désactivé pour cette session)',
   'View Details': 'Voir les détails',
   'Update failed:': 'Échec de la mise à jour :',
   'Updating {{name}}...': 'Mise à jour de {{name}}...',
@@ -1253,7 +1247,6 @@ export default {
   'Persist the model selection to the user settings (global scope)':
     'Persister la sélection du modèle dans les paramètres utilisateur (étendue globale)',
   'API Key': 'API Key',
-  '(default)': '(par défaut)',
   '(not set)': '(non défini)',
   Modality: 'Modalité',
   'Context Window': 'Fenêtre de contexte',
@@ -1957,7 +1950,6 @@ export default {
     "Afficher le tableau de bord des statistiques d'utilisation.",
 
   // Stats Dashboard — keyboard hints (not translated)
-  'tab \xB7 esc': 'tab \xB7 esc',
   'tab \xB7 r dates \xB7 \u2190\u2192 month \xB7 esc':
     'tab \xB7 r dates \xB7 \u2190\u2192 month \xB7 esc',
   'tab \xB7 r dates \xB7 esc': 'tab \xB7 r dates \xB7 esc',

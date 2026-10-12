@@ -6,10 +6,9 @@
 
 /**
  * Render-ready views of the two Goal cards: the v2 `goal_state` card and the
- * legacy `goal_status` one. Pure, so every lifecycle state is unit-testable,
- * and shared, so the ink and OpenTUI renderers cannot word the same record
- * differently. Text is returned as recorded; a renderer that writes to a
- * terminal sanitizes it.
+ * legacy `goal_status` one. Pure, so every lifecycle state is unit-testable.
+ * Text is returned as recorded; a renderer that writes to a terminal
+ * sanitizes it.
  */
 
 import { ICON } from '../constants.js';

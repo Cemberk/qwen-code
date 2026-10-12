@@ -7,30 +7,38 @@
 /**
  * Heavy half of the telemetry SDK split (issue #4748).
  *
- * This module owns NodeSDK, batch processors, the file exporters, and both
- * instrumentations. It must only ever be loaded via the dynamic `import()` in
- * `sdk.ts#initializeTelemetry`, so processes that never enable telemetry (the
- * default) skip the module-load cost entirely. Telemetry is only ever written
- * to the local `telemetry.outfile`; there is no network exporter.
+ * This module owns the tracer, logger and meter providers, batch processors,
+ * the file exporters, and both instrumentations. It must only ever be loaded
+ * via the dynamic `import()` in `sdk.ts#initializeTelemetry`, so processes
+ * that never enable telemetry (the default) skip the module-load cost
+ * entirely. Telemetry is only ever written to the local `telemetry.outfile`;
+ * there is no network exporter.
  */
 
-import type { Context, TextMapPropagator } from '@opentelemetry/api';
-import { getNumberFromEnv } from '@opentelemetry/core';
-import { NodeSDK } from '@opentelemetry/sdk-node';
+import {
+  metrics,
+  type Context,
+  type TextMapPropagator,
+} from '@opentelemetry/api';
+import { logs } from '@opentelemetry/api-logs';
+import { getBooleanFromEnv, getNumberFromEnv } from '@opentelemetry/core';
 import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import {
   BatchSpanProcessor,
+  NodeTracerProvider,
   type ReadableSpan,
   type Span as SdkSpan,
-  type SpanExporter,
   type SpanProcessor,
 } from '@opentelemetry/sdk-trace-node';
 import {
   BatchLogRecordProcessor,
-  type LogRecordExporter,
+  LoggerProvider,
 } from '@opentelemetry/sdk-logs';
-import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
+import {
+  MeterProvider,
+  PeriodicExportingMetricReader,
+} from '@opentelemetry/sdk-metrics';
 import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
 import { UndiciInstrumentation } from '@opentelemetry/instrumentation-undici';
 import type { TelemetryRuntimeConfig } from './runtime-config.js';
@@ -84,20 +92,24 @@ class SessionIdSpanProcessor implements SpanProcessor {
 }
 
 export interface StartedTelemetrySdk {
-  sdk: NodeSDK;
+  shutdown(): Promise<void>;
 }
 
 /**
- * Assemble (but do not start) the NodeSDK for the given config. Returns
- * `undefined` when no telemetry outfile is configured: the outfile is the
- * only telemetry destination. The facade (`sdk.ts`) owns `start()`,
- * initialized-state, and session-context wiring.
+ * Create the tracer, logger and meter providers for the given config and
+ * register them, the context manager, the propagator and the instrumentations
+ * globally. Returns `undefined` when no telemetry outfile is configured (the
+ * outfile is the only telemetry destination) or `OTEL_SDK_DISABLED` is set.
+ * The facade (`sdk.ts`) owns initialized-state, shutdown, and session-context
+ * wiring.
  */
 export async function startTelemetrySdk(
   config: TelemetryRuntimeConfig,
 ): Promise<StartedTelemetrySdk | undefined> {
   const telemetryOutfile = config.getTelemetryOutfile();
-  if (!telemetryOutfile) return undefined;
+  if (!telemetryOutfile || getBooleanFromEnv('OTEL_SDK_DISABLED')) {
+    return undefined;
+  }
   // User-provided resource attributes (env + settings, already merged with
   // RESERVED stripping and OTEL_SERVICE_NAME precedence in the resolver).
   // We strip service.name/service.version here too as defense-in-depth, then
@@ -149,39 +161,67 @@ export async function startTelemetrySdk(
     }
   }
 
-  const spanExporter: SpanExporter = new FileSpanExporter(telemetryOutfile);
-  const logExporter: LogRecordExporter = new FileLogExporter(telemetryOutfile);
-  const metricReader = new PeriodicExportingMetricReader({
-    exporter: new FileMetricExporter(telemetryOutfile),
-    exportIntervalMillis: 10000,
-  });
-
   const spanAttributeValueLengthLimit =
     getNumberFromEnv('OTEL_SPAN_ATTRIBUTE_VALUE_LENGTH_LIMIT') ??
     getNumberFromEnv('OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT') ??
     Infinity;
   configureContextUsageAttributeLengthLimit(spanAttributeValueLengthLimit);
 
-  const sdk = new NodeSDK({
+  const tracerProvider = new NodeTracerProvider({
     resource,
-    // Disable async host/process/env resource detectors: they leave attributes
-    // pending and trigger an OTel diag.error on any resource attribute read
-    // before the detectors settle (e.g. during HttpInstrumentation span creation).
-    autoDetectResources: false,
-    textMapPropagator: NOOP_PROPAGATOR,
     spanLimits: {
       attributeValueLengthLimit: spanAttributeValueLengthLimit,
     },
     spanProcessors: [
       new SessionIdSpanProcessor(),
-      new BatchSpanProcessor(spanExporter),
+      new BatchSpanProcessor(new FileSpanExporter(telemetryOutfile)),
     ],
-    logRecordProcessors: [
-      new BatchLogRecordProcessor({ exporter: logExporter }),
-    ],
-    metricReaders: [metricReader],
-    instrumentations: [new HttpInstrumentation(), new UndiciInstrumentation()],
   });
+  // Also installs the default AsyncLocalStorage context manager.
+  tracerProvider.register({ propagator: NOOP_PROPAGATOR });
 
-  return { sdk };
+  const meterProvider = new MeterProvider({
+    resource,
+    readers: [
+      new PeriodicExportingMetricReader({
+        exporter: new FileMetricExporter(telemetryOutfile),
+        exportIntervalMillis: 10000,
+      }),
+    ],
+  });
+  metrics.setGlobalMeterProvider(meterProvider);
+
+  const loggerProvider = new LoggerProvider({
+    resource,
+    logRecordLimits: {
+      attributeCountLimit:
+        getNumberFromEnv('OTEL_LOGRECORD_ATTRIBUTE_COUNT_LIMIT') ??
+        getNumberFromEnv('OTEL_ATTRIBUTE_COUNT_LIMIT'),
+      attributeValueLengthLimit:
+        getNumberFromEnv('OTEL_LOGRECORD_ATTRIBUTE_VALUE_LENGTH_LIMIT') ??
+        getNumberFromEnv('OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT'),
+    },
+    processors: [
+      new BatchLogRecordProcessor({
+        exporter: new FileLogExporter(telemetryOutfile),
+      }),
+    ],
+  });
+  logs.setGlobalLoggerProvider(loggerProvider);
+
+  // Instrumentations enable themselves on construction and take their meter
+  // from the global meter provider (which, unlike the tracer and logger
+  // providers, has no proxy), so they are created only after registration.
+  new HttpInstrumentation();
+  new UndiciInstrumentation();
+
+  return {
+    async shutdown() {
+      await Promise.all([
+        tracerProvider.shutdown(),
+        loggerProvider.shutdown(),
+        meterProvider.shutdown(),
+      ]);
+    },
+  };
 }

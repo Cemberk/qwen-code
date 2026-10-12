@@ -20,8 +20,8 @@ export default {
 
   'User level': '使用者層級',
   'Project level': '專案層級',
-  'Clipboard image paste is unavailable because the native clipboard module could not be loaded. Reinstall Qwen Code or use the npm installation method.':
-    '剪貼簿圖片貼上功能無法使用，因為原生剪貼簿模組載入失敗。請重新安裝 Qwen Code，或改用 npm 安裝方式。',
+  'Clipboard image paste is unavailable because the system clipboard could not be read.':
+    '剪貼簿圖片貼上功能無法使用，因為無法讀取系統剪貼簿。',
 
   // ==========================================================================
   // Extensions manager dialog (Installed / Discover / Sources tabs)
@@ -545,11 +545,6 @@ export default {
   active: '已啟用',
   disabled: '已禁用',
   enabled: '已啟用',
-  'disabled (bare mode)': '已禁用（精簡模式）',
-  'disabled (safe mode)': '已禁用（安全模式）',
-  'disabled (disableAllHooks)': '已禁用（disableAllHooks）',
-  'disabled (folder not trusted)': '已禁用（資料夾未受信任）',
-  'disabled (turned off for this session)': '已禁用（本工作階段中已關閉）',
   'View Details': '查看詳情',
   'Update failed:': '更新失敗：',
   'Updating {{name}}...': '正在更新 {{name}}...',
@@ -897,18 +892,7 @@ export default {
   'No hook config selected': '未選擇 Hook 配置',
   'To modify or remove this hook, edit settings.json directly or ask Qwen to help.':
     '要修改或刪除此 Hook，請直接編輯 settings.json 或詢問 Qwen。',
-  'Safe mode is on, so no hooks run in this session.':
-    '安全模式已開啟，本會話不會執行任何 Hook。',
-  'Bare mode is on, so no hooks run in this session.':
-    '精簡模式已開啟，本會話不會執行任何 Hook。',
-  'All hooks are disabled by the disableAllHooks setting.':
-    '所有 Hook 已被 disableAllHooks 設定停用。',
-  'Timeout:': '逾時：',
-  'Status message:': '狀態訊息：',
   'Options:': '選項：',
-  'Skill:': '技能：',
-  'runs in background': '在背景執行',
-  sequential: '依序執行',
   'Hook Configuration - Disabled': 'Hook 配置 - 已禁用',
   'All hooks are currently disabled. You have {{count}} that are not running.':
     '所有 Hook 當前已禁用。您有 {{count}} 未運行。',
@@ -1306,7 +1290,6 @@ export default {
   ' (this project)': '（當前專案）',
   ' (global)': '（全域）',
   'API Key': 'API Key',
-  '(default)': '(默認)',
   '(not set)': '(未設置)',
   Modality: '模態',
   'Context Window': '上下文窗口',
@@ -1836,7 +1819,6 @@ export default {
   'Show usage statistics dashboard.': '顯示使用統計面板。',
 
   // Stats Dashboard — keyboard hints (not translated)
-  'tab \xB7 esc': 'tab \xB7 esc',
   'tab \xB7 r dates \xB7 \u2190\u2192 month \xB7 esc':
     'tab \xB7 r dates \xB7 \u2190\u2192 month \xB7 esc',
   'tab \xB7 r dates \xB7 esc': 'tab \xB7 r dates \xB7 esc',

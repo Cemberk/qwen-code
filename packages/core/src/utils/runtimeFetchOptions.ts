@@ -54,34 +54,6 @@ function requireUndici(): UndiciModule {
 export type Runtime = 'node' | 'bun' | 'unknown';
 
 /**
- * Determine whether TLS certificate verification should be disabled for
- * outbound API connections.
- *
- * This is an opt-in escape hatch for self-hosted / lab environments that use
- * self-signed certificates. Because Qwen Code installs its own undici
- * dispatcher (to control timeouts), Node's global `NODE_TLS_REJECT_UNAUTHORIZED`
- * is not automatically honored by that dispatcher — this helper feeds the
- * setting back into the dispatcher's TLS connect options.
- *
- * Sources (any one enables it):
- * - `QWEN_TLS_INSECURE` env var (`1`/`true`/`yes`/`on`, case-insensitive).
- *   The `--insecure` CLI flag sets this.
- * - `NODE_TLS_REJECT_UNAUTHORIZED=0` (Node convention, for parity)
- *
- * WARNING: disabling verification removes protection against
- * man-in-the-middle attacks. Only use it for trusted, private endpoints.
- *
- * @returns true when certificate verification should be skipped
- */
-export function isTlsVerificationDisabled(): boolean {
-  const flag = process.env['QWEN_TLS_INSECURE'];
-  if (flag !== undefined && /^(1|true|yes|on)$/i.test(flag.trim())) {
-    return true;
-  }
-  return process.env['NODE_TLS_REJECT_UNAUTHORIZED'] === '0';
-}
-
-/**
  * Detect the current JavaScript runtime
  */
 export function detectRuntime(): Runtime {
@@ -126,7 +98,6 @@ function withRedirectError<F extends (...args: never[]) => unknown>(
 }
 
 let sharedDispatcher: Dispatcher | undefined;
-let sharedDispatcherInsecure = false;
 
 /**
  * Build runtime-specific fetch options for the OpenAI SDK.
@@ -144,17 +115,12 @@ export function buildRuntimeFetchOptions(): OpenAIRuntimeFetchOptions {
     };
   }
 
-  const insecure = isTlsVerificationDisabled();
   const { Agent, fetch: undiciFetch } = requireUndici();
-  if (!sharedDispatcher || sharedDispatcherInsecure !== insecure) {
-    sharedDispatcher = new Agent({
-      headersTimeout: 0,
-      bodyTimeout: 0,
-      keepAliveTimeout: 60_000,
-      ...(insecure ? { connect: { rejectUnauthorized: false } } : {}),
-    });
-    sharedDispatcherInsecure = insecure;
-  }
+  sharedDispatcher ??= new Agent({
+    headersTimeout: 0,
+    bodyTimeout: 0,
+    keepAliveTimeout: 60_000,
+  });
   return {
     fetchOptions: { dispatcher: sharedDispatcher },
     fetch: withRedirectError(undiciFetch),
@@ -167,5 +133,4 @@ export function buildRuntimeFetchOptions(): OpenAIRuntimeFetchOptions {
  */
 export function resetDispatcherCache(): void {
   sharedDispatcher = undefined;
-  sharedDispatcherInsecure = false;
 }

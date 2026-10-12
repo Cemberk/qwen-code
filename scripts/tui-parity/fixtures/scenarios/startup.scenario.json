@@ -1,6 +1,6 @@
 {
   "id": "startup-banner",
-  "description": "Startup/banner: fixed (OpenTUI) must not full-clear or duplicate the banner vs base (Ink).",
+  "description": "Startup/banner: fixed must not full-clear or duplicate the banner vs base.",
   "proves": "fixed side startup emits no more full-screen clears / duplicate live-output than base under identical terminal geometry.",
   "doesNotProve": "model-streaming behavior (no model stream in this scenario); visual identity.",
   "terminal": { "rows": 24, "columns": 80 },

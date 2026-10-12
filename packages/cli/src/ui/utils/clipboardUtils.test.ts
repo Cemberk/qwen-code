@@ -21,18 +21,12 @@ import { join } from 'node:path';
 const TEST_DIR = join(tmpdir(), `qwen-clipboard-test-${process.pid}`);
 
 // Use vi.hoisted to define mock functions before vi.mock is hoisted
-const { mockSpawn, mockExecSync, clipboardMockState, mockDebugLogger } =
+const { mockSpawn, mockExecFile, mockExec, mockExecSync, mockDebugLogger } =
   vi.hoisted(() => ({
     mockSpawn: vi.fn(),
+    mockExecFile: vi.fn(),
+    mockExec: vi.fn(),
     mockExecSync: vi.fn(),
-    clipboardMockState: {
-      failLoad: false,
-      loadDelayMs: 0,
-      // The module resolves, but using it still throws - the shape of a native
-      // addon built against a different Node ABI.
-      throwOnConstruct: false,
-      throwOnHasFormat: false,
-    },
     // clipboardUtils records every failure it diagnoses through
     // createDebugLogger, which is a no-op without an active debug session, so
     // the diagnostics are only assertable through a spy.
@@ -45,51 +39,18 @@ const { mockSpawn, mockExecSync, clipboardMockState, mockDebugLogger } =
     },
   }));
 
-// Mock @teddyzhu/clipboard
-vi.mock('@teddyzhu/clipboard', async () => {
-  if (clipboardMockState.loadDelayMs > 0) {
-    await new Promise((resolve) =>
-      setTimeout(resolve, clipboardMockState.loadDelayMs),
-    );
-  }
-  if (clipboardMockState.failLoad) {
-    throw new Error('native clipboard module missing');
-  }
-  // Both exports share one implementation so the throw flags apply no matter
-  // which shape the caller destructures. The flags are read per call, not per
-  // factory evaluation.
-  const ClipboardManager = vi.fn().mockImplementation(() => {
-    if (clipboardMockState.throwOnConstruct) {
-      throw new Error('native clipboard addon ABI mismatch');
-    }
-    return {
-      hasFormat: vi.fn().mockImplementation(() => {
-        if (clipboardMockState.throwOnHasFormat) {
-          throw new Error('native clipboard addon ABI mismatch');
-        }
-        return false;
-      }),
-      getImageData: vi.fn().mockReturnValue({ data: null }),
-    };
-  });
-  return {
-    default: { ClipboardManager },
-    ClipboardManager,
-  };
-});
-
 // Mock node:child_process
 vi.mock('node:child_process', () => ({
   default: {
     spawn: mockSpawn,
     execSync: mockExecSync,
-    exec: vi.fn(),
-    execFile: vi.fn(),
+    exec: mockExec,
+    execFile: mockExecFile,
   },
   spawn: mockSpawn,
   execSync: mockExecSync,
-  exec: vi.fn(),
-  execFile: vi.fn(),
+  exec: mockExec,
+  execFile: mockExecFile,
 }));
 
 // Swap only the logger factory; every other core export is passed through, so
@@ -315,10 +276,6 @@ describe('clipboardUtils', () => {
       );
     await realFs.rm(TEST_DIR, { recursive: true, force: true });
 
-    clipboardMockState.failLoad = false;
-    clipboardMockState.loadDelayMs = 0;
-    clipboardMockState.throwOnConstruct = false;
-    clipboardMockState.throwOnHasFormat = false;
     vi.resetModules();
     vi.clearAllMocks();
 
@@ -330,7 +287,6 @@ describe('clipboardUtils', () => {
     cleanupOldClipboardImages = mod.cleanupOldClipboardImages;
     writeOsc52 = mod.writeOsc52;
     isWaylandSession = mod.isWaylandSession;
-    mod.resetLinuxClipboardTool();
     // Set up Wayland env as default
     vi.stubEnv('WAYLAND_DISPLAY', 'wayland-0');
     vi.stubEnv('XDG_SESSION_TYPE', undefined as unknown as string);
@@ -371,18 +327,16 @@ describe('clipboardUtils', () => {
     it('uses wl-paste for a case-insensitive Wayland session type', async () => {
       vi.stubEnv('XDG_SESSION_TYPE', 'Wayland');
       vi.stubEnv('WAYLAND_DISPLAY', '');
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/wl-paste'));
       mockSpawn.mockReturnValue(createMockChild('image/png\n', 0));
 
       await clipboardHasImage();
 
-      expect(mockExecSync).toHaveBeenCalledWith('command -v wl-paste', {
-        stdio: 'ignore',
+      expect(mockSpawn).toHaveBeenCalledWith('wl-paste', ['--list-types'], {
+        stdio: ['ignore', 'pipe', 'pipe'],
       });
     });
 
     it('should return true when clipboard contains image', async () => {
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/wl-paste'));
       const mockChild = createMockChild('image/png\nimage/bmp\n', 0);
       mockSpawn.mockReturnValue(mockChild);
 
@@ -391,7 +345,6 @@ describe('clipboardUtils', () => {
     });
 
     it('should return false when clipboard does not contain image', async () => {
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/wl-paste'));
       const mockChild = createMockChild('text/plain\n', 0);
       mockSpawn.mockReturnValue(mockChild);
 
@@ -400,9 +353,7 @@ describe('clipboardUtils', () => {
     });
 
     it('should return false when wl-paste is not found', async () => {
-      mockExecSync.mockImplementation(() => {
-        throw new Error('command not found');
-      });
+      mockSpawn.mockReturnValue(createSpawnErrorChild());
 
       const result = await clipboardHasImage();
       expect(result).toBe(false);
@@ -413,9 +364,9 @@ describe('clipboardUtils', () => {
 
   describe('clipboardHasImage onUnavailable on Linux', () => {
     it('notifies when there is no display server to reach a tool through', async () => {
-      // getLinuxClipboardTool() exit (a): not a Wayland session, no
-      // XDG_SESSION_TYPE and no DISPLAY, so it returns null without ever
-      // probing for wl-paste/xclip.
+      // getLinuxClipboardTool(): not a Wayland session, no XDG_SESSION_TYPE
+      // and no DISPLAY, so it returns null without ever running
+      // wl-paste/xclip.
       vi.stubEnv('WAYLAND_DISPLAY', undefined as unknown as string);
       vi.stubEnv('XDG_SESSION_TYPE', undefined as unknown as string);
       vi.stubEnv('DISPLAY', undefined as unknown as string);
@@ -423,34 +374,10 @@ describe('clipboardUtils', () => {
       const onUnavailable = vi.fn();
       await expect(clipboardHasImage(onUnavailable)).resolves.toBe(false);
       expect(onUnavailable).toHaveBeenCalledOnce();
-      expect(mockExecSync).not.toHaveBeenCalled();
-    });
-
-    it('notifies when the tool probe fails on X11', async () => {
-      // getLinuxClipboardTool() exit (b): display env is present so xclip is
-      // selected, but `command -v xclip` throws because it is not installed.
-      setupX11Env();
-      mockExecSync.mockImplementation(() => {
-        throw new Error('command not found');
-      });
-
-      const onUnavailable = vi.fn();
-      await expect(clipboardHasImage(onUnavailable)).resolves.toBe(false);
-      expect(onUnavailable).toHaveBeenCalledOnce();
-    });
-
-    it('notifies when the tool probe fails on Wayland', async () => {
-      mockExecSync.mockImplementation(() => {
-        throw new Error('command not found');
-      });
-
-      const onUnavailable = vi.fn();
-      await expect(clipboardHasImage(onUnavailable)).resolves.toBe(false);
-      expect(onUnavailable).toHaveBeenCalledOnce();
+      expect(mockSpawn).not.toHaveBeenCalled();
     });
 
     it('stays quiet when the clipboard holds an image', async () => {
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/wl-paste'));
       mockSpawn.mockReturnValue(createMockChild('image/png\n', 0));
 
       const onUnavailable = vi.fn();
@@ -460,35 +387,19 @@ describe('clipboardUtils', () => {
 
     it('stays quiet when the clipboard holds only text', async () => {
       // "no image on the clipboard" is benign and must not nag the user.
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/wl-paste'));
       mockSpawn.mockReturnValue(createMockChild('text/plain\n', 0));
 
       const onUnavailable = vi.fn();
       await expect(clipboardHasImage(onUnavailable)).resolves.toBe(false);
       expect(onUnavailable).not.toHaveBeenCalled();
     });
-
-    it('still notifies on the non-Linux native module path', async () => {
-      clipboardMockState.failLoad = true;
-      vi.resetModules();
-      const mod = await import('./clipboardUtils.js');
-      Object.defineProperty(process, 'platform', {
-        value: 'darwin',
-        configurable: true,
-        writable: true,
-      });
-
-      const onUnavailable = vi.fn();
-      await expect(mod.clipboardHasImage(onUnavailable)).resolves.toBe(false);
-      expect(onUnavailable).toHaveBeenCalledOnce();
-    });
   });
 
   // ─── Linux tool found but its query fails (#12505 finding 1) ──
-  // getLinuxClipboardTool() only probes `command -v`; it never touches the
-  // display server, so the probe can pass while the actual clipboard query
-  // fails (dead/stale X server, compositor socket gone). Those failures must
-  // notify. Staying quiet is reserved for two benign answers: a successful
+  // getLinuxClipboardTool() only reads the session environment; it never
+  // touches the display server, so a tool can be selected while the actual
+  // clipboard query fails (dead/stale X server, compositor socket gone, tool
+  // not installed). Those failures must notify. Staying quiet is reserved for two benign answers: a successful
   // query that finds no image, and an empty clipboard (which also exits
   // non-zero, but is the tool answering correctly).
 
@@ -496,7 +407,6 @@ describe('clipboardUtils', () => {
     it('notifies when wl-paste --list-types exits non-zero', async () => {
       // No stderr to classify the exit, so it stays a query failure: the
       // default for an unexplained non-zero exit is to notify.
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/wl-paste'));
       mockSpawn.mockReturnValue(createMockChild('', 1));
 
       const onUnavailable = vi.fn();
@@ -505,7 +415,6 @@ describe('clipboardUtils', () => {
     });
 
     it('notifies when wl-paste fails to spawn', async () => {
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/wl-paste'));
       mockSpawn.mockReturnValue(createSpawnErrorChild());
 
       const onUnavailable = vi.fn();
@@ -530,7 +439,6 @@ describe('clipboardUtils', () => {
     });
 
     it('notifies when the wl-paste query times out', async () => {
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/wl-paste'));
       mockSpawn.mockReturnValue(createHangingChild());
 
       const onUnavailable = vi.fn();
@@ -549,7 +457,6 @@ describe('clipboardUtils', () => {
     }, 10000);
 
     it('notifies when spawning wl-paste itself throws', async () => {
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/wl-paste'));
       mockSpawn.mockImplementation(() => {
         throw new Error('spawn error');
       });
@@ -565,7 +472,6 @@ describe('clipboardUtils', () => {
       // is empty, so it cannot be classified as benign. The dead-X-server
       // wording itself is pinned further down in this block.
       setupX11Env();
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/xclip'));
       mockSpawn.mockReturnValue(createMockChild('', 1));
 
       const onUnavailable = vi.fn();
@@ -575,7 +481,6 @@ describe('clipboardUtils', () => {
 
     it('notifies when xclip fails to spawn on X11', async () => {
       setupX11Env();
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/xclip'));
       mockSpawn.mockReturnValue(createSpawnErrorChild());
 
       const onUnavailable = vi.fn();
@@ -595,7 +500,6 @@ describe('clipboardUtils', () => {
 
     it('notifies when the xclip query times out on X11', async () => {
       setupX11Env();
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/xclip'));
       mockSpawn.mockReturnValue(createHangingChild());
 
       const onUnavailable = vi.fn();
@@ -611,7 +515,6 @@ describe('clipboardUtils', () => {
 
     it('notifies when spawning xclip itself throws on X11', async () => {
       setupX11Env();
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/xclip'));
       mockSpawn.mockImplementation(() => {
         throw new Error('spawn error');
       });
@@ -627,7 +530,6 @@ describe('clipboardUtils', () => {
       // with no argument, so a misplaced notification could not fail there —
       // this closes that coverage gap.
       setupX11Env();
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/xclip'));
       mockSpawn.mockReturnValue(
         createMockChild('text/plain\nUTF8_STRING\n', 0),
       );
@@ -644,11 +546,10 @@ describe('clipboardUtils', () => {
     // tool version produces, and its upstream provenance, is documented once on
     // EMPTY_CLIPBOARD_STDERR_MARKERS rather than restated here; each case below
     // pins one of those wordings. Pressing the image-paste binding with an
-    // empty clipboard is routine, so it must not claim the native module is
-    // broken.
+    // empty clipboard is routine, so it must not claim the clipboard is
+    // unavailable.
 
     it('stays quiet when wl-paste exits non-zero because nothing is copied', async () => {
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/wl-paste'));
       mockSpawn.mockReturnValue(createMockChild('', 1, 'Nothing is copied\n'));
 
       const onUnavailable = vi.fn();
@@ -661,7 +562,6 @@ describe('clipboardUtils', () => {
     });
 
     it('stays quiet when wl-paste 1.x exits non-zero with "No selection"', async () => {
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/wl-paste'));
       mockSpawn.mockReturnValue(createMockChild('', 1, 'No selection\n'));
 
       const onUnavailable = vi.fn();
@@ -677,7 +577,6 @@ describe('clipboardUtils', () => {
       // onUnavailable and spends the session's one-shot notify latch on a
       // false alarm, silencing the genuine failure this PR exists to report.
       setupX11Env();
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/xclip'));
       mockSpawn.mockReturnValue(
         createMockChild('', 1, 'Error: target TARGETS not available\n'),
       );
@@ -691,7 +590,6 @@ describe('clipboardUtils', () => {
       // Unreleased xclip git master wording, kept so the marker set covers
       // both the shipped and the in-development spelling.
       setupX11Env();
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/xclip'));
       mockSpawn.mockReturnValue(
         createMockChild(
           '',
@@ -707,7 +605,6 @@ describe('clipboardUtils', () => {
 
     it('still notifies when wl-paste cannot reach the Wayland server', async () => {
       // Real failure, same exit code 1: the compositor socket is gone.
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/wl-paste'));
       mockSpawn.mockReturnValue(
         createMockChild(
           '',
@@ -732,7 +629,6 @@ describe('clipboardUtils', () => {
       // Real failure, same exit code as an empty clipboard: xcprint.c
       // `errxdisplay()` prints this and exits EXIT_FAILURE.
       setupX11Env();
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/xclip'));
       mockSpawn.mockReturnValue(
         createMockChild('', 1, "xclip: Error: Can't open display: :0\n"),
       );
@@ -752,7 +648,6 @@ describe('clipboardUtils', () => {
       // anything to stderr: the user is notified, so the debug log is the only
       // place the reason can come from.
       setupX11Env();
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/xclip'));
       mockSpawn.mockReturnValue(createMockChild('', 1));
 
       await expect(clipboardHasImage(vi.fn())).resolves.toBe(false);
@@ -762,7 +657,6 @@ describe('clipboardUtils', () => {
     });
 
     it('records the exit code when wl-paste --list-types fails silently', async () => {
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/wl-paste'));
       mockSpawn.mockReturnValue(createMockChild('', 1));
 
       await expect(clipboardHasImage(vi.fn())).resolves.toBe(false);
@@ -781,7 +675,6 @@ describe('clipboardUtils', () => {
 
     describe('clipboardHasImage', () => {
       it('should detect xclip as the clipboard tool on X11', async () => {
-        mockExecSync.mockReturnValue(Buffer.from('/usr/bin/xclip'));
         const mockChild = createMockChild('image/png\nTARGETS\n', 0);
         mockSpawn.mockReturnValue(mockChild);
 
@@ -798,7 +691,6 @@ describe('clipboardUtils', () => {
       });
 
       it('should return false when xclip reports no image types', async () => {
-        mockExecSync.mockReturnValue(Buffer.from('/usr/bin/xclip'));
         const mockChild = createMockChild('text/plain\nUTF8_STRING\n', 0);
         mockSpawn.mockReturnValue(mockChild);
 
@@ -807,9 +699,7 @@ describe('clipboardUtils', () => {
       });
 
       it('should return false when xclip is not found', async () => {
-        mockExecSync.mockImplementation(() => {
-          throw new Error('command not found');
-        });
+        mockSpawn.mockReturnValue(createSpawnErrorChild());
 
         const result = await clipboardHasImage();
         expect(result).toBe(false);
@@ -818,9 +708,7 @@ describe('clipboardUtils', () => {
 
     describe('saveClipboardImage', () => {
       it('should return null when xclip is not found', async () => {
-        mockExecSync.mockImplementation(() => {
-          throw new Error('command not found');
-        });
+        mockSpawn.mockImplementation(() => createSpawnErrorChild());
 
         const result = await saveClipboardImage(TEST_DIR);
         expect(result).toBe(null);
@@ -843,8 +731,6 @@ describe('clipboardUtils', () => {
     // and the "python3 PIL conversion fails" test verifies error handling.
 
     it('should return null when python3 PIL conversion fails', async () => {
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/wl-paste'));
-
       let callCount = 0;
       mockSpawn.mockImplementation(() => {
         callCount++;
@@ -901,8 +787,6 @@ describe('clipboardUtils', () => {
     });
 
     it('should prefer PNG over BMP when both are available', async () => {
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/wl-paste'));
-
       let callCount = 0;
       const spawnCalls: Array<{ command: string; args: string[] }> = [];
       mockSpawn.mockImplementation((command: string, args: string[]) => {
@@ -966,10 +850,6 @@ describe('clipboardUtils', () => {
   // ─── saveFromCommand error path tests ─────────────────────────
 
   describe('saveFromCommand error paths', () => {
-    beforeEach(() => {
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/wl-paste'));
-    });
-
     it('should return null on spawn timeout (5s)', async () => {
       let callCount = 0;
       mockSpawn.mockImplementation(() => {
@@ -1080,17 +960,14 @@ describe('clipboardUtils', () => {
 
   describe('saveClipboardImage', () => {
     it('should return null when no clipboard tool is available', async () => {
-      mockExecSync.mockImplementation(() => {
-        throw new Error('command not found');
-      });
+      vi.stubEnv('WAYLAND_DISPLAY', undefined as unknown as string);
 
       const result = await saveClipboardImage(TEST_DIR);
       expect(result).toBe(null);
+      expect(mockSpawn).not.toHaveBeenCalled();
     });
 
     it('should return null on spawn error during list-types', async () => {
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/wl-paste'));
-
       // Mock spawn to throw an error
       mockSpawn.mockImplementation(() => {
         throw new Error('spawn error');
@@ -1104,7 +981,6 @@ describe('clipboardUtils', () => {
       // saveFileWithWlPaste calls getWlPasteImageTypes without an
       // onUnavailable callback, so this log line is the only trace a
       // synchronous spawn throw (EMFILE under fd pressure) leaves behind.
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/wl-paste'));
       const spawnError = new Error('spawn EMFILE');
       mockSpawn.mockImplementation(() => {
         throw spawnError;
@@ -1137,130 +1013,210 @@ describe('clipboardUtils', () => {
     });
   });
 
-  describe('macOS/Windows fallback', () => {
-    it('notifies after a cached native module load failure', async () => {
-      clipboardMockState.failLoad = true;
-      vi.resetModules();
-      const mod = await import('./clipboardUtils.js');
+  // ─── macOS / Windows: osascript and PowerShell through execFile ───
+
+  describe('macOS and Windows', () => {
+    function setPlatform(platform: NodeJS.Platform) {
       Object.defineProperty(process, 'platform', {
-        value: 'darwin',
+        value: platform,
         configurable: true,
         writable: true,
       });
+    }
 
-      await expect(mod.clipboardHasImage()).resolves.toBe(false);
-      const onUnavailable = vi.fn();
-      await expect(mod.clipboardHasImage(onUnavailable)).resolves.toBe(false);
-      expect(onUnavailable).toHaveBeenCalledOnce();
+    // Answers through the execFile callback the way Node does once the helper
+    // exits: an error for a helper that could not run, failed, or timed out.
+    function execFileAnswers(stdout: string, error: Error | null = null) {
+      mockExecFile.mockImplementation(
+        (
+          _file: string,
+          _args: string[],
+          _options: object,
+          callback: (err: Error | null, out: string, errOut: string) => void,
+        ) => {
+          process.nextTick(() => callback(error, stdout, ''));
+        },
+      );
+    }
+
+    function lastExecFileCall() {
+      const [file, args, options] = mockExecFile.mock.calls.at(-1)!;
+      return {
+        file: file as string,
+        args: args as string[],
+        options: options as { env?: NodeJS.ProcessEnv; shell?: unknown },
+      };
+    }
+
+    afterEach(() => {
+      // No path may reach a shell: exec/execSync stay unused, and no
+      // execFile/spawn call opts into one.
+      expect(mockExec).not.toHaveBeenCalled();
+      expect(mockExecSync).not.toHaveBeenCalled();
+      for (const call of [
+        ...mockExecFile.mock.calls,
+        ...mockSpawn.mock.calls,
+      ]) {
+        expect(call[2]).not.toHaveProperty('shell');
+      }
     });
 
-    it('notifies when the native module loads but constructing it throws', async () => {
-      clipboardMockState.throwOnConstruct = true;
-      vi.resetModules();
-      const mod = await import('./clipboardUtils.js');
-      Object.defineProperty(process, 'platform', {
-        value: 'darwin',
-        configurable: true,
-        writable: true,
-      });
-      const onUnavailable = vi.fn();
+    it('checks the macOS clipboard with osascript and a fixed argv', async () => {
+      setPlatform('darwin');
+      execFileAnswers('true\n');
 
-      await expect(mod.clipboardHasImage(onUnavailable)).resolves.toBe(false);
-      expect(onUnavailable).toHaveBeenCalledOnce();
+      const onUnavailable = vi.fn();
+      await expect(clipboardHasImage(onUnavailable)).resolves.toBe(true);
+      expect(onUnavailable).not.toHaveBeenCalled();
+      expect(mockExecFile).toHaveBeenCalledOnce();
+      const { file, args } = lastExecFileCall();
+      expect(file).toBe('osascript');
+      expect(args).toEqual([
+        '-l',
+        'JavaScript',
+        '-e',
+        expect.stringContaining(
+          '$.NSImage.canInitWithPasteboard($.NSPasteboard.generalPasteboard)',
+        ),
+      ]);
+      expect(mockSpawn).not.toHaveBeenCalled();
     });
 
-    it('notifies when the native module loads but hasFormat throws', async () => {
-      clipboardMockState.throwOnHasFormat = true;
-      vi.resetModules();
-      const mod = await import('./clipboardUtils.js');
-      Object.defineProperty(process, 'platform', {
-        value: 'darwin',
-        configurable: true,
-        writable: true,
-      });
-      const onUnavailable = vi.fn();
+    it('saves the macOS image with the path as an argument, not in the script', async () => {
+      setPlatform('darwin');
+      execFileAnswers('true\n');
 
-      await expect(mod.clipboardHasImage(onUnavailable)).resolves.toBe(false);
-      expect(onUnavailable).toHaveBeenCalledOnce();
+      const saved = await saveClipboardImage(TEST_DIR);
+
+      expect(saved).toMatch(/clipboard-\d+-[0-9a-f-]+\.png$/);
+      expect(saved!.startsWith(join(TEST_DIR, 'clipboard'))).toBe(true);
+      const { file, args } = lastExecFileCall();
+      expect(file).toBe('osascript');
+      expect(args).toEqual([
+        '-l',
+        'JavaScript',
+        '-e',
+        expect.stringContaining('writeToFileAtomically(argv[0], false)'),
+        saved,
+      ]);
+      expect(args[3]).not.toContain(TEST_DIR);
     });
 
-    it('does not notify when the clipboard read succeeds but holds no image', async () => {
-      vi.resetModules();
-      const mod = await import('./clipboardUtils.js');
-      Object.defineProperty(process, 'platform', {
-        value: 'darwin',
-        configurable: true,
-        writable: true,
-      });
-      const onUnavailable = vi.fn();
+    it('checks the Windows clipboard with PowerShell and a fixed argv', async () => {
+      setPlatform('win32');
+      execFileAnswers('True\r\n');
 
-      await expect(mod.clipboardHasImage(onUnavailable)).resolves.toBe(false);
+      await expect(clipboardHasImage()).resolves.toBe(true);
+      const { file, args, options } = lastExecFileCall();
+      expect(file).toBe('powershell');
+      expect(args).toEqual([
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        expect.stringContaining(
+          '[System.Windows.Forms.Clipboard]::ContainsImage()',
+        ),
+      ]);
+      expect(options.env).toBeUndefined();
+    });
+
+    it('saves the Windows image with the path in the environment, not in the script', async () => {
+      setPlatform('win32');
+      execFileAnswers('True\r\n');
+
+      const saved = await saveClipboardImage(TEST_DIR);
+
+      expect(saved).toMatch(/clipboard-\d+-[0-9a-f-]+\.png$/);
+      const { file, args, options } = lastExecFileCall();
+      expect(file).toBe('powershell');
+      expect(args).toEqual([
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        expect.stringContaining('$image.Save($env:QWEN_CLIPBOARD_IMAGE_PATH'),
+      ]);
+      expect(args[3]).not.toContain(TEST_DIR);
+      expect(options.env?.['QWEN_CLIPBOARD_IMAGE_PATH']).toBe(saved);
+    });
+
+    it('creates the clipboard directory owner-only', async () => {
+      setPlatform('darwin');
+      execFileAnswers('true\n');
+
+      await saveClipboardImage(TEST_DIR);
+
+      const { mkdir } = await import('node:fs/promises');
+      expect(vi.mocked(mkdir)).toHaveBeenCalledWith(
+        join(TEST_DIR, 'clipboard'),
+        { recursive: true, mode: 0o700 },
+      );
+    });
+
+    it('stays quiet when the clipboard holds no image', async () => {
+      setPlatform('win32');
+      execFileAnswers('False\r\n');
+
+      const onUnavailable = vi.fn();
+      await expect(clipboardHasImage(onUnavailable)).resolves.toBe(false);
       expect(onUnavailable).not.toHaveBeenCalled();
     });
 
-    it('shares an in-flight native module load without false errors', async () => {
-      clipboardMockState.loadDelayMs = 20;
-      vi.resetModules();
-      const mod = await import('./clipboardUtils.js');
-      Object.defineProperty(process, 'platform', {
-        value: 'darwin',
-        configurable: true,
-        writable: true,
-      });
+    it('returns null and removes the file when the helper saves nothing', async () => {
+      setPlatform('darwin');
+      execFileAnswers('false\n');
+
+      await expect(saveClipboardImage(TEST_DIR)).resolves.toBe(null);
+      const { unlink } = await import('node:fs/promises');
+      expect(vi.mocked(unlink)).toHaveBeenCalledWith(
+        lastExecFileCall().args[4],
+      );
+    });
+
+    it.each(['darwin', 'win32'] as const)(
+      'notifies when the %s helper cannot run',
+      async (platform) => {
+        setPlatform(platform);
+        execFileAnswers('', new Error('spawn ENOENT'));
+
+        const onUnavailable = vi.fn();
+        await expect(clipboardHasImage(onUnavailable)).resolves.toBe(false);
+        expect(onUnavailable).toHaveBeenCalledOnce();
+        await expect(saveClipboardImage(TEST_DIR)).resolves.toBe(null);
+      },
+    );
+
+    it('notifies without running anything on other platforms', async () => {
+      setPlatform('freebsd');
+
       const onUnavailable = vi.fn();
-
-      await expect(
-        Promise.all([
-          mod.clipboardHasImage(onUnavailable),
-          mod.clipboardHasImage(onUnavailable),
-        ]),
-      ).resolves.toEqual([false, false]);
-      expect(onUnavailable).not.toHaveBeenCalled();
+      await expect(clipboardHasImage(onUnavailable)).resolves.toBe(false);
+      expect(onUnavailable).toHaveBeenCalledOnce();
+      await expect(saveClipboardImage(TEST_DIR)).resolves.toBe(null);
+      expect(mockExecFile).not.toHaveBeenCalled();
+      expect(mockSpawn).not.toHaveBeenCalled();
     });
 
-    it('should return false on non-linux platform when @teddyzhu/clipboard fails', async () => {
-      const originalPlatform = process.platform;
-      Object.defineProperty(process, 'platform', {
-        value: 'darwin',
-        configurable: true,
-        writable: true,
-      });
+    it('runs wl-paste and xclip through spawn with fixed argvs and no shell on Linux', async () => {
+      mockSpawn.mockReturnValue(createMockChild('image/png\n', 0));
+      await expect(clipboardHasImage()).resolves.toBe(true);
+      setupX11Env();
+      mockSpawn.mockReturnValue(createMockChild('image/png\n', 0));
+      await expect(clipboardHasImage()).resolves.toBe(true);
 
-      // @teddyzhu/clipboard mock returns false by default
-      const result = await clipboardHasImage();
-      expect(result).toBe(false);
-
-      Object.defineProperty(process, 'platform', {
-        value: originalPlatform,
-        configurable: true,
-        writable: true,
-      });
-    });
-
-    it('should return null on non-linux platform when saving fails', async () => {
-      const originalPlatform = process.platform;
-      Object.defineProperty(process, 'platform', {
-        value: 'win32',
-        configurable: true,
-        writable: true,
-      });
-
-      // @teddyzhu/clipboard mock returns false by default
-      const result = await saveClipboardImage(TEST_DIR);
-      expect(result).toBe(null);
-
-      Object.defineProperty(process, 'platform', {
-        value: originalPlatform,
-        configurable: true,
-        writable: true,
-      });
+      expect(mockSpawn.mock.calls).toEqual([
+        ['wl-paste', ['--list-types'], { stdio: ['ignore', 'pipe', 'pipe'] }],
+        [
+          'xclip',
+          ['-selection', 'clipboard', '-t', 'TARGETS', '-o'],
+          { stdio: ['ignore', 'pipe', 'pipe'] },
+        ],
+      ]);
+      expect(mockExecFile).not.toHaveBeenCalled();
     });
   });
 
   describe('cache behavior', () => {
     it('should reset wl-paste cache between clipboardHasImage calls', async () => {
-      mockExecSync.mockReturnValue(Buffer.from('/usr/bin/wl-paste'));
-
       // First call: returns image
       const mockChild1 = createMockChild('image/png\n', 0);
       mockSpawn.mockReturnValue(mockChild1);

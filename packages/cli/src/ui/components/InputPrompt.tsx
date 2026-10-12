@@ -608,7 +608,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       {
         type: 'error',
         text: t(
-          'Clipboard image paste is unavailable because the native clipboard module could not be loaded. Reinstall Qwen Code or use the npm installation method.',
+          'Clipboard image paste is unavailable because the system clipboard could not be read.',
         ),
       },
       Date.now(),
@@ -666,7 +666,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
         try {
           const stats = await fs.stat(sourcePath);
           if (!stats.isFile()) continue;
-          await fs.mkdir(clipboardDir, { recursive: true });
+          await fs.mkdir(clipboardDir, { recursive: true, mode: 0o700 });
           const destPath = path.join(
             clipboardDir,
             `clipboard-${Date.now()}-${attachments.length}${path.extname(sourcePath)}`,

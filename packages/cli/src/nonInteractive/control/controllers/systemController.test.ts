@@ -62,7 +62,6 @@ function createContext(
     permissionMode: 'default',
     sdkCanUseToolTimeoutMs: undefined,
     sdkMcpServers: new Set<string>(),
-    mcpClients: new Map(),
     inputClosed: false,
     ...overrides,
   };

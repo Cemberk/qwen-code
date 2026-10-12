@@ -1070,11 +1070,6 @@ export default {
   Enable: 'Включить',
   disabled: 'отключен',
   enabled: 'включен',
-  'disabled (bare mode)': 'отключен (минимальный режим)',
-  'disabled (safe mode)': 'отключен (безопасный режим)',
-  'disabled (disableAllHooks)': 'отключен (disableAllHooks)',
-  'disabled (folder not trusted)': 'отключен (папка не доверенная)',
-  'disabled (turned off for this session)': 'отключен (выключен в этой сессии)',
   Reconnect: 'Переподключить',
   'View tools': 'Просмотреть инструменты',
   'Error:': 'Ошибка:',
@@ -1154,7 +1149,6 @@ export default {
   // ============================================================================
   'Select Model': 'Выбрать модель',
   'API Key': 'API Key',
-  '(default)': '(по умолчанию)',
   '(not set)': '(не задано)',
   Modality: 'Модальность',
   'Context Window': 'Контекстное окно',
@@ -1928,7 +1922,6 @@ export default {
     'Показать панель статистики использования.',
 
   // Stats Dashboard — keyboard hints (not translated)
-  'tab \xB7 esc': 'tab \xB7 esc',
   'tab \xB7 r dates \xB7 \u2190\u2192 month \xB7 esc':
     'tab \xB7 r dates \xB7 \u2190\u2192 month \xB7 esc',
   'tab \xB7 r dates \xB7 esc': 'tab \xB7 r dates \xB7 esc',

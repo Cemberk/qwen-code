@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@qwen-code/qwen-code-core';
+import type { Config, DiscoveredMCPPrompt } from '@qwen-code/qwen-code-core';
 import {
   getErrorMessage,
   getMCPServerPrompts,
@@ -16,7 +16,8 @@ import type {
 } from '../ui/commands/types.js';
 import { CommandKind } from '../ui/commands/types.js';
 import type { ICommandLoader } from './types.js';
-import type { PromptArgument } from '@modelcontextprotocol/sdk/types.js';
+
+type PromptArgument = NonNullable<DiscoveredMCPPrompt['arguments']>[number];
 
 // Shared by completion() and parseArgs() so the named-arg grammar stays in
 // sync between tab-completion and execution. Declared without `/g`; callers

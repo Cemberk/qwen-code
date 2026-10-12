@@ -11,6 +11,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Config } from '../config/config.js';
 import type { PermissionManager } from '../permissions/permission-manager.js';
 import { ToolNames } from '../tools/tool-names.js';
+import { GlobTool } from '../tools/glob.js';
+import {
+  buildPermissionCheckContext,
+  evaluatePermissionRules,
+} from '../core/permission-helpers.js';
+import { WorkspaceContext } from '../utils/workspaceContext.js';
 import {
   createMemoryScopedAgentConfig,
   isAllowedMemoryPath,
@@ -42,6 +48,7 @@ describe('createMemoryScopedAgentConfig', () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllEnvs();
     if (originalMemoryBase === undefined) {
       delete process.env['QWEN_CODE_MEMORY_BASE_DIR'];
     } else {
@@ -509,6 +516,95 @@ describe('createMemoryScopedAgentConfig', () => {
         toolName: ToolNames.SHELL,
         command: 'touch bad',
       }),
+    ).resolves.toBe('deny');
+  });
+
+  it('keeps the extraction and dream agents reading memory through explicit allows', async () => {
+    // Global (not repo-local) memory, which lives outside the workspace.
+    vi.stubEnv('QWEN_CODE_MEMORY_LOCAL', '');
+    clearAutoMemoryRootCache();
+    const memoryDir = path.join(getAutoMemoryRoot(projectRoot), 'project');
+    await fs.mkdir(memoryDir, { recursive: true });
+    const workspace = new WorkspaceContext(projectRoot);
+    const base = {
+      getTargetDir: () => projectRoot,
+      getWorkspaceContext: () => workspace,
+      getFileService: () => ({}),
+      getPermissionManager: () => undefined,
+    } as unknown as Config;
+    const agents = {
+      // Options passed by extractionAgentPlanner and dreamAgentPlanner.
+      extraction: {
+        protectPinnedMemory: true,
+        restrictReadsToMemoryPaths: true,
+      },
+      dream: {
+        allowShell: true,
+        includeUserMemory: false,
+        protectPinnedMemory: true,
+      },
+    };
+    // The memory roots are outside the workspace, so the tool itself asks.
+    const glob = new GlobTool(base).build({ pattern: '*.md', path: memoryDir });
+    expect(await glob.getDefaultPermission()).toBe('ask');
+
+    for (const options of Object.values(agents)) {
+      const pm = permissionManager(
+        createMemoryScopedAgentConfig(base, projectRoot, options),
+      );
+      for (const toolName of [
+        ToolNames.GLOB,
+        ToolNames.GREP,
+        ToolNames.LS,
+        ToolNames.READ_FILE,
+      ]) {
+        const ctx = buildPermissionCheckContext(
+          toolName,
+          { path: memoryDir },
+          projectRoot,
+        );
+        const { finalPermission } = await evaluatePermissionRules(
+          pm,
+          'ask',
+          ctx,
+        );
+        expect(finalPermission).toBe('allow');
+      }
+    }
+
+    // The dream agent greps transcripts through its read-only shell allow.
+    const dream = permissionManager(
+      createMemoryScopedAgentConfig(base, projectRoot, agents.dream),
+    );
+    await expect(
+      dream.evaluate({
+        toolName: ToolNames.SHELL,
+        command: `grep -rn "term" ${path.join(tempDir, 'chats')}/ --include="*.jsonl" | tail -50`,
+        cwd: projectRoot,
+      }),
+    ).resolves.toBe('allow');
+  });
+
+  it('leaves reads outside the managed memory roots to the tool', async () => {
+    const dream = permissionManager(
+      createMemoryScopedAgentConfig({} as Config, projectRoot, {
+        allowShell: true,
+      }),
+    );
+    await expect(
+      dream.evaluate({
+        toolName: ToolNames.GLOB,
+        filePath: path.join(tempDir, 'memory', 'settings.json'),
+      }),
+    ).resolves.toBe('default');
+
+    const extraction = permissionManager(
+      createMemoryScopedAgentConfig({} as Config, projectRoot, {
+        restrictReadsToMemoryPaths: true,
+      }),
+    );
+    await expect(
+      extraction.evaluate({ toolName: ToolNames.GLOB, filePath: projectRoot }),
     ).resolves.toBe('deny');
   });
 

@@ -11,6 +11,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { getMemoryBaseDir } from '../memory/paths.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import type { Config } from '../config/config.js';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
@@ -1013,6 +1014,14 @@ describe('GlobTool', () => {
       const invocation = globTool.build(params);
       const permission = await invocation.getDefaultPermission();
       expect(permission).toBe('ask');
+    });
+
+    it('should return ask for paths under the memory base dir', async () => {
+      const invocation = globTool.build({
+        pattern: '*',
+        path: path.join(getMemoryBaseDir(), 'projects'),
+      });
+      expect(await invocation.getDefaultPermission()).toBe('ask');
     });
   });
 });

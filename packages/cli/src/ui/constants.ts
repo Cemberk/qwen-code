@@ -43,26 +43,9 @@ export const ICON = {
   CROSS: `✖${_VS15}`,
 } as const;
 
-// cli-spinners' `dots`, the frames ink's responding spinner animates. Shared so
-// a frame or rate change cannot land in one renderer only.
-export const SPINNER_FRAMES = [
-  '⠋',
-  '⠙',
-  '⠹',
-  '⠸',
-  '⠼',
-  '⠴',
-  '⠦',
-  '⠧',
-  '⠇',
-  '⠏',
-];
-
-export const SPINNER_INTERVAL_MS = 80;
-
 /**
  * The frame drawn while a call is parked on a confirmation: ink's
- * `LoadingIndicator` passes it as `nonRespondingDisplay`, so both renderers stop
- * animating and show this one instead. Shared so the value cannot drift.
+ * `LoadingIndicator` passes it as `nonRespondingDisplay`, so the spinner stops
+ * animating and shows this one instead.
  */
 export const WAITING_SPINNER_FRAME = '⠏';

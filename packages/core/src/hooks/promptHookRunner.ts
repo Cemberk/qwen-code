@@ -9,13 +9,13 @@ import { createChildAbortController } from '../utils/abortController.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
 import { HookAbortError, HookTimeoutError } from './hook-errors.js';
 import { DEFAULT_PROMPT_HOOK_TIMEOUT_SECONDS } from './hook-timeout.js';
+import { HookEventName } from './types.js';
 import type {
   PromptHookConfig,
   LLMHookResponse,
   HookInput,
   HookOutput,
   HookExecutionResult,
-  HookEventName,
 } from './types.js';
 import type { Config } from '../config/config.js';
 import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
@@ -48,6 +48,20 @@ const LLMHookResponseSchema = z.object({
   reason: z.string().optional(),
   additionalContext: z.string().optional(),
 });
+
+/**
+ * Events whose prompt hook gates an action that has not happened yet. When
+ * such a hook cannot reach a decision (malformed model output, an error or a
+ * timeout) the action is blocked instead of let through unchecked. On every
+ * other event a failed hook blocks nothing: for Stop and SubagentStop a block
+ * would make the agent keep working on a result nobody judged.
+ */
+const FAIL_CLOSED_EVENTS: ReadonlySet<HookEventName> = new Set([
+  HookEventName.PreToolUse,
+  HookEventName.PermissionRequest,
+  HookEventName.UserPromptSubmit,
+  HookEventName.UserPromptExpansion,
+]);
 
 /**
  * Prompt Hook Runner - executes prompt hooks using LLM evaluation
@@ -138,6 +152,9 @@ export class PromptHookRunner {
       // message mentions an abort.
       if (error instanceof HookTimeoutError) {
         debugLogger.warn(`Prompt hook ${hookName} timed out: ${errorMessage}`);
+        if (FAIL_CLOSED_EVENTS.has(eventName)) {
+          return this.failClosed(hookConfig, eventName, errorMessage, duration);
+        }
         return {
           hookConfig,
           eventName,
@@ -157,6 +174,11 @@ export class PromptHookRunner {
           error: error instanceof Error ? error : new Error(errorMessage),
           duration,
         };
+      }
+
+      if (FAIL_CLOSED_EVENTS.has(eventName)) {
+        debugLogger.warn(`Prompt hook ${hookName} failed: ${errorMessage}`);
+        return this.failClosed(hookConfig, eventName, errorMessage, duration);
       }
 
       // Non-blocking error: Prompt hook failure should not block operations
@@ -394,31 +416,69 @@ export class PromptHookRunner {
       jsonStr = jsonMatch[1].trim();
     }
 
-    // Try to parse as JSON
+    let parsed: unknown;
     try {
-      const parsed = JSON.parse(jsonStr);
-      const validated = LLMHookResponseSchema.safeParse(parsed);
-
-      if (!validated.success) {
-        debugLogger.warn(
-          `LLM response validation failed: ${validated.error.message}`,
-        );
-        // Validation failed, default to allow (fail-open)
-        return {
-          ok: true,
-          reason: 'Response validation failed, defaulting to allow',
-        };
-      }
-
-      return validated.data;
+      parsed = JSON.parse(jsonStr);
     } catch {
       debugLogger.warn(`Failed to parse LLM response as JSON: ${text}`);
-      // Parse failed, default to allow (fail-open)
-      return {
-        ok: true,
-        reason: 'Failed to parse LLM response, defaulting to allow',
-      };
+      throw new Error('Model response is not valid JSON');
     }
+    const validated = LLMHookResponseSchema.safeParse(parsed);
+    if (!validated.success) {
+      debugLogger.warn(
+        `LLM response validation failed: ${validated.error.message}`,
+      );
+      throw new Error('Model response does not match the hook response format');
+    }
+    return validated.data;
+  }
+
+  /**
+   * The result for a hook on a {@link FAIL_CLOSED_EVENTS} event that could not
+   * reach a decision. It carries no `error`: an errored result is reported as
+   * a runner failure, which the event's caller treats as no decision.
+   */
+  private failClosed(
+    hookConfig: PromptHookConfig,
+    eventName: HookEventName,
+    errorMessage: string,
+    duration: number,
+  ): HookExecutionResult {
+    const hookName = hookConfig.name || 'prompt-hook';
+    return {
+      hookConfig,
+      eventName,
+      success: false,
+      outcome: 'blocking',
+      output: this.blockOutput(
+        eventName,
+        `Blocked because prompt hook "${hookName}" could not decide: ${errorMessage}`,
+      ),
+      duration,
+    };
+  }
+
+  private blockOutput(
+    eventName: HookEventName,
+    reason: string,
+    additionalContext?: string,
+  ): HookOutput {
+    return {
+      continue: false,
+      stopReason: reason,
+      decision: 'block',
+      reason,
+      hookSpecificOutput:
+        eventName === HookEventName.PermissionRequest
+          ? {
+              hookEventName: eventName,
+              decision: { behavior: 'deny', message: reason },
+              ...(additionalContext ? { additionalContext } : {}),
+            }
+          : additionalContext
+            ? { additionalContext }
+            : undefined,
+    };
   }
 
   /**
@@ -437,15 +497,11 @@ export class PromptHookRunner {
       const reason = response.reason || 'Blocked by prompt hook';
       debugLogger.info(`Prompt hook ${hookName} blocked: ${reason}`);
 
-      const output: HookOutput = {
-        continue: false,
-        stopReason: reason,
-        decision: 'block',
+      const output = this.blockOutput(
+        eventName,
         reason,
-        hookSpecificOutput: response.additionalContext
-          ? { additionalContext: response.additionalContext }
-          : undefined,
-      };
+        response.additionalContext,
+      );
 
       return {
         hookConfig,

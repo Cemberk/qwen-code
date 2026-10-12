@@ -6,7 +6,7 @@
 
 import * as fs from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
-import { execSync, spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createDebugLogger } from '@qwen-code/qwen-code-core';
@@ -57,41 +57,25 @@ export function writeOsc52(text: string): boolean {
   }
 }
 
-// Track which tool works on Linux to avoid redundant checks/failures
-let linuxClipboardTool: 'wl-paste' | 'xclip' | null | undefined;
-
 // Cache for wl-paste image types (reset after each paste operation)
 let cachedWlPasteImageTypes: string[] | null = null;
 
-// Cache for @teddyzhu/clipboard module (macOS/Windows fallback)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let clipboardModulePromise: Promise<any | null> | null = null;
-
-/**
- * Get and cache the @teddyzhu/clipboard module.
- * Only used on macOS/Windows as fallback for Linux platform-native tools.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function getClipboardModule(): Promise<any | null> {
-  if (!clipboardModulePromise) {
-    const modName = '@teddyzhu/clipboard';
-    clipboardModulePromise = import(modName).catch(() => {
-      debugLogger.error(
-        'Failed to load @teddyzhu/clipboard native module. Clipboard image features will be unavailable.',
-      );
-      return null;
-    });
-  }
-  return clipboardModulePromise;
-}
-
-/**
- * Reset the cached Linux clipboard tool. Used for testing.
- */
-export function resetLinuxClipboardTool(): void {
-  linuxClipboardTool = undefined;
-  cachedWlPasteImageTypes = null;
-}
+// osascript and PowerShell run these fixed scripts; the only variable input,
+// the output path, travels as an argument or environment variable.
+const MACOS_HAS_IMAGE_SCRIPT =
+  "ObjC.import('AppKit'); $.NSImage.canInitWithPasteboard($.NSPasteboard.generalPasteboard)";
+const MACOS_SAVE_IMAGE_SCRIPT = `ObjC.import('AppKit');
+function run(argv) {
+  const image = $.NSImage.alloc.initWithPasteboard($.NSPasteboard.generalPasteboard);
+  if (image.isNil()) return false;
+  const rep = $.NSBitmapImageRep.imageRepWithData(image.TIFFRepresentation);
+  return rep.representationUsingTypeProperties($.NSBitmapImageFileTypePNG, $({})).writeToFileAtomically(argv[0], false);
+}`;
+const POWERSHELL_ARGS = ['-NoProfile', '-NonInteractive', '-Command'];
+const WINDOWS_IMAGE_PATH_ENV = 'QWEN_CLIPBOARD_IMAGE_PATH';
+const WINDOWS_HAS_IMAGE_SCRIPT =
+  'Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Clipboard]::ContainsImage()';
+const WINDOWS_SAVE_IMAGE_SCRIPT = `Add-Type -AssemblyName System.Windows.Forms, System.Drawing; $image = [System.Windows.Forms.Clipboard]::GetImage(); if ($image) { $image.Save($env:${WINDOWS_IMAGE_PATH_ENV}, [System.Drawing.Imaging.ImageFormat]::Png); $true } else { $false }`;
 
 export function isWaylandSession(): boolean {
   return (
@@ -105,31 +89,56 @@ export function isWaylandSession(): boolean {
  * Handles WSL2 where XDG_SESSION_TYPE may be unset but WAYLAND_DISPLAY is set.
  */
 function getLinuxClipboardTool(): 'wl-paste' | 'xclip' | null {
-  if (linuxClipboardTool !== undefined) return linuxClipboardTool;
+  if (isWaylandSession()) return 'wl-paste';
+  if (process.env['XDG_SESSION_TYPE'] === 'x11' || process.env['DISPLAY']) {
+    return 'xclip';
+  }
+  return null;
+}
 
-  const sessionType = process.env['XDG_SESSION_TYPE'];
-  const display = process.env['DISPLAY'];
-
-  let toolName: 'wl-paste' | 'xclip' | null = null;
-
-  if (isWaylandSession()) {
-    toolName = 'wl-paste';
-  } else if (sessionType === 'x11' || display) {
-    toolName = 'xclip';
+/**
+ * Runs the macOS (osascript) or Windows (PowerShell) clipboard script with a
+ * fixed argument array and no shell: the image check, or the PNG save when
+ * `imagePath` is given. Resolves whether the script printed `true`, or null
+ * when the platform has no such tool or it could not run, failed, or timed
+ * out.
+ */
+function runNativeClipboardScript(imagePath?: string): Promise<boolean | null> {
+  let file: string;
+  let args: string[];
+  let env: NodeJS.ProcessEnv | undefined;
+  if (process.platform === 'darwin') {
+    file = 'osascript';
+    args = imagePath
+      ? ['-l', 'JavaScript', '-e', MACOS_SAVE_IMAGE_SCRIPT, imagePath]
+      : ['-l', 'JavaScript', '-e', MACOS_HAS_IMAGE_SCRIPT];
+  } else if (process.platform === 'win32') {
+    file = 'powershell';
+    args = [
+      ...POWERSHELL_ARGS,
+      imagePath ? WINDOWS_SAVE_IMAGE_SCRIPT : WINDOWS_HAS_IMAGE_SCRIPT,
+    ];
+    if (imagePath) {
+      env = { ...process.env, [WINDOWS_IMAGE_PATH_ENV]: imagePath };
+    }
   } else {
-    linuxClipboardTool = null;
-    return null;
+    return Promise.resolve(null);
   }
-
-  try {
-    execSync('command -v ' + toolName, { stdio: 'ignore' });
-    linuxClipboardTool = toolName;
-    return toolName;
-  } catch {
-    debugLogger.warn(`${toolName} not found`);
-    linuxClipboardTool = null;
-    return null;
-  }
+  return new Promise((resolve) => {
+    execFile(
+      file,
+      args,
+      { env, timeout: PROCESS_TIMEOUT_MS, windowsHide: true },
+      (error, stdout) => {
+        if (error) {
+          debugLogger.debug(`${file} failed:`, error);
+          resolve(null);
+          return;
+        }
+        resolve(stdout.trim().toLowerCase() === 'true');
+      },
+    );
+  });
 }
 
 /**
@@ -396,13 +405,13 @@ async function checkClipboardForImage(
 
 /**
  * Checks if the system clipboard contains an image.
- * Uses platform-native tools (wl-paste/xclip) on Linux.
+ * Uses platform-native tools: wl-paste/xclip on Linux, osascript on macOS,
+ * PowerShell on Windows.
  * @param onUnavailable Called when no clipboard backend can be reached: the
- *   macOS/Windows native module cannot load, Linux has no wl-paste/xclip, or
- *   the detected Linux tool's clipboard query fails. Not called when the
- *   query succeeds and the clipboard simply holds no image, nor when the tool
- *   reports an empty clipboard (which exits non-zero but is a correct
- *   answer).
+ *   platform tool is missing, fails, or times out, or Linux has no display
+ *   server. Not called when the query succeeds and the clipboard simply holds
+ *   no image, nor when a Linux tool reports an empty clipboard (which exits
+ *   non-zero but is a correct answer).
  * @returns true if clipboard contains an image
  */
 export async function clipboardHasImage(
@@ -426,9 +435,9 @@ export async function clipboardHasImage(
           onUnavailable,
         );
       }
-      // No usable clipboard tool: either there is no display server to reach
-      // one through, or the wl-paste/xclip probe failed. Report it instead of
-      // failing silently, so callers can tell "no image" from "no tool".
+      // No display server to reach a clipboard tool through. Report it
+      // instead of failing silently, so callers can tell "no image" from
+      // "no tool".
       onUnavailable?.();
     } catch (error) {
       debugLogger.error('Error checking clipboard for image:', error);
@@ -436,21 +445,9 @@ export async function clipboardHasImage(
     return false;
   }
 
-  try {
-    const mod = await getClipboardModule();
-    if (!mod) {
-      onUnavailable?.();
-      return false;
-    }
-    const clipboard = new mod.ClipboardManager();
-    return clipboard.hasFormat('image');
-  } catch (error) {
-    debugLogger.error('Error checking clipboard for image:', error);
-    // The module resolved but the call threw, so "no image" and "unreachable
-    // clipboard backend" would otherwise be indistinguishable to the caller.
-    onUnavailable?.();
-    return false;
-  }
+  const hasImage = await runNativeClipboardScript();
+  if (hasImage === null) onUnavailable?.();
+  return hasImage === true;
 }
 
 /**
@@ -685,7 +682,8 @@ async function saveFileWithXclip(tempFilePath: string): Promise<boolean> {
 
 /**
  * Saves the image from clipboard to a temporary file.
- * Uses platform-native tools (wl-paste/xclip) on Linux.
+ * Uses platform-native tools: wl-paste/xclip on Linux, osascript on macOS,
+ * PowerShell on Windows.
  * @param targetDir The target directory to create temp files within
  * @returns The path to the saved image file, or null if no image or error
  */
@@ -695,14 +693,14 @@ export async function saveClipboardImage(
   try {
     const baseDir = targetDir || process.cwd();
     const tempDir = path.join(baseDir, 'clipboard');
-    await fs.mkdir(tempDir, { recursive: true });
+    await fs.mkdir(tempDir, { recursive: true, mode: 0o700 });
     const timestamp = new Date().getTime();
+    const pngPath = path.join(
+      tempDir,
+      `clipboard-${timestamp}-${randomUUID()}.png`,
+    );
 
     if (process.platform === 'linux') {
-      const pngPath = path.join(
-        tempDir,
-        `clipboard-${timestamp}-${randomUUID()}.png`,
-      );
       const tool = getLinuxClipboardTool();
 
       if (tool === 'wl-paste') {
@@ -726,27 +724,19 @@ export async function saveClipboardImage(
       return null;
     }
 
-    const mod = await getClipboardModule();
-    if (!mod) return null;
-    const clipboard = new mod.ClipboardManager();
-
-    if (!clipboard.hasFormat('image')) {
-      return null;
+    if (await runNativeClipboardScript(pngPath)) {
+      try {
+        if ((await fs.stat(pngPath)).size > 0) return pngPath;
+      } catch {
+        /* ignore */
+      }
     }
-
-    const tempFilePath = path.join(
-      tempDir,
-      `clipboard-${timestamp}-${randomUUID()}.png`,
-    );
-    const imageData = clipboard.getImageData();
-    const buffer = imageData.data;
-
-    if (!buffer) {
-      return null;
+    try {
+      await fs.unlink(pngPath);
+    } catch {
+      /* ignore */
     }
-
-    await fs.writeFile(tempFilePath, buffer);
-    return tempFilePath;
+    return null;
   } catch (error) {
     debugLogger.error('Error saving clipboard image:', error);
     return null;

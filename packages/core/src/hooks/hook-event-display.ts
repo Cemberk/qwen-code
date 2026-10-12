@@ -48,7 +48,7 @@ export const HOOK_EVENT_DISPLAY: Readonly<
   // coreToolScheduler.ts fails the call with EXECUTION_DENIED and the reason.
   [HookEventName.PreToolUse]: meta(false, true),
   // formatUserPromptExpansionBlockedMessage is shown by every slash command
-  // dispatcher (Ink, OpenTUI and non-interactive).
+  // dispatcher (Ink and non-interactive).
   [HookEventName.UserPromptExpansion]: meta(false, true),
   // todoWrite.ts returns createBlockedTodoResult for the new item.
   [HookEventName.TodoCreated]: meta(false, true),

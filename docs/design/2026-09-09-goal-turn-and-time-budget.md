@@ -259,7 +259,7 @@ the record still change because they explicitly whitelist its fields.
 ## Follow-up
 
 - Show the cadence ceilings where the token pair is already shown: the footer
-  pill, the ink and OpenTUI status cards, the headless `Usage:` line, and the
-  Web Shell strip and Goals dialog.
+  pill, the ink status card, the headless `Usage:` line, and the Web Shell
+  strip and Goals dialog.
 - Reconsider whether idle active time between turns should count against the
   time budget, once there is a report of it mattering.

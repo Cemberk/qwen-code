@@ -1,6 +1,6 @@
 {
   "id": "real-stream",
-  "description": "Real model stream via existing qwen-code config: fixed (OpenTUI) must stream with no full-screen clears / duplicate live-output vs base (Ink).",
+  "description": "Real model stream via existing qwen-code config: fixed must stream with no full-screen clears / duplicate live-output vs base.",
   "proves": "with the user's real config, fixed side streams with <= base full-screen clears and duplicate live-output, balanced DEC 2026.",
   "doesNotProve": "visual identity; model correctness.",
   "terminal": {

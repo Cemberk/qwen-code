@@ -24,6 +24,7 @@ import { isShellCommandReadOnly } from './shellReadOnlyChecker.js';
 import {
   classifyAwkCommandSafety,
   classifySedCommandSafety,
+  hasShellBraceExpansion,
   hasShellPatternExpansion,
 } from './shell-safety-rules.js';
 
@@ -1259,6 +1260,187 @@ async function isShellCommandReadOnlyInternal(
       isShellCommandReadOnly(command) &&
       !(cwd && fallbackGitConfigMakesCommandUnsafe(command, cwd))
     );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Public API: isShellCommandReadOnlyWithinWorkspace
+// ---------------------------------------------------------------------------
+
+/** Read-only commands whose reads do not come from their arguments. */
+const IMPLICIT_OUTSIDE_READ_COMMANDS = new Set([
+  'df',
+  'ps',
+  'where',
+  'which',
+  'whoami',
+]);
+
+/** Read-only commands that print their arguments instead of reading them. */
+const NON_READING_COMMANDS = new Set([
+  'basename',
+  'dirname',
+  'echo',
+  'printf',
+  'pwd',
+]);
+
+/**
+ * Options that make a command read places its arguments do not name: by
+ * following symlinks while it walks a directory, or by reading a list of
+ * paths from a file.
+ */
+const INDIRECT_READ_OPTIONS: Record<string, RegExp> = {
+  du: /^(?:-[^-]*L|--dereference$)/,
+  find: /^-(?:L|H|follow|files0-from)$/,
+  grep: /^(?:-[^-]*R|--dereference-recursive$)/,
+  ls: /^(?:-[^-]*L|--dereference$)/,
+  rg: /^(?:-[^-]*L|--follow$)/,
+  ripgrep: /^(?:-[^-]*L|--follow$)/,
+  tree: /^(?:-[^-]*l|--fromfile$)/,
+};
+const FILE_LIST_OPTION = /^--files0?-from(?:=|$)/;
+
+/**
+ * The literal text of an argument, or null when the shell would expand it
+ * into something this check cannot see: variables, `~`, brace expansion,
+ * globs (a glob can match a symlink that leads out of the workspace) and
+ * escapes.
+ */
+function literalArgument(node: SyntaxNode): string | null {
+  switch (node.type) {
+    case 'word':
+    case 'number':
+      return /\\|^~|[=:]~|[*?[]/.test(node.text) ||
+        hasShellBraceExpansion(node.text)
+        ? null
+        : node.text;
+    case 'raw_string':
+      return stripOuterQuotes(node.text);
+    case 'string':
+      return node.namedChildren.every(
+        (child) => child.type === 'string_content',
+      ) && !node.text.includes('\\')
+        ? stripOuterQuotes(node.text)
+        : null;
+    case 'concatenation': {
+      if (hasShellBraceExpansion(node.text)) return null;
+      const parts = node.children.map(literalArgument);
+      return parts.every((part) => part !== null) ? parts.join('') : null;
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * The directories a statement may run in. `cd` adds its target instead of
+ * replacing the current directory: a failed `cd`, or one inside a subshell
+ * or pipeline, leaves the previous directory in effect, so a relative path
+ * must stay inside for every directory the command might be in.
+ */
+type PathScope = {
+  cwds: string[];
+  isWithin: (absolutePath: string) => boolean;
+};
+
+function resolvesWithin(scope: PathScope, target: string): boolean {
+  return scope.cwds.every((cwd) => scope.isWithin(path.resolve(cwd, target)));
+}
+
+function changeDirectory(scope: PathScope, args: string[]): boolean {
+  if (args.length !== 1) return false; // `cd` alone goes home.
+  const target = args[0]!;
+  // CDPATH can send a bare name anywhere; `/`, `./` and `../` bypass it.
+  if (process.env['CDPATH'] && !/^(?:\/|\.\.?(?:\/|$))/.test(target)) {
+    return false;
+  }
+  if (!resolvesWithin(scope, target)) return false;
+  const next = scope.cwds.map((cwd) => path.resolve(cwd, target));
+  scope.cwds = [...new Set([...scope.cwds, ...next])];
+  return true;
+}
+
+function argumentsStayWithin(command: SyntaxNode, scope: PathScope): boolean {
+  const root = getCommandName(command);
+  const args: string[] = [];
+  for (const node of getArgumentNodes(command)) {
+    const literal = literalArgument(node);
+    if (literal === null) return false;
+    args.push(literal);
+  }
+  if (!root || NON_READING_COMMANDS.has(root)) return true;
+  if (IMPLICIT_OUTSIDE_READ_COMMANDS.has(root)) return false;
+  if (root === 'cd') return changeDirectory(scope, args);
+  if (root === 'awk' && args.some((arg) => /ARG[VC]/.test(arg))) return false;
+  const indirect = INDIRECT_READ_OPTIONS[root];
+  let operandsOnly = false;
+  for (const arg of args) {
+    if (!operandsOnly && arg === '--') {
+      operandsOnly = true;
+    } else if (!operandsOnly && arg.startsWith('-') && arg !== '-') {
+      if (indirect?.test(arg) || FILE_LIST_OPTION.test(arg)) return false;
+      const equals = arg.indexOf('=');
+      if (equals >= 0) {
+        if (!resolvesWithin(scope, arg.slice(equals + 1))) return false;
+      } else if (/[/~]|\.\./.test(arg)) {
+        // A value attached to a short option, e.g. `-f/etc/x`.
+        return false;
+      }
+    } else if (!resolvesWithin(scope, arg)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function redirectStaysWithin(redirect: SyntaxNode, scope: PathScope): boolean {
+  const operator = redirect.children.find((child) => !child.isNamed)?.type;
+  const destination = redirect.childForFieldName('destination');
+  const target = destination ? literalArgument(destination) : null;
+  if (target === null) return false;
+  if (operator === '<') return resolvesWithin(scope, target);
+  // Descriptor duplication (`2>&1`, `<&-`) reads no file.
+  return (operator === '>&' || operator === '<&') && /^(?:\d+|-)$/.test(target);
+}
+
+/**
+ * Whether `command` is read-only (see {@link isShellCommandReadOnlyASTInDirectory})
+ * and every path it can read, run in `cwd`, satisfies `isWithin` (the
+ * workspace check). Anything this cannot determine counts as outside:
+ * expansions in arguments, a `cd` whose target is outside or unknown,
+ * symlink-following options, commands that read outside state on their own
+ * (`ps`, `which`). Non-path arguments such as patterns are checked as paths
+ * too, so a pattern that looks like an outside path also fails; that errs
+ * toward asking.
+ */
+export async function isShellCommandReadOnlyWithinWorkspace(
+  command: string,
+  cwd: string,
+  isWithin: (absolutePath: string) => boolean,
+): Promise<boolean> {
+  if (!(await isShellCommandReadOnlyASTInDirectory(command, cwd))) {
+    return false;
+  }
+  if (parserInitFailed || !isWithin(cwd)) return false;
+  const scope: PathScope = { cwds: [path.resolve(cwd)], isWithin };
+  try {
+    const tree = await parseShellCommand(command);
+    try {
+      // Document order, so a `cd` widens the scope of what follows it.
+      return collectDescendants(
+        tree.rootNode,
+        new Set(['command', 'file_redirect']),
+      ).every((node) =>
+        node.type === 'command'
+          ? argumentsStayWithin(node, scope)
+          : redirectStaysWithin(node, scope),
+      );
+    } finally {
+      tree.delete();
+    }
+  } catch {
+    return false;
   }
 }
 

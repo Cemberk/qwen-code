@@ -39,7 +39,6 @@ describe('SdkMcpController', () => {
       settings: createMinimalSettings(),
       permissionMode: 'default',
       sdkMcpServers: new Set<string>(),
-      mcpClients: new Map(),
       inputClosed: false,
     };
     const controller = new SdkMcpController(

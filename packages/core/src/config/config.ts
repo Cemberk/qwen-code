@@ -2984,7 +2984,7 @@ export class Config {
     }
     if (this.initialized) {
       // Joining the in-flight run matters: callers that swallow the old
-      // throw (the OpenTUI submit path, slash-command loading) proceeded on
+      // throw (slash-command loading) proceeded on
       // a config whose chat had not started yet, and the first prompt died
       // with "Chat not initialized" (#11002).
       if (!this.initializationSettled) {

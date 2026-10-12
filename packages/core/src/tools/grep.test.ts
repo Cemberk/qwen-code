@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { getMemoryBaseDir } from '../memory/paths.js';
 import { spawn } from 'node:child_process';
 import type { GrepToolParams } from './grep.js';
 import { GrepTool } from './grep.js';
@@ -1023,6 +1024,14 @@ describe('GrepTool', () => {
       const invocation = grepTool.build(params);
       const permission = await invocation.getDefaultPermission();
       expect(permission).toBe('ask');
+    });
+
+    it('should return ask for paths under the memory base dir', async () => {
+      const invocation = grepTool.build({
+        pattern: 'hello',
+        path: path.join(getMemoryBaseDir(), 'projects'),
+      });
+      expect(await invocation.getDefaultPermission()).toBe('ask');
     });
   });
 

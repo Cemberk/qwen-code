@@ -423,12 +423,6 @@ export default {
   active: 'activa',
   disabled: 'desactivada',
   enabled: 'activada',
-  'disabled (bare mode)': 'desactivada (mode mínim)',
-  'disabled (safe mode)': 'desactivada (mode segur)',
-  'disabled (disableAllHooks)': 'desactivada (disableAllHooks)',
-  'disabled (folder not trusted)': 'desactivada (carpeta no fiable)',
-  'disabled (turned off for this session)':
-    'desactivada (apagada en aquesta sessió)',
   'View Details': 'Visualitza els detalls',
   'Update failed:': "Error en l'actualització:",
   'Updating {{name}}...': 'Actualitzant {{name}}...',
@@ -1227,7 +1221,6 @@ export default {
   // ============================================================================
   'Select Model': 'Seleccioneu el model',
   'API Key': 'API Key',
-  '(default)': '(per defecte)',
   '(not set)': '(no establert)',
   Modality: 'Modalitat',
   'Context Window': 'Fin. de context',
@@ -1886,7 +1879,6 @@ export default {
   'Show usage statistics dashboard.': "Mostra el tauler d'estadístiques d'ús.",
 
   // Stats Dashboard — keyboard hints (not translated)
-  'tab \xB7 esc': 'tab \xB7 esc',
   'tab \xB7 r dates \xB7 \u2190\u2192 month \xB7 esc':
     'tab \xB7 r dates \xB7 \u2190\u2192 month \xB7 esc',
   'tab \xB7 r dates \xB7 esc': 'tab \xB7 r dates \xB7 esc',
@@ -1970,8 +1962,8 @@ export default {
     'No es poden marcar com a preferits els MCP servers proporcionats per una extensió.',
   'User level': "Nivell d'usuari",
   'Project level': 'Nivell de projecte',
-  'Clipboard image paste is unavailable because the native clipboard module could not be loaded. Reinstall Qwen Code or use the npm installation method.':
-    "L'enganxament d'imatges del porta-retalls no està disponible perquè no s'ha pogut carregar el mòdul natiu del porta-retalls. Reinstal·leu Qwen Code o useu el mètode d'instal·lació per npm.",
+  'Clipboard image paste is unavailable because the system clipboard could not be read.':
+    "L'enganxament d'imatges del porta-retalls no està disponible perquè no s'ha pogut llegir el porta-retalls del sistema.",
   '"{{name}}" {{state}}.': '«{{name}}» {{state}}.',
   Actions: 'Accions',
   'Add to Favorites': 'Afegeix als preferits',

@@ -7,7 +7,8 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { Content, Part } from '@google/genai';
-import type { ApprovalModeValue, Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
+import { resolveAgentApprovalMode } from '../config/approval-mode.js';
 import * as jsonl from '../utils/jsonl-utils.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
 import {
@@ -51,7 +52,6 @@ import {
   createApprovalModeOverride,
   stampBackgroundPromptPolicy,
 } from '../tools/agent/agent.js';
-import type { ApprovalMode } from '../config/config.js';
 import {
   FORK_AGENT,
   FORK_DEFAULT_MAX_TURNS,
@@ -162,42 +162,6 @@ interface RestorePausedEntryOptions {
   error?: string;
   resumeBlockedReason?: string;
   suppressRegisterCallback?: boolean;
-}
-
-function normalizeApprovalMode(
-  value: string | undefined,
-  fallback: ApprovalModeValue,
-): ApprovalModeValue {
-  switch (value) {
-    case 'plan':
-    case 'default':
-    case 'auto-edit':
-    case 'auto':
-    case 'yolo':
-      return value;
-    default:
-      return fallback;
-  }
-}
-
-function reconcileResumedApprovalMode(
-  persistedMode: ApprovalModeValue,
-  parentMode: ApprovalModeValue,
-  isTrustedFolder: boolean,
-): ApprovalModeValue {
-  if (
-    isTrustedFolder ||
-    (persistedMode !== 'auto-edit' &&
-      persistedMode !== 'auto' &&
-      persistedMode !== 'yolo')
-  ) {
-    return persistedMode;
-  }
-
-  if (parentMode === 'plan' || parentMode === 'default') {
-    return parentMode;
-  }
-  return 'default';
 }
 
 function persistBackgroundCancellation(
@@ -908,17 +872,11 @@ export class BackgroundAgentResumeService {
         return undefined;
       }
 
-      const parentApprovalMode = normalizeApprovalMode(
-        this.config.getApprovalMode() as ApprovalModeValue,
-        'default',
-      );
-      const resolvedApprovalMode = reconcileResumedApprovalMode(
-        normalizeApprovalMode(
-          meta.resolvedApprovalMode ?? meta.persistedCliFlags?.approvalMode,
-          parentApprovalMode,
-        ),
-        parentApprovalMode,
-        this.config.isTrustedFolder(),
+      // A resumed agent never runs more permissively than the session that
+      // resumes it, whatever mode it ran in before.
+      const resolvedApprovalMode = resolveAgentApprovalMode(
+        this.config.getApprovalMode(),
+        meta.resolvedApprovalMode ?? meta.persistedCliFlags?.approvalMode,
       );
       // Always wrap, even when the resolved approval mode matches the
       // parent's. The wrapper rebuilds the tool registry on the
@@ -930,7 +888,7 @@ export class BackgroundAgentResumeService {
       // matching wrapper in `agent.ts:createApprovalModeOverride`.
       const approvalOverride = await createApprovalModeOverride(
         this.config,
-        resolvedApprovalMode as ApprovalMode,
+        resolvedApprovalMode,
         { persistedCliFlags: meta.persistedCliFlags },
       );
       const activeAgentConfig = approvalOverride.config;

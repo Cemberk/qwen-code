@@ -6,7 +6,13 @@
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
@@ -14,11 +20,13 @@ import {
   initParser,
   isShellCommandReadOnlyAST,
   isShellCommandReadOnlyASTInDirectory,
+  isShellCommandReadOnlyWithinWorkspace,
   extractCommandRules,
   _resetParser,
   _setParserFailedForTesting,
 } from './shellAstParser.js';
 import { isShellCommandReadOnly } from './shellReadOnlyChecker.js';
+import { WorkspaceContext } from './workspaceContext.js';
 
 beforeAll(async () => {
   await initParser();
@@ -1029,6 +1037,136 @@ describe('classifyShellCommandSafety', () => {
     expect((cpuUsage.user + cpuUsage.system) / 1000).toBeLessThan(
       maxClassificationCpuMs,
     );
+  });
+});
+
+// =========================================================================
+// isShellCommandReadOnlyWithinWorkspace
+// =========================================================================
+
+describe('isShellCommandReadOnlyWithinWorkspace', () => {
+  let ws: string;
+  let extra: string;
+  let outside: string;
+  let workspace: WorkspaceContext;
+  const staysIn = (command: string, cwd = ws) =>
+    isShellCommandReadOnlyWithinWorkspace(command, cwd, (p) =>
+      workspace.isPathWithinWorkspace(p),
+    );
+
+  beforeAll(() => {
+    ws = mkdtempSync(path.join(tmpdir(), 'ro-ws-'));
+    extra = mkdtempSync(path.join(tmpdir(), 'ro-extra-'));
+    outside = mkdtempSync(path.join(tmpdir(), 'ro-outside-'));
+    mkdirSync(path.join(ws, 'sub'));
+    writeFileSync(path.join(ws, 'a.txt'), 'a');
+    writeFileSync(path.join(outside, 'secret.txt'), 'secret');
+    symlinkSync(outside, path.join(ws, 'link'));
+    workspace = new WorkspaceContext(ws, [extra]);
+  });
+
+  afterAll(() => {
+    for (const dir of [ws, extra, outside]) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    'ls -la',
+    'cat a.txt',
+    'grep -rn foo sub',
+    'git log --oneline -n 5',
+    'git diff HEAD~1 -- a.txt',
+    "git log --format='%h %s'",
+    'find . -name "*.ts"',
+    'grep -rn "x" --include="*.ts" .',
+    'cat sub/../a.txt',
+    'wc -l a.txt | sort | head -5',
+    'cat a.txt 2>&1',
+    'echo /etc/passwd',
+    'cat < a.txt',
+  ])('allows %s', async (command) => {
+    expect(await staysIn(command)).toBe(true);
+  });
+
+  it('allows paths in an --include-directories workspace directory', async () => {
+    expect(await staysIn(`cat ${path.join(extra, 'notes.md')}`)).toBe(true);
+  });
+
+  it('allows cd to the directory the command already runs in', async () => {
+    expect(await staysIn(`cd ${ws} && ls`)).toBe(true);
+  });
+
+  it('checks paths after a cd against both the old and the new directory', async () => {
+    expect(await staysIn('cd sub && ls')).toBe(true);
+    expect(await staysIn('cd sub && cat a.txt')).toBe(true);
+    // From sub this is ws/a.txt, but if the cd failed it is outside.
+    expect(await staysIn('cd sub && cat ../a.txt')).toBe(false);
+    expect(await staysIn('cd link && cat secret.txt')).toBe(false);
+  });
+
+  it('only trusts a cd to a bare name when CDPATH is unset', async () => {
+    const saved = process.env['CDPATH'];
+    process.env['CDPATH'] = outside;
+    try {
+      expect(await staysIn('cd sub && ls')).toBe(false);
+      expect(await staysIn('cd ./sub && ls')).toBe(true);
+    } finally {
+      if (saved === undefined) delete process.env['CDPATH'];
+      else process.env['CDPATH'] = saved;
+    }
+  });
+
+  it.each([
+    ['an absolute path outside', 'cat /etc/passwd'],
+    ['a .. escape', 'cat ../secret.txt'],
+    ['a .. escape hidden in a subdirectory', 'cat sub/../../secret.txt'],
+    ['a ~ path', 'cat ~/.ssh/id_rsa'],
+    ['a ~ path after =', 'grep --file=~/patterns x'],
+    ['a variable', 'cat $HOME/.bashrc'],
+    ['a braced variable in quotes', 'cat "${HOME}/x"'],
+    ['an ANSI-C quoted path', "cat $'\\x2fetc/passwd'"],
+    ['an escaped path', 'cat \\.\\./secret.txt'],
+    ['a glob', 'cat *'],
+    ['a brace expansion', 'cat {a.txt,/etc/passwd}'],
+    ['cd outside', 'cd /tmp && cat x'],
+    ['cd home', 'cd && ls'],
+    ['an input redirect from outside', 'cat < /etc/passwd'],
+    ['an option value outside', 'grep --file=/etc/patterns x'],
+    ['an attached short option value', 'grep -f/etc/patterns x'],
+    ['an option argument outside', 'sort -T /tmp a.txt'],
+    ['a git pathspec outside', 'git log -- /etc/passwd'],
+    ['a search root outside', 'grep -r foo /etc'],
+    ['a find root outside', 'find / -name x'],
+    ['a path after --', 'cat -- /etc/passwd'],
+    ['find following symlinks', 'find -L . -name x'],
+    ['grep following symlinks', 'grep -Rn foo .'],
+    ['rg following symlinks', 'rg --follow foo'],
+    ['a list of files to read', 'wc --files0-from=list'],
+    ['a command that reads the process table', 'ps aux'],
+    ['a PATH lookup', 'which node'],
+    ['awk reading files named in ARGV', `awk 'BEGIN{ARGV[1]="x"} {print}'`],
+    ['a non-read-only command', 'rm -rf sub'],
+    ['a pipeline with one outside read', 'cat a.txt | grep -f /etc/x'],
+  ])('asks for %s', async (_label, command) => {
+    expect(await staysIn(command)).toBe(false);
+  });
+
+  it('asks for a path through a symlink that leads outside', async () => {
+    expect(await staysIn('cat link/secret.txt')).toBe(false);
+    expect(await staysIn('grep -r foo link')).toBe(false);
+  });
+
+  it('only narrows commands that are already read-only', async () => {
+    // Each "asks" case above is read-only by itself; only its paths differ.
+    expect(
+      await isShellCommandReadOnlyASTInDirectory('cat /etc/passwd', ws),
+    ).toBe(true);
+    expect(await staysIn('cat /etc/passwd')).toBe(false);
+  });
+
+  it('asks when the command runs outside the workspace', async () => {
+    expect(await staysIn('ls', outside)).toBe(false);
   });
 });
 

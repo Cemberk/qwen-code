@@ -63,7 +63,7 @@ export function safeSetStatus(
  * Determine whether the synthetic session root should force the SAMPLED flag.
  *
  * This function reads `OTEL_TRACES_SAMPLER` to infer the sampler type.
- * If a sampler is configured programmatically (e.g. via NodeSDK constructor)
+ * If a sampler is configured programmatically (e.g. via the tracer provider)
  * without setting the env var, this heuristic will not detect it.
  *
  * parentbased_* samplers delegate to localParentNotSampled (default AlwaysOff)

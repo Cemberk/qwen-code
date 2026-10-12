@@ -37,12 +37,10 @@ describe('bundled workflow-creator skill', () => {
     expect(body).toContain('Do not use `node --check`');
   });
 
-  it('limits slash-command completion guidance to ink and gives the OpenTUI fallback', () => {
+  it('states the slash-command completion guidance', () => {
     const { body } = loadSkill();
-    expect(body).toContain("interactive TUI's ink renderer");
     expect(body).toContain(
-      'OpenTUI renderer does not yet run client-scheduled tools',
+      'In the interactive TUI, the slash command runs in the foreground',
     );
-    expect(body).toContain("Workflow({ name: '<name>' })");
   });
 });

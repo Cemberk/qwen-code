@@ -208,8 +208,7 @@ resume` 再授一个窗口；`model.goalMaxActiveMinutes: 1` 同理。
 
 ## 后续工作
 
-- 在已经显示 token 那一对数字的位置上显示这两道节奏上限：底栏 pill、ink 与
-  OpenTUI 状态卡片、headless 的 `Usage:` 行，以及 Web Shell 的状态条与 Goals 对
-  话框。
+- 在已经显示 token 那一对数字的位置上显示这两道节奏上限：底栏 pill、ink 状态
+  卡片、headless 的 `Usage:` 行，以及 Web Shell 的状态条与 Goals 对话框。
 - 等到有人报告轮次之间的空闲活跃时长确实造成困扰时，再重新考虑它是否应当计入时长
   预算。

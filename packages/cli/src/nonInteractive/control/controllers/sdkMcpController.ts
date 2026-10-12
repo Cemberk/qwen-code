@@ -17,12 +17,14 @@
  * SDK MCP Server processes → control_response → CLI MCP Client
  */
 
-import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
+import type { SendSdkMcpMessage } from '@qwen-code/qwen-code-core';
 import { BaseController } from './baseController.js';
 import type {
   ControlRequestPayload,
   CLIControlMcpMessageRequest,
 } from '../../types.js';
+
+type JSONRPCMessage = Parameters<SendSdkMcpMessage>[1];
 
 const MCP_REQUEST_TIMEOUT = 30_000; // 30 seconds
 

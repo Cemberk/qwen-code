@@ -19,11 +19,6 @@ import {
   startFakeOpenAIServer,
   type FakeOpenAIToolCall,
 } from './fake-openai-server.js';
-import {
-  e2eRendererEnv,
-  pickE2eRenderer,
-  resolveE2eCliCommand,
-} from './renderer-matrix.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -922,17 +917,10 @@ export class TestRig {
     ptyProcess: pty.IPty;
     promise: Promise<{ exitCode: number; signal?: number; output: string }>;
   } {
-    const renderer = pickE2eRenderer();
-    const { command: cliCommand, initialArgs } = this._getCommandAndArgs(
+    const { command, initialArgs } = this._getCommandAndArgs(
       ['--yolo'],
       options,
     );
-    // The renderer matrix swaps node for bun only when driving the repo
-    // bundle directly; installed-release runs keep their own launcher and
-    // still get the pinned QWEN_TUI_RENDERER below.
-    const isNpmRelease =
-      process.env.INTEGRATION_TEST_USE_INSTALLED_GEMINI === 'true';
-    const command = isNpmRelease ? cliCommand : resolveE2eCliCommand(renderer);
     const commandArgs = [...initialArgs, ...args];
 
     this._interactiveOutput = ''; // Reset output for the new run
@@ -942,10 +930,7 @@ export class TestRig {
       cols: 80,
       rows: 30,
       cwd: this.testDir!,
-      env: {
-        ...process.env,
-        ...e2eRendererEnv(renderer),
-      } as { [key: string]: string },
+      env: process.env as { [key: string]: string },
     });
     this.interactiveProcesses.push(ptyProcess);
 

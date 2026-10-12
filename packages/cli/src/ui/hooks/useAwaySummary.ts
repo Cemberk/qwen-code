@@ -20,8 +20,7 @@ const MIN_USER_MESSAGES_TO_FIRE = 3;
 const MIN_USER_MESSAGES_SINCE_LAST_RECAP = 2;
 
 /**
- * The transcript rows the dedup gate reads. ink passes its own history items;
- * the OpenTUI leg maps its live transcript onto the same two fields.
+ * The transcript rows the dedup gate reads.
  */
 export interface RecapGateItem {
   type: string;

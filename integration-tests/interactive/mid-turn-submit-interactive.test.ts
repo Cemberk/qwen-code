@@ -157,9 +157,7 @@ describe('Mid-turn submit', () => {
 
   /**
    * Everything the CLI has sent the model so far, as one haystack. Whether a
-   * submission ran is read from request bodies rather than screen text: OpenTUI
-   * repaints by diffing cells, so text a user can plainly see may never reach
-   * the byte stream as a contiguous run.
+   * submission ran is read from request bodies rather than screen text.
    */
   function requestBodies(): string {
     return fakeServer!.requests

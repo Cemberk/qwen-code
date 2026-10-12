@@ -232,27 +232,11 @@ function writeDistPackageJson(rootDir, distDir) {
       'locales',
       'examples',
       'bundled',
-      // OpenTUI renderer runtime assets (tree-sitter grammars, parser worker,
-      // web-tree-sitter wasm, native render library) are intentionally NOT
-      // published in the npm package — a multi-megabyte tree dominated by the
-      // native render library — against the unpacked-size budget. An npm
-      // install also has no @opentui/core dependency to resolve the assets
-      // against: below the runtime floor (Node < 26.4.0) the renderer gate
-      // never selects opentui, and at or above it, QWEN_TUI_RENDERER=opentui
-      // selects the renderer, the boot fails on the missing asset tree, and
-      // a stderr warning falls back to ink on every startup.
     ],
     config: rootPackageJson.config,
     dependencies: {},
     optionalDependencies: {
       ...nodePtyPins,
-      '@teddyzhu/clipboard': '0.0.5',
-      '@teddyzhu/clipboard-darwin-arm64': '0.0.5',
-      '@teddyzhu/clipboard-darwin-x64': '0.0.5',
-      '@teddyzhu/clipboard-linux-x64-gnu': '0.0.5',
-      '@teddyzhu/clipboard-linux-arm64-gnu': '0.0.5',
-      '@teddyzhu/clipboard-win32-x64-msvc': '0.0.5',
-      '@teddyzhu/clipboard-win32-arm64-msvc': '0.0.5',
       // sharp is a native module externalized in esbuild. Declaring sharp alone
       // is sufficient: its own optionalDependencies pull in the matching @img
       // platform binary for every OS/arch npm installs onto, so the platform

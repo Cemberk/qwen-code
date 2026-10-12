@@ -109,12 +109,6 @@ export const TOP_LEVEL_GLOBAL_OPTIONS = {
     description:
       'Disable all customizations (context files, hooks, extensions, skills, MCP servers) for troubleshooting.',
   },
-  insecure: {
-    type: 'boolean' as const,
-    description:
-      'Skip TLS certificate verification for API connections (for self-signed certs in trusted/lab environments). Equivalent to setting QWEN_TLS_INSECURE=1. WARNING: removes protection against man-in-the-middle attacks.',
-    default: false,
-  },
   'chat-recording': {
     type: 'boolean' as const,
     description:

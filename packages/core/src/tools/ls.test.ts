@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { getMemoryBaseDir } from '../memory/paths.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
@@ -99,6 +100,13 @@ describe('LSTool', () => {
       const invocation = lsTool.build({ path: '/tmp' });
       const permission = await invocation.getDefaultPermission();
       expect(permission).toBe('ask');
+    });
+
+    it('should return ask for paths under the memory base dir', async () => {
+      const invocation = lsTool.build({
+        path: path.join(getMemoryBaseDir(), 'projects'),
+      });
+      expect(await invocation.getDefaultPermission()).toBe('ask');
     });
   });
 

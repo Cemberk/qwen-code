@@ -48,14 +48,11 @@ export const PROJECT_ENV_HARDCODED_EXCLUSIONS = [
   // tools.workflowNameOnly, which a workspace may only turn on; a project
   // .env must not be able to unset the operator's exported value.
   'QWEN_CODE_WORKFLOW_NAME_ONLY',
-  // QWEN_TLS_INSECURE (and NODE_TLS_REJECT_UNAUTHORIZED, which it mirrors)
-  // disable TLS certificate verification for all outbound API connections. A
-  // project `.env` must never enable either — that would let an untrusted repo
-  // silently turn off MITM protection. Opt-in stays with the user via the
-  // `--insecure` flag, the shell environment, or a home `.env`. The initial
-  // `.env` load only consults this list, so both keys must be here (not just
+  // NODE_TLS_REJECT_UNAUTHORIZED=0 makes Node skip TLS certificate
+  // verification process-wide. A project `.env` must never set it — that would
+  // let an untrusted repo silently turn off MITM protection. The initial `.env`
+  // load only consults this list, so the key must be here (not just
   // RELOAD_EXCLUDED_KEYS, which only applies on reload).
-  'QWEN_TLS_INSECURE',
   'NODE_TLS_REJECT_UNAUTHORIZED',
   // NODE_EXTRA_CA_CERTS reaches the same outcome by adding a TLS trust
   // anchor instead of disabling verification.
@@ -217,9 +214,6 @@ export const PROJECT_ENV_HARDCODED_EXCLUSIONS = [
   // `.env` pointing it at an attacker script runs on any browser-launch
   // flow.
   'BROWSER',
-  // OTUI_ASSET_ROOT picks the directory the OpenTUI renderer dlopens its
-  // native library from, so a project file must not point it at its own.
-  'OTUI_ASSET_ROOT',
   // DEV selects dev-harness behavior; only the dev harness (scripts/dev.js)
   // stamps it into the launch env, so a project file must not set it.
   'DEV',

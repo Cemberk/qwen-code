@@ -37,7 +37,6 @@ function createContext(canUseToolTimeoutMs?: number): IControlContext {
     permissionMode: 'default',
     sdkCanUseToolTimeoutMs: canUseToolTimeoutMs,
     sdkMcpServers: new Set<string>(),
-    mcpClients: new Map(),
     inputClosed: false,
   };
 }

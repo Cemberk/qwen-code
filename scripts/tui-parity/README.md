@@ -1,8 +1,8 @@
 # TUI parity harness
 
 Deterministic, dependency-light harness that compares a base CLI capture
-(current Ink behavior) against a fixed CLI capture (OpenTUI behavior) with
-machine-checkable metrics and reviewable artifacts. Node built-ins plus the
+against a fixed CLI capture with machine-checkable metrics and reviewable
+artifacts. Node built-ins plus the
 repository's existing `@lydell/node-pty` capability for PTY allocation.
 
 ## Runner contract
@@ -18,8 +18,8 @@ node scripts/tui-parity/runner.mjs \
   the artifact directory. Exit codes: 0 pass, 1 threshold/capture failure,
   2 usage or validation error.
 - `--base` / `--fixed` override the scenario commands (single scenario only).
-  This is the real-CLI contract: point base at the Ink build and fixed at the
-  OpenTUI build with the same scenario parameters. Overrides always capture
+  This is the real-CLI contract: point base and fixed at the two builds being
+  compared, with the same scenario parameters. Overrides always capture
   through a native PTY. Relative `.js/.mjs/.cjs` script paths after `node`
   resolve against the repository root. The final resolved argv (after any
   override) is re-validated before anything is captured: declared
