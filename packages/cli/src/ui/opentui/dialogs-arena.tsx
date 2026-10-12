@@ -53,9 +53,6 @@ export interface OpenTuiArenaDialogProps {
   onFillInput?: (text: string) => void;
 }
 
-const MODEL_PROVIDERS_DOCUMENTATION_URL =
-  'https://qwenlm.github.io/qwen-code-docs/en/users/configuration/settings/#modelproviders';
-
 const STATUS_REFRESH_INTERVAL_MS = 2000;
 const IN_PROCESS_REFRESH_INTERVAL_MS = 1000;
 const MAX_MODEL_NAME_LENGTH = 35;
@@ -155,7 +152,6 @@ function ArenaStart({ config, onClose, onFillInput }: OpenTuiArenaDialogProps) {
 
   const selectableCount = modelItems.length;
   const needsMoreModels = selectableCount < 2;
-  const showMoreModelsHint = selectableCount >= 2 && selectableCount < 3;
 
   useKeyboard((key) => {
     const o = toOriginalKey(key);
@@ -227,14 +223,6 @@ function ArenaStart({ config, onClose, onFillInput }: OpenTuiArenaDialogProps) {
           <text fg={C.yellow}>
             {'  - Or configure modelProviders in settings.json'}
           </text>
-        </box>
-      )}
-      {showMoreModelsHint && (
-        <box marginTop={1} flexDirection="column">
-          <text fg={C.dim}>
-            {'Configure more models with the modelProviders guide:'}
-          </text>
-          <text fg={C.dim}>{MODEL_PROVIDERS_DOCUMENTATION_URL}</text>
         </box>
       )}
     </ArenaFrame>

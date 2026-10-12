@@ -19,7 +19,7 @@ import {
   stripRuntimeSnapshotPrefix,
 } from '@qwen-code/qwen-code-core';
 import type { Settings } from '../config/settings.js';
-import { sanitizeProviderBaseUrl } from './acpModelUtils.js';
+import { sanitizeProviderBaseUrl } from './model-option-utils.js';
 
 /** Env var names that hold the model selection. */
 const MODEL_ENV_VARS: readonly string[] = OPENAI_ENV_MAPPING.model;

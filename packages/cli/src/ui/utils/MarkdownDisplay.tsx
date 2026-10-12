@@ -874,7 +874,6 @@ const RenderCodeBlockInternal: React.FC<RenderCodeBlockProps> = ({
       <MermaidDiagram
         source={content.join('\n')}
         sourceCopyCommand={`/copy mermaid ${codeBlockLangIndex || codeBlockIndex}`}
-        isPending={isPending}
         availableTerminalHeight={availableTerminalHeight}
         contentWidth={contentWidth}
       />

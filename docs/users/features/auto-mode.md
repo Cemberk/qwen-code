@@ -28,9 +28,9 @@ walks three layers in order:
 2. **Safe-tool allowlist** — Read-only and metadata-only built-in tools
    (Read, Grep, Glob, LS, LSP, TodoWrite, AskUserQuestion, etc.) are
    auto-approved without invoking the classifier.
-3. **LLM classifier** — Everything else (shell commands, web fetches,
-   sub-agent spawns, edits outside the workspace, MCP tools) is sent to
-   a two-stage classifier:
+3. **LLM classifier** — Everything else (shell commands, sub-agent
+   spawns, edits outside the workspace, MCP tools) is sent to a two-stage
+   classifier:
    - **Stage 1 (fast)** — outputs `{ shouldBlock }` only. Around ~300ms.
      If `shouldBlock` is `false`, the action is allowed and the call
      proceeds.
@@ -268,14 +268,10 @@ approved fallback the consecutive counter resets.
 **The classifier sees sensitive data in my prompts**
 
 Tool inputs are projected through each tool's `toAutoClassifierInput`
-method before they reach the classifier. Long edit content, web fetch
-prompts, and sub-agent prompts are truncated. Tool results (file
-contents, web pages) are never sent to the classifier — only the user's
-text and assistant tool-use calls go through.
-
-If a specific tool is exposing fields you'd rather redact, file an issue
-with the tool name; the projection is per-tool and is meant to be
-tightened over time.
+method before they reach the classifier. Long edit content and
+sub-agent prompts are truncated. Tool results (such as file contents) are
+never sent to the classifier — only the user's text and assistant
+tool-use calls go through.
 
 ## Limitations
 

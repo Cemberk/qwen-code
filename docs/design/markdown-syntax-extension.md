@@ -27,9 +27,6 @@ not separate feature PRs.
 Included in the first implementation:
 
 - Mermaid code blocks render visually in the TUI.
-- Mermaid diagrams render through PNG terminal images when image rendering is
-  explicitly enabled, `mmdc` is available, and the terminal supports an image
-  path.
 - `flowchart` / `graph` Mermaid diagrams fall back to box-and-arrow previews.
 - `sequenceDiagram` Mermaid diagrams fall back to participant-arrow previews.
 - Basic `classDiagram`, `stateDiagram`, `erDiagram`, `gantt`, `pie`,
@@ -50,62 +47,19 @@ Included in the first implementation:
 
 ## Mermaid Rendering Strategy
 
-### First version: capability-gated image rendering plus text fallback
+Mermaid blocks render in-process as a terminal wireframe or bounded text
+preview. Qwen Code does not invoke an external Mermaid renderer (Mermaid CLI,
+Puppeteer/Chromium, or `chafa`) for diagrams. While a response is still
+streaming, Mermaid blocks show a bounded pending preview.
 
-The implementation now treats Mermaid's own layout as the preferred path. When
-the local environment supports it, the TUI renders Mermaid blocks through this
-pipeline:
+### Resizable wireframe preview
 
-```text
-Mermaid source
-  -> mmdc / Mermaid CLI
-  -> PNG
-  -> Kitty or iTerm2 terminal image protocol
-```
-
-If the terminal does not support inline images but `chafa` is installed, the
-same PNG is rendered as ANSI block graphics. If neither image protocol nor
-`chafa` is available, the renderer falls back to the synchronous terminal text
-preview described below.
-
-The image render is not attempted while a response is still streaming. During
-streaming, Mermaid blocks show a bounded pending preview. Once the response is
-finalized, the image path is attempted only when explicitly enabled. This keeps
-slow `mmdc` startup, especially the opt-in `npx` path, out of the default
-interactive render path.
-
-PNG generation is cached independently from terminal placement. Repeated
-renders of the same Mermaid source, including terminal resize updates, reuse
-the generated PNG and only recompute the Kitty/iTerm2 placement dimensions.
-
-The image path is intentionally opt-in and capability-gated instead of always
-bundling or invoking Puppeteer/Chromium from the hot CLI path. A user can enable
-the image path with `QWEN_CODE_MERMAID_IMAGE_RENDERING=1`, then provide
-`@mermaid-js/mermaid-cli` by installing `mmdc` on `PATH` or by setting
-`QWEN_CODE_MERMAID_MMD_CLI` to the binary path. For ad-hoc local verification,
-`QWEN_CODE_MERMAID_ALLOW_NPX=1` allows the renderer to invoke
-`npx -y @mermaid-js/mermaid-cli@11.12.0`; this is intentionally opt-in because
-the first run may install Puppeteer/Chromium and block rendering. Repo-local
-`node_modules/.bin` renderers are not auto-discovered unless
-`QWEN_CODE_MERMAID_ALLOW_LOCAL_RENDERERS=1` is set. Terminal protocol selection
-can be forced with `QWEN_CODE_MERMAID_IMAGE_PROTOCOL=kitty|iterm2|off`.
-
-For Kitty-compatible terminals such as Ghostty, the renderer uses Kitty
-Unicode placeholders instead of writing the image payload as Ink text. The PNG
-is transmitted through raw stdout in quiet mode (`q=2`) with a virtual
-placement (`U=1`), and the React tree renders the normal placeholder character
-grid (`U+10EEEE`) with explicit row and column diacritics for each cell. This
-keeps Ink responsible for layout and resize while preventing APC payload bytes
-from being wrapped into visible base64 text.
-
-### Fallback: resizable wireframe preview
-
-The fallback avoids async work because Ink's `<Static>` path is append-only: a
+The preview avoids async work because Ink's `<Static>` path is append-only: a
 finalized message cannot reliably wait for a background render job and then
-update in place without forcing a full static refresh. The fallback must
+update in place without forcing a full static refresh. The preview must
 therefore produce terminal output during the normal React render pass.
 
-For `flowchart` / `graph` diagrams, the fallback builds a lightweight graph
+For `flowchart` / `graph` diagrams, the preview builds a lightweight graph
 model instead of printing one edge at a time:
 
 - Nodes are normalized by Mermaid id, label, and basic shape.
@@ -141,23 +95,8 @@ terminal. Rendered Mermaid headings also show the Mermaid-specific copy command,
 for example `/copy mermaid 2`, so users can recover the original diagram source
 without switching the whole view to raw mode.
 
-The fallback is still not a complete Mermaid engine. It is a fast,
-dependency-light preview layer for common LLM-generated diagrams when
-high-fidelity rendering is not available.
-
-### Future providers
-
-The provider boundary is intentionally open for additional native image
-providers:
-
-- `mmdc` / `@mermaid-js/mermaid-cli` for SVG/PNG output.
-- `terminal-image` for Kitty/iTerm2 plus ANSI fallback.
-- `chafa` when present for Sixel/Kitty/iTerm2/Unicode mosaics.
-
-This path should remain optional, cached, and capability-gated, with cache keys
-based on source hash, terminal width, renderer provider, and terminal protocol.
-It should not block startup or add bundled Mermaid/Puppeteer work to the hot TUI
-path by default.
+The preview is not a complete Mermaid engine. It is a fast, dependency-light
+preview layer for common LLM-generated diagrams.
 
 ## AST Renderer Compatibility
 
@@ -178,8 +117,7 @@ cache tokens/blocks, then render from current width/theme/settings props.
 
 - Mermaid source is treated as untrusted input.
 - The first renderer does not execute Mermaid JavaScript.
-- Native image rendering must be opt-in or capability-gated.
-- Future browser-based rendering must use timeouts and size limits.
+- Mermaid rendering never starts an external process.
 - Rendering should degrade to terminal text instead of throwing.
 - Large blocks should respect available height and width.
 
@@ -193,7 +131,7 @@ npx vitest run \
   src/config/settingsSchema.test.ts \
   src/ui/AppContainer.test.tsx \
   src/ui/utils/MarkdownDisplay.test.tsx \
-  src/ui/utils/mermaidImageRenderer.test.ts \
+  src/ui/utils/MermaidDiagram.test.tsx \
   src/ui/commands/copyCommand.test.ts \
   src/ui/components/BaseTextInput.test.tsx \
   src/ui/keyMatchers.test.ts \

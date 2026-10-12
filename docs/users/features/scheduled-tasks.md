@@ -2,7 +2,7 @@
 
 > Use `/loop` and the cron scheduling tools to run prompts repeatedly, poll for status, or set one-time reminders within a Qwen Code session.
 
-Scheduled tasks let Qwen Code re-run a prompt automatically on an interval. Use them to poll a deployment, babysit a PR, check back on a long-running build, or remind yourself to do something later in the session.
+Scheduled tasks let Qwen Code re-run a prompt automatically on an interval. Use them to check back on a long-running build or test run, or remind yourself to do something later in the session.
 
 Tasks created from the terminal are session-scoped: they live in the current Qwen Code process and are gone when you exit. Nothing is written to disk.
 
@@ -13,7 +13,7 @@ Tasks created from the terminal are session-scoped: they live in the current Qwe
 The `/loop` [bundled skill](skills.md) is the quickest way to schedule a recurring prompt. Pass an optional interval and a prompt, and Qwen Code sets up a cron job that fires in the background while the session stays open.
 
 ```text
-/loop 5m check if the deployment finished and tell me what happened
+/loop 5m check if the build finished and tell me what happened
 ```
 
 Qwen Code parses the interval, converts it to a cron expression, schedules the job, and confirms the cadence and job ID. It then immediately executes the prompt once — you don't have to wait for the first cron fire.
@@ -35,10 +35,10 @@ Supported units are `s` for seconds, `m` for minutes, `h` for hours, and `d` for
 The scheduled prompt can itself be a command or skill invocation. This is useful for re-running a workflow you've already packaged.
 
 ```text
-/loop 20m /review-pr 1234
+/loop 20m /simplify
 ```
 
-Each time the job fires, Qwen Code runs `/review-pr 1234` as if you had typed it.
+Each time the job fires, Qwen Code runs `/simplify` as if you had typed it.
 
 ### Autonomous mode
 
@@ -89,7 +89,7 @@ what scheduled tasks do I have?
 ```
 
 ```text
-cancel the deploy check job
+cancel the build check job
 ```
 
 Under the hood, Qwen Code uses these tools:

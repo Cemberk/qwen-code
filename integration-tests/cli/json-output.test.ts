@@ -5,12 +5,7 @@
  */
 
 import { expect, describe, it, beforeEach, afterEach, vi } from 'vitest';
-import {
-  CONTAINER_SANDBOX_NO_PROXY,
-  fakeServerHostOptions,
-  IS_CONTAINER_SANDBOX,
-  TestRig,
-} from '../test-helper.js';
+import { TestRig } from '../test-helper.js';
 import {
   startFakeOpenAIServer,
   type FakeOpenAIServer,
@@ -25,17 +20,13 @@ describe('JSON output', () => {
     // The spawned CLI routes through any inherited HTTP(S)_PROXY; without a
     // loopback NO_PROXY entry the fake-server POST is tunnelled and these
     // tests hang. Mirrors test-helper.ts:993-995.
-    const noProxy = IS_CONTAINER_SANDBOX
-      ? CONTAINER_SANDBOX_NO_PROXY
-      : '127.0.0.1,localhost';
+    const noProxy = '127.0.0.1,localhost';
     vi.stubEnv('NO_PROXY', noProxy);
     vi.stubEnv('no_proxy', noProxy);
-    fakeServer = await startFakeOpenAIServer(
-      ({ body }) =>
-        body['stream'] === true
-          ? { contentChunks: ['Par', 'is'] }
-          : { content: '{"selected_memories":[]}' },
-      fakeServerHostOptions(),
+    fakeServer = await startFakeOpenAIServer(({ body }) =>
+      body['stream'] === true
+        ? { contentChunks: ['Par', 'is'] }
+        : { content: '{"selected_memories":[]}' },
     );
     await rig.setup('json-output-test');
   });

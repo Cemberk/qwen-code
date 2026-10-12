@@ -10,13 +10,16 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  buildKittyPlaceholder,
   containsCmdShellMetacharacters,
+  encodeKittyVirtualImage,
   getTerminalImageRenderSupport,
   INLINE_DECODE_NEGATIVE_CACHE_BYTE_LIMIT,
   INLINE_DECODE_NEGATIVE_CACHE_LIMIT,
   MAX_INLINE_IMAGE_PIXELS,
   markKittyImageWritten,
   prepareInlineTerminalImage,
+  readPngSize,
   renderTerminalImage,
   supportsKittyImageProtocol,
   TRANSMITTED_KEY_LIMIT,
@@ -844,5 +847,31 @@ describe('containsCmdShellMetacharacters', () => {
     ]) {
       expect(containsCmdShellMetacharacters(safe)).toBe(false);
     }
+  });
+});
+
+describe('Kitty image encoding', () => {
+  it('encodes PNG data as a Kitty virtual placement', () => {
+    expect(readPngSize(PNG_1X1)).toEqual({ width: 1, height: 1 });
+    expect(encodeKittyVirtualImage(PNG_1X1, 42, 40, 10)).toContain(
+      '\u001b_Ga=T,f=100,i=42,q=2,U=1,c=40,r=10,',
+    );
+  });
+
+  it('builds Kitty unicode placeholders for virtual placements', () => {
+    const placeholder = buildKittyPlaceholder(42, 3, 2);
+
+    expect(placeholder.color).toBe('#00002a');
+    expect(placeholder.lines).toEqual([
+      '\u{10EEEE}\u{305}\u{305}\u{10EEEE}\u{305}\u{30D}\u{10EEEE}\u{305}\u{30E}',
+      '\u{10EEEE}\u{30D}\u{305}\u{10EEEE}\u{30D}\u{30D}\u{10EEEE}\u{30D}\u{30E}',
+    ]);
+  });
+
+  it('clamps Kitty placeholder width to the available diacritic alphabet', () => {
+    const placeholder = buildKittyPlaceholder(42, 200, 1);
+
+    expect(placeholder.lines[0]).not.toContain('undefined');
+    expect(Array.from(placeholder.lines[0] ?? '').length).toBeLessThan(200 * 3);
   });
 });

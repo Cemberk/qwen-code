@@ -212,9 +212,9 @@ export const ExtensionActionsView = ({
             } else if (checked === ExtensionUpdateState.NOT_UPDATABLE) {
               onStatus({
                 type: 'info',
-                // Claude marketplace plugins are install-time conversions with
-                // no git remote, so there's nothing to diff against — spell out
-                // the reason and the workaround.
+                // Claude marketplace plugins are install-time conversions, so
+                // there's nothing to diff against — spell out the reason and
+                // the workaround.
                 text:
                   extension.installMetadata?.originSource === 'Claude'
                     ? t(
@@ -384,11 +384,12 @@ export const ExtensionActionsView = ({
   // While an update is in flight Escape cancels the run rather than leaving —
   // leaving would unmount this view while the operation keeps running and let
   // the user start a second one from a fresh mount. Cancelling (rather than
-  // ignoring the key) matters because the update can sit in a fetch with no
-  // deadline of its own, and this view can neither bound nor see it: ignoring
-  // Escape would leave every key in the dialog inert while the footer still
-  // promises "Esc to go back". The abort rejects the awaited call, so the catch
-  // below reports it and the `finally` clears the guard.
+  // ignoring the key) matters because the update can sit in a long archive
+  // extraction or copy with no deadline of its own, and this view can neither
+  // bound nor see it: ignoring Escape would leave every key in the dialog inert
+  // while the footer still promises "Esc to go back". The abort rejects the
+  // awaited call, so the catch below reports it and the `finally` clears the
+  // guard.
   // A scope change is ignored while it runs: it has no cancellation of its own
   // and is short-lived.
   useKeypress(

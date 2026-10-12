@@ -316,7 +316,7 @@ describe('settings list handler', () => {
     expect(mockWriteStdoutLine).toHaveBeenCalledWith('  Value: [not set]');
   });
 
-  it('should show [value stored in keychain] for sensitive settings', async () => {
+  it('should show [value stored in encrypted file] for sensitive settings', async () => {
     const mockExtension = {
       name: 'my-extension',
       id: 'ext-id-123',
@@ -339,7 +339,7 @@ describe('settings list handler', () => {
     await parser.parseAsync('settings list my-extension');
 
     expect(mockWriteStdoutLine).toHaveBeenCalledWith(
-      '  Value: [value stored in keychain] (user)',
+      '  Value: [value stored in encrypted file] (user)',
     );
   });
 });

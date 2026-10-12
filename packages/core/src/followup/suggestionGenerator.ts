@@ -40,8 +40,8 @@ PRIORITY: If the assistant's last message contains a tip or hint like "Tip: type
 or "type X to ...", extract X as the suggestion. These are explicit next-step hints.
 
 EXAMPLES:
-Assistant says "Tip: type post comments to publish findings" → "post comments"
-Assistant says "type /review to start" → "/review"
+Assistant says "Tip: type /compress to free up context" → "/compress"
+Assistant says "type /plan to start" → "/plan"
 User asked "fix the bug and run tests", bug is fixed → "run the tests"
 After code written → "try it out"
 Model offers options → suggest the one the user would likely pick, based on conversation

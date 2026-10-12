@@ -1446,11 +1446,11 @@ export async function loadCliConfig(
   ) {
     process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0';
     // The setting is process-wide, so the blast radius is every outbound HTTPS
-    // connection (model API, OAuth, MCP servers, and child processes that
+    // connection (model API, MCP servers, and child processes that
     // inherit the env), not just model calls. Log to the debug file too, so the
     // state is discoverable after the terminal scrollback is gone.
     const tlsWarning =
-      'TLS certificate verification is disabled (--insecure / QWEN_TLS_INSECURE). All HTTPS connections in this process (API calls, OAuth, MCP servers, child processes) are vulnerable to man-in-the-middle attacks.';
+      'TLS certificate verification is disabled (--insecure / QWEN_TLS_INSECURE). All HTTPS connections in this process (API calls, MCP servers, child processes) are vulnerable to man-in-the-middle attacks.';
     debugLogger.warn(tlsWarning);
     // eslint-disable-next-line no-console
     console.error(`WARNING: ${tlsWarning}`);

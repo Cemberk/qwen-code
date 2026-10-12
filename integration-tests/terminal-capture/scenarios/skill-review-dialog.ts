@@ -20,18 +20,6 @@ const harness = [
 export default [
   {
     ...base,
-    name: 'skill-review-before-global-qwen',
-    spawn: [...harness, 'before'],
-    flow: [
-      {
-        sleep: 7000,
-        capture: 'before-global-qwen.png',
-        captureFull: 'before-global-qwen-full.png',
-      },
-    ],
-  },
-  {
-    ...base,
     name: 'skill-review-after-preview',
     spawn: [...harness, 'after-preview'],
     flow: [

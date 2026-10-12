@@ -71,7 +71,7 @@ export const ToolConfirmationMessage: React.FC<
   // An open right-click context menu owns the keyboard while it is up. The
   // dispatch in KeypressContext is a broadcast that discards return values,
   // so an overlay cannot consume a key for the dialog — the dialog has to go
-  // quiet itself, or one Enter aimed at "Open Link" also approves the
+  // quiet itself, or one Enter aimed at a menu item also approves the
   // pending tool call. Mirrors the main view's InputPrompt gate; the
   // teammate tab renders this same dialog (via HistoryItemDisplay).
   const { menu: contextMenu } = useContextMenu();
@@ -104,7 +104,7 @@ export const ToolConfirmationMessage: React.FC<
   const handleConfirm = async (outcome: ToolConfirmationOutcome) => {
     // Hold the rejection here: the scheduler re-throws after terminalizing a
     // call the trust gate refused, and an unhandled rejection trips the
-    // process-level handler (llm.tsx), which shows a "file a bug report"
+    // process-level handler (llm.tsx), which shows an "unexpected error"
     // banner and opens the debug console over a correctly-refused action.
     void Promise.resolve(onConfirm(outcome)).catch(() => {});
   };

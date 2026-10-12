@@ -65,8 +65,6 @@ export default tseslint.config(
       'packages/**/.integration-test/**',
       'dist/**',
       'demo/**/dist/**',
-      'docs-site/.next/**',
-      'docs-site/out/**',
       '.qwen/**',
       'scripts/codemod/fixtures/**', // codemod test data; intentionally non-idiomatic ink input/output
     ],
@@ -455,27 +453,6 @@ export default tseslint.config(
           caughtErrorsIgnorePattern: '^_',
         },
       ],
-    },
-  },
-  // Settings for docs-site directory
-  {
-    files: ['docs-site/**/*.{js,jsx}'],
-    languageOptions: {
-      globals: {
-        ...globals.browser,
-        ...globals.node,
-      },
-      parserOptions: {
-        ecmaFeatures: {
-          jsx: true,
-        },
-      },
-    },
-    rules: {
-      // Allow relaxed rules for documentation site
-      '@typescript-eslint/no-unused-vars': 'off',
-      'react/prop-types': 'off',
-      'react/react-in-jsx-scope': 'off',
     },
   },
 );

@@ -85,8 +85,6 @@ describe('modifyWithEditor', () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     await fsp.rm(testProjectDir, { recursive: true, force: true });
-    const diffDir = path.join(os.tmpdir(), 'qwen-code-tool-modify-diffs');
-    await fsp.rm(diffDir, { recursive: true, force: true });
   });
 
   describe('successful modification', () => {
@@ -138,39 +136,38 @@ describe('modifyWithEditor', () => {
       });
     });
 
-    it('should create temp directory if it does not exist', async () => {
-      const diffDir = path.join(os.tmpdir(), 'qwen-code-tool-modify-diffs');
-      await fsp.rm(diffDir, { recursive: true, force: true }).catch(() => {});
+    it.skipIf(process.platform === 'win32')(
+      'writes temp files into a private per-edit directory and removes it',
+      async () => {
+        let observed:
+          | { dirMode: number; oldMode: number; newMode: number; dir: string }
+          | undefined;
+        mockOpenDiff.mockImplementation(async (oldPath, newPath) => {
+          observed = {
+            dir: path.dirname(oldPath),
+            dirMode: (await fsp.stat(path.dirname(oldPath))).mode & 0o777,
+            oldMode: (await fsp.stat(oldPath)).mode & 0o777,
+            newMode: (await fsp.stat(newPath)).mode & 0o777,
+          };
+        });
 
-      await modifyWithEditor(
-        mockParams,
-        mockModifyContext,
-        'vscode' as EditorType,
-        abortSignal,
-        vi.fn(),
-      );
+        await modifyWithEditor(
+          mockParams,
+          mockModifyContext,
+          'vscode' as EditorType,
+          abortSignal,
+          vi.fn(),
+        );
 
-      const stats = await fsp.stat(diffDir);
-      expect(stats.isDirectory()).toBe(true);
-    });
-
-    it('should not create temp directory if it already exists', async () => {
-      const diffDir = path.join(os.tmpdir(), 'qwen-code-tool-modify-diffs');
-      await fsp.mkdir(diffDir, { recursive: true });
-
-      const mkdirSpy = vi.spyOn(fs, 'mkdirSync');
-
-      await modifyWithEditor(
-        mockParams,
-        mockModifyContext,
-        'vscode' as EditorType,
-        abortSignal,
-        vi.fn(),
-      );
-
-      expect(mkdirSpy).not.toHaveBeenCalled();
-      mkdirSpy.mockRestore();
-    });
+        expect(observed).toMatchObject({
+          dirMode: 0o700,
+          oldMode: 0o600,
+          newMode: 0o600,
+        });
+        expect(path.dirname(observed!.dir)).toBe(os.tmpdir());
+        await expect(fsp.access(observed!.dir)).rejects.toThrow();
+      },
+    );
   });
 
   it('should handle missing old temp file gracefully', async () => {
@@ -287,9 +284,10 @@ describe('modifyWithEditor', () => {
     expect(oldFilePath).toMatch(/qwen-code-modify-test-file-old-\d+\.txt$/);
     expect(newFilePath).toMatch(/qwen-code-modify-test-file-new-\d+\.txt$/);
 
-    const diffDir = path.join(os.tmpdir(), 'qwen-code-tool-modify-diffs');
-    expect(path.dirname(oldFilePath)).toBe(diffDir);
-    expect(path.dirname(newFilePath)).toBe(diffDir);
+    expect(path.dirname(oldFilePath)).toBe(path.dirname(newFilePath));
+    expect(path.basename(path.dirname(oldFilePath))).toMatch(
+      /^qwen-code-modify-/,
+    );
   });
 
   it('should create temp files with correct naming without extension', async () => {
@@ -309,9 +307,10 @@ describe('modifyWithEditor', () => {
     expect(oldFilePath).toMatch(/qwen-code-modify-test-file-old-\d+$/);
     expect(newFilePath).toMatch(/qwen-code-modify-test-file-new-\d+$/);
 
-    const diffDir = path.join(os.tmpdir(), 'qwen-code-tool-modify-diffs');
-    expect(path.dirname(oldFilePath)).toBe(diffDir);
-    expect(path.dirname(newFilePath)).toBe(diffDir);
+    expect(path.dirname(oldFilePath)).toBe(path.dirname(newFilePath));
+    expect(path.basename(path.dirname(oldFilePath))).toMatch(
+      /^qwen-code-modify-/,
+    );
   });
 });
 

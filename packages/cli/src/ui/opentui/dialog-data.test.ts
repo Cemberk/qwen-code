@@ -136,7 +136,7 @@ describe('buildModelEntries', () => {
       id: 'm1',
       label: 'M1',
       authType: AuthType.USE_OPENAI,
-      baseUrl: 'https://provider.example',
+      baseUrl: 'http://127.0.0.1:8000/v1',
       contextWindowSize: 8192,
     },
     {
@@ -173,7 +173,7 @@ describe('buildModelEntries', () => {
       buildModelSelectionKey(
         String(AuthType.USE_OPENAI),
         'm1',
-        'https://provider.example',
+        'http://127.0.0.1:8000/v1',
       ),
     );
   });
@@ -271,7 +271,7 @@ describe('applyModelSelection', () => {
       getContentGeneratorConfig: (() => ({
         authType: AuthType.USE_OPENAI,
         model: 'm2',
-        baseUrl: 'https://provider.example',
+        baseUrl: 'http://127.0.0.1:8000/v1',
         apiKey: 'sk-1234567',
       })) as Config['getContentGeneratorConfig'],
       ...overrides,
@@ -286,7 +286,7 @@ describe('applyModelSelection', () => {
       });
       const { settings, written } = createFakeSettings();
       const entries = [
-        modelRow({ id: 'm2', baseUrl: 'https://provider.example' }),
+        modelRow({ id: 'm2', baseUrl: 'http://127.0.0.1:8000/v1' }),
       ];
 
       const outcome = await applyModelSelection({
@@ -300,7 +300,7 @@ describe('applyModelSelection', () => {
       expect(switchModel).toHaveBeenCalledWith(
         AuthType.USE_OPENAI,
         'm2',
-        expect.objectContaining({ baseUrl: 'https://provider.example' }),
+        expect.objectContaining({ baseUrl: 'http://127.0.0.1:8000/v1' }),
       );
       expect(written).toContainEqual({
         scope: SettingScope.User,
@@ -310,7 +310,7 @@ describe('applyModelSelection', () => {
       expect(written).toContainEqual({
         scope: SettingScope.User,
         key: 'model.baseUrl',
-        value: 'https://provider.example',
+        value: 'http://127.0.0.1:8000/v1',
       });
       expect(written).toContainEqual({
         scope: SettingScope.User,
@@ -483,7 +483,7 @@ describe('applyModelSelection', () => {
       const entries = [
         modelRow({
           id: 'qv',
-          baseUrl: 'https://v.example',
+          baseUrl: 'http://127.0.0.1:8001/v1',
           modalities: { image: true },
         }),
       ];
@@ -497,12 +497,12 @@ describe('applyModelSelection', () => {
       });
 
       expect(setVisionModel).toHaveBeenCalledWith(
-        'openai:qv\0https://v.example',
+        'openai:qv\0http://127.0.0.1:8001/v1',
       );
       expect(written).toContainEqual({
         scope: SettingScope.User,
         key: 'visionModel',
-        value: 'openai:qv\0https://v.example',
+        value: 'openai:qv\0http://127.0.0.1:8001/v1',
       });
       expect(
         written.find((write) => write.key === 'model.name'),
@@ -812,8 +812,8 @@ describe('mcp and extension feeds', () => {
             isActive: true,
             version: '1.2.3',
             installMetadata: {
-              source: 'https://github.com/a/b',
-              originSource: 'GitHub',
+              source: '/x/src/fav',
+              originSource: 'QwenCode',
             },
             mcpServers: { a: {}, b: {} },
             skills: [{}],
@@ -831,8 +831,8 @@ describe('mcp and extension feeds', () => {
       favorite: true,
       scope: 'user',
       version: '1.2.3',
-      source: 'https://github.com/a/b',
-      origin: 'GitHub',
+      source: '/x/src/fav',
+      origin: 'QwenCode',
       components: '2 MCP · 1 Skills · 2 Workflows',
     });
     expect(rows[1]).toMatchObject({
@@ -1057,7 +1057,7 @@ describe('computeModelDialogInitialKey (/model opens on the current model)', () 
       key: buildModelSelectionKey(
         AuthType.USE_OPENAI,
         'm1',
-        'https://provider.example',
+        'http://127.0.0.1:8000/v1',
       ),
       authType: AuthType.USE_OPENAI,
       modelId: 'm1',
@@ -1076,7 +1076,7 @@ describe('computeModelDialogInitialKey (/model opens on the current model)', () 
         getModel: () => 'm1',
         getAuthType: () => AuthType.USE_OPENAI,
         getContentGeneratorConfig: (() => ({
-          baseUrl: 'https://provider.example',
+          baseUrl: 'http://127.0.0.1:8000/v1',
         })) as Config['getContentGeneratorConfig'],
       } as Partial<Config>),
       settings,
@@ -1093,7 +1093,7 @@ describe('computeModelDialogInitialKey (/model opens on the current model)', () 
         getModel: () => 'm2',
         getAuthType: () => AuthType.USE_OPENAI,
         getContentGeneratorConfig: (() => ({
-          baseUrl: 'https://moved.example',
+          baseUrl: 'http://127.0.0.1:8002/v1',
         })) as Config['getContentGeneratorConfig'],
       } as Partial<Config>),
       settings,
@@ -1383,14 +1383,14 @@ describe('Advisor model selection', () => {
         id: 'shared',
         label: 'Default',
         authType: AuthType.USE_OPENAI,
-        baseUrl: 'https://api.openai.com/v1',
+        baseUrl: 'http://127.0.0.1:11434/v1',
       },
       {
         id: 'shared',
         label: 'Explicit',
         authType: AuthType.USE_OPENAI,
-        baseUrl: 'https://api.openai.com/v1',
-        registryBaseUrl: 'https://api.openai.com/v1',
+        baseUrl: 'http://127.0.0.1:11434/v1',
+        registryBaseUrl: 'http://127.0.0.1:11434/v1',
       },
       {
         id: 'vision',
@@ -1399,7 +1399,7 @@ describe('Advisor model selection', () => {
         visionOnly: true,
       },
     ];
-    const selector = `${AuthType.USE_OPENAI}:shared\0https://api.openai.com/v1`;
+    const selector = `${AuthType.USE_OPENAI}:shared\0http://127.0.0.1:11434/v1`;
     const setAdvisorModel = vi.fn().mockResolvedValue(false);
     const switchModel = vi.fn();
     const config = stubConfig({

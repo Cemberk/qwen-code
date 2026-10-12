@@ -40,12 +40,12 @@ describe('fetchWithPolicy', () => {
           headers: { 'content-type': 'text/plain' },
         }),
     );
-    const result = await fetchWithPolicy('https://example.com/x', opts);
+    const result = await fetchWithPolicy('http://127.0.0.1:8080/x', opts);
     expect(result.status).toBe(200);
     expect(result.contentType).toBe('text/plain');
     expect(result.body.toString()).toBe('hello');
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'https://example.com/x',
+      'http://127.0.0.1:8080/x',
       expect.objectContaining({ redirect: 'error' }),
     );
   });
@@ -59,7 +59,7 @@ describe('fetchWithPolicy', () => {
         }),
     );
     await expect(
-      fetchWithPolicy('https://example.com/big', opts),
+      fetchWithPolicy('http://127.0.0.1:8080/big', opts),
     ).rejects.toThrow(/Response too large/);
   });
 
@@ -74,7 +74,7 @@ describe('fetchWithPolicy', () => {
     });
     stubFetch(() => new Response(body, { status: 200 }));
     await expect(
-      fetchWithPolicy('https://example.com/big-stream', opts),
+      fetchWithPolicy('http://127.0.0.1:8080/big-stream', opts),
     ).rejects.toThrow(/exceeded the 1000-byte limit while streaming/);
   });
 
@@ -83,7 +83,7 @@ describe('fetchWithPolicy', () => {
     controller.abort(new Error('user cancelled'));
     stubFetch(() => new Response('never', { status: 200 }));
     await expect(
-      fetchWithPolicy('https://example.com/x', {
+      fetchWithPolicy('http://127.0.0.1:8080/x', {
         ...opts,
         signal: controller.signal,
       }),
@@ -107,7 +107,7 @@ describe('fetchWithPolicy', () => {
           statusText: 'Internal Server Error',
         }),
     );
-    const result = await fetchWithPolicy('https://example.com/boom', opts);
+    const result = await fetchWithPolicy('http://127.0.0.1:8080/boom', opts);
     expect(result.status).toBe(500);
     expect(result.statusText).toBe('Internal Server Error');
     expect(result.body.length).toBe(0);
@@ -125,9 +125,50 @@ describe('fetchWithPolicy', () => {
           headers: { 'content-length': '5000' },
         }),
     );
-    const result = await fetchWithPolicy('https://example.com/missing', opts);
+    const result = await fetchWithPolicy('http://127.0.0.1:8080/missing', opts);
     expect(result.status).toBe(404);
     expect(result.body.length).toBe(0);
+  });
+});
+
+describe('fetchWithPolicy host policy', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    'https://example.com/models',
+    'http://192.168.1.10:11434/v1/models',
+    'http://0.0.0.0:11434/v1/models',
+    'http://localhost.example.com/v1/models',
+    'http://127.0.0.1.nip.io/v1/models',
+    'http://localhost@evil.example/v1/models',
+    'ftp://127.0.0.1/models',
+    'not a url',
+  ])('rejects %s before any request is made', async (url) => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      fetchWithPolicy(url, { timeoutMs: 1000, maxBytes: 1024 }),
+    ).rejects.toMatchObject({ code: 'ERR_NOT_LOOPBACK' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'http://127.0.0.1:11434/v1/models',
+    'http://[::1]:11434/v1/models',
+    'http://localhost:11434/v1/models',
+  ])('fetches loopback URL %s', async (url) => {
+    const fetchMock = vi.fn(async () => new Response('ok'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await fetchWithPolicy(url, {
+      timeoutMs: 1000,
+      maxBytes: 1024,
+    });
+    expect(result.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -149,7 +190,7 @@ describe('fetchWithPolicy retry', () => {
         : new Response('recovered', { status: 200 });
     }) as typeof fetch;
 
-    const result = await fetchWithPolicy('https://example.com/flaky', opts);
+    const result = await fetchWithPolicy('http://127.0.0.1:8080/flaky', opts);
     expect(calls).toBe(2);
     expect(result.status).toBe(200);
     expect(result.body.toString()).toBe('recovered');
@@ -164,7 +205,7 @@ describe('fetchWithPolicy retry', () => {
         : new Response('recovered', { status: 200 });
     }) as typeof fetch;
 
-    const result = await fetchWithPolicy('https://example.com/limited', opts);
+    const result = await fetchWithPolicy('http://127.0.0.1:8080/limited', opts);
     expect(calls).toBe(2);
     expect(result.status).toBe(200);
     expect(result.body.toString()).toBe('recovered');
@@ -177,7 +218,7 @@ describe('fetchWithPolicy retry', () => {
       return new Response('blocked', { status: 403 });
     }) as typeof fetch;
 
-    const result = await fetchWithPolicy('https://example.com/blocked', opts);
+    const result = await fetchWithPolicy('http://127.0.0.1:8080/blocked', opts);
     expect(calls).toBe(2);
     expect(result.status).toBe(403);
   });
@@ -198,7 +239,7 @@ describe('fetchWithPolicy retry', () => {
         return new Response('ok', { status: 200 });
       }) as typeof fetch;
 
-      const result = await fetchWithPolicy('https://example.com/reset', opts);
+      const result = await fetchWithPolicy('http://127.0.0.1:8080/reset', opts);
       expect(calls).toBe(2);
       expect(result.status).toBe(200);
     },
@@ -211,7 +252,7 @@ describe('fetchWithPolicy retry', () => {
       return new Response('nope', { status: 404 });
     }) as typeof fetch;
 
-    const result = await fetchWithPolicy('https://example.com/missing', opts);
+    const result = await fetchWithPolicy('http://127.0.0.1:8080/missing', opts);
     expect(calls).toBe(1);
     expect(result.status).toBe(404);
   });
@@ -230,7 +271,7 @@ describe('fetchWithPolicy retry', () => {
     }) as typeof fetch;
 
     await expect(
-      fetchWithPolicy('https://example.com/tls', opts),
+      fetchWithPolicy('http://127.0.0.1:8080/tls', opts),
     ).rejects.toThrow('fetch failed');
     expect(calls).toBe(1);
   });
@@ -261,7 +302,7 @@ describe('fetchWithPolicy retry abort handling', () => {
       return new Response('ok', { status: 200 });
     }) as typeof fetch;
 
-    const result = await fetchWithPolicy('https://example.com/reset', opts);
+    const result = await fetchWithPolicy('http://127.0.0.1:8080/reset', opts);
     expect(calls).toBe(2);
     expect(result.status).toBe(200);
   });
@@ -276,7 +317,7 @@ describe('fetchWithPolicy retry abort handling', () => {
     setTimeout(() => controller.abort(new Error('user cancelled')), 100);
 
     await expect(
-      fetchWithPolicy('https://example.com/blocked', {
+      fetchWithPolicy('http://127.0.0.1:8080/blocked', {
         ...opts,
         signal: controller.signal,
       }),
@@ -291,7 +332,7 @@ describe('fetchWithPolicy retry abort handling', () => {
 
     // 200ms budget expires inside the 500ms retry delay.
     await expect(
-      fetchWithPolicy('https://example.com/blocked', {
+      fetchWithPolicy('http://127.0.0.1:8080/blocked', {
         ...opts,
         timeoutMs: 200,
       }),

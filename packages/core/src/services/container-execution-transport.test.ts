@@ -16,7 +16,6 @@ import {
   realpath,
   rename,
   rm,
-  symlink,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -160,7 +159,7 @@ describe.skipIf(process.platform === 'win32')(
     const prepare = (id: string) =>
       environment.prepare({ id, toolName: 'read_file', params: {} }, signal);
 
-    const prepareInstall = () =>
+    const preparePackageInstall = () =>
       environment.prepare(
         {
           id: 'install',
@@ -185,7 +184,7 @@ describe.skipIf(process.platform === 'win32')(
       [{ Host: { Security: { Rootless: true } } }, true],
       [{ host: { security: { rootless: true } } }, true],
     ])(
-      'uses security metadata for both worker UID mappings: %j',
+      'uses security metadata for the worker UID mapping: %j',
       async (info, rootless) => {
         await environment.dispose();
         runtime.execFile.mockClear();
@@ -199,11 +198,11 @@ describe.skipIf(process.platform === 'win32')(
           },
         );
         environment = await createEnvironment();
-        await prepareInstall();
+        await preparePackageInstall();
         const creates = runtime.execFile.mock.calls
           .map((call) => call[1] as string[])
           .filter((args) => args[0] === 'create');
-        expect(creates).toHaveLength(2);
+        expect(creates).toHaveLength(1);
         for (const args of creates) {
           expect(args.includes('--user')).toBe(!rootless);
           if (!rootless)
@@ -287,84 +286,78 @@ describe.skipIf(process.platform === 'win32')(
       },
     );
 
-    it.each(['primary', 'installation'])(
-      'retries failed %s removal at session shutdown without reopening execution',
-      async (kind) => {
-        if (kind === 'installation') await prepareInstall();
-        const creates = runtime.execFile.mock.calls.filter(
-          (call) => call[1][0] === 'create',
-        );
-        const args = creates.at(-1)![1];
-        const failedName = args[args.indexOf('--name') + 1];
-        const entry = join(root, 'workspace', '.git');
-        const temporary = dirname(environment.outputDirectory);
-        const output = join(environment.outputDirectory, 'keep.txt');
-        await writeFile(output, 'retained output');
-        let failurePending = true;
-        const originalRuntime = runtime.execFile.getMockImplementation()!;
-        runtime.execFile.mockImplementation(
-          (program, command, options, callback) => {
-            if (
-              command[0] === 'rm' &&
-              command[2] === failedName &&
-              failurePending
-            ) {
-              failurePending = false;
-              callback(
-                new Error('runtime unavailable'),
-                '',
-                'runtime unavailable',
-              );
-            } else originalRuntime(program, command, options, callback);
-          },
-        );
-        const owner = new Config({
-          targetDir: join(root, 'workspace'),
-          cwd: join(root, 'workspace'),
-          debugMode: false,
-          deferTelemetryInitialization: true,
+    it('retries failed worker removal at session shutdown without reopening execution', async () => {
+      const creates = runtime.execFile.mock.calls.filter(
+        (call) => call[1][0] === 'create',
+      );
+      const args = creates.at(-1)![1];
+      const failedName = args[args.indexOf('--name') + 1];
+      const entry = join(root, 'workspace', '.git');
+      const temporary = dirname(environment.outputDirectory);
+      const output = join(environment.outputDirectory, 'keep.txt');
+      await writeFile(output, 'retained output');
+      let failurePending = true;
+      const originalRuntime = runtime.execFile.getMockImplementation()!;
+      runtime.execFile.mockImplementation(
+        (program, command, options, callback) => {
+          if (
+            command[0] === 'rm' &&
+            command[2] === failedName &&
+            failurePending
+          ) {
+            failurePending = false;
+            callback(
+              new Error('runtime unavailable'),
+              '',
+              'runtime unavailable',
+            );
+          } else originalRuntime(program, command, options, callback);
+        },
+      );
+      const owner = new Config({
+        targetDir: join(root, 'workspace'),
+        cwd: join(root, 'workspace'),
+        debugMode: false,
+        deferTelemetryInitialization: true,
+      });
+      owner.registerExecutionEnvironment(Promise.resolve(environment));
+      try {
+        const first = environment.dispose();
+        expect(environment.dispose()).toBe(first);
+        await expect(first).rejects.toThrow('runtime unavailable');
+        expect(await readdir(entry)).toEqual([]);
+        expect(await readFile(output, 'utf8')).toBe('retained output');
+        expect(await readdir(gitMask(creates[0][1]))).toEqual([]);
+        const createCount = creates.length;
+        await expect(prepare('after-close')).rejects.toThrow('closed');
+        expect(
+          runtime.execFile.mock.calls.filter((call) => call[1][0] === 'create'),
+        ).toHaveLength(createCount);
+        await expect(
+          owner.shutdownExecutionEnvironments(),
+        ).resolves.toBeUndefined();
+        await expect(lstat(entry)).rejects.toMatchObject({ code: 'ENOENT' });
+        await expect(lstat(temporary)).rejects.toMatchObject({
+          code: 'ENOENT',
         });
-        owner.registerExecutionEnvironment(Promise.resolve(environment));
-        try {
-          const first = environment.dispose();
-          expect(environment.dispose()).toBe(first);
-          await expect(first).rejects.toThrow('runtime unavailable');
-          expect(await readdir(entry)).toEqual([]);
-          expect(await readFile(output, 'utf8')).toBe('retained output');
-          expect(await readdir(gitMask(creates[0][1]))).toEqual([]);
-          const createCount = creates.length;
-          await expect(prepareInstall()).rejects.toThrow('closed');
-          expect(
-            runtime.execFile.mock.calls.filter(
-              (call) => call[1][0] === 'create',
-            ),
-          ).toHaveLength(createCount);
-          await expect(
-            owner.shutdownExecutionEnvironments(),
-          ).resolves.toBeUndefined();
-          await expect(lstat(entry)).rejects.toMatchObject({ code: 'ENOENT' });
-          await expect(lstat(temporary)).rejects.toMatchObject({
-            code: 'ENOENT',
-          });
-          expect(
-            runtime.execFile.mock.calls.filter(
-              (call) => call[1][0] === 'rm' && call[1][2] === failedName,
-            ),
-          ).toHaveLength(2);
-          const removals = runtime.execFile.mock.calls.filter(
-            (call) => call[1][0] === 'rm',
-          ).length;
-          await environment.dispose();
-          expect(
-            runtime.execFile.mock.calls.filter((call) => call[1][0] === 'rm'),
-          ).toHaveLength(removals);
-        } finally {
-          runtime.execFile.mockImplementation(originalRuntime);
-          await environment.dispose().catch(() => undefined);
-          await rm(temporary, { recursive: true, force: true });
-        }
-      },
-    );
+        expect(
+          runtime.execFile.mock.calls.filter(
+            (call) => call[1][0] === 'rm' && call[1][2] === failedName,
+          ),
+        ).toHaveLength(2);
+        const removals = runtime.execFile.mock.calls.filter(
+          (call) => call[1][0] === 'rm',
+        ).length;
+        await environment.dispose();
+        expect(
+          runtime.execFile.mock.calls.filter((call) => call[1][0] === 'rm'),
+        ).toHaveLength(removals);
+      } finally {
+        runtime.execFile.mockImplementation(originalRuntime);
+        await environment.dispose().catch(() => undefined);
+        await rm(temporary, { recursive: true, force: true });
+      }
+    });
 
     it.skipIf(process.getuid?.() === 0).each(['mount point', 'output'])(
       'retries failed %s deletion without releasing another sibling lease',
@@ -468,14 +461,10 @@ describe.skipIf(process.platform === 'win32')(
         await siblings[0].dispose();
         expect((await lstat(entry)).isDirectory()).toBe(true);
         await siblings[1].prepare(
-          {
-            id: 'install',
-            toolName: 'run_shell_command',
-            params: { command: 'npm install' },
-          },
+          { id: 'read', toolName: 'read_file', params: {} },
           signal,
         );
-        await expect(siblings[1].execute('install', signal)).resolves.toEqual(
+        await expect(siblings[1].execute('read', signal)).resolves.toEqual(
           result,
         );
         await siblings[1].dispose();
@@ -485,7 +474,7 @@ describe.skipIf(process.platform === 'win32')(
       }
     });
 
-    it('keeps an initially absent root .git masked on the primary and later install workers', async () => {
+    it('keeps an initially absent root .git masked on an offline worker', async () => {
       const primaryArgs = runtime.execFile.mock.calls.find(
         (call) => call[1][0] === 'create',
       )![1];
@@ -494,13 +483,10 @@ describe.skipIf(process.platform === 'win32')(
       const entry = join(root, 'workspace', '.git');
       expect((await lstat(entry)).isDirectory()).toBe(true);
       await writeFile(join(entry, 'config'), 'workspace metadata');
-      await prepareInstall();
-      const creates = runtime.execFile.mock.calls.filter(
-        (call) => call[1][0] === 'create',
-      );
-      expect(creates).toHaveLength(2);
-      expect(gitMask(creates[1][1])).toBe(mask);
-      expect(creates[1][1]).not.toContain('--network');
+      await preparePackageInstall();
+      expect(
+        runtime.execFile.mock.calls.filter((call) => call[1][0] === 'create'),
+      ).toHaveLength(1);
       expect(
         primaryArgs.slice(
           primaryArgs.indexOf('--network'),
@@ -510,18 +496,6 @@ describe.skipIf(process.platform === 'win32')(
       expect(await readdir(mask)).toEqual([]);
       expect(await readFile(join(entry, 'config'), 'utf8')).toBe(
         'workspace metadata',
-      );
-      await expect(environment.execute('install', signal)).resolves.toEqual(
-        result,
-      );
-      expect(children[1].requests.map((request) => request.method)).toContain(
-        'execute',
-      );
-      expect(
-        children[0].requests.map((request) => request.method),
-      ).not.toContain('execute');
-      expect(runtime.execFile.mock.calls.map((call) => call[1])).toContainEqual(
-        ['rm', '-f', creates[1][1][creates[1][1].indexOf('--name') + 1]],
       );
     });
 
@@ -542,104 +516,6 @@ describe.skipIf(process.platform === 'win32')(
         expect((await lstat(mask)).isDirectory()).toBe(kind === 'directory');
         if (kind === 'file') expect(await readFile(mask, 'utf8')).toBe('');
         else expect(await readdir(mask)).toEqual([]);
-      },
-    );
-
-    it.each(['file', 'symlink'])(
-      'refuses an install worker when an absent .git becomes a %s',
-      async (kind) => {
-        const entry = join(root, 'workspace', '.git');
-        await rm(entry, { recursive: true, force: true });
-        if (kind === 'file') await writeFile(entry, 'gitdir: ../metadata');
-        else await symlink(join(root, 'bundle'), entry, 'dir');
-        runtime.execFile.mockClear();
-        runtime.spawn.mockClear();
-        await expect(prepareInstall()).rejects.toThrow(
-          kind === 'file' ? 'changed type' : 'symlinked .git',
-        );
-        expect(
-          runtime.execFile.mock.calls.some((call) => call[1][0] === 'create'),
-        ).toBe(false);
-        expect(runtime.spawn).not.toHaveBeenCalled();
-      },
-    );
-
-    it('refuses an install worker when a .git file becomes a directory', async () => {
-      await environment.dispose();
-      const entry = join(root, 'workspace', '.git');
-      await rm(entry, { recursive: true, force: true });
-      await writeFile(entry, 'gitdir: ../metadata');
-      environment = await createEnvironment();
-      await rm(entry);
-      await mkdir(entry);
-      runtime.execFile.mockClear();
-      runtime.spawn.mockClear();
-      await expect(prepareInstall()).rejects.toThrow('changed type');
-      expect(
-        runtime.execFile.mock.calls.some((call) => call[1][0] === 'create'),
-      ).toBe(false);
-      expect(runtime.spawn).not.toHaveBeenCalled();
-    });
-
-    it('does not create an install container after disposal during its filesystem check', async () => {
-      runtime.execFile.mockClear();
-      runtime.spawn.mockClear();
-      const installation = prepareInstall().catch((error: unknown) => error);
-      const disposal = environment.dispose();
-      expect(await installation).toMatchObject({
-        message: expect.stringContaining('disposed during startup'),
-      });
-      await disposal;
-      expect(
-        runtime.execFile.mock.calls.some((call) => call[1][0] === 'create'),
-      ).toBe(false);
-      expect(runtime.spawn).not.toHaveBeenCalled();
-    });
-
-    it.each(['type change', 'disposal'])(
-      'does not attach an install worker after %s during container creation',
-      async (change) => {
-        let finishCreate: (() => void) | undefined;
-        runtime.execFile.mockClear();
-        runtime.spawn.mockClear();
-        runtime.execFile.mockImplementation(
-          (_runtime, args, _options, callback) => {
-            if (args[0] === 'create') {
-              finishCreate = () => callback(null, '', '');
-            } else callback(null, '{}', '');
-          },
-        );
-        const installation = prepareInstall().catch((error: unknown) => error);
-        await vi.waitFor(() => expect(finishCreate).toBeDefined());
-        let disposal: Promise<void> | undefined;
-        if (change === 'type change') {
-          await rm(join(root, 'workspace', '.git'), {
-            recursive: true,
-            force: true,
-          });
-          await writeFile(
-            join(root, 'workspace', '.git'),
-            'gitdir: ../metadata',
-          );
-        } else {
-          disposal = environment.dispose();
-        }
-        finishCreate!();
-        expect(await installation).toMatchObject({
-          message: expect.stringContaining(
-            change === 'type change'
-              ? 'changed type'
-              : 'disposed during startup',
-          ),
-        });
-        await disposal;
-        expect(runtime.spawn).not.toHaveBeenCalled();
-        const created = runtime.execFile.mock.calls.find(
-          (call) => call[1][0] === 'create',
-        )![1];
-        expect(
-          runtime.execFile.mock.calls.map((call) => call[1]),
-        ).toContainEqual(['rm', '-f', created[created.indexOf('--name') + 1]]);
       },
     );
 

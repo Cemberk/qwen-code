@@ -355,13 +355,10 @@ export function applySkillAllowedTools(
  *
  * A project skill's hooks are marked trust-gated by `registerSkillHooks`, so
  * the event handler re-reads folder trust at fire time. `isTrustedFolder()`
- * reads the IDE context store first and only falls back to the `Config`'s
- * own readonly field, so with an IDE companion connected that value is live
- * and revoking trust silences an already-registered gate at the next event,
- * without a restart. With no IDE connection it is fixed for the life of the
+ * reads the `Config`'s own readonly field, so it is fixed for the life of the
  * `Config`, and a change made through the CLI's trust dialog takes effect on
- * restart. Granting trust never retro-registers either way — the skill has
- * to be invoked again, which is safe because registration dedups.
+ * restart. Granting trust never retro-registers — the skill has to be invoked
+ * again, which is safe because registration dedups.
  *
  * No-ops when the session has no hook system or no session id.
  */

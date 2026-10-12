@@ -24,7 +24,7 @@ import type {
 import { formatDuration } from './ui/utils/formatters.js';
 import { isSlashCommand } from './ui/utils/commandUtils.js';
 import { sanitizeTerminalText } from './ui/utils/textUtils.js';
-import { isInlineModelOverrideAllowed } from './utils/acpModelUtils.js';
+import { isInlineModelOverrideAllowed } from './utils/model-option-utils.js';
 import type { LoadedSettings } from './config/settings.js';
 import {
   executeToolCall,

@@ -20,7 +20,7 @@
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { fakeServerHostOptions, TestRig } from './test-helper.js';
+import { TestRig } from './test-helper.js';
 import { fakeToolCall, startFakeOpenAIServer } from './fake-openai-server.js';
 import type {
   FakeOpenAIResponse,
@@ -47,11 +47,8 @@ const RUN_DOWNSTREAM = 'run the downstream command';
 describe('skill hooks survive session resume', () => {
   let rig: TestRig;
   let fakeServer: FakeOpenAIServer;
-  let restoreNoProxy: (() => void) | undefined;
 
   afterEach(async () => {
-    restoreNoProxy?.();
-    restoreNoProxy = undefined;
     await fakeServer?.close();
     await rig?.cleanup();
   });
@@ -102,11 +99,11 @@ describe('skill hooks survive session resume', () => {
         };
       }
       return { content: 'done' };
-    }, fakeServerHostOptions());
+    });
 
     // Both launches share one home so `--continue` can find the recorded
     // session, and neither can reach the developer's real one.
-    restoreNoProxy = stubFakeModelEnv(rig, fakeServer);
+    stubFakeModelEnv(rig, fakeServer);
 
     const flagPath = join(rig.testDir!, EXECUTED_FLAG);
 

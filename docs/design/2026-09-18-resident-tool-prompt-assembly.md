@@ -113,7 +113,7 @@ The prompt depends only on the session-start snapshot, so `setStaticSystemPrefix
 - **Two prose mentions stay ungated.** The persisted-output mandate (`prompts.ts:420`) and the plan-mode reminder (`:1480`) name `read_file` outside `## Using Your Tools`, so a session that does not declare it still reads them. That is pre-existing behaviour rather than a regression introduced here, and it is why §7's invariant test is scoped to the gated sections.
 - **Dropping guidance for a tool that _is_ declared would be a regression**, and no CI test would catch it today. §7 adds the invariant test that closes this.
 - **Core gate.** The change lands in `packages/core/src/core/**`, which is reviewed at the core gate's 100%-confidence bar; a `feat` reaching 500+ production lines escalates to a maintainer for awareness.
-- **No recall harness exists.** There is no `evals/` directory, and the only agentic harness (`integration-tests/terminal-bench`) is manual-only, so "the model still picks the right tool" cannot be asserted in CI. The mitigation is that step 1 only removes text about tools the model does not have.
+- **No recall harness exists.** There is no `evals/` directory and no agentic task harness, so "the model still picks the right tool" cannot be asserted in CI. The mitigation is that step 1 only removes text about tools the model does not have.
 
 ## 7. Validation plan
 

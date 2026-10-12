@@ -15,28 +15,7 @@ if (process.env['QWEN_DEBUG_LOG_FILE'] === undefined) {
   process.env['QWEN_DEBUG_LOG_FILE'] = '0';
 }
 
-if (process.env['QWEN_SERVE_NO_PERSISTENT_REGISTRATION'] === undefined) {
-  process.env['QWEN_SERVE_NO_PERSISTENT_REGISTRATION'] = '1';
-}
-
-// The review sandbox policy is the OPERATOR's setting for their own reviews,
-// and this suite must not inherit it. A maintainer who turns the feature on
-// and then runs `npm test` would otherwise watch the review tests refuse to
-// run — 101 of them, measured — because the phase gates correctly do what the
-// setting says. Deleting rather than pinning to a value, so `sandboxPolicy`'s
-// "strictest of environment and settings" rule is left alone and a test that
-// wants a policy still stubs one.
-delete process.env['QWEN_REVIEW_SANDBOX'];
 delete process.env['SANDBOX_SET_UID_GID'];
-
-// Registration capacity is an OPERATOR daemon setting, and `createServeApp` /
-// `runQwenServe` read it straight from the ambient environment when no explicit
-// option or `daemonEnv` is supplied. A maintainer who exports the documented
-// downgrade value would otherwise turn the capacity assertions red, and an
-// invalid value would throw at app construction, failing every test that builds
-// one. Deleting rather than pinning, so tests that want a capacity still pass
-// one explicitly.
-delete process.env['QWEN_SERVE_MAX_WORKSPACES'];
 
 import { configure } from '@testing-library/react';
 

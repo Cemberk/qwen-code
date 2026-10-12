@@ -46,42 +46,12 @@ support, fallbacks, limits, and session-history behavior.
 
 ## Mermaid
 
-Fenced `mermaid` code blocks render visually in `render` mode. The TUI uses a
-layered strategy:
-
-1. If enabled and supported, Qwen Code asks Mermaid CLI (`mmdc`) to render the
-   diagram to a PNG and sends it to the terminal image protocol.
-2. If terminal images are unavailable but `chafa` is installed, the same PNG can
-   be converted to ANSI block graphics.
-3. Otherwise, Qwen Code falls back to a terminal wireframe or compact text
-   preview.
-4. If a Mermaid diagram type cannot be previewed, Qwen Code shows the original
-   fenced source instead of hiding it behind a placeholder.
-
-Mermaid image rendering is disabled by default because it requires external
-renderers and terminal image support. Enable it with:
-
-```bash
-QWEN_CODE_MERMAID_IMAGE_RENDERING=1 qwen
-```
-
-Optional environment variables:
-
-| Variable                                    | Description                                                                       |
-| ------------------------------------------- | --------------------------------------------------------------------------------- |
-| `QWEN_CODE_MERMAID_IMAGE_RENDERING=1`       | Enables external Mermaid image rendering.                                         |
-| `QWEN_CODE_DISABLE_MERMAID_IMAGES=1`        | Disables Mermaid image rendering even when enabled elsewhere.                     |
-| `QWEN_CODE_MERMAID_IMAGE_PROTOCOL=kitty`    | Forces Kitty protocol output. Useful for terminals such as Kitty and Ghostty.     |
-| `QWEN_CODE_MERMAID_IMAGE_PROTOCOL=iterm2`   | Requests iTerm2 inline images. Interactive TUI rendering falls back to text/ANSI. |
-| `QWEN_CODE_MERMAID_IMAGE_PROTOCOL=off`      | Disables terminal image protocols and allows text or `chafa` fallback.            |
-| `QWEN_CODE_MERMAID_MMD_CLI=/path/to/mmdc`   | Uses a specific Mermaid CLI executable.                                           |
-| `QWEN_CODE_MERMAID_ALLOW_LOCAL_RENDERERS=1` | Allows project-local renderer binaries under `node_modules/.bin`.                 |
-| `QWEN_CODE_MERMAID_RENDER_WIDTH=1200`       | Overrides the PNG render width.                                                   |
-| `QWEN_CODE_MERMAID_RENDER_TIMEOUT_MS=10000` | Overrides the external render timeout, capped at 60000 ms.                        |
-| `QWEN_CODE_MERMAID_CELL_ASPECT_RATIO=0.5`   | Adjusts image row fitting for terminal font cell geometry.                        |
-
-The first image render can be slow. During streaming, Qwen Code shows a bounded text preview
-and attempts image rendering only after the model response is complete.
+Fenced `mermaid` code blocks render visually in `render` mode. Qwen Code draws
+the diagram in-process as a terminal wireframe or compact text preview; it does
+not run an external renderer. If a Mermaid diagram type cannot be previewed,
+Qwen Code shows the original fenced source instead of hiding it behind a
+placeholder. During streaming, Qwen Code shows a bounded text preview until the
+model response is complete.
 
 ### Mermaid Source Copy
 
@@ -175,10 +145,6 @@ their existing meaning (the 2nd `python` block in the last message).
 
 ## Current Limits
 
-- Mermaid image rendering depends on Mermaid CLI plus terminal image support.
-- Async iTerm2 inline image placement is disabled in the TUI because the
-  protocol is cursor-position bound; use Kitty/Ghostty or ANSI fallback for
-  interactive image previews.
 - Wireframe Mermaid rendering is a readable terminal preview, not a full
   Mermaid layout engine.
 - Raw mode is global for rendered Markdown blocks; it is not a per-block toggle.

@@ -2,9 +2,8 @@
 
 Dual Output is a sidecar mode for the interactive TUI: while Qwen Code keeps
 rendering normally on `stdout`, it concurrently emits a structured JSON event
-stream to a separate channel so an external program — an IDE extension, a web
-frontend, a CI pipeline, an automation script — can observe and steer the
-session.
+stream to a separate channel so an external program — an editor extension, a
+CI pipeline, an automation script — can observe and steer the session.
 
 It also provides a reverse channel: an external program can write JSONL
 commands into a file that the TUI watches, allowing it to submit prompts and
@@ -18,19 +17,6 @@ exactly as before with no extra I/O and no behavioral changes.
 Dual Output is a low-level plumbing primitive. These are concrete integrations
 it unlocks:
 
-### Terminal + Chat dual-mode real-time sync
-
-The flagship use case. A web or desktop ChatUI hosts the TUI inside a PTY
-and renders a parallel conversation view driven by the structured event
-stream:
-
-- User can type in either surface — the TUI (for terminal-native power-users)
-  or the web UI (for richer UX, shareable links, mobile). Both views stay
-  in sync because every message flows through the same JSON events.
-- Tool-approval prompts appear in both places; whoever approves first wins.
-- Session history is captured verbatim from `--json-file`, so the server
-  side has a canonical machine-readable transcript without parsing ANSI.
-
 ### IDE extensions (VS Code / JetBrains / Cursor / Neovim)
 
 Embed Qwen Code inside the IDE. The TUI runs in the editor's integrated
@@ -43,13 +29,6 @@ terminal panel for users who want it, while the extension consumes
 - Status bar indicators (thinking / responding / awaiting approval).
 - Programmatic `confirmation_response` writes when the user clicks a
   native IDE approval button.
-
-### Browser-based Chat frontends
-
-A Node/Bun server spawns the TUI in a PTY for its rendering semantics but
-exposes a WebSocket channel to the browser. Events on `--json-file` are
-forwarded to the client; user messages typed in the browser are injected
-via `--input-file`. No ANSI parsing on either side.
 
 ### CI / automation observers
 
@@ -75,12 +54,6 @@ Tee every TUI session to a regular file with `--json-file`. Later:
 - Automated regression tests can compare runs across model versions.
 - A replay tool can re-emit events through the same protocol to feed
   visualization dashboards.
-
-### Observability dashboards
-
-Stream `--json-file` into Loki / OTEL / any pipeline that accepts JSONL.
-Extract `usage.input_tokens`, `tool_use.name`, `result.duration_api_ms`
-as first-class metrics in Grafana. No need for log-parsing regex.
 
 ### Testing and QA
 

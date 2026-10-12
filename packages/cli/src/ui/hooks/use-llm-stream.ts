@@ -113,7 +113,7 @@ import {
 import { fitPendingSlice } from '../utils/pending-rendered-height.js';
 import { useStateAndRef } from './useStateAndRef.js';
 import { normalizePartList } from '../../utils/normalize-part-list.js';
-import { isInlineModelOverrideAllowed } from '../../utils/acpModelUtils.js';
+import { isInlineModelOverrideAllowed } from '../../utils/model-option-utils.js';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import {
   useReactToolScheduler,
@@ -1606,7 +1606,7 @@ export const useLlmStream = (
         // pre-processed by the notification drain loop which already
         // added the display item to history. Just pass the model text
         // through to the API. Cron prompts still go through the normal
-        // slash/@-command/shell preprocessing path below.
+        // slash/@-command preprocessing path below, but never the shell.
         if (submitType === SendMessageType.Notification) {
           onDebugMessage(
             `Received notification (${trimmedQuery.length} chars)`,
@@ -1725,8 +1725,12 @@ export const useLlmStream = (
         // A queued submission carries the shell intent recorded when the
         // user submitted it; the live flag may have flipped while the
         // entry waited in the queue (#11626). Other producers record no
-        // intent and route on the live flag, as before.
-        const routeToShell = shellModeIntent ?? shellModeActive;
+        // intent and route on the live flag, as before. A scheduled (cron
+        // or loop) prompt is model text, never a shell command, whatever
+        // mode the input box happens to be in when it fires.
+        const routeToShell =
+          submitType !== SendMessageType.Cron &&
+          (shellModeIntent ?? shellModeActive);
         if (routeToShell && handleShellCommand(trimmedQuery, abortSignal)) {
           return { queryToSend: null, shouldProceed: false };
         }
@@ -1735,9 +1739,9 @@ export const useLlmStream = (
 
         // Cron prompts are already rendered as a `● …` notification by
         // their queue drain, so skip the user-message history item to
-        // avoid a duplicate `> …` line. Preprocessing (@/slash/shell)
-        // still runs for Cron. (Teammate envelopes returned earlier
-        // and never reach this point.)
+        // avoid a duplicate `> …` line. Preprocessing (@/slash) still
+        // runs for Cron. (Teammate envelopes returned earlier and never
+        // reach this point.)
         if (submitType !== SendMessageType.Cron) {
           const insertedId = addItem(
             {
@@ -6037,7 +6041,7 @@ export const useLlmStream = (
         }
 
         try {
-          await fs.mkdir(checkpointDir, { recursive: true });
+          await fs.mkdir(checkpointDir, { recursive: true, mode: 0o700 });
         } catch (error) {
           if (!isNodeError(error) || error.code !== 'EEXIST') {
             onDebugMessage(
@@ -6088,6 +6092,7 @@ export const useLlmStream = (
                 null,
                 2,
               ),
+              { mode: 0o600 },
             );
           } catch (error) {
             onDebugMessage(
@@ -6510,7 +6515,7 @@ export const useLlmStream = (
         };
 
         // Cron prompts must run as individual turns — each needs its own
-        // slash/shell/@ preprocessing and approval cycle. Only batch
+        // slash/@ preprocessing and approval cycle. Only batch
         // Notification items (which pass through without preprocessing).
         if (targetType === SendMessageType.Cron) {
           const item = queue.shift()!;

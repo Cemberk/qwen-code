@@ -1044,7 +1044,7 @@ export function projectSpecialItemText(
     case 'info': {
       // ink's InfoMessage renders linkUrl/linkText as a footer link (the
       // URL prints when the terminal cannot render links), so headless/SSH
-      // users can still recover it (/bug).
+      // users can still recover it.
       const text = typeof record['text'] === 'string' ? record['text'] : null;
       const linkUrl =
         typeof record['linkUrl'] === 'string' ? record['linkUrl'] : null;

@@ -59,8 +59,8 @@ function getInteractionModePrompt(mode: SystemPromptInteractionMode): {
       };
     case 'acp':
       return {
-        role: 'a CLI agent operating through an ACP host',
-        questions: `Use '${ToolNames.ASK_USER_QUESTION}' when clarification is necessary. The ACP host can relay the question and response.`,
+        role: 'a CLI agent operating through a host application',
+        questions: `Use '${ToolNames.ASK_USER_QUESTION}' when clarification is necessary. The host application can relay the question and response.`,
       };
     case 'interactive':
       return getInteractiveInteractionModePrompt();
@@ -546,10 +546,6 @@ ${taskManagementSection}# Primary Workflows
 ${softwareEngineeringTasks}- Tool results and user messages may include <system-reminder> tags. <system-reminder> tags contain useful information and reminders. They are NOT part of the user's provided input or the tool result.
 - When you see a <persisted-output> tag in a tool result, the full output was saved to disk because it was too large. Use the read_file tool to access the complete content if the preview is insufficient.
 
-## New Applications
-
-When a user wants to create a new application, project, website, game, or library from scratch, use the '${ToolNames.SKILL}' tool with skill="new-app" to load the detailed workflow and tech-stack guidance.
-
 # Operational Guidelines
 
 ## Communicating With the User
@@ -572,7 +568,6 @@ ${toolGuidance}
 
 ## Interaction Details
 - **Help Command:** The user can use '/help' to display help information.
-- **Feedback:** To report a bug or provide feedback, please use the /bug command.
 
 ${(function () {
   // Determine sandbox status based on environment variables
@@ -1460,7 +1455,7 @@ Plan mode is no longer active. This notice supersedes any earlier reminder that 
  * @returns A formatted system reminder string wrapped in XML tags
  */
 export function getArenaSystemReminder(configFilePath: string): string {
-  return `<system-reminder>An Arena session is active. For details, read: ${configFilePath}. This message is for internal use only. Do not mention this to user in your response.</system-reminder>`;
+  return `<system-reminder>An Arena session is active. For details, read: ${configFilePath}.</system-reminder>`;
 }
 
 // ============================================================================
@@ -1572,9 +1567,9 @@ Find something genuinely interesting or amusing from the session summaries.`,
   improvements: `Analyze this Qwen Code usage data and suggest improvements.
 
 ## QC FEATURES REFERENCE (pick from these for features_to_try):
-1. **MCP Servers**: Connect Qwen to external tools, databases, and APIs via Model Context Protocol.
-   - How to use: Run \`qwen mcp add --transport http <server-name> <http-url>\`
-   - Good for: database queries, Slack integration, GitHub issue lookup, connecting to internal APIs
+1. **MCP Servers**: Connect Qwen to local tools and databases via Model Context Protocol servers that run as local processes over stdio.
+   - How to use: Run \`qwen mcp add <server-name> <command> [args...]\`
+   - Good for: database queries, project-specific scripts, local developer tools
 
 2. **Custom Skills**: Reusable prompts you define as markdown files that run with a single /command.
    - How to use: Create \`.qwen/skills/wrapup/SKILL.md\` with instructions. Then type \`/wrapup\` to run it.

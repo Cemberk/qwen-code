@@ -543,13 +543,11 @@ export class PermissionController extends BaseController {
           );
           return;
         }
-        // No SDK available - use local permission check
-        const modeCheck = this.checkPermissionMode();
-        const outcome = modeCheck.allowed
-          ? ToolConfirmationOutcome.ProceedOnce
-          : ToolConfirmationOutcome.Cancel;
-
-        await toolCall.confirmationDetails.onConfirm(outcome);
+        // No SDK host can answer. Core already applied the approval mode
+        // and still wants a decision, so refuse rather than approve.
+        await toolCall.confirmationDetails.onConfirm(
+          ToolConfirmationOutcome.Cancel,
+        );
         return;
       }
 

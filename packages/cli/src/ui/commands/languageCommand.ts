@@ -371,10 +371,6 @@ export const languageCommand: SlashCommand = {
               ...SUPPORTED_LANGUAGES.map(
                 (o) => `  - ${o.id}: ${o.nativeName || o.fullName}`,
               ),
-              '',
-              t(
-                'To request additional UI language packs, please open an issue on GitHub.',
-              ),
             ].join('\n'),
           };
         }

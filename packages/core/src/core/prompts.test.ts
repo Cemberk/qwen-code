@@ -159,8 +159,8 @@ describe('Core System Prompt (prompts.ts)', () => {
     ],
     [
       'acp',
-      'a CLI agent operating through an ACP host',
-      'The ACP host can relay the question and response',
+      'a CLI agent operating through a host application',
+      'The host application can relay the question and response',
     ],
   ] as const)(
     'aligns the system prompt with %s mode',
@@ -1003,7 +1003,7 @@ describe('main-session style: reminder decision matches prompt section', () => {
       const markers = {
         interactive: 'an interactive CLI agent',
         headless: 'a non-interactive CLI agent',
-        acp: 'a CLI agent operating through an ACP host',
+        acp: 'a CLI agent operating through a host application',
       } as const;
       expect(getMainSessionBaseSystemPrompt(makeConfig(flags))).toContain(
         markers[session],
@@ -2117,30 +2117,6 @@ describe('resolvePathFromEnv helper function', () => {
         isDisabled: false,
       });
     });
-  });
-});
-
-describe('New Applications workflow deferred to skill', () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-    vi.stubEnv('SANDBOX', undefined);
-  });
-
-  it('system prompt does not contain the full New Applications workflow', () => {
-    vi.mocked(isGitRepository).mockReturnValue(false);
-    const prompt = getCoreSystemPrompt();
-    expect(prompt).not.toContain(
-      'Autonomously implement and deliver a visually appealing',
-    );
-    expect(prompt).not.toContain('Websites (Frontend):');
-    expect(prompt).not.toContain('npx create-react-app');
-  });
-
-  it('system prompt references the new-app skill', () => {
-    vi.mocked(isGitRepository).mockReturnValue(false);
-    const prompt = getCoreSystemPrompt();
-    expect(prompt).toContain('new-app');
-    expect(prompt).toContain('## New Applications');
   });
 });
 

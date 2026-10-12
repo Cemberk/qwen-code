@@ -156,12 +156,6 @@ vi.mock('read-package-up', () => ({
   }),
 }));
 
-vi.mock('update-notifier', () => ({
-  default: vi.fn(() => ({
-    notify: vi.fn(),
-  })),
-}));
-
 vi.mock('./utils/events.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./utils/events.js')>();
   return {
@@ -982,7 +976,6 @@ describe('llm.tsx main function', () => {
       isSafeMode: () => false,
       getModelsConfig: () => ({ getCurrentAuthType: () => null }),
       getContentGeneratorConfig: () => undefined,
-      getUsageStatisticsEnabled: () => true,
       getSessionId: () => 'test-session-id',
     } as unknown as Config;
 
@@ -1221,7 +1214,6 @@ describe('llm.tsx main function', () => {
       isSafeMode: () => false,
       getModelsConfig: () => ({ getCurrentAuthType: () => null }),
       getContentGeneratorConfig: () => undefined,
-      getUsageStatisticsEnabled: () => true,
       getSessionId: () => 'test-session-id',
       getResumedSessionData: () => ({
         conversation: {
@@ -1334,7 +1326,7 @@ describe('llm.tsx main function', () => {
     } as never);
     vi.mocked(loadSandboxConfig).mockResolvedValue({
       command: 'sandbox-exec',
-      image: 'ghcr.io/qwenlm/qwen-code:1.0.0',
+      image: 'qwen-code-sandbox:1.0.0',
     });
     vi.mocked(loadCliConfig).mockResolvedValue({
       getModelsConfig: () => ({ getCurrentAuthType: () => null }),
@@ -1447,7 +1439,7 @@ describe('llm.tsx main function', () => {
     );
     expect(appEventsMock.emit).toHaveBeenCalledWith(
       AppEvent.LogError,
-      expect.stringContaining('Please file a bug report using the /bug tool.'),
+      expect.stringContaining('This is an unexpected error.'),
     );
 
     // Simulate a second rejection
@@ -1566,7 +1558,6 @@ describe('llm.tsx main function', () => {
       getWarnings: () => [],
       isSafeMode: () => false,
       getModelsConfig: () => ({ getCurrentAuthType: () => null }),
-      getUsageStatisticsEnabled: () => true,
       getSessionId: () => 'test-session-id',
       getOutputFormat: () => OutputFormat.TEXT,
     } as unknown as Config;
@@ -1750,7 +1741,6 @@ describe('llm.tsx OpenTUI renderer dispatch', () => {
       getWarnings: () => [],
       isSafeMode: () => false,
       getModelsConfig: () => ({ getCurrentAuthType: () => null }),
-      getUsageStatisticsEnabled: () => true,
       getSessionId: () => 'test-session-id',
       isTelemetryInitializationDeferred: () => true,
     } as unknown as Config);
@@ -1968,7 +1958,6 @@ describe('llm.tsx main function kitty protocol', () => {
       getWarnings: () => [],
       isSafeMode: () => false,
       getModelsConfig: () => ({ getCurrentAuthType: () => null }),
-      getUsageStatisticsEnabled: () => true,
       getSessionId: () => 'test-session-id',
       isTelemetryInitializationDeferred: () => true,
     } as unknown as Config);
@@ -2080,7 +2069,6 @@ describe('llm.tsx main function kitty protocol', () => {
       getWarnings: () => [],
       isSafeMode: () => false,
       getModelsConfig: () => ({ getCurrentAuthType: () => null }),
-      getUsageStatisticsEnabled: () => true,
       getSessionId: () => 'test-session-id',
       isTelemetryInitializationDeferred: () => false,
     } as unknown as Config);
@@ -2191,7 +2179,6 @@ describe('llm.tsx main function kitty protocol', () => {
       getWarnings: () => [],
       isSafeMode: () => false,
       getModelsConfig: () => ({ getCurrentAuthType: () => null }),
-      getUsageStatisticsEnabled: () => true,
       getSessionId: () => 'test-session-id',
       isTelemetryInitializationDeferred: () => true,
     } as unknown as Config);
@@ -2297,7 +2284,6 @@ describe('llm.tsx main function kitty protocol', () => {
         getCurrentAuthType: () => null,
         getGenerationConfig: () => ({}),
       }),
-      getUsageStatisticsEnabled: () => true,
       getSessionId: () => 'test-session-id',
       isTelemetryInitializationDeferred: () => true,
     } as unknown as Config);
@@ -2611,7 +2597,6 @@ describe('llm.tsx main function kitty protocol', () => {
       getWarnings: () => [],
       isSafeMode: () => false,
       getModelsConfig: () => ({ getCurrentAuthType: () => null }),
-      getUsageStatisticsEnabled: () => true,
       getSessionId: () => 'test-session-id',
       shutdown: vi.fn(),
     } as unknown as Config);

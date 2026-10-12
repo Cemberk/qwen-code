@@ -612,7 +612,6 @@ export default {
   'This extension will run the following MCP servers:':
     'Cette extension exécutera les MCP servers suivants :',
   local: 'local',
-  remote: 'distant',
   'This extension will add the following commands: {{commands}}.':
     'Cette extension ajoutera les commandes suivantes : {{commands}}.',
   'This extension will append info to your QWEN.md context using {{fileName}}':
@@ -704,7 +703,8 @@ export default {
   '(workspace)': '(espace de travail)',
   '(user)': '(utilisateur)',
   '[not set]': '[non défini]',
-  '[value stored in keychain]': '[valeur stockée dans le trousseau]',
+  '[value stored in encrypted file]':
+    '[valeur stockée dans un fichier chiffré]',
   'Value:': 'Valeur :',
   'Manage extension settings.': 'Gérer les paramètres des extensions.',
   'You need to specify a command (set or list).':
@@ -978,8 +978,6 @@ export default {
   'Invalid command. Available subcommands:':
     'Commande invalide. Sous-commandes disponibles :',
   'Available subcommands:': 'Sous-commandes disponibles :',
-  'To request additional UI language packs, please open an issue on GitHub.':
-    "Pour demander des packs de langue d'interface supplémentaires, veuillez ouvrir un ticket sur GitHub.",
   'Available options:': 'Options disponibles :',
   'Set UI language to {{name}}':
     "Définir la langue de l'interface sur {{name}}",
@@ -1238,15 +1236,12 @@ export default {
   'Overall Goal:': 'Objectif global :',
   'You must connect a provider to proceed. Press Ctrl+C again to exit.':
     'Vous devez connecter un fournisseur pour continuer. Appuyez à nouveau sur Ctrl+C pour quitter.',
-  'Bring your own API key': 'Apportez votre propre API Key',
   'Missing API key for OpenAI-compatible auth. Set settings.security.auth.apiKey, or set the {{envKeyHint}} environment variable.':
     "API Key manquante pour l'authentification compatible OpenAI. Définissez settings.security.auth.apiKey ou la variable d'environnement {{envKeyHint}}.",
   'Missing API key for OpenAI-compatible auth. Set the {{envKeyHint}} environment variable.':
     "API Key manquante pour l'authentification compatible OpenAI. Définissez la variable d'environnement {{envKeyHint}}.",
   'Failed to authenticate. Message: {{message}}':
     "Échec de l'authentification. Message : {{message}}",
-  'Authenticated successfully with {{authType}} credentials.':
-    'Authentification réussie avec les identifiants {{authType}}.',
   // ============================================================================
   // Boîtes de dialogue - Modèle
   // ============================================================================
@@ -1373,7 +1368,6 @@ export default {
   '{{count}} prompt': '{{count}} invite',
   '{{count}} prompts': '{{count}} invites',
   '(from {{extensionName}})': '(depuis {{extensionName}})',
-  OAuth: 'OAuth',
   'tools and prompts will appear when ready':
     'les outils et invites apparaîtront quand prêts',
   '{{count}} tools cached': '{{count}} outils mis en cache',
@@ -1399,8 +1393,6 @@ export default {
     "Utilisez /compress quand la conversation devient longue pour résumer l'historique et libérer le contexte.",
   'Start a fresh idea with /clear or /new; the previous session stays available in history.':
     "Commencez une nouvelle idée avec /clear ou /new ; la session précédente reste disponible dans l'historique.",
-  'Use /bug to submit issues to the maintainers when something goes off.':
-    'Utilisez /bug pour soumettre des problèmes aux mainteneurs quand quelque chose ne va pas.',
   'Switch auth type quickly with /auth.':
     "Changez rapidement le type d'authentification avec /auth.",
   'You can run any shell commands from Qwen Code using ! (e.g. !ls).':
@@ -1725,8 +1717,6 @@ export default {
   // ============================================================================
   // Extensions - Commande Explore
   // ============================================================================
-  'Open extensions page in your browser':
-    'Ouvrir la page des extensions dans votre navigateur',
   'Retrying in {{seconds}} seconds… (attempt {{attempt}}/{{maxRetries}})':
     'Nouvelle tentative dans {{seconds}} secondes… (tentative {{attempt}}/{{maxRetries}})',
   'Press Ctrl+Y to retry': 'Appuyez sur Ctrl+Y pour réessayer',
@@ -1750,16 +1740,7 @@ export default {
   // Boîte de dialogue Auth - Titres et étiquettes
   // ============================================================================
   Custom: 'Personnalisé',
-  'Choose based on where your account is registered':
-    "Choisissez en fonction de l'endroit où votre compte est enregistré",
 
-  // ============================================================================
-  // Mises à jour internationales Coding Plan
-  // ============================================================================
-  'New model configurations are available for {{region}}. Update now?':
-    'De nouvelles configurations de modèle sont disponibles pour {{region}}. Mettre à jour maintenant ?',
-  '{{region}} configuration updated successfully. Model switched to "{{model}}".':
-    'Configuration {{region}} mise à jour avec succès. Modèle changé en "{{model}}".',
   // ============================================================================
   // Composant d'utilisation du contexte
   // ============================================================================
@@ -1790,10 +1771,6 @@ export default {
     'Exécutez /context detail pour une répartition par élément.',
   'body loaded': 'corps chargé',
   memory: 'mémoire',
-  '{{region}} configuration updated successfully.':
-    'Configuration {{region}} mise à jour avec succès.',
-  'Authenticated successfully with {{region}}. API key and model configs saved to settings.json.':
-    'Authentification réussie avec {{region}}. API Key et configurations de modèle enregistrées dans settings.json.',
   'Type something...': 'Tapez quelque chose...',
   Submit: 'Soumettre',
   'Submit answers': 'Soumettre les réponses',
@@ -1805,36 +1782,7 @@ export default {
     "↑/↓ : Naviguer | ←/→ : Changer d'onglet | Enter : Sélectionner",
   '↑/↓: Navigate | Enter: Select | Esc: Cancel':
     '↑/↓ : Naviguer | Enter : Sélectionner | Esc : Annuler',
-  'Show current authentication status':
-    "Afficher le statut d'authentification actuel",
-  'Authentication completed successfully.':
-    'Authentification terminée avec succès.',
   Global: 'Global',
-  '\n=== Authentication Status ===\n': "\n=== Statut d'authentification ===\n",
-  'Run one of the following commands to get started:\n':
-    "Exécutez l'une des commandes suivantes pour commencer :\n",
-  'Or simply run:': 'Ou simplement exécutez :',
-  '  qwen auth                - Interactive authentication setup\n':
-    "  qwen auth                - Configuration d'authentification interactive\n",
-  '  Type: Free tier (discontinued 2026-04-15)':
-    '  Type : Niveau gratuit (abandonné 2026-04-15)',
-  '  Limit: No longer available': '  Limite : Plus disponible',
-  '  Region: {{region}}': '  Région : {{region}}',
-  '  Current Model: {{model}}': '  Modèle actuel : {{model}}',
-  '  Config Version: {{version}}': '  Version de config : {{version}}',
-  '  Status: API key configured\n': '  Statut : API Key configurée\n',
-  '  Issue: API key not found in environment or settings\n':
-    "  Problème : API Key introuvable dans l'environnement ou les paramètres\n",
-  '  Run `qwen auth coding-plan` to re-configure.\n':
-    '  Exécutez `qwen auth coding-plan` pour reconfigurer.\n',
-  '  Status: Configured\n': '  Statut : Configuré\n',
-  'Failed to check authentication status: {{error}}':
-    "Échec de la vérification du statut d'authentification : {{error}}",
-  'Select an option:': 'Sélectionner une option :',
-  'Raw mode not available. Please run in an interactive terminal.':
-    'Mode brut non disponible. Veuillez exécuter dans un terminal interactif.',
-  '(Use ↑ ↓ arrows to navigate, Enter to select, Ctrl+C to exit)\n':
-    '(Utilisez les flèches ↑ ↓ pour naviguer, Enter pour sélectionner, Ctrl+C pour quitter)\n',
   'Switch to plan mode or exit plan mode':
     'Passer en mode plan ou quitter le mode plan',
   'Set how hard reasoning-capable models think ({{tiers}}); mapped and clamped per provider.':
@@ -1987,7 +1935,6 @@ export default {
   Auto: 'Automatique',
   Tokens: 'Jetons',
   tokens: 'jetons',
-  '中国 (China)': 'Chine',
 
   // Stats Dashboard — Category 2
   'Activity Heatmap': "Carte d'activité",

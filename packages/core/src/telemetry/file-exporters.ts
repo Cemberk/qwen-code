@@ -35,7 +35,11 @@ class FileExporter {
       // Directory could not be created; the stream error handler below will
       // absorb the resulting open failure.
     }
-    this.writeStream = fs.createWriteStream(filePath, { flags: 'a' });
+    // Spans and logs can carry prompts and tool output: owner-only.
+    this.writeStream = fs.createWriteStream(filePath, {
+      flags: 'a',
+      mode: 0o600,
+    });
     this.writeStream.on('error', () => {
       // Swallow telemetry file errors — exporters report failures through the
       // ExportResult callback; an unhandled `error` event would crash Node.

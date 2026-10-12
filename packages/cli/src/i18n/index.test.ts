@@ -50,49 +50,97 @@ describe('bundled locale fallback', () => {
     );
   }, 20000);
 
-  it('falls back to bundled translations when a user locale default export is null', async () => {
+  it('never imports locale modules from the user settings directory', async () => {
     const tempDir = await fs.mkdtemp(
-      path.join(os.tmpdir(), 'qwen-i18n-null-locale-'),
+      path.join(os.tmpdir(), 'qwen-i18n-user-locale-'),
     );
     const localesDir = path.join(tempDir, 'locales');
     await fs.mkdir(localesDir, { recursive: true });
     await fs.writeFile(
       path.join(localesDir, 'zh.js'),
-      'export default null;\n',
+      "globalThis.__qwenUserLocaleLoaded = true;\nexport default { 'show version info': 'user override' };\n",
       'utf-8',
     );
-
     vi.spyOn(Storage, 'getGlobalQwenDir').mockReturnValue(tempDir);
 
-    const { setLanguageAsync, t } = await import('./index.js');
-    await setLanguageAsync('zh');
+    try {
+      const { setLanguageAsync, t } = await import('./index.js');
+      await setLanguageAsync('zh');
 
-    expect(t('show version info')).toBe('显示版本信息');
-
-    await fs.rm(tempDir, { recursive: true, force: true });
+      expect(t('show version info')).toBe('显示版本信息');
+      expect(
+        (globalThis as { __qwenUserLocaleLoaded?: boolean })
+          .__qwenUserLocaleLoaded,
+      ).toBeUndefined();
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
   }, 20000);
+});
 
-  it('falls back to bundled translations when a user locale default export is an array', async () => {
-    const tempDir = await fs.mkdtemp(
-      path.join(os.tmpdir(), 'qwen-i18n-array-locale-'),
-    );
-    const localesDir = path.join(tempDir, 'locales');
-    await fs.mkdir(localesDir, { recursive: true });
+describe('locale code validation', () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'qwen-i18n-traversal-'));
     await fs.writeFile(
-      path.join(localesDir, 'zh.js'),
-      "export default ['show version info'];\n",
+      path.join(tempDir, 'evil.js'),
+      "globalThis.__qwenEvilLocaleLoaded = true;\nexport default { 'show version info': 'pwned' };\n",
       'utf-8',
     );
+  });
 
-    vi.spyOn(Storage, 'getGlobalQwenDir').mockReturnValue(tempDir);
-
-    const { setLanguageAsync, t } = await import('./index.js');
-    await setLanguageAsync('zh');
-
-    expect(t('show version info')).toBe('显示版本信息');
-
+  afterEach(async () => {
+    vi.unstubAllEnvs();
+    delete (globalThis as { __qwenEvilLocaleLoaded?: boolean })
+      .__qwenEvilLocaleLoaded;
     await fs.rm(tempDir, { recursive: true, force: true });
-  }, 20000);
+  });
+
+  function traversalCode(): string {
+    const localesDir = path.join(
+      path.dirname(new URL(import.meta.url).pathname),
+      'locales',
+    );
+    return path.relative(localesDir, path.join(tempDir, 'evil'));
+  }
+
+  it('rejects a path-traversal language setting before any import', async () => {
+    const { setLanguageAsync, getCurrentLanguage, t } = await import(
+      './index.js'
+    );
+
+    await setLanguageAsync(traversalCode() as never);
+
+    expect(getCurrentLanguage()).toBe('en');
+    expect(t('show version info')).toBe('show version info');
+    expect(
+      (globalThis as { __qwenEvilLocaleLoaded?: boolean })
+        .__qwenEvilLocaleLoaded,
+    ).toBeUndefined();
+  });
+
+  it('rejects a path-traversal QWEN_CODE_LANG', async () => {
+    vi.stubEnv('QWEN_CODE_LANG', traversalCode());
+    const { initializeI18n, resolveLanguageSetting, getCurrentLanguage } =
+      await import('./index.js');
+
+    await initializeI18n(resolveLanguageSetting('zh'));
+
+    expect(getCurrentLanguage()).toBe('en');
+    expect(
+      (globalThis as { __qwenEvilLocaleLoaded?: boolean })
+        .__qwenEvilLocaleLoaded,
+    ).toBeUndefined();
+  });
+
+  it('falls back to English for unshipped language codes', async () => {
+    const { resolveLanguage } = await import('./index.js');
+
+    expect(resolveLanguage('es' as never)).toBe('en');
+    expect(resolveLanguage('zh-CN' as never)).toBe('zh');
+  });
 });
 
 describe('public i18n exports', () => {

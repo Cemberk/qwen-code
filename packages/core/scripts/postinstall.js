@@ -6,7 +6,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -20,7 +19,7 @@ const vendorDir = path.join(packageRoot, 'vendor', 'ripgrep');
 const landlockVendorDir = path.join(packageRoot, 'vendor', 'landlock-run');
 
 /**
- * Remove quarantine attribute and set executable permissions on macOS/Linux
+ * Set executable permissions on macOS/Linux.
  * This script never throws errors to avoid blocking npm workflows.
  */
 function setupRipgrepBinaries() {
@@ -64,19 +63,6 @@ function setupRipgrepBinaries() {
       // Set executable permissions
       fs.chmodSync(rgBinary, 0o755);
       console.log(`✓ Set executable permissions on ${rgBinary}`);
-
-      // On macOS, remove quarantine attribute
-      if (platform === 'darwin') {
-        try {
-          execSync(`xattr -d com.apple.quarantine "${rgBinary}"`, {
-            stdio: 'pipe',
-          });
-          console.log(`✓ Removed quarantine attribute from ${rgBinary}`);
-        } catch {
-          // Quarantine attribute might not exist, which is fine
-          console.log('ℹ Quarantine attribute not present or already removed');
-        }
-      }
     } catch (error) {
       console.log(
         `⚠ Could not complete ripgrep setup: ${error.message || 'Unknown error'}`,

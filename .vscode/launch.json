@@ -18,18 +18,6 @@
       }
     },
     {
-      "name": "Launch Companion VS Code Extension",
-      "type": "extensionHost",
-      "request": "launch",
-      "args": [
-        "--extensionDevelopmentPath=${workspaceFolder}/packages/vscode-ide-companion"
-      ],
-      "outFiles": [
-        "${workspaceFolder}/packages/vscode-ide-companion/dist/**/*.js"
-      ],
-      "preLaunchTask": "launch: vscode-ide-companion (copy+build)"
-    },
-    {
       "name": "Attach",
       "port": 9229,
       "request": "attach",
@@ -138,7 +126,7 @@
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "env": {
-        "GEMINI_SANDBOX": "false"
+        "QWEN_SANDBOX": "false"
       }
     }
   ],

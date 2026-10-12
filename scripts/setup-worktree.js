@@ -27,6 +27,7 @@ getPinnedPnpmPackage(
 );
 const env = {
   ...process.env,
+  COREPACK_ENABLE_NETWORK: '0',
   QWEN_SKIP_PREPARE: '1',
   QWEN_SKIP_NOTICE_GENERATION: '1',
 };
@@ -124,8 +125,8 @@ function repositoryConfigOwnership() {
   return gitDir === commonDir ? 'owns' : 'linked';
 }
 
-function install(cacheMode) {
-  const result = runPnpm(['install', '--frozen-lockfile', cacheMode]);
+function install() {
+  const result = runPnpm(['install', '--frozen-lockfile', '--offline']);
   if (result.status === 0) {
     const hooksPath = getHooksPath();
     if (
@@ -189,17 +190,19 @@ function exitWithResult(result) {
 }
 
 // install() exits the process on every path where the install succeeded, so it
-// returns only a failed result and the registry retry below is the only
-// decision left for this driver to make.
-const cachedInstall = install('--offline');
+// returns only a failed result.
+const failedInstall = install();
 
 if (
-  cachedInstall.error ||
-  cachedInstall.signal ||
-  (cachedInstall.status !== null && cachedInstall.status >= 128)
+  !failedInstall.error &&
+  !failedInstall.signal &&
+  failedInstall.status < 128
 ) {
-  exitWithResult(cachedInstall);
+  console.error(
+    'worktree setup failed: the offline install could not complete. This ' +
+      'script never contacts the package registry, so the pinned pnpm must ' +
+      'already be in the Corepack cache and every package in pnpm-lock.yaml ' +
+      'in the local pnpm store.',
+  );
 }
-
-console.warn('Cached install unavailable; retrying with registry access.');
-exitWithResult(install('--prefer-offline'));
+exitWithResult(failedInstall);

@@ -18,18 +18,12 @@ import { join } from 'node:path';
 import type { Config } from '../config/config.js';
 import { Storage } from '../config/storage.js';
 import {
-  isPackageInstallation,
   ContainerExecutionEnvironment,
   workerContainerArguments,
   type ContainerExecutionOptions,
 } from './container-execution-environment.js';
 import type { ExecutionWorkerOptions } from './execution-environment.js';
 import { ExecutionCleanupError } from './execution-environment.js';
-import type { ToolResult } from '../tools/tools.js';
-import {
-  isShellResultDisplay,
-  shellResultText,
-} from '../utils/shell-result.js';
 
 describe('container execution boundary', () => {
   it('preserves preparation errors and cleanup ownership when release fails', async () => {
@@ -49,7 +43,6 @@ describe('container execution boundary', () => {
         primary,
         options: { runtime: 'docker' },
         temporaryDirectory: '/tmp/failed-container',
-        workers: new Set([primary]),
         invocations: new Map(),
         releaseGitMountPoint,
       },
@@ -68,143 +61,6 @@ describe('container execution boundary', () => {
     await expect(environment.dispose()).rejects.toBe(cleanupFailure);
     expect(primary.dispose).toHaveBeenCalledOnce();
     expect(releaseGitMountPoint).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    {
-      llmContent: 'installed package',
-      returnDisplay: 'installation complete',
-      outputBudgetApplied: true,
-    },
-    {
-      llmContent: [{ text: 'installed package' }],
-      returnDisplay: 'installation complete',
-      outputBudgetApplied: true,
-    },
-    {
-      llmContent: 'partial installation output',
-      returnDisplay: 'installation failed',
-      outputBudgetApplied: true,
-      error: { message: 'partial installation output' },
-    },
-    {
-      llmContent: 'installed package',
-      returnDisplay: {
-        type: 'shell_result',
-        version: 1,
-        text: 'installation complete',
-        output: 'installed package',
-        directory: '/workspace',
-        exitCode: 0,
-        signal: null,
-        pid: 42,
-        error: null,
-        outcome: 'completed',
-        notices: ['existing notice'],
-        truncated: false,
-        outputFiles: [],
-      },
-      outputBudgetApplied: true,
-    },
-  ] satisfies ToolResult[])(
-    'preserves the tool result and cleanup ownership when installation cleanup fails: %j',
-    async (toolResult) => {
-      const temporaryDirectory = await mkdtemp(
-        join(tmpdir(), 'execution-cleanup-'),
-      );
-      const failure = new ExecutionCleanupError(
-        'container removal failed' +
-          (toolResult.error ? 'x'.repeat(35_000) : ''),
-      );
-      const primary = { dispose: vi.fn().mockResolvedValue(undefined) };
-      const install = {
-        request: vi.fn().mockResolvedValue(structuredClone(toolResult)),
-        dispose: vi.fn().mockRejectedValue(failure),
-      };
-      const environment: ContainerExecutionEnvironment = Object.assign(
-        Object.create(ContainerExecutionEnvironment.prototype),
-        {
-          primary,
-          options: { runtime: 'docker' },
-          temporaryDirectory,
-          workers: new Set([primary, install]),
-          invocations: new Map([['install', install]]),
-        },
-      );
-      try {
-        const result = await environment.execute(
-          'install',
-          new AbortController().signal,
-        );
-        expect(JSON.stringify(result.llmContent)).toContain(
-          typeof toolResult.llmContent === 'string'
-            ? toolResult.llmContent
-            : toolResult.llmContent[0].text,
-        );
-        expect(shellResultText(result.returnDisplay)).toContain(
-          shellResultText(toolResult.returnDisplay),
-        );
-        expect(JSON.stringify(result.llmContent)).toContain(
-          'Container cleanup failed after tool execution',
-        );
-        expect(shellResultText(result.returnDisplay)).toContain(
-          'do not automatically retry',
-        );
-        if (isShellResultDisplay(toolResult.returnDisplay)) {
-          expect(result.returnDisplay).toMatchObject({
-            output: toolResult.returnDisplay.output,
-            notices: [
-              'existing notice',
-              expect.stringContaining('Container cleanup failed'),
-            ],
-          });
-        }
-        expect(result.outputBudgetApplied).not.toBe(true);
-        if (toolResult.error) {
-          expect(result.error?.message).toContain(toolResult.error.message);
-          expect(result.error?.message).toContain('container removal failed');
-          expect(result.error?.message).toBe(result.llmContent);
-          expect(result.error?.message.length).toBeGreaterThan(30_000);
-        } else {
-          expect(result.error).toBeUndefined();
-        }
-        await expect(environment.dispose()).rejects.toBe(failure);
-        await expect(access(temporaryDirectory)).resolves.toBeUndefined();
-        expect(primary.dispose).toHaveBeenCalledOnce();
-      } finally {
-        await rm(temporaryDirectory, { recursive: true, force: true });
-      }
-    },
-  );
-
-  it.each([
-    'npm ci',
-    'npm install',
-    'npm install --ignore-scripts',
-    'pnpm install --frozen-lockfile',
-    'yarn install',
-  ])('recognizes standalone installation: %s', (command) => {
-    expect(isPackageInstallation(command)).toBe(true);
-  });
-  it.each([
-    'npm test',
-    'npm run build',
-    'pnpm test',
-    'yarn build',
-    'npm ci && curl example.com',
-    'npm ci; npm test',
-    'npm ci\ncurl example.com',
-    'npm install $(curl example.com)',
-    'npm install `whoami`',
-    'npm ci | cat',
-    'npm ci > output',
-    'npm ci &',
-    'env TOKEN=value npm ci',
-    'sh -c "npm ci"',
-    'npm install "${TOKEN}"',
-    'npm install <(curl example.com)',
-  ])('keeps other shell expressions offline: %s', (command) => {
-    expect(isPackageInstallation(command)).toBe(false);
   });
 
   const options: ContainerExecutionOptions = {
@@ -467,17 +323,21 @@ describe('container execution boundary', () => {
   );
 
   it.skipIf(process.platform === 'win32')(
-    'allows ordinary networking only for the install worker and preserves rootless ownership',
+    'never grants a network and preserves rootless ownership',
     () => {
       const args = workerContainerArguments(
         options,
         worker,
-        'install-name',
+        'rootless-name',
         true,
         '/tmp/mask',
-        true,
       );
-      expect(args).not.toContain('--network');
+      expect(
+        args.slice(args.indexOf('--network'), args.indexOf('--network') + 2),
+      ).toEqual(['--network', 'none']);
+      expect(args.filter((arg) => arg.startsWith('--network'))).toEqual([
+        '--network',
+      ]);
       expect(args).not.toContain('--user');
       expect(args).toContain('/tmp/mask:/workspace/project/.git:ro');
       expect(args).toContain('HOME=/executor-home');

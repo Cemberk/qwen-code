@@ -6,12 +6,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { join } from 'node:path';
-import {
-  CONTAINER_SANDBOX_NO_PROXY,
-  fakeServerHostOptions,
-  IS_CONTAINER_SANDBOX,
-  TestRig,
-} from '../test-helper.js';
+import { TestRig } from '../test-helper.js';
 import {
   fakeToolCall,
   startFakeOpenAIServer,
@@ -73,9 +68,7 @@ function toolNames(body: JsonObject): string[] {
 }
 
 function configureEnv(testDir: string, baseUrl: string): void {
-  const noProxy = IS_CONTAINER_SANDBOX
-    ? CONTAINER_SANDBOX_NO_PROXY
-    : '127.0.0.1,localhost';
+  const noProxy = '127.0.0.1,localhost';
   vi.stubEnv('HOME', testDir);
   vi.stubEnv('QWEN_HOME', join(testDir, '.qwen'));
   vi.stubEnv('QWEN_RUNTIME_DIR', join(testDir, '.qwen'));
@@ -202,7 +195,7 @@ describe('native Advisor tool', () => {
               ),
         ],
       };
-    }, fakeServerHostOptions());
+    });
     rig = await setupRig(server.baseUrl, 0, false);
     const output = await runPrompt(
       'Assess this substantial implementation approach.',
@@ -257,7 +250,7 @@ describe('native Advisor tool', () => {
         };
       }
       return { content: 'Prior answer with unique context.' };
-    }, fakeServerHostOptions());
+    });
 
     rig = await setupRig(server.baseUrl);
     evidenceFile = rig.createFile('evidence.txt', 'wire-level evidence');
@@ -357,7 +350,7 @@ describe('native Advisor tool', () => {
         content: 'I will ask Advisor.',
         toolCalls: [fakeToolCall('advisor', {}, 'advisor-failure-call')],
       };
-    }, fakeServerHostOptions());
+    });
     rig = await setupRig(server.baseUrl);
 
     const output = await runPrompt('Test Advisor failure handling.');
@@ -405,7 +398,7 @@ describe('native Advisor tool', () => {
           ),
         ],
       };
-    }, fakeServerHostOptions());
+    });
     rig = await setupRig(server.baseUrl);
     rig.mkdir('.qwen/agents');
     rig.createFile(
@@ -446,7 +439,7 @@ describe('native Advisor tool', () => {
           ),
         ],
       };
-    }, fakeServerHostOptions());
+    });
     rig = await setupRig(server.baseUrl, 1);
     const output = await runPrompt('Exercise the session limit.');
     expect(output).toContain('Continued after the limit.');
@@ -456,15 +449,12 @@ describe('native Advisor tool', () => {
   });
 
   it('does not expose or request Advisor when the session override is off', async () => {
-    server = await startFakeOpenAIServer(
-      ({ body }) => ({
-        content:
-          body['stream'] === true
-            ? 'Advisor is not available in this request.'
-            : '{"selected_memories":[]}',
-      }),
-      fakeServerHostOptions(),
-    );
+    server = await startFakeOpenAIServer(({ body }) => ({
+      content:
+        body['stream'] === true
+          ? 'Advisor is not available in this request.'
+          : '{"selected_memories":[]}',
+    }));
     rig = await setupRig(server.baseUrl);
 
     const output = await runPrompt('Check the available tools.', 'off');

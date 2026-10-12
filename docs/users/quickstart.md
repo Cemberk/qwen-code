@@ -259,4 +259,3 @@ build a dashboard showing products that are most frequently returned by our UK c
 
 - **In Qwen Code**: Type `/help` or ask "how do I..."
 - **Documentation**: You're here! Browse other guides
-- **Community**: Join our [GitHub Discussion](https://github.com/QwenLM/qwen-code/discussions) for tips and support

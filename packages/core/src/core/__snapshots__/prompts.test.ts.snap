@@ -30,10 +30,6 @@ When requested to perform tasks like fixing bugs, adding features, refactoring, 
 - Tool results and user messages may include <system-reminder> tags. <system-reminder> tags contain useful information and reminders. They are NOT part of the user's provided input or the tool result.
 - When you see a <persisted-output> tag in a tool result, the full output was saved to disk because it was too large. Use the read_file tool to access the complete content if the preview is insufficient.
 
-## New Applications
-
-When a user wants to create a new application, project, website, game, or library from scratch, use the 'skill' tool with skill="new-app" to load the detailed workflow and tech-stack guidance.
-
 # Operational Guidelines
 
 ## Communicating With the User
@@ -72,7 +68,6 @@ Final responses should be concise by default, but their shape and depth must mat
 
 ## Interaction Details
 - **Help Command:** The user can use '/help' to display help information.
-- **Feedback:** To report a bug or provide feedback, please use the /bug command.
 
 
 # Kernel Sandbox (bwrap)
@@ -170,10 +165,6 @@ When requested to perform tasks like fixing bugs, adding features, refactoring, 
 - Tool results and user messages may include <system-reminder> tags. <system-reminder> tags contain useful information and reminders. They are NOT part of the user's provided input or the tool result.
 - When you see a <persisted-output> tag in a tool result, the full output was saved to disk because it was too large. Use the read_file tool to access the complete content if the preview is insufficient.
 
-## New Applications
-
-When a user wants to create a new application, project, website, game, or library from scratch, use the 'skill' tool with skill="new-app" to load the detailed workflow and tech-stack guidance.
-
 # Operational Guidelines
 
 ## Communicating With the User
@@ -212,7 +203,6 @@ Final responses should be concise by default, but their shape and depth must mat
 
 ## Interaction Details
 - **Help Command:** The user can use '/help' to display help information.
-- **Feedback:** To report a bug or provide feedback, please use the /bug command.
 
 
 # Outside of Sandbox
@@ -314,10 +304,6 @@ When requested to perform tasks like fixing bugs, adding features, refactoring, 
 - Tool results and user messages may include <system-reminder> tags. <system-reminder> tags contain useful information and reminders. They are NOT part of the user's provided input or the tool result.
 - When you see a <persisted-output> tag in a tool result, the full output was saved to disk because it was too large. Use the read_file tool to access the complete content if the preview is insufficient.
 
-## New Applications
-
-When a user wants to create a new application, project, website, game, or library from scratch, use the 'skill' tool with skill="new-app" to load the detailed workflow and tech-stack guidance.
-
 # Operational Guidelines
 
 ## Communicating With the User
@@ -356,7 +342,6 @@ Final responses should be concise by default, but their shape and depth must mat
 
 ## Interaction Details
 - **Help Command:** The user can use '/help' to display help information.
-- **Feedback:** To report a bug or provide feedback, please use the /bug command.
 
 
 # Outside of Sandbox
@@ -471,10 +456,6 @@ When requested to perform tasks like fixing bugs, adding features, refactoring, 
 - Tool results and user messages may include <system-reminder> tags. <system-reminder> tags contain useful information and reminders. They are NOT part of the user's provided input or the tool result.
 - When you see a <persisted-output> tag in a tool result, the full output was saved to disk because it was too large. Use the read_file tool to access the complete content if the preview is insufficient.
 
-## New Applications
-
-When a user wants to create a new application, project, website, game, or library from scratch, use the 'skill' tool with skill="new-app" to load the detailed workflow and tech-stack guidance.
-
 # Operational Guidelines
 
 ## Communicating With the User
@@ -513,7 +494,6 @@ Final responses should be concise by default, but their shape and depth must mat
 
 ## Interaction Details
 - **Help Command:** The user can use '/help' to display help information.
-- **Feedback:** To report a bug or provide feedback, please use the /bug command.
 
 
 # Outside of Sandbox
@@ -610,10 +590,6 @@ When requested to perform tasks like fixing bugs, adding features, refactoring, 
 - Tool results and user messages may include <system-reminder> tags. <system-reminder> tags contain useful information and reminders. They are NOT part of the user's provided input or the tool result.
 - When you see a <persisted-output> tag in a tool result, the full output was saved to disk because it was too large. Use the read_file tool to access the complete content if the preview is insufficient.
 
-## New Applications
-
-When a user wants to create a new application, project, website, game, or library from scratch, use the 'skill' tool with skill="new-app" to load the detailed workflow and tech-stack guidance.
-
 # Operational Guidelines
 
 ## Communicating With the User
@@ -652,7 +628,6 @@ Final responses should be concise by default, but their shape and depth must mat
 
 ## Interaction Details
 - **Help Command:** The user can use '/help' to display help information.
-- **Feedback:** To report a bug or provide feedback, please use the /bug command.
 
 
 # Sandbox
@@ -749,10 +724,6 @@ When requested to perform tasks like fixing bugs, adding features, refactoring, 
 - Tool results and user messages may include <system-reminder> tags. <system-reminder> tags contain useful information and reminders. They are NOT part of the user's provided input or the tool result.
 - When you see a <persisted-output> tag in a tool result, the full output was saved to disk because it was too large. Use the read_file tool to access the complete content if the preview is insufficient.
 
-## New Applications
-
-When a user wants to create a new application, project, website, game, or library from scratch, use the 'skill' tool with skill="new-app" to load the detailed workflow and tech-stack guidance.
-
 # Operational Guidelines
 
 ## Communicating With the User
@@ -791,7 +762,6 @@ Final responses should be concise by default, but their shape and depth must mat
 
 ## Interaction Details
 - **Help Command:** The user can use '/help' to display help information.
-- **Feedback:** To report a bug or provide feedback, please use the /bug command.
 
 
 # macOS Seatbelt
@@ -888,10 +858,6 @@ When requested to perform tasks like fixing bugs, adding features, refactoring, 
 - Tool results and user messages may include <system-reminder> tags. <system-reminder> tags contain useful information and reminders. They are NOT part of the user's provided input or the tool result.
 - When you see a <persisted-output> tag in a tool result, the full output was saved to disk because it was too large. Use the read_file tool to access the complete content if the preview is insufficient.
 
-## New Applications
-
-When a user wants to create a new application, project, website, game, or library from scratch, use the 'skill' tool with skill="new-app" to load the detailed workflow and tech-stack guidance.
-
 # Operational Guidelines
 
 ## Communicating With the User
@@ -930,7 +896,6 @@ Final responses should be concise by default, but their shape and depth must mat
 
 ## Interaction Details
 - **Help Command:** The user can use '/help' to display help information.
-- **Feedback:** To report a bug or provide feedback, please use the /bug command.
 
 
 # Outside of Sandbox
@@ -1027,10 +992,6 @@ When requested to perform tasks like fixing bugs, adding features, refactoring, 
 - Tool results and user messages may include <system-reminder> tags. <system-reminder> tags contain useful information and reminders. They are NOT part of the user's provided input or the tool result.
 - When you see a <persisted-output> tag in a tool result, the full output was saved to disk because it was too large. Use the read_file tool to access the complete content if the preview is insufficient.
 
-## New Applications
-
-When a user wants to create a new application, project, website, game, or library from scratch, use the 'skill' tool with skill="new-app" to load the detailed workflow and tech-stack guidance.
-
 # Operational Guidelines
 
 ## Communicating With the User
@@ -1069,7 +1030,6 @@ Final responses should be concise by default, but their shape and depth must mat
 
 ## Interaction Details
 - **Help Command:** The user can use '/help' to display help information.
-- **Feedback:** To report a bug or provide feedback, please use the /bug command.
 
 
 # Outside of Sandbox
@@ -1166,10 +1126,6 @@ When requested to perform tasks like fixing bugs, adding features, refactoring, 
 - Tool results and user messages may include <system-reminder> tags. <system-reminder> tags contain useful information and reminders. They are NOT part of the user's provided input or the tool result.
 - When you see a <persisted-output> tag in a tool result, the full output was saved to disk because it was too large. Use the read_file tool to access the complete content if the preview is insufficient.
 
-## New Applications
-
-When a user wants to create a new application, project, website, game, or library from scratch, use the 'skill' tool with skill="new-app" to load the detailed workflow and tech-stack guidance.
-
 # Operational Guidelines
 
 ## Communicating With the User
@@ -1208,7 +1164,6 @@ Final responses should be concise by default, but their shape and depth must mat
 
 ## Interaction Details
 - **Help Command:** The user can use '/help' to display help information.
-- **Feedback:** To report a bug or provide feedback, please use the /bug command.
 
 
 # Outside of Sandbox
@@ -1305,10 +1260,6 @@ When requested to perform tasks like fixing bugs, adding features, refactoring, 
 - Tool results and user messages may include <system-reminder> tags. <system-reminder> tags contain useful information and reminders. They are NOT part of the user's provided input or the tool result.
 - When you see a <persisted-output> tag in a tool result, the full output was saved to disk because it was too large. Use the read_file tool to access the complete content if the preview is insufficient.
 
-## New Applications
-
-When a user wants to create a new application, project, website, game, or library from scratch, use the 'skill' tool with skill="new-app" to load the detailed workflow and tech-stack guidance.
-
 # Operational Guidelines
 
 ## Communicating With the User
@@ -1347,7 +1298,6 @@ Final responses should be concise by default, but their shape and depth must mat
 
 ## Interaction Details
 - **Help Command:** The user can use '/help' to display help information.
-- **Feedback:** To report a bug or provide feedback, please use the /bug command.
 
 
 # Outside of Sandbox
@@ -1444,10 +1394,6 @@ When requested to perform tasks like fixing bugs, adding features, refactoring, 
 - Tool results and user messages may include <system-reminder> tags. <system-reminder> tags contain useful information and reminders. They are NOT part of the user's provided input or the tool result.
 - When you see a <persisted-output> tag in a tool result, the full output was saved to disk because it was too large. Use the read_file tool to access the complete content if the preview is insufficient.
 
-## New Applications
-
-When a user wants to create a new application, project, website, game, or library from scratch, use the 'skill' tool with skill="new-app" to load the detailed workflow and tech-stack guidance.
-
 # Operational Guidelines
 
 ## Communicating With the User
@@ -1486,7 +1432,6 @@ Final responses should be concise by default, but their shape and depth must mat
 
 ## Interaction Details
 - **Help Command:** The user can use '/help' to display help information.
-- **Feedback:** To report a bug or provide feedback, please use the /bug command.
 
 
 # Sandbox
@@ -1608,10 +1553,6 @@ When requested to perform tasks like fixing bugs, adding features, refactoring, 
 - Tool results and user messages may include <system-reminder> tags. <system-reminder> tags contain useful information and reminders. They are NOT part of the user's provided input or the tool result.
 - When you see a <persisted-output> tag in a tool result, the full output was saved to disk because it was too large. Use the read_file tool to access the complete content if the preview is insufficient.
 
-## New Applications
-
-When a user wants to create a new application, project, website, game, or library from scratch, use the 'skill' tool with skill="new-app" to load the detailed workflow and tech-stack guidance.
-
 # Operational Guidelines
 
 ## Communicating With the User
@@ -1650,7 +1591,6 @@ Final responses should be concise by default, but their shape and depth must mat
 
 ## Interaction Details
 - **Help Command:** The user can use '/help' to display help information.
-- **Feedback:** To report a bug or provide feedback, please use the /bug command.
 
 
 # Outside of Sandbox
@@ -1842,10 +1782,6 @@ When requested to perform tasks like fixing bugs, adding features, refactoring, 
 - Tool results and user messages may include <system-reminder> tags. <system-reminder> tags contain useful information and reminders. They are NOT part of the user's provided input or the tool result.
 - When you see a <persisted-output> tag in a tool result, the full output was saved to disk because it was too large. Use the read_file tool to access the complete content if the preview is insufficient.
 
-## New Applications
-
-When a user wants to create a new application, project, website, game, or library from scratch, use the 'skill' tool with skill="new-app" to load the detailed workflow and tech-stack guidance.
-
 # Operational Guidelines
 
 ## Communicating With the User
@@ -1884,7 +1820,6 @@ Final responses should be concise by default, but their shape and depth must mat
 
 ## Interaction Details
 - **Help Command:** The user can use '/help' to display help information.
-- **Feedback:** To report a bug or provide feedback, please use the /bug command.
 
 
 # Outside of Sandbox
@@ -2006,10 +1941,6 @@ When requested to perform tasks like fixing bugs, adding features, refactoring, 
 - Tool results and user messages may include <system-reminder> tags. <system-reminder> tags contain useful information and reminders. They are NOT part of the user's provided input or the tool result.
 - When you see a <persisted-output> tag in a tool result, the full output was saved to disk because it was too large. Use the read_file tool to access the complete content if the preview is insufficient.
 
-## New Applications
-
-When a user wants to create a new application, project, website, game, or library from scratch, use the 'skill' tool with skill="new-app" to load the detailed workflow and tech-stack guidance.
-
 # Operational Guidelines
 
 ## Communicating With the User
@@ -2048,7 +1979,6 @@ Final responses should be concise by default, but their shape and depth must mat
 
 ## Interaction Details
 - **Help Command:** The user can use '/help' to display help information.
-- **Feedback:** To report a bug or provide feedback, please use the /bug command.
 
 
 # Outside of Sandbox
@@ -2236,10 +2166,6 @@ When requested to perform tasks like fixing bugs, adding features, refactoring, 
 - Tool results and user messages may include <system-reminder> tags. <system-reminder> tags contain useful information and reminders. They are NOT part of the user's provided input or the tool result.
 - When you see a <persisted-output> tag in a tool result, the full output was saved to disk because it was too large. Use the read_file tool to access the complete content if the preview is insufficient.
 
-## New Applications
-
-When a user wants to create a new application, project, website, game, or library from scratch, use the 'skill' tool with skill="new-app" to load the detailed workflow and tech-stack guidance.
-
 # Operational Guidelines
 
 ## Communicating With the User
@@ -2278,7 +2204,6 @@ Final responses should be concise by default, but their shape and depth must mat
 
 ## Interaction Details
 - **Help Command:** The user can use '/help' to display help information.
-- **Feedback:** To report a bug or provide feedback, please use the /bug command.
 
 
 # Outside of Sandbox
@@ -2375,10 +2300,6 @@ When requested to perform tasks like fixing bugs, adding features, refactoring, 
 - Tool results and user messages may include <system-reminder> tags. <system-reminder> tags contain useful information and reminders. They are NOT part of the user's provided input or the tool result.
 - When you see a <persisted-output> tag in a tool result, the full output was saved to disk because it was too large. Use the read_file tool to access the complete content if the preview is insufficient.
 
-## New Applications
-
-When a user wants to create a new application, project, website, game, or library from scratch, use the 'skill' tool with skill="new-app" to load the detailed workflow and tech-stack guidance.
-
 # Operational Guidelines
 
 ## Communicating With the User
@@ -2417,7 +2338,6 @@ Final responses should be concise by default, but their shape and depth must mat
 
 ## Interaction Details
 - **Help Command:** The user can use '/help' to display help information.
-- **Feedback:** To report a bug or provide feedback, please use the /bug command.
 
 
 # Outside of Sandbox
@@ -2514,10 +2434,6 @@ When requested to perform tasks like fixing bugs, adding features, refactoring, 
 - Tool results and user messages may include <system-reminder> tags. <system-reminder> tags contain useful information and reminders. They are NOT part of the user's provided input or the tool result.
 - When you see a <persisted-output> tag in a tool result, the full output was saved to disk because it was too large. Use the read_file tool to access the complete content if the preview is insufficient.
 
-## New Applications
-
-When a user wants to create a new application, project, website, game, or library from scratch, use the 'skill' tool with skill="new-app" to load the detailed workflow and tech-stack guidance.
-
 # Operational Guidelines
 
 ## Communicating With the User
@@ -2556,7 +2472,6 @@ Final responses should be concise by default, but their shape and depth must mat
 
 ## Interaction Details
 - **Help Command:** The user can use '/help' to display help information.
-- **Feedback:** To report a bug or provide feedback, please use the /bug command.
 
 
 # Outside of Sandbox

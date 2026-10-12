@@ -7,8 +7,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { OverlayFs } from './overlayFs.js';
 import { writeFile, readFile, mkdir, rm } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, statSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 
@@ -157,10 +157,13 @@ describe('OverlayFs', () => {
     it('removes the overlay directory', async () => {
       const realFile = join(testDir, 'file.ts');
       await writeFile(realFile, 'content');
-      await overlay.redirectWrite(realFile);
+      const overlayPath = await overlay.redirectWrite(realFile);
 
-      const overlayDir = overlay['overlayDir'];
+      const overlayDir = dirname(overlayPath);
       expect(existsSync(overlayDir)).toBe(true);
+      if (process.platform !== 'win32') {
+        expect(statSync(overlayDir).mode & 0o777).toBe(0o700);
+      }
 
       await overlay.cleanup();
 

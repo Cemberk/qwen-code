@@ -3645,7 +3645,7 @@ describe('Hooks System Integration', () => {
           TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name')
           COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 
-          if [ "$TOOL_NAME" = "Bash" ] && [[ "$COMMAND" == *"rm -rf"* ]]; then
+          if [ "$TOOL_NAME" = "run_shell_command" ] && [[ "$COMMAND" == *"rm -rf"* ]]; then
             echo '{"decision": "deny", "reason": "Dangerous command blocked", "hookSpecificOutput": {"additionalContext": "Security threat detected"}}'
           else
             echo '{"decision": "allow"}'
@@ -3673,13 +3673,17 @@ describe('Hooks System Integration', () => {
           },
         });
 
+        rig.mkdir('sentinel-dir');
+
         // This command should ideally be blocked by the hook
         // Note: Currently the PermissionRequest deny decision may not block tool execution
-        const result = await rig.run('Execute bash command: rm -rf /tmp');
+        const result = await rig.run(
+          'Execute shell command in the current directory: rm -rf ./sentinel-dir',
+        );
         expect(result).toBeDefined();
 
-        // The hook system correctly identifies dangerous operations
-        // But current implementation may not fully enforce the deny decision
+        // rig.run passes --yolo in non-interactive mode, so no permission
+        // prompt is raised and this hook does not fire on this path.
       });
     });
 

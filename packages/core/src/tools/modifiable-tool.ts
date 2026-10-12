@@ -64,12 +64,9 @@ function createTempFilesForModify(
   proposedContent: string,
   file_path: string,
 ): { oldPath: string; newPath: string } {
-  const tempDir = os.tmpdir();
-  const diffDir = path.join(tempDir, 'qwen-code-tool-modify-diffs');
-
-  if (!fs.existsSync(diffDir)) {
-    fs.mkdirSync(diffDir, { recursive: true });
-  }
+  // A fresh owner-only directory per edit: the files hold workspace content
+  // and the shared temp directory may be readable or writable by others.
+  const diffDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qwen-code-modify-'));
 
   const ext = path.extname(file_path);
   const fileName = path.basename(file_path, ext);
@@ -83,8 +80,16 @@ function createTempFilesForModify(
     `qwen-code-modify-${fileName}-new-${timestamp}${ext}`,
   );
 
-  fs.writeFileSync(tempOldPath, currentContent, 'utf8');
-  fs.writeFileSync(tempNewPath, proposedContent, 'utf8');
+  fs.writeFileSync(tempOldPath, currentContent, {
+    encoding: 'utf8',
+    flag: 'wx',
+    mode: 0o600,
+  });
+  fs.writeFileSync(tempNewPath, proposedContent, {
+    encoding: 'utf8',
+    flag: 'wx',
+    mode: 0o600,
+  });
 
   return { oldPath: tempOldPath, newPath: tempNewPath };
 }
@@ -139,6 +144,12 @@ function deleteTempFiles(oldPath: string, newPath: string): void {
     fs.unlinkSync(newPath);
   } catch {
     debugLogger.warn(`Error deleting temp diff file: ${newPath}`);
+  }
+
+  try {
+    fs.rmdirSync(path.dirname(oldPath));
+  } catch {
+    debugLogger.warn(`Error deleting temp diff directory: ${oldPath}`);
   }
 }
 

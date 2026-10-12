@@ -10,28 +10,22 @@
  * or the real filesystem.
  */
 
-import { mkdir, copyFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, copyFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, dirname, relative, isAbsolute } from 'node:path';
 import { tmpdir } from 'node:os';
-import { randomUUID } from 'node:crypto';
 
 /**
  * Copy-on-write overlay filesystem for speculation safety.
  */
 export class OverlayFs {
-  private readonly overlayDir: string;
+  // Created on first write as a fresh owner-only directory: the overlay holds
+  // copies of workspace files, and the shared temp directory may be readable
+  // or writable by other users.
+  private overlayDir?: Promise<string>;
   private readonly writtenFiles = new Map<string, string>(); // relPath -> overlayPath
 
-  constructor(private readonly realCwd: string) {
-    const id = randomUUID().slice(0, 8);
-    this.overlayDir = join(
-      tmpdir(),
-      'qwen-speculation',
-      String(process.pid),
-      id,
-    );
-  }
+  constructor(private readonly realCwd: string) {}
 
   /**
    * Resolve a read path: return overlay path if the file was previously written,
@@ -60,7 +54,8 @@ export class OverlayFs {
       return this.writtenFiles.get(rel)!;
     }
 
-    const overlayPath = join(this.overlayDir, rel);
+    this.overlayDir ??= mkdtemp(join(tmpdir(), 'qwen-speculation-'));
+    const overlayPath = join(await this.overlayDir, rel);
     await mkdir(dirname(overlayPath), { recursive: true });
 
     // Copy-on-write: copy original to overlay if it exists
@@ -103,8 +98,9 @@ export class OverlayFs {
    * Clean up the overlay directory.
    */
   async cleanup(): Promise<void> {
+    if (!this.overlayDir) return;
     try {
-      await rm(this.overlayDir, { recursive: true, force: true });
+      await rm(await this.overlayDir, { recursive: true, force: true });
     } catch {
       // Best-effort cleanup
     }

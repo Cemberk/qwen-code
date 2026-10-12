@@ -43,11 +43,12 @@ New worktrees use `node scripts/setup-worktree.js`. The script uses Corepack so
 an existing pnpm cache can stay fully offline and the integrity-pinned pnpm
 package declared by `packageManager` is verified before execution. It fails
 closed when Corepack is unavailable; Node versions that no longer bundle it
-must install it separately. The script freezes the lockfile and first
-attempts an offline install from the shared local store. It retries with
-registry access only when that cache-only attempt is incomplete.
-This avoids waiting for pnpm to prefetch optional binaries for other platforms
-on the common warm-store path. The script sets `QWEN_SKIP_PREPARE=1` plus a
+must install it separately. The script freezes the lockfile and installs
+offline only, from the shared local store, with Corepack's network access
+disabled; when the store or the Corepack cache is incomplete it fails with a
+message instead of reaching the registry.
+Installing offline also avoids waiting for pnpm to prefetch optional binaries
+for other platforms. The script sets `QWEN_SKIP_PREPARE=1` plus a
 bootstrap-private notice-generation guard, keeping dependency install scripts
 enabled while skipping repository build, bundle, and npm-layout notice
 generation. Because `QWEN_SKIP_PREPARE=1` also suppresses the Husky step that

@@ -54,6 +54,3 @@ qwen extensions link /path/to/starter   # link this directory for local testing
 Then restart Qwen Code. The context loads automatically, `/writing:polish` and
 `/skills` become available, the `diary-writer` subagent appears under
 `/agents manage`, and (once built) the MCP `count_words` tool is callable.
-
-See the [Getting Started with Extensions](https://github.com/QwenLM/qwen-code/blob/main/docs/users/extension/getting-started-extensions.md)
-guide for a deeper walkthrough.

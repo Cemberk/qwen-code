@@ -93,6 +93,15 @@ export const PROJECT_ENV_HARDCODED_EXCLUSIONS = [
   // (`OPENSSL_CONF`).
   'CURL_HOME',
   'WGETRC',
+  // Proxy variables route the traffic of every session subprocess (curl, git,
+  // npm, pip) and, where Node honors NODE_USE_ENV_PROXY, the CLI's own fetch
+  // through a host of the repository's choosing. Matching is case-insensitive,
+  // so the lowercase spellings are covered too.
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'ALL_PROXY',
+  'NO_PROXY',
+  'NODE_USE_ENV_PROXY',
   // PIP_CONFIG_FILE redirects all of pip's configuration at the file it
   // names — index-url, trusted-host, proxy, cert, or client-cert in an
   // attacker file sends session pip traffic or credentials to attacker
@@ -144,11 +153,10 @@ export const PROJECT_ENV_HARDCODED_EXCLUSIONS = [
   'QWEN_SANDBOX_IMAGE',
   'QWEN_SANDBOX_NET',
   // The container/Seatbelt launcher reads these to add docker flags, host
-  // mounts, published ports, container env, the Seatbelt profile, and to build
-  // an image from source — the same operator-only boundary as QWEN_SANDBOX.
+  // mounts, container env, the Seatbelt profile, and to build an image from
+  // source — the same operator-only boundary as QWEN_SANDBOX.
   'SANDBOX_FLAGS',
   'SANDBOX_MOUNTS',
-  'SANDBOX_PORTS',
   'SANDBOX_ENV',
   'SANDBOX_SET_UID_GID',
   'SEATBELT_PROFILE',
@@ -209,6 +217,9 @@ export const PROJECT_ENV_HARDCODED_EXCLUSIONS = [
   // `.env` pointing it at an attacker script runs on any browser-launch
   // flow.
   'BROWSER',
+  // OTUI_ASSET_ROOT picks the directory the OpenTUI renderer dlopens its
+  // native library from, so a project file must not point it at its own.
+  'OTUI_ASSET_ROOT',
   // DEV selects dev-harness behavior; only the dev harness (scripts/dev.js)
   // stamps it into the launch env, so a project file must not set it.
   'DEV',
@@ -249,10 +260,9 @@ export function isHardcodedProjectEnvExclusion(key: string): boolean {
 }
 
 // Variables that pick the model server, its credentials and model, or that
-// route session data (telemetry, debug log, system prompt dump, memory) and
-// commands (Mermaid renderer). A project `.env` and a workspace settings `env`
-// block must never set them: a repository must not redirect the conversation
-// or run its own renderer. Unlike the hardcoded tier above, the operator's own
+// route session data (telemetry, debug log, system prompt dump, memory). A
+// project `.env` and a workspace settings `env` block must never set them: a
+// repository must not redirect the conversation. Unlike the hardcoded tier above, the operator's own
 // User/System settings `env` may still set them — `/auth` stores the API key
 // there under a QWEN_CUSTOM_API_KEY_* name.
 const PROJECT_ENV_OPERATOR_ONLY_KEYS = [
@@ -264,8 +274,6 @@ const PROJECT_ENV_OPERATOR_ONLY_KEYS = [
   'QWEN_CODE_MEMORY_BASE_DIR',
   'QWEN_CODE_MEMORY_LOCAL',
   'QWEN_CODE_MEMORY_TEAM',
-  'QWEN_CODE_MERMAID_MMD_CLI',
-  'QWEN_CODE_MERMAID_ALLOW_LOCAL_RENDERERS',
   'QWEN_CODE_SUPPRESS_YOLO_WARNING',
 ] as const;
 

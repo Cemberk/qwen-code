@@ -21,12 +21,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import {
-  CONTAINER_SANDBOX_NO_PROXY,
-  fakeServerHostOptions,
-  IS_CONTAINER_SANDBOX,
-  TestRig,
-} from '../test-helper.js';
+import { TestRig } from '../test-helper.js';
 import { startFakeOpenAIServer } from '../fake-openai-server.js';
 import {
   existsSync,
@@ -42,9 +37,7 @@ const CURRENT_SETTINGS_VERSION = 4;
 
 // The fake server is reached over loopback, so a runner-level proxy must not
 // be allowed to intercept it.
-const NO_PROXY = IS_CONTAINER_SANDBOX
-  ? CONTAINER_SANDBOX_NO_PROXY
-  : '127.0.0.1,localhost';
+const NO_PROXY = '127.0.0.1,localhost';
 
 // Helper: list files under a directory recursively, returning relative paths
 function listFilesRecursive(dir: string, base = dir): string[] {
@@ -201,10 +194,9 @@ describe('QWEN_HOME environment variable', () => {
       vi.stubEnv('NO_PROXY', NO_PROXY);
       vi.stubEnv('no_proxy', NO_PROXY);
 
-      const fakeServer = await startFakeOpenAIServer(
-        () => ({ content: 'Hello!' }),
-        fakeServerHostOptions(),
-      );
+      const fakeServer = await startFakeOpenAIServer(() => ({
+        content: 'Hello!',
+      }));
 
       try {
         // Explicit CLI flags outrank ambient auth and any settings.json, so

@@ -10,28 +10,19 @@ import {
   fakeToolCall,
   type FakeOpenAIServer,
 } from '../fake-openai-server.js';
-import {
-  TestRig,
-  type,
-  printDebugInfo,
-  applyContainerSandboxNoProxy,
-  fakeServerHostOptions,
-} from '../test-helper.js';
+import { TestRig, type, printDebugInfo } from '../test-helper.js';
 
 describe('Interactive file system', () => {
   let rig: TestRig;
   let fakeServer: FakeOpenAIServer | undefined;
-  let restoreNoProxy: () => void;
 
   beforeEach(() => {
     rig = new TestRig();
-    restoreNoProxy = applyContainerSandboxNoProxy();
   });
 
   afterEach(async () => {
     await fakeServer?.close();
     fakeServer = undefined;
-    restoreNoProxy();
     await rig.cleanup();
   });
 
@@ -68,7 +59,7 @@ describe('Interactive file system', () => {
           };
         }
         return { content: 'Done. The version is now 1.0.1.' };
-      }, fakeServerHostOptions());
+      });
 
       await rig.setup('interactive-read-then-write', {
         settings: {

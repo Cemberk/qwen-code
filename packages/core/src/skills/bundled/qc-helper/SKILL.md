@@ -72,12 +72,6 @@ Use this index to locate the right document for the user's question. Load only t
 | Markdown rendering                          | `docs/features/markdown-rendering.md`   |
 | Contextual tips                             | `docs/features/tips.md`                 |
 
-### Integrations
-
-| Topic          | Doc Path                            |
-| -------------- | ----------------------------------- |
-| GitHub Actions | `docs/integration-github-action.md` |
-
 ### Extensions
 
 | Topic                           | Doc Path                                       |
@@ -114,16 +108,16 @@ When the user asks about configuration, the primary reference is `docs/configura
 
 ### Common Config Categories
 
-| Category      | Key Config Keys                                         | Reference                                                                                        |
-| ------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Permissions   | `permissions.allow/ask/deny`                            | `docs/configuration/settings.md`, `docs/features/approval-mode.md`                               |
-| MCP Servers   | `mcpServers.*`, `mcp.*`                                 | `docs/configuration/settings.md`, `docs/features/mcp.md`                                         |
-| Tool Approval | `tools.approvalMode`                                    | `docs/configuration/settings.md`, `docs/features/approval-mode.md`, `docs/features/auto-mode.md` |
-| Hooks         | `hooks.*`                                               | `docs/configuration/settings.md`, `docs/features/hooks.md`                                       |
-| Model         | `model.name`, `modelProviders`                          | `docs/configuration/settings.md`, `docs/configuration/model-providers.md`                        |
-| General/UI    | `general.*`, `ui.*`, `ide.*`, `output.*`                | `docs/configuration/settings.md`                                                                 |
-| Context       | `context.*`                                             | `docs/configuration/settings.md`                                                                 |
-| Advanced      | `env`, `security`, `privacy`, `telemetry`, `advanced.*` | `docs/configuration/settings.md`                                                                 |
+| Category      | Key Config Keys                              | Reference                                                                                        |
+| ------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Permissions   | `permissions.allow/ask/deny`                 | `docs/configuration/settings.md`, `docs/features/approval-mode.md`                               |
+| MCP Servers   | `mcpServers.*`, `mcp.*`                      | `docs/configuration/settings.md`, `docs/features/mcp.md`                                         |
+| Tool Approval | `tools.approvalMode`                         | `docs/configuration/settings.md`, `docs/features/approval-mode.md`, `docs/features/auto-mode.md` |
+| Hooks         | `hooks.*`                                    | `docs/configuration/settings.md`, `docs/features/hooks.md`                                       |
+| Model         | `model.name`, `modelProviders`               | `docs/configuration/settings.md`, `docs/configuration/model-providers.md`                        |
+| General/UI    | `general.*`, `ui.*`, `output.*`              | `docs/configuration/settings.md`                                                                 |
+| Context       | `context.*`                                  | `docs/configuration/settings.md`                                                                 |
+| Advanced      | `env`, `security`, `telemetry`, `advanced.*` | `docs/configuration/settings.md`                                                                 |
 
 ---
 

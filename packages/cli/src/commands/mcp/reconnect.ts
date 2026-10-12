@@ -28,7 +28,8 @@ async function getMcpServersFromConfig(
   const extManager =
     extensionManager ??
     new ExtensionManager({
-      isWorkspaceTrusted: isWorkspaceTrusted(settings.merged).isTrusted ?? true,
+      isWorkspaceTrusted:
+        isWorkspaceTrusted(settings.merged).isTrusted === true,
       locale: getCurrentLanguage(),
     });
 
@@ -101,7 +102,7 @@ async function createMinimalConfig(): Promise<Config> {
     // state. Without it `isTrustedFolder()` defaults to true here, the
     // untrusted-skip reporting below becomes unreachable, and this command
     // would attempt connections a normal session would not (issue #9944).
-    trustedFolder: isWorkspaceTrusted(settings.merged).isTrusted ?? true,
+    trustedFolder: isWorkspaceTrusted(settings.merged).isTrusted === true,
     ...(fileFiltering !== undefined ? { fileFiltering } : {}),
   });
 
@@ -197,12 +198,11 @@ function describeSkippedConnectionReason(
  * Runs discovery for one server and verifies that it actually produced a
  * live connection. `discoverToolsForServer` is best-effort and swallows
  * connect errors, so without the status check this command would print
- * "Reconnected successfully" for a server it never reached — e.g. a
- * single-session HTTP server whose only session is held by a running Qwen
- * Code session, or a server that is simply down (issue #9944).
+ * "Reconnected successfully" for a server it never reached — e.g. a server
+ * that is simply down (issue #9944).
  *
- * When verification fails, the underlying connect cause (ECONNREFUSED, an
- * OAuth 401, a spawn error...) is retrievable via `getMCPServerLastError`:
+ * When verification fails, the underlying connect cause (a spawn error, a
+ * failed handshake...) is retrievable via `getMCPServerLastError`:
  * the client records it into the status registry before discovery's
  * best-effort catch swallows it. Append it so the failure output tells the
  * user WHY instead of a bare status enum.
@@ -269,7 +269,7 @@ async function reconnectMcpServer(serverName: string): Promise<void> {
 async function reconnectAllMcpServers(): Promise<void> {
   const settings = loadSettings();
   const extensionManager = new ExtensionManager({
-    isWorkspaceTrusted: isWorkspaceTrusted(settings.merged).isTrusted ?? true,
+    isWorkspaceTrusted: isWorkspaceTrusted(settings.merged).isTrusted === true,
     locale: getCurrentLanguage(),
   });
   await extensionManager.refreshCache();

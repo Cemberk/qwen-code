@@ -4,8 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  afterAll,
+  vi,
+} from 'vitest';
 import { EventEmitter } from 'node:events';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+// A directory owned by this run, never a fixed shared path.
+const TEST_DIR = join(tmpdir(), `qwen-clipboard-test-${process.pid}`);
 
 // Use vi.hoisted to define mock functions before vi.mock is hoisted
 const { mockSpawn, mockExecSync, clipboardMockState, mockDebugLogger } =
@@ -278,6 +291,14 @@ const timeoutMs = process.env['RUNNER_NAME']?.startsWith('ecs-qwen-')
 vi.setConfig({ testTimeout: timeoutMs, hookTimeout: timeoutMs });
 
 describe('clipboardUtils', () => {
+  afterAll(async () => {
+    const realFs =
+      await vi.importActual<typeof import('node:fs/promises')>(
+        'node:fs/promises',
+      );
+    await realFs.rm(TEST_DIR, { recursive: true, force: true });
+  });
+
   let clipboardHasImage: (onUnavailable?: () => void) => Promise<boolean>;
   let saveClipboardImage: (dir?: string) => Promise<string | null>;
   let cleanupOldClipboardImages: (dir?: string) => Promise<void>;
@@ -285,14 +306,14 @@ describe('clipboardUtils', () => {
   let isWaylandSession: () => boolean;
 
   beforeEach(async () => {
-    // Clean up /tmp/test directory from previous runs to ensure
+    // Clean up the test directory from previous runs to ensure
     // fs.open with O_EXCL fails consistently in saveFromCommand tests.
     // Must use the real fs module because node:fs/promises is mocked.
     const realFs =
       await vi.importActual<typeof import('node:fs/promises')>(
         'node:fs/promises',
       );
-    await realFs.rm('/tmp/test', { recursive: true, force: true });
+    await realFs.rm(TEST_DIR, { recursive: true, force: true });
 
     clipboardMockState.failLoad = false;
     clipboardMockState.loadDelayMs = 0;
@@ -801,7 +822,7 @@ describe('clipboardUtils', () => {
           throw new Error('command not found');
         });
 
-        const result = await saveClipboardImage('/tmp/test');
+        const result = await saveClipboardImage(TEST_DIR);
         expect(result).toBe(null);
       });
 
@@ -864,7 +885,7 @@ describe('clipboardUtils', () => {
         return child;
       });
 
-      const result = await saveClipboardImage('/tmp/test');
+      const result = await saveClipboardImage(TEST_DIR);
       expect(result).toBe(null);
 
       // Witness that the run reached the BMP branch and derived the .bmp path —
@@ -920,7 +941,7 @@ describe('clipboardUtils', () => {
         return child;
       });
 
-      await saveClipboardImage('/tmp/test');
+      await saveClipboardImage(TEST_DIR);
 
       // O_EXCL in saveFromCommand prevents the second spawn because
       // mkdir is mocked (directory never actually created), so fs.open
@@ -979,7 +1000,7 @@ describe('clipboardUtils', () => {
         return child;
       });
 
-      const result = await saveClipboardImage('/tmp/test');
+      const result = await saveClipboardImage(TEST_DIR);
       expect(result).toBe(null);
     }, 10000);
 
@@ -1010,7 +1031,7 @@ describe('clipboardUtils', () => {
         return child;
       });
 
-      const result = await saveClipboardImage('/tmp/test');
+      const result = await saveClipboardImage(TEST_DIR);
       expect(result).toBe(null);
     });
 
@@ -1046,7 +1067,7 @@ describe('clipboardUtils', () => {
         return child;
       });
 
-      const result = await saveClipboardImage('/tmp/test');
+      const result = await saveClipboardImage(TEST_DIR);
       expect(result).toBe(null);
     });
 
@@ -1063,7 +1084,7 @@ describe('clipboardUtils', () => {
         throw new Error('command not found');
       });
 
-      const result = await saveClipboardImage('/tmp/test');
+      const result = await saveClipboardImage(TEST_DIR);
       expect(result).toBe(null);
     });
 
@@ -1075,7 +1096,7 @@ describe('clipboardUtils', () => {
         throw new Error('spawn error');
       });
 
-      const result = await saveClipboardImage('/tmp/test');
+      const result = await saveClipboardImage(TEST_DIR);
       expect(result).toBe(null);
     });
 
@@ -1089,7 +1110,7 @@ describe('clipboardUtils', () => {
         throw spawnError;
       });
 
-      await expect(saveClipboardImage('/tmp/test')).resolves.toBe(null);
+      await expect(saveClipboardImage(TEST_DIR)).resolves.toBe(null);
       expect(mockDebugLogger.error).toHaveBeenCalledWith(
         'Failed to spawn wl-paste --list-types:',
         spawnError,
@@ -1225,7 +1246,7 @@ describe('clipboardUtils', () => {
       });
 
       // @teddyzhu/clipboard mock returns false by default
-      const result = await saveClipboardImage('/tmp/test');
+      const result = await saveClipboardImage(TEST_DIR);
       expect(result).toBe(null);
 
       Object.defineProperty(process, 'platform', {

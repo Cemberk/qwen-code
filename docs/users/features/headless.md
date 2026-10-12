@@ -418,18 +418,6 @@ export QWEN_CODE_UNATTENDED_RETRY=1
 
 ### Examples
 
-#### GitHub Actions
-
-```yaml
-- name: Automated code review
-  env:
-    QWEN_CODE_UNATTENDED_RETRY: '1'
-  run: |
-    qwen -p "Review all files in src/ for security issues" \
-      --output-format json \
-      --yolo > review.json
-```
-
 #### Overnight batch processing
 
 ```bash
@@ -440,7 +428,7 @@ qwen -p "Migrate all callback-style functions to async/await in src/" --yolo
 #### Background daemon
 
 ```bash
-QWEN_CODE_UNATTENDED_RETRY=1 nohup qwen -p "Audit all dependencies for known CVEs" \
+QWEN_CODE_UNATTENDED_RETRY=1 nohup qwen -p "Review all files in src/ for security issues" \
   --output-format json > audit.json 2> audit.log &
 ```
 

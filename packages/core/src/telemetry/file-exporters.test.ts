@@ -114,6 +114,19 @@ describe('FileExporter robustness', () => {
     await exporter.shutdown();
   });
 
+  it.skipIf(process.platform === 'win32')(
+    'creates the outfile readable by the owner only',
+    async () => {
+      const outfile = path.join(tmpDir, 'out.jsonl');
+      const exporter = new FileSpanExporter(outfile);
+      await new Promise<void>((resolve) =>
+        exporter.export([{ name: 'span' } as never], () => resolve()),
+      );
+      await exporter.shutdown();
+      expect(fs.statSync(outfile).mode & 0o777).toBe(0o600);
+    },
+  );
+
   it('does not crash when the outfile path is unusable', async () => {
     // Make the parent a regular file so the directory — and therefore the
     // write stream — cannot be created. The async stream `error` must be

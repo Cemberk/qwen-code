@@ -69,6 +69,11 @@ const TRACKED_ENV = [
   'LESSCLOSE',
   'CURL_HOME',
   'WGETRC',
+  'HTTP_PROXY',
+  'https_proxy',
+  'ALL_PROXY',
+  'no_proxy',
+  'NODE_USE_ENV_PROXY',
   'PYTHON',
   'GIT_SEQUENCE_EDITOR',
   'XDG_CONFIG_HOME',
@@ -107,7 +112,6 @@ const TRACKED_ENV = [
   'QWEN_CUSTOM_API_KEY_OPENAI_TEST',
   'QWEN_TELEMETRY_OUTFILE',
   'QWEN_SYSTEM_MD',
-  'QWEN_CODE_MERMAID_MMD_CLI',
   'SANDBOX_FLAGS',
   'SANDBOX_MOUNTS',
   'SEATBELT_PROFILE',
@@ -472,6 +476,41 @@ describe('loadEnvironment', () => {
     expect(process.env['NODE_REPL_EXTERNAL_MODULE']).toBeUndefined();
     expect(process.env['npm_config_node_gyp']).toBeUndefined();
     expect(process.env['npm_config_init_module']).toBeUndefined();
+    expect(process.env['RUNTIME_DOTENV']).toBe('allowed');
+  });
+
+  it('never applies proxy routing from a project .env or settings.env', () => {
+    const workspace = makeWorkspace();
+    fs.writeFileSync(
+      path.join(workspace, '.env'),
+      [
+        'HTTP_PROXY=http://proxy.example:3128',
+        'https_proxy=http://proxy.example:3128',
+        'NODE_USE_ENV_PROXY=1',
+        'RUNTIME_DOTENV=allowed',
+        '',
+      ].join('\n'),
+    );
+
+    loadEnvironment(
+      testSettings({
+        env: {
+          ALL_PROXY: 'socks5://proxy.example:1080',
+          no_proxy: '*',
+        },
+      }),
+      workspace,
+    );
+
+    for (const key of [
+      'HTTP_PROXY',
+      'https_proxy',
+      'NODE_USE_ENV_PROXY',
+      'ALL_PROXY',
+      'no_proxy',
+    ]) {
+      expect.soft(process.env[key], key).toBeUndefined();
+    }
     expect(process.env['RUNTIME_DOTENV']).toBe('allowed');
   });
 
@@ -995,7 +1034,6 @@ describe('loadEnvironment', () => {
           'QWEN_CUSTOM_API_KEY_OPENAI_TEST=sk-repo',
           'QWEN_TELEMETRY_OUTFILE=/workspace-a/telemetry.log',
           'QWEN_SYSTEM_MD=/workspace-a/system.md',
-          'QWEN_CODE_MERMAID_MMD_CLI=/workspace-a/mmdc',
           'SANDBOX_FLAGS=--network=host',
           'SANDBOX_MOUNTS=/:/host',
           'SEATBELT_PROFILE=permissive-open',
@@ -1019,7 +1057,6 @@ describe('loadEnvironment', () => {
         'QWEN_CUSTOM_API_KEY_OPENAI_TEST',
         'QWEN_TELEMETRY_OUTFILE',
         'QWEN_SYSTEM_MD',
-        'QWEN_CODE_MERMAID_MMD_CLI',
         'SANDBOX_FLAGS',
         'SANDBOX_MOUNTS',
         'SEATBELT_PROFILE',

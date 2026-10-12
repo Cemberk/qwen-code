@@ -131,7 +131,6 @@ export const insightCommand: SlashCommand = {
 
       try {
         await openBrowserSecurely(pathToFileURL(outputPath).href, {
-          allowFile: true,
           allowedFilePaths: [outputPath],
         });
       } catch (browserError) {

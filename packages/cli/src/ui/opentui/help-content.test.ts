@@ -7,7 +7,7 @@
 /**
  * Verifies the OpenTUI `/help` content builder reproduces the original ink
  * Help dialog: shortcut list, grouping/sorting, signature + description +
- * subcommand lines, truncation widths, and the docs footer.
+ * subcommand lines, and truncation widths.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -144,18 +144,18 @@ describe('help command lines (signature/meta/description/subcommands)', () => {
   });
 });
 
-describe('overlay row budget (80x24 bounded rows, footer kept visible)', () => {
-  it('leaves body rows so header+footer+hints fit at 24 rows', () => {
+describe('overlay row budget (80x24 bounded rows, hints kept visible)', () => {
+  it('leaves body rows so header+hints fit at 24 rows', () => {
     // banner (3) + mount margin (1) + status (1) + composer chrome (5) +
-    // overlay borders/padding/header/footer/hints/margins (10) = 20, so a
-    // 24-row terminal keeps 4 rows for the tab body.
-    expect(computeHelpBodyRows(24)).toBe(4);
+    // overlay borders/padding/header/hints/margins (8) = 18, so a
+    // 24-row terminal keeps 6 rows for the tab body.
+    expect(computeHelpBodyRows(24)).toBe(6);
   });
 
   it('never goes negative on tiny terminals', () => {
     expect(computeHelpBodyRows(0)).toBe(0);
     expect(computeHelpBodyRows(12)).toBe(0);
-    expect(computeHelpBodyRows(19)).toBe(0);
+    expect(computeHelpBodyRows(18)).toBe(0);
   });
 
   it('body + fixed overlay rows + reserved chrome never exceeds the screen', () => {

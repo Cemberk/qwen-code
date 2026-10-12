@@ -287,7 +287,7 @@ export function setupUnhandledRejectionHandler() {
   let unhandledRejectionOccurred = false;
   process.on('unhandledRejection', (reason, _promise) => {
     const errorMessage = `=========================================
-This is an unexpected error. Please file a bug report using the /bug tool.
+This is an unexpected error.
 CRITICAL: Unhandled Promise Rejection!
 =========================================
 Reason: ${reason}${
@@ -410,8 +410,8 @@ export async function main() {
     process.env[QWEN_CODE_SIMPLE_ENV_VAR] = '1';
   }
 
-  // Run before yargs parses subcommands — handlers like `channel status`/`stop`
-  // call `process.exit` before `loadSettings()` would otherwise bootstrap.
+  // Run before yargs parses subcommands — subcommand handlers can call
+  // `process.exit` before `loadSettings()` would otherwise bootstrap.
   preResolveHomeEnvOverrides();
   // Created before anything writes into it so settings, credentials and
   // transcripts are private to the user. An existing directory is left as is.

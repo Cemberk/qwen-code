@@ -623,7 +623,8 @@ export default {
   '(workspace)': '(Arbeitsbereich)',
   '(user)': '(Benutzer)',
   '[not set]': '[nicht gesetzt]',
-  '[value stored in keychain]': '[Wert in Schlüsselbund gespeichert]',
+  '[value stored in encrypted file]':
+    '[Wert in verschlüsselter Datei gespeichert]',
   'Manage extension settings.': 'Erweiterungseinstellungen verwalten.',
   'You need to specify a command (set or list).':
     'Sie müssen einen Befehl angeben (set oder list).',
@@ -905,8 +906,6 @@ export default {
   'Invalid command. Available subcommands:':
     'Ungültiger Befehl. Verfügbare Unterbefehle:',
   'Available subcommands:': 'Verfügbare Unterbefehle:',
-  'To request additional UI language packs, please open an issue on GitHub.':
-    'Um zusätzliche UI-Sprachpakete anzufordern, öffnen Sie bitte ein Issue auf GitHub.',
   'Available options:': 'Verfügbare Optionen:',
   'Set UI language to {{name}}': 'UI-Sprache auf {{name}} setzen',
 
@@ -1115,7 +1114,6 @@ export default {
   'Run qwen --debug to see error logs':
     'Führen Sie qwen --debug aus, um Fehlerprotokolle anzuzeigen',
 
-  // MCP OAuth Authentication
   // MCP Tool List
   'No tools available for this server.':
     'Keine Werkzeuge für diesen Server verfügbar.',
@@ -1193,15 +1191,12 @@ export default {
   'Overall Goal:': 'Gesamtziel:',
   'You must connect a provider to proceed. Press Ctrl+C again to exit.':
     'Sie müssen einen Anbieter verbinden, um fortzufahren. Drücken Sie erneut Ctrl+C zum Beenden.',
-  'Bring your own API key': 'Eigenen API Key verwenden',
   'Missing API key for OpenAI-compatible auth. Set settings.security.auth.apiKey, or set the {{envKeyHint}} environment variable.':
     'API Key für OpenAI-kompatible Authentifizierung fehlt. Setzen Sie settings.security.auth.apiKey oder die Umgebungsvariable {{envKeyHint}}.',
   'Missing API key for OpenAI-compatible auth. Set the {{envKeyHint}} environment variable.':
     'API Key für OpenAI-kompatible Authentifizierung fehlt. Setzen Sie die Umgebungsvariable {{envKeyHint}}.',
   'Failed to authenticate. Message: {{message}}':
     'Authentifizierung fehlgeschlagen. Meldung: {{message}}',
-  'Authenticated successfully with {{authType}} credentials.':
-    'Erfolgreich mit {{authType}}-Anmeldedaten authentifiziert.',
   // ============================================================================
   // Dialogs - Model
   // ============================================================================
@@ -1324,7 +1319,6 @@ export default {
   '{{count}} prompt': '{{count}} Prompt',
   '{{count}} prompts': '{{count}} Prompts',
   '(from {{extensionName}})': '(von {{extensionName}})',
-  OAuth: 'OAuth',
   'tools and prompts will appear when ready':
     'Werkzeuge und Prompts werden angezeigt, wenn bereit',
   '{{count}} tools cached': '{{count}} Werkzeuge zwischengespeichert',
@@ -1646,16 +1640,10 @@ export default {
   'TOML format will continue to work for now, but migration is recommended.':
     'Das TOML-Format funktioniert vorerst weiter, aber eine Migration wird empfohlen.',
 
-  // ============================================================================
-  // Extensions - Explore Command
-  // ============================================================================
-  'Open extensions page in your browser': 'Erweiterungsseite im Browser öffnen',
   'Use /compress when the conversation gets long to summarize history and free up context.':
     'Verwenden Sie /compress, wenn die Unterhaltung lang wird, um den Verlauf zusammenzufassen und Kontext freizugeben.',
   'Start a fresh idea with /clear or /new; the previous session stays available in history.':
     'Starten Sie eine neue Idee mit /clear oder /new; die vorherige Sitzung bleibt im Verlauf verfügbar.',
-  'Use /bug to submit issues to the maintainers when something goes off.':
-    'Verwenden Sie /bug, um Probleme an die Betreuer zu melden, wenn etwas schiefgeht.',
   'Switch auth type quickly with /auth.':
     'Wechseln Sie den Authentifizierungstyp schnell mit /auth.',
   'You can run any shell commands from Qwen Code using ! (e.g. !ls).':
@@ -1690,7 +1678,7 @@ export default {
     'Einrichtungsanweisungen finden Sie in der Dokumentation',
 
   // ============================================================================
-  // Coding Plan Authentication
+  // API Key Authentication
   // ============================================================================
   'API key cannot be empty.': 'API Key darf nicht leer sein.',
 
@@ -1698,16 +1686,7 @@ export default {
   // Auth Dialog - View Titles and Labels
   // ============================================================================
   Custom: 'Benutzerdefiniert',
-  'Choose based on where your account is registered':
-    'Wählen Sie basierend auf dem Registrierungsort Ihres Kontos',
 
-  // ============================================================================
-  // Coding Plan International Updates
-  // ============================================================================
-  'New model configurations are available for {{region}}. Update now?':
-    'Neue Modellkonfigurationen sind für {{region}} verfügbar. Jetzt aktualisieren?',
-  '{{region}} configuration updated successfully. Model switched to "{{model}}".':
-    '{{region}}-Konfiguration erfolgreich aktualisiert. Modell auf "{{model}}" umgeschaltet.',
   // ============================================================================
   // Context Usage Component
   // ============================================================================
@@ -1744,10 +1723,6 @@ export default {
   active: 'aktiv',
   'body loaded': 'Inhalt geladen',
   memory: 'Speicher',
-  '{{region}} configuration updated successfully.':
-    '{{region}}-Konfiguration erfolgreich aktualisiert.',
-  'Authenticated successfully with {{region}}. API key and model configs saved to settings.json.':
-    'Erfolgreich mit {{region}} authentifiziert. API Key und Modellkonfigurationen wurden in settings.json gespeichert.',
   'Type something...': 'Etwas eingeben...',
   Submit: 'Senden',
   'Submit answers': 'Antworten senden',
@@ -1759,36 +1734,7 @@ export default {
     '↑/↓: Navigieren | ←/→: Tabs wechseln | Enter: Auswählen',
   '↑/↓: Navigate | Enter: Select | Esc: Cancel':
     '↑/↓: Navigieren | Enter: Auswählen | Esc: Abbrechen',
-  'Show current authentication status':
-    'Aktuellen Authentifizierungsstatus anzeigen',
-  'Authentication completed successfully.':
-    'Authentifizierung erfolgreich abgeschlossen.',
   Global: 'Global',
-  '\n=== Authentication Status ===\n': '\n=== Authentifizierungsstatus ===\n',
-  'Run one of the following commands to get started:\n':
-    'Führen Sie einen der folgenden Befehle aus, um zu beginnen:\n',
-  'Or simply run:': 'Oder einfach ausführen:',
-  '  qwen auth                - Interactive authentication setup\n':
-    '  qwen auth                - Interaktive Authentifizierungseinrichtung\n',
-  '  Type: Free tier (discontinued 2026-04-15)':
-    '  Typ: Kostenloses Kontingent (eingestellt 2026-04-15)',
-  '  Limit: No longer available': '  Limit: Nicht mehr verfügbar',
-  '  Region: {{region}}': '  Region: {{region}}',
-  '  Current Model: {{model}}': '  Aktuelles Modell: {{model}}',
-  '  Config Version: {{version}}': '  Konfigurationsversion: {{version}}',
-  '  Status: API key configured\n': '  Status: API Key konfiguriert\n',
-  '  Issue: API key not found in environment or settings\n':
-    '  Problem: API Key nicht in Umgebung oder Einstellungen gefunden\n',
-  '  Run `qwen auth coding-plan` to re-configure.\n':
-    '  Führen Sie `qwen auth coding-plan` aus, um neu zu konfigurieren.\n',
-  '  Status: Configured\n': '  Status: Konfiguriert\n',
-  'Failed to check authentication status: {{error}}':
-    'Authentifizierungsstatus konnte nicht überprüft werden: {{error}}',
-  'Select an option:': 'Option auswählen:',
-  'Raw mode not available. Please run in an interactive terminal.':
-    'Raw-Modus nicht verfügbar. Bitte in einem interaktiven Terminal ausführen.',
-  '(Use ↑ ↓ arrows to navigate, Enter to select, Ctrl+C to exit)\n':
-    '(↑ ↓ Pfeiltasten zum Navigieren, Enter zum Auswählen, Ctrl+C zum Beenden)\n',
   'to expand details': 'zum Erweitern der Details',
   'Switch to plan mode or exit plan mode':
     'In den Plan-Modus wechseln oder den Plan-Modus verlassen',
@@ -1984,8 +1930,6 @@ export default {
   'Prompts:': 'Eingaben:',
   'Resources:': 'Ressourcen:',
   'Skills:': 'Fähigkeiten:',
-  remote: 'entfernt',
-  '中国 (China)': 'China',
 
   // Stats Dashboard — Category 2
   'Activity Heatmap': 'Aktivitäts-Heatmap',

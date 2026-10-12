@@ -13,13 +13,7 @@ import { ExtensionStorage } from './storage.js';
 import type { ExtensionConfig } from './extensionManager.js';
 import prompts from 'prompts';
 import { EXTENSION_SETTINGS_FILENAME } from './variables.js';
-import { HybridTokenStorage } from '../mcp/token-storage/hybrid-token-storage.js';
 import { FileTokenStorage } from '../mcp/token-storage/file-token-storage.js';
-import { KeychainTokenStorage } from '../mcp/token-storage/keychain-token-storage.js';
-import {
-  TokenStorageType,
-  type SecretStorage,
-} from '../mcp/token-storage/types.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
 import { atomicWriteFile, atomicWriteJSON } from '../utils/atomicFileWrite.js';
 
@@ -35,10 +29,12 @@ export interface ExtensionSetting {
 const ENV_VAR_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const SETTINGS_SELECTOR_FILENAME = '.qwen-extension-settings.json';
 const SETTINGS_BUNDLE_PREFIX = '$qwen:extension-settings:v2:';
+const SETTINGS_BACKEND = 'encrypted_file';
+const KEYCHAIN_BACKEND = 'keychain';
 
 interface ExtensionSettingsSelector {
   version: 1;
-  backend: TokenStorageType;
+  backend: typeof SETTINGS_BACKEND;
   bundleKey: string;
 }
 
@@ -66,35 +62,31 @@ async function readSettingsSelector(
     !('version' in parsed) ||
     parsed.version !== 1 ||
     !('backend' in parsed) ||
-    !Object.values(TokenStorageType).includes(
-      parsed.backend as TokenStorageType,
-    ) ||
+    (parsed.backend !== SETTINGS_BACKEND &&
+      parsed.backend !== KEYCHAIN_BACKEND) ||
     !('bundleKey' in parsed) ||
     typeof parsed.bundleKey !== 'string' ||
     !parsed.bundleKey.startsWith(SETTINGS_BUNDLE_PREFIX)
   ) {
     throw new Error('Stored extension settings selector is invalid.');
   }
+  // Written by builds that kept secrets in the OS keychain, which this build
+  // cannot read. Treat it as absent so the settings can be entered again.
+  if (parsed.backend === KEYCHAIN_BACKEND) {
+    debugLogger.warn(
+      `Ignoring keychain-backed settings of extension "${extensionName}".`,
+    );
+    return undefined;
+  }
   return parsed as ExtensionSettingsSelector;
-}
-
-function createSelectedStorage(
-  serviceName: string,
-  backend: TokenStorageType,
-): SecretStorage {
-  return backend === TokenStorageType.KEYCHAIN
-    ? new KeychainTokenStorage(serviceName)
-    : new FileTokenStorage(serviceName);
 }
 
 async function deleteSettingsSnapshot(
   selector: ExtensionSettingsSelector,
   serviceName: string,
 ): Promise<void> {
-  const storage = createSelectedStorage(serviceName, selector.backend);
-  if ((await storage.getSecret(selector.bundleKey)) !== null) {
-    await storage.deleteSecret(selector.bundleKey);
-  }
+  const storage = new FileTokenStorage(serviceName);
+  await storage.deleteSecret(selector.bundleKey);
   const keys = await storage.listSecrets();
   for (const key of keys) {
     if (key.startsWith(`${selector.bundleKey}:override:`)) {
@@ -151,7 +143,7 @@ export interface ExtensionSetting {
   sensitive?: boolean;
 }
 
-const getKeychainStorageName = (
+const getSecretStorageName = (
   extensionName: string,
   extensionId: string,
   scope: ExtensionSettingScope,
@@ -180,7 +172,7 @@ export async function maybePromptForSettings(
   previousExtensionConfig?: ExtensionConfig,
   previousSettings?: Record<string, string>,
   envFilePathOverride?: string,
-  deferKeychainMutations = false,
+  deferSecretMutations = false,
 ): Promise<PreparedExtensionSettingsMutation | undefined> {
   const { name: extensionName, settings } = extensionConfig;
   validateExtensionSettingEnvVars(settings);
@@ -206,12 +198,10 @@ export async function maybePromptForSettings(
     extensionName,
     envFilePathOverride,
   );
-  const keychain = new HybridTokenStorage(
-    getKeychainStorageName(extensionName, extensionId, scope),
-  );
-  const serviceName = getKeychainStorageName(extensionName, extensionId, scope);
+  const serviceName = getSecretStorageName(extensionName, extensionId, scope);
+  const storage = new FileTokenStorage(serviceName);
   const previousSelector = await readSettingsSelector(extensionName);
-  const keychainMutations: Array<() => Promise<void>> = [];
+  const secretMutations: Array<() => Promise<void>> = [];
   let newSelector: ExtensionSettingsSelector | undefined;
 
   if (!settings || settings.length === 0) {
@@ -219,10 +209,10 @@ export async function maybePromptForSettings(
       await atomicWriteFile(envFilePath, '', { noFollow: true });
     }
     await fs.rm(selectorPath, { force: true });
-    keychainMutations.push(async () => await clearKeychainSettings(keychain));
-    return await applyOrDeferKeychainMutations(
-      keychainMutations,
-      deferKeychainMutations,
+    secretMutations.push(async () => await clearSecrets(storage));
+    return await applyOrDeferSecretMutations(
+      secretMutations,
+      deferSecretMutations,
       previousSelector,
       undefined,
       serviceName,
@@ -241,8 +231,8 @@ export async function maybePromptForSettings(
   }
 
   for (const removedSensitiveSetting of settingsChanges.removeSensitive) {
-    keychainMutations.push(
-      async () => await keychain.deleteSecret(removedSensitiveSetting.envVar),
+    secretMutations.push(
+      async () => await storage.deleteSecret(removedSensitiveSetting.envVar),
     );
   }
 
@@ -262,8 +252,8 @@ export async function maybePromptForSettings(
     }
     if (setting.sensitive) {
       sensitiveSettings[setting.envVar] = value;
-      keychainMutations.push(
-        async () => await keychain.setSecret(setting.envVar, value),
+      secretMutations.push(
+        async () => await storage.setSecret(setting.envVar, value),
       );
     } else {
       nonSensitiveSettings[setting.envVar] = value;
@@ -275,10 +265,10 @@ export async function maybePromptForSettings(
   await atomicWriteFile(envFilePath, envContent, { noFollow: true });
   if (Object.keys(sensitiveSettings).length > 0) {
     const bundleKey = `${SETTINGS_BUNDLE_PREFIX}${randomUUID()}`;
-    await keychain.setSecret(bundleKey, JSON.stringify(sensitiveSettings));
+    await storage.setSecret(bundleKey, JSON.stringify(sensitiveSettings));
     newSelector = {
       version: 1,
-      backend: await keychain.getStorageType(),
+      backend: SETTINGS_BACKEND,
       bundleKey,
     };
     try {
@@ -289,7 +279,7 @@ export async function maybePromptForSettings(
       });
     } catch (error) {
       try {
-        await keychain.deleteSecret(bundleKey);
+        await storage.deleteSecret(bundleKey);
       } catch (cleanupError) {
         throw new AggregateError(
           [error, cleanupError],
@@ -302,16 +292,16 @@ export async function maybePromptForSettings(
   } else {
     await fs.rm(selectorPath, { force: true });
   }
-  return await applyOrDeferKeychainMutations(
-    keychainMutations,
-    deferKeychainMutations,
+  return await applyOrDeferSecretMutations(
+    secretMutations,
+    deferSecretMutations,
     previousSelector,
     newSelector,
     serviceName,
   );
 }
 
-async function applyOrDeferKeychainMutations(
+async function applyOrDeferSecretMutations(
   mutations: ReadonlyArray<() => Promise<void>>,
   defer: boolean,
   previousSelector: ExtensionSettingsSelector | undefined,
@@ -373,19 +363,13 @@ export async function getScopedEnvContents(
   scope: ExtensionSettingScope,
 ): Promise<Record<string, string>> {
   const { name: extensionName } = extensionConfig;
-  const keychain = new HybridTokenStorage(
-    getKeychainStorageName(extensionName, extensionId, scope),
+  const storage = new FileTokenStorage(
+    getSecretStorageName(extensionName, extensionId, scope),
   );
   const selector =
     scope === ExtensionSettingScope.USER
       ? await readSettingsSelector(extensionName)
       : undefined;
-  const settingsStorage = selector
-    ? createSelectedStorage(
-        getKeychainStorageName(extensionName, extensionId, scope),
-        selector.backend,
-      )
-    : keychain;
   const envFilePath = getEnvFilePath(extensionName, scope);
   let customEnv: Record<string, string> = {};
   if (fsSync.existsSync(envFilePath)) {
@@ -395,7 +379,7 @@ export async function getScopedEnvContents(
 
   if (extensionConfig.settings) {
     const bundleContent = selector
-      ? await settingsStorage.getSecret(selector.bundleKey)
+      ? await storage.getSecret(selector.bundleKey)
       : null;
     if (selector && bundleContent === null) {
       throw new Error('Stored extension settings bundle is missing.');
@@ -406,7 +390,7 @@ export async function getScopedEnvContents(
     for (const setting of extensionConfig.settings) {
       if (!setting.sensitive) continue;
       const override = selector
-        ? await settingsStorage.getSecret(
+        ? await storage.getSecret(
             `${selector.bundleKey}:override:${setting.envVar}`,
           )
         : null;
@@ -414,7 +398,7 @@ export async function getScopedEnvContents(
         override ??
         (selector
           ? bundle?.[setting.envVar]
-          : await settingsStorage.getSecret(setting.envVar));
+          : await storage.getSecret(setting.envVar));
       if (secret) {
         customEnv[setting.envVar] = secret;
       }
@@ -472,35 +456,29 @@ export async function updateSetting(
   }
 
   const newValue = await requestSetting(settingToUpdate);
-  const keychain = new HybridTokenStorage(
-    getKeychainStorageName(extensionName, extensionId, scope),
-  );
 
   if (settingToUpdate.sensitive) {
+    const storage = new FileTokenStorage(
+      getSecretStorageName(extensionName, extensionId, scope),
+    );
     const selector =
       scope === ExtensionSettingScope.USER
         ? await readSettingsSelector(extensionName)
         : undefined;
-    const settingsStorage = selector
-      ? createSelectedStorage(
-          getKeychainStorageName(extensionName, extensionId, scope),
-          selector.backend,
-        )
-      : keychain;
     if (selector) {
-      await settingsStorage.setSecret(
+      await storage.setSecret(
         `${selector.bundleKey}:override:${settingToUpdate.envVar}`,
         newValue,
       );
       try {
-        await keychain.setSecret(settingToUpdate.envVar, newValue);
+        await storage.setSecret(settingToUpdate.envVar, newValue);
       } catch (error) {
         debugLogger.warn(
           `Failed to synchronize legacy extension setting "${settingToUpdate.envVar}": ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     } else {
-      await settingsStorage.setSecret(settingToUpdate.envVar, newValue);
+      await storage.setSecret(settingToUpdate.envVar, newValue);
     }
     return;
   }
@@ -565,13 +543,8 @@ function getSettingsChanges(
   };
 }
 
-async function clearKeychainSettings(keychain: HybridTokenStorage) {
-  if (!(await keychain.isAvailable())) {
-    return;
+async function clearSecrets(storage: FileTokenStorage) {
+  for (const secret of await storage.listSecrets()) {
+    await storage.deleteSecret(secret);
   }
-  const secrets = await keychain.listSecrets();
-  for (const secret of secrets) {
-    await keychain.deleteSecret(secret);
-  }
-  return;
 }

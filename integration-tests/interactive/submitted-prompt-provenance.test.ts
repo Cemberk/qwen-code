@@ -11,12 +11,7 @@ import {
   startFakeOpenAIServer,
   type FakeOpenAIServer,
 } from '../fake-openai-server.js';
-import {
-  TestRig,
-  type,
-  applyContainerSandboxNoProxy,
-  fakeServerHostOptions,
-} from '../test-helper.js';
+import { TestRig, type } from '../test-helper.js';
 
 interface CapturedHookInput {
   hook_event_name?: unknown;
@@ -29,19 +24,16 @@ describe('submitted prompt provenance', () => {
   let rig: TestRig;
   let savedQwenHome: string | undefined;
   let savedTrustedFoldersPath: string | undefined;
-  let restoreNoProxy: () => void;
 
   beforeEach(() => {
     rig = new TestRig();
     savedQwenHome = process.env['QWEN_HOME'];
     savedTrustedFoldersPath = process.env['QWEN_CODE_TRUSTED_FOLDERS_PATH'];
-    restoreNoProxy = applyContainerSandboxNoProxy();
   });
 
   afterEach(async () => {
     await fakeServer?.close();
     fakeServer = undefined;
-    restoreNoProxy();
     await rig.cleanup();
     if (savedQwenHome === undefined) {
       delete process.env['QWEN_HOME'];
@@ -112,20 +104,18 @@ describe('submitted prompt provenance', () => {
       ].join('\n'),
     );
 
-    fakeServer = await startFakeOpenAIServer(
-      ({ requestIndex }) =>
-        requestIndex === 0
-          ? {
-              toolCalls: [
-                fakeToolCall(
-                  'read_file',
-                  { file_path: toolFile },
-                  'call_submitted_prompt_e2e',
-                ),
-              ],
-            }
-          : { content: 'PROVENANCE_E2E_DONE' },
-      fakeServerHostOptions(),
+    fakeServer = await startFakeOpenAIServer(({ requestIndex }) =>
+      requestIndex === 0
+        ? {
+            toolCalls: [
+              fakeToolCall(
+                'read_file',
+                { file_path: toolFile },
+                'call_submitted_prompt_e2e',
+              ),
+            ],
+          }
+        : { content: 'PROVENANCE_E2E_DONE' },
     );
 
     const { ptyProcess, promise } = rig.runInteractive(

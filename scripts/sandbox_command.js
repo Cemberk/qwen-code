@@ -20,7 +20,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-const { join, dirname } = path;
+const { join } = path;
 import stripJsonComments from 'strip-json-comments';
 import os from 'node:os';
 import yargs from 'yargs';
@@ -54,40 +54,27 @@ if (!qwenSandbox) {
 }
 
 if (!qwenSandbox) {
-  // Walk up from cwd to find a project-level .env. Parse manually and copy
-  // only QWEN_SANDBOX — calling dotenv.config() here would inject every key,
-  // including QWEN_HOME / QWEN_RUNTIME_DIR that the main CLI hard-blocks via
-  // PROJECT_ENV_HARDCODED_EXCLUSIONS. A project file must not be able to
-  // redirect global state through this back door.
-  let currentDir = process.cwd();
-  while (true) {
-    const qwenEnv = join(currentDir, '.qwen', '.env');
-    const regularEnv = join(currentDir, '.env');
-    let candidate = null;
-    if (existsSync(qwenEnv)) {
-      candidate = qwenEnv;
-    } else if (existsSync(regularEnv)) {
-      candidate = regularEnv;
-    }
-    if (candidate) {
-      try {
-        const parsed = dotenv.parse(readFileSync(candidate, 'utf-8'));
-        if (
-          parsed.QWEN_SANDBOX &&
-          !Object.hasOwn(process.env, 'QWEN_SANDBOX')
-        ) {
-          process.env.QWEN_SANDBOX = parsed.QWEN_SANDBOX;
-        }
-      } catch (_e) {
-        // Match dotenv's quiet-mode behavior used elsewhere.
+  // Like the CLI, only home-scoped .env files may choose the sandbox: a
+  // project .env cannot pick the command that build_sandbox.js runs. Parse
+  // manually and copy only QWEN_SANDBOX; dotenv.config() would inject every
+  // key in the file.
+  const configDir = process.env.QWEN_HOME
+    ? resolvePath(process.env.QWEN_HOME)
+    : join(os.homedir(), '.qwen');
+  for (const candidate of [
+    join(configDir, '.env'),
+    join(os.homedir(), '.env'),
+  ]) {
+    if (!existsSync(candidate)) continue;
+    try {
+      const parsed = dotenv.parse(readFileSync(candidate, 'utf-8'));
+      if (parsed.QWEN_SANDBOX && !Object.hasOwn(process.env, 'QWEN_SANDBOX')) {
+        process.env.QWEN_SANDBOX = parsed.QWEN_SANDBOX;
       }
-      break;
+    } catch (_e) {
+      // Match dotenv's quiet-mode behavior used elsewhere.
     }
-    const parentDir = dirname(currentDir);
-    if (parentDir === currentDir) {
-      break;
-    }
-    currentDir = parentDir;
+    break;
   }
   qwenSandbox = process.env.QWEN_SANDBOX;
 }

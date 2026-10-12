@@ -8,7 +8,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { writeStderrLine } from '../utils/stdioHelpers.js';
-import { Storage, resolveBundleDir } from '@qwen-code/qwen-code-core';
+import { resolveBundleDir } from '@qwen-code/qwen-code-core';
 import {
   type SupportedLanguage,
   SUPPORTED_LANGUAGES,
@@ -46,16 +46,8 @@ type TranslationLoadResult =
 const getBuiltinLocalesDir = (): string =>
   path.join(resolveBundleDir(import.meta.url), 'locales');
 
-const getUserLocalesDir = (): string =>
-  path.join(Storage.getGlobalQwenDir(), 'locales');
-
-const getLocalePath = (
-  lang: SupportedLanguage,
-  useUserDir: boolean = false,
-): string => {
-  const baseDir = useUserDir ? getUserLocalesDir() : getBuiltinLocalesDir();
-  return path.join(baseDir, `${lang}.js`);
-};
+const getLocalePath = (lang: SupportedLanguage): string =>
+  path.join(getBuiltinLocalesDir(), `${lang}.js`);
 
 // Language detection
 export function detectSystemLanguage(): SupportedLanguage {
@@ -134,22 +126,7 @@ async function loadTranslationsAsync(
   }
 
   const loadPromise = (async () => {
-    const userJsPath = getLocalePath(lang, true);
-    if (fs.existsSync(getUserLocalesDir()) && fs.existsSync(userJsPath)) {
-      const userResult = await tryImportTranslations(
-        pathToFileURL(userJsPath).href,
-      );
-      if (userResult.translations) {
-        translationCache[lang] = userResult.translations;
-        return userResult.translations;
-      }
-
-      writeStderrLine(
-        `Failed to load translations from user directory for ${lang}: ${userResult.error.message}`,
-      );
-    }
-
-    const builtinJsPath = getLocalePath(lang, false);
+    const builtinJsPath = getLocalePath(lang);
     const builtinModuleSpecifiers: string[] = [];
     if (fs.existsSync(getBuiltinLocalesDir()) && fs.existsSync(builtinJsPath)) {
       builtinModuleSpecifiers.push(pathToFileURL(builtinJsPath).href);
@@ -180,7 +157,7 @@ async function loadTranslationsAsync(
       );
     }
 
-    // Return empty object if both directories fail
+    // Return empty object if loading fails
     // Cache it to avoid repeated failed attempts
     translationCache[lang] = {};
     return {};
@@ -214,6 +191,8 @@ function interpolate(
 }
 
 // Language setting helpers
+// Only shipped locale codes ever reach a module import; anything else falls
+// back to English.
 export function resolveLanguage(
   lang: SupportedLanguage | 'auto',
 ): SupportedLanguage {
@@ -221,7 +200,7 @@ export function resolveLanguage(
     return detectSystemLanguage();
   }
 
-  return resolveSupportedLanguage(lang) ?? lang;
+  return resolveSupportedLanguage(lang) ?? 'en';
 }
 
 // Public API
@@ -235,9 +214,7 @@ export function setLanguage(lang: SupportedLanguage | 'auto'): void {
 
   // Warn if translations are empty and JS file exists (requires async loading)
   if (Object.keys(loaded).length === 0) {
-    const userJsPath = getLocalePath(resolvedLang, true);
-    const builtinJsPath = getLocalePath(resolvedLang, false);
-    if (fs.existsSync(userJsPath) || fs.existsSync(builtinJsPath)) {
+    if (fs.existsSync(getLocalePath(resolvedLang))) {
       writeStderrLine(
         `Language file for ${resolvedLang} requires async loading. ` +
           `Use setLanguageAsync() instead, or call initializeI18n() first.`,

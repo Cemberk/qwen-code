@@ -559,7 +559,7 @@ export interface TelemetrySettings {
   logPrompts?: boolean;
   /**
    * Stable end-user identifier written to GenAI spans as `gen_ai.user.id`.
-   * This is an ARMS extension and may contain linkable personal data.
+   * It may contain linkable personal data.
    */
   userId?: string;
   includeSensitiveSpanAttributes?: boolean;

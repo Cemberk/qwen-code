@@ -170,7 +170,7 @@ export class OpenAILogger {
     if (this.initialized) return;
 
     try {
-      await fs.mkdir(this.logDir, { recursive: true });
+      await fs.mkdir(this.logDir, { recursive: true, mode: 0o700 });
       this.initialized = true;
     } catch (error) {
       debugLogger.error('Failed to initialize OpenAI logger:', error);
@@ -220,7 +220,11 @@ export class OpenAILogger {
     };
 
     try {
-      await fs.writeFile(filePath, JSON.stringify(logData, null, 2), 'utf-8');
+      // Full prompts and responses: readable by the owner only.
+      await fs.writeFile(filePath, JSON.stringify(logData, null, 2), {
+        encoding: 'utf-8',
+        mode: 0o600,
+      });
       return filePath;
     } catch (writeError) {
       debugLogger.error('Failed to write OpenAI log file:', writeError);

@@ -1851,6 +1851,24 @@ describe('McpClientManager — PR 14 guardrails', () => {
     expect(createdCount).toBe(0);
   });
 
+  it('readResource never lazy-spawns a server in an untrusted folder', async () => {
+    let createdCount = 0;
+    vi.mocked(McpClient).mockImplementation(() => {
+      createdCount += 1;
+      return makeConnectedMcpClientMock() as unknown as McpClient;
+    });
+    const config = configWithServers(
+      { a: { command: 'node' } },
+      { isTrustedFolder: () => false },
+    );
+    const manager = new McpClientManager(config, {} as ToolRegistry);
+
+    await expect(manager.readResource('a', 'file:///x')).rejects.toThrow(
+      /untrusted folder/,
+    );
+    expect(createdCount).toBe(0);
+  });
+
   it('discoverAllMcpTools disconnects on discover() failure (wenshao R8 #1 line 532)', async () => {
     // Bulk-path mirror of R7 #3 (per-server path). Pre-fix:
     // connect() success + discover() throw → catch deleted client

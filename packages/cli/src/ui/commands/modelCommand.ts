@@ -25,8 +25,8 @@ import {
 import { SettingScope, type LoadedSettings } from '../../config/settings.js';
 import {
   isInlineModelOverrideAllowed,
-  parseAcpModelOption,
-} from '../../utils/acpModelUtils.js';
+  parseModelOption,
+} from '../../utils/model-option-utils.js';
 
 const MAIN_MODEL_CONFIGURATION_HINT =
   'Configure models in settings.modelProviders and ensure the required environment variables are set. In interactive mode, run /auth to configure or switch providers, or run /model without arguments to choose from configured models.';
@@ -124,7 +124,7 @@ async function switchMainModel(
   modelArg: string,
   scopeOverride?: SettingScope,
 ): Promise<string> {
-  const parsed = parseAcpModelOption(modelArg);
+  const parsed = parseModelOption(modelArg);
 
   if (parsed.authType) {
     await config.switchModel(parsed.authType, parsed.modelId);
@@ -742,7 +742,7 @@ export const modelCommand: SlashCommand = {
     const inlinePrompt =
       firstSpace === -1 ? '' : trimmedArgs.slice(firstSpace + 1).trim();
     if (modelName) {
-      const parsed = parseAcpModelOption(modelName);
+      const parsed = parseModelOption(modelName);
       const targetAuthType = parsed.authType ?? authType;
       const availableModels = config
         .getAvailableModelsForAuthType(targetAuthType)

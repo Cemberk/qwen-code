@@ -46,7 +46,7 @@ flowchart TB
 | `packages/core`          | UI-independent agent orchestration, model-provider integration, prompt and context construction, tool registration and execution, permissions, sessions, memory, telemetry, and shared services. |
 | `packages/web-templates` | Web templates packaged as embeddable JavaScript and CSS strings.                                                                                                                                 |
 | `integration-tests`      | End-to-end coverage for CLI, interactive, sandbox, hook, and terminal behavior.                                                                                                                  |
-| `docs` and `docs-site`   | User, developer, and design documentation plus the documentation site.                                                                                                                           |
+| `docs`                   | User, developer, and design documentation.                                                                                                                                                       |
 | `scripts`                | Build, packaging, release, validation, and repository-maintenance automation.                                                                                                                    |
 
 Most code lives in npm workspaces under `packages/`. A package should depend on

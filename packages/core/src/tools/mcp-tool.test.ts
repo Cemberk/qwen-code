@@ -2095,22 +2095,19 @@ describe('DiscoveredMCPTool', () => {
       },
     );
 
-    it('repairs the session of an unannotated tool after the server restarted (issue #9944)', async () => {
-      // An HTTP MCP server that restarted comes back with a fresh
-      // `mcp-session-id` space and answers our stale session with
-      // `-32001 "Session not found"`. The tool carries no
-      // readOnlyHint/idempotentHint annotations, so pre-fix the reconnect
-      // path never ran and the tool stayed unusable until a full session
-      // restart. The ambiguous call must still not be replayed — but the
-      // session repair (fresh initialize + tool reload) has to happen.
-      const sessionNotFoundError = Object.assign(
-        new Error(
-          'Error POSTing to endpoint: {"jsonrpc":"2.0","error":{"code":-32001,"message":"Session not found"},"id":null}',
-        ),
+    it('repairs the connection of an unannotated tool after the server died mid-call (issue #9944)', async () => {
+      // A server whose connection died mid-call leaves the client
+      // DISCONNECTED and rejects the pending request with `-32001`. The tool
+      // carries no readOnlyHint/idempotentHint annotations, so pre-fix the
+      // reconnect path never ran and the tool stayed unusable until a full
+      // session restart. The ambiguous call must still not be replayed — but
+      // the repair (fresh initialize + tool reload) has to happen.
+      const connectionDiedError = Object.assign(
+        new Error('MCP error -32001: Request timed out'),
         { code: -32001 },
       );
       const initialClient: McpDirectClient = {
-        callTool: vi.fn().mockRejectedValueOnce(sessionNotFoundError),
+        callTool: vi.fn().mockRejectedValueOnce(connectionDiedError),
       };
       const discoverToolsForServer = vi.fn().mockResolvedValue(undefined);
       const ensureTool = vi.fn();
@@ -2141,53 +2138,6 @@ describe('DiscoveredMCPTool', () => {
       expect(discoverToolsForServer).toHaveBeenCalledWith(serverName);
       expect(ensureTool).toHaveBeenCalledTimes(1);
     });
-
-    it.each(['Session not found', 'Session terminated', 'Session expired'])(
-      'routes "%s" to the reconnect path even while the status is still CONNECTED (issue #9944)',
-      async (sessionMessage) => {
-        // Servers that keep no GET SSE stream never flip the client status
-        // to DISCONNECTED when the session dies; the stale `-32001` code
-        // would then be misread as an execution timeout and the reconnect
-        // path would never run. The session-error carve-out must win for
-        // every dead-session phrasing a server may use — not just
-        // "Session not found" — so all three variants exercise it.
-        const sessionError = Object.assign(
-          new Error(
-            `Error POSTing to endpoint: {"jsonrpc":"2.0","error":{"code":-32001,"message":"${sessionMessage}"},"id":null}`,
-          ),
-          { code: -32001 },
-        );
-        const initialClient: McpDirectClient = {
-          callTool: vi.fn().mockRejectedValueOnce(sessionError),
-        };
-        const discoverToolsForServer = vi.fn().mockResolvedValue(undefined);
-        const ensureTool = vi.fn();
-        const mockConfig = {
-          isTrustedFolder: () => true,
-          getToolRegistry: () => ({ discoverToolsForServer, ensureTool }),
-        };
-        const tool = new DiscoveredMCPTool(
-          initialClient,
-          serverName,
-          serverToolName,
-          baseDescription,
-          inputSchema,
-          true,
-          undefined,
-          mockConfig as any,
-          undefined,
-          undefined,
-          undefined, // no annotations → no replay, but repair must still run
-        );
-
-        updateMCPServerStatus(serverName, MCPServerStatus.CONNECTED);
-        await expect(
-          tool.build({ param: 'test' }).execute(new AbortController().signal),
-        ).rejects.toThrow(unsafeReplayErrorMessage);
-
-        expect(discoverToolsForServer).toHaveBeenCalledWith(serverName);
-      },
-    );
 
     it('should not retry on non-connection errors', async () => {
       const params = { param: 'test' };

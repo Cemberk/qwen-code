@@ -551,7 +551,6 @@ export default {
   'This extension will run the following MCP servers:':
     'Это расширение запустит следующие MCP servers:',
   local: 'локальный',
-  remote: 'удалённый',
   'This extension will add the following commands: {{commands}}.':
     'Это расширение добавит следующие команды: {{commands}}.',
   'This extension will append info to your QWEN.md context using {{fileName}}':
@@ -640,7 +639,8 @@ export default {
   '(workspace)': '(рабочее пространство)',
   '(user)': '(пользователь)',
   '[not set]': '[не задано]',
-  '[value stored in keychain]': '[значение хранится в связке ключей]',
+  '[value stored in encrypted file]':
+    '[значение хранится в зашифрованном файле]',
   'Manage extension settings.': 'Управление настройками расширений.',
   'You need to specify a command (set or list).':
     'Необходимо указать команду (set или list).',
@@ -918,8 +918,6 @@ export default {
   'Invalid command. Available subcommands:':
     'Неверная команда. Доступные подкоманды:',
   'Available subcommands:': 'Доступные подкоманды:',
-  'To request additional UI language packs, please open an issue on GitHub.':
-    'Для запроса дополнительных языковых пакетов интерфейса, пожалуйста, создайте обращение на GitHub.',
   'Available options:': 'Доступные варианты:',
   'Set UI language to {{name}}': 'Установить язык интерфейса на {{name}}',
 
@@ -1145,15 +1143,12 @@ export default {
   'Overall Goal:': 'Общая цель:',
   'You must connect a provider to proceed. Press Ctrl+C again to exit.':
     'Необходимо подключить провайдера для продолжения. Нажмите Ctrl+C снова для выхода.',
-  'Bring your own API key': 'Используйте свой API Key',
   'Missing API key for OpenAI-compatible auth. Set settings.security.auth.apiKey, or set the {{envKeyHint}} environment variable.':
     'Отсутствует API Key для аутентификации, совместимой с OpenAI. Укажите settings.security.auth.apiKey или переменную окружения {{envKeyHint}}.',
   'Missing API key for OpenAI-compatible auth. Set the {{envKeyHint}} environment variable.':
     'Отсутствует API Key для аутентификации, совместимой с OpenAI. Установите переменную окружения {{envKeyHint}}.',
   'Failed to authenticate. Message: {{message}}':
     'Не удалось авторизоваться. Сообщение: {{message}}',
-  'Authenticated successfully with {{authType}} credentials.':
-    'Успешно авторизовано с учетными данными {{authType}}.',
   // ============================================================================
   // Диалоги - Модель
   // ============================================================================
@@ -1276,7 +1271,6 @@ export default {
   '{{count}} prompt': '{{count}} промпт',
   '{{count}} prompts': '{{count}} промпта(ов)',
   '(from {{extensionName}})': '(от {{extensionName}})',
-  OAuth: 'OAuth',
   'tools and prompts will appear when ready':
     'инструменты и промпты появятся, когда будут готовы',
   '{{count}} tools cached': '{{count}} инструмента(ов) в кэше',
@@ -1601,17 +1595,10 @@ export default {
   'TOML format will continue to work for now, but migration is recommended.':
     'Формат TOML пока продолжит работать, но миграция рекомендуется.',
 
-  // ============================================================================
-  // Extensions - Explore Command
-  // ============================================================================
-  'Open extensions page in your browser':
-    'Открыть страницу расширений в браузере',
   'Use /compress when the conversation gets long to summarize history and free up context.':
     'Используйте /compress, когда разговор становится длинным, чтобы подвести итог и освободить контекст.',
   'Start a fresh idea with /clear or /new; the previous session stays available in history.':
     'Начните новую идею с /clear или /new; предыдущая сессия останется в истории.',
-  'Use /bug to submit issues to the maintainers when something goes off.':
-    'Используйте /bug, чтобы сообщить о проблемах разработчикам.',
   'Switch auth type quickly with /auth.':
     'Быстро переключите тип аутентификации с помощью /auth.',
   'You can run any shell commands from Qwen Code using ! (e.g. !ls).':
@@ -1646,7 +1633,7 @@ export default {
     'Инструкции по настройке см. в документации',
 
   // ============================================================================
-  // Coding Plan Authentication
+  // API Key Authentication
   // ============================================================================
   'API key cannot be empty.': 'API Key не может быть пустым.',
 
@@ -1654,16 +1641,7 @@ export default {
   // Auth Dialog - View Titles and Labels
   // ============================================================================
   Custom: 'Пользовательский',
-  'Choose based on where your account is registered':
-    'Выберите в зависимости от места регистрации вашего аккаунта',
 
-  // ============================================================================
-  // Coding Plan International Updates
-  // ============================================================================
-  'New model configurations are available for {{region}}. Update now?':
-    'Доступны новые конфигурации моделей для {{region}}. Обновить сейчас?',
-  '{{region}} configuration updated successfully. Model switched to "{{model}}".':
-    'Конфигурация {{region}} успешно обновлена. Модель переключена на "{{model}}".',
   // ============================================================================
   // Context Usage Component
   // ============================================================================
@@ -1735,7 +1713,6 @@ export default {
   'Run qwen --debug to see error logs':
     'Запустите qwen --debug для просмотра журналов ошибок',
 
-  // MCP OAuth Authentication
   // MCP Tool List
   'No tools available for this server.':
     'Для этого сервера нет доступных инструментов.',
@@ -1751,10 +1728,6 @@ export default {
   Parameters: 'Параметры',
   'No tool selected': 'Инструмент не выбран',
   Server: 'Сервер',
-  '{{region}} configuration updated successfully.':
-    'Конфигурация {{region}} успешно обновлена.',
-  'Authenticated successfully with {{region}}. API key and model configs saved to settings.json.':
-    'Успешная аутентификация с {{region}}. API Key и конфигурации моделей сохранены в settings.json.',
   'Type something...': 'Введите что-то...',
   Submit: 'Отправить',
   'Submit answers': 'Отправить ответы',
@@ -1766,35 +1739,7 @@ export default {
     '↑/↓: Навигация | ←/→: Переключение вкладок | Enter: Выбор',
   '↑/↓: Navigate | Enter: Select | Esc: Cancel':
     '↑/↓: Навигация | Enter: Выбор | Esc: Отмена',
-  'Show current authentication status':
-    'Показать текущий статус аутентификации',
-  'Authentication completed successfully.': 'Аутентификация успешно завершена.',
   Global: 'Глобальный',
-  '\n=== Authentication Status ===\n': '\n=== Статус аутентификации ===\n',
-  'Run one of the following commands to get started:\n':
-    'Выполните одну из следующих команд для начала:\n',
-  'Or simply run:': 'Или просто выполните:',
-  '  qwen auth                - Interactive authentication setup\n':
-    '  qwen auth                - Интерактивная настройка аутентификации\n',
-  '  Type: Free tier (discontinued 2026-04-15)':
-    '  Тип: Бесплатный уровень (прекращено 2026-04-15)',
-  '  Limit: No longer available': '  Лимит: Больше не доступен',
-  '  Region: {{region}}': '  Регион: {{region}}',
-  '  Current Model: {{model}}': '  Текущая модель: {{model}}',
-  '  Config Version: {{version}}': '  Версия конфигурации: {{version}}',
-  '  Status: API key configured\n': '  Статус: API Key настроен\n',
-  '  Issue: API key not found in environment or settings\n':
-    '  Проблема: API Key не найден в окружении или настройках\n',
-  '  Run `qwen auth coding-plan` to re-configure.\n':
-    '  Выполните `qwen auth coding-plan` для повторной настройки.\n',
-  '  Status: Configured\n': '  Статус: Настроено\n',
-  'Failed to check authentication status: {{error}}':
-    'Не удалось проверить статус аутентификации: {{error}}',
-  'Select an option:': 'Выберите вариант:',
-  'Raw mode not available. Please run in an interactive terminal.':
-    'Raw-режим недоступен. Пожалуйста, запустите в интерактивном терминале.',
-  '(Use ↑ ↓ arrows to navigate, Enter to select, Ctrl+C to exit)\n':
-    '(↑ ↓ стрелки для навигации, Enter для выбора, Ctrl+C для выхода)\n',
   'Switch to plan mode or exit plan mode':
     'Переключиться в режим плана или выйти из режима плана',
   'Set how hard reasoning-capable models think ({{tiers}}); mapped and clamped per provider.':
@@ -1961,7 +1906,6 @@ export default {
   // === Same-as-English optimization ===
   ' (not in model registry)': ' (не в реестре моделей)',
   'start server': 'запустить сервер',
-  '中国 (China)': 'Китай',
 
   // Stats Dashboard — Category 2
   'Activity Heatmap': 'Карта активности',

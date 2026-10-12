@@ -20,7 +20,6 @@
  * feature parity + regression are complete.
  */
 
-import { appendFileSync } from 'node:fs';
 import type {
   AgentResultDisplay,
   Config,
@@ -659,7 +658,6 @@ export async function* livePromptEvents(
     getModelName: () => turnModel.current ?? config.getModel(),
     getMaxSessionTurns: () => config.getMaxSessionTurns(),
   });
-  const dbg = process.env['QWEN_OPENTUI_DEBUG'];
 
   // The ink app drives tool EXECUTION via useReactToolScheduler: the client
   // only yields `tool_call_request` and ends the turn, then the UI schedules
@@ -749,16 +747,6 @@ export async function* livePromptEvents(
         // First event from this send: the request is out, so a stashed
         // mid-turn steer is delivered (R6-7).
         flushSteeredStash();
-        if (dbg) {
-          try {
-            appendFileSync(
-              '/tmp/opentui-events.log',
-              `${(ev as { type?: string }).type}\n`,
-            );
-          } catch {
-            /* ignore */
-          }
-        }
         if ((ev as { type?: string }).type === 'tool_call_request') {
           pending.push(
             (ev as { value: { callId: string; name: string; args?: unknown } })

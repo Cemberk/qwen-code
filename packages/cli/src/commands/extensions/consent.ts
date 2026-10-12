@@ -181,11 +181,8 @@ export function extensionConsentString(
   if (mcpServerEntries.length) {
     output.push(t('This extension will run the following MCP servers:'));
     for (const [key, mcpServer] of mcpServerEntries) {
-      const isLocal = !!mcpServer.command;
       const source = `${mcpServer.command || ''}${mcpServer.args ? ' ' + mcpServer.args.join(' ') : ''}`;
-      output.push(
-        `  * ${key} (${isLocal ? t('local') : t('remote')}): ${source}`,
-      );
+      output.push(`  * ${key} (${t('local')}): ${source}`);
     }
   }
   if (commands && commands.length > 0) {

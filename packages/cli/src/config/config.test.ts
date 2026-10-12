@@ -3971,7 +3971,7 @@ describe('loadCliConfig safe mode', () => {
     const argv = await parseArguments();
     const settings: Settings = {
       slashCommands: {
-        disabled: ['/review', '/bug'],
+        disabled: ['/review', '/stats'],
       },
     };
     const config = await loadCliConfig(settings, argv, undefined, []);

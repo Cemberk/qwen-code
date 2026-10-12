@@ -201,7 +201,6 @@ export const legacyCoreBarrelImports = [
   'packages/cli/src/ui/utils/terminal-image-renderer.ts',
   'packages/cli/src/ui/utils/terminalSetup.ts',
   'packages/cli/src/ui/utils/workflow-keyword.ts',
-  'packages/cli/src/utils/acpModelUtils.ts',
   'packages/cli/src/utils/deferred-core-runtime.ts',
   'packages/cli/src/utils/errors.ts',
   'packages/cli/src/utils/extension-mention.ts',

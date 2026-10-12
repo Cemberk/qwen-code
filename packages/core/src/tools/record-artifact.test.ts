@@ -910,7 +910,7 @@ describe('RecordArtifactTool', () => {
     ).toThrow(/storage.*workspace/);
   });
 
-  it('rejects artifact metadata that the daemon store would drop', () => {
+  it('rejects oversized and non-finite artifact metadata', () => {
     const tool = makeTool();
 
     expect(() =>

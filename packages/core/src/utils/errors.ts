@@ -42,9 +42,8 @@ export function isAbortError(error: unknown): boolean {
   // api_errors and classified 'unknown' rather than 'abort'. Match on the
   // class name — as `getErrorType` below already does for SDK errors — so this
   // provider-agnostic util needs no SDK import. The CLI bundle preserves class
-  // names (esbuild `keepNames: true` in esbuild.config.js); other bundles that
-  // minify without keepNames (e.g. vscode-ide-companion) do not, but they don't
-  // drive provider SDK requests, so the match holds where it runs.
+  // names (esbuild `keepNames: true` in esbuild.config.js), so the match holds
+  // where it runs.
   if (
     error instanceof Error &&
     error.constructor?.name === 'APIUserAbortError'

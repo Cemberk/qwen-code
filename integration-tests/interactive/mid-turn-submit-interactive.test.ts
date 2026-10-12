@@ -13,13 +13,7 @@ import {
   type FakeOpenAIResponse,
   type FakeOpenAIServer,
 } from '../fake-openai-server.js';
-import {
-  TestRig,
-  type,
-  printDebugInfo,
-  applyContainerSandboxNoProxy,
-  fakeServerHostOptions,
-} from '../test-helper.js';
+import { TestRig, type, printDebugInfo } from '../test-helper.js';
 
 type RigSession = ReturnType<TestRig['runInteractive']>;
 
@@ -73,11 +67,9 @@ function heldFirstTurn(extra: Partial<FakeOpenAIResponse> = {}): {
 describe('Mid-turn submit', () => {
   let rig: TestRig;
   let fakeServer: FakeOpenAIServer | undefined;
-  let restoreNoProxy: () => void;
 
   beforeEach(() => {
     rig = new TestRig();
-    restoreNoProxy = applyContainerSandboxNoProxy();
   });
 
   afterEach(async () => {
@@ -85,7 +77,6 @@ describe('Mid-turn submit', () => {
     releaseHeldTurn = undefined;
     await fakeServer?.close();
     fakeServer = undefined;
-    restoreNoProxy();
     await rig.cleanup();
   });
 
@@ -118,7 +109,7 @@ describe('Mid-turn submit', () => {
     handler: FakeOpenAIHandler,
   ): Promise<FakeOpenAIServer> {
     process.env['QWEN_CODE_LANG'] = 'en';
-    fakeServer = await startFakeOpenAIServer(handler, fakeServerHostOptions());
+    fakeServer = await startFakeOpenAIServer(handler);
     return fakeServer;
   }
 

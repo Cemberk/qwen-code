@@ -787,6 +787,66 @@ describe('DataProcessor', () => {
     });
   });
 
+  describe('facet cache paths', () => {
+    function sessionRecords(sessionId: string): ChatRecord[] {
+      return (['user', 'assistant'] as const).map((type) => ({
+        sessionId,
+        timestamp: new Date().toISOString(),
+        type,
+        message: { role: type === 'user' ? 'user' : 'model', parts: [] },
+        uuid: '',
+        parentUuid: null,
+        cwd: '',
+        version: '',
+      })) as ChatRecord[];
+    }
+
+    async function generateFacets(sessionId: string) {
+      mockedReadJsonlFile.mockResolvedValue(sessionRecords(sessionId));
+      mockGenerateJson.mockResolvedValue({
+        underlying_goal: 'Test goal',
+        goal_categories: { coding: 1 },
+        outcome: 'fully_achieved',
+        user_satisfaction_counts: { satisfied: 1 },
+        Qwen_helpfulness: 'very_helpful',
+        session_type: 'single_task',
+        friction_counts: {},
+        friction_detail: '',
+        primary_success: 'correct_code_edits',
+        brief_summary: 'Test summary',
+      });
+      mockedFs.readFile.mockRejectedValue(
+        Object.assign(new Error('missing'), { code: 'ENOENT' }),
+      );
+      return (
+        dataProcessor as unknown as {
+          generateFacets(
+            files: Array<{ path: string; mtime: number }>,
+            facetsOutputDir?: string,
+          ): Promise<SessionFacets[]>;
+        }
+      ).generateFacets([{ path: '/chats/s.jsonl', mtime: 1 }], '/facets');
+    }
+
+    it('caches a facet under the session id', async () => {
+      await generateFacets('0b6f3d2e-session');
+
+      expect(mockedFs.writeFile).toHaveBeenCalledWith(
+        '/facets/0b6f3d2e-session.json',
+        expect.any(String),
+        'utf-8',
+      );
+    });
+
+    it('never builds a facet path from a session id that could escape the facets directory', async () => {
+      const facets = await generateFacets('../../.qwen/settings');
+
+      expect(facets).toHaveLength(1);
+      expect(mockedFs.readFile).not.toHaveBeenCalled();
+      expect(mockedFs.writeFile).not.toHaveBeenCalled();
+    });
+  });
+
   describe('analyzeSession', () => {
     it('should return null for empty records', async () => {
       const result = await (

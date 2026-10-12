@@ -20,7 +20,9 @@ import type {
 import { Storage } from '@qwen-code/qwen-code-core/config/storage.js';
 import { resolveBundleDir } from '@qwen-code/qwen-code-core/utils/bundlePaths.js';
 import { FatalSandboxError } from '@qwen-code/qwen-code-core/utils/errors.js';
-import { isSubpath } from '@qwen-code/qwen-code-core/utils/paths.js';
+import { getAllMemoryFilenames } from '@qwen-code/qwen-code-core/utils/memory-constants.js';
+import { TRUSTED_FOLDERS_FILENAME } from '../config/trustedFolders.js';
+import { MCP_APPROVALS_FILENAME } from '../config/mcpApprovals.js';
 import { BWRAP_MIGRATION_MESSAGE } from '../config/execution-sandbox-settings.js';
 import { randomBytes } from 'node:crypto';
 import { writeStderrLine } from '../utils/stdioHelpers.js';
@@ -127,11 +129,44 @@ async function shouldUseCurrentUserInSandbox(): Promise<boolean> {
   return false;
 }
 
-function ports(): string[] {
-  return (process.env['SANDBOX_PORTS'] ?? '')
-    .split(',')
-    .filter((p) => p.trim())
-    .map((p) => p.trim());
+const SANDBOX_HOME_DIR_NAME = 'sandbox-home';
+const SANDBOX_HOME_CONFIG_DIRS = [
+  'extensions',
+  'skills',
+  'commands',
+  'agents',
+  'workflows',
+  'rules',
+  'output-styles',
+];
+
+function prepareSandboxHome(userSettingsDir: string): string {
+  const sandboxHome = ensureDirectoryAndGetRealPath(
+    path.join(Storage.getRuntimeBaseDir(), SANDBOX_HOME_DIR_NAME),
+  );
+  const configFiles = [
+    'settings.json',
+    '.env',
+    TRUSTED_FOLDERS_FILENAME,
+    MCP_APPROVALS_FILENAME,
+    ...getAllMemoryFilenames().filter((name) => path.basename(name) === name),
+  ];
+  for (const file of configFiles) {
+    const source = path.join(userSettingsDir, file);
+    const copy = path.join(sandboxHome, file);
+    // The container can write this directory, so whatever sits at `copy` may
+    // be a symlink it planted. Remove it and create the copy exclusively, so
+    // the host never writes through a link to a file outside the sandbox home.
+    fs.rmSync(copy, { force: true, recursive: true });
+    if (fs.existsSync(source)) {
+      fs.copyFileSync(source, copy, fs.constants.COPYFILE_EXCL);
+    }
+  }
+  return sandboxHome;
+}
+
+function hasNetworkFlag(args: string[]): boolean {
+  return args.some((arg) => /^--net(work)?(=|$)/.test(arg));
 }
 
 function entrypoint(workdir: string, cliArgs: string[]): string[] {
@@ -168,20 +203,6 @@ function entrypoint(workdir: string, cliArgs: string[]): string[] {
     shellCmds.push(`export PYTHONPATH="$PYTHONPATH${pythonPathSuffix}";`);
   }
 
-  const projectSandboxBashrc = path.join(
-    SETTINGS_DIRECTORY_NAME,
-    'sandbox.bashrc',
-  );
-  if (fs.existsSync(projectSandboxBashrc)) {
-    shellCmds.push(`source ${getContainerPath(projectSandboxBashrc)};`);
-  }
-
-  ports().forEach((p) =>
-    shellCmds.push(
-      `socat TCP4-LISTEN:${p},bind=$(hostname -i),fork,reuseaddr TCP4:127.0.0.1:${p} 2> /dev/null &`,
-    ),
-  );
-
   const quotedCliArgs = cliArgs.slice(2).map((arg) => quote([arg]));
   const cliCmd =
     process.env['NODE_ENV'] === 'development'
@@ -189,7 +210,7 @@ function entrypoint(workdir: string, cliArgs: string[]): string[] {
         ? 'npm run debug --'
         : 'npm rebuild && npm run start --'
       : process.env['DEBUG']
-        ? `node --inspect-brk=0.0.0.0:${process.env['DEBUG_PORT'] || '9229'} $(which qwen)`
+        ? `node --inspect-brk=127.0.0.1:${process.env['DEBUG_PORT'] || '9229'} $(which qwen)`
         : 'qwen';
 
   const args = [...shellCmds, cliCmd, ...quotedCliArgs];
@@ -399,71 +420,51 @@ export async function start_sandbox(
     args.push('-t');
   }
 
-  // allow access to host.docker.internal
-  args.push('--add-host', 'host.docker.internal:host-gateway');
+  // Containers get no network unless the user configures one explicitly.
+  if (!hasNetworkFlag(args)) {
+    args.push('--network', 'none');
+  }
 
   // mount current directory as working directory in sandbox (set via --workdir)
   args.push('--volume', `${workdir}:${containerWorkdir}`);
 
-  // Mount user settings at /home/node/.qwen and at the canonical host path
-  // used by QWEN_HOME, unless that host path is already covered by a broader
-  // runtime-dir mount below.
-  const userSettingsDirOnHost = getUserSettingsDir();
-  const runtimeBaseDirOnHost = Storage.getRuntimeBaseDir();
-  const userSettingsDirRealPath = ensureDirectoryAndGetRealPath(
-    userSettingsDirOnHost,
-  );
-  const runtimeBaseDirRealPath =
-    ensureDirectoryAndGetRealPath(runtimeBaseDirOnHost);
+  // The host CLI later loads and runs what lives in the user settings dir
+  // (hooks, MCP servers, extensions, trusted folders), so the container only
+  // ever sees it read-only. The sandboxed CLI gets a home of its own that the
+  // host never reads, seeded with copies of the config files on every launch.
+  const userSettingsDirRealPath =
+    ensureDirectoryAndGetRealPath(getUserSettingsDir());
   const userSettingsDirInSandbox = getContainerPath(
     `/home/node/${SETTINGS_DIRECTORY_NAME}`,
   );
   const userSettingsDirContainerPath = getContainerPath(
     userSettingsDirRealPath,
   );
-  const runtimeBaseDirContainerPath = getContainerPath(runtimeBaseDirRealPath);
-  const runtimeCoveredByUserSettings = isSubpath(
-    userSettingsDirRealPath,
-    runtimeBaseDirRealPath,
-  );
-  const userSettingsCoveredByRuntime = isSubpath(
-    runtimeBaseDirRealPath,
-    userSettingsDirRealPath,
-  );
-  const runtimeSameAsUserSettings =
-    runtimeCoveredByUserSettings && userSettingsCoveredByRuntime;
-
   args.push(
     '--volume',
-    `${userSettingsDirRealPath}:${userSettingsDirInSandbox}`,
+    `${userSettingsDirRealPath}:${userSettingsDirInSandbox}:ro`,
   );
-  if (
-    (!userSettingsCoveredByRuntime || runtimeSameAsUserSettings) &&
-    userSettingsDirInSandbox !== userSettingsDirContainerPath
-  ) {
+  if (userSettingsDirInSandbox !== userSettingsDirContainerPath) {
     args.push(
       '--volume',
-      `${userSettingsDirRealPath}:${userSettingsDirContainerPath}`,
+      `${userSettingsDirRealPath}:${userSettingsDirContainerPath}:ro`,
     );
   }
 
-  // Pass QWEN_HOME so the sandboxed CLI resolves the global qwen dir to the
-  // same path the host did, instead of relying on the /home/node/.qwen mount
-  // being the default fallback.
-  args.push('--env', `QWEN_HOME=${userSettingsDirContainerPath}`);
-
-  // Mount the runtime base dir and pass QWEN_RUNTIME_DIR when it diverges
-  // from the global qwen dir; otherwise the existing user-settings mount
-  // already covers it.
-  if (!runtimeCoveredByUserSettings) {
-    args.push(
-      '--volume',
-      `${runtimeBaseDirRealPath}:${runtimeBaseDirContainerPath}`,
-    );
+  const sandboxHomeRealPath = prepareSandboxHome(userSettingsDirRealPath);
+  const sandboxHomeContainerPath = getContainerPath(sandboxHomeRealPath);
+  args.push('--volume', `${sandboxHomeRealPath}:${sandboxHomeContainerPath}`);
+  for (const dir of SANDBOX_HOME_CONFIG_DIRS) {
+    const hostDir = path.join(userSettingsDirRealPath, dir);
+    if (fs.existsSync(hostDir)) {
+      args.push(
+        '--volume',
+        `${hostDir}:${getContainerPath(path.join(sandboxHomeRealPath, dir))}:ro`,
+      );
+    }
   }
-  if (!runtimeSameAsUserSettings) {
-    args.push('--env', `QWEN_RUNTIME_DIR=${runtimeBaseDirContainerPath}`);
-  }
+  args.push('--env', `QWEN_HOME=${sandboxHomeContainerPath}`);
+  args.push('--env', `QWEN_RUNTIME_DIR=${sandboxHomeContainerPath}`);
 
   // mount os.tmpdir() as os.tmpdir() inside container
   args.push('--volume', `${os.tmpdir()}:${getContainerPath(os.tmpdir())}`);
@@ -491,15 +492,6 @@ export async function start_sandbox(
         args.push('--volume', mount);
       }
     }
-  }
-
-  // expose env-specified ports on the sandbox
-  ports().forEach((p) => args.push('--publish', `127.0.0.1:${p}:${p}`));
-
-  // if DEBUG is set, expose debugging port
-  if (process.env['DEBUG']) {
-    const debugPort = process.env['DEBUG_PORT'] || '9229';
-    args.push(`--publish`, `127.0.0.1:${debugPort}:${debugPort}`);
   }
 
   // name container after image, plus random suffix to avoid conflicts
@@ -555,15 +547,13 @@ export async function start_sandbox(
     );
   }
 
-  // copy the local model server credentials and selection
-  if (process.env['OPENAI_API_KEY']) {
-    args.push('--env', `OPENAI_API_KEY=${process.env['OPENAI_API_KEY']}`);
-  }
-  if (process.env['OPENAI_BASE_URL']) {
-    args.push('--env', `OPENAI_BASE_URL=${process.env['OPENAI_BASE_URL']}`);
-  }
-  if (process.env['OPENAI_MODEL']) {
-    args.push('--env', `OPENAI_MODEL=${process.env['OPENAI_MODEL']}`);
+  // Values that may be secrets are passed by name: the runtime reads them
+  // from its own environment, so they never appear on its command line.
+  const sandboxProcessEnv: NodeJS.ProcessEnv = { ...process.env };
+  for (const name of ['OPENAI_API_KEY', 'OPENAI_BASE_URL', 'OPENAI_MODEL']) {
+    if (process.env[name]) {
+      args.push('--env', name);
+    }
   }
 
   // copy TERM and COLORTERM to try to maintain terminal setup
@@ -580,7 +570,6 @@ export async function start_sandbox(
 
   // copy VIRTUAL_ENV if under working directory
   // also mount-replace VIRTUAL_ENV directory with <project_settings>/sandbox.venv
-  // sandbox can then set up this new VIRTUAL_ENV directory using sandbox.bashrc (see below)
   // directory will be empty if not set up, which is still preferable to having host binaries
   const virtualEnv = process.env['VIRTUAL_ENV'];
   if (
@@ -605,9 +594,12 @@ export async function start_sandbox(
   if (process.env['SANDBOX_ENV']) {
     for (let env of process.env['SANDBOX_ENV'].split(',')) {
       if ((env = env.trim())) {
-        if (env.includes('=')) {
-          writeStderrLine(`SANDBOX_ENV: ${env}`);
-          args.push('--env', env);
+        const separator = env.indexOf('=');
+        if (separator > 0) {
+          const name = env.slice(0, separator);
+          writeStderrLine(`SANDBOX_ENV: ${name}`);
+          sandboxProcessEnv[name] = env.slice(separator + 1);
+          args.push('--env', name);
         } else {
           throw new FatalSandboxError(
             'SANDBOX_ENV must be a comma-separated list of key=value pairs',
@@ -700,6 +692,7 @@ export async function start_sandbox(
   process.stdin.pause();
   const sandboxProcess = spawn(config.command, args, {
     stdio: 'inherit',
+    env: sandboxProcessEnv,
   });
 
   return new Promise<number>((resolve, reject) => {

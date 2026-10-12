@@ -98,12 +98,10 @@ export const useMemoryMonitor = ({
         addItem(
           {
             type: MessageType.WARNING,
-            text:
-              `High memory usage detected: ${(
-                usage.rss /
-                (1024 * 1024 * 1024)
-              ).toFixed(2)} GB. ` +
-              'If you experience a crash, please file a bug report by running `/bug`',
+            text: `High memory usage detected: ${(
+              usage.rss /
+              (1024 * 1024 * 1024)
+            ).toFixed(2)} GB.`,
           },
           Date.now(),
         );

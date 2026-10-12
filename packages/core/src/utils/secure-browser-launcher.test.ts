@@ -6,8 +6,15 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { openBrowserSecurely } from './secure-browser-launcher.js';
+
+const REPORT_PATH = resolve('report.html');
+const REPORT_URL = pathToFileURL(REPORT_PATH).href;
+
+function openReport(url = REPORT_URL) {
+  return openBrowserSecurely(url, { allowedFilePaths: [fileURLToPath(url)] });
+}
 
 // Create mock function using vi.hoisted
 const mockExecFile = vi.hoisted(() => vi.fn());
@@ -81,95 +88,73 @@ describe('secure-browser-launcher', () => {
   }
 
   describe('URL validation', () => {
-    it('should allow valid HTTP URLs', async () => {
+    it('should open an allow-listed local file URL', async () => {
       setPlatform('darwin');
-      await openBrowserSecurely('http://example.com');
+      await openReport();
       expect(mockExecFile).toHaveBeenCalledWith(
         'open',
-        ['http://example.com'],
+        [REPORT_URL],
         expect.any(Object),
       );
     });
 
-    it('should allow valid HTTPS URLs', async () => {
-      setPlatform('darwin');
-      await openBrowserSecurely('https://example.com');
-      expect(mockExecFile).toHaveBeenCalledWith(
-        'open',
-        ['https://example.com'],
-        expect.any(Object),
-      );
+    it('should never open remote or non-file URLs', async () => {
+      for (const url of [
+        'http://example.com',
+        'https://example.com/report.html',
+        'http://127.0.0.1:8080/',
+        'javascript:alert(1)',
+        'ftp://example.com',
+        'data:text/html,hi',
+      ]) {
+        await expect(
+          openBrowserSecurely(url, { allowedFilePaths: [REPORT_PATH] }),
+        ).rejects.toThrow('Unsafe protocol');
+      }
+      expect(mockExecFile).not.toHaveBeenCalled();
+      expect(mockSpawn).not.toHaveBeenCalled();
     });
 
-    it('should reject non-HTTP(S) protocols', async () => {
-      await expect(openBrowserSecurely('file:///etc/passwd')).rejects.toThrow(
-        'Unsafe protocol',
-      );
-      await expect(openBrowserSecurely('javascript:alert(1)')).rejects.toThrow(
-        'Unsafe protocol',
-      );
-      await expect(openBrowserSecurely('ftp://example.com')).rejects.toThrow(
-        'Unsafe protocol',
-      );
-    });
-
-    it('should allow file URLs only when explicitly requested with an allow-list', async () => {
-      setPlatform('linux');
-      vi.stubEnv('DISPLAY', ':1');
-      const filePath = resolve('report.html');
-      const fileUrl = pathToFileURL(filePath).href;
-
+    it('should reject file URLs that name a remote host', async () => {
       await expect(
-        openBrowserSecurely('file:///tmp/report.html'),
-      ).rejects.toThrow('Unsafe protocol');
-
-      await expect(
-        openBrowserSecurely(fileUrl, {
-          allowFile: true,
+        openBrowserSecurely('file://fileserver.example/share/report.html', {
+          allowedFilePaths: ['/share/report.html'],
         }),
-      ).rejects.toThrow('allowedFilePaths is required');
-
-      await openBrowserSecurely(fileUrl, {
-        allowFile: true,
-        allowedFilePaths: [filePath],
-      });
-
-      expect(mockExecFile).toHaveBeenCalledWith(
-        'xdg-open',
-        [fileUrl],
-        expect.any(Object),
-      );
+      ).rejects.toThrow();
+      expect(mockExecFile).not.toHaveBeenCalled();
     });
 
-    it('should restrict file URLs to the caller allow-list when provided', async () => {
-      const allowedPath = resolve('report.html');
+    it('should restrict file URLs to the caller allow-list', async () => {
       const otherPath = resolve('other.html');
 
       await expect(
         openBrowserSecurely(pathToFileURL(otherPath).href, {
-          allowFile: true,
-          allowedFilePaths: [allowedPath],
+          allowedFilePaths: [REPORT_PATH],
         }),
+      ).rejects.toThrow('allowed file set');
+      await expect(
+        openBrowserSecurely(REPORT_URL, { allowedFilePaths: [] }),
       ).rejects.toThrow('allowed file set');
     });
 
     it('should reject invalid URLs', async () => {
-      await expect(openBrowserSecurely('not-a-url')).rejects.toThrow(
-        'Invalid URL',
-      );
-      await expect(openBrowserSecurely('')).rejects.toThrow('Invalid URL');
+      await expect(
+        openBrowserSecurely('not-a-url', { allowedFilePaths: [REPORT_PATH] }),
+      ).rejects.toThrow('Invalid URL');
+      await expect(
+        openBrowserSecurely('', { allowedFilePaths: [REPORT_PATH] }),
+      ).rejects.toThrow('Invalid URL');
     });
 
     it('should reject URLs with control characters', async () => {
-      await expect(
-        openBrowserSecurely('http://example.com\nmalicious-command'),
-      ).rejects.toThrow('invalid characters');
-      await expect(
-        openBrowserSecurely('http://example.com\rmalicious-command'),
-      ).rejects.toThrow('invalid characters');
-      await expect(
-        openBrowserSecurely('http://example.com\x00'),
-      ).rejects.toThrow('invalid characters');
+      for (const suffix of ['\nmalicious-command', '\rmalicious', '\x00']) {
+        await expect(
+          openBrowserSecurely(`${REPORT_URL}${suffix}`, {
+            allowedFilePaths: [REPORT_PATH],
+          }),
+        ).rejects.toThrow();
+      }
+      expect(mockExecFile).not.toHaveBeenCalled();
     });
   });
 
@@ -177,10 +162,13 @@ describe('secure-browser-launcher', () => {
     it('should prevent PowerShell command injection on Windows', async () => {
       setPlatform('win32');
 
-      const maliciousUrl =
-        "http://127.0.0.1:8080/?param=example#$(Invoke-Expression([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('Y2FsYy5leGU='))))";
+      const maliciousUrl = pathToFileURL(
+        resolve(
+          "report-$(Invoke-Expression([System.Convert]::FromBase64String('Y2FsYy5leGU='))).html",
+        ),
+      ).href;
 
-      await openBrowserSecurely(maliciousUrl);
+      await openReport(maliciousUrl);
 
       expect(mockExecFile).toHaveBeenCalledWith(
         'powershell.exe',
@@ -200,16 +188,14 @@ describe('secure-browser-launcher', () => {
       setPlatform('darwin');
 
       const urlsWithSpecialChars = [
-        'http://example.com/path?param=value&other=$value',
-        'http://example.com/path#fragment;command',
-        'http://example.com/$(whoami)',
-        'http://example.com/`command`',
-        'http://example.com/|pipe',
-        'http://example.com/>redirect',
-      ];
+        'report&other=$value.html',
+        'report;command.html',
+        'report-$(whoami).html',
+        'report|pipe.html',
+      ].map((name) => pathToFileURL(resolve(name)).href);
 
       for (const url of urlsWithSpecialChars) {
-        await openBrowserSecurely(url);
+        await openReport(url);
         expect(mockExecFile).toHaveBeenCalledWith(
           'open',
           [url],
@@ -221,9 +207,10 @@ describe('secure-browser-launcher', () => {
     it('should properly escape single quotes in URLs on Windows', async () => {
       setPlatform('win32');
 
-      const urlWithSingleQuotes =
-        "http://example.com/path?name=O'Brien&test='value'";
-      await openBrowserSecurely(urlWithSingleQuotes);
+      const urlWithSingleQuotes = pathToFileURL(
+        resolve("O'Brien's report.html"),
+      ).href;
+      await openReport(urlWithSingleQuotes);
 
       expect(mockExecFile).toHaveBeenCalledWith(
         'powershell.exe',
@@ -233,33 +220,31 @@ describe('secure-browser-launcher', () => {
           '-WindowStyle',
           'Hidden',
           '-Command',
-          `Start-Process 'http://example.com/path?name=O''Brien&test=''value'''`,
+          `Start-Process '${urlWithSingleQuotes.replace(/'/g, "''")}'`,
         ],
         expect.any(Object),
       );
+      expect(urlWithSingleQuotes).toContain("'");
     });
   });
 
   describe('Platform-specific behavior', () => {
     it('should use correct command on macOS', async () => {
       setPlatform('darwin');
-      await openBrowserSecurely('https://example.com');
+      await openReport();
       expect(mockExecFile).toHaveBeenCalledWith(
         'open',
-        ['https://example.com'],
+        [REPORT_URL],
         expect.any(Object),
       );
     });
 
     it('should use PowerShell on Windows', async () => {
       setPlatform('win32');
-      await openBrowserSecurely('https://example.com');
+      await openReport();
       expect(mockExecFile).toHaveBeenCalledWith(
         'powershell.exe',
-        expect.arrayContaining([
-          '-Command',
-          `Start-Process 'https://example.com'`,
-        ]),
+        expect.arrayContaining(['-Command', `Start-Process '${REPORT_URL}'`]),
         expect.any(Object),
       );
     });
@@ -267,19 +252,17 @@ describe('secure-browser-launcher', () => {
     it('should use xdg-open on Linux', async () => {
       setPlatform('linux');
       vi.stubEnv('DISPLAY', ':1');
-      await openBrowserSecurely('https://example.com');
+      await openReport();
       expect(mockExecFile).toHaveBeenCalledWith(
         'xdg-open',
-        ['https://example.com'],
+        [REPORT_URL],
         expect.any(Object),
       );
     });
 
     it('should throw on unsupported platforms', async () => {
       setPlatform('aix');
-      await expect(openBrowserSecurely('https://example.com')).rejects.toThrow(
-        'Unsupported platform',
-      );
+      await expect(openReport()).rejects.toThrow('Unsupported platform');
     });
 
     it('should prefer BROWSER when it is configured', async () => {
@@ -287,11 +270,11 @@ describe('secure-browser-launcher', () => {
       vi.stubEnv('DISPLAY', ':1');
       vi.stubEnv('BROWSER', 'firefox --new-tab');
 
-      await openBrowserSecurely('https://example.com');
+      await openReport();
 
       expect(mockSpawn).toHaveBeenCalledWith(
         'firefox',
-        ['--new-tab', 'https://example.com'],
+        ['--new-tab', REPORT_URL],
         expect.objectContaining({
           detached: true,
           stdio: 'ignore',
@@ -305,11 +288,11 @@ describe('secure-browser-launcher', () => {
       vi.stubEnv('DISPLAY', ':1');
       vi.stubEnv('BROWSER', 'firefox --new-tab %s');
 
-      await openBrowserSecurely('https://example.com');
+      await openReport();
 
       expect(mockSpawn).toHaveBeenCalledWith(
         'firefox',
-        ['--new-tab', 'https://example.com'],
+        ['--new-tab', REPORT_URL],
         expect.any(Object),
       );
     });
@@ -318,9 +301,10 @@ describe('secure-browser-launcher', () => {
       setPlatform('linux');
       vi.stubEnv('DISPLAY', ':1');
       vi.stubEnv('BROWSER', 'firefox --new-tab %s');
-      const url = 'https://example.com/callback?code=$&state=abc';
+      const url = pathToFileURL(resolve('callback$&state.html')).href;
+      expect(url).toContain('$&');
 
-      await openBrowserSecurely(url);
+      await openReport(url);
 
       expect(mockSpawn).toHaveBeenCalledWith(
         'firefox',
@@ -337,11 +321,11 @@ describe('secure-browser-launcher', () => {
         'chromium --user-data-dir="/tmp/my profile" --new-tab %s',
       );
 
-      await openBrowserSecurely('https://example.com');
+      await openReport();
 
       expect(mockSpawn).toHaveBeenCalledWith(
         'chromium',
-        ['--user-data-dir=/tmp/my profile', '--new-tab', 'https://example.com'],
+        ['--user-data-dir=/tmp/my profile', '--new-tab', REPORT_URL],
         expect.any(Object),
       );
     });
@@ -351,11 +335,11 @@ describe('secure-browser-launcher', () => {
       vi.stubEnv('DISPLAY', ':1');
       vi.stubEnv('BROWSER', '"/opt/my browser/chromium" --new-tab %s');
 
-      await openBrowserSecurely('https://example.com');
+      await openReport();
 
       expect(mockSpawn).toHaveBeenCalledWith(
         '/opt/my browser/chromium',
-        ['--new-tab', 'https://example.com'],
+        ['--new-tab', REPORT_URL],
         expect.any(Object),
       );
       expect(mockExecFile).not.toHaveBeenCalled();
@@ -368,11 +352,11 @@ describe('secure-browser-launcher', () => {
       vi.stubEnv('MIR_SOCKET', '');
       vi.stubEnv('BROWSER', 'firefox');
 
-      await openBrowserSecurely('https://example.com');
+      await openReport();
 
       expect(mockSpawn).toHaveBeenCalledWith(
         'firefox',
-        ['https://example.com'],
+        [REPORT_URL],
         expect.any(Object),
       );
       expect(mockExecFile).not.toHaveBeenCalled();
@@ -383,12 +367,12 @@ describe('secure-browser-launcher', () => {
       vi.stubEnv('DISPLAY', ':1');
       vi.stubEnv('BROWSER', 'www-browser --headless');
 
-      await openBrowserSecurely('https://example.com');
+      await openReport();
 
       expect(mockSpawn).not.toHaveBeenCalled();
       expect(mockExecFile).toHaveBeenCalledWith(
         'xdg-open',
-        ['https://example.com'],
+        [REPORT_URL],
         expect.any(Object),
       );
     });
@@ -398,12 +382,12 @@ describe('secure-browser-launcher', () => {
       vi.stubEnv('DISPLAY', ':1');
       vi.stubEnv('BROWSER', '/usr/bin/www-browser --headless');
 
-      await openBrowserSecurely('https://example.com');
+      await openReport();
 
       expect(mockSpawn).not.toHaveBeenCalled();
       expect(mockExecFile).toHaveBeenCalledWith(
         'xdg-open',
-        ['https://example.com'],
+        [REPORT_URL],
         expect.any(Object),
       );
     });
@@ -416,7 +400,7 @@ describe('secure-browser-launcher', () => {
       vi.stubEnv('BROWSER', 'www-browser');
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      await openBrowserSecurely('https://example.com');
+      await openReport();
 
       expect(mockSpawn).not.toHaveBeenCalled();
       expect(mockExecFile).not.toHaveBeenCalled();
@@ -431,15 +415,12 @@ describe('secure-browser-launcher', () => {
       setPlatform('win32');
       vi.stubEnv('BROWSER', 'firefox --new-tab');
 
-      await openBrowserSecurely('https://example.com');
+      await openReport();
 
       expect(mockSpawn).not.toHaveBeenCalled();
       expect(mockExecFile).toHaveBeenCalledWith(
         'powershell.exe',
-        expect.arrayContaining([
-          '-Command',
-          `Start-Process 'https://example.com'`,
-        ]),
+        expect.arrayContaining(['-Command', `Start-Process '${REPORT_URL}'`]),
         expect.any(Object),
       );
     });
@@ -448,15 +429,12 @@ describe('secure-browser-launcher', () => {
       setPlatform('win32');
       vi.stubEnv('BROWSER', 'www-browser');
 
-      await openBrowserSecurely('https://example.com');
+      await openReport();
 
       expect(mockSpawn).not.toHaveBeenCalled();
       expect(mockExecFile).toHaveBeenCalledWith(
         'powershell.exe',
-        expect.arrayContaining([
-          '-Command',
-          `Start-Process 'https://example.com'`,
-        ]),
+        expect.arrayContaining(['-Command', `Start-Process '${REPORT_URL}'`]),
         expect.any(Object),
       );
     });
@@ -466,12 +444,12 @@ describe('secure-browser-launcher', () => {
       vi.stubEnv('BROWSER', '"');
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      await openBrowserSecurely('https://example.com');
+      await openReport();
 
       expect(mockSpawn).not.toHaveBeenCalled();
       expect(mockExecFile).toHaveBeenCalledWith(
         'open',
-        ['https://example.com'],
+        [REPORT_URL],
         expect.any(Object),
       );
       expect(consoleSpy).toHaveBeenCalledWith(
@@ -503,18 +481,16 @@ describe('secure-browser-launcher', () => {
       });
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      await expect(
-        openBrowserSecurely('https://example.com'),
-      ).resolves.toBeUndefined();
+      await expect(openReport()).resolves.toBeUndefined();
 
       expect(mockSpawn).toHaveBeenCalledWith(
         'firefox',
-        ['--new-tab', 'https://example.com'],
+        ['--new-tab', REPORT_URL],
         expect.any(Object),
       );
       expect(mockExecFile).toHaveBeenCalledWith(
         'xdg-open',
-        ['https://example.com'],
+        [REPORT_URL],
         expect.any(Object),
       );
       expect(consoleSpy).toHaveBeenCalledWith(
@@ -531,7 +507,7 @@ describe('secure-browser-launcher', () => {
       vi.stubEnv('MIR_SOCKET', '');
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      await openBrowserSecurely('https://example.com');
+      await openReport();
 
       expect(mockExecFile).not.toHaveBeenCalled();
       expect(consoleSpy).toHaveBeenCalledWith(
@@ -549,9 +525,7 @@ describe('secure-browser-launcher', () => {
 
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      await expect(
-        openBrowserSecurely('https://example.com'),
-      ).resolves.toBeUndefined();
+      await expect(openReport()).resolves.toBeUndefined();
 
       expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining('Failed to open browser automatically'),
@@ -569,19 +543,19 @@ describe('secure-browser-launcher', () => {
       mockExecFile.mockRejectedValueOnce(new Error('Command not found'));
       mockExecFile.mockResolvedValueOnce({ stdout: '', stderr: '' });
 
-      await openBrowserSecurely('https://example.com');
+      await openReport();
 
       expect(mockExecFile).toHaveBeenCalledTimes(2);
       expect(mockExecFile).toHaveBeenNthCalledWith(
         1,
         'xdg-open',
-        ['https://example.com'],
+        [REPORT_URL],
         expect.any(Object),
       );
       expect(mockExecFile).toHaveBeenNthCalledWith(
         2,
         'gnome-open',
-        ['https://example.com'],
+        [REPORT_URL],
         expect.any(Object),
       );
     });
@@ -595,11 +569,11 @@ describe('secure-browser-launcher', () => {
         .mockRejectedValueOnce(new Error('gnome-open missing'))
         .mockRejectedValueOnce(new Error('kde-open missing'));
 
-      await openBrowserSecurely('https://example.com');
+      await openReport();
 
       expect(mockSpawn).toHaveBeenCalledWith(
         'firefox',
-        ['https://example.com'],
+        [REPORT_URL],
         expect.any(Object),
       );
     });

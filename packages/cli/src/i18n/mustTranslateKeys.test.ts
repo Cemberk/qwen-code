@@ -155,9 +155,6 @@ describe('must-translate locale coverage', () => {
       expect(extensionSubcommands.get('install')).not.toBe(
         'Install an extension from a local path',
       );
-      expect(extensionSubcommands.get('explore')).not.toBe(
-        'Open extensions page in your browser',
-      );
       expect(memoryCommand.description).not.toBe('Open the memory manager.');
       expect(rememberCommand.description).not.toBe(
         'Save a durable memory to the memory system.',

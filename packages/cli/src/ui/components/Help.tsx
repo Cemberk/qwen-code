@@ -46,7 +46,6 @@ const TAB_DEFS: Array<{ tab: HelpTab; labelKey: string }> = [
   { tab: 'commands', labelKey: 'commands' },
   { tab: 'custom-commands', labelKey: 'custom-commands' },
 ];
-const DOCS_URL = 'https://qwenlm.github.io/qwen-code-docs/';
 
 export const Help: React.FC<HelpProps> = ({
   commands,
@@ -113,11 +112,6 @@ export const Help: React.FC<HelpProps> = ({
                 isInteractive={isInteractive}
               />
             )}
-          </Box>
-          <Box marginTop={1}>
-            <Text color={theme.text.secondary}>
-              {t('For more help:')} <Text underline>{DOCS_URL}</Text>
-            </Text>
           </Box>
           <Box marginTop={1}>
             <Text italic color={theme.text.secondary}>

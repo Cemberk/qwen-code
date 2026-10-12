@@ -304,15 +304,6 @@ When `--worktree` is combined with `--resume <session-id>`, the worktree wins: t
 
 For interactive (TUI) and headless (`-p`) modes the worktree is automatically created and the session chdirs into it before the first turn.
 
-PR-fetch failure modes (exit code != 0, no worktree created):
-
-| Cause                         | Message excerpt                                            |
-| ----------------------------- | ---------------------------------------------------------- |
-| Missing `origin` remote       | `requires an "origin" remote that points at GitHub`        |
-| PR doesn't exist on origin    | `Failed to fetch PR #<N>: the PR does not exist on origin` |
-| 30s network timeout           | `Failed to fetch PR #<N>: timed out after 30s`             |
-| PR number out of range / zero | `Invalid PR number`                                        |
-
 ## Limitations
 
 The following items are intentionally not implemented in the current phase:

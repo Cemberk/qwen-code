@@ -736,7 +736,6 @@ export default {
   'This extension will run the following MCP servers:':
     '此擴展將運行以下 MCP servers：',
   local: '本地',
-  remote: '遠程',
   'This extension will add the following commands: {{commands}}.':
     '此擴展將添加以下命令：{{commands}}。',
   'This extension will append info to your QWEN.md context using {{fileName}}':
@@ -823,7 +822,7 @@ export default {
   '(workspace)': '（工作區）',
   '(user)': '（用戶）',
   '[not set]': '［未設置］',
-  '[value stored in keychain]': '［值存儲在鑰匙串中］',
+  '[value stored in encrypted file]': '［值儲存在加密檔案中］',
   'Value:': '值：',
   'Manage extension settings.': '管理擴展設置。',
   'You need to specify a command (set or list).':
@@ -1052,8 +1051,6 @@ export default {
     '生成 LLM 輸出語言規則檔案失敗：{{error}}',
   'Invalid command. Available subcommands:': '無效的命令。可用的子命令：',
   'Available subcommands:': '可用的子命令：',
-  'To request additional UI language packs, please open an issue on GitHub.':
-    '如需請求其他 UI 語言包，請在 GitHub 上提交 issue',
   'Available options:': '可用選項：',
   'Set UI language to {{name}}': '將 UI 語言設置為 {{name}}',
   'Tool Approval Mode': '工具審批模式',
@@ -1300,20 +1297,11 @@ export default {
   'Overall Goal:': '總體目標：',
   'You must connect a provider to proceed. Press Ctrl+C again to exit.':
     '必須連接一個服務商才能繼續。再次按 Ctrl+C 退出',
-  'For individual developers · Pay per model call · 5-hour/weekly quotas':
-    '適合個人開發場景 · 按模型調用次數計費 · 每 5 小時/每週限額',
-  Subscribe: '訂閱計劃',
-  'Select Subscription Plan': '選擇訂閱計劃',
-  'For teams/companies · Credits deducted by token usage · Dedicated API key and base URL':
-    '適合一人公司/團隊/企業 · 按 Token 消耗抵扣 Credits · 專屬 API Key 和 Base URL',
-  'Bring your own API key': '使用自己的 API Key',
   'Missing API key for OpenAI-compatible auth. Set settings.security.auth.apiKey, or set the {{envKeyHint}} environment variable.':
     '缺少 OpenAI 兼容認證的 API Key。請設置 settings.security.auth.apiKey 或設置 {{envKeyHint}} 環境變量。',
   'Missing API key for OpenAI-compatible auth. Set the {{envKeyHint}} environment variable.':
     '缺少 OpenAI 兼容認證的 API Key。請設置 {{envKeyHint}} 環境變量。',
   'Failed to authenticate. Message: {{message}}': '認證失敗。消息：{{message}}',
-  'Authenticated successfully with {{authType}} credentials.':
-    '使用 {{authType}} 憑據成功認證。',
   'Select Model': '選擇模型',
   ' (this project)': '（當前專案）',
   ' (global)': '（全域）',
@@ -1430,7 +1418,6 @@ export default {
   '{{count}} prompt': '{{count}} 個提示',
   '{{count}} prompts': '{{count}} 個提示',
   '(from {{extensionName}})': '（來自 {{extensionName}}）',
-  OAuth: 'OAuth',
   'tools and prompts will appear when ready': '工具和提示將在就緒時顯示',
   '{{count}} tools cached': '{{count}} 個工具已緩存',
   'Tools:': '工具：',
@@ -1450,8 +1437,6 @@ export default {
     '對話變長時用 /compress，總結歷史並釋放上下文。',
   'Start a fresh idea with /clear or /new; the previous session stays available in history.':
     '用 /clear 或 /new 開啟新思路；之前的會話會保留在歷史記錄中。',
-  'Use /bug to submit issues to the maintainers when something goes off.':
-    '遇到問題時，用 /bug 將問題提交給維護者。',
   'Switch auth type quickly with /auth.': '用 /auth 快速切換認證方式。',
   'You can run any shell commands from Qwen Code using ! (e.g. !ls).':
     '在 Qwen Code 中使用 ! 可運行任意 shell 命令（例如 !ls）。',
@@ -1611,7 +1596,6 @@ export default {
   'Preserve all command functionality': '保留所有命令功能',
   'TOML format will continue to work for now, but migration is recommended.':
     'TOML 格式目前仍可使用，但建議遷移。',
-  'Open extensions page in your browser': '在瀏覽器中打開擴展市場頁面',
   'Retrying in {{seconds}} seconds… (attempt {{attempt}}/{{maxRetries}})':
     '將於 {{seconds}} 秒後重試…（第 {{attempt}}/{{maxRetries}} 次）',
   'Press Ctrl+Y to retry': '按 Ctrl+Y 重試。',
@@ -1619,18 +1603,10 @@ export default {
   'to retry last request': '重試上一次請求',
   'to queue for the next turn': '排到下一輪',
   'API key cannot be empty.': 'API Key 不能為空。',
-  'API key is stored in settings.env. You can migrate it to a .env file for better security.':
-    'API Key 已存儲在 settings.env 中。您可以將其遷移到 .env 檔案以獲得更好的安全性。',
   'You can configure your API key and models in settings.json':
     '您可以在 settings.json 中配置 API Key 和模型',
   'Refer to the documentation for setup instructions': '請參考文檔瞭解配置說明',
   Custom: '自定義',
-  'Choose based on where your account is registered':
-    '請根據您的賬號註冊地區選擇',
-  'New model configurations are available for {{region}}. Update now?':
-    '{{region}} 有新的模型配置可用。是否立即更新？',
-  '{{region}} configuration updated successfully. Model switched to "{{model}}".':
-    '{{region}} 配置更新成功。模型已切換至 "{{model}}"。',
   'Context Usage': '上下文使用情況',
   '% used': '% 已用',
   '% context used': '% 上下文已用',
@@ -1663,9 +1639,6 @@ export default {
     '顯示上下文窗口使用情況分解。輸入 "/context detail" 查看詳細分解。',
   'body loaded': '內容已加載',
   memory: '記憶',
-  '{{region}} configuration updated successfully.': '{{region}} 配置更新成功。',
-  'Authenticated successfully with {{region}}. API key and model configs saved to settings.json.':
-    '成功通過 {{region}} 認證。API Key 和模型配置已保存至 settings.json。',
   'Type something...': '輸入內容...',
   Submit: '提交',
   'Submit answers': '提交答案',
@@ -1677,35 +1650,7 @@ export default {
     '↑/↓: 導航 | ←/→: 切換標籤頁 | Enter: 選擇',
   '↑/↓: Navigate | Enter: Select | Esc: Cancel':
     '↑/↓: 導航 | Enter: 選擇 | Esc: 取消',
-  'Show current authentication status': '顯示當前認證狀態',
-  'Authentication completed successfully.': '認證完成。',
-  '中国 (China)': '中國 (China)',
   Global: '全球',
-  '\n=== Authentication Status ===\n': '\n=== 認證狀態 ===\n',
-  'Run one of the following commands to get started:\n':
-    '運行以下命令之一開始配置：\n',
-  'Or simply run:': '或者直接運行：',
-  '  qwen auth                - Interactive authentication setup\n':
-    '  qwen auth                - 交互式認證配置\n',
-  '  Type: Free tier (discontinued 2026-04-15)':
-    '  類型：免費額度（2026-04-15 已停用）',
-  '  Limit: No longer available': '  限額：已不可用',
-  '  Region: {{region}}': '  區域：{{region}}',
-  '  Current Model: {{model}}': '  當前模型：{{model}}',
-  '  Config Version: {{version}}': '  配置版本：{{version}}',
-  '  Status: API key configured\n': '  狀態：API Key 已配置\n',
-  '  Issue: API key not found in environment or settings\n':
-    '  問題：在環境變量或設置中未找到 API Key\n',
-  '  Run `qwen auth coding-plan` to re-configure.\n':
-    '  運行 `qwen auth coding-plan` 重新配置。\n',
-  '  Status: Configured\n': '  狀態：已配置\n',
-  'Failed to check authentication status: {{error}}':
-    '檢查認證狀態失敗：{{error}}',
-  'Select an option:': '請選擇：',
-  'Raw mode not available. Please run in an interactive terminal.':
-    '原始模式不可用。請在交互式終端中運行。',
-  '(Use ↑ ↓ arrows to navigate, Enter to select, Ctrl+C to exit)\n':
-    '(使用 ↑ ↓ 箭頭導航，Enter 選擇，Ctrl+C 退出)\n',
   'Switch to plan mode or exit plan mode': '切換到計劃模式或退出計劃模式',
   'Set how hard reasoning-capable models think ({{tiers}}); mapped and clamped per provider.':
     '設定具備推理能力的模型思考的強度（{{tiers}}）；依各供應商進行映射與鉗制。',

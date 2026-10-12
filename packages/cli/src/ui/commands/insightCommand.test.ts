@@ -74,7 +74,6 @@ describe('insightCommand', () => {
         path.resolve('runtime-output', 'insights', 'insight-2026-03-05.html'),
       ).href,
       {
-        allowFile: true,
         allowedFilePaths: [
           path.resolve('runtime-output', 'insights', 'insight-2026-03-05.html'),
         ],

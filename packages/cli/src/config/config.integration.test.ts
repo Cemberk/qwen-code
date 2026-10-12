@@ -13,24 +13,6 @@ import type {
   ContentGeneratorConfig,
 } from '@qwen-code/qwen-code-core';
 import { Config } from '@qwen-code/qwen-code-core';
-import { http, HttpResponse } from 'msw';
-import { setupServer } from 'msw/node';
-export const server = setupServer();
-
-// TODO(richieforeman): Consider moving this to test setup globally.
-beforeAll(() => {
-  server.listen({});
-});
-
-afterEach(() => {
-  server.resetHandlers();
-});
-
-afterAll(() => {
-  server.close();
-});
-
-const CLEARCUT_URL = 'https://play.googleapis.com/log';
 
 const TEST_CONTENT_GENERATOR_CONFIG: ContentGeneratorConfig = {
   apiKey: 'test-key',
@@ -55,7 +37,6 @@ describe('Configuration Integration Tests', () => {
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(tmpdir(), 'qwen-code-test-'));
-    server.resetHandlers(http.post(CLEARCUT_URL, () => HttpResponse.text()));
 
     vi.clearAllMocks();
   });

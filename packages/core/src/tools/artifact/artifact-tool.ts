@@ -40,7 +40,7 @@ import { LocalPublisher } from './local-publisher.js';
 /** Opens a URL in the browser. Injectable so tests don't launch a browser. */
 export type UrlOpener = (
   url: string,
-  options: { allowFile: boolean; allowedFilePaths: string[] },
+  options: { allowedFilePaths: string[] },
 ) => Promise<void>;
 
 export interface ArtifactToolParams {
@@ -223,7 +223,6 @@ class ArtifactToolInvocation extends BaseToolInvocation<
     if (this.shouldAutoOpen) {
       try {
         await this.openUrl(url, {
-          allowFile: true,
           allowedFilePaths: filePath ? [filePath] : [],
         });
       } catch (err) {

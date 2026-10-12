@@ -5,7 +5,6 @@ This guide provides solutions to common issues and debugging tips, including top
 - Model server connection and configuration errors
 - Frequently asked questions (FAQs)
 - Debugging tips
-- Existing GitHub Issues similar to yours or creating new Issues
 
 ## Model server connection and configuration errors
 
@@ -80,7 +79,7 @@ This guide provides solutions to common issues and debugging tips, including top
 - **Error: `MODULE_NOT_FOUND` or import errors.**
   - **Cause:** Dependencies are not installed correctly, or the project hasn't been built.
   - **Solution:**
-    1.  Run `npm install` to ensure all dependencies are present.
+    1.  Run `corepack pnpm install --frozen-lockfile` to ensure all dependencies are present.
     2.  Run `npm run build` to compile the project.
     3.  Verify that the build completed successfully with `npm run start`.
 
@@ -105,7 +104,7 @@ This guide provides solutions to common issues and debugging tips, including top
 
 - **Right-click does nothing, links do not open, or text cannot be selected in the terminal**
   - **Issue:** Native right-click context menus, OSC 8 hyperlink clicks, and terminal-native text selection stop working while Qwen Code is running.
-  - **Cause:** When `ui.mouseTracking` is enabled (the default), Qwen Code captures all mouse events via SGR mouse tracking to power in-app text selection, click-to-position, row hover, history-item toggling, and viewport scrolling. The terminal forwards every mouse event to the app instead of handling it natively. Qwen Code supplies its own replacements while tracking is on: a single click opens an http(s) OSC 8 hyperlink, and right-click on a link or text selection opens an in-app context menu.
+  - **Cause:** When `ui.mouseTracking` is enabled (the default), Qwen Code captures all mouse events via SGR mouse tracking to power in-app text selection, click-to-position, row hover, history-item toggling, and viewport scrolling. The terminal forwards every mouse event to the app instead of handling it natively. Qwen Code supplies its own replacements while tracking is on: a single click copies an OSC 8 hyperlink to the clipboard, and right-click on a link or text selection opens an in-app context menu.
   - **Solution:** If you prefer the terminal's native handling, set `"ui.mouseTracking": false` in your `settings.json`. This turns off all in-app mouse interaction, including the in-app link open and context menu. In Virtualized History (`ui.useTerminalBuffer: true`, the default), the wheel will no longer scroll the transcript — use `Shift+↑/↓`, `PgUp/PgDn`, or `Ctrl+Home/End` instead. To also restore native terminal scrollback, set `"ui.useTerminalBuffer": false`. Requires restart.
 
 ## Exit Codes
@@ -138,7 +137,3 @@ The Qwen Code uses specific exit codes to indicate the reason for termination. T
 
 - **Pre-flight checks:**
   - Always run `npm run preflight` before committing code. This can catch many common issues related to formatting, linting, and type errors.
-
-## Existing GitHub Issues similar to yours or creating new Issues
-
-If you encounter an issue that was not covered here in this _Troubleshooting guide_, consider searching the Qwen Code [Issue tracker on GitHub](https://github.com/QwenLM/qwen-code/issues). If you can't find an issue similar to yours, consider creating a new GitHub Issue with a detailed description. Pull requests are also welcome!

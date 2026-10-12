@@ -79,9 +79,6 @@ const renderComponent = (
     getAdvisorModel: vi.fn(() => undefined),
     setAdvisorModel: vi.fn().mockResolvedValue(undefined),
     getChatRecordingService: vi.fn(() => ({ recordSlashCommand })),
-
-    // --- Functions used by ClearcutLogger ---
-    getUsageStatisticsEnabled: vi.fn(() => true),
     getSessionId: vi.fn(() => 'mock-session-id'),
     getDebugMode: vi.fn(() => false),
     getContentGeneratorConfig: vi.fn(() => ({
@@ -89,7 +86,6 @@ const renderComponent = (
       model: DEFAULT_MODEL_ID,
       baseUrl: LOCAL_BASE_URL,
     })),
-    getUseModelRouter: vi.fn(() => false),
 
     // --- Spread test-specific overrides ---
     ...(contextValue ?? {}),
@@ -1193,10 +1189,8 @@ describe('<ModelDialog />', () => {
                 getGenerationConfig: vi.fn(() => ({ baseUrl: undefined })),
               })),
               getActiveRuntimeModelSnapshot: vi.fn(() => undefined),
-              getUsageStatisticsEnabled: vi.fn(() => false),
               getSessionId: vi.fn(() => 'session'),
               getDebugMode: vi.fn(() => false),
-              getUseModelRouter: vi.fn(() => false),
             } as unknown as Config
           }
         >
@@ -1258,10 +1252,8 @@ describe('<ModelDialog />', () => {
                 getGenerationConfig: vi.fn(() => ({ baseUrl: undefined })),
               })),
               getActiveRuntimeModelSnapshot: vi.fn(() => undefined),
-              getUsageStatisticsEnabled: vi.fn(() => false),
               getSessionId: vi.fn(() => 'session'),
               getDebugMode: vi.fn(() => false),
-              getUseModelRouter: vi.fn(() => false),
             } as unknown as Config
           }
         >
@@ -1326,10 +1318,8 @@ describe('<ModelDialog />', () => {
                 })),
               })),
               getActiveRuntimeModelSnapshot: vi.fn(() => undefined),
-              getUsageStatisticsEnabled: vi.fn(() => false),
               getSessionId: vi.fn(() => 'session'),
               getDebugMode: vi.fn(() => false),
-              getUseModelRouter: vi.fn(() => false),
             } as unknown as Config
           }
         >

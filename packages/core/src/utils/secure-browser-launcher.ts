@@ -17,21 +17,20 @@ import {
 const execFileAsync = promisify(execFile);
 
 type BrowserLaunchOptions = {
-  allowFile?: boolean;
-  allowedFilePaths?: string[];
+  /** Local files the caller generated and is allowed to open. */
+  allowedFilePaths: string[];
 };
 
 /**
- * Validates that a URL is safe to open in a browser.
- * Only allows HTTP and HTTPS URLs by default. file:// URLs are allowed only
- * when a caller opts in for locally generated reports.
+ * Validates that a URL is safe to open in a browser. Only file:// URLs for
+ * files in the caller's allow-list are accepted; remote URLs never are.
  *
  * @param url The URL to validate
- * @throws Error if the URL is invalid or uses an unsafe protocol
+ * @throws Error if the URL is invalid, not a file:// URL, or not allow-listed
  */
 function validateUrl(
   url: string,
-  { allowFile = false, allowedFilePaths }: BrowserLaunchOptions = {},
+  { allowedFilePaths }: BrowserLaunchOptions,
 ): void {
   let parsedUrl: URL;
 
@@ -41,28 +40,20 @@ function validateUrl(
     throw new Error(`Invalid URL: ${url}`);
   }
 
-  const allowedProtocols = allowFile
-    ? ['http:', 'https:', 'file:']
-    : ['http:', 'https:'];
-
-  // Only allow browser-safe protocols by default.
-  if (!allowedProtocols.includes(parsedUrl.protocol)) {
+  if (parsedUrl.protocol !== 'file:') {
     throw new Error(
-      `Unsafe protocol: ${parsedUrl.protocol}. Only ${allowedProtocols.join(
-        ', ',
-      )} are allowed.`,
+      `Unsafe protocol: ${parsedUrl.protocol}. Only local file: URLs can be opened.`,
     );
   }
 
-  if (parsedUrl.protocol === 'file:' && allowFile) {
-    if (!allowedFilePaths?.length) {
-      throw new Error('allowedFilePaths is required when allowFile is true');
-    }
-    const requestedPath = resolve(fileURLToPath(parsedUrl));
-    const allowed = allowedFilePaths.map((filePath) => resolve(filePath));
-    if (!allowed.includes(requestedPath)) {
-      throw new Error('File URL is not in the allowed file set');
-    }
+  if (parsedUrl.host !== '') {
+    throw new Error('File URL must not name a remote host');
+  }
+
+  const requestedPath = resolve(fileURLToPath(parsedUrl));
+  const allowed = allowedFilePaths.map((filePath) => resolve(filePath));
+  if (!allowed.includes(requestedPath)) {
+    throw new Error('File URL is not in the allowed file set');
   }
 
   // Additional validation: ensure no newlines or control characters
@@ -73,19 +64,19 @@ function validateUrl(
 }
 
 /**
- * Opens a URL in the user's default browser securely.
+ * Opens a locally generated file:// URL in the user's default browser.
  *
  * On failure (e.g., missing browser binary or command), this function does NOT throw an error.
  * Instead, it logs the URL to the console error stream so the user can open it manually,
  * and resolves successfully to prevent application crashes.
  *
- * @param url - The URL to open.
- * @param browserOptions.allowFile - Allow file:// URLs for locally generated reports.
+ * @param url - The file:// URL to open.
+ * @param browserOptions.allowedFilePaths - The files this call may open.
  * @returns A promise that resolves when the attempt is made (whether successful or logged).
  */
 export async function openBrowserSecurely(
   url: string,
-  browserOptions: BrowserLaunchOptions = {},
+  browserOptions: BrowserLaunchOptions,
 ): Promise<void> {
   // Validate the URL first
   validateUrl(url, browserOptions);

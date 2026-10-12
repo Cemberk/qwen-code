@@ -36,7 +36,7 @@ import {
   readFileSync,
 } from 'node:fs';
 import { expect, vi } from 'vitest';
-import { applyContainerSandboxNoProxy, type TestRig } from '../test-helper.js';
+import type { TestRig } from '../test-helper.js';
 import type { FakeOpenAIServer } from '../fake-openai-server.js';
 
 /** Written to stderr by the gate when it blocks a call. */
@@ -145,26 +145,19 @@ export function gateHits(hitsLog: string): number {
  * `QWEN_HOME` and `QWEN_RUNTIME_DIR` land inside the rig's own directory, so
  * a suite that launches twice (resume) finds its recorded session there and
  * neither launch can reach the real one.
- *
- * Returns the no-proxy restore function: under the docker/podman sandbox legs
- * the CLI is containerized, so the fake server must be reachable as
- * host.docker.internal and excluded from the proxy. Both halves are no-ops
- * outside a container sandbox.
  */
 export function stubFakeModelEnv(
   rig: TestRig,
   fakeServer: FakeOpenAIServer,
-): () => void {
+): void {
   vi.stubEnv('OPENAI_API_KEY', 'fake-key');
   vi.stubEnv('OPENAI_BASE_URL', fakeServer.baseUrl);
   vi.stubEnv('OPENAI_MODEL', 'fake-model');
   vi.stubEnv('QWEN_MODEL', 'fake-model');
   vi.stubEnv('QWEN_HOME', join(rig.testDir!, '.qwen-home'));
   vi.stubEnv('QWEN_RUNTIME_DIR', join(rig.testDir!, '.qwen-home'));
-  const restoreNoProxy = applyContainerSandboxNoProxy();
   // The gate's required value is deliberately absent, in every session.
   vi.stubEnv('DOWNSTREAM_SESSION_ID', '');
-  return restoreNoProxy;
 }
 
 /** The launch arguments that select the fake model over the real auth flow. */

@@ -775,7 +775,6 @@ export default {
   'This extension will run the following MCP servers:':
     '此扩展将运行以下 MCP servers：',
   local: '本地',
-  remote: '远程',
   'This extension will add the following commands: {{commands}}.':
     '此扩展将添加以下命令：{{commands}}。',
   'This extension will append info to your QWEN.md context using {{fileName}}':
@@ -862,7 +861,7 @@ export default {
   '(workspace)': '（工作区）',
   '(user)': '（用户）',
   '[not set]': '［未设置］',
-  '[value stored in keychain]': '［值存储在钥匙串中］',
+  '[value stored in encrypted file]': '［值存储在加密文件中］',
   'Value:': '值：',
   'Manage extension settings.': '管理扩展设置。',
   'You need to specify a command (set or list).':
@@ -1134,8 +1133,6 @@ export default {
     '生成 LLM 输出语言规则文件失败：{{error}}',
   'Invalid command. Available subcommands:': '无效的命令。可用的子命令：',
   'Available subcommands:': '可用的子命令：',
-  'To request additional UI language packs, please open an issue on GitHub.':
-    '如需请求其他 UI 语言包，请在 GitHub 上提交 issue',
   'Available options:': '可用选项：',
   'Set UI language to {{name}}': '将 UI 语言设置为 {{name}}',
 
@@ -1224,7 +1221,6 @@ export default {
     '请在设置中添加 MCP servers 以开始使用。',
   'Run qwen --debug to see error logs': '运行 qwen --debug 查看错误日志',
 
-  // MCP OAuth Authentication
   // MCP Server Detail
   'Command:': '命令：',
   'Working Directory:': '工作目录：',
@@ -1439,20 +1435,11 @@ export default {
   'Overall Goal:': '总体目标：',
   'You must connect a provider to proceed. Press Ctrl+C again to exit.':
     '必须连接一个服务商才能继续。再次按 Ctrl+C 退出',
-  'For individual developers \u00B7 Pay per model call \u00B7 5-hour/weekly quotas':
-    '适合个人开发场景 \u00B7 按模型调用次数计费 \u00B7 每 5 小时/每周限额',
-  Subscribe: '订阅计划',
-  'Select Subscription Plan': '选择订阅计划',
-  'For teams/companies \u00B7 Credits deducted by token usage \u00B7 Dedicated API key and base URL':
-    '适合一人公司/团队/企业 \u00B7 按 Token 消耗抵扣 Credits \u00B7 专属 API Key 和 Base URL',
-  'Bring your own API key': '使用自己的 API Key',
   'Missing API key for OpenAI-compatible auth. Set settings.security.auth.apiKey, or set the {{envKeyHint}} environment variable.':
     '缺少 OpenAI 兼容认证的 API Key。请设置 settings.security.auth.apiKey 或设置 {{envKeyHint}} 环境变量。',
   'Missing API key for OpenAI-compatible auth. Set the {{envKeyHint}} environment variable.':
     '缺少 OpenAI 兼容认证的 API Key。请设置 {{envKeyHint}} 环境变量。',
   'Failed to authenticate. Message: {{message}}': '认证失败。消息：{{message}}',
-  'Authenticated successfully with {{authType}} credentials.':
-    '使用 {{authType}} 凭据成功认证。',
   // ============================================================================
   // Dialogs - Model
   // ============================================================================
@@ -1584,7 +1571,6 @@ export default {
   '{{count}} prompt': '{{count}} 个提示',
   '{{count}} prompts': '{{count}} 个提示',
   '(from {{extensionName}})': '（来自 {{extensionName}}）',
-  OAuth: 'OAuth',
   'tools and prompts will appear when ready': '工具和提示将在就绪时显示',
   '{{count}} tools cached': '{{count}} 个工具已缓存',
   'Tools:': '工具：',
@@ -1607,8 +1593,6 @@ export default {
     '对话变长时用 /compress，总结历史并释放上下文。',
   'Start a fresh idea with /clear or /new; the previous session stays available in history.':
     '用 /clear 或 /new 开启新思路；之前的会话会保留在历史记录中。',
-  'Use /bug to submit issues to the maintainers when something goes off.':
-    '遇到问题时，用 /bug 将问题提交给维护者。',
   'Switch auth type quickly with /auth.': '用 /auth 快速切换认证方式。',
   'You can run any shell commands from Qwen Code using ! (e.g. !ls).':
     '在 Qwen Code 中使用 ! 可运行任意 shell 命令（例如 !ls）。',
@@ -1800,10 +1784,6 @@ export default {
   'TOML format will continue to work for now, but migration is recommended.':
     'TOML 格式目前仍可使用，但建议迁移。',
 
-  // ============================================================================
-  // Extensions - Explore Command
-  // ============================================================================
-  'Open extensions page in your browser': '在浏览器中打开扩展市场页面',
   'Retrying in {{seconds}} seconds… (attempt {{attempt}}/{{maxRetries}})':
     '将于 {{seconds}} 秒后重试…（第 {{attempt}}/{{maxRetries}} 次）',
   'Press Ctrl+Y to retry': '按 Ctrl+Y 重试。',
@@ -1812,11 +1792,9 @@ export default {
   'to queue for the next turn': '排到下一轮',
 
   // ============================================================================
-  // Coding Plan Authentication
+  // API Key Authentication
   // ============================================================================
   'API key cannot be empty.': 'API Key 不能为空。',
-  'API key is stored in settings.env. You can migrate it to a .env file for better security.':
-    'API Key 已存储在 settings.env 中。您可以将其迁移到 .env 文件以获得更好的安全性。',
 
   // ============================================================================
   // Custom API Key Configuration
@@ -1829,16 +1807,7 @@ export default {
   // Auth Dialog - View Titles and Labels
   // ============================================================================
   Custom: '自定义',
-  'Choose based on where your account is registered':
-    '请根据您的账号注册地区选择',
 
-  // ============================================================================
-  // Coding Plan International Updates
-  // ============================================================================
-  'New model configurations are available for {{region}}. Update now?':
-    '{{region}} 有新的模型配置可用。是否立即更新？',
-  '{{region}} configuration updated successfully. Model switched to "{{model}}".':
-    '{{region}} 配置更新成功。模型已切换至 "{{model}}"。',
   // ============================================================================
   // Context Usage
   // ============================================================================
@@ -1872,9 +1841,6 @@ export default {
     '运行 /context detail 查看详细分解。',
   'body loaded': '内容已加载',
   memory: '记忆',
-  '{{region}} configuration updated successfully.': '{{region}} 配置更新成功。',
-  'Authenticated successfully with {{region}}. API key and model configs saved to settings.json.':
-    '成功通过 {{region}} 认证。API Key 和模型配置已保存至 settings.json。',
   'Type something...': '输入内容...',
   Submit: '提交',
   'Submit answers': '提交答案',
@@ -1886,34 +1852,7 @@ export default {
     '↑/↓: 导航 | ←/→: 切换标签页 | Enter: 选择',
   '↑/↓: Navigate | Enter: Select | Esc: Cancel':
     '↑/↓: 导航 | Enter: 选择 | Esc: 取消',
-  'Show current authentication status': '显示当前认证状态',
-  'Authentication completed successfully.': '认证完成。',
   Global: '全球',
-  '\n=== Authentication Status ===\n': '\n=== 认证状态 ===\n',
-  'Run one of the following commands to get started:\n':
-    '运行以下命令之一开始配置：\n',
-  'Or simply run:': '或者直接运行：',
-  '  qwen auth                - Interactive authentication setup\n':
-    '  qwen auth                - 交互式认证配置\n',
-  '  Type: Free tier (discontinued 2026-04-15)':
-    '  类型：免费额度（2026-04-15 已停用）',
-  '  Limit: No longer available': '  限额：已不可用',
-  '  Region: {{region}}': '  区域：{{region}}',
-  '  Current Model: {{model}}': '  当前模型：{{model}}',
-  '  Config Version: {{version}}': '  配置版本：{{version}}',
-  '  Status: API key configured\n': '  状态：API Key 已配置\n',
-  '  Issue: API key not found in environment or settings\n':
-    '  问题：在环境变量或设置中未找到 API Key\n',
-  '  Run `qwen auth coding-plan` to re-configure.\n':
-    '  运行 `qwen auth coding-plan` 重新配置。\n',
-  '  Status: Configured\n': '  状态：已配置\n',
-  'Failed to check authentication status: {{error}}':
-    '检查认证状态失败：{{error}}',
-  'Select an option:': '请选择：',
-  'Raw mode not available. Please run in an interactive terminal.':
-    '原始模式不可用。请在交互式终端中运行。',
-  '(Use ↑ ↓ arrows to navigate, Enter to select, Ctrl+C to exit)\n':
-    '(使用 ↑ ↓ 箭头导航，Enter 选择，Ctrl+C 退出)\n',
   'Switch to plan mode or exit plan mode': '切换到计划模式或退出计划模式',
   'Set how hard reasoning-capable models think ({{tiers}}); mapped and clamped per provider.':
     '设置具备推理能力的模型思考的强度（{{tiers}}）；按各提供方进行映射与钳制。',
@@ -2149,7 +2088,6 @@ export default {
   // === Same-as-English optimization ===
   ' (not in model registry)': '（不在模型注册表中）',
   'start server': '启动服务器',
-  '中国 (China)': '中国',
   'No compression needed.': '无需压缩。',
   // Update command
   '⚠️ History gap: earlier conversation was lost before this point (storage interruption) and could not be recovered.':

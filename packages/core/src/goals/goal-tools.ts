@@ -162,7 +162,7 @@ export class GetGoalTool extends BaseDeclarativeTool<
     super(
       GetGoalTool.Name,
       ToolDisplayNames.GET_GOAL,
-      'Read the current Goal during a permitted Goal turn: its objective, status, budget figures, and the verifier\'s feedback on the previous proposal when there is any. Outside a Goal turn it returns "active": false with "lastGoal", a summary of the session\'s most recent Goal. It never changes Goal state. Use the result silently; do not mention the retrieval to the user.',
+      'Read the current Goal during a permitted Goal turn: its objective, status, budget figures, and the verifier\'s feedback on the previous proposal when there is any. Outside a Goal turn it returns "active": false with "lastGoal", a summary of the session\'s most recent Goal. It never changes Goal state.',
       Kind.Read,
       {
         type: 'object',

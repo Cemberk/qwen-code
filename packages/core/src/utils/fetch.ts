@@ -5,6 +5,7 @@
  */
 
 import { getErrorMessage } from './errors.js';
+import { getLocalBaseUrlError } from './local-base-url.js';
 import { delay } from './retry.js';
 
 export class FetchError extends Error {
@@ -51,13 +52,20 @@ const RETRY_DELAY_MS = 500;
 /**
  * Fetch with a full-transfer timeout, a byte cap enforced while streaming,
  * caller-abort wiring, and a single retry on transient failures (403/429
- * statuses, connection resets). Redirects are never followed: a 3xx response
- * fails the request. The timeout budget spans both attempts.
+ * statuses, connection resets). Only http(s) URLs on 127.0.0.1, ::1 or
+ * localhost are fetched. Redirects are never followed: a 3xx response fails
+ * the request. The timeout budget spans both attempts.
  */
 export async function fetchWithPolicy(
   url: string,
   options: FetchPolicyOptions,
 ): Promise<FetchPolicyResponse> {
+  if (getLocalBaseUrlError(url)) {
+    throw new FetchError(
+      `Refusing to fetch ${url}: only http(s) URLs on 127.0.0.1, ::1 or localhost are allowed.`,
+      'ERR_NOT_LOOPBACK',
+    );
+  }
   const timeoutSignal = AbortSignal.timeout(options.timeoutMs);
   const signal = options.signal
     ? AbortSignal.any([options.signal, timeoutSignal])

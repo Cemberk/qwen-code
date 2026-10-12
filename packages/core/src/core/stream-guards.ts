@@ -5,13 +5,11 @@
  */
 
 /**
- * Stream-safety guards shared by every streaming wire (OpenAI pipeline and
- * Anthropic generator). Both wires face the same hazards once a streaming
- * response has returned 200 — a stream that goes silent, and a drip-fed
- * stream that never completes (issue #8597) — so the watchdog mechanics and
- * their tuning knobs live here once instead of drifting per wire (issue
- * #9005 finding 4). The SDK `timeout` only bounds connect + first response,
- * which is why these guards exist at all.
+ * Stream-safety guards for the streaming OpenAI pipeline. Once a streaming
+ * response has returned 200 it can still go silent, or be drip-fed and never
+ * complete (issue #8597); the watchdog mechanics and their tuning knobs live
+ * here. The SDK `timeout` only bounds connect + first response, which is why
+ * these guards exist at all.
  */
 
 import type { ContentGeneratorConfig } from './contentGenerator.js';
@@ -42,9 +40,8 @@ export class StreamInactivityTimeoutError extends Error {
         `increase modelProviders[providerId][].generationConfig.streamIdleTimeoutMs; ` +
         `provider configuration takes precedence, so model.generationConfig is ` +
         `ignored for those models. For runtime models, increase ` +
-        `model.generationConfig.streamIdleTimeoutMs. Built-in Qwen OAuth models ` +
-        `cannot be overridden via settings. Use ${QWEN_STREAM_IDLE_TIMEOUT_MS_ENV} ` +
-        `for them or whenever no explicit value is active. ` +
+        `model.generationConfig.streamIdleTimeoutMs. Use ` +
+        `${QWEN_STREAM_IDLE_TIMEOUT_MS_ENV} whenever no explicit value is active. ` +
         `Set the active value to 0 to disable it.`,
     );
     this.name = 'StreamInactivityTimeoutError';

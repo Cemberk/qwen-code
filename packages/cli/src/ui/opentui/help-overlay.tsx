@@ -10,21 +10,20 @@
  * Help overlay for the OpenTUI renderer (PR1 slice 1): renders the same
  * content as the original ink `Help` dialog — tab bar (general / commands /
  * custom-commands), shortcut grid, grouped command listing with the original
- * 18-line scroll window, docs footer. Tab/Shift+Tab/Esc/↑/↓ key handling
+ * 18-line scroll window, key hints. Tab/Shift+Tab/Esc/↑/↓ key handling
  * lives in the backend (the composer owns focus); this component is pure
  * presentation fed by `help-content.ts`.
  *
  * Reconciler-safe: `<text>` children are only strings or `<span>` segments
  * (TextNodeRenderable rejects nested `<text>` renderables). The tab body is
- * height-capped via `computeHelpBodyRows`, so the docs footer and the key
- * hints remain visible on an 80x24 terminal.
+ * height-capped via `computeHelpBodyRows`, so the key hints remain visible
+ * on an 80x24 terminal.
  */
 
 import { C } from './theme.js';
 import type { SlashCommand } from '../commands/types.js';
 import { t } from '../../i18n/index.js';
 import {
-  HELP_DOCS_URL,
   HELP_KEY_COL_WIDTH,
   HELP_TABS,
   buildHelpCommandsLines,
@@ -194,7 +193,7 @@ export function HelpOverlay(props: {
   scroll: number;
   /**
    * Row budget for the tab body (computeHelpBodyRows). The body is capped to
-   * this height so the footer/hints below it always fit on screen.
+   * this height so the hints below it always fit on screen.
    */
   bodyRows: number;
   /**
@@ -265,11 +264,6 @@ export function HelpOverlay(props: {
                 bodyRows={bodyRows}
               />
             )}
-          </box>
-          <box marginTop={1}>
-            <text fg={C.dim}>
-              {t('For more help:')} <span fg={C.accent}>{HELP_DOCS_URL}</span>
-            </text>
           </box>
           <box marginTop={1}>
             <text fg={C.dim}>

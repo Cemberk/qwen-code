@@ -35,11 +35,10 @@ component. The component revalidates the path against the current workspace
 before reading it. Rendering is prepared during the component's first render
 because completed tool rows enter Ink's append-only `Static` region
 immediately; an asynchronous state update would be dropped there.
-Kitty-compatible terminals use the existing virtual-image and
-Unicode-placeholder approach already used for Mermaid diagrams. Other
-terminals try `chafa` with symbol output. `chafa` receives only the same
-allowlisted environment used by the Mermaid renderer, so API credentials are
-not forwarded. If neither path is available, the TUI shows a bounded text
+Kitty-compatible terminals use a virtual image with Unicode placeholders.
+Other terminals try `chafa` with symbol output. `chafa` receives only an
+allowlisted environment, so API credentials are not forwarded, and a
+project-local `node_modules/.bin/chafa` is never executed. If neither path is available, the TUI shows a bounded text
 fallback naming the image.
 
 Previews are capped at 72 columns and 24 rows, then reduced further to fit the

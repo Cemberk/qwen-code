@@ -42,24 +42,24 @@ if (Object.keys(pnpmPackages).length === 0) {
   process.exit(1);
 }
 
+// Every package must come from the registry pinned by a sha512 integrity
+// hash. Git, tarball-URL and directory resolutions name an unpinned source
+// and are rejected even when they carry a hash.
 const invalidPnpmPackages = [];
 for (const [key, details] of Object.entries(pnpmPackages)) {
   const resolution = details?.resolution ?? {};
-  // Registry packages carry a sha512 integrity hash; git and tarball
-  // resolutions identify their source directly.
-  const hasIntegrity =
+  const isIntegrityOnlyRegistryResolution =
     typeof resolution.integrity === 'string' &&
-    resolution.integrity.startsWith('sha512-');
-  const isGitOrTarball =
-    resolution.type === 'git' || typeof resolution.tarball === 'string';
-  if (!hasIntegrity && !isGitOrTarball) {
+    resolution.integrity.startsWith('sha512-') &&
+    Object.keys(resolution).every((field) => field === 'integrity');
+  if (!isIntegrityOnlyRegistryResolution) {
     invalidPnpmPackages.push(key);
   }
 }
 
 if (invalidPnpmPackages.length > 0) {
   console.error(
-    '\nError: The following dependencies in pnpm-lock.yaml are missing "resolution.integrity":',
+    '\nError: The following dependencies in pnpm-lock.yaml are not integrity-pinned registry packages (only a sha512 "resolution.integrity" is accepted; git, tarball and directory resolutions are rejected):',
   );
   invalidPnpmPackages.forEach((pkg) => console.error(`- ${pkg}`));
   process.exitCode = 1;

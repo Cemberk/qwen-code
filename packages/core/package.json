@@ -66,7 +66,6 @@
     "scripts/postinstall.js"
   ],
   "dependencies": {
-    "@google/genai": "2.6.0",
     "@iarna/toml": "^2.2.5",
     "@jitl/quickjs-singlefile-mjs-release-sync": "0.32.0",
     "@modelcontextprotocol/client": "2.0.0",
@@ -113,7 +112,6 @@
     "undici": "^7.28.0",
     "uuid": "^9.0.1",
     "web-tree-sitter": "^0.24.7",
-    "ws": "^8.18.0",
     "yaml": "^2.8.1",
     "yauzl": "^2.10.0",
     "zod": "^3.25.76"
@@ -128,6 +126,7 @@
     "@lydell/node-pty-win32-x64": "1.2.0-beta.10"
   },
   "devDependencies": {
+    "@google/genai": "2.6.0",
     "@types/diff": "^7.0.2",
     "@types/dotenv": "^6.1.1",
     "@types/fast-levenshtein": "^0.0.4",
@@ -135,12 +134,12 @@
     "@types/picomatch": "^4.0.1",
     "@types/prompts": "^2.4.9",
     "@types/tar": "^6.1.13",
-    "@types/ws": "^8.5.10",
     "@types/yauzl": "^2.9.1",
     "msw": "^2.3.4",
     "tree-sitter-wasms": "^0.1.13",
     "typescript": "^5.3.3",
-    "vitest": "^3.1.1"
+    "vitest": "^3.1.1",
+    "ws": "^8.18.0"
   },
   "engines": {
     "node": ">=22"

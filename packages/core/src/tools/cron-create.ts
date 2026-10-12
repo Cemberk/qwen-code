@@ -145,11 +145,11 @@ export class CronCreateTool extends BaseDeclarativeTool<
         'For "every N minutes" / "every hour" / "weekdays at 9am" requests:\n' +
         '  "*/5 * * * *" (every 5 min), "0 * * * *" (hourly), "0 9 * * 1-5" (weekdays at 9am local)\n\n' +
         '## Avoid the :00 and :30 minute marks when the task allows it\n\n' +
-        'Every user who asks for "9am" gets `0 9`, and every user who asks for "hourly" gets `0 *` — which means requests from across the planet land on the API at the same instant. When the user\'s request is approximate, pick a minute that is NOT 0 or 30:\n' +
+        'Every task asked for at "9am" gets `0 9`, and every "hourly" task gets `0 *` — so they all fire at the same instant and queue behind each other. When the user\'s request is approximate, pick a minute that is NOT 0 or 30:\n' +
         '  "every morning around 9" → "57 8 * * *" or "3 9 * * *" (not "0 9 * * *")\n' +
         '  "hourly" → "7 * * * *" (not "0 * * * *")\n' +
         '  "in an hour or so, remind me to..." → pick whatever minute you land on, don\'t round\n\n' +
-        'Only use minute 0 or 30 when the user names that exact time and clearly means it ("at 9:00 sharp", "at half past", coordinating with a meeting). When in doubt, nudge a few minutes early or late — the user will not notice, and the fleet will.\n\n' +
+        'Only use minute 0 or 30 when the user names that exact time and clearly means it ("at 9:00 sharp", "at half past", coordinating with a meeting). When in doubt, nudge a few minutes early or late — the user will not notice.\n\n' +
         '## Durability\n\n' +
         'By default (durable: false) the job lives only in this Qwen Code session — nothing is written to disk, and the job is gone when Qwen Code exits. ' +
         `Pass durable: true to write to ${CRON_TASKS_DISPLAY_PATH} so the job survives restarts. ` +

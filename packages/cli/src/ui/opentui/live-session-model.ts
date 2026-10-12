@@ -51,9 +51,9 @@ export type LiveToolItem = Extract<HistoryItem, { kind: 'tool' }> & {
   /** Structured subagent summary: the card renders ink's three coloured runs
    * (SubagentScrollbackSummary parity) instead of the flattened output. */
   subagentSummary?: SubagentSummary;
-  /** Vision-bridge egress disclosure (ink ToolMessage renders the notice
-   * under the result): tells the user their image/prompt left the machine
-   * via the vision model. */
+  /** Vision-bridge disclosure (ink ToolMessage renders the notice under the
+   * result): tells the user their image/prompt was sent to the separately
+   * configured vision model. */
   visionBridgeNotice?: string;
 };
 

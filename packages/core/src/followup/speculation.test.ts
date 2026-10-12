@@ -63,6 +63,8 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+const allow = async () => 'allow' as const;
+
 describe('startSpeculation', () => {
   it('rejects tool sandbox sessions before starting host speculation', async () => {
     const config = {
@@ -140,6 +142,61 @@ describe('startSpeculation', () => {
     await abortSpeculation(state);
   });
 
+  it.each(['ask', 'deny'] as const)(
+    'stops instead of running a read whose permission is %s',
+    async (permission) => {
+      const execute = vi.fn();
+      const toolRegistry = {
+        ensureTool: vi.fn().mockResolvedValue({
+          build: vi.fn().mockReturnValue({
+            execute,
+            getDefaultPermission: async () => permission,
+          }),
+        }),
+      };
+      const config = {
+        getApprovalMode: vi.fn().mockReturnValue(ApprovalMode.DEFAULT),
+        getCwd: vi.fn().mockReturnValue(process.cwd()),
+        getFastModel: vi.fn().mockReturnValue(undefined),
+        getSessionId: vi.fn().mockReturnValue('spec-session'),
+        getTargetDir: vi.fn().mockReturnValue('/spec/cwd'),
+        getToolRegistry: vi.fn().mockReturnValue(toolRegistry),
+      } as unknown as Config;
+
+      forkedAgentMocks.runForkedAgent.mockResolvedValue({
+        jsonResult: { suggestion: '' },
+      });
+      forkedAgentMocks.sendMessageStream.mockImplementation(async function* () {
+        yield {
+          type: 'chunk',
+          value: {
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      functionCall: {
+                        id: 'call-outside-workspace',
+                        name: 'read_file',
+                        args: { file_path: '/home/user/.ssh/id_rsa' },
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        };
+      });
+
+      const state = await startSpeculation(config, 'read the key');
+      await vi.waitFor(() => expect(state.status).toBe('boundary'));
+      expect(execute).not.toHaveBeenCalled();
+
+      await abortSpeculation(state);
+    },
+  );
+
   it('executes a speculative read and observes it as a producer', async () => {
     const execute = vi.fn().mockResolvedValue({
       llmContent: 'file contents',
@@ -148,6 +205,7 @@ describe('startSpeculation', () => {
     const toolRegistry = {
       ensureTool: vi.fn().mockResolvedValue({
         build: vi.fn().mockReturnValue({
+          getDefaultPermission: allow,
           params: { path: '/normalized/a.ts' },
           execute,
         }),
@@ -217,7 +275,9 @@ describe('startSpeculation', () => {
     const execute = vi.fn().mockRejectedValue(new Error('execution failed'));
     const toolRegistry = {
       ensureTool: vi.fn().mockResolvedValue({
-        build: vi.fn().mockReturnValue({ execute }),
+        build: vi
+          .fn()
+          .mockReturnValue({ execute, getDefaultPermission: allow }),
       }),
     };
     const config = {
@@ -300,6 +360,7 @@ describe('startSpeculation', () => {
     const toolRegistry = {
       ensureTool: vi.fn().mockResolvedValue({
         build: vi.fn().mockReturnValue({
+          getDefaultPermission: allow,
           execute: vi.fn().mockResolvedValue(result),
         }),
       }),
@@ -364,7 +425,9 @@ describe('startSpeculation', () => {
     });
     const toolRegistry = {
       ensureTool: vi.fn().mockResolvedValue({
-        build: vi.fn().mockReturnValue({ execute }),
+        build: vi
+          .fn()
+          .mockReturnValue({ execute, getDefaultPermission: allow }),
       }),
     };
     const config = {
@@ -426,7 +489,9 @@ describe('startSpeculation', () => {
     });
     const toolRegistry = {
       ensureTool: vi.fn().mockResolvedValue({
-        build: vi.fn().mockReturnValue({ execute }),
+        build: vi
+          .fn()
+          .mockReturnValue({ execute, getDefaultPermission: allow }),
       }),
     };
     const config = {
@@ -490,7 +555,9 @@ describe('startSpeculation', () => {
     }));
     const toolRegistry = {
       ensureTool: vi.fn().mockResolvedValue({
-        build: vi.fn().mockReturnValue({ execute }),
+        build: vi
+          .fn()
+          .mockReturnValue({ execute, getDefaultPermission: allow }),
       }),
     };
     const config = {
@@ -554,7 +621,9 @@ describe('startSpeculation', () => {
     });
     const toolRegistry = {
       ensureTool: vi.fn().mockResolvedValue({
-        build: vi.fn().mockReturnValue({ execute }),
+        build: vi
+          .fn()
+          .mockReturnValue({ execute, getDefaultPermission: allow }),
       }),
     };
     const config = {
@@ -664,6 +733,7 @@ describe.each([
         getToolRegistry: vi.fn().mockReturnValue({
           ensureTool: vi.fn().mockResolvedValue({
             build: vi.fn().mockReturnValue({
+              getDefaultPermission: allow,
               execute: vi.fn().mockResolvedValue({
                 llmContent: '',
                 returnDisplay: '',

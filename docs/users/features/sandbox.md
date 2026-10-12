@@ -97,7 +97,9 @@ Cross-platform sandboxing with complete process isolation.
 
 Qwen Code only runs a sandbox image that is already present locally; images are never pulled. Build the default image (`qwen-code-sandbox:<version>`) with `npm run build:sandbox` in the qwen-code repository. If the image is missing, startup fails with a hint to build it.
 
-The container sandbox mounts your workspace and your `~/.qwen` directory into the container so auth and settings persist between runs.
+The container sandbox mounts your workspace read-write and your `~/.qwen` directory read-only. Nothing the container writes can change the settings, hooks, MCP servers, extensions or trusted folders that a later unsandboxed run loads. On every launch, `settings.json`, `.env`, `trustedFolders.json`, `mcpApprovals.json` and your global memory file are copied into a separate home for the sandboxed CLI (`<runtime dir>/sandbox-home`), and your `extensions`, `skills`, `commands`, `agents`, `workflows`, `rules` and `output-styles` directories are mounted into it read-only. Sessions, history and other runtime output from sandboxed runs are stored in that home, separately from unsandboxed sessions. Configuration changes made inside the sandbox last only until the next launch.
+
+The container starts with networking disabled (`--network none`). To give it a network, choose one explicitly with `SANDBOX_FLAGS` (for example `SANDBOX_FLAGS=--network=host` on Linux so the CLI can reach a model server on the host's loopback). Credentials such as `OPENAI_API_KEY` and `SANDBOX_ENV` values are passed to the container by name, never on the container runtime's command line.
 
 **Best for**: Strong isolation on any OS, consistent tooling inside a known image.
 
@@ -204,7 +206,7 @@ export SANDBOX_FLAGS="--flag1 --flag2=value"
 
 ## Linux UID/GID handling
 
-On Linux, Qwen Code defaults to enabling UID/GID mapping so the sandbox runs as your user (and reuses the mounted `~/.qwen`). Override with:
+On Linux, Qwen Code defaults to enabling UID/GID mapping so the sandbox runs as your user (and can read the mounted `~/.qwen`). Override with:
 
 ```bash
 export SANDBOX_SET_UID_GID=true   # Force host UID/GID
@@ -223,7 +225,7 @@ export SANDBOX_SET_UID_GID=false  # Disable UID/GID mapping
 
 **Missing commands**
 
-- Container sandbox: add them via `.qwen/sandbox.Dockerfile` or `.qwen/sandbox.bashrc`.
+- Container sandbox: add them to a custom image (see `.qwen/sandbox.Dockerfile` below).
 - Seatbelt: your host binaries are used, but the sandbox may restrict access to some paths.
 
 **Java not available in Docker sandbox**
@@ -251,7 +253,8 @@ For more details on customizing the sandbox, see [Customizing the sandbox enviro
 
 **Network issues**
 
-- Check sandbox profile allows network.
+- Seatbelt: check that the sandbox profile allows network.
+- Docker/Podman: the container has no network unless `SANDBOX_FLAGS` selects one.
 
 ### Debug mode
 

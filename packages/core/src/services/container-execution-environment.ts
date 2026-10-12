@@ -23,14 +23,11 @@ import {
 import { homedir, tmpdir } from 'node:os';
 import { isAbsolute, join, relative, sep } from 'node:path';
 import { createInterface } from 'node:readline';
-import { parse } from 'shell-quote';
 import { Mutex } from 'async-mutex';
 import type { Config } from '../config/config.js';
 import { Storage } from '../config/storage.js';
 import type { PermissionDecision } from '../permissions/types.js';
-import { ToolNames } from '../tools/tool-names.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
-import { isShellResultDisplay } from '../utils/shell-result.js';
 import { hasRootlessMarker } from '../utils/container-runtime.js';
 import { resolveWorkspacePath } from '../utils/workspaceContext.js';
 import type {
@@ -60,23 +57,6 @@ export interface ContainerExecutionOptions {
   runtimeEnv: NodeJS.ProcessEnv;
   environment: readonly string[];
   containerHome: string;
-}
-
-/** Only standalone package-manager installs receive network access. */
-export function isPackageInstallation(command: string): boolean {
-  if (/[\n\r$`]/.test(command)) return false;
-  try {
-    const words = parse(command);
-    if (!words.every((word) => typeof word === 'string')) return false;
-    const [program, action] = words;
-    return (
-      (program === 'npm' && (action === 'install' || action === 'ci')) ||
-      (program === 'pnpm' && action === 'install') ||
-      (program === 'yarn' && action === 'install')
-    );
-  } catch {
-    return false;
-  }
 }
 
 function runtimeCommand(
@@ -119,7 +99,6 @@ export function workerContainerArguments(
   name: string,
   rootless: boolean,
   gitMask: string,
-  network = false,
 ): string[] {
   const args = [
     'create',
@@ -147,7 +126,7 @@ export function workerContainerArguments(
       `${worker.outputDirectory}:${worker.outputDirectory}`,
     );
   args.push('--volume', `${gitMask}:${join(worker.workspace, '.git')}:ro`);
-  if (!network) args.push('--network', 'none');
+  args.push('--network', 'none');
   const uid = process.getuid?.();
   const gid = process.getgid?.();
   if (!rootless && uid !== undefined && gid !== undefined)
@@ -273,16 +252,9 @@ class ContainerWorker {
     worker: ExecutionWorkerOptions,
     rootless: boolean,
     gitMask: string,
-    network: boolean,
     signal: AbortSignal,
   ): Promise<void> {
-    this.starting = this.startInternal(
-      worker,
-      rootless,
-      gitMask,
-      network,
-      signal,
-    );
+    this.starting = this.startInternal(worker, rootless, gitMask, signal);
     return this.starting;
   }
 
@@ -290,7 +262,6 @@ class ContainerWorker {
     worker: ExecutionWorkerOptions,
     rootless: boolean,
     gitMask: string,
-    network: boolean,
     signal: AbortSignal,
   ): Promise<void> {
     signal.throwIfAborted();
@@ -309,7 +280,6 @@ class ContainerWorker {
         this.name,
         rootless,
         gitMask,
-        network,
       ),
       signal,
     );
@@ -442,21 +412,15 @@ export class ContainerExecutionEnvironment implements ExecutionEnvironment {
   get outputDirectory(): string {
     return join(this.temporaryDirectory, 'output');
   }
-  private readonly workers = new Set<ContainerWorker>();
   private readonly invocations = new Map<string, ContainerWorker>();
   private disposal?: Promise<void>;
   private releaseGitMountPoint?: () => Promise<void>;
   private closed = false;
   private constructor(
     private readonly options: ContainerExecutionOptions,
-    private readonly workerOptions: ExecutionWorkerOptions,
-    private readonly rootless: boolean,
     private readonly temporaryDirectory: string,
-    private readonly gitMask: string,
     private readonly primary: ContainerWorker,
-  ) {
-    this.workers.add(primary);
-  }
+  ) {}
 
   static async create(
     config: Config,
@@ -556,10 +520,7 @@ export class ContainerExecutionEnvironment implements ExecutionEnvironment {
     const primary = new ContainerWorker(resolvedOptions);
     const environment = new ContainerExecutionEnvironment(
       resolvedOptions,
-      workerOptions,
-      rootless,
       temporaryDirectory,
-      gitMask,
       primary,
     );
     try {
@@ -569,7 +530,7 @@ export class ContainerExecutionEnvironment implements ExecutionEnvironment {
       environment.releaseGitMountPoint = gitMountPoint.release;
       if (gitMountPoint.directory) await mkdir(gitMask);
       else await writeFile(gitMask, '');
-      await primary.start(workerOptions, rootless, gitMask, false, signal);
+      await primary.start(workerOptions, rootless, gitMask, signal);
       return environment;
     } catch (error) {
       await environment.dispose().catch((cleanupError: unknown) => {
@@ -587,37 +548,7 @@ export class ContainerExecutionEnvironment implements ExecutionEnvironment {
     signal: AbortSignal,
   ): Promise<PreparedExecution> {
     if (this.closed) throw new Error('Container executor is closed.');
-    let worker = this.primary;
-    if (
-      request.toolName === ToolNames.SHELL &&
-      typeof request.params['command'] === 'string' &&
-      isPackageInstallation(request.params['command'])
-    ) {
-      if (request.params['is_background'])
-        throw new Error(
-          'Network-enabled package installations must run in the foreground.',
-        );
-      worker = new ContainerWorker(this.options);
-      this.workers.add(worker);
-      try {
-        await worker.start(
-          this.workerOptions,
-          this.rootless,
-          this.gitMask,
-          true,
-          signal,
-        );
-      } catch (error) {
-        await worker.dispose().catch((cleanupError: unknown) => {
-          throw new ExecutionCleanupError(
-            `${String(error)}; cleanup failed: ${String(cleanupError)}`,
-            { cause: error },
-          );
-        });
-        this.workers.delete(worker);
-        throw error;
-      }
-    }
+    const worker = this.primary;
     this.invocations.set(request.id, worker);
     try {
       return await worker.request({ method: 'prepare', request }, signal);
@@ -685,34 +616,6 @@ export class ContainerExecutionEnvironment implements ExecutionEnvironment {
       throw error;
     }
     this.invocations.delete(id);
-    if (worker !== this.primary) {
-      try {
-        await worker.dispose();
-        this.workers.delete(worker);
-      } catch (error) {
-        const notice = `\n\n[Container cleanup failed after tool execution: ${String(error)}. The tool result above is still valid; do not automatically retry the command.]`;
-        delete result.outputBudgetApplied;
-        result.llmContent =
-          typeof result.llmContent === 'string'
-            ? result.llmContent + notice
-            : [
-                ...(Array.isArray(result.llmContent)
-                  ? result.llmContent
-                  : [result.llmContent]),
-                { text: notice },
-              ];
-        if (typeof result.returnDisplay === 'string') {
-          result.returnDisplay += notice;
-        } else if (isShellResultDisplay(result.returnDisplay)) {
-          result.returnDisplay = {
-            ...result.returnDisplay,
-            text: result.returnDisplay.text + notice,
-            notices: [...result.returnDisplay.notices, notice.trim()],
-          };
-        }
-        if (result.error) result.error.message += notice;
-      }
-    }
     return result;
   }
 
@@ -730,11 +633,7 @@ export class ContainerExecutionEnvironment implements ExecutionEnvironment {
     const worker = this.invocations.get(id);
     if (!worker) return;
     this.invocations.delete(id);
-    if (worker !== this.primary) {
-      await worker.dispose();
-      this.workers.delete(worker);
-    } else
-      await worker.request({ method: 'release', invocationId: id }, signal);
+    await worker.request({ method: 'release', invocationId: id }, signal);
   }
   async invalidateReadCache(paths?: readonly string[]): Promise<void> {
     await this.primary.request(
@@ -745,7 +644,7 @@ export class ContainerExecutionEnvironment implements ExecutionEnvironment {
   dispose(): Promise<void> {
     this.closed = true;
     this.disposal ??= (async () => {
-      const resources = `${[...this.workers].map((worker) => worker.name).join(', ')} (${this.options.runtime}); temporary directory ${this.temporaryDirectory}`;
+      const resources = `${this.primary.name} (${this.options.runtime}); temporary directory ${this.temporaryDirectory}`;
       const notice = setTimeout(() => {
         // eslint-disable-next-line no-console -- report owned resources before bounded CLI exit abandons cleanup
         console.warn(
@@ -754,15 +653,10 @@ export class ContainerExecutionEnvironment implements ExecutionEnvironment {
       }, 500);
       notice.unref?.();
       try {
-        const results = await Promise.allSettled(
-          [...this.workers].map((worker) => worker.dispose()),
-        );
-        const failure = results.find((result) => result.status === 'rejected');
-        // A failed removal may leave a worker using these mounts. Retain the
-        // lease and temporary files until a later dispose removes that worker.
-        if (failure?.status === 'rejected') throw failure.reason;
+        // A failed removal may leave the worker using these mounts. Retain the
+        // lease and temporary files until a later dispose removes it.
+        await this.primary.dispose();
         this.invocations.clear();
-        this.workers.clear();
         await this.releaseGitMountPoint?.();
         await rm(this.temporaryDirectory, { recursive: true, force: true });
       } catch (error) {

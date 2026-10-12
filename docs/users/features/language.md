@@ -1,16 +1,15 @@
 # Internationalization (i18n) & Language
 
-Qwen Code is built for multilingual workflows: it supports UI localization (i18n/l10n) in the CLI, lets you choose the assistant output language, and allows custom UI language packs.
+Qwen Code is built for multilingual workflows: it supports UI localization (i18n/l10n) in the CLI and lets you choose the assistant output language.
 
 ## Overview
 
 From a user point of view, Qwen Code’s “internationalization” spans multiple layers:
 
-| Capability / Setting     | What it controls                                                       | Where stored                 |
-| ------------------------ | ---------------------------------------------------------------------- | ---------------------------- |
-| `/language ui`           | Terminal UI text (menus, system messages, prompts)                     | `~/.qwen/settings.json`      |
-| `/language output`       | Language the AI responds in (an output preference, not UI translation) | `~/.qwen/output-language.md` |
-| Custom UI language packs | Overrides/extends built-in UI translations                             | `~/.qwen/locales/*.js`       |
+| Capability / Setting | What it controls                                                       | Where stored                 |
+| -------------------- | ---------------------------------------------------------------------- | ---------------------------- |
+| `/language ui`       | Terminal UI text (menus, system messages, prompts)                     | `~/.qwen/settings.json`      |
+| `/language output`   | Language the AI responds in (an output preference, not UI translation) | `~/.qwen/output-language.md` |
 
 ## UI Language
 
@@ -115,19 +114,9 @@ export QWEN_CODE_LANG=zh
 
 This influences auto-detection on first startup (if you haven’t set a UI language and no `output-language.md` file exists yet).
 
-## Custom Language Packs
+## UI Translations
 
-For UI translations, you can create custom language packs in `~/.qwen/locales/`:
-
-- Example: `~/.qwen/locales/es.js` for Spanish
-- Example: `~/.qwen/locales/fr.js` for French
-
-User directory takes precedence over built-in translations.
-
-> [!tip]
->
-> Contributions are welcome! If you’d like to improve built-in translations or add new languages.
-> For a concrete example, see [PR #1238: feat(i18n): add Russian language support](https://github.com/QwenLM/qwen-code/pull/1238).
+Only the built-in UI languages can be selected. A UI language setting or `QWEN_CODE_LANG` value that is not one of them falls back to English; translation files are never loaded from outside the installed package.
 
 ### Maintaining `zh-TW` (Traditional Chinese for Taiwan)
 
@@ -151,17 +140,6 @@ The `check-i18n` script (run in CI via `npm run check-i18n`) will fail the build
 > [!note]
 >
 > The check uses plain substring matching, which does not understand Chinese word boundaries. A bigram pattern can therefore false-positive across compound-word boundaries — for example, `區塊鏈接口` (= `區塊鏈` + `接口`) contains the substring `鏈接` even though neither word is incorrect. If you hit a surprising CI failure of this kind, add the translation key to `ZH_TW_ALLOWED_EXCEPTIONS` rather than removing the pattern.
-
-### Language Pack Format
-
-```javascript
-// ~/.qwen/locales/es.js
-export default {
-  Hello: 'Hola',
-  Settings: 'Configuracion',
-  // ... more translations
-};
-```
 
 ## Related Commands
 

@@ -11,11 +11,7 @@ import {
   startFakeOpenAIServer,
   type FakeOpenAIServer,
 } from '../fake-openai-server.js';
-import {
-  applyContainerSandboxNoProxy,
-  fakeServerHostOptions,
-  TestRig,
-} from '../test-helper.js';
+import { TestRig } from '../test-helper.js';
 import { pickE2eRenderer } from '../renderer-matrix.js';
 import {
   InteractiveSession,
@@ -29,14 +25,12 @@ describe.skipIf(pickE2eRenderer() === 'opentui')(
     let rig: TestRig;
     let server: FakeOpenAIServer | undefined;
     let session: InteractiveSession | undefined;
-    let restoreNoProxy: (() => void) | undefined;
 
     afterEach(async () => {
       await session?.close();
       session = undefined;
       await server?.close();
       server = undefined;
-      restoreNoProxy?.();
       await rig?.cleanup();
     });
 
@@ -98,7 +92,6 @@ describe.skipIf(pickE2eRenderer() === 'opentui')(
     ])('delivers $marker once', async (testCase) => {
       const isSlash = testCase.source === 'slash';
       rig = new TestRig();
-      restoreNoProxy = applyContainerSandboxNoProxy();
       await rig.setup(`workflow-completion-${testCase.status}`, {
         settings: { telemetry: { enabled: false } },
       });
@@ -154,7 +147,7 @@ describe.skipIf(pickE2eRenderer() === 'opentui')(
               ? expectedReply
               : 'WORKFLOW_RESULT_MISSING',
         };
-      }, fakeServerHostOptions());
+      });
 
       session = await InteractiveSession.start({
         cwd: rig.testDir!,

@@ -6,7 +6,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { MessageBusType, type Message } from './types.js';
+import type { Message } from './types.js';
 import { safeJsonStringify } from '../utils/safeJsonStringify.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
 
@@ -19,18 +19,7 @@ export class MessageBus extends EventEmitter {
   }
 
   private isValidMessage(message: Message): boolean {
-    if (!message || !message.type) {
-      return false;
-    }
-
-    if (
-      message.type === MessageBusType.TOOL_CONFIRMATION_REQUEST &&
-      !('correlationId' in message)
-    ) {
-      return false;
-    }
-
-    return true;
+    return Boolean(message && message.type);
   }
 
   private emitMessage(message: Message): void {
@@ -48,20 +37,7 @@ export class MessageBus extends EventEmitter {
         );
       }
 
-      if (message.type === MessageBusType.TOOL_CONFIRMATION_REQUEST) {
-        // Allow all tool confirmations by default (policy engine removed)
-        this.emitMessage({
-          type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
-          correlationId: message.correlationId,
-          confirmed: true,
-        });
-      } else if (message.type === MessageBusType.HOOK_EXECUTION_REQUEST) {
-        // Allow all hook executions by default (policy engine removed)
-        this.emitMessage(message);
-      } else {
-        // For all other message types, just emit them
-        this.emitMessage(message);
-      }
+      this.emitMessage(message);
     } catch (error) {
       this.emit('error', error);
     }

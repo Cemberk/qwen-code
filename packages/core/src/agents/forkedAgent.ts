@@ -45,7 +45,10 @@ import { ApprovalMode, type Config } from '../config/config.js';
 import { LlmChat, StreamEventType } from '../core/llm-chat.js';
 import { FunctionCallingConfigMode } from '../core/genai-compat.js';
 import { createRuntimeContentGeneratorView } from '../models/content-generator-config.js';
-import { createApprovalModeOverride } from '../tools/agent/agent.js';
+import {
+  createApprovalModeOverride,
+  stampBackgroundPromptPolicy,
+} from '../tools/agent/agent.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
 import {
   AgentHeadless,
@@ -419,7 +422,10 @@ export interface CachePathParams {
 export interface AgentPathParams {
   /** Unique name for this agent run (for logging and telemetry). */
   name: string;
-  /** Runtime config. ApprovalMode is forced to YOLO internally. */
+  /**
+   * Runtime config. The forked agent never runs with a more permissive
+   * approval mode than this config's (see the AgentHeadless path).
+   */
   config: Config;
   /** Task prompt sent as the initial user message. */
   taskPrompt: string;
@@ -663,25 +669,31 @@ export async function runForkedAgent(
   }
 
   // ── AgentHeadless path ────────────────────────────────────────────────────
-  // `createApprovalModeOverride` rebuilds the tool registry on the YOLO
-  // wrapper Config so core file tools (`EditTool` / `WriteFileTool` /
+  // Forked agents run in the background with no UI that could answer a
+  // permission prompt. They run in YOLO only when the parent session already
+  // does; otherwise in DEFAULT with prompts auto-denied, so anything the parent
+  // would have asked about is refused while calls the scoped permission
+  // manager explicitly allows (e.g. memory-path writes) still proceed.
+  //
+  // `createApprovalModeOverride` rebuilds the tool registry on the wrapper
+  // Config so core file tools (`EditTool` / `WriteFileTool` /
   // `ReadFileTool`) resolve `this.config` to the wrapper, not to the
-  // parent. Without that rebuild the YOLO override is silently ignored
-  // on the bound-tool path (parent's pre-bound tool instances keep
-  // reading the parent's approval mode), and the wrapper's own
-  // `FileReadCache` lazy-init is bypassed too.
+  // parent. Without that rebuild the override is silently ignored on the
+  // bound-tool path (parent's pre-bound tool instances keep reading the
+  // parent's approval mode), and the wrapper's own `FileReadCache`
+  // lazy-init is bypassed too.
   //
   // Consumers that pre-wrap with `createMemoryScopedAgentConfig`
-  // (memory extraction / dream agent) compose correctly: the YOLO
-  // wrapper's bound tools resolve `this.config.getPermissionManager()`
-  // through the prototype chain to the scoped wrapper's own override,
-  // while `this.config.getApprovalMode()` lands on YOLO.
-  const { config: yoloConfig, cleanup: restoreParentPM } =
-    await createApprovalModeOverride(params.config, ApprovalMode.YOLO);
-  // YOLO never triggers strip → restoreParentPM is a no-op. Kept for
-  // API symmetry with the other createApprovalModeOverride callers; if
-  // this function ever switches away from YOLO the lifecycle stays
-  // correct without further refactor.
+  // (memory extraction / dream agent) compose correctly: the wrapper's
+  // bound tools resolve `this.config.getPermissionManager()` through the
+  // prototype chain to the scoped wrapper's own override.
+  const forkApprovalMode =
+    params.config.getApprovalMode() === ApprovalMode.YOLO
+      ? ApprovalMode.YOLO
+      : ApprovalMode.DEFAULT;
+  const { config: agentConfig, cleanup: restoreParentPM } =
+    await createApprovalModeOverride(params.config, forkApprovalMode);
+  stampBackgroundPromptPolicy(agentConfig, false);
   const filesTouched = new Set<string>();
   const pendingMutatingPaths = new Map<string, string[]>();
   const filesWritten = new Set<string>();
@@ -700,7 +712,7 @@ export async function runForkedAgent(
     params.model ?? params.config.getFastModel?.() ?? params.config.getModel();
   const modelRuntime = await buildForkedModelRuntime(
     params.config,
-    yoloConfig,
+    agentConfig,
     modelSelector,
   );
   const modelConfig: ModelConfig = {
@@ -771,7 +783,7 @@ export async function runForkedAgent(
   try {
     const headless = await AgentHeadless.create(
       params.name,
-      yoloConfig,
+      agentConfig,
       promptConfig,
       modelConfig,
       runConfig,
@@ -874,7 +886,7 @@ export async function runForkedAgent(
     // instances dispose their change-listeners on shared
     // SubagentManager / SkillManager. Same shape as the spawn-path
     // finallys in `agent.ts` and `background-agent-resume.ts`.
-    void yoloConfig
+    void agentConfig
       .getToolRegistry()
       .stop()
       .catch(() => {});

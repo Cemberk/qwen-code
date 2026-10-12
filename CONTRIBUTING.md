@@ -207,49 +207,6 @@ npm run lint
 
 For more detailed architecture, see `docs/architecture.md`.
 
-## Documentation Development
-
-This section describes how to develop and preview the documentation locally.
-
-### Prerequisites
-
-1. Ensure you have Node.js (version 22+) installed
-2. Have npm or yarn available
-
-### Setup Documentation Site Locally
-
-To work on the documentation and preview changes locally:
-
-1. Navigate to the `docs-site` directory:
-
-   ```bash
-   cd docs-site
-   ```
-
-2. Install dependencies:
-
-   ```bash
-   npm install
-   ```
-
-3. Link the documentation content from the main `docs` directory:
-
-   ```bash
-   npm run link
-   ```
-
-   This creates a symbolic link from `../docs` to `content` in the docs-site project, allowing the documentation content to be served by the Next.js site.
-
-4. Start the development server:
-
-   ```bash
-   npm run dev
-   ```
-
-5. Open [http://localhost:3000](http://localhost:3000) in your browser to see the documentation site with live updates as you make changes.
-
-Any changes made to the documentation files in the main `docs` directory will be reflected immediately in the documentation site.
-
 ## Debugging
 
 ### VS Code:

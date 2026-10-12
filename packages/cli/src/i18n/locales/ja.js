@@ -697,8 +697,6 @@ export default {
   'Invalid command. Available subcommands:':
     '無効なコマンドです。使用可能なサブコマンド:',
   'Available subcommands:': '使用可能なサブコマンド:',
-  'To request additional UI language packs, please open an issue on GitHub.':
-    '追加のUI言語パックをリクエストするには、GitHub で Issue を作成してください',
   'Available options:': '使用可能なオプション:',
   'Set UI language to {{name}}': 'UI言語を {{name}} に設定',
   'Analyze only, do not modify files or execute commands':
@@ -879,7 +877,6 @@ export default {
   'Run qwen --debug to see error logs':
     'qwen --debug を実行してエラーログを確認してください',
 
-  // MCP OAuth Authentication
   // MCP Tool List
   'No tools available for this server.':
     'このサーバーには使用可能なツールがありません。',
@@ -991,11 +988,8 @@ export default {
   'Overall Goal:': '全体目標:',
   'You must connect a provider to proceed. Press Ctrl+C again to exit.':
     '続行するにはプロバイダーに接続してください。Ctrl+C をもう一度押すと終了します',
-  'Bring your own API key': '自分の API Key を使用',
   'Failed to authenticate. Message: {{message}}':
     '認証に失敗しました。メッセージ: {{message}}',
-  'Authenticated successfully with {{authType}} credentials.':
-    '{{authType}} 認証情報で正常に認証されました',
   // Dialogs - Model
   'Select Model': 'モデルを選択',
   Modality: 'モダリティ',
@@ -1097,7 +1091,6 @@ export default {
   '{{count}} prompt': '{{count}} プロンプト',
   '{{count}} prompts': '{{count}} プロンプト',
   '(from {{extensionName}})': '({{extensionName}} から)',
-  OAuth: 'OAuth',
   'tools and prompts will appear when ready':
     'ツールとプロンプトは準備完了後に表示されます',
   '{{count}} tools cached': '{{count}} ツール(キャッシュ済み)',
@@ -1119,8 +1112,6 @@ export default {
     '会話が長くなったら /compress で履歴を要約し、コンテキストを解放できます。',
   'Start a fresh idea with /clear or /new; the previous session stays available in history.':
     '/clear または /new で新しいアイデアを始められます。前のセッションは履歴に残ります。',
-  'Use /bug to submit issues to the maintainers when something goes off.':
-    '問題が発生したら /bug でメンテナーに報告できます。',
   'Switch auth type quickly with /auth.':
     '/auth で認証タイプをすばやく切り替えられます。',
   'You can run any shell commands from Qwen Code using ! (e.g. !ls).':
@@ -1271,7 +1262,7 @@ export default {
     'セットアップ手順はドキュメントを参照してください',
 
   // ============================================================================
-  // Coding Plan Authentication
+  // API Key Authentication
   // ============================================================================
   'API key cannot be empty.': 'API Key は空にできません。',
 
@@ -1279,16 +1270,7 @@ export default {
   // Auth Dialog - View Titles and Labels
   // ============================================================================
   Custom: 'カスタム',
-  'Choose based on where your account is registered':
-    'アカウントの登録先に応じて選択してください',
 
-  // ============================================================================
-  // Coding Plan International Updates
-  // ============================================================================
-  'New model configurations are available for {{region}}. Update now?':
-    '{{region}} の新しいモデル設定が利用可能です。今すぐ更新しますか？',
-  '{{region}} configuration updated successfully. Model switched to "{{model}}".':
-    '{{region}} の設定が正常に更新されました。モデルが "{{model}}" に切り替わりました。',
   // ============================================================================
   // Context Usage Component
   // ============================================================================
@@ -1323,10 +1305,6 @@ export default {
   active: '有効',
   'body loaded': '本文読み込み済み',
   memory: 'メモリ',
-  '{{region}} configuration updated successfully.':
-    '{{region}} の設定が正常に更新されました。',
-  'Authenticated successfully with {{region}}. API key and model configs saved to settings.json.':
-    '{{region}} での認証に成功しました。API Key とモデル設定が settings.json に保存されました。',
   'Type something...': '何か入力...',
   Submit: '送信',
   'Submit answers': '回答を送信',
@@ -1338,34 +1316,7 @@ export default {
     '↑/↓: ナビゲート | ←/→: タブ切り替え | Enter: 選択',
   '↑/↓: Navigate | Enter: Select | Esc: Cancel':
     '↑/↓: ナビゲート | Enter: 選択 | Esc: キャンセル',
-  'Show current authentication status': '現在の認証ステータスを表示',
-  'Authentication completed successfully.': '認証が正常に完了しました。',
   Global: 'グローバル',
-  '\n=== Authentication Status ===\n': '\n=== 認証ステータス ===\n',
-  'Run one of the following commands to get started:\n':
-    '以下のコマンドのいずれかを実行して開始してください:\n',
-  'Or simply run:': 'または以下を実行:',
-  '  qwen auth                - Interactive authentication setup\n':
-    '  qwen auth                - インタラクティブ認証セットアップ\n',
-  '  Type: Free tier (discontinued 2026-04-15)':
-    '  タイプ: 無料枠（2026-04-15 終了）',
-  '  Limit: No longer available': '  制限: 利用不可',
-  '  Region: {{region}}': '  リージョン: {{region}}',
-  '  Current Model: {{model}}': '  現在のモデル: {{model}}',
-  '  Config Version: {{version}}': '  設定バージョン: {{version}}',
-  '  Status: API key configured\n': '  ステータス: API Key 設定済み\n',
-  '  Issue: API key not found in environment or settings\n':
-    '  問題: 環境変数または設定に API Key が見つかりません\n',
-  '  Run `qwen auth coding-plan` to re-configure.\n':
-    '  `qwen auth coding-plan` を実行して再設定してください。\n',
-  '  Status: Configured\n': '  ステータス: 設定済み\n',
-  'Failed to check authentication status: {{error}}':
-    '認証ステータスの確認に失敗しました: {{error}}',
-  'Select an option:': 'オプションを選択:',
-  'Raw mode not available. Please run in an interactive terminal.':
-    'Rawモードが利用できません。インタラクティブターミナルで実行してください。',
-  '(Use ↑ ↓ arrows to navigate, Enter to select, Ctrl+C to exit)\n':
-    '(↑ ↓ 矢印キーで移動、Enter で選択、Ctrl+C で終了)\n',
   'to expand details': '詳細を展開',
   'Switch to plan mode or exit plan mode':
     'プランモードに切り替えるか、プランモードを終了する',
@@ -1439,7 +1390,6 @@ export default {
   'Lists installed extensions.': 'インストール済みの拡張機能を一覧表示します。',
   'Updates all extensions or a named extension to the latest version.':
     'すべての拡張機能、または指定した拡張機能を最新バージョンに更新します。',
-  'Open extensions page in your browser': 'ブラウザで拡張機能ページを開く',
   'Manage Extensions': '拡張機能を管理',
   'Extension Details': '拡張機能の詳細',
   'View Extension': '拡張機能を表示',
@@ -1576,7 +1526,6 @@ export default {
   'This extension will run the following MCP servers:':
     'この拡張機能は次の MCP servers を実行します:',
   local: 'ローカル',
-  remote: 'リモート',
   'This extension will add the following commands: {{commands}}.':
     'この拡張機能は次のコマンドを追加します: {{commands}}。',
   'This extension will append info to your QWEN.md context using {{fileName}}':
@@ -1660,7 +1609,7 @@ export default {
   '(workspace)': '(ワークスペース)',
   '(user)': '(ユーザー)',
   '[not set]': '[未設定]',
-  '[value stored in keychain]': '[値はキーチェーンに保存されています]',
+  '[value stored in encrypted file]': '[値は暗号化ファイルに保存されています]',
   'Value:': '値:',
   'Manage extension settings.': '拡張機能の設定を管理します。',
   'You need to specify a command (set or list).':
@@ -1757,7 +1706,6 @@ export default {
 
   // === Same-as-English optimization ===
   ' (not in model registry)': '（モデルレジストリにありません）',
-  '中国 (China)': '中国',
 
   // Stats Dashboard — Category 2 (missing from ja)
   'Activity Heatmap': 'アクティビティヒートマップ',

@@ -24,8 +24,8 @@ export function registerCleanup(
 
 /**
  * Per-cleanup ceiling. Caps any single hung cleanup (slow disk on
- * `chatRecording.flush`, MCP disconnect on a dead socket, telemetry HTTP
- * stall) so it can't starve the rest of the cleanup chain.
+ * `chatRecording.flush`, MCP disconnect on a dead pipe, telemetry
+ * shutdown) so it can't starve the rest of the cleanup chain.
  */
 const PER_CLEANUP_TIMEOUT_MS = 2_000;
 

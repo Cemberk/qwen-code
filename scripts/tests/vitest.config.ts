@@ -13,11 +13,9 @@ export default defineConfig({
     include: ['scripts/tests/**/*.test.{js,ts}'],
     exclude: [...configDefaults.exclude],
     setupFiles: ['scripts/tests/test-setup.ts'],
-    // Several suites spawn the real `corepack pnpm`; on a cold per-run cache
-    // every worker would download the pinned pnpm concurrently, and a losing
-    // install poisons the shared cache for the rest of the run (#12436).
-    // Warm it once here, before any worker forks.
-    globalSetup: ['scripts/tests/corepack-warmup.js'],
+    // release-versioning spawns the real `corepack pnpm`; it must use the
+    // cached pinned pnpm and fail rather than download one.
+    env: { COREPACK_ENABLE_NETWORK: '0' },
     // Several suites spawn real subprocesses and run about 5x slower on a
     // contended host than on a quiet one.
     // `||`, not `??`: `??` only catches `undefined`, and a workflow expression

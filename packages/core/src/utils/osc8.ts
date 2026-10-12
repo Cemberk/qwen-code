@@ -7,9 +7,8 @@
 /**
  * OSC 8 hyperlink primitives (package-agnostic).
  *
- * These live in `core` so both the CLI renderers and core-side emitters — for
- * example the Qwen OAuth device-flow fallback message — can wrap a URL in a
- * single clickable link. `packages/cli/src/ui/utils/osc8.ts` re-exports them
+ * These live in `core` so both the CLI renderers and core-side emitters can
+ * wrap a URL in a single clickable link. `packages/cli/src/ui/utils/osc8.ts` re-exports them
  * so existing CLI imports keep resolving unchanged.
  *
  * Supported terminals (iTerm2 ≥ 3.1, WezTerm ≥ 20200620, Kitty, Ghostty,

@@ -80,12 +80,6 @@ describe('isTransientNetworkError', () => {
     expect(isTransientNetworkError(new Error('transport error'))).toBe(true);
   });
 
-  it('returns true for Streamable HTTP connection error', () => {
-    expect(
-      isTransientNetworkError(new Error('Streamable HTTP connection failed')),
-    ).toBe(true);
-  });
-
   it('returns false for 401 Unauthorized', () => {
     expect(isTransientNetworkError(new Error('401 Unauthorized'))).toBe(false);
   });

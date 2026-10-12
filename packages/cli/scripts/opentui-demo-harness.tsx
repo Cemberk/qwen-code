@@ -3,9 +3,8 @@
 /**
  * Offline no-flicker harness: mounts a representative streaming transcript on
  * a real CLI renderer so a PTY capture can measure the actual emitted byte
- * stream (full-screen clears, DEC 2026 balance). Needs no model credentials,
- * so it runs on fork PRs where secrets.QWEN_API_KEY is unavailable — the
- * live-model equivalent drives `packages/cli/dist/index.js` with
+ * stream (full-screen clears, DEC 2026 balance). Needs no model server — the
+ * model-driven equivalent drives `packages/cli/dist/index.js` with
  * QWEN_TUI_RENDERER=opentui (opentui-noflicker.scenario.json). Exits cleanly
  * on its own — the runner treats timed-out captures as failures.
  *

@@ -203,6 +203,18 @@ function normalizeSessionFacet(
   return hasMeaningfulInsightValue(meaningfulContent) ? normalizedFacet : null;
 }
 
+// Session ids come from transcript files; only a plain file name may become
+// a facet cache path, so a crafted id cannot escape the facets directory.
+function getFacetPath(
+  facetsOutputDir: string,
+  sessionId: string | undefined,
+): string | undefined {
+  if (!sessionId || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(sessionId)) {
+    return undefined;
+  }
+  return path.join(facetsOutputDir, `${sessionId}.json`);
+}
+
 export class DataProcessor {
   constructor(private config: Config) {}
 
@@ -1281,11 +1293,8 @@ None captured`;
           // Check if we already have this session analyzed
           if (records.length > 0 && facetsOutputDir) {
             const sessionId = records[0].sessionId;
-            if (sessionId) {
-              const existingFacetPath = path.join(
-                facetsOutputDir,
-                `${sessionId}.json`,
-              );
+            const existingFacetPath = getFacetPath(facetsOutputDir, sessionId);
+            if (existingFacetPath) {
               try {
                 // Check if file exists and is readable
                 const existingData = await fs.readFile(
@@ -1342,12 +1351,12 @@ None captured`;
 
           const facet = await this.analyzeSession(records);
 
-          if (facet && facetsOutputDir) {
+          const facetPath =
+            facet && facetsOutputDir
+              ? getFacetPath(facetsOutputDir, facet.session_id)
+              : undefined;
+          if (facet && facetPath) {
             try {
-              const facetPath = path.join(
-                facetsOutputDir,
-                `${facet.session_id}.json`,
-              );
               await fs.writeFile(
                 facetPath,
                 JSON.stringify(facet, null, 2),

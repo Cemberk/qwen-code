@@ -10,27 +10,19 @@ import {
   startFakeOpenAIServer,
   type FakeOpenAIServer,
 } from '../fake-openai-server.js';
-import {
-  TestRig,
-  type,
-  applyContainerSandboxNoProxy,
-  fakeServerHostOptions,
-} from '../test-helper.js';
+import { TestRig, type } from '../test-helper.js';
 
 describe('Interactive protocol tag retry guard', () => {
   let fakeServer: FakeOpenAIServer | undefined;
   let rig: TestRig;
-  let restoreNoProxy: () => void;
 
   beforeEach(() => {
     rig = new TestRig();
-    restoreNoProxy = applyContainerSandboxNoProxy();
   });
 
   afterEach(async () => {
     await fakeServer?.close();
     fakeServer = undefined;
-    restoreNoProxy();
     await rig.cleanup();
   });
 
@@ -67,7 +59,7 @@ describe('Interactive protocol tag retry guard', () => {
             total_tokens: 28,
           },
         };
-      }, fakeServerHostOptions());
+      });
 
       await rig.setup('interactive-protocol-tag-filtering-http-retry', {
         settings: {

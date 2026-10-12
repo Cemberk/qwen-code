@@ -733,7 +733,7 @@ describe('ToolConfirmationMessage', () => {
 
       it('subscribes to the promise onConfirm returns instead of letting it float', async () => {
         // A floating rejection reaches the process-level handler (llm.tsx) and
-        // shows a "file a bug report" banner over a correctly-refused action,
+        // shows an "unexpected error" banner over a correctly-refused action,
         // so the call site must consume what onConfirm returns. Asserted via a
         // thenable: `Promise.resolve(x).catch(...)` subscribes through `then`,
         // a bare `onConfirm(outcome)` statement never does.

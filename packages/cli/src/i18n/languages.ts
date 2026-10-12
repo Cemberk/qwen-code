@@ -124,7 +124,7 @@ function getMatchedLocaleTokenLength(
 
 /**
  * Resolves a language alias or locale ID to a supported canonical locale code.
- * Returns undefined for unsupported values so callers can preserve custom codes.
+ * Returns undefined for unsupported values.
  */
 export function resolveSupportedLanguage(
   input: string,

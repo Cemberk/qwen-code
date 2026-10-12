@@ -13,7 +13,7 @@ import { matches, nextFireTime, parseCron } from '../utils/cronParser.js';
 import { humanReadableCron } from '../utils/cronDisplay.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
 import { ToolNames } from '../tools/tool-names.js';
-import type { CronTaskDelivery, DurableCronTask } from './cronTasksFile.js';
+import type { DurableCronTask } from './cronTasksFile.js';
 import {
   addCronTask,
   CRON_TASKS_DISPLAY_PATH,
@@ -98,7 +98,6 @@ export interface CronJob {
   groupId?: string;
   /** Human-readable task label used to name a fresh per-run session. */
   name?: string;
-  delivery?: CronTaskDelivery;
   /** One-shot that was due while no owning session ran — fired late. */
   missed?: boolean;
   todoWorkChainId?: string;
@@ -1063,7 +1062,6 @@ export class CronScheduler {
             ...carrier,
             prompt: buildMissedCronNotification(runnable),
             missed: true,
-            delivery: undefined,
           });
           this.removeMissedFromDisk(runnable.map((t) => t.id));
         }
@@ -1658,7 +1656,6 @@ function durableTaskToJob(
     ...(task.modelServiceId ? { modelServiceId: task.modelServiceId } : {}),
     ...(task.groupId ? { groupId: task.groupId } : {}),
     ...(task.name ? { name: task.name } : {}),
-    ...(task.delivery && task.sessionId ? { delivery: task.delivery } : {}),
   };
 }
 
@@ -1673,7 +1670,6 @@ function jobToDurableTask(job: CronJob): DurableCronTask {
     ...(job.boundSessionId ? { sessionId: job.boundSessionId } : {}),
     ...(job.sessionMode ? { sessionMode: job.sessionMode } : {}),
     ...(job.name ? { name: job.name } : {}),
-    ...(job.delivery ? { delivery: job.delivery } : {}),
   };
 }
 

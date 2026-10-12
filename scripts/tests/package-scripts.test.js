@@ -219,18 +219,41 @@ describe('package scripts', () => {
       expect(result.stderr).toContain('has no packages section');
     });
 
-    it('accepts a git dependency pnpm keys by source instead of version', () => {
-      const resolved = 'git+https://github.com/example/git-dep.git#7ae66ab2';
+    it.each([
+      [
+        'git',
+        'git-dep@git+https://github.com/example/git-dep.git#7ae66ab2',
+        { type: 'git', repo: 'https://github.com/example/git-dep.git' },
+      ],
+      [
+        'tarball',
+        'tar-dep@https://example.com/tar-dep-1.0.0.tgz',
+        { tarball: 'https://example.com/tar-dep-1.0.0.tgz' },
+      ],
+      [
+        'hashed tarball',
+        'hashed-dep@https://example.com/hashed-dep-1.0.0.tgz',
+        {
+          tarball: 'https://example.com/hashed-dep-1.0.0.tgz',
+          integrity: 'sha512-AAAA',
+        },
+      ],
+      [
+        'directory',
+        'dir-dep@file:../dir-dep',
+        { type: 'directory', directory: '../dir-dep' },
+      ],
+      ['sha1-only', 'old-dep@1.0.0', { integrity: 'sha1-AAAA' }],
+    ])('rejects a %s resolution', (_kind, key, resolution) => {
       const result = runCheckLockfile((fixtureRoot) =>
         mutatePnpmLock(fixtureRoot, (lock) => {
-          lock.packages[`git-dep@${resolved}`] = {
-            resolution: { type: 'git' },
-          };
+          lock.packages[key] = { resolution };
         }),
       );
 
-      expect(result.status).toBe(0);
-      expect(result.stdout).toContain('pnpm lockfile check passed.');
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('not integrity-pinned registry packages');
+      expect(result.stderr).toContain(`- ${key}`);
     });
 
     it('fails when a registry package loses its integrity hash', () => {
@@ -241,7 +264,7 @@ describe('package scripts', () => {
       );
 
       expect(result.status).toBe(1);
-      expect(result.stderr).toContain('missing "resolution.integrity"');
+      expect(result.stderr).toContain('"resolution.integrity"');
       expect(result.stderr).toContain('- left-pad@1.3.0');
     });
   });
@@ -690,20 +713,20 @@ describe('package scripts', () => {
     },
   );
 
-  it('falls back to registry access when the pnpm store is incomplete', () => {
-    const binDir = mkdtempSync(path.join(tmpdir(), 'qwen-worktree-fallback-'));
+  it('fails without registry access when the pnpm store is incomplete', () => {
+    const binDir = mkdtempSync(path.join(tmpdir(), 'qwen-worktree-offline-'));
     const logFile = path.join(binDir, 'corepack.log');
 
     try {
       if (process.platform === 'win32') {
         writeFileSync(
           path.join(binDir, 'corepack.cmd'),
-          '@echo %QWEN_SKIP_PREPARE% %QWEN_SKIP_NOTICE_GENERATION% %*>>"%WORKTREE_SETUP_LOG%"\r\n@if "%4"=="--offline" exit /b 1\r\n',
+          '@echo %COREPACK_ENABLE_NETWORK% %*>>"%WORKTREE_SETUP_LOG%"\r\n@exit /b 1\r\n',
         );
       } else {
         writeFileSync(
           path.join(binDir, 'corepack'),
-          '#!/bin/sh\necho "$QWEN_SKIP_PREPARE $QWEN_SKIP_NOTICE_GENERATION $*" >> "$WORKTREE_SETUP_LOG"\n[ "$4" != "--offline" ]\n',
+          '#!/bin/sh\necho "$COREPACK_ENABLE_NETWORK $*" >> "$WORKTREE_SETUP_LOG"\nexit 1\n',
         );
         chmodSync(path.join(binDir, 'corepack'), 0o755);
       }
@@ -714,24 +737,19 @@ describe('package scripts', () => {
         {
           cwd: root,
           encoding: 'utf8',
-          // `PATH` holds only the stub directory, so the fallback stays pinned
-          // as needing no ambient tooling: with no git to resolve a repository
-          // the hook step reports itself skipped rather than failing an install
-          // that succeeded.
           env: {
             ...process.env,
-            HUSKY: '1',
+            COREPACK_ENABLE_NETWORK: '1',
             PATH: binDir,
             WORKTREE_SETUP_LOG: logFile,
           },
         },
       );
 
-      expect(result.status).toBe(0);
-      expect(result.stdout).toContain('skipping Husky');
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('never contacts the package registry');
       expect(readFileSync(logFile, 'utf8').trim().split(/\r?\n/)).toEqual([
-        '1 1 pnpm install --frozen-lockfile --offline',
-        '1 1 pnpm install --frozen-lockfile --prefer-offline',
+        '0 pnpm install --frozen-lockfile --offline',
       ]);
     } finally {
       rmSync(binDir, { recursive: true, force: true });

@@ -9,11 +9,7 @@ import {
   startFakeOpenAIServer,
   type FakeOpenAIServer,
 } from '../fake-openai-server.js';
-import {
-  applyContainerSandboxNoProxy,
-  fakeServerHostOptions,
-  TestRig,
-} from '../test-helper.js';
+import { TestRig } from '../test-helper.js';
 import {
   ABOUT_FIELD,
   InteractiveSession,
@@ -24,11 +20,9 @@ describe('Command output visibility', () => {
   let rig: TestRig;
   let server: FakeOpenAIServer | undefined;
   let session: InteractiveSession | undefined;
-  let restoreNoProxy: () => void;
 
   beforeEach(() => {
     rig = new TestRig();
-    restoreNoProxy = applyContainerSandboxNoProxy();
   });
 
   afterEach(async () => {
@@ -36,7 +30,6 @@ describe('Command output visibility', () => {
     session = undefined;
     await server?.close();
     server = undefined;
-    restoreNoProxy();
     await rig.cleanup();
   });
 
@@ -57,10 +50,9 @@ describe('Command output visibility', () => {
         },
       },
     });
-    server = await startFakeOpenAIServer(
-      () => ({ content: 'VISIBILITY_UNEXPECTED_REQUEST' }),
-      fakeServerHostOptions(),
-    );
+    server = await startFakeOpenAIServer(() => ({
+      content: 'VISIBILITY_UNEXPECTED_REQUEST',
+    }));
     session = await InteractiveSession.start({
       cwd: rig.testDir!,
       // The readiness string and the field label below are English UI strings,

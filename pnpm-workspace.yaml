@@ -20,6 +20,12 @@ nodeLinker: 'hoisted'
 packageImportMethod: 'clone-or-copy'
 linkWorkspacePackages: true
 verifyDepsBeforeRun: false
+# Packages published less than a day ago are not installed (minutes). pnpm 11
+# defaults to the same value; it is set here so the gate does not depend on
+# the pnpm version.
+minimumReleaseAge: 1440
+# pnpm would otherwise query the registry for newer pnpm releases.
+updateNotifier: false
 fetchRetries: 5
 fetchRetryMintimeout: 20000
 fetchRetryMaxtimeout: 120000
@@ -56,7 +62,8 @@ overrides:
   '@agentclientprotocol/sdk>zod': '3.25.76'
 
 allowBuilds:
-  '@google/genai': true
+  # Type-only devDependency; its install script is never needed.
+  '@google/genai': false
   '@qwen-code/qwen-code-core@file:packages/core': true
   esbuild: true
   # Darwin-only optional dependency whose install script is only
@@ -67,6 +74,5 @@ allowBuilds:
   # tailwindcss's nested chokidar fall back to fs.watch. All of them are
   # build and test tooling, never shipped runtime.
   fsevents: false
-  keytar: true
   msw: true
   protobufjs: true

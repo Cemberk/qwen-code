@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { fakeServerHostOptions, TestRig } from './test-helper.js';
+import { TestRig } from './test-helper.js';
 import { fakeToolCall, startFakeOpenAIServer } from './fake-openai-server.js';
 import type { FakeOpenAIServer } from './fake-openai-server.js';
 import {
@@ -33,11 +33,8 @@ import { existsSync } from 'node:fs';
 describe('skill hooks fire on both invocation paths', () => {
   let rig: TestRig;
   let fakeServer: FakeOpenAIServer;
-  let restoreNoProxy: (() => void) | undefined;
 
   afterEach(async () => {
-    restoreNoProxy?.();
-    restoreNoProxy = undefined;
     await fakeServer?.close();
     await rig?.cleanup();
   });
@@ -81,9 +78,9 @@ describe('skill hooks fire on both invocation paths', () => {
         };
       }
       return { content: 'done' };
-    }, fakeServerHostOptions());
+    });
 
-    restoreNoProxy = stubFakeModelEnv(rig, fakeServer);
+    stubFakeModelEnv(rig, fakeServer);
 
     const { ptyProcess } = rig.runInteractive(
       ...fakeModelLaunchArgs(fakeServer),

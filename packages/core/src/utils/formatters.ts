@@ -14,10 +14,9 @@ const roundedTo = (value: number, digits: number): number =>
 
 /**
  * Renders a byte count with a human-readable unit. This is the one
- * implementation: `packages/cli/src/ui/utils/formatters.ts` and
- * `packages/cli/src/serve/env-snapshot.ts` re-use it instead of keeping their
- * own copies, so the same byte count cannot format differently depending on
- * which code path prints it.
+ * implementation: `packages/cli/src/ui/utils/formatters.ts` re-uses it instead
+ * of keeping its own copy, so the same byte count cannot format differently
+ * depending on which code path prints it.
  */
 export const formatMemoryUsage = (bytes: number): string => {
   // The unit is chosen from the rounded figure rather than the raw byte

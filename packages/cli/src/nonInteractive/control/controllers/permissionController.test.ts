@@ -453,6 +453,46 @@ describe('PermissionController', () => {
     });
   });
 
+  it.each(['auto-edit', 'auto', 'yolo'])(
+    'cancels a call awaiting approval without an SDK host in %s mode',
+    async (mode) => {
+      const context = createContext();
+      vi.mocked(context.config.getInputFormat).mockReturnValue('text');
+      context.permissionMode = mode as never;
+      const controller = new PermissionController(
+        context,
+        createRegistry(),
+        'PermissionController',
+      );
+      const onConfirm = vi.fn();
+
+      controller.getToolCallUpdateCallback()([
+        {
+          status: 'awaiting_approval',
+          request: {
+            callId: `tool-call-shell-${mode}`,
+            name: 'run_shell_command',
+            args: { command: 'rm -rf build' },
+          },
+          confirmationDetails: {
+            type: 'exec',
+            title: 'Run command',
+            command: 'rm -rf build',
+            rootCommand: 'rm',
+            onConfirm,
+          },
+        } as never,
+      ]);
+
+      await vi.waitFor(() => {
+        expect(onConfirm).toHaveBeenCalledWith(ToolConfirmationOutcome.Cancel);
+      });
+      expect(onConfirm).not.toHaveBeenCalledWith(
+        ToolConfirmationOutcome.ProceedOnce,
+      );
+    },
+  );
+
   it('explains when ask_user_question has no interactive SDK', async () => {
     const context = createContext();
     vi.mocked(context.config.getInputFormat).mockReturnValue('text');

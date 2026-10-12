@@ -23,9 +23,3 @@ Use the `/stats` command to see your cached token savings:
 - Example: "10,500 (90.4%) of input tokens were served from the cache, reducing costs."
 
 This information is only displayed when the server reports cached tokens.
-
-## Example Stats Display
-
-![Qwen Code Stats Display](https://img.alicdn.com/imgextra/i3/O1CN01F1yzRs1juyZu63jdS_!!6000000004609-2-tps-1038-738.png)
-
-The above image shows an example of the `/stats` command output, highlighting the cached token savings information.

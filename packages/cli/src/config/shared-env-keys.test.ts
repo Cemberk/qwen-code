@@ -200,6 +200,26 @@ describe('PROJECT_ENV_HARDCODED_EXCLUSIONS', () => {
   // useLaunchEditor spawn these like the blocked GIT_EDITOR; CPython executes
   // PYTHONSTARTUP at interactive startup; the CLI execs $BROWSER via
   // openBrowserSecurely. Each is an exec redirect from a project .env.
+  it('excludes the OpenTUI native library location', () => {
+    expect(isHardcodedProjectEnvExclusion('OTUI_ASSET_ROOT')).toBe(true);
+  });
+
+  it('excludes proxy routing in every spelling', () => {
+    for (const key of [
+      'HTTP_PROXY',
+      'http_proxy',
+      'HTTPS_PROXY',
+      'https_proxy',
+      'ALL_PROXY',
+      'all_proxy',
+      'NO_PROXY',
+      'no_proxy',
+      'NODE_USE_ENV_PROXY',
+    ]) {
+      expect.soft(isHardcodedProjectEnvExclusion(key), key).toBe(true);
+    }
+  });
+
   it('excludes the editor, startup, and browser exec-redirect keys', () => {
     for (const key of ['VISUAL', 'EDITOR', 'PYTHONSTARTUP', 'BROWSER']) {
       expect(PROJECT_ENV_HARDCODED_EXCLUSIONS).toContain(key);

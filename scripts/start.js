@@ -71,7 +71,7 @@ try {
 if (process.env.DEBUG && !sandboxCommand) {
   if (process.env.SANDBOX) {
     const port = process.env.DEBUG_PORT || '9229';
-    nodeArgs.push(`--inspect-brk=0.0.0.0:${port}`);
+    nodeArgs.push(`--inspect-brk=127.0.0.1:${port}`);
   } else {
     nodeArgs.push('--inspect-brk');
   }

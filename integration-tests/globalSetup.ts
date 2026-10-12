@@ -10,7 +10,6 @@ if (process.env['NO_COLOR'] !== undefined) {
 }
 
 import {
-  copyFile,
   mkdir,
   readdir,
   rm,
@@ -33,10 +32,6 @@ const integrationTestsDir = join(rootDir, '.integration-tests');
 let runDir = ''; // Make runDir accessible in teardown
 let sdkE2eRunDir = ''; // SDK E2E test run directory
 
-// Resolved before the redirect below, so setup() can still find the host's
-// real global qwen dir.
-const hostQwenDir = Storage.getGlobalQwenDir();
-
 // These suites spawn the real CLI, which reads the global qwen dir for
 // settings, saved memories, tool-usage history, and extensions. Inherited
 // from the host, that dir is live user state and the run is only as
@@ -49,11 +44,12 @@ const hostQwenDir = Storage.getGlobalQwenDir();
 // and the turn under test got the trailing text instead — 42 reds across
 // permission-control and tool-control that no hosted runner could reproduce.
 //
-// Give the run its own global qwen dir, seeded with the host's configuration
-// but none of its accumulated files (see carryOverHostConfig). It lives
-// outside the worktree so that copy never lands in a tracked tree. A caller
-// that pins QWEN_HOME — globalSetup.test.ts, or someone reproducing against
-// real state — keeps it, and owns its lifecycle.
+// Give the run its own empty global qwen dir. Nothing is copied from the
+// host's, so the host's settings and credentials never reach the temp dir;
+// suites that need a model point the CLI at the fake OpenAI server or take it
+// from the environment. A caller that pins QWEN_HOME — globalSetup.test.ts,
+// or someone reproducing against real state — keeps it, and owns its
+// lifecycle.
 const HERMETIC_HOME_PREFIX = 'qwen-e2e-home-';
 const hermeticQwenHome = join(
   tmpdir(),
@@ -71,37 +67,6 @@ const memoryFilePath = join(
   DEFAULT_CONTEXT_FILENAME,
 );
 let originalMemoryContent: string | null = null;
-
-/**
- * Carries the host's configuration — and only that — into the hermetic global
- * qwen dir.
- *
- * The suites that talk to a real model rely on ambient auth. CI supplies it
- * through the environment, but a developer's typically lives in
- * `~/.qwen/settings.json`: as credentials under `security.auth`, as provider
- * keys in the `env` block, or as routing in `model` / `modelProviders`. There
- * is no subset of those that is safe to carry alone, so the file goes across
- * whole and a developer's setup keeps working exactly as it does today.
- *
- * What deliberately does not come across is everything the dir accumulates as
- * files: saved memories, tool-usage history, extensions, skills, commands.
- * That is the state a run has no business depending on, and the state that
- * made these suites fail. Carrying settings.json forward keeps whatever the
- * persistent pool relies on for credentials — its `~/.qwen` is populated,
- * which is how the memories got there — so this narrows the blast radius to
- * the files without gambling on where CI's auth comes from.
- */
-async function carryOverHostConfig() {
-  for (const fileName of ['settings.json', 'oauth_creds.json']) {
-    await copyFile(
-      join(hostQwenDir, fileName),
-      join(hermeticQwenHome, fileName),
-    ).catch(() => {
-      // Absent on CI and on a machine that has never run the CLI, and absent
-      // for whichever auth type the developer is not using.
-    });
-  }
-}
 
 /**
  * Removes scratch homes an earlier run could not. Teardown's cleanup is
@@ -139,7 +104,6 @@ async function sweepLeakedQwenHomes() {
 export async function setup() {
   if (ownsQwenHome) {
     await mkdir(hermeticQwenHome, { recursive: true });
-    await carryOverHostConfig();
     await sweepLeakedQwenHomes();
   }
 
@@ -233,7 +197,7 @@ export async function teardown() {
   }
 
   // Not gated on KEEP_OUTPUT: this is a scratch dir rather than a test
-  // artifact, and it holds a copy of the developer's credentials.
+  // artifact.
   if (ownsQwenHome) {
     await removeScratchDir(hermeticQwenHome);
   }

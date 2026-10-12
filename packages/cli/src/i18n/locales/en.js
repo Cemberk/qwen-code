@@ -784,7 +784,6 @@ export default {
   'This extension will run the following MCP servers:':
     'This extension will run the following MCP servers:',
   local: 'local',
-  remote: 'remote',
   'This extension will add the following commands: {{commands}}.':
     'This extension will add the following commands: {{commands}}.',
   'This extension will append info to your QWEN.md context using {{fileName}}':
@@ -879,7 +878,7 @@ export default {
   '(workspace)': '(workspace)',
   '(user)': '(user)',
   '[not set]': '[not set]',
-  '[value stored in keychain]': '[value stored in keychain]',
+  '[value stored in encrypted file]': '[value stored in encrypted file]',
   'Value:': 'Value:',
   'Manage extension settings': 'Manage extension settings',
   'Manage extension settings.': 'Manage extension settings.',
@@ -1188,8 +1187,6 @@ export default {
   'Invalid command. Available subcommands:':
     'Invalid command. Available subcommands:',
   'Available subcommands:': 'Available subcommands:',
-  'To request additional UI language packs, please open an issue on GitHub.':
-    'To request additional UI language packs, please open an issue on GitHub.',
   'Available options:': 'Available options:',
   'Set UI language to {{name}}': 'Set UI language to {{name}}',
 
@@ -1280,7 +1277,6 @@ export default {
     'Add MCP servers to your settings to get started.',
   'Run qwen --debug to see error logs': 'Run qwen --debug to see error logs',
 
-  // MCP OAuth Authentication
   // MCP Tool List
   'No tools available for this server.': 'No tools available for this server.',
   destructive: 'destructive',
@@ -1507,21 +1503,12 @@ export default {
   'Overall Goal:': 'Overall Goal:',
   'You must connect a provider to proceed. Press Ctrl+C again to exit.':
     'You must connect a provider to proceed. Press Ctrl+C again to exit.',
-  'For individual developers \u00B7 Pay per model call \u00B7 5-hour/weekly quotas':
-    'For individual developers \u00B7 Pay per model call \u00B7 5-hour/weekly quotas',
-  Subscribe: 'Subscribe',
-  'Select Subscription Plan': 'Select Subscription Plan',
-  'For teams/companies \u00B7 Credits deducted by token usage \u00B7 Dedicated API key and base URL':
-    'For teams/companies \u00B7 Credits deducted by token usage \u00B7 Dedicated API key and base URL',
-  'Bring your own API key': 'Bring your own API key',
   'Missing API key for OpenAI-compatible auth. Set settings.security.auth.apiKey, or set the {{envKeyHint}} environment variable.':
     'Missing API key for OpenAI-compatible auth. Set settings.security.auth.apiKey, or set the {{envKeyHint}} environment variable.',
   'Missing API key for OpenAI-compatible auth. Set the {{envKeyHint}} environment variable.':
     'Missing API key for OpenAI-compatible auth. Set the {{envKeyHint}} environment variable.',
   'Failed to authenticate. Message: {{message}}':
     'Failed to authenticate. Message: {{message}}',
-  'Authenticated successfully with {{authType}} credentials.':
-    'Authenticated successfully with {{authType}} credentials.',
   // ============================================================================
   // Dialogs - Model
   // ============================================================================
@@ -1650,7 +1637,6 @@ export default {
   '{{count}} prompt': '{{count}} prompt',
   '{{count}} prompts': '{{count}} prompts',
   '(from {{extensionName}})': '(from {{extensionName}})',
-  OAuth: 'OAuth',
   'tools and prompts will appear when ready':
     'tools and prompts will appear when ready',
   '{{count}} tools cached': '{{count}} tools cached',
@@ -1675,8 +1661,6 @@ export default {
     'Use /compress when the conversation gets long to summarize history and free up context.',
   'Start a fresh idea with /clear or /new; the previous session stays available in history.':
     'Start a fresh idea with /clear or /new; the previous session stays available in history.',
-  'Use /bug to submit issues to the maintainers when something goes off.':
-    'Use /bug to submit issues to the maintainers when something goes off.',
   'Switch auth type quickly with /auth.':
     'Switch auth type quickly with /auth.',
   'You can run any shell commands from Qwen Code using ! (e.g. !ls).':
@@ -2011,11 +1995,6 @@ export default {
   'TOML format will continue to work for now, but migration is recommended.':
     'TOML format will continue to work for now, but migration is recommended.',
 
-  // ============================================================================
-  // Extensions - Explore Command
-  // ============================================================================
-  'Open extensions page in your browser':
-    'Open extensions page in your browser',
   'Retrying in {{seconds}} seconds… (attempt {{attempt}}/{{maxRetries}})':
     'Retrying in {{seconds}} seconds… (attempt {{attempt}}/{{maxRetries}})',
   'Press Ctrl+Y to retry': 'Press Ctrl+Y to retry',
@@ -2024,11 +2003,9 @@ export default {
   'to queue for the next turn': 'to queue for the next turn',
 
   // ============================================================================
-  // Coding Plan Authentication
+  // API Key Authentication
   // ============================================================================
   'API key cannot be empty.': 'API key cannot be empty.',
-  'API key is stored in settings.env. You can migrate it to a .env file for better security.':
-    'API key is stored in settings.env. You can migrate it to a .env file for better security.',
 
   // ============================================================================
   // Custom API Key Configuration
@@ -2042,16 +2019,7 @@ export default {
   // Auth Dialog - View Titles and Labels
   // ============================================================================
   Custom: 'Custom',
-  'Choose based on where your account is registered':
-    'Choose based on where your account is registered',
 
-  // ============================================================================
-  // Coding Plan International Updates
-  // ============================================================================
-  'New model configurations are available for {{region}}. Update now?':
-    'New model configurations are available for {{region}}. Update now?',
-  '{{region}} configuration updated successfully. Model switched to "{{model}}".':
-    '{{region}} configuration updated successfully. Model switched to "{{model}}".',
   // ============================================================================
   // Context Usage Component
   // ============================================================================
@@ -2088,10 +2056,6 @@ export default {
     'Show context window usage breakdown. Use "/context detail" for per-item breakdown.',
   'body loaded': 'body loaded',
   memory: 'memory',
-  '{{region}} configuration updated successfully.':
-    '{{region}} configuration updated successfully.',
-  'Authenticated successfully with {{region}}. API key and model configs saved to settings.json.':
-    'Authenticated successfully with {{region}}. API key and model configs saved to settings.json.',
   'Type something...': 'Type something...',
   Submit: 'Submit',
   'Submit answers': 'Submit answers',
@@ -2103,10 +2067,6 @@ export default {
     '↑/↓: Navigate | ←/→: Switch tabs | Enter: Select',
   '↑/↓: Navigate | Enter: Select | Esc: Cancel':
     '↑/↓: Navigate | Enter: Select | Esc: Cancel',
-  'Show current authentication status': 'Show current authentication status',
-  'Authentication completed successfully.':
-    'Authentication completed successfully.',
-  '中国 (China)': '中国 (China)',
   'Get or set any setting by dot-path key':
     'Get or set any setting by dot-path key',
   'Invalid boolean value: "{{value}}". Use "true" or "false".':
@@ -2138,31 +2098,6 @@ export default {
     'Setting tools.approvalMode to "yolo" is blocked via /config for security reasons. Edit settings.json directly if you understand the risks.',
   '(empty)': '(empty)',
   Global: 'Global',
-  '\n=== Authentication Status ===\n': '\n=== Authentication Status ===\n',
-  'Run one of the following commands to get started:\n':
-    'Run one of the following commands to get started:\n',
-  'Or simply run:': 'Or simply run:',
-  '  qwen auth                - Interactive authentication setup\n':
-    '  qwen auth                - Interactive authentication setup\n',
-  '  Type: Free tier (discontinued 2026-04-15)':
-    '  Type: Free tier (discontinued 2026-04-15)',
-  '  Limit: No longer available': '  Limit: No longer available',
-  '  Region: {{region}}': '  Region: {{region}}',
-  '  Current Model: {{model}}': '  Current Model: {{model}}',
-  '  Config Version: {{version}}': '  Config Version: {{version}}',
-  '  Status: API key configured\n': '  Status: API key configured\n',
-  '  Issue: API key not found in environment or settings\n':
-    '  Issue: API key not found in environment or settings\n',
-  '  Run `qwen auth coding-plan` to re-configure.\n':
-    '  Run `qwen auth coding-plan` to re-configure.\n',
-  '  Status: Configured\n': '  Status: Configured\n',
-  'Failed to check authentication status: {{error}}':
-    'Failed to check authentication status: {{error}}',
-  'Select an option:': 'Select an option:',
-  'Raw mode not available. Please run in an interactive terminal.':
-    'Raw mode not available. Please run in an interactive terminal.',
-  '(Use ↑ ↓ arrows to navigate, Enter to select, Ctrl+C to exit)\n':
-    '(Use ↑ ↓ arrows to navigate, Enter to select, Ctrl+C to exit)\n',
   'Switch to plan mode or exit plan mode':
     'Switch to plan mode or exit plan mode',
   'Set how hard reasoning-capable models think ({{tiers}}); mapped and clamped per provider.':

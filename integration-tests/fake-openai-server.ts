@@ -88,10 +88,7 @@ export type FakeOpenAIServer = {
   close: () => Promise<void>;
 };
 
-export type FakeOpenAIServerOptions = (
-  | { listenHost?: undefined; baseUrlHost?: undefined }
-  | { listenHost: string; baseUrlHost: string }
-) & {
+export type FakeOpenAIServerOptions = {
   keepAlive?: boolean;
 };
 
@@ -200,7 +197,7 @@ export async function startFakeOpenAIServer(
     };
     server.once('error', onError);
     server.once('listening', onListening);
-    server.listen(0, options.listenHost ?? '127.0.0.1');
+    server.listen(0, '127.0.0.1');
   });
 
   const address = server.address();
@@ -210,9 +207,7 @@ export async function startFakeOpenAIServer(
 
   let closePromise: Promise<void> | undefined;
   return {
-    baseUrl: `http://${options.baseUrlHost ?? '127.0.0.1'}:${
-      (address as AddressInfo).port
-    }/v1`,
+    baseUrl: `http://127.0.0.1:${(address as AddressInfo).port}/v1`,
     requests,
     close: () => (closePromise ??= closeServer(server)),
   };

@@ -28,6 +28,7 @@ import {
 import { stripToolResultImages } from '../services/visionBridge/tool-result-vision-bridge.js';
 import { OverlayFs } from './overlayFs.js';
 import { evaluateToolCall, rewritePathArgs } from './speculationToolGate.js';
+import { evaluatePermissionFlow } from '../core/permissionFlow.js';
 import {
   getCacheSafeParams,
   createForkedChat,
@@ -396,6 +397,20 @@ async function runSpeculativeLoop(
           }
 
           const invocation = tool.build(args);
+          // A read the user would be asked about (outside the workspace, or
+          // matching an ask/deny rule) ends speculation instead of running.
+          if (gate.action === 'allow') {
+            const { finalPermission } = await evaluatePermissionFlow(
+              config,
+              invocation,
+              name,
+              args,
+            );
+            if (finalPermission !== 'allow') {
+              hitBoundary = true;
+              break;
+            }
+          }
           const result = await invocation.execute(
             state.abortController!.signal,
           );

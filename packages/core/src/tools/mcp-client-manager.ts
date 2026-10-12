@@ -1030,6 +1030,14 @@ export class McpClientManager {
         throw new Error(`MCP server '${serverName}' is pending approval.`);
       }
 
+      // Discovery never starts servers in an untrusted folder; neither does a
+      // resource read.
+      if (!this.cliConfig.isTrustedFolder()) {
+        throw new Error(
+          `MCP server '${serverName}' cannot start in an untrusted folder.`,
+        );
+      }
+
       const sdkCallback = isSdkMcpServerConfig(serverConfig)
         ? this.sendSdkMcpMessage
         : undefined;

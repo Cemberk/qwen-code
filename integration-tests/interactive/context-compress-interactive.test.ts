@@ -9,12 +9,7 @@ import {
   startFakeOpenAIServer,
   type FakeOpenAIServer,
 } from '../fake-openai-server.js';
-import {
-  TestRig,
-  type,
-  applyContainerSandboxNoProxy,
-  fakeServerHostOptions,
-} from '../test-helper.js';
+import { TestRig, type } from '../test-helper.js';
 
 // Keep fake-server request indexes structural: seed request 0 is followed by
 // the /compress side-query at request 1, without a memory extractor in between.
@@ -32,17 +27,14 @@ const SUITE_SETTINGS = {
 describe('Interactive Mode', () => {
   let rig: TestRig;
   let fakeServer: FakeOpenAIServer | undefined;
-  let restoreNoProxy: () => void;
 
   beforeEach(() => {
     rig = new TestRig();
-    restoreNoProxy = applyContainerSandboxNoProxy();
   });
 
   afterEach(async () => {
     await fakeServer?.close();
     fakeServer = undefined;
-    restoreNoProxy();
     await rig.cleanup();
   });
 
@@ -50,15 +42,12 @@ describe('Interactive Mode', () => {
     // The seed must fit the 80x30 pty viewport: under the OpenTUI renderer
     // off-screen rows never reach the pty stream waitForText polls, so a
     // seed longer than the viewport hides its own end marker (#11191).
-    fakeServer = await startFakeOpenAIServer(
-      ({ requestIndex }) => ({
-        content:
-          requestIndex === 0
-            ? `${'history '.repeat(100)} Einstein`
-            : '<state_snapshot>Compressed history focused on Einstein.</state_snapshot>',
-      }),
-      fakeServerHostOptions(),
-    );
+    fakeServer = await startFakeOpenAIServer(({ requestIndex }) => ({
+      content:
+        requestIndex === 0
+          ? `${'history '.repeat(100)} Einstein`
+          : '<state_snapshot>Compressed history focused on Einstein.</state_snapshot>',
+    }));
     return rig.runInteractive(
       '--auth-type',
       'openai',

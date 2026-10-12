@@ -36,8 +36,7 @@ When disabled:
 - an attempted call returns an actionable error naming the opt-in setting;
 - the default system prompt omits the Todo task-management section and all
   `todo_write` guidance while retaining adaptive planning guidance;
-- the Agent tool omits `todo_id` from its model-facing schema and usage notes;
-- the bundled new-application workflow does not require an unavailable tool.
+- the Agent tool omits `todo_id` from its model-facing schema and usage notes.
 
 When enabled, the existing Todo implementation remains unchanged. Persistence,
 hooks, active-Todo reminders, ACP rendering, and the daemon Todo Stop Guard

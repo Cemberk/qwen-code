@@ -19,7 +19,7 @@ Brief the agent like a smart colleague: make the delegated task, boundaries, and
 - If you need a short response, say so explicitly.
 - For lookups, provide the exact target. For investigations, provide the actual question rather than an over-prescribed sequence of steps.
 - Provide clear, detailed prompts so the agent can work autonomously and return exactly the information you need.
-- Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent.
+- Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, etc.), since it is not aware of the user's intent.
 
 Terse command-style prompts produce shallow, generic work.
 

@@ -1,6 +1,6 @@
 ---
 name: extension-creator
-description: Create, scaffold, customize, validate, and locally test Qwen Code extensions. Use when the user wants a new Qwen Code extension, needs help choosing an extension template, wants to add QWEN.md context, commands, skills, agents, MCP servers, settings, hooks, channels, or LSP servers, or asks how to link and test an extension locally. Invoke with `/extension-creator` followed by an extension path and optional template name.
+description: Create, scaffold, customize, validate, and locally test Qwen Code extensions. Use when the user wants a new Qwen Code extension, needs help choosing an extension template, wants to add QWEN.md context, commands, skills, agents, MCP servers, settings, hooks, or LSP servers, or asks how to link and test an extension locally. Invoke with `/extension-creator` followed by an extension path and optional template name.
 argument-hint: '<extension-path> [template]'
 allowedTools:
   - read_file
@@ -66,8 +66,8 @@ Use this procedure before every `qwen extensions link` or re-link attempt.
 1. If `qwen extensions list` already shows the manifest `name` and the user only
    needs validation, do not run link again; continue with the After Linking
    verification.
-2. Summarize default context files, `settings`, `hooks`, `channels`, and
-   `lspServers` because the trust prompt does not show all of that detail.
+2. Summarize default context files, `settings`, `hooks`, and `lspServers`
+   because the trust prompt does not show all of that detail.
 3. Summarize the full consent surface the prompt would show: MCP servers,
    commands, explicit or default context files, skills, and agents.
 4. Ask the user whether to approve linking before running
@@ -99,11 +99,6 @@ If the request names several capabilities, use `starter` only when the combined
 example is useful; otherwise scaffold the closest template and add the missing
 folders by hand.
 
-The `mcp-server` and `starter` templates can include demonstration MCP code with
-outbound network access. Remove or replace demo network calls unless the user
-asked for that behavior. If network access is intentional, summarize it during
-the trust review and require explicit approval.
-
 ## Extension Shape
 
 Keep `qwen-extension.json` at the extension root. Common runtime-relevant Qwen
@@ -123,7 +118,7 @@ Code extension fields include:
   traversal, or `$`-prefixed environment references.
 - `mcpServers` - MCP server startup config. Treat `trust` as a
   security-sensitive field: do not add it to avoid review prompts, and if it is
-  already present, audit it with the server command or endpoint and require
+  already present, audit it with the server command and require
   explicit user approval before keeping it.
 - `settings` - array of user-prompted configuration entries. Each entry uses
   `name`, `description`, `envVar`, and optional `sensitive`. Set
@@ -142,13 +137,6 @@ Code extension fields include:
   strings. Use `${CLAUDE_PLUGIN_ROOT}` for the extension root in file-based
   hooks; `${extensionPath}`, `${workspacePath}`, `${/}`, and `${pathSeparator}`
   are not substituted there.
-- `channels` - map of channel adapters. Each value uses `entry` for the
-  compiled JavaScript entry point and optional `displayName`.
-  `channels.<type>.entry` must be a path relative to the extension root; do not
-  use `${extensionPath}` or other path variables in this field because the
-  runtime already prepends the extension path during resolution.
-  `channels.<type>.entry` must import a module exporting `plugin` with a
-  matching `channelType` and a `createChannel` function.
 - `lspServers` - inline `.lsp.json`-style object or JSON path. It only applies
   when LSP support is enabled. When `lspServers` is a JSON file path, the loaded
   file resolves path variables such as `${extensionPath}` and `${workspacePath}`;
@@ -165,8 +153,8 @@ separator only in fields where hydrated paths are expected, such as
 for `${extensionPath}`. Environment variables such as `${HOME}` and `$HOME` are
 also resolved by the runtime, so avoid unintended `$`-prefixed references in
 string fields. Do not use path variables in fields this skill marks as
-relative-only, especially `channels.<type>.entry`, `contextFileName`, `hooks`
-string paths, and `lspServers` JSON paths. For example:
+relative-only, especially `contextFileName`, `hooks` string paths, and
+`lspServers` JSON paths. For example:
 `"args": ["${extensionPath}${/}dist${/}server.js"]`.
 
 For external hook files, use `${CLAUDE_PLUGIN_ROOT}` in hook commands because
@@ -194,7 +182,7 @@ for those resources.
 
 Whether the path is pre-existing or freshly scaffolded, review
 `qwen-extension.json` before linking the extension. Inspect extension execution
-fields such as `hooks`, `mcpServers`, `channels`, and `lspServers`. These
+fields such as `hooks`, `mcpServers`, and `lspServers`. These
 fields can execute arbitrary code. Flag suspicious command values such as
 network downloads, piped shells, or encoded payloads. In `contextFileName`,
 reject absolute paths, `..` traversal, and
@@ -204,7 +192,7 @@ external target after you describe the risk. In `settings`, inspect each
 `LD_PRELOAD`, `PATH`, or `DYLD_INSERT_LIBRARIES`. In `mcpServers`, inspect
 `trust`, local execution fields, and any secret-bearing value that uses
 `$`-prefixed environment expansion. Require explicit user approval for `trust`
-or credential forwarding. In `hooks`, `channels`, and `lspServers`, also inspect
+or credential forwarding. In `hooks` and `lspServers`, also inspect
 `env` or equivalent environment configuration for process-control variables,
 and inspect `cwd` for paths outside the extension root. Describe the concern to
 the user and ask whether to proceed.
@@ -246,8 +234,7 @@ visible in the current session.
 3. Run the relevant validation again. If it fails, stop and report the
    error to the user; do not continue to re-checking, restarting, uninstalling,
    or re-linking until the user confirms how to proceed.
-4. Re-run the Before Handoff checklist. For compiled templates, perform channel
-   `entry` checks once the build output exists.
+4. Re-run the Before Handoff checklist.
 5. Restart Qwen Code if the updated extension behavior is not visible in the
    current session.
 6. If the update is still not picked up after restart, run
@@ -274,7 +261,7 @@ visible in the current session.
   symlinked root as safe just because its children are contained by the resolved
   target; stop unless the user explicitly approves the resolved target.
 - Confirm referenced folders or files exist when `contextFileName`, `commands`,
-  `skills`, `agents`, `mcpServers`, `hooks`, `channels`, or `lspServers` are
+  `skills`, `agents`, `mcpServers`, `hooks`, or `lspServers` are
   configured.
 - Validate external JSON files referenced by `hooks`, default
   `hooks/hooks.json`, and `lspServers` before linking, for example with the same
@@ -298,13 +285,5 @@ visible in the current session.
   path variables such as `${extensionPath}` and `${/}` before checking
   existence. For compiled templates, perform this check only after the build has
   produced the referenced files.
-- For `channels` in compiled templates, after trust review and build, verify
-  the `entry` file exists, then read it and inspect top-level code for side
-  effects such as network access, process environment exfiltration, file system
-  mutation, child process execution, or hidden imports that perform those
-  actions. Confirm it statically exports a `plugin` object with the expected
-  `channelType` and a `createChannel` function. Do not dynamically import the
-  module because import executes top-level code before the user has approved the
-  extension.
 - Keep the scaffold focused on the requested capability; do not add folders or
   build tooling beyond what the requested capabilities require.

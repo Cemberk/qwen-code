@@ -863,7 +863,7 @@ describe('mcp reconnect command', () => {
       );
     });
 
-    it('defaults to trusted when workspace trust is undecided', async () => {
+    it('treats undecided workspace trust as untrusted, like a session', async () => {
       mockedLoadSettings.mockReturnValue({
         merged: {
           mcpServers: {
@@ -883,7 +883,7 @@ describe('mcp reconnect command', () => {
 
       expect(MockedConfig).toHaveBeenCalledWith(
         expect.objectContaining({
-          trustedFolder: true,
+          trustedFolder: false,
         }),
       );
     });

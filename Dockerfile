@@ -47,12 +47,9 @@ ENV CLI_VERSION=$CLI_VERSION_ARG
 RUN apt-get update && apt-get install -y --no-install-recommends \
   python3 \
   man-db \
-  curl \
-  dnsutils \
   less \
   jq \
   bc \
-  gh \
   git \
   unzip \
   rsync \
@@ -60,7 +57,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   procps \
   psmisc \
   lsof \
-  socat \
   ca-certificates \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*

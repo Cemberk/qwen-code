@@ -517,8 +517,9 @@ describe('runAutoMemoryExtractionByAgent', () => {
 
   it('confines the extraction agent reads to the managed memory roots', async () => {
     // The inherited history is untrusted free text, and this agent runs under
-    // YOLO, so the task prompt's "do not inspect unrelated files" cannot be the
-    // only thing standing between a prompt-injected instruction and
+    // YOLO when the session does, so the task prompt's "do not inspect
+    // unrelated files" cannot be the only thing standing between a
+    // prompt-injected instruction and
     // read_file/grep_search over the whole filesystem. Both sibling memory
     // agents pass restrictReadsToMemoryPaths for the same read-only-memory job.
     vi.mocked(runForkedAgent).mockResolvedValue({

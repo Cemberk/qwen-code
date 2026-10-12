@@ -8,20 +8,20 @@ import { describe, it, expect } from 'vitest';
 import { AuthType, type Config } from '@qwen-code/qwen-code-core';
 import {
   isInlineModelOverrideAllowed,
-  parseAcpModelOption,
+  parseModelOption,
   sanitizeProviderBaseUrl,
-} from './acpModelUtils.js';
+} from './model-option-utils.js';
 
-describe('acpModelUtils', () => {
+describe('model-option-utils', () => {
   it('parses modelId and validates authType', () => {
-    expect(parseAcpModelOption(` qwen3(${AuthType.USE_OPENAI}) `)).toEqual({
+    expect(parseModelOption(` qwen3(${AuthType.USE_OPENAI}) `)).toEqual({
       modelId: 'qwen3',
       authType: AuthType.USE_OPENAI,
     });
   });
 
   it('returns trimmed input as modelId when authType is invalid', () => {
-    expect(parseAcpModelOption('qwen3(not-a-real-auth)')).toEqual({
+    expect(parseModelOption('qwen3(not-a-real-auth)')).toEqual({
       modelId: 'qwen3(not-a-real-auth)',
     });
   });

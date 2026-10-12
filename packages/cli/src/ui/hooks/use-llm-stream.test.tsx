@@ -938,10 +938,10 @@ describe('useLlmStream', () => {
       });
       mockConfig.getDefaultVisionBridgeModel = vi.fn(() => ({
         id: 'vision-agent',
-        baseUrl: 'https://vision.example.com/v1',
+        baseUrl: 'http://127.0.0.1:11435/v1',
         agentCapable: true,
       }));
-      const selector = 'vision-agent\0https://vision.example.com/v1\0';
+      const selector = 'vision-agent\0http://127.0.0.1:11435/v1\0';
       const { result, mockSendMessageStream } = renderTestHook();
       const toolRequest = {
         callId: 'full-turn-tool',
@@ -1054,14 +1054,14 @@ describe('useLlmStream', () => {
       enableBridge();
       mockConfig.getDefaultVisionBridgeModel = vi.fn(() => ({
         id: 'vision-agent',
-        baseUrl: 'https://vision.example.com/v1',
+        baseUrl: 'http://127.0.0.1:11435/v1',
         agentCapable: true,
       }));
       mockHandleSlashCommand.mockResolvedValue({
         type: 'submit_prompt',
         content: [{ text: 'describe' }, imagePart],
       });
-      const selector = 'vision-agent\0https://vision.example.com/v1\0';
+      const selector = 'vision-agent\0http://127.0.0.1:11435/v1\0';
       const { result, mockSendMessageStream } = renderTestHook();
 
       await act(async () => {
@@ -1120,14 +1120,14 @@ describe('useLlmStream', () => {
       enableBridge();
       mockConfig.getDefaultVisionBridgeModel = vi.fn(() => ({
         id: 'vision-agent',
-        baseUrl: 'https://vision.example.com/v1',
+        baseUrl: 'http://127.0.0.1:11435/v1',
         agentCapable: true,
       }));
       mockHandleSlashCommand.mockResolvedValue({
         type: 'submit_prompt',
         content: [{ text: 'describe' }, imagePart],
       });
-      const selector = 'vision-agent\0https://vision.example.com/v1\0';
+      const selector = 'vision-agent\0http://127.0.0.1:11435/v1\0';
       const { result } = renderTestHook();
 
       await act(async () => {
@@ -1184,7 +1184,7 @@ describe('useLlmStream', () => {
         convertedCount: 0,
         omittedCount: 0,
         modelId: 'vm',
-        modelEndpoint: 'vision.example.com',
+        modelEndpoint: '127.0.0.1:11435',
         egressOccurred: true,
         error: 'timed out',
       });
@@ -1201,7 +1201,7 @@ describe('useLlmStream', () => {
         expect.objectContaining({
           type: MessageType.ERROR,
           text: expect.stringContaining(
-            'Your image and prompt/context were sent to vm (vision.example.com).',
+            'Your image and prompt/context were sent to vm (127.0.0.1:11435).',
           ),
         }),
         expect.any(Number),
@@ -1222,7 +1222,7 @@ describe('useLlmStream', () => {
         convertedCount: 0,
         omittedCount: 0,
         modelId: 'vm',
-        modelEndpoint: 'vision.example.com',
+        modelEndpoint: '127.0.0.1:11435',
         egressOccurred: true,
         error: '401 from https://signed.example.com?token=secret',
       });
@@ -1262,7 +1262,7 @@ describe('useLlmStream', () => {
           convertedCount: 0,
           omittedCount: 0,
           modelId: 'vm',
-          modelEndpoint: 'vision.example.com',
+          modelEndpoint: '127.0.0.1:11435',
           egressOccurred: true,
         });
       });
@@ -1277,7 +1277,7 @@ describe('useLlmStream', () => {
         expect.objectContaining({
           type: MessageType.VISION_NOTICE,
           text: expect.stringContaining(
-            'Your image and prompt/context were sent to vm (vision.example.com).',
+            'Your image and prompt/context were sent to vm (127.0.0.1:11435).',
           ),
         }),
         expect.any(Number),
@@ -16893,6 +16893,51 @@ describe('useLlmStream', () => {
         expect.any(AbortSignal),
       );
       expect(mockSendMessageStream).not.toHaveBeenCalled();
+    });
+
+    it('never runs a scheduled prompt as a shell command while shell mode is on', async () => {
+      const handleShellCommand = vi.fn().mockReturnValue(true);
+      vi.mocked(useShellCommandProcessor).mockReturnValue({
+        handleShellCommand,
+        activeShellPtyId: null,
+      } as unknown as ReturnType<typeof useShellCommandProcessor>);
+
+      const { result } = renderWithShellMode(true);
+      await act(async () => {
+        await result.current.submitQuery(
+          'rm -rf build && echo scheduled',
+          SendMessageType.Cron,
+        );
+      });
+
+      expect(handleShellCommand).not.toHaveBeenCalled();
+      expect(mockSendMessageStream).toHaveBeenCalledWith(
+        'rm -rf build && echo scheduled',
+        expect.any(AbortSignal),
+        expect.any(String),
+        expect.objectContaining({ type: SendMessageType.Cron }),
+      );
+    });
+
+    it('ignores even a recorded shell intent for a scheduled prompt', async () => {
+      const handleShellCommand = vi.fn().mockReturnValue(true);
+      vi.mocked(useShellCommandProcessor).mockReturnValue({
+        handleShellCommand,
+        activeShellPtyId: null,
+      } as unknown as ReturnType<typeof useShellCommandProcessor>);
+
+      const { result } = renderWithShellMode(false);
+      await act(async () => {
+        await result.current.submitQuery(
+          'echo scheduled',
+          SendMessageType.Cron,
+          undefined,
+          { shellMode: true },
+        );
+      });
+
+      expect(handleShellCommand).not.toHaveBeenCalled();
+      expect(mockSendMessageStream).toHaveBeenCalled();
     });
   });
 

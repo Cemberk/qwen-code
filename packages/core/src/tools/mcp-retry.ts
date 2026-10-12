@@ -78,8 +78,7 @@ export function isTransientNetworkError(error: unknown): boolean {
 
   if (
     message.includes('Connection closed') ||
-    message.includes('transport error') ||
-    message.includes('Streamable HTTP connection')
+    message.includes('transport error')
   ) {
     return true;
   }

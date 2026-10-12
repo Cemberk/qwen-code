@@ -101,7 +101,7 @@ describe('globalSetup hermetic qwen home', () => {
   beforeEach(async () => {
     tmpRoot = await mkdtemp(join(tmpdir(), 'qwen-globalsetup-tmp-'));
     savedEnv = new Map(
-      [...SETUP_ENV_KEYS, 'QWEN_HOME', 'TMPDIR'].map((key) => [
+      [...SETUP_ENV_KEYS, 'QWEN_HOME', 'TMPDIR', 'HOME'].map((key) => [
         key,
         process.env[key],
       ]),
@@ -140,6 +140,24 @@ describe('globalSetup hermetic qwen home', () => {
 
     await expect(teardown()).resolves.toBeUndefined();
     expect(existsSync(home!)).toBe(false);
+  });
+
+  it("starts the run's qwen home empty instead of copying the host's", async () => {
+    const hostQwenDir = join(tmpRoot, 'host-home', '.qwen');
+    await mkdir(hostQwenDir, { recursive: true });
+    await writeFile(
+      join(hostQwenDir, 'settings.json'),
+      JSON.stringify({ security: { auth: { apiKey: 'host-secret' } } }),
+      'utf-8',
+    );
+    process.env['HOME'] = join(tmpRoot, 'host-home');
+
+    const { setup, teardown } = await loadGlobalSetup();
+    await setup();
+
+    await expect(readdir(process.env['QWEN_HOME']!)).resolves.toEqual([]);
+
+    await teardown();
   });
 
   it('sweeps a stale qwen home a torn-down run left behind', async () => {

@@ -600,7 +600,6 @@ export default {
   'This extension will run the following MCP servers:':
     'Aquesta extensió executarà els següents MCP servers:',
   local: 'local',
-  remote: 'remot',
   'This extension will add the following commands: {{commands}}.':
     'Aquesta extensió afegirà les ordres següents: {{commands}}.',
   'This extension will append info to your QWEN.md context using {{fileName}}':
@@ -690,7 +689,8 @@ export default {
   '(workspace)': '(espai de treball)',
   '(user)': '(usuari)',
   '[not set]': '[no establert]',
-  '[value stored in keychain]': '[valor emmagatzemat al clauer]',
+  '[value stored in encrypted file]':
+    '[valor emmagatzemat en un fitxer xifrat]',
   'Value:': 'Valor:',
   'Manage extension settings.': 'Gestiona la configuració de les extensions.',
   'You need to specify a command (set or list).':
@@ -949,8 +949,6 @@ export default {
   'Invalid command. Available subcommands:':
     'Ordre no vàlida. Subordres disponibles:',
   'Available subcommands:': 'Subordres disponibles:',
-  'To request additional UI language packs, please open an issue on GitHub.':
-    "Per sol·licitar paquets d'idioma addicionals per a la interfície, obriu una incidència a GitHub.",
   'Available options:': 'Opcions disponibles:',
   'Set UI language to {{name}}':
     "Establir l'idioma de la interfície a {{name}}",
@@ -1218,15 +1216,12 @@ export default {
   'Overall Goal:': 'Objectiu general:',
   'You must connect a provider to proceed. Press Ctrl+C again to exit.':
     'Cal connectar un proveïdor per continuar. Premeu Ctrl+C de nou per sortir.',
-  'Bring your own API key': 'Porteu la vostra pròpia API Key',
   'Missing API key for OpenAI-compatible auth. Set settings.security.auth.apiKey, or set the {{envKeyHint}} environment variable.':
     "Manca l'API Key per a l'autenticació compatible amb OpenAI. Establiu settings.security.auth.apiKey o la variable d'entorn {{envKeyHint}}.",
   'Missing API key for OpenAI-compatible auth. Set the {{envKeyHint}} environment variable.':
     "Manca l'API Key per a l'autenticació compatible amb OpenAI. Establiu la variable d'entorn {{envKeyHint}}.",
   'Failed to authenticate. Message: {{message}}':
     'Error en autenticar-se. Missatge: {{message}}',
-  'Authenticated successfully with {{authType}} credentials.':
-    "S'ha autenticat correctament amb les credencials {{authType}}.",
   // ============================================================================
   // Diàlegs - Model
   // ============================================================================
@@ -1347,7 +1342,6 @@ export default {
   '{{count}} prompt': '{{count}} missatge',
   '{{count}} prompts': '{{count}} missatges',
   '(from {{extensionName}})': '(de {{extensionName}})',
-  OAuth: 'OAuth',
   'tools and prompts will appear when ready':
     'les eines i els missatges apareixeran quan estiguin a punt',
   '{{count}} tools cached': '{{count}} eines en memòria cau',
@@ -1373,8 +1367,6 @@ export default {
     "Useu /compress quan la conversa sigui llarga per resumir l'historial i alliberar context.",
   'Start a fresh idea with /clear or /new; the previous session stays available in history.':
     "Comenceu una idea nova amb /clear o /new; la sessió anterior segueix disponible a l'historial.",
-  'Use /bug to submit issues to the maintainers when something goes off.':
-    'Useu /bug per enviar incidències als mantenidors quan alguna cosa vagi malament.',
   'Switch auth type quickly with /auth.':
     "Canvieu ràpidament el tipus d'autenticació amb /auth.",
   'You can run any shell commands from Qwen Code using ! (e.g. !ls).':
@@ -1706,8 +1698,6 @@ export default {
   // ============================================================================
   // Extensions - Ordre d'explorar
   // ============================================================================
-  'Open extensions page in your browser':
-    "Obrir la pàgina d'extensions al vostre navegador",
   'Retrying in {{seconds}} seconds… (attempt {{attempt}}/{{maxRetries}})':
     'Reintentant en {{seconds}} segons… (intent {{attempt}}/{{maxRetries}})',
   'Press Ctrl+Y to retry': 'Premeu Ctrl+Y per reintentar',
@@ -1716,7 +1706,7 @@ export default {
   'to retry last request': "per reintentar l'última sol·licitud",
 
   // ============================================================================
-  // Autenticació de Coding Plan
+  // Autenticació amb API Key
   // ============================================================================
   'API key cannot be empty.': 'La API Key no pot estar buida.',
 
@@ -1732,16 +1722,7 @@ export default {
   // Diàleg d'autenticació - Títols i etiquetes
   // ============================================================================
   Custom: 'Personalitzat',
-  'Choose based on where your account is registered':
-    "Trieu en funció d'on teniu registrat el compte",
 
-  // ============================================================================
-  // Actualitzacions internacionals de Coding Plan
-  // ============================================================================
-  'New model configurations are available for {{region}}. Update now?':
-    'Hi ha noves configuracions de model disponibles per a {{region}}. Actualitzeu ara?',
-  '{{region}} configuration updated successfully. Model switched to "{{model}}".':
-    'La configuració de {{region}} s\'ha actualitzat correctament. El model ha canviat a "{{model}}".',
   // ============================================================================
   // Component d'ús del context
   // ============================================================================
@@ -1779,10 +1760,6 @@ export default {
     'Mostrar el desglossament de l\'ús de la finestra de context. Useu "/context detail" per a un desglossament per element.',
   'body loaded': 'cos carregat',
   memory: 'memòria',
-  '{{region}} configuration updated successfully.':
-    "La configuració de {{region}} s'ha actualitzat correctament.",
-  'Authenticated successfully with {{region}}. API key and model configs saved to settings.json.':
-    "S'ha autenticat correctament amb {{region}}. La API Key i les configuracions del model s'han desat a settings.json.",
   'Type something...': 'Escriviu alguna cosa...',
   Submit: 'Envia',
   'Submit answers': 'Envia les respostes',
@@ -1795,35 +1772,7 @@ export default {
     '↑/↓: Navegar | ←/→: Canviar de pestanya | Return: Seleccionar',
   '↑/↓: Navigate | Enter: Select | Esc: Cancel':
     '↑/↓: Navegar | Return: Seleccionar | Esc: Cancel·lar',
-  'Show current authentication status': "Mostra l'estat d'autenticació actual",
-  'Authentication completed successfully.':
-    "L'autenticació s'ha completat correctament.",
   Global: 'Global',
-  '\n=== Authentication Status ===\n': "\n=== Estat d'autenticació ===\n",
-  'Run one of the following commands to get started:\n':
-    'Executeu una de les ordres següents per començar:\n',
-  'Or simply run:': 'O simplement executeu:',
-  '  qwen auth                - Interactive authentication setup\n':
-    "  qwen auth                - Configuració interactiva de l'autenticació\n",
-  '  Type: Free tier (discontinued 2026-04-15)':
-    '  Tipus: Nivell gratuït (descontinuat el 15-04-2026)',
-  '  Limit: No longer available': '  Límit: Ja no disponible',
-  '  Region: {{region}}': '  Regió: {{region}}',
-  '  Current Model: {{model}}': '  Model actual: {{model}}',
-  '  Config Version: {{version}}': '  Versió de configuració: {{version}}',
-  '  Status: API key configured\n': '  Estat: API Key configurada\n',
-  '  Issue: API key not found in environment or settings\n':
-    "  Problema: API Key no trobada a l'entorn o la configuració\n",
-  '  Run `qwen auth coding-plan` to re-configure.\n':
-    '  Executeu `qwen auth coding-plan` per tornar a configurar.\n',
-  '  Status: Configured\n': '  Estat: Configurat\n',
-  'Failed to check authentication status: {{error}}':
-    "Error en comprovar l'estat d'autenticació: {{error}}",
-  'Select an option:': 'Seleccioneu una opció:',
-  'Raw mode not available. Please run in an interactive terminal.':
-    'El mode raw no està disponible. Executeu en un terminal interactiu.',
-  '(Use ↑ ↓ arrows to navigate, Enter to select, Ctrl+C to exit)\n':
-    '(Useu les fletxes ↑ ↓ per navegar, Return per seleccionar, Ctrl+C per sortir)\n',
   'Switch to plan mode or exit plan mode':
     'Canviar al mode de planificació o sortir del mode de planificació',
   'Set how hard reasoning-capable models think ({{tiers}}); mapped and clamped per provider.':
@@ -1916,7 +1865,6 @@ export default {
     "La porta del planificador no ha vist la marca de temps d'aquest dream; el proper cicle de dream es pot tornar a executar abans del normal.",
   'Manage extension settings': 'Gestiona la configuració de les extensions',
   'Desc:': 'Descripció:',
-  '中国 (China)': 'Xina',
 
   // Stats Dashboard — Category 2
   'Activity Heatmap': "Mapa d'activitat",
@@ -2239,12 +2187,6 @@ export default {
   // ============================================================================
   // Plans i subscripcions
   // ============================================================================
-  'For individual developers · Pay per model call · 5-hour/weekly quotas':
-    'Per a desenvolupadors individuals · Pagament per crida al model · Quotes de 5 h/setmanals',
-  Subscribe: 'Subscriure',
-  'Select Subscription Plan': 'Seleccionar el pla de subscripció',
-  'For teams/companies · Credits deducted by token usage · Dedicated API key and base URL':
-    "Per a equips/empreses · Crèdits descomptats per l'ús de tokens · Clau API i URL base dedicades",
   ' (this project)': ' (aquest projecte)',
   ' (global)': ' (global)',
   'Current vision model: {{visionModel}}\nUse "/model --vision <model-id>" to set the vision bridge model.':
@@ -2280,12 +2222,6 @@ export default {
   'Topics touched ({{count}})': 'Temes tocats ({{count}})',
   '{{count}} more': '{{count}} més',
   'to queue for the next turn': 'per posar a la cua per al torn següent',
-
-  // ============================================================================
-  // Token Plan / Coding Plan
-  // ============================================================================
-  'API key is stored in settings.env. You can migrate it to a .env file for better security.':
-    'La clau API es desa a settings.env. Podeu migrar-la a un fitxer .env per a més seguretat.',
 
   // ============================================================================
   // /config — obtenció/definició de paràmetres

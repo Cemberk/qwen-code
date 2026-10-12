@@ -224,40 +224,6 @@ Qwen Code can generate tests that follow your project's existing patterns and co
 
 For comprehensive coverage, ask Qwen Code to identify edge cases you might have missed. Qwen Code can analyze your code paths and suggest tests for error conditions, boundary values, and unexpected inputs that are easy to overlook.
 
-## Create pull requests
-
-Suppose you need to create a well-documented pull request for your changes.
-
-**1. Summarize your changes**
-
-```
-summarize the changes I've made to the authentication module
-```
-
-**2. Generate a pull request with Qwen Code**
-
-```
-create a pr
-```
-
-**3. Review and refine**
-
-```
-enhance the PR description with more context about the security improvements
-```
-
-**4. Add testing details**
-
-```
-add information about how these changes were tested
-```
-
-> [!tip]
->
-> - Ask Qwen Code directly to make a PR for you
-> - Review Qwen Code's generated PR before submitting
-> - Ask Qwen Code to highlight potential risks or considerations
-
 ## Handle documentation
 
 Suppose you need to add or update documentation for your code.
@@ -315,7 +281,7 @@ This provides a directory listing with file information.
 **3. Reference MCP resources**
 
 ```
-Show me the data from @github: repos/owner/repo/issues
+Show me the data from @db: tables/users
 ```
 
 This fetches data from connected MCP servers using the format @server: resource. See [MCP](./features/mcp) for details.
@@ -537,7 +503,7 @@ Qwen Code has built-in access to its documentation and can answer questions abou
 ### Example questions
 
 ```
-can Qwen Code create pull requests?
+can Qwen Code create git commits?
 ```
 
 ```
@@ -553,7 +519,7 @@ how do I use MCP with Qwen Code?
 ```
 
 ```
-how do I configure Qwen Code for Amazon Bedrock?
+how do I connect Qwen Code to my local model server?
 ```
 
 ```

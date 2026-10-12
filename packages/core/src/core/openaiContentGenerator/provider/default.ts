@@ -6,6 +6,7 @@ import { DEFAULT_MAX_RETRIES, resolveRequestTimeout } from '../constants.js';
 import type { OpenAICompatibleProvider } from './types.js';
 import type { OpenAIResponseParsingOptions } from '../responseParsingOptions.js';
 import { buildRuntimeFetchOptions } from '../../../utils/runtimeFetchOptions.js';
+import { assertLocalBaseUrl } from '../../../utils/local-base-url.js';
 import {
   tokenLimit,
   hasExplicitOutputLimit,
@@ -110,7 +111,9 @@ export class DefaultOpenAICompatibleProvider
     const defaultHeaders = this.buildHeaders();
     return new OpenAI({
       apiKey,
-      baseURL: baseUrl,
+      // Every model request goes through this client, so the loopback rule is
+      // enforced here as well as where the configuration is resolved.
+      baseURL: assertLocalBaseUrl(baseUrl),
       timeout,
       maxRetries,
       defaultHeaders,

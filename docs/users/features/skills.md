@@ -46,7 +46,6 @@ Use `/learn` to distill an existing knowledge source into a reusable project
 Skill:
 
 ```text
-/learn https://docs.example.com/api
 /learn ~/projects/acme-sdk
 /learn Our deploy process: run migrate, deploy the service, then check health
 ```
@@ -55,17 +54,16 @@ The command runs as a normal agent turn and creates the result under
 `.qwen/skills/learned-skill-<name>/SKILL.md` with `source: learned` in its
 frontmatter. Review the generated instructions before using or sharing them.
 
-`/learn` also accepts local or direct-link `.mp4`, `.webm`, `.mov`, and `.m4v`
-videos. Add text after the path or URL to focus the generated Skill on one part
-of the tutorial:
+`/learn` also accepts local `.mp4`, `.webm`, `.mov`, and `.m4v` videos in the
+workspace. Add text after the path to focus the generated Skill on one part of
+the tutorial:
 
 ```text
 /learn ./tutorial.mp4 focus on the deployment workflow
 ```
 
 Video learning requires a video-capable model on an OpenAI-compatible provider.
-YouTube page URLs are not direct video input; download the video into the
-workspace and pass its local path instead.
+`/learn` does not accept URLs; pass a local path or paste the text instead.
 
 ### Personal Skills
 

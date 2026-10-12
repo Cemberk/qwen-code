@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { AuthType, type Config } from '@qwen-code/qwen-code-core';
+import type { Config } from '@qwen-code/qwen-code-core/config/config.js';
+import { AuthType } from '@qwen-code/qwen-code-core/utils/auth-type.js';
 import { z } from 'zod';
 
 export function sanitizeProviderBaseUrl(baseUrl: string): string {
@@ -88,7 +89,7 @@ function findAuthorityEnd(baseUrl: string, authorityStart: number): number {
  * If the string ends with `(...)` and `...` is a valid `AuthType`, returns both;
  * otherwise returns the trimmed input as `modelId` only.
  */
-export function parseAcpModelOption(input: string): {
+export function parseModelOption(input: string): {
   modelId: string;
   authType?: AuthType;
 } {

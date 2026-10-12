@@ -163,15 +163,6 @@ export const tipRegistry: ContextualTip[] = [
     priority: 50,
   },
   {
-    id: 'bug-report',
-    content:
-      'Use /bug to submit issues to the maintainers when something goes off.',
-    trigger: 'startup',
-    isRelevant: () => true,
-    cooldownPrompts: 0,
-    priority: 50,
-  },
-  {
     id: 'auth-switch',
     content: 'Switch auth type quickly with /auth.',
     trigger: 'startup',

@@ -70,3 +70,46 @@ describe('sandbox_command.js QWEN_SANDBOX handling', () => {
     expect(stderr).toContain(`missing sandbox command '${payload}'`);
   });
 });
+
+describe('sandbox_command.js .env sources', () => {
+  it('ignores QWEN_SANDBOX from a project .env', async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import(
+      'node:fs'
+    );
+    const { tmpdir } = await import('node:os');
+    const root = mkdtempSync(path.join(tmpdir(), 'sandbox-command-env-'));
+    try {
+      const home = path.join(root, 'home');
+      const project = path.join(root, 'project');
+      mkdirSync(home, { recursive: true });
+      mkdirSync(project, { recursive: true });
+      writeFileSync(
+        path.join(project, '.env'),
+        'QWEN_SANDBOX=./evil-runtime\n',
+      );
+      const env = { ...process.env, HOME: home, QWEN_HOME: '' };
+      delete env.QWEN_SANDBOX;
+      let result;
+      try {
+        result = {
+          status: 0,
+          stdout: execFileSync(process.execPath, [scriptPath, '-q'], {
+            cwd: project,
+            encoding: 'utf8',
+            env,
+          }),
+          stderr: '',
+        };
+      } catch (err) {
+        result = {
+          status: err.status ?? 1,
+          stdout: err.stdout?.toString() ?? '',
+          stderr: err.stderr?.toString() ?? '',
+        };
+      }
+      expect(`${result.stdout}${result.stderr}`).not.toContain('evil-runtime');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});

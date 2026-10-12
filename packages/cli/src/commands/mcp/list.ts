@@ -42,7 +42,7 @@ async function getMcpServersFromConfig(): Promise<
 > {
   const settings = loadSettings();
   const extensionManager = new ExtensionManager({
-    isWorkspaceTrusted: isWorkspaceTrusted(settings.merged).isTrusted ?? true,
+    isWorkspaceTrusted: isWorkspaceTrusted(settings.merged).isTrusted === true,
     locale: getCurrentLanguage(),
   });
   await extensionManager.refreshCache();

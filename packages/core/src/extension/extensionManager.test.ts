@@ -147,11 +147,9 @@ describe('extension tests', () => {
   let tempWorkspaceDir: string;
   let userExtensionsDir: string;
   let savedQwenHome: string | undefined;
-  let savedForceFileStorage: string | undefined;
 
   beforeEach(() => {
     savedQwenHome = process.env['QWEN_HOME'];
-    savedForceFileStorage = process.env['QWEN_CODE_FORCE_FILE_STORAGE'];
     delete process.env['QWEN_HOME'];
     tempHomeDir = fs.mkdtempSync(
       path.join(os.tmpdir(), 'qwen-code-test-home-'),
@@ -173,11 +171,6 @@ describe('extension tests', () => {
       delete process.env['QWEN_HOME'];
     } else {
       process.env['QWEN_HOME'] = savedQwenHome;
-    }
-    if (savedForceFileStorage === undefined) {
-      delete process.env['QWEN_CODE_FORCE_FILE_STORAGE'];
-    } else {
-      process.env['QWEN_CODE_FORCE_FILE_STORAGE'] = savedForceFileStorage;
     }
     vi.restoreAllMocks();
   });
@@ -678,7 +671,6 @@ describe('extension tests', () => {
       expect(extension.contextFiles).toEqual([]);
       expect(extension.hooks).toBeUndefined();
       expect(extension.settings).toBeUndefined();
-      expect(extension.channels).toBeUndefined();
       expect(Object.keys(extension.mcpServers ?? {})).toEqual(['local']);
       expect(extension.mcpServers?.['local']?.agentPluginV1).toBe(true);
       expect(requestConsent).toHaveBeenCalledWith(

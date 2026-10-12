@@ -162,6 +162,18 @@ describe('OpenAILogger', () => {
       expect(fileExists).toBe(true);
     });
 
+    it.skipIf(process.platform === 'win32')(
+      'should write logs readable by the owner only',
+      async () => {
+        const logDir = path.join(testTempDir, 'private-logs');
+        const logger = new OpenAILogger(logDir);
+        const logPath = await logger.logInteraction({ model: 'm' }, {});
+
+        expect((await fs.stat(logPath)).mode & 0o777).toBe(0o600);
+        expect((await fs.stat(logDir)).mode & 0o777).toBe(0o700);
+      },
+    );
+
     it('should include sanitized internal prompt id suffix when provided', async () => {
       const logger = new OpenAILogger(testTempDir);
       await logger.initialize();

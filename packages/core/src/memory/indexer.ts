@@ -287,12 +287,10 @@ export async function rebuildUserAutoMemoryIndex(): Promise<string> {
 
 /**
  * Thrown by {@link rebuildTeamAutoMemoryIndex} when the team-memory root (or any
- * parent component) is a symlink that could redirect the committed index OUTSIDE
- * the repository. This is a SECURITY rejection, deliberately distinct from
- * operational IO failures (EACCES/ENOSPC/EPERM): the git-sync gate MUST block on
- * it — never add/commit/push a root that escapes the repo — whereas an
- * operational failure self-corrects on the next rebuild and must not permanently
- * gate legitimate sync.
+ * parent component) is a symlink that could redirect the index OUTSIDE the
+ * repository. This is a SECURITY rejection, deliberately distinct from
+ * operational IO failures (EACCES/ENOSPC/EPERM), which self-correct on the next
+ * rebuild.
  */
 export class TeamMemoryRootSecurityError extends Error {
   constructor(message: string) {
@@ -350,9 +348,9 @@ export async function rebuildTeamAutoMemoryIndex(
     );
   }
   const docs = await scanTeamAutoMemoryTopicDocuments(projectRoot);
-  // Code-unit comparison, NOT localeCompare: the index is committed and pushed,
+  // Code-unit comparison, NOT localeCompare: the index lives in the repository,
   // so its ordering must be byte-identical across machines/locales — otherwise
-  // two collaborators churn MEMORY.md back and forth and the ff-only sync wedges.
+  // two collaborators churn MEMORY.md back and forth.
   const ordered = [...docs].sort((a, b) =>
     a.relativePath < b.relativePath
       ? -1

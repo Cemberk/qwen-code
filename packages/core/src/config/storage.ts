@@ -12,7 +12,6 @@ import { getProjectHash, QWEN_DIR, sanitizeCwd } from '../utils/paths.js';
 import { FatalConfigError } from '../utils/errors.js';
 
 export { QWEN_DIR } from '../utils/paths.js';
-export const GOOGLE_ACCOUNTS_FILENAME = 'google_accounts.json';
 export const SKILL_PROVIDER_CONFIG_DIRS = ['.qwen', '.agents'];
 const TMP_DIR_NAME = 'tmp';
 const PROJECT_DIR_NAME = 'projects';

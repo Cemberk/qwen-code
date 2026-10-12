@@ -6,22 +6,20 @@
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import {
   MAX_TERMINAL_IMAGE_BYTES,
   type TerminalImageRenderSupport,
   type TerminalImageDisplay,
 } from '@qwen-code/qwen-code-core';
-import {
-  buildKittyPlaceholder,
-  createRendererChildEnv,
-  encodeKittyVirtualImage,
-  findExecutable,
-  readPngSize,
-  shouldRunThroughShell,
-  type KittyImagePlaceholder,
-} from './mermaidImageRenderer.js';
 import { MAX_INLINE_IMAGE_ENCODED_LENGTH } from './inline-image-parts.js';
+
+export interface KittyImagePlaceholder {
+  color: string;
+  imageId: number;
+  lines: string[];
+}
 
 const CHAFA_TIMEOUT_MS = 8000;
 const CHAFA_MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
@@ -36,12 +34,157 @@ export const MAX_INLINE_IMAGE_PIXELS = 64_000_000;
 // Node forwards arguments unquoted, so a model-chosen path containing any of
 // them is a command-injection vector through a .cmd/.bat chafa shim.
 const CMD_SHELL_METACHARACTERS = /[&|<>^%"!()\n\r]/;
+const PNG_SIGNATURE = '89504e470d0a1a0a';
+const KITTY_PLACEHOLDER = '\u{10EEEE}';
+const RENDERER_ENV_ALLOWLIST = [
+  'PATH',
+  'PATHEXT',
+  'HOME',
+  'USERPROFILE',
+  'TMPDIR',
+  'TMP',
+  'TEMP',
+  'SystemRoot',
+  'WINDIR',
+  'COMSPEC',
+  'LOCALAPPDATA',
+  'APPDATA',
+] as const;
+const KITTY_PLACEHOLDER_DIACRITICS = [
+  '\u{305}',
+  '\u{30D}',
+  '\u{30E}',
+  '\u{310}',
+  '\u{312}',
+  '\u{33D}',
+  '\u{33E}',
+  '\u{33F}',
+  '\u{346}',
+  '\u{34A}',
+  '\u{34B}',
+  '\u{34C}',
+  '\u{350}',
+  '\u{351}',
+  '\u{352}',
+  '\u{357}',
+  '\u{35B}',
+  '\u{363}',
+  '\u{364}',
+  '\u{365}',
+  '\u{366}',
+  '\u{367}',
+  '\u{368}',
+  '\u{369}',
+  '\u{36A}',
+  '\u{36B}',
+  '\u{36C}',
+  '\u{36D}',
+  '\u{36E}',
+  '\u{36F}',
+  '\u{483}',
+  '\u{484}',
+  '\u{485}',
+  '\u{486}',
+  '\u{487}',
+  '\u{592}',
+  '\u{593}',
+  '\u{594}',
+  '\u{595}',
+  '\u{597}',
+  '\u{598}',
+  '\u{599}',
+  '\u{59C}',
+  '\u{59D}',
+  '\u{59E}',
+  '\u{59F}',
+  '\u{5A0}',
+  '\u{5A1}',
+  '\u{5A8}',
+  '\u{5A9}',
+  '\u{5AB}',
+  '\u{5AC}',
+  '\u{5AF}',
+  '\u{5C4}',
+  '\u{610}',
+  '\u{611}',
+  '\u{612}',
+  '\u{613}',
+  '\u{614}',
+  '\u{615}',
+  '\u{616}',
+  '\u{617}',
+  '\u{657}',
+  '\u{658}',
+  '\u{659}',
+  '\u{65A}',
+  '\u{65B}',
+  '\u{65D}',
+  '\u{65E}',
+  '\u{6D6}',
+  '\u{6D7}',
+  '\u{6D8}',
+  '\u{6D9}',
+  '\u{6DA}',
+  '\u{6DB}',
+  '\u{6DC}',
+  '\u{6DF}',
+  '\u{6E0}',
+  '\u{6E1}',
+  '\u{6E2}',
+  '\u{6E4}',
+  '\u{6E7}',
+  '\u{6E8}',
+  '\u{6EB}',
+  '\u{6EC}',
+  '\u{730}',
+  '\u{732}',
+  '\u{733}',
+  '\u{735}',
+  '\u{736}',
+  '\u{73A}',
+  '\u{73D}',
+  '\u{73F}',
+  '\u{740}',
+  '\u{741}',
+  '\u{743}',
+  '\u{745}',
+  '\u{747}',
+  '\u{749}',
+  '\u{74A}',
+  '\u{7EB}',
+  '\u{7EC}',
+  '\u{7ED}',
+  '\u{7EE}',
+  '\u{7EF}',
+  '\u{7F0}',
+  '\u{7F1}',
+  '\u{7F3}',
+  '\u{816}',
+  '\u{817}',
+  '\u{818}',
+  '\u{819}',
+  '\u{81B}',
+  '\u{81C}',
+  '\u{81D}',
+  '\u{81E}',
+  '\u{81F}',
+  '\u{820}',
+  '\u{821}',
+  '\u{822}',
+  '\u{823}',
+  '\u{825}',
+  '\u{826}',
+  '\u{827}',
+  '\u{829}',
+  '\u{82A}',
+  '\u{82B}',
+  '\u{82C}',
+];
 
 // Completed tool rows enter Ink's append-only Static region immediately, so
 // rendering must stay synchronous. A terminal resize or a restored session
 // re-renders every visible image, which would otherwise re-read the file and
-// re-spawn chafa for each one. This cache makes those repeats cheap; it mirrors
-// the bounded LRU the Mermaid renderer keeps for the same reason.
+// re-spawn chafa for each one. This cache makes those repeats cheap.
 const RENDER_CACHE_LIMIT = 40;
 const RENDER_CACHE_BYTE_LIMIT = 32 * 1024 * 1024;
 const renderCache = new Map<string, TerminalImageRenderResult>();
@@ -586,8 +729,8 @@ function renderWithChafa(
   chafaPath: string | null,
 ): Extract<TerminalImageRenderResult, { kind: 'ansi' | 'unavailable' }> {
   // Resolve chafa through the hardened lookup so a project-local
-  // node_modules/.bin/chafa is never executed unless the user opted in, then
-  // spawn the resolved path rather than a bare name resolved off PATH.
+  // node_modules/.bin/chafa is never executed, then spawn the resolved path
+  // rather than a bare name resolved off PATH.
   if (!chafaPath) {
     return {
       kind: 'unavailable',
@@ -649,4 +792,134 @@ function firstLineBounded(text: string): string {
   return firstLine.length > MAX_REASON_CHARS
     ? `${firstLine.slice(0, MAX_REASON_CHARS)}…`
     : firstLine;
+}
+
+export function encodeKittyVirtualImage(
+  png: Buffer,
+  imageId: number,
+  widthCells: number,
+  rows: number,
+): string {
+  const encoded = png.toString('base64');
+  const chunkSize = 4096;
+  const chunks: string[] = [];
+  const firstControl = `a=T,f=100,i=${imageId},q=2,U=1,c=${widthCells},r=${rows}`;
+
+  for (let offset = 0; offset < encoded.length; offset += chunkSize) {
+    const chunk = encoded.slice(offset, offset + chunkSize);
+    const hasMore = offset + chunkSize < encoded.length;
+    const control =
+      offset === 0
+        ? `${firstControl},m=${hasMore ? 1 : 0}`
+        : `m=${hasMore ? 1 : 0}`;
+    chunks.push(`\u001b_G${control};${chunk}\u001b\\`);
+  }
+
+  return chunks.join('');
+}
+
+export function buildKittyPlaceholder(
+  imageId: number,
+  widthCells: number,
+  rows: number,
+): KittyImagePlaceholder {
+  const clampedRows = Math.min(rows, KITTY_PLACEHOLDER_DIACRITICS.length);
+  const clampedWidth = Math.min(
+    widthCells,
+    KITTY_PLACEHOLDER_DIACRITICS.length,
+  );
+  const lines = Array.from({ length: clampedRows }, (_, row) => {
+    const rowDiacritic = KITTY_PLACEHOLDER_DIACRITICS[row];
+    const cells = Array.from({ length: clampedWidth }, (_, column) => {
+      const columnDiacritic = KITTY_PLACEHOLDER_DIACRITICS[column];
+      return `${KITTY_PLACEHOLDER}${rowDiacritic}${columnDiacritic}`;
+    });
+    return cells.join('');
+  });
+
+  return {
+    color: `#${imageId.toString(16).padStart(6, '0')}`,
+    imageId,
+    lines,
+  };
+}
+
+export function readPngSize(
+  png: Buffer,
+): { width: number; height: number } | null {
+  if (png.length < 24 || png.subarray(0, 8).toString('hex') !== PNG_SIGNATURE) {
+    return null;
+  }
+
+  return {
+    width: png.readUInt32BE(16),
+    height: png.readUInt32BE(20),
+  };
+}
+
+function findExecutable(
+  command: string,
+  env: NodeJS.ProcessEnv,
+): string | null {
+  const extensions =
+    process.platform === 'win32'
+      ? (env['PATHEXT'] ?? '.EXE;.CMD;.BAT;.COM').split(';').filter(Boolean)
+      : [''];
+  const localRendererDir = normalizeExecutableDir(
+    process.cwd(),
+    'node_modules',
+    '.bin',
+  );
+  const candidates: string[] = [];
+
+  for (const dir of (env['PATH'] ?? '').split(path.delimiter).filter(Boolean)) {
+    const normalizedDir = normalizeExecutableDir(dir);
+    if (
+      normalizedDir === localRendererDir ||
+      normalizedDir.endsWith(`${path.sep}node_modules${path.sep}.bin`)
+    ) {
+      continue;
+    }
+    for (const extension of extensions) {
+      candidates.push(path.join(dir, `${command}${extension}`));
+    }
+  }
+
+  return candidates.find(isExecutable) ?? null;
+}
+
+function normalizeExecutableDir(...segments: string[]): string {
+  const dir = path.resolve(...segments);
+  try {
+    return fs.realpathSync.native(dir);
+  } catch {
+    return dir;
+  }
+}
+
+function isExecutable(filePath: string): boolean {
+  try {
+    fs.accessSync(filePath, fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function shouldRunThroughShell(command: string): boolean {
+  return process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(command);
+}
+
+function createRendererChildEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const sourceEnv = { ...process.env, ...env };
+  const childEnv: NodeJS.ProcessEnv = {};
+
+  for (const key of RENDERER_ENV_ALLOWLIST) {
+    const value = sourceEnv[key];
+    if (value !== undefined) {
+      childEnv[key] = value;
+    }
+  }
+
+  return childEnv;
 }

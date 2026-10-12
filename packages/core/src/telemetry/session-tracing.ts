@@ -620,7 +620,7 @@ export function startInteractionSpan(
   const attributes = buildInteractionAttributes(config, options);
 
   // Each interaction is a trace root with its own traceId so that traces
-  // stay bounded and renderable in trace viewers (ARMS / Jaeger).
+  // stay bounded and renderable in trace viewers (e.g. Jaeger).
   // Cross-prompt correlation uses the session.id span attribute instead.
   const span = getTracer().startSpan(
     SPAN_INTERACTION,

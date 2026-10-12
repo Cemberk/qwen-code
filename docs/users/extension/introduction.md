@@ -213,7 +213,7 @@ Settings can be configured at two levels:
 - **User level** (default): Settings apply across all projects (`~/.qwen/.env`)
 - **Workspace level**: Settings apply only to the current project (`.qwen/.env`)
 
-Workspace settings take precedence over user settings. Sensitive settings are stored securely and never displayed in plain text.
+Workspace settings take precedence over user settings. Sensitive settings are stored in an encrypted file (`~/.qwen/extension-secrets-v1.json`, readable only by your user account) and never displayed in plain text.
 
 When Qwen Code starts, it loads all the extensions and merges their configurations. If there are any conflicts, the workspace configuration takes precedence.
 
@@ -302,7 +302,7 @@ A script can also declare `whenToUse`, a sentence saying when the workflow appli
 ```js
 export const meta = {
   name: 'deep-research',
-  description: 'Researches a question across the codebase and the web',
+  description: 'Researches a question across the codebase',
   whenToUse:
     'When the user asks for a sourced, multi-angle answer to an open question',
 };

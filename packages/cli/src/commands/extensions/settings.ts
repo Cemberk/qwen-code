@@ -123,7 +123,7 @@ const listCommand: CommandModule<object, ListArgs> = {
       if (value === undefined) {
         displayValue = t('[not set]');
       } else if (setting.sensitive) {
-        displayValue = t('[value stored in keychain]');
+        displayValue = t('[value stored in encrypted file]');
       } else {
         displayValue = value;
       }

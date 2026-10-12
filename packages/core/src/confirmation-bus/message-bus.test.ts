@@ -11,8 +11,6 @@ import type {
   HookExecutionRequest,
   HookExecutionResponse,
   Message,
-  ToolConfirmationRequest,
-  ToolConfirmationResponse,
   ToolExecutionSuccess,
 } from './types.js';
 
@@ -40,26 +38,6 @@ describe('MessageBus', () => {
   });
 
   describe('publish', () => {
-    it('should auto-confirm tool confirmation requests', async () => {
-      const responses: ToolConfirmationResponse[] = [];
-      bus.subscribe<ToolConfirmationResponse>(
-        MessageBusType.TOOL_CONFIRMATION_RESPONSE,
-        (msg) => responses.push(msg),
-      );
-
-      const request: ToolConfirmationRequest = {
-        type: MessageBusType.TOOL_CONFIRMATION_REQUEST,
-        toolCall: { name: 'test_tool', args: {} },
-        correlationId: 'test-123',
-      };
-
-      await bus.publish(request);
-
-      expect(responses).toHaveLength(1);
-      expect(responses[0].confirmed).toBe(true);
-      expect(responses[0].correlationId).toBe('test-123');
-    });
-
     it('should emit hook execution requests directly', async () => {
       const received: HookExecutionRequest[] = [];
       bus.subscribe<HookExecutionRequest>(
@@ -105,19 +83,6 @@ describe('MessageBus', () => {
       bus.on('error', (err) => errors.push(err));
 
       await bus.publish(null as unknown as Message);
-
-      expect(errors).toHaveLength(1);
-      expect(errors[0].message).toContain('Invalid message structure');
-    });
-
-    it('should emit error for tool confirmation request without correlationId', async () => {
-      const errors: Error[] = [];
-      bus.on('error', (err) => errors.push(err));
-
-      await bus.publish({
-        type: MessageBusType.TOOL_CONFIRMATION_REQUEST,
-        toolCall: { name: 'test', args: {} },
-      } as unknown as Message);
 
       expect(errors).toHaveLength(1);
       expect(errors[0].message).toContain('Invalid message structure');
@@ -291,21 +256,6 @@ describe('MessageBus', () => {
       setTimeout(() => controller.abort(), 10);
 
       await expect(promise).rejects.toThrow('Request aborted');
-    });
-
-    it('should auto-confirm tool confirmation via request pattern', async () => {
-      const response = await bus.request<
-        ToolConfirmationRequest,
-        ToolConfirmationResponse
-      >(
-        {
-          type: MessageBusType.TOOL_CONFIRMATION_REQUEST,
-          toolCall: { name: 'test_tool', args: {} },
-        },
-        MessageBusType.TOOL_CONFIRMATION_RESPONSE,
-      );
-
-      expect(response.confirmed).toBe(true);
     });
   });
 

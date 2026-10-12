@@ -220,6 +220,18 @@ describe('DefaultOpenAICompatibleProvider', () => {
       );
     });
 
+    it.each([
+      'https://api.example.com/v1',
+      'http://10.0.0.5:11434/v1',
+      'http://0.0.0.0:11434/v1',
+      undefined,
+    ])('refuses to build a client for base URL %s', (baseUrl) => {
+      mockContentGeneratorConfig.baseUrl = baseUrl;
+
+      expect(() => provider.buildClient()).toThrow();
+      expect(OpenAI).not.toHaveBeenCalled();
+    });
+
     it('should include custom headers from buildHeaders', () => {
       provider.buildClient();
 

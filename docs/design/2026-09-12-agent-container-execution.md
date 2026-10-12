@@ -14,7 +14,6 @@ permission preparation, execution, and cache maintenance. Replacing
 The existing review command runner provides useful container policy: an explicit
 environment allowlist, temporary HOME, named cleanup, and offline build/test
 commands. Its review-specific mount layout is not a general workspace policy.
-Install currently has ordinary container networking, not registry-only egress.
 
 ## Scope and activation
 
@@ -268,16 +267,11 @@ commit transfer or a private Git metadata view requires a separate design.
 
 ## Network and credentials
 
-General commands, file operations, builds, tests run without
-network access. An explicitly recognized standalone package installation may run
-in a separate install container sharing the working files. Command classification
-must reject compound shell expressions as installation requests. This exception
-allows ordinary networking, including package lifecycle scripts and access to
-the writable workspace. Scripts can transmit workspace contents. Lifecycle
-scripts remain enabled for dependency/toolchain compatibility; registry-only
-egress or mandatory `--ignore-scripts` would be a separate policy change.
+Every command, file operation, build, test and package installation runs
+without network access (`--network none`); there is no networked install
+container. Install dependencies outside the container.
 
-Both paths use the same explicit environment allowlist and temporary HOME. No
+The worker uses an explicit environment allowlist and temporary HOME. No
 model, GitHub, cloud or MCP credentials are forwarded. Images and the container
 runtime are trusted infrastructure. Rootless detection reads only Docker
 `SecurityOptions` and Podman `Host.Security.Rootless` or `host.security.rootless`;
@@ -407,7 +401,7 @@ rejection. Assert container argv, environment, mounts and network classification
 Drive the global CLI first to record the unsupported baseline, then the built
 CLI with a deterministic model fixture. With a real Docker or Podman runtime,
 verify inaccessible host sentinel credentials, worktree persistence, denied
-networking, installation, process cleanup and container death. Simulated runtime
+networking, process cleanup and container death. Simulated runtime
 tests are protocol evidence, not evidence of kernel isolation. Report unavailable
 real-runtime tests explicitly.
 

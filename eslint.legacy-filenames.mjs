@@ -9,7 +9,6 @@
 export const legacyFilenames = [
   'abortController',
   'aboutCommand',
-  'acpModelUtils',
   'agentHistoryAdapter',
   'agentsCommand',
   'approvalModeCommand',
@@ -175,7 +174,6 @@ export const legacyFilenames = [
   'memoryImportProcessor',
   'memoryLifecycle',
   'memoryPressureMonitor',
-  'mermaidImageRenderer',
   'mermaidVisualRenderer',
   'messageInspectors',
   'mockCommandContext',

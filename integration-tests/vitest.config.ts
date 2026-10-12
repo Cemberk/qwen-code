@@ -16,11 +16,7 @@ export default defineConfig({
     globalSetup: './globalSetup.ts',
     reporters: ['default'],
     include: ['**/*.test.ts'],
-    exclude: [
-      '**/terminal-bench/*.test.ts',
-      '**/hook-integration/**',
-      '**/node_modules/**',
-    ],
+    exclude: ['**/hook-integration/**', '**/node_modules/**'],
     retry: 2,
     fileParallelism: true,
     pool: 'forks',

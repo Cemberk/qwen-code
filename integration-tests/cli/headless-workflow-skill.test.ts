@@ -7,12 +7,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  CONTAINER_SANDBOX_NO_PROXY,
-  fakeServerHostOptions,
-  IS_CONTAINER_SANDBOX,
-  TestRig,
-} from '../test-helper.js';
+import { TestRig } from '../test-helper.js';
 import {
   fakeToolCall,
   startFakeOpenAIServer,
@@ -94,11 +89,9 @@ describe('headless extension workflow Skill entry', () => {
           };
         }
         return { content: 'WORKFLOW_SKILL_PROBE_DONE' };
-      }, fakeServerHostOptions());
+      });
 
-      const noProxy = IS_CONTAINER_SANDBOX
-        ? CONTAINER_SANDBOX_NO_PROXY
-        : '127.0.0.1,localhost';
+      const noProxy = '127.0.0.1,localhost';
       vi.stubEnv('NO_PROXY', noProxy);
       vi.stubEnv('no_proxy', noProxy);
       vi.stubEnv('QWEN_HOME', qwenHome);

@@ -5,8 +5,8 @@
  */
 
 /**
- * Integration tests for `GitWorktreeService.configureHooksPath()`. Uses real
- * git invocations against a temp repo because the existing
+ * Integration tests that worktree creation leaves git hook configuration
+ * alone. Uses real git invocations against a temp repo because the existing
  * `gitWorktreeService.test.ts` mocks simple-git heavily, making it
  * unsuitable for verifying actual `git config` side effects.
  */
@@ -21,7 +21,7 @@ import { GitWorktreeService } from './gitWorktreeService.js';
 // Real git invocations + user-global hooks (e.g. trustup) can take
 // 10–20s per setUp on slower runners; bump per-test and per-hook
 // timeouts so the suite isn't flaky on CI. (Phase C reviewer #4174.)
-describe('GitWorktreeService.createUserWorktree() — hooksPath setup', () => {
+describe('GitWorktreeService.createUserWorktree() — git hooks', () => {
   vi.setConfig({ testTimeout: 30000, hookTimeout: 30000 });
 
   let repoRoot: string;
@@ -56,7 +56,7 @@ describe('GitWorktreeService.createUserWorktree() — hooksPath setup', () => {
     }
   }
 
-  it('points core.hooksPath at .husky when present', async () => {
+  it('never enables repository-tracked .husky hooks the user did not install', async () => {
     const huskyDir = path.join(repoRoot, '.husky');
     await fs.mkdir(huskyDir, { recursive: true });
     await fs.writeFile(path.join(huskyDir, 'pre-commit'), '#!/bin/sh\n', {
@@ -67,31 +67,13 @@ describe('GitWorktreeService.createUserWorktree() — hooksPath setup', () => {
     const result = await svc.createUserWorktree('husky-test');
     expect(result.success).toBe(true);
 
-    const hooksPath = readWorktreeConfig(
-      result.worktree!.path,
-      'core.hooksPath',
+    expect(readWorktreeConfig(result.worktree!.path, 'core.hooksPath')).toBe(
+      '',
     );
-    expect(hooksPath).toBe(huskyDir);
+    expect(readWorktreeConfig(repoRoot, 'core.hooksPath')).toBe('');
   });
 
-  it('falls back to .git/hooks when .husky is missing', async () => {
-    const svc = new GitWorktreeService(repoRoot);
-    const result = await svc.createUserWorktree('hooks-fallback');
-    expect(result.success).toBe(true);
-
-    const hooksPath = readWorktreeConfig(
-      result.worktree!.path,
-      'core.hooksPath',
-    );
-    // .git/hooks always exists after `git init`, so this branch always wins
-    // when no .husky/ directory is provisioned.
-    expect(hooksPath).toBe(path.join(repoRoot, '.git', 'hooks'));
-  });
-
-  it('still creates the worktree even when hooksPath setup fails', async () => {
-    // Sanity: pass a non-existent base for husky and git/hooks (impossible
-    // in practice since `git init` always provisions .git/hooks, but
-    // exercise the error-tolerance path explicitly).
+  it('creates the worktree', async () => {
     const svc = new GitWorktreeService(repoRoot);
     const result = await svc.createUserWorktree('always-creates');
     expect(result.success).toBe(true);

@@ -7,7 +7,6 @@
 import type React from 'react';
 import { useMemo, useState } from 'react';
 import { Box, Text } from 'ink';
-import Link from 'ink-link';
 import { useConfig } from '../../contexts/ConfigContext.js';
 import { theme } from '../../semantic-colors.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
@@ -18,9 +17,6 @@ interface ArenaStartDialogProps {
   onClose: () => void;
   onConfirm: (selectedModels: string[]) => void;
 }
-
-const MODEL_PROVIDERS_DOCUMENTATION_URL =
-  'https://qwenlm.github.io/qwen-code-docs/en/users/configuration/settings/#modelproviders';
 
 export function ArenaStartDialog({
   onClose,
@@ -45,8 +41,6 @@ export function ArenaStartDialog({
   }, [config]);
   const selectableModelCount = modelItems.length;
   const needsMoreModels = selectableModelCount < 2;
-  const shouldShowMoreModelsHint =
-    selectableModelCount >= 2 && selectableModelCount < 3;
 
   useKeypress(
     (key) => {
@@ -118,23 +112,6 @@ export function ArenaStartDialog({
             {t('  - Or configure modelProviders in settings.json')}
           </Text>
         </Box>
-      )}
-
-      {shouldShowMoreModelsHint && (
-        <>
-          <Box marginTop={1}>
-            <Text color={theme.text.secondary}>
-              {t('Configure more models with the modelProviders guide:')}
-            </Text>
-          </Box>
-          <Box marginTop={0}>
-            <Link url={MODEL_PROVIDERS_DOCUMENTATION_URL} fallback={false}>
-              <Text color={theme.text.secondary} underline>
-                {MODEL_PROVIDERS_DOCUMENTATION_URL}
-              </Text>
-            </Link>
-          </Box>
-        </>
       )}
 
       <Box marginTop={1} flexDirection="column">
