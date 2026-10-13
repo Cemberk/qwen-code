@@ -1,7 +1,5 @@
 # Fresh-Startup Performance: Time to Typeable and RSS
 
-[English](2026-09-24-fresh-startup-performance.md) | [简体中文](2026-09-24-fresh-startup-performance.zh-CN.md)
-
 Status: implemented. Section 9 records the design decisions.
 
 ## 1. Problem

@@ -747,8 +747,7 @@ export class ChatCompressionService {
         // Compression output is bounded by the window-clamped budget to
         // guarantee a predictable reserve across providers and keep
         // `prompt + max_tokens <= window` valid on small-window deployments
-        // (see docs/design/auto-compaction-threshold-redesign.md, issue
-        // #7960). Thinking is disabled because per-provider thinking-budget
+        // (issue #7960). Thinking is disabled because per-provider thinking-budget
         // semantics are inconsistent (Anthropic/OpenAI count it separately,
         // Gemini varies by model).
         config: {
@@ -949,7 +948,7 @@ export class ChatCompressionService {
     // if the model consistently produces max-length summaries we want to stop
     // trying after MAX_CONSECUTIVE_FAILURES strikes rather than burn an API
     // call on every send. Reactive overflow still catches the catastrophic
-    // case. See docs/design/auto-compaction-threshold-redesign.md risk #2.
+    // case.
     //
     // Provider-reported counts compare against coldOutputBudget, not the
     // fixed ceiling: since issue #7960's clamp the requested budget can sit

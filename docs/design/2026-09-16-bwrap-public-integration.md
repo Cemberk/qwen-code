@@ -1,7 +1,5 @@
 # Public bwrap tool execution integration
 
-[English](2026-09-16-bwrap-public-integration.md) | [简体中文](2026-09-16-bwrap-public-integration.zh-CN.md)
-
 ## Status and scope
 
 Implementation candidate updated on 2026-09-19. This change is the third stage of the bwrap delivery: it is stacked on the runtime integration stage, exposes the public CLI boundary and retires whole-CLI bwrap. The merged execution foundation remains the transport and lifecycle base. Landlock and the public Linux x64/aarch64 acceptance workflow are separate follow-up changes.

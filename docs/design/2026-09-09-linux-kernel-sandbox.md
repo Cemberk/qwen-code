@@ -1,7 +1,5 @@
 # Linux kernel sandbox (bwrap + landlock-run) design
 
-[English](2026-09-09-linux-kernel-sandbox.md) | [简体中文](2026-09-09-linux-kernel-sandbox.zh-CN.md)
-
 Internal design document for giving qwen-code kernel-level isolation on Linux
 hosts that have no container runtime — closing the gap where today
 `--sandbox` on Linux means "docker/podman or nothing", and

@@ -1,7 +1,5 @@
 # Runtime shell sandbox integration
 
-[English](2026-09-16-runtime-shell-sandbox.md) | [简体中文](2026-09-16-runtime-shell-sandbox.zh-CN.md)
-
 ## Status and problem
 
 Implementation stage, 2026-09-16. The structured process API and bwrap adapter are implemented and have Linux kernel evidence. Previously, production ShellTool launched through the legacy service without receiving an operator policy. This stage connects the trusted runtime to foreground and background shell execution. It builds on the [bwrap execution foundation](2026-09-17-bwrap-execution-foundation.md) and is not the public sandbox release.

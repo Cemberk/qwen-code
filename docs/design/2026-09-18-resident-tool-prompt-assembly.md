@@ -1,7 +1,5 @@
 # Assembling the System Prompt from the Resident Tool Set
 
-[English](2026-09-18-resident-tool-prompt-assembly.md) | [简体中文](2026-09-18-resident-tool-prompt-assembly.zh-CN.md)
-
 **Status:** proposal for [#12032](https://github.com/QwenLM/qwen-code/issues/12032), part of [#12028](https://github.com/QwenLM/qwen-code/issues/12028). Step 1 only (session-start assembly); step 2 is named as follow-up work and is not proposed here.
 
 Every code reference below was read on `main` at `8bd2feabba`. Nothing was built, run, or measured for this document; the token figures attributed to #12032 are that issue's own measurements and were not re-measured.
@@ -117,7 +115,7 @@ The prompt depends only on the session-start snapshot, so `setStaticSystemPrefix
 
 ## 7. Validation plan
 
-Items 1-4 are automated in this PR's `prompts.test.ts`, so every push re-checks them; item 5 needs a real session and is handed off in [`docs/verification/resident-tool-prompt-assembly/README.md`](../verification/resident-tool-prompt-assembly/README.md).
+Items 1-4 are automated in this PR's `prompts.test.ts`, so every push re-checks them; item 5 needs a real session.
 
 1. **Default-session regression (in CI).** The 17 existing full-prompt snapshots cover the no-snapshot path, and `renders identically when every tool is declared` covers the all-declared path. Together they are the guard that makes the change safe for the common case.
 2. **Effect, and no drift outside it (in CI).** Two tests bracket the saving: a file-work allowlist must drop 900-1,400 characters (measured 1,104, ~276 tokens — policy bullets only, since that allowlist keeps every example), and a narrower allowlist must drop 3,800-5,000 (measured 4,327, ~1,082 tokens, three example blocks included). A third asserts all four model-specific example notations are gated, not just the bracket form. Together they fail on a lost saving and on newly added ungated tool text. `changes nothing outside the two gated sections` strips `## Using Your Tools` and `# Examples` from both renders and asserts the remainder is identical.

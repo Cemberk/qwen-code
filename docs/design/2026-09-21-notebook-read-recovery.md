@@ -1,7 +1,5 @@
 # Notebook read recovery
 
-[English](2026-09-21-notebook-read-recovery.md) | [简体中文](2026-09-21-notebook-read-recovery.zh-CN.md)
-
 ## Problem
 
 Notebook reads reject `offset`, `limit`, and nonempty `pages`. In observed

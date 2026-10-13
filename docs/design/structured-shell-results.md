@@ -1,7 +1,5 @@
 # Structured Shell results
 
-[English](structured-shell-results.md) | [简体中文](structured-shell-results.zh-CN.md)
-
 ## Scope
 
 Replace the Web Shell completed-result text parser with a versioned structured Shell result. Keep model-facing llmContent unchanged and keep the existing human display text for terminal consumers. Legacy records render verbatim. Background launch acknowledgments and early returns (including cancellation before execution) retain their existing string format. No streaming transport changes.

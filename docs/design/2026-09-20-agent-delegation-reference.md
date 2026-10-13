@@ -1,7 +1,5 @@
 # Moving the Agent Tool's Prompt-Writing Guidance into a Bundled Reference
 
-[English](2026-09-20-agent-delegation-reference.md) | [简体中文](2026-09-20-agent-delegation-reference.zh-CN.md)
-
 **Status:** implements one of the four acceptance items in [#12054](https://github.com/QwenLM/qwen-code/issues/12054) — a size budget on the Agent description, for `agent` only; that issue stays open for the other three, and the PR body says `Part of` rather than `Closes`. Part of [#12028](https://github.com/QwenLM/qwen-code/issues/12028). Builds on the Agent/Shell size budgets from [#12142](https://github.com/QwenLM/qwen-code/pull/12142) — landed as `36887c49` — whose rows this change lowers.
 
 Every figure below was measured, not rendered on paper: the real `AgentTool` is constructed and its assembled `description` read, with the two subagent entries the budget test uses, team off, todo on. The _Before_ column is the same measurement with the two changed source files reverted to the merge base, so exactly one variable moves. Run locally on Linux — `packages/core` built, then 98 tests across the three affected files and 20 in the bundled-skills integration file, all passing, and every row of §3 reproduced from the constructed tool. The macOS and Windows unit jobs are `skipped` by CI for this PR rather than green, so nothing automated covers them; this is platform-independent string and module work, and `Desktop Shell (windows-2022)` does run. Token counts are characters ÷ 4, the same rough conversion the issue uses.

@@ -1,7 +1,5 @@
 # Startup Benchmark Harness
 
-[English](2026-09-25-startup-benchmark-harness.md) | [简体中文](2026-09-25-startup-benchmark-harness.zh-CN.md)
-
 Status: implemented.
 
 ## 1. Problem

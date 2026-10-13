@@ -1,7 +1,5 @@
 # Second-pass system prompt simplification
 
-[English](2026-09-23-system-prompt-second-pass.md) | [简体中文](2026-09-23-system-prompt-second-pass.zh-CN.md)
-
 ## Problem and scope
 
 After the first pass (#12360), the default main-session prompt still restates the same rules in adjacent sections: the dedicated-tool policy is explained twice, verification appears as two overlapping bullets plus a restated summary, adaptive response detail is described in both the communication and tone sections, and the Git guidance splits one commit-message rule across two bullets and three overlapping source-of-truth bullets.

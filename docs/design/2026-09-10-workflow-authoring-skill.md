@@ -1,7 +1,5 @@
 # Workflow authoring reference as a bundled skill
 
-[中文](./2026-09-10-workflow-authoring-skill.zh-CN.md)
-
 Tracking issue: #11013, item 4.
 
 ## Problem

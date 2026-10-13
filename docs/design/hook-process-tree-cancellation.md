@@ -1,7 +1,5 @@
 # Hook Process Tree Cancellation
 
-[English](hook-process-tree-cancellation.md) | [简体中文](hook-process-tree-cancellation.zh-CN.md)
-
 ## Problem
 
 Command hooks run through a shell and can create nested processes. HookRunner currently signals only the direct shell process and uses `ChildProcess.killed` to decide whether to escalate from SIGTERM to SIGKILL. That property records that a signal was sent, not that the process exited, so an unresponsive shell can prevent escalation and descendants can survive as orphans.

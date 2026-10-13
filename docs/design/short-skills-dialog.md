@@ -1,7 +1,5 @@
 # Short Skills Dialog
 
-[English](short-skills-dialog.md) | [简体中文](short-skills-dialog.zh-CN.md)
-
 ## Decision
 
 Search includes both workspace-toggleable skills and locked skills. Bare mode

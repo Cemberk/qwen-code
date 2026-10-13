@@ -1,7 +1,5 @@
 # Sandboxed workflows, HTML artifacts and image decoding
 
-[English](2026-10-12-sandboxed-workflows-artifacts-images.md) | [简体中文](2026-10-12-sandboxed-workflows-artifacts-images.zh-CN.md)
-
 ## Status
 
 Implemented, 2026-10-12, on the local-only fork. The workflow host, the

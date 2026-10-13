@@ -1,7 +1,5 @@
 # First-pass system prompt simplification
 
-[English](2026-09-20-system-prompt-first-pass.md) | [简体中文](2026-09-20-system-prompt-first-pass.zh-CN.md)
-
 ## Problem and scope
 
 The default main-session prompt repeats project conventions, communication guidance, and interaction-mode instructions. Its five example variants include arithmetic, primality, an unexecuted deletion, and a redundant file-discovery conversation. Refactoring examples invite an unsolicited commit, conflicting with headless instructions that prohibit questions.

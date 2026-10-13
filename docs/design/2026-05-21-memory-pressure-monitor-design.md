@@ -6,8 +6,6 @@ status: 'implemented'
 
 # Memory Pressure Monitor
 
-[English](2026-05-21-memory-pressure-monitor-design.md) | [简体中文](2026-05-21-memory-pressure-monitor-design.zh-CN.md)
-
 ## Problem
 
 Long-running Qwen Code sessions can accumulate memory through large tool

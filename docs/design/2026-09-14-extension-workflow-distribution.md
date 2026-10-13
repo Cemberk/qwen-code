@@ -1,7 +1,5 @@
 # Extension workflow distribution
 
-[中文](./2026-09-14-extension-workflow-distribution.zh-CN.md)
-
 Tracking issue: #11013, item 12 (distribution half); #8105 PR 15.
 
 ## Problem

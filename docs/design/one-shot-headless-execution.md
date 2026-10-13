@@ -1,7 +1,5 @@
 # One-shot headless execution
 
-[English](one-shot-headless-execution.md) | [简体中文](one-shot-headless-execution.zh-CN.md)
-
 Status: Implemented in this change.
 
 ## Problem

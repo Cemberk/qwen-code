@@ -1,7 +1,5 @@
 # Coalescing extension status reads
 
-[English](extension-status-coalescing.md) | [简体中文](extension-status-coalescing.zh-CN.md)
-
 ## Problem
 
 The legacy-primary `GET /workspace/extensions` controller caches completed

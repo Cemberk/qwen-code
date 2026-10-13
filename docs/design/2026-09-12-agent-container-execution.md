@@ -1,7 +1,5 @@
 # Container execution for subagents (Track A)
 
-[English](2026-09-12-agent-container-execution.md) | [简体中文](2026-09-12-agent-container-execution.zh-CN.md)
-
 Status: backend and operator/definition policy implemented. Independent Linux Docker and rootful/rootless Podman verification covers `e544823995`; subsequent review fixes have local controlled-worker verification and still need native-runtime revalidation. Related: #11695, #11696, #9556.
 
 ## Problem and current state

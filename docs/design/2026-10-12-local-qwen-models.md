@@ -1,7 +1,5 @@
 # Built-in local Qwen models
 
-[English](2026-10-12-local-qwen-models.md) | [简体中文](2026-10-12-local-qwen-models.zh-CN.md)
-
 ## Status
 
 Implemented, 2026-10-12, on the local-only fork. Verified on an Apple M4 with

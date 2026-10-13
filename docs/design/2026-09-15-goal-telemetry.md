@@ -1,7 +1,5 @@
 # Goal telemetry
 
-[English](2026-09-15-goal-telemetry.md) | [简体中文](2026-09-15-goal-telemetry.zh-CN.md)
-
 ## Problem
 
 A Goal runs autonomously, and the ways it stops — the verifier completing or blocking it, a token, turn or active-time budget running out, the no-progress bound pausing it, the user pausing or clearing it — are recorded only in the session transcript. The telemetry package has no Goal event and no Goal metric. An operator who wants to know how often Goals end blocked, how much a completed Goal spends, or whether a budget is set too low has to read transcripts one at a time.

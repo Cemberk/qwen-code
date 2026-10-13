@@ -1,7 +1,5 @@
 # System prompt simplification, third pass
 
-[English](2026-09-26-system-prompt-third-pass.md) | [简体中文](2026-09-26-system-prompt-third-pass.zh-CN.md)
-
 ## Problem and scope
 
 After the second pass (#12546), two duplications that pass deliberately deferred remain:

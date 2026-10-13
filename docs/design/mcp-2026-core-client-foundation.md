@@ -1,7 +1,5 @@
 # MCP 2026 core client foundation
 
-[English](mcp-2026-core-client-foundation.md) | [简体中文](mcp-2026-core-client-foundation.zh-CN.md)
-
 ## Context
 
 Qwen Code's configured MCP sessions currently use the v1 TypeScript SDK. A

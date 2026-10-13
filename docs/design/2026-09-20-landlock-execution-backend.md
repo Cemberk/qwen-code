@@ -1,7 +1,5 @@
 # Landlock tool execution backend
 
-[English](2026-09-20-landlock-execution-backend.md) | [简体中文](2026-09-20-landlock-execution-backend.zh-CN.md)
-
 ## Status and scope
 
 This design adds a Landlock filesystem backend to the tool execution boundary introduced by the bwrap delivery. It builds on the public bwrap CLI cutover and trusted review-state migration already merged into main (#12267 and #12491), without restoring whole-CLI sandboxing. Shell commands, terminal shell entrypoints, and the existing file worker continue to enter confinement per tool invocation while the CLI, model transport, authentication, and session state remain on the host.

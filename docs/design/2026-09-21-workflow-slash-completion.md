@@ -1,7 +1,5 @@
 # Saved workflow slash-command completion
 
-[English](2026-09-21-workflow-slash-completion.md) | [简体中文](2026-09-21-workflow-slash-completion.zh-CN.md)
-
 Status: implementation under review in [#12415](https://github.com/QwenLM/qwen-code/pull/12415), addressing [#12176](https://github.com/QwenLM/qwen-code/issues/12176).
 
 ## Problem

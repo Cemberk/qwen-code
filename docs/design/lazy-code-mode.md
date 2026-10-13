@@ -1,7 +1,5 @@
 # Lazy Code Mode
 
-[English](lazy-code-mode.md) | [简体中文](lazy-code-mode.zh-CN.md)
-
 ## Problem and scope
 
 CodeModeOnly currently puts every callable tool's signature and description in

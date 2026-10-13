@@ -1,7 +1,5 @@
 # Runtime file tools in the execution sandbox
 
-[English](2026-09-16-runtime-file-sandbox.md) | [简体中文](2026-09-16-runtime-file-sandbox.zh-CN.md)
-
 ## Status and problem
 
 Implemented internal integration stage, 2026-09-16, following [runtime Shell integration](2026-09-16-runtime-shell-sandbox.md). Before this stage the registry exposed only Shell and task_stop. The prototype file worker accepted small UTF-8 JSON writes, replaced symlinks, and did not preserve existing modes. Production Write/Edit additionally created directories on the host. Simply registering those tools would both bypass confinement and leave existing files uneditable without Read's prior-read cache.

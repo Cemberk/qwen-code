@@ -47,11 +47,8 @@ Before submitting your PR, ensure that all automated checks are passing by runni
 
 If your PR introduces a user-facing change (e.g., a new command, a modified flag, or a change in behavior), you must also update the relevant documentation in the `/docs` directory.
 
-New or updated design documents must include complete English (`<name>.md`) and
-Simplified Chinese (`<name>.zh-CN.md`) versions in the same directory and PR.
-Keep their structure, decisions, constraints, and acceptance criteria aligned,
-and add reciprocal language links. See the design documentation requirements
-in [English](../design/README.md) or [简体中文](../design/README.zh-CN.md).
+Design documents are written in English. See the
+[design documentation requirements](../design/README.md).
 
 #### 6. Write Clear Commit Messages and a Good PR Description
 

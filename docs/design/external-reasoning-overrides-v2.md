@@ -1,7 +1,5 @@
 # External reasoning overrides, bounded redesign
 
-[English](external-reasoning-overrides-v2.md) | [简体中文](external-reasoning-overrides-v2.zh-CN.md)
-
 Status: implemented; local validation passed. Supersedes the implementation
 approach in PR #11521. The new PR must stay within 3,500 changed lines, counting
 additions and deletions across production code, tests, generated files and docs.

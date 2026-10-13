@@ -1,7 +1,5 @@
 # Named-workflows-only lock
 
-[中文](./2026-09-17-workflow-name-only.zh-CN.md)
-
 Tracking issue: #11013, item 12 (remaining part).
 
 Status: implemented in #12078.

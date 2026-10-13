@@ -1,7 +1,5 @@
 # Stopping a Goal at a turn or an active-time budget
 
-[English](2026-09-09-goal-turn-and-time-budget.md) | [简体中文](2026-09-09-goal-turn-and-time-budget.zh-CN.md)
-
 ## Problem
 
 A Goal's autonomous continuation has one configurable ceiling: the token

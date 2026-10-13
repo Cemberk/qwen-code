@@ -1,7 +1,5 @@
 # Extension File Reload Design
 
-[English](extension-file-reload.md) | [简体中文](extension-file-reload.zh-CN.md)
-
 ## Background
 
 Extension changes currently enter the runtime from two different directions.

@@ -1,7 +1,5 @@
 # Query-time native LSP document synchronization (PR1)
 
-[English](lsp-disk-document-sync.md) | [简体中文](lsp-disk-document-sync.zh-CN.md)
-
 Native LSP queries previously opened each URI once and never refreshed its text.
 The service owns a per-server, per-connection map of delivered disk text and
 version. Before location and document queries, it reads the target file and

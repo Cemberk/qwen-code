@@ -1,7 +1,5 @@
 # Shell Output Budget: One Decision Per Body
 
-[English](shell-output-budget-single-entry.md) | [简体中文](shell-output-budget-single-entry.zh-CN.md)
-
 ## Problem
 
 Shell output crosses two independent size policies before it reaches the model,

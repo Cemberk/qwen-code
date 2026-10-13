@@ -1,7 +1,5 @@
 # bwrap execution foundation
 
-[English](2026-09-17-bwrap-execution-foundation.md) | [简体中文](2026-09-17-bwrap-execution-foundation.zh-CN.md)
-
 ## Status and problem
 
 This is the first independent implementation slice of the tool-execution sandbox work previously collected in PR #12064. It adds an internal execution foundation. Runtime policy, tool routing, public settings and retirement of the whole-CLI bwrap backend belong to subsequent changes. Existing CLI entrypoints retain their current behavior.

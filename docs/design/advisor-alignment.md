@@ -1,7 +1,5 @@
 # Advisor behavior alignment
 
-[English](advisor-alignment.md) | [简体中文](advisor-alignment.zh-CN.md)
-
 ## Goal and reference
 
 Complete the executor/advisor behavior introduced by #9636 and the acceptance contract in #9036. The product goal is autonomous consultation during ordinary work after the user enables an Advisor, without requiring the user to request consultation in each prompt. The executor remains responsible for actions and the final answer.

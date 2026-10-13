@@ -1,7 +1,5 @@
 # Deferred Tool Call Bridge
 
-[English](deferred-tool-call-bridge.md) | [简体中文](deferred-tool-call-bridge.zh-CN.md)
-
 ## Problem
 
 `tool_search` previously revealed each matched deferred tool and refreshed the

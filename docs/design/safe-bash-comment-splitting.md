@@ -1,7 +1,5 @@
 # Conservative Bash Comment Recognition in Permission Rules
 
-[English](safe-bash-comment-splitting.md) | [简体中文](safe-bash-comment-splitting.zh-CN.md)
-
 ## Status
 
 Implemented by the focused replacement for #11821.

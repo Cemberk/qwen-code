@@ -315,8 +315,6 @@ The following items are intentionally not implemented in the current phase:
 - **Mid-session `enter_worktree` does NOT switch `process.cwd()` or `Config.targetDir`.** That tool uses the model-context-only convention (see [Sub-Agents](./sub-agents.md)). Only the startup `--worktree` flag actually switches the process working directory.
 - **Relative paths in other arg fields are resolved BEFORE the worktree chdir.** Path-taking flags (`--mcp-config`, `--openai-logging-dir`, `--json-file`, `--input-file`, `--telemetry-outfile`, `--include-directories`) are normalized to absolute paths against the launch cwd when `--worktree` is set. Other path-shaped argv fields not in this list still resolve against the worktree cwd — use absolute paths to be safe.
 
-Track the roadmap in `docs/design/worktree.md`.
-
 ## Troubleshooting
 
 **The Footer shows no worktree indicator even though I just created one.**

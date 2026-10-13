@@ -1,7 +1,5 @@
 # Tool Output Offload/Preview: State Transitions and Privacy Model
 
-[English](2026-08-10-tool-output-offload-preview.md) | [简体中文](2026-08-10-tool-output-offload-preview.zh-CN.md)
-
 > Design note required by [#4184](https://github.com/QwenLM/qwen-code/issues/4184)
 > (acceptance criterion: "A design note documents the offload/preview state
 > transition and privacy model"). Mitigation implemented in #4880; retention
