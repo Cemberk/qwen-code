@@ -26,7 +26,8 @@ itself.
 
 ## Non-goals
 
-- Downloading models, checking for new ones or reading Hugging Face metadata.
+- Downloading in qwen's own code, checking for new models or reading Hugging
+  Face metadata. Downloads go through the user's `hf` tool.
 - Installing llama.cpp.
 - Serving more than one model at a time, or sharing an engine between qwen
   sessions.
@@ -99,6 +100,22 @@ itself.
 - A project `.env` cannot set `HF_HUB_CACHE`, `HUGGINGFACE_HUB_CACHE`,
   `HF_HOME` or `XDG_CACHE_HOME`, so a repository cannot point qwen at model
   files it supplies.
+
+### Downloading and removing
+
+- `/models`, `/models download` and `/models remove` are built-in slash
+  commands, so only the user can run them; built-in commands are never
+  model-invocable.
+- `download` runs `hf download <repo> <file>` for a listed id, or adds a new
+  repository and file to the user's `localModels` first. `remove` runs
+  `hf cache rm model/<repo> -y`.
+- `hf` is found on `PATH` (absolute entries only) and runs with
+  `HF_HUB_DISABLE_IMPLICIT_TOKEN=1`, `HF_HUB_DISABLE_TELEMETRY=1` and no
+  `HF_TOKEN`. Arguments are validated first: a repository must be
+  `owner/name`, and no part of a file path may start with `-`, so neither can
+  pass an option to `hf`.
+- qwen itself still makes no network connection: `hf` does, and only on the
+  user's command.
 
 ### Engine lifecycle
 
@@ -180,8 +197,9 @@ itself.
   separate 1.2 GB GGUF, `--spec-type draft-mtp`) ran out of GPU memory next
   to the weights. An 8-bit context cache made generation slower (16.9 tokens/s)
   for a cache that is already small.
-- **No downloads in qwen.** Every earlier phase removed network code. The user
-  runs `hf download` knowingly.
+- **No downloads in qwen's code.** Every earlier phase removed network code.
+  The `/models` commands run the user's `hf` tool, deterministically and only
+  when the user types them.
 - **Placeholder base URL** instead of a port reserved at startup: a persisted
   selection stays valid, and a restart may use a new port.
 - **Lease per request** instead of restarting only on `/model`: side models,

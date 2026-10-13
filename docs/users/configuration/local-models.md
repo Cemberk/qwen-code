@@ -58,6 +58,22 @@ models and longer for large ones. If a fast, vision or subagent model is a
 different local model from the main one, each switch between them reloads the
 engine, so leave those unset or set them to the main model.
 
+## Downloading and removing models from Qwen Code
+
+These commands run the `hf` tool for you, only when you type them. The model
+cannot run them.
+
+| Command                           | What it does                                                                                               |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `/models`                         | Lists the local models and marks the downloaded ones.                                                      |
+| `/models download <id>`           | Runs `hf download <repo> <file>` for a model in the list.                                                  |
+| `/models download <repo> <file>`  | Adds that file to `localModels` (its id is the file name in lower case, without `.gguf`) and downloads it. |
+| `/models remove <id>` or `<repo>` | Runs `hf cache rm model/<repo> -y`, deleting every downloaded file of that repository.                     |
+
+`hf` runs without your Hugging Face token and with telemetry off. Downloading
+contacts huggingface.co; the `hf` tool also checks PyPI for a newer version of
+itself once a day.
+
 ## Changing the list
 
 Set `localModels` in `~/.qwen/settings.json`. It replaces the built-in list, so

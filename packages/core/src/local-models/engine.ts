@@ -71,7 +71,11 @@ export interface EngineCommand {
   env: NodeJS.ProcessEnv;
 }
 
-function findExecutable(name: string, searchPath: string): string | undefined {
+/** An executable named `name` in an absolute `PATH` entry. */
+export function findExecutable(
+  name: string,
+  searchPath: string = process.env['PATH'] ?? '',
+): string | undefined {
   for (const dir of searchPath.split(path.delimiter)) {
     // A relative entry would resolve against the workspace.
     if (!path.isAbsolute(dir)) continue;

@@ -332,6 +332,11 @@ export default {
   'Theme "{{themeName}}" not found.': '未找到主題 "{{themeName}}"。',
   'Theme "{{themeName}}" not found in selected scope.':
     '在所選作用域中未找到主題 "{{themeName}}"。',
+  'List, download or remove local models': '列出、下載或刪除本機模型',
+  'Download a local model: /models download <id>, or <repo> <file> to add one':
+    '下載本機模型：/models download <id>，或使用 <repo> <file> 新增模型',
+  'Delete a local model from disk: /models remove <id or repo>':
+    '從磁碟刪除本機模型：/models remove <id 或 repo>',
   'Clear conversation history and free up context': '清除對話歷史並釋放上下文',
   'Compresses the context by replacing it with a summary.':
     '通過摘要替換來壓縮上下文',

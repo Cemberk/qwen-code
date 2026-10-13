@@ -358,6 +358,12 @@ export default {
   'Theme "{{themeName}}" not found.': 'Theme "{{themeName}}" not found.',
   'Theme "{{themeName}}" not found in selected scope.':
     'Theme "{{themeName}}" not found in selected scope.',
+  'List, download or remove local models':
+    'List, download or remove local models',
+  'Download a local model: /models download <id>, or <repo> <file> to add one':
+    'Download a local model: /models download <id>, or <repo> <file> to add one',
+  'Delete a local model from disk: /models remove <id or repo>':
+    'Delete a local model from disk: /models remove <id or repo>',
   'Clear conversation history and free up context':
     'Clear conversation history and free up context',
   'Compresses the context by replacing it with a summary.':

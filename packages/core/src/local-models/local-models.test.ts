@@ -37,6 +37,7 @@ describe('validateLocalModels', () => {
     ['a file outside the repo', [{ ...gguf, file: '../x.gguf' }], /\.file/],
     ['an absolute file', [{ ...gguf, file: '/x.gguf' }], /\.file/],
     ['a non-gguf file', [{ ...gguf, file: 'x.bin' }], /\.file/],
+    ['an option-like file', [{ ...gguf, file: '--dir=x.gguf' }], /\.file/],
     [
       'a fractional context size',
       [{ ...gguf, contextSize: 1.5 }],

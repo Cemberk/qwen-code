@@ -71,6 +71,11 @@ export const BUILT_IN_LOCAL_MODELS: readonly LocalModelConfig[] = [
 
 const REPO_PATTERN = /^[A-Za-z0-9][\w.-]*\/[A-Za-z0-9][\w.-]*$/;
 
+/** Whether `value` names a Hugging Face repository, `owner/name`. */
+export function isHuggingFaceRepo(value: string): boolean {
+  return REPO_PATTERN.test(value);
+}
+
 /**
  * Validate a `localModels` value and return it typed.
  *
@@ -111,7 +116,9 @@ export function validateLocalModels(value: unknown): LocalModelConfig[] {
       !file.endsWith('.gguf') ||
       file.startsWith('/') ||
       file.includes('\\') ||
-      file.split('/').some((part) => part === '' || part === '..')
+      file
+        .split('/')
+        .some((part) => part === '' || part === '..' || part.startsWith('-'))
     ) {
       throw new Error(
         `${at}.file must be the path of a .gguf file inside the repository.`,
