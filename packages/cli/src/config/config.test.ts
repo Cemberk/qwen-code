@@ -3573,7 +3573,7 @@ describe('loadCliConfig model selection', () => {
     const err = await loadCliConfig(
       {
         localModels: [
-          { id: 'q', format: 'gguf', repo: 'Qwen/Qwen3-8B-GGUF' },
+          { id: 'q', repo: 'Qwen/Qwen3-8B-GGUF' },
         ] as Settings['localModels'],
       },
       argv,

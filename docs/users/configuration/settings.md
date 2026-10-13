@@ -247,9 +247,9 @@ The `extra_body` field adds custom parameters to the request body sent to the mo
 
 #### localModels
 
-| Setting       | Type  | Description                                                                                                                                                                                                                                                                                                                                        | Default                |
-| ------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| `localModels` | array | Qwen models that Qwen Code runs itself from the Hugging Face cache, with `mlx_lm.server` (`"format": "mlx"`) or `llama-server` (`"format": "gguf"`). Listed in `/model` ahead of `modelProviders`; the first one is the default when no model is set. Replaces the built-in list; `[]` turns local models off. See [Local Models](./local-models). | the built-in Qwen list |
+| Setting       | Type  | Description                                                                                                                                                                                                                                                                                | Default                |
+| ------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------- |
+| `localModels` | array | GGUF Qwen models that Qwen Code runs itself with `llama-server` from the Hugging Face cache. Listed in `/model` ahead of `modelProviders`; the first one is the default when no model is set. Replaces the built-in list; `[]` turns local models off. See [Local Models](./local-models). | the built-in Qwen list |
 
 #### fastModel
 

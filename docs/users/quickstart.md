@@ -10,7 +10,7 @@ Make sure you have:
 
 - A **terminal** or command prompt open
 - A code project to work with
-- A model engine: `mlx-lm` (`uv tool install mlx-lm`) on Apple Silicon or llama.cpp (`brew install llama.cpp`), and a Qwen model downloaded with `hf download` (see [Local Models](./configuration/local-models)). Alternatively, any OpenAI-compatible model server running on this machine, such as [Ollama](https://ollama.com), [LM Studio](https://lmstudio.ai) or [vLLM](https://docs.vllm.ai)
+- llama.cpp (`brew install llama.cpp`) and a Qwen model downloaded with `hf download` (see [Local Models](./configuration/local-models)). Alternatively, any OpenAI-compatible model server running on this machine, such as [Ollama](https://ollama.com), [LM Studio](https://lmstudio.ai) or [vLLM](https://docs.vllm.ai)
 
 ## Step 1: Build Qwen Code
 
@@ -38,16 +38,16 @@ You can also run the bundle directly with `node dist/cli.js`.
 ## Step 2: Pick a model
 
 Qwen Code comes with a list of Qwen models that it runs itself. With nothing
-configured it runs the first one, `qwen3-8b-mlx`. Download it once:
+configured it runs the first one, `qwen3-8b`. Download it once:
 
 ```bash
-hf download mlx-community/Qwen3-8B-4bit
+hf download Qwen/Qwen3-8B-GGUF Qwen3-8B-Q4_K_M.gguf
 ```
 
 Then start Qwen Code and send a prompt; the engine starts on the first
 request and stops when you exit. Use `/model` to switch to another model from
-the list. See [Local Models](./configuration/local-models) for the full list,
-the GGUF models for llama.cpp, and how to change the list.
+the list. See [Local Models](./configuration/local-models) for the full list
+and how to change it.
 
 Qwen Code only connects to model servers on this machine, and never
 downloads anything itself.

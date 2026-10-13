@@ -19,14 +19,8 @@ const COMMIT = '75f1b73b657a50f5092502799457ccb4a4a1f9df';
 const gguf: LocalModelConfig = {
   id: 'q',
   name: 'Qwen GGUF',
-  format: 'gguf',
   repo: 'Qwen/Qwen3-8B-GGUF',
   file: 'Qwen3-8B-Q4_K_M.gguf',
-};
-const mlx: LocalModelConfig = {
-  id: 'm',
-  format: 'mlx',
-  repo: 'mlx-community/Qwen3-8B-4bit',
 };
 
 describe('huggingFaceHubCacheDir', () => {
@@ -43,7 +37,7 @@ describe('huggingFaceHubCacheDir', () => {
 });
 
 describe('huggingFaceDownloadCommand', () => {
-  it('names the file for GGUF, every part for a split GGUF, and the repo for MLX', () => {
+  it('names the file, or every part of a split file', () => {
     expect(huggingFaceDownloadCommand(gguf)).toBe(
       'hf download Qwen/Qwen3-8B-GGUF Qwen3-8B-Q4_K_M.gguf',
     );
@@ -54,9 +48,6 @@ describe('huggingFaceDownloadCommand', () => {
       }),
     ).toBe(
       'hf download Qwen/Qwen3-8B-GGUF --include "Q8_0/Big-Q8_0-*-of-00003.gguf"',
-    );
-    expect(huggingFaceDownloadCommand(mlx)).toBe(
-      'hf download mlx-community/Qwen3-8B-4bit',
     );
   });
 });
@@ -104,28 +95,6 @@ describe('resolveLocalModelPath', () => {
     expect(resolveLocalModelPath(split, cache)).toBe(
       path.join(snapshotOf(gguf.repo), 'm-00001-of-00002.gguf'),
     );
-  });
-
-  it('needs the config and every indexed weight file of an MLX model', () => {
-    download(mlx.repo, {
-      'config.json': '{}',
-      'model.safetensors.index.json': JSON.stringify({
-        weight_map: { a: 'model-1.safetensors', b: 'model-2.safetensors' },
-      }),
-      'model-1.safetensors': 'x',
-    });
-    expect(() => resolveLocalModelPath(mlx, cache)).toThrow(
-      /hf download mlx-community\/Qwen3-8B-4bit\n/,
-    );
-    download(mlx.repo, { 'model-2.safetensors': 'x' });
-    expect(resolveLocalModelPath(mlx, cache)).toBe(snapshotOf(mlx.repo));
-  });
-
-  it('accepts a single-file MLX model', () => {
-    download(mlx.repo, { 'config.json': '{}' });
-    expect(() => resolveLocalModelPath(mlx, cache)).toThrow(/not downloaded/);
-    download(mlx.repo, { 'model.safetensors': 'x' });
-    expect(resolveLocalModelPath(mlx, cache)).toBe(snapshotOf(mlx.repo));
   });
 
   it('ignores a ref that is not a commit hash', () => {

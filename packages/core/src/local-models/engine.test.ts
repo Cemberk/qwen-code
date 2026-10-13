@@ -17,21 +17,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { engineCommand, startLocalModelEngine } from './engine.js';
 import type { LocalModelConfig } from './local-models.js';
 
-const gguf: LocalModelConfig = {
-  id: 'q-gguf',
+const model: LocalModelConfig = {
+  id: 'q',
   name: 'Qwen GGUF',
-  format: 'gguf',
   repo: 'Qwen/Qwen3-8B-GGUF',
   file: 'Qwen3-8B-Q4_K_M.gguf',
   contextSize: 16384,
 };
-const mlx: LocalModelConfig = {
-  id: 'q-mlx',
-  format: 'mlx',
-  repo: 'mlx-community/Qwen3-8B-4bit',
-};
 
-// Stands in for both engines: serves 200 on every path, or exits with an
+// Stands in for llama-server: serves 200 on every path, or exits with an
 // error when the model path says "broken".
 const FAKE_ENGINE = `#!${process.execPath}
 const args = process.argv.slice(2);
@@ -45,17 +39,6 @@ require('node:http')
   .listen(Number(args[args.indexOf('--port') + 1]), '127.0.0.1');
 `;
 
-const QWEN3_SAMPLING = [
-  '--temp',
-  '0.6',
-  '--top-p',
-  '0.95',
-  '--top-k',
-  '20',
-  '--min-p',
-  '0',
-];
-
 let dir: string;
 beforeEach(() => {
   dir = mkdtempSync(path.join(os.tmpdir(), 'local-engine-'));
@@ -65,13 +48,11 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-function installFakeEngines(): string {
+function installFakeEngine(): string {
   const bin = path.join(dir, 'bin');
   mkdirSync(bin);
-  for (const name of ['llama-server', 'mlx_lm.server']) {
-    writeFileSync(path.join(bin, name), FAKE_ENGINE);
-    chmodSync(path.join(bin, name), 0o755);
-  }
+  writeFileSync(path.join(bin, 'llama-server'), FAKE_ENGINE);
+  chmodSync(path.join(bin, 'llama-server'), 0o755);
   return bin;
 }
 
@@ -86,10 +67,10 @@ describe('engineCommand', () => {
     OPENAI_API_KEY: 'sk-other',
   });
 
-  it('runs llama-server on loopback, offline, with the key and nothing else from the environment', () => {
-    const bin = installFakeEngines();
+  it('runs llama-server on loopback, offline, with n-gram speculation, the key and nothing else from the environment', () => {
+    const bin = installFakeEngine();
     const command = engineCommand(
-      gguf,
+      model,
       '/m.gguf',
       4321,
       'k',
@@ -108,12 +89,21 @@ describe('engineCommand', () => {
         '--ctx-size',
         '16384',
         '--alias',
-        'q-gguf',
+        'q',
         '--jinja',
         '--offline',
         '--no-webui',
         '--no-slots',
-        ...QWEN3_SAMPLING,
+        '--temp',
+        '0.6',
+        '--top-p',
+        '0.95',
+        '--top-k',
+        '20',
+        '--min-p',
+        '0',
+        '--spec-type',
+        'ngram-simple',
       ],
       env: {
         PATH: env(bin)['PATH'],
@@ -121,39 +111,12 @@ describe('engineCommand', () => {
         TMPDIR: '/tmp/u',
         LLAMA_API_KEY: 'k',
       },
-      requestModel: undefined,
-    });
-  });
-
-  it('runs mlx_lm.server on loopback with the Hugging Face hub offline', () => {
-    const bin = installFakeEngines();
-    const command = engineCommand(mlx, '/snap', 4321, 'k', env(bin), 'linux');
-    expect(command.command).toBe(path.join(bin, 'mlx_lm.server'));
-    expect(command.args).toEqual([
-      '--model',
-      '/snap',
-      '--host',
-      '127.0.0.1',
-      '--port',
-      '4321',
-      '--allowed-origins',
-      'none',
-      ...QWEN3_SAMPLING,
-    ]);
-    // It loads whatever a request names, so requests name its own model.
-    expect(command.requestModel).toBe('default_model');
-    expect(command.env).toEqual({
-      PATH: env(bin)['PATH'],
-      HOME: '/home/u',
-      TMPDIR: '/tmp/u',
-      HF_HUB_OFFLINE: '1',
-      HF_HUB_DISABLE_TELEMETRY: '1',
     });
   });
 
   it('wraps the engine in a Seatbelt profile that confines its network and writes on macOS', () => {
-    const bin = installFakeEngines();
-    const command = engineCommand(gguf, '/m.gguf', 1, 'k', env(bin), 'darwin');
+    const bin = installFakeEngine();
+    const command = engineCommand(model, '/m.gguf', 1, 'k', env(bin), 'darwin');
     expect(command.command).toBe('/usr/bin/sandbox-exec');
     expect(command.args.slice(0, 3)).toEqual(['-D', 'HOME=/home/u', '-p']);
     const profile = command.args[3];
@@ -166,9 +129,9 @@ describe('engineCommand', () => {
   });
 
   it('lets the engine inherit qwen’s own Seatbelt sandbox, which cannot nest', () => {
-    const bin = installFakeEngines();
+    const bin = installFakeEngine();
     const command = engineCommand(
-      gguf,
+      model,
       '/m.gguf',
       1,
       'k',
@@ -181,26 +144,26 @@ describe('engineCommand', () => {
   it('ignores relative PATH entries and says how to install a missing engine', () => {
     const relative = path.join(dir, 'relative');
     mkdirSync(relative);
-    writeFileSync(path.join(relative, 'mlx_lm.server'), FAKE_ENGINE);
-    chmodSync(path.join(relative, 'mlx_lm.server'), 0o755);
+    writeFileSync(path.join(relative, 'llama-server'), FAKE_ENGINE);
+    chmodSync(path.join(relative, 'llama-server'), 0o755);
     expect(() =>
       engineCommand(
-        mlx,
-        '/snap',
+        model,
+        '/m.gguf',
         1,
         'k',
         { PATH: path.relative(process.cwd(), relative) },
         'linux',
       ),
     ).toThrow(
-      /mlx_lm\.server was not found on PATH[\s\S]*uv tool install mlx-lm/,
+      /llama-server was not found on PATH[\s\S]*brew install llama\.cpp/,
     );
   });
 });
 
 describe('startLocalModelEngine', () => {
   const COMMIT = '75f1b73b657a50f5092502799457ccb4a4a1f9df';
-  const downloadGguf = (file: string) => {
+  const download = (file: string) => {
     const repoDir = path.join(dir, 'hub', 'models--Qwen--Qwen3-8B-GGUF');
     mkdirSync(path.join(repoDir, 'refs'), { recursive: true });
     writeFileSync(path.join(repoDir, 'refs', 'main'), COMMIT);
@@ -211,7 +174,7 @@ describe('startLocalModelEngine', () => {
   beforeEach(() => {
     vi.stubEnv(
       'PATH',
-      [installFakeEngines(), process.env['PATH']].join(path.delimiter),
+      [installFakeEngine(), process.env['PATH']].join(path.delimiter),
     );
     vi.stubEnv('HF_HUB_CACHE', path.join(dir, 'hub'));
     // The tests may already run inside a Seatbelt sandbox, which cannot nest.
@@ -219,8 +182,8 @@ describe('startLocalModelEngine', () => {
   });
 
   it('starts the engine on a loopback port, waits until it answers, and stops it', async () => {
-    downloadGguf(gguf.file!);
-    const engine = await startLocalModelEngine(gguf, 'k');
+    download(model.file);
+    const engine = await startLocalModelEngine(model, 'k');
     expect(engine.baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/v1$/);
     const health = await fetch(engine.baseUrl.replace('/v1', '/health'));
     expect(health.status).toBe(200);
@@ -230,15 +193,15 @@ describe('startLocalModelEngine', () => {
   });
 
   it('fails with the engine output when the engine exits during startup', async () => {
-    const broken = { ...gguf, file: 'broken.gguf' };
-    downloadGguf(broken.file);
+    const broken = { ...model, file: 'broken.gguf' };
+    download(broken.file);
     await expect(startLocalModelEngine(broken, 'k')).rejects.toThrow(
       /Qwen GGUF failed to start: the engine exited \(code 3\)\.\nerror loading model: .*broken\.gguf/,
     );
   });
 
   it('fails before starting anything when the model is not downloaded', async () => {
-    await expect(startLocalModelEngine(gguf, 'k')).rejects.toThrow(
+    await expect(startLocalModelEngine(model, 'k')).rejects.toThrow(
       /not downloaded[\s\S]*hf download Qwen\/Qwen3-8B-GGUF/,
     );
   });

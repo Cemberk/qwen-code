@@ -34,16 +34,13 @@ export class LocalModelContentGenerator implements ContentGenerator {
   ) {}
 
   private generatorFor(lease: LocalModelLease): ContentGenerator {
-    const { baseUrl, apiKey, requestModel } = lease;
-    const key = `${baseUrl}\0${apiKey}\0${requestModel ?? ''}`;
+    const { baseUrl, apiKey } = lease;
+    const key = `${baseUrl}\0${apiKey}`;
     if (this.current?.key !== key) {
-      const config = { ...this.generatorConfig, baseUrl, apiKey };
-      if (requestModel) {
-        // extra_body is applied last, so only the wire value changes; qwen's
-        // model-specific handling still sees the model's id.
-        config.extra_body = { ...config.extra_body, model: requestModel };
-      }
-      this.current = { key, generator: this.create(config) };
+      this.current = {
+        key,
+        generator: this.create({ ...this.generatorConfig, baseUrl, apiKey }),
+      };
     }
     return this.current.generator;
   }

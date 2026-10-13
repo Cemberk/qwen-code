@@ -38,26 +38,10 @@ export function huggingFaceHubCacheDir(
 
 /** The command that downloads `model` into the cache. The user runs it; qwen never downloads. */
 export function huggingFaceDownloadCommand(model: LocalModelConfig): string {
-  if (model.format === 'mlx') {
-    return `hf download ${model.repo}`;
-  }
-  const split = SPLIT_GGUF_PATTERN.exec(model.file!);
+  const split = SPLIT_GGUF_PATTERN.exec(model.file);
   return split
     ? `hf download ${model.repo} --include "${split[1]}-*-of-${split[3]}.gguf"`
     : `hf download ${model.repo} ${model.file}`;
-}
-
-function weightFiles(snapshot: string): string[] {
-  const index = path.join(snapshot, 'model.safetensors.index.json');
-  if (!existsSync(index)) {
-    return ['model.safetensors'];
-  }
-  const weightMap = (
-    JSON.parse(readFileSync(index, 'utf8')) as {
-      weight_map?: Record<string, string>;
-    }
-  ).weight_map;
-  return [...new Set(Object.values(weightMap ?? {}))];
 }
 
 function ggufParts(file: string): string[] {
@@ -74,10 +58,10 @@ function ggufParts(file: string): string[] {
 }
 
 /**
- * Locate a downloaded model: the GGUF file, or the MLX snapshot directory.
- * Reads only the local cache.
+ * Locate a downloaded model's GGUF file. Reads only the local cache.
  *
- * @throws Error with the download command when the model is not (fully) in the cache.
+ * @throws Error with the download command when the file (or any part of a
+ *   split file) is not in the cache.
  */
 export function resolveLocalModelPath(
   model: LocalModelConfig,
@@ -99,15 +83,11 @@ export function resolveLocalModelPath(
   } catch {
     // Not downloaded; reported below.
   }
-  const required =
-    model.format === 'gguf'
-      ? ggufParts(model.file!)
-      : snapshot && existsSync(path.join(snapshot, 'config.json'))
-        ? weightFiles(snapshot)
-        : ['config.json'];
   if (
     !snapshot ||
-    !required.every((file) => existsSync(path.join(snapshot, file)))
+    !ggufParts(model.file).every((file) =>
+      existsSync(path.join(snapshot, file)),
+    )
   ) {
     throw new Error(
       `${model.name ?? model.id} is not downloaded (looked in ${cacheDir}). ` +
@@ -115,5 +95,5 @@ export function resolveLocalModelPath(
         'That command contacts huggingface.co; qwen itself never does.',
     );
   }
-  return model.format === 'gguf' ? path.join(snapshot, model.file!) : snapshot;
+  return path.join(snapshot, model.file);
 }

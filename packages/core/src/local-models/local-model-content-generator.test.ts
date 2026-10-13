@@ -23,7 +23,7 @@ const config = {
   apiKey: 'local',
 } as ContentGeneratorConfig;
 
-function setup(baseUrls: string[], requestModel?: string) {
+function setup(baseUrls: string[]) {
   const released: string[] = [];
   const acquired: string[] = [];
   const server = {
@@ -33,7 +33,6 @@ function setup(baseUrls: string[], requestModel?: string) {
       return {
         baseUrl,
         apiKey: 'real-key',
-        requestModel,
         release: () => released.push(modelId),
       };
     }),
@@ -77,15 +76,6 @@ describe('LocalModelContentGenerator', () => {
       { ...config, baseUrl: 'http://127.0.0.1:5000/v1', apiKey: 'real-key' },
     ]);
     expect(t.released).toEqual(['q-main']);
-  });
-
-  it('sends the name the engine expects without changing the model qwen sees', async () => {
-    const t = setup(['http://127.0.0.1:5000/v1'], 'default_model');
-    await t.generator.generateContent(request(), 'p');
-    expect(t.created[0]).toMatchObject({
-      model: 'q-main',
-      extra_body: { model: 'default_model' },
-    });
   });
 
   it('leases the model the request names', async () => {

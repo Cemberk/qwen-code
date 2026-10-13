@@ -14,8 +14,6 @@ export interface LocalModelLease {
   /** The engine's OpenAI-compatible `/v1` root. */
   readonly baseUrl: string;
   readonly apiKey: string;
-  /** The `model` value requests must carry, when it differs from the model's id. */
-  readonly requestModel?: string;
   /** Idempotent. */
   release(): void;
 }
@@ -39,7 +37,7 @@ export type StartEngine = (
  * is restarted by the next lease.
  */
 export class LocalModelServer {
-  /** Engines started by this server accept only this key (llama-server). */
+  /** Engines started by this server accept only this key. */
   readonly apiKey = randomBytes(24).toString('hex');
   private models: readonly LocalModelConfig[] = [];
   private engine?: LocalModelEngine;
@@ -104,7 +102,6 @@ export class LocalModelServer {
     return {
       baseUrl: engine.baseUrl,
       apiKey: this.apiKey,
-      requestModel: engine.requestModel,
       release: () => {
         if (released) return;
         released = true;

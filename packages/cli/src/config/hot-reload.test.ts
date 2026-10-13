@@ -932,7 +932,11 @@ describe('registerModelProvidersHotReload', () => {
     try {
       registerModelProvidersHotReload(watcher, settings, config);
       const local: LocalModelConfig[] = [
-        { id: 'q', format: 'mlx', repo: 'mlx-community/Qwen3-8B-4bit' },
+        {
+          id: 'q',
+          repo: 'Qwen/Qwen3-8B-GGUF',
+          file: 'Qwen3-8B-Q4_K_M.gguf',
+        },
       ];
       merged.localModels = local;
       merged.modelProviders = {
@@ -965,9 +969,10 @@ describe('registerModelProvidersHotReload', () => {
     const spy = vi.fn();
     appEvents.on(AppEvent.LogError, spy);
     try {
+      // No file: what a hand edit might leave behind.
       merged.localModels = [
-        { id: 'q', format: 'gguf', repo: 'Qwen/Qwen3-8B-GGUF' },
-      ];
+        { id: 'q', repo: 'Qwen/Qwen3-8B-GGUF' },
+      ] as Settings['localModels'];
       await listener([]);
       await listener([]);
 

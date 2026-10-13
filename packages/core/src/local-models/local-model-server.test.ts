@@ -9,8 +9,8 @@ import type { LocalModelEngine } from './engine.js';
 import type { LocalModelConfig } from './local-models.js';
 import { LocalModelServer } from './local-model-server.js';
 
-const a: LocalModelConfig = { id: 'a', format: 'mlx', repo: 'o/a' };
-const b: LocalModelConfig = { id: 'b', format: 'mlx', repo: 'o/b' };
+const a: LocalModelConfig = { id: 'a', repo: 'o/a', file: 'a.gguf' };
+const b: LocalModelConfig = { id: 'b', repo: 'o/b', file: 'b.gguf' };
 
 // Records engine starts and stops; each start gets its own port.
 function fakeEngines() {

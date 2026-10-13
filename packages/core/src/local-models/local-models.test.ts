@@ -16,7 +16,6 @@ import {
 
 const gguf = {
   id: 'q-gguf',
-  format: 'gguf',
   repo: 'Qwen/Qwen3-8B-GGUF',
   file: 'Qwen3-8B-Q4_K_M.gguf',
 };
@@ -32,18 +31,12 @@ describe('validateLocalModels', () => {
     ['a non-array', {}, /must be an array/],
     ['a missing id', [{ ...gguf, id: ' ' }], /\[0\]\.id/],
     ['a duplicate id', [gguf, gguf], /used by another entry/],
-    ['an unknown format', [{ ...gguf, format: 'onnx' }], /\.format/],
     ['a repo without an owner', [{ ...gguf, repo: 'Qwen3-8B' }], /\.repo/],
     ['a repo with a path', [{ ...gguf, repo: 'a/b/c' }], /\.repo/],
-    ['a gguf without a file', [{ ...gguf, file: undefined }], /\.file/],
+    ['a missing file', [{ ...gguf, file: undefined }], /\.file/],
     ['a file outside the repo', [{ ...gguf, file: '../x.gguf' }], /\.file/],
     ['an absolute file', [{ ...gguf, file: '/x.gguf' }], /\.file/],
     ['a non-gguf file', [{ ...gguf, file: 'x.bin' }], /\.file/],
-    [
-      'a file on an mlx model',
-      [{ id: 'm', format: 'mlx', repo: 'a/b', file: 'x.gguf' }],
-      /only used by gguf/,
-    ],
     [
       'a fractional context size',
       [{ ...gguf, contextSize: 1.5 }],
@@ -62,25 +55,30 @@ describe('withLocalModelProviders', () => {
       envKey: 'OLLAMA_API_KEY',
     };
     const providers = withLocalModelProviders({ openai: [own] }, [
-      { ...gguf, format: 'gguf' },
-      { id: 'q-mlx', format: 'mlx', repo: 'mlx-community/Qwen3-8B-4bit' },
+      gguf,
+      {
+        id: 'q-14b',
+        repo: 'Qwen/Qwen3-14B-GGUF',
+        file: 'Qwen3-14B-Q4_K_M.gguf',
+        contextSize: 8192,
+      },
     ]);
     expect(providers?.['openai']).toEqual([
       {
         id: 'q-gguf',
         name: 'q-gguf',
-        description: 'GGUF · Qwen/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M.gguf',
+        description: 'Qwen/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M.gguf',
         baseUrl: LOCAL_MODEL_BASE_URL,
         envKey: LOCAL_MODEL_KEY_ENV,
         generationConfig: { contextWindowSize: 32768 },
       },
       {
-        id: 'q-mlx',
-        name: 'q-mlx',
-        description: 'MLX · mlx-community/Qwen3-8B-4bit',
+        id: 'q-14b',
+        name: 'q-14b',
+        description: 'Qwen/Qwen3-14B-GGUF/Qwen3-14B-Q4_K_M.gguf',
         baseUrl: LOCAL_MODEL_BASE_URL,
         envKey: LOCAL_MODEL_KEY_ENV,
-        generationConfig: { contextWindowSize: 32768 },
+        generationConfig: { contextWindowSize: 8192 },
       },
       own,
     ]);

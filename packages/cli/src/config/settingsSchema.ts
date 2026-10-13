@@ -290,7 +290,7 @@ const SETTINGS_SCHEMA = {
     requiresRestart: false,
     default: BUILT_IN_LOCAL_MODELS as LocalModelConfig[],
     description:
-      'Qwen models qwen runs itself from the Hugging Face cache, listed in /model ahead of modelProviders. Each entry has an id, an optional name, a format ("mlx", run by mlx_lm.server, or "gguf", run by llama-server), a Hugging Face repo, the .gguf file for gguf models, and an optional contextSize. Replaces the built-in list.',
+      'GGUF Qwen models qwen runs itself with llama-server from the Hugging Face cache, listed in /model ahead of modelProviders. Each entry has an id, an optional name, a Hugging Face repo, the .gguf file and an optional contextSize. Replaces the built-in list; [] turns local models off.',
     showInDialog: false,
     mergeStrategy: MergeStrategy.REPLACE,
   },

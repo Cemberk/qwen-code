@@ -6,20 +6,16 @@
 
 import type { ModelConfig, ModelProvidersConfig } from '../models/types.js';
 
-/** `mlx` models run in `mlx_lm.server`; `gguf` models run in `llama-server`. */
-export type LocalModelFormat = 'mlx' | 'gguf';
-
-/** A model qwen runs itself, from the Hugging Face cache (`localModels`). */
+/** A GGUF model qwen runs itself with llama-server, from the Hugging Face cache (`localModels`). */
 export interface LocalModelConfig {
   /** The name `/model`, `model.name` and `--model` use. */
   id: string;
   /** Display name; defaults to `id`. */
   name?: string;
-  format: LocalModelFormat;
   /** Hugging Face repository, `owner/name`. */
   repo: string;
-  /** The `.gguf` file in the repository (GGUF only); the first part of a split file. */
-  file?: string;
+  /** The `.gguf` file in the repository; the first part of a split file. */
+  file: string;
   /** Context window in tokens. */
   contextSize?: number;
 }
@@ -40,52 +36,31 @@ export const LOCAL_MODEL_BASE_URL = 'http://127.0.0.1:0/v1';
 export const LOCAL_MODEL_KEY_ENV = 'QWEN_LOCAL_MODEL_KEY';
 export const LOCAL_MODEL_KEY_PLACEHOLDER = 'local';
 
-/** The default `localModels`: MLX first, since the fork mainly runs on Apple Silicon. */
+/** The default `localModels`. */
 export const BUILT_IN_LOCAL_MODELS: readonly LocalModelConfig[] = [
   {
-    id: 'qwen3-8b-mlx',
-    name: 'Qwen3 8B (MLX 4-bit)',
-    format: 'mlx',
-    repo: 'mlx-community/Qwen3-8B-4bit',
-  },
-  {
-    id: 'qwen3-4b-mlx',
-    name: 'Qwen3 4B (MLX 4-bit)',
-    format: 'mlx',
-    repo: 'mlx-community/Qwen3-4B-4bit',
-  },
-  {
-    id: 'qwen3-14b-mlx',
-    name: 'Qwen3 14B (MLX 4-bit)',
-    format: 'mlx',
-    repo: 'mlx-community/Qwen3-14B-4bit',
-  },
-  {
-    id: 'qwen3-coder-30b-a3b-mlx',
-    name: 'Qwen3 Coder 30B A3B (MLX 4-bit, needs 32 GB)',
-    format: 'mlx',
-    repo: 'mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit',
-  },
-  {
-    id: 'qwen3-8b-gguf',
-    name: 'Qwen3 8B (GGUF Q4_K_M)',
-    format: 'gguf',
+    id: 'qwen3-8b',
+    name: 'Qwen3 8B (Q4_K_M)',
     repo: 'Qwen/Qwen3-8B-GGUF',
     file: 'Qwen3-8B-Q4_K_M.gguf',
   },
   {
-    id: 'qwen3-4b-gguf',
-    name: 'Qwen3 4B (GGUF Q4_K_M)',
-    format: 'gguf',
+    id: 'qwen3-4b',
+    name: 'Qwen3 4B (Q4_K_M)',
     repo: 'Qwen/Qwen3-4B-GGUF',
     file: 'Qwen3-4B-Q4_K_M.gguf',
   },
   {
-    id: 'qwen3-14b-gguf',
-    name: 'Qwen3 14B (GGUF Q4_K_M)',
-    format: 'gguf',
+    id: 'qwen3-14b',
+    name: 'Qwen3 14B (Q4_K_M)',
     repo: 'Qwen/Qwen3-14B-GGUF',
     file: 'Qwen3-14B-Q4_K_M.gguf',
+  },
+  {
+    id: 'qwen3-coder-30b-a3b',
+    name: 'Qwen3 Coder 30B A3B (Q4_K_M, ~19 GB)',
+    repo: 'unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF',
+    file: 'Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf',
   },
 ];
 
@@ -117,9 +92,6 @@ export function validateLocalModels(value: unknown): LocalModelConfig[] {
     if (model['name'] !== undefined && typeof model['name'] !== 'string') {
       throw new Error(`${at}.name must be a string.`);
     }
-    if (model['format'] !== 'mlx' && model['format'] !== 'gguf') {
-      throw new Error(`${at}.format must be "mlx" or "gguf".`);
-    }
     if (
       typeof model['repo'] !== 'string' ||
       !REPO_PATTERN.test(model['repo'])
@@ -129,18 +101,12 @@ export function validateLocalModels(value: unknown): LocalModelConfig[] {
       );
     }
     const file = model['file'];
-    if (model['format'] === 'mlx' && file !== undefined) {
-      throw new Error(
-        `${at}.file is only used by gguf models; an mlx model is the whole repository.`,
-      );
-    }
     if (
-      model['format'] === 'gguf' &&
-      (typeof file !== 'string' ||
-        !file.endsWith('.gguf') ||
-        file.startsWith('/') ||
-        file.includes('\\') ||
-        file.split('/').some((part) => part === '' || part === '..'))
+      typeof file !== 'string' ||
+      !file.endsWith('.gguf') ||
+      file.startsWith('/') ||
+      file.includes('\\') ||
+      file.split('/').some((part) => part === '' || part === '..')
     ) {
       throw new Error(
         `${at}.file must be the path of a .gguf file inside the repository.`,
@@ -171,10 +137,7 @@ export function withLocalModelProviders(
   const entries: ModelConfig[] = localModels.map((model) => ({
     id: model.id,
     name: model.name ?? model.id,
-    description:
-      model.format === 'mlx'
-        ? `MLX · ${model.repo}`
-        : `GGUF · ${model.repo}/${model.file}`,
+    description: `${model.repo}/${model.file}`,
     baseUrl: LOCAL_MODEL_BASE_URL,
     envKey: LOCAL_MODEL_KEY_ENV,
     generationConfig: {
