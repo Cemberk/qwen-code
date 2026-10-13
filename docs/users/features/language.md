@@ -20,7 +20,6 @@ This is the CLI’s UI localization layer (i18n/l10n): it controls the language 
 Use the `/language ui` command:
 
 ```bash
-/language ui zh-CN    # Chinese
 /language ui en-US    # English
 /language ui ru-RU    # Russian
 /language ui de-DE    # German
@@ -33,7 +32,6 @@ Use the `/language ui` command:
 Aliases are also supported:
 
 ```bash
-/language ui zh       # Chinese
 /language ui en       # English
 /language ui ru       # Russian
 /language ui de       # German
@@ -66,7 +64,6 @@ The LLM output language is controlled by a rule file at `~/.qwen/output-language
 
 On first startup, if no `output-language.md` file exists, Qwen Code automatically creates one based on your system locale. For example:
 
-- System locale `zh` creates a rule for Chinese responses
 - System locale `en` creates a rule for English responses
 - System locale `ru` creates a rule for Russian responses
 - System locale `de` creates a rule for German responses
@@ -80,7 +77,6 @@ On first startup, if no `output-language.md` file exists, Qwen Code automaticall
 Use `/language output <language>` to change:
 
 ```bash
-/language output Chinese
 /language output English
 /language output Japanese
 /language output German
@@ -109,7 +105,7 @@ Any language name works. The LLM will be instructed to respond in that language.
 ### Via Environment Variable
 
 ```bash
-export QWEN_CODE_LANG=zh
+export QWEN_CODE_LANG=ja
 ```
 
 This influences auto-detection on first startup (if you haven’t set a UI language and no `output-language.md` file exists yet).
@@ -117,29 +113,6 @@ This influences auto-detection on first startup (if you haven’t set a UI langu
 ## UI Translations
 
 Only the built-in UI languages can be selected. A UI language setting or `QWEN_CODE_LANG` value that is not one of them falls back to English; translation files are never loaded from outside the installed package.
-
-### Maintaining `zh-TW` (Traditional Chinese for Taiwan)
-
-`zh-TW` is **not** an automatic OpenCC s2t conversion of `zh.js` — it is a hand-maintained Taiwan-vocabulary translation. When adding or updating keys, please follow the conventions below.
-
-The "CI enforced?" column indicates whether `npm run check-i18n` will fail the build on a violation. Rows marked **No** are style guidance enforced by review only — typically because the offending form has a legitimate non-UI meaning (`文件` can mean "document", `打開` is colloquially fine in Taiwan).
-
-| Avoid                 | Use instead           | CI enforced? | Reason                                                                                                                                                                           |
-| --------------------- | --------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 文件 (file)           | 檔案                  | No           | Taiwan term for filesystem files (but `文件` can legitimately mean "document")                                                                                                   |
-| 服務器 / 服务器       | 伺服器                | Yes          | Taiwan term for "server"                                                                                                                                                         |
-| 菜單 / 菜单           | 選單                  | Yes          | Taiwan term for "menu"                                                                                                                                                           |
-| 鏈接 / 链接           | 連結                  | Yes          | Taiwan term for "link" (bare `鏈` is fine — e.g. 區塊鏈)                                                                                                                         |
-| 打開                  | 開啟                  | No           | Taiwan-preferred verb for "open" (UI); `打開` is colloquially common                                                                                                             |
-| 爲 / 啓 / 曆史 / 鏈接 | 為 / 啟 / 歷史 / 連結 | Yes          | Variant Traditional forms from raw OpenCC s2t. Note: `曆` is context-dependent and correct in calendar terms (日曆, 農曆, 西曆); CI only flags the bigram `曆史`, not bare `曆`. |
-
-If you are not a Traditional Chinese speaker and need to bootstrap a value, **do not paste raw OpenCC `s2t` output**: the default s2t profile emits variant Traditional characters (e.g. 爲, 啓) that Taiwan does not use, and never rewrites Mainland-Chinese vocabulary (服務器, 菜單). Prefer `s2twp.json` (Simplified → Taiwan with phrase mapping) as a starting point and then ask a Taiwan-Chinese speaker to review.
-
-The `check-i18n` script (run in CI via `npm run check-i18n`) will fail the build if any of the CI-enforced substrings above end up in a `zh-TW` value. See `scripts/check-i18n.ts → ZH_TW_FORBIDDEN_PATTERNS` for the full list. If a translation legitimately needs to contain a CI-forbidden substring, add its key to `ZH_TW_ALLOWED_EXCEPTIONS` in the same file with a brief justification.
-
-> [!note]
->
-> The check uses plain substring matching, which does not understand Chinese word boundaries. A bigram pattern can therefore false-positive across compound-word boundaries — for example, `區塊鏈接口` (= `區塊鏈` + `接口`) contains the substring `鏈接` even though neither word is incorrect. If you hit a surprising CI failure of this kind, add the translation key to `ZH_TW_ALLOWED_EXCEPTIONS` rather than removing the pattern.
 
 ## Related Commands
 

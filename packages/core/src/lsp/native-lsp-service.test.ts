@@ -15,7 +15,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-// 模拟依赖项
+// Mock dependencies
 class MockConfig {
   rootPath = '/test/workspace';
 
@@ -67,7 +67,7 @@ class MockWorkspaceContext {
 
 class MockFileDiscoveryService {
   async discoverFiles(_root: string, _options: unknown): Promise<string[]> {
-    // 模拟发现一些文件
+    // Pretend to discover a few files
     return [
       '/test/workspace/src/index.ts',
       '/test/workspace/src/utils.ts',
@@ -131,7 +131,7 @@ describe('NativeLspService', () => {
     await lspService.discoverAndPrepare();
     const status = lspService.getStatus();
 
-    // 检查服务是否已准备就绪
+    // Check that the service is ready
     expect(status).toBeDefined();
   });
 

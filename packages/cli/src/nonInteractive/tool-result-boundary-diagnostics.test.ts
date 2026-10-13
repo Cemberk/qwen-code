@@ -60,7 +60,7 @@ describe('CLI tool-result boundary diagnostics', () => {
       'call-secret',
       { state: 'reusable', kinds: ['file'] },
     );
-    const frame = '汉😀';
+    const frame = 'あ😀';
     observeHeadlessToolResultWire(message, frame);
 
     expect(mockObserveBoundary).toHaveBeenNthCalledWith(

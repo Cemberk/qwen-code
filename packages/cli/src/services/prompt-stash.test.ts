@@ -31,7 +31,7 @@ describe('prompt stash', () => {
   });
 
   it('round-trips multiline and unicode input', () => {
-    const text = 'first line\n第二行 🚀';
+    const text = 'first line\nこんにちは 🚀';
 
     expect(savePromptStash(targetDir, text)).toBe(true);
     expect(loadPromptStash(targetDir)).toBe(text);

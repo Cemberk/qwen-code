@@ -174,18 +174,18 @@ function memoryDoc(
 
 const multilingualDocs: ScannedAutoMemoryDocument[] = [
   memoryDoc(
-    'zh-deploy.md',
+    'ja-perf.md',
     'project',
-    '生产部署流程',
-    '发布检查清单',
-    '上线前确认监控和回滚开关。',
+    '性能改善目標',
+    '四半期性能指標',
+    '起動時間短縮。',
   ),
   memoryDoc(
-    'zh-api.md',
+    'ja-api.md',
     'reference',
-    '接口延迟排查',
-    'API 性能看板',
-    '记录服务响应时间和告警入口。',
+    '応答遅延調査',
+    'API 監視画面',
+    'サービス応答時間と警告入口の記録。',
   ),
   memoryDoc(
     'ja-auth.md',
@@ -232,9 +232,9 @@ const multilingualDocs: ScannedAutoMemoryDocument[] = [
   memoryDoc(
     'mixed-api.md',
     'reference',
-    'Qwen API 限流',
+    'Qwen API レート制限',
     'Rate limit dashboard',
-    '检查 quota 和请求速率。',
+    'quota とリクエスト速度を確認。',
   ),
   memoryDoc(
     'body-only.md',
@@ -255,11 +255,11 @@ const multilingualDocs: ScannedAutoMemoryDocument[] = [
 const multilingualRecallCases: Array<
   [name: string, query: string, expectedFilename: string | null]
 > = [
-  ['Chinese title', '生产部署', 'zh-deploy.md'],
-  ['Chinese description', '发布检查', 'zh-deploy.md'],
-  ['Chinese API title', '接口延迟', 'zh-api.md'],
-  ['Chinese troubleshooting', '延迟排查', 'zh-api.md'],
-  ['Chinese mixed ASCII', 'API 延迟', 'zh-api.md'],
+  ['Japanese kanji-only title', '性能改善', 'ja-perf.md'],
+  ['Japanese kanji-only description', '四半期指標', 'ja-perf.md'],
+  ['Japanese API title', '応答遅延', 'ja-api.md'],
+  ['Japanese troubleshooting', '遅延調査', 'ja-api.md'],
+  ['Japanese mixed ASCII', 'API 遅延', 'ja-api.md'],
   ['Japanese Han title', '認証設定', 'ja-auth.md'],
   ['Japanese Katakana description', 'ログイン構成', 'ja-auth.md'],
   ['Japanese prolonged sound mark', 'ユーザー', 'ja-auth.md'],
@@ -274,9 +274,9 @@ const multilingualRecallCases: Array<
   ['English description', 'production deployment', 'en-release.md'],
   ['English style description', 'concise answer', 'en-style.md'],
   ['English preference title', 'response preferences', 'en-style.md'],
-  ['Mixed-language title', 'qwen api 限流', 'mixed-api.md'],
+  ['Mixed-language title', 'qwen api レート制限', 'mixed-api.md'],
   ['Mixed-language description', 'rate limit', 'mixed-api.md'],
-  ['Mixed ASCII and Han', 'API 限流', 'mixed-api.md'],
+  ['Mixed ASCII and Han', 'API 制限', 'mixed-api.md'],
   ['Body-only English', 'rollback procedures', 'body-only.md'],
   ['Body-only phrase', 'emergency rollback', 'body-only.md'],
   ['NFKC full-width API', 'ＱＷＥＮ ＡＰＩ', 'mixed-api.md'],
@@ -286,7 +286,7 @@ const multilingualRecallCases: Array<
     'en-release.md',
   ],
   ['No lexical match', 'vector database', null],
-  ['Single Han character', '部', null],
+  ['Single Katakana character', 'デ', null],
   ['Single Japanese character', '認', null],
   ['Single Hangul character', '배', null],
   ['Short ASCII token', 'go', null],
@@ -438,43 +438,49 @@ describe('auto-memory relevant recall', () => {
     ).toEqual([single, duplicated]);
   });
 
-  it('matches Chinese metadata in heuristic mode', () => {
-    const chineseDoc: ScannedAutoMemoryDocument = {
+  it('matches Japanese metadata in heuristic mode', () => {
+    const japaneseDoc: ScannedAutoMemoryDocument = {
       ...docs[1]!,
-      title: '发布说明',
-      description: '数据库集成测试必须连接真实服务',
-      keywords: ['数据库测试', '真实依赖'],
-      usageScenarios: ['排查集成测试失败'],
-      body: '不要使用数据库 mock。',
+      title: 'リリースノート',
+      description: 'データベース結合試験は実サービスに接続すること',
+      keywords: ['データベース試験', '実依存'],
+      usageScenarios: ['結合試験の失敗調査'],
+      body: 'データベースの mock は使わない。',
     };
 
     expect(
-      selectRelevantAutoMemoryDocuments('集成测试为什么不能使用模拟数据库', [
-        chineseDoc,
-      ]),
-    ).toEqual([chineseDoc]);
+      selectRelevantAutoMemoryDocuments(
+        'なぜ結合試験で模擬データベースを使えないのか',
+        [japaneseDoc],
+      ),
+    ).toEqual([japaneseDoc]);
     expect(
-      selectRelevantAutoMemoryDocuments('前端按钮应该使用什么颜色', [
-        chineseDoc,
-      ]),
+      selectRelevantAutoMemoryDocuments(
+        'フロントエンドのボタンは何色にすべきか',
+        [japaneseDoc],
+      ),
     ).toEqual([]);
   });
 
-  it('matches two-character Chinese terms and NFKC-normalized metadata', () => {
+  it('matches two-character kanji terms and NFKC-normalized metadata', () => {
     const normalizedDoc: ScannedAutoMemoryDocument = {
       ...docs[1]!,
-      title: '召回检查',
-      description: 'ＡＰＩ 调用记录',
-      keywords: ['召回'],
+      title: '想起確認',
+      description: 'ＡＰＩ 呼出記録',
+      keywords: ['想起'],
       usageScenarios: [],
       body: '',
     };
 
     expect(
-      selectRelevantAutoMemoryDocuments('检查记忆召回效果', [normalizedDoc]),
+      selectRelevantAutoMemoryDocuments('記憶想起の効果を確認', [
+        normalizedDoc,
+      ]),
     ).toEqual([normalizedDoc]);
     expect(
-      selectRelevantAutoMemoryDocuments('API 调用为什么失败', [normalizedDoc]),
+      selectRelevantAutoMemoryDocuments('API 呼出が失敗する理由', [
+        normalizedDoc,
+      ]),
     ).toEqual([normalizedDoc]);
   });
 
@@ -594,12 +600,12 @@ describe('auto-memory relevant recall', () => {
 
   it('does not let a Latin run swallow the CJK that follows it', () => {
     // `\p{L}` also matches Han, so a naive alphabetic class would tokenize
-    // `abc漢字` as one run and stop matching either half on its own.
+    // `abc東京` as one run and stop matching either half on its own.
     const latin = memoryDoc('latin.md', 'reference', 'abc', '', '');
-    const han = memoryDoc('han.md', 'reference', '漢字', '', '');
+    const han = memoryDoc('han.md', 'reference', '東京', '', '');
 
     expect(
-      selectRelevantAutoMemoryDocuments('abc漢字', [latin, han]).map(
+      selectRelevantAutoMemoryDocuments('abc東京', [latin, han]).map(
         (doc) => doc.filename,
       ),
     ).toEqual(['latin.md', 'han.md']);
@@ -733,11 +739,11 @@ describe('auto-memory relevant recall', () => {
       'reference',
       'General note',
       '',
-      '接口延迟排查入口。',
+      '遅延調査の入口。',
     );
 
     expect(
-      selectRelevantAutoMemoryDocuments('延迟排查', [bodyOnly], 5, false),
+      selectRelevantAutoMemoryDocuments('遅延調査', [bodyOnly], 5, false),
     ).toEqual([bodyOnly]);
   });
 
@@ -832,9 +838,9 @@ describe('auto-memory relevant recall', () => {
     );
 
     expect(result.prompt).toContain(
-      '[内容已在当前上下文] [project:reference.md]',
+      '[already in current context] [project:reference.md]',
     );
-    expect(result.prompt).toContain('关键词：latency dashboard');
+    expect(result.prompt).toContain('Keywords: latency dashboard');
     expect(result.prompt).not.toContain('Dashboards and external docs');
   });
 
@@ -850,8 +856,8 @@ describe('auto-memory relevant recall', () => {
       { config },
     );
 
-    expect(result.prompt).not.toContain('[内容已在当前上下文]');
-    expect(result.prompt).toContain('摘要：Dashboards and external docs');
+    expect(result.prompt).not.toContain('[already in current context]');
+    expect(result.prompt).toContain('Summary: Dashboards and external docs');
   });
 
   it('publishes only strong metadata matches in the fast focused subtree', async () => {
@@ -945,7 +951,7 @@ describe('auto-memory relevant recall', () => {
 
     expect(onFastResult.mock.calls[0]?.[0].selectedDocs[0]).toEqual(stale);
     expect(onFastResult.mock.calls[0]?.[0].focusedPrompt).toContain(
-      '[内容已更新，需要重新读取] [project:reference.md]',
+      '[updated, re-read needed] [project:reference.md]',
     );
   });
 
@@ -1285,7 +1291,7 @@ describe('auto-memory relevant recall', () => {
     for (const doc of result.selectedDocs) {
       expect(result.focusedPrompt).toContain(toAutoMemoryRef(doc));
     }
-    expect(result.focusedPrompt).toContain('另 ');
+    expect(result.focusedPrompt).toContain('more selected');
     const renderedRefs = new Set(result.selectedDocs.map(toAutoMemoryRef));
     for (const doc of capSizedDocs) {
       if (!renderedRefs.has(toAutoMemoryRef(doc))) {

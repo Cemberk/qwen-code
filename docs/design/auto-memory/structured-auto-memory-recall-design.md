@@ -152,11 +152,11 @@ Tree. It is not a replacement global tree:
 The paths below are the query-relevant subtree for this turn. They add focus
 to the existing memory tree; they do not replace it.
 └── tool_experience
-    关键词：structured memory recall, selector latency, search_memory
+    Keywords: structured memory recall, selector latency, search_memory
     ├── [project:project/model-pull-memory.md] model-pull-memory-design
-    │   摘要：...
-    │   适用：...
-    └── [内容已在当前上下文] [project:reference/cua-driver-rs.md] cua-driver-rs-reference
+    │   Summary: ...
+    │   Use when: ...
+    └── [already in current context] [project:reference/cua-driver-rs.md] cua-driver-rs-reference
 ```
 
 Keywords shared by leaves in one category are aggregated on the parent to

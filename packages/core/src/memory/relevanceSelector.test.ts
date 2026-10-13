@@ -342,7 +342,7 @@ describe('selectRelevantAutoMemoryDocumentsByModel', () => {
       filePath: `/tmp/bounded-${index}.md`,
       relativePath: `bounded-${index}.md`,
       filename: `bounded-${index}.md`,
-      description: `${'界'.repeat(511)}😀${'x'.repeat(2_000)}`,
+      description: `${'あ'.repeat(511)}😀${'x'.repeat(2_000)}`,
       mtimeMs: index,
     }));
     vi.mocked(runSideQuery).mockImplementation(async (_config, options) => {
@@ -377,7 +377,7 @@ describe('selectRelevantAutoMemoryDocumentsByModel', () => {
     const largeDocs = Array.from({ length: 16 }, (_, index) => ({
       ...docs[0],
       filePath: `/tmp/large-${index}.md`,
-      description: '界'.repeat(512),
+      description: 'あ'.repeat(512),
     }));
     const shortDoc = {
       ...docs[1],
@@ -442,7 +442,7 @@ describe('selectRelevantAutoMemoryDocumentsByModel', () => {
     const longDocs = Array.from({ length: 20 }, (_, index) => ({
       ...docs[0],
       filePath: `/tmp/recent-${index}.md`,
-      description: '界'.repeat(512),
+      description: 'あ'.repeat(512),
     }));
     const lexicalDoc = {
       ...docs[1],

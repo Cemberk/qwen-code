@@ -196,7 +196,7 @@ describe('installTerminalResizeReflow', () => {
       stdout as unknown as NodeJS.WriteStream,
     );
     try {
-      const cjk = Array.from({ length: 10 }, () => '中'.repeat(3)).join('\n');
+      const cjk = Array.from({ length: 10 }, () => 'あ'.repeat(3)).join('\n');
       stdout.write(eraseLines(10) + cjk); // 3 wide chars (6 cells) per row
       stdout.columns = 3; // greedy: one wide char per row -> 3 rows each
       stdout.emit('resize');

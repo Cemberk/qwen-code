@@ -57,12 +57,3 @@ Non–user-visible (refactor, types, docs): commands and output below; write N/A
 Closes #N / Fixes #N / Resolves #N to auto-close.
 Otherwise reference without a closing keyword.
 -->
-
-<details>
-<summary>中文说明</summary>
-
-<!--
-完整翻译上面的英文正文，逐段对应，不要省略或缩写。PR 标题保持英文。
--->
-
-</details>

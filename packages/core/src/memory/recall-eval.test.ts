@@ -36,7 +36,6 @@ const RECALL_AT = 5;
 
 const categories = new Set([
   'english',
-  'chinese',
   'japanese',
   'korean',
   'mixed',
@@ -337,9 +336,7 @@ const isSemanticNoLexical = (testCase: EvalCase) =>
 const isOtherScript = (testCase: EvalCase) =>
   testCase.category === 'other-script';
 const isCjk = (testCase: EvalCase) =>
-  testCase.category === 'chinese' ||
-  testCase.category === 'japanese' ||
-  testCase.category === 'korean';
+  testCase.category === 'japanese' || testCase.category === 'korean';
 /** Queries that mix scripts, including the full-width NFKC cases. */
 const isMixed = (testCase: EvalCase) =>
   testCase.category === 'mixed' || testCase.category === 'nfkc';

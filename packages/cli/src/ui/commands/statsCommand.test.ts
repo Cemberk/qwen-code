@@ -1297,7 +1297,7 @@ describe('statsCommand', () => {
 
     it('uses locale translations for historical token usage output', async () => {
       await seedUsage();
-      await setLanguageAsync('zh');
+      await setLanguageAsync('fr');
       const dailySubCommand = statsCommand.subCommands?.find(
         (sc) => sc.name === 'daily',
       );
@@ -1308,9 +1308,11 @@ describe('statsCommand', () => {
         throw new Error('Subcommand has no action');
       }
 
-      expect(dailySubCommand.description).toBe('显示每日 token 使用统计信息');
+      expect(dailySubCommand.description).toBe(
+        "Afficher les statistiques quotidiennes d'utilisation des tokens.",
+      );
       expect(exportSubCommand.description).toBe(
-        '将 token 使用统计信息导出为 CSV 或 JSON',
+        "Exporter les statistiques d'utilisation des tokens en CSV ou JSON.",
       );
 
       const dailyResult = (await dailySubCommand.action(
@@ -1321,13 +1323,15 @@ describe('statsCommand', () => {
         '2025-07-14',
       )) as { type: string; messageType: string; content: string };
 
-      expect(dailyResult.content).toContain('2025-07-14 的每日 token 使用情况');
-      expect(dailyResult.content).toContain('总计：47 个 token');
-      expect(dailyResult.content).toContain('model-a：32 个 token（1 个请求）');
-      expect(dailyResult.content).toContain('缓存（已包含在输入中）：6');
-      expect(dailyResult.content).toContain('按来源：');
       expect(dailyResult.content).toContain(
-        '生成耗时（TTFT/TPS）归属于生成指标',
+        'Utilisation quotidienne des tokens pour 2025-07-14',
+      );
+      expect(dailyResult.content).toContain('Total : 47 tokens');
+      expect(dailyResult.content).toContain('model-a : 32 tokens (1 requêtes)');
+      expect(dailyResult.content).toContain('Cache (inclus dans l’entrée) : 6');
+      expect(dailyResult.content).toContain('Par source :');
+      expect(dailyResult.content).toContain(
+        'les temps de génération (TTFT/TPS) relèvent des métriques de génération',
       );
 
       const exportResult = (await exportSubCommand.action(
@@ -1340,7 +1344,7 @@ describe('statsCommand', () => {
 
       expect(exportResult.messageType).toBe('error');
       expect(exportResult.content).toContain(
-        'Token 使用导出路径必须位于项目工作目录内',
+        "Le chemin d'export de l'utilisation des tokens doit rester dans le répertoire de travail du projet",
       );
     });
   });

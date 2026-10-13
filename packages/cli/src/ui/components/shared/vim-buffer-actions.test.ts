@@ -929,9 +929,9 @@ describe('vim-buffer-actions', () => {
       });
     });
 
-    describe('Chinese character handling', () => {
-      it('should handle Chinese characters in word movements', () => {
-        const state = createTestState(['hello 你好 world'], 0, 0);
+    describe('Japanese character handling', () => {
+      it('should handle Japanese characters in word movements', () => {
+        const state = createTestState(['hello ねこ world'], 0, 0);
 
         // Move to end of 'hello'
         let result = handleVimAction(state, {
@@ -947,13 +947,13 @@ describe('vim-buffer-actions', () => {
           payload: { count: 1 },
         });
         expect(result).toHaveOnlyValidCharacters();
-        expect(result.cursorCol).toBe(6); // Start of '你好'
+        expect(result.cursorCol).toBe(6); // Start of 'ねこ'
       });
     });
 
     describe('Mixed script handling', () => {
       it('should handle mixed Latin and non-Latin scripts with word end commands', () => {
-        const state = createTestState(['test中文test'], 0, 0);
+        const state = createTestState(['testねこtest'], 0, 0);
 
         let result = handleVimAction(state, {
           type: 'vim_move_word_end' as const,
@@ -962,24 +962,24 @@ describe('vim-buffer-actions', () => {
         expect(result).toHaveOnlyValidCharacters();
         expect(result.cursorCol).toBe(3); // End of 'test'
 
-        // Second word end command should move to end of '中文'
+        // Second word end command should move to end of 'ねこ'
         result = handleVimAction(result, {
           type: 'vim_move_word_end' as const,
           payload: { count: 1 },
         });
         expect(result).toHaveOnlyValidCharacters();
-        expect(result.cursorCol).toBe(5); // End of '中文'
+        expect(result.cursorCol).toBe(5); // End of 'ねこ'
       });
 
       it('should handle mixed Latin and non-Latin scripts with word forward commands', () => {
-        const state = createTestState(['test中文test'], 0, 0);
+        const state = createTestState(['testねこtest'], 0, 0);
 
         let result = handleVimAction(state, {
           type: 'vim_move_word_forward' as const,
           payload: { count: 1 },
         });
         expect(result).toHaveOnlyValidCharacters();
-        expect(result.cursorCol).toBe(4); // Start of '中'
+        expect(result.cursorCol).toBe(4); // Start of 'ね'
 
         // Second word forward command should move to start of final 'test'
         result = handleVimAction(result, {
@@ -991,7 +991,7 @@ describe('vim-buffer-actions', () => {
       });
 
       it('should handle mixed Latin and non-Latin scripts with word backward commands', () => {
-        const state = createTestState(['test中文test'], 0, 9); // Start at end of final 'test'
+        const state = createTestState(['testねこtest'], 0, 9); // Start at end of final 'test'
 
         let result = handleVimAction(state, {
           type: 'vim_move_word_backward' as const,
@@ -1000,13 +1000,13 @@ describe('vim-buffer-actions', () => {
         expect(result).toHaveOnlyValidCharacters();
         expect(result.cursorCol).toBe(6); // Start of final 'test'
 
-        // Second word backward command should move to start of '中文'
+        // Second word backward command should move to start of 'ねこ'
         result = handleVimAction(result, {
           type: 'vim_move_word_backward' as const,
           payload: { count: 1 },
         });
         expect(result).toHaveOnlyValidCharacters();
-        expect(result.cursorCol).toBe(4); // Start of '中'
+        expect(result.cursorCol).toBe(4); // Start of 'ね'
       });
 
       it('should handle Unicode block characters consistently with w and e commands', () => {
@@ -1050,8 +1050,8 @@ describe('vim-buffer-actions', () => {
         expect(eResult.cursorCol).toBe(10); // End of third block sequence
       });
 
-      it('should handle strings starting with Chinese characters', () => {
-        const state = createTestState(['中文test英文word'], 0, 0);
+      it('should handle strings starting with Japanese characters', () => {
+        const state = createTestState(['ねこtestいぬword'], 0, 0);
 
         // Test 'w' command - when at start of non-Latin word, w moves to next word
         let wResult = handleVimAction(state, {
@@ -1065,7 +1065,7 @@ describe('vim-buffer-actions', () => {
           type: 'vim_move_word_forward' as const,
           payload: { count: 1 },
         });
-        expect(wResult.cursorCol).toBe(6); // Start of '英文'
+        expect(wResult.cursorCol).toBe(6); // Start of 'いぬ'
 
         // Test 'e' command
         let eResult = handleVimAction(state, {
@@ -1073,7 +1073,7 @@ describe('vim-buffer-actions', () => {
           payload: { count: 1 },
         });
         expect(eResult).toHaveOnlyValidCharacters();
-        expect(eResult.cursorCol).toBe(1); // End of 中文
+        expect(eResult.cursorCol).toBe(1); // End of ねこ
 
         eResult = handleVimAction(eResult, {
           type: 'vim_move_word_end' as const,

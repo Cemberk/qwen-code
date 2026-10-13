@@ -211,7 +211,8 @@ export async function buildSystemMessage(
       }))
     : [];
 
-  // 首轮模型请求前同时注册 Skill 可调用命令，避免只返回客户端命令列表。
+  // Also register Skill-invocable commands before the first model request,
+  // so we don't return only the client command list.
   const slashCommands = await loadSlashCommandNames(config, settings);
 
   // Load subagent names from config

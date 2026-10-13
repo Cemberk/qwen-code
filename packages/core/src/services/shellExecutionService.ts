@@ -1430,7 +1430,7 @@ export class ShellExecutionService {
           // everything contract: no listeners re-attach.
           // PR-2.5 wave-4: preserve the detected encoding
           // from the foreground decoders so a non-UTF-8 child (e.g.
-          // GBK on a Chinese Windows shell) doesn't snapshot correctly
+          // GBK on a code page 936 Windows shell) doesn't snapshot correctly
           // and then mojibake the post-promote tail. The foreground
           // `stdoutDecoder` / `stderrDecoder` are initialized in
           // `handleOutput` from `getCachedEncodingForBuffer(data)` on

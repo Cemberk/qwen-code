@@ -208,8 +208,9 @@ describe('ExtensionsManagerDialog', () => {
     // the app's main content area is capped at 100 cols (AppContainer). On a
     // wide terminal the dialog overflowed its container and the right-aligned
     // status column ("Extension v… (…)") was clipped off-screen to a sliver
-    // ("扩…"). The dialog must stay within ~100 columns regardless of terminal
-    // width. Rendered through a 200-column stdout to exercise the wide case.
+    // (one character and "…"). The dialog must stay within ~100 columns
+    // regardless of terminal width. Rendered through a 200-column stdout to
+    // exercise the wide case.
     const original = Object.getOwnPropertyDescriptor(process.stdout, 'columns');
     Object.defineProperty(process.stdout, 'columns', {
       value: 200,

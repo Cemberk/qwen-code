@@ -54,7 +54,7 @@ export const isWordCharWithCombining = (char: string): boolean =>
 // Get the script of a character (simplified for common scripts)
 export const getCharScript = (char: string): string => {
   if (/[\p{Script=Latin}]/u.test(char)) return 'latin'; // All Latin script chars including diacritics
-  if (/[\p{Script=Han}]/u.test(char)) return 'han'; // Chinese
+  if (/[\p{Script=Han}]/u.test(char)) return 'han'; // CJK ideographs
   if (/[\p{Script=Arabic}]/u.test(char)) return 'arabic';
   if (/[\p{Script=Hiragana}]/u.test(char)) return 'hiragana';
   if (/[\p{Script=Katakana}]/u.test(char)) return 'katakana';
@@ -68,7 +68,7 @@ export const isDifferentScript = (char1: string, char2: string): boolean => {
   return getCharScript(char1) !== getCharScript(char2);
 };
 
-/** Shared regex for CJK (Chinese/Japanese/Korean) characters */
+/** Shared regex for CJK characters */
 const CJK_CHAR_REGEX =
   /[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/;
 
@@ -101,7 +101,7 @@ let segmenter: Intl.Segmenter | null | false = null;
 function ensureSegmenterLoaded(): void {
   if (segmenter !== null) return; // already loaded or previously marked as failed
   try {
-    segmenter = new Intl.Segmenter('zh', { granularity: 'word' });
+    segmenter = new Intl.Segmenter(undefined, { granularity: 'word' });
     debugLogger.info('Intl.Segmenter: initialized successfully');
   } catch (err) {
     debugLogger.warn('Intl.Segmenter: failed to initialize', err);

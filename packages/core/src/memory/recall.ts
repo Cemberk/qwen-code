@@ -101,7 +101,7 @@ const CJK_CLASS =
  * silently producing none. It excludes CJK per character rather than relying
  * on alternation order: `\p{L}` also matches Han, so a plain class would let
  * a run starting in Latin swallow the CJK that follows it and turn
- * `abc漢字` into one token.
+ * `abc東京` into one token.
  *
  * Scripts written without spaces and outside the CJK set (Thai, Khmer, Lao)
  * still collapse into a single long token. That is no worse than the previous

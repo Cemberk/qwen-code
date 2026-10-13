@@ -582,16 +582,16 @@ describe('memoryImportProcessor', () => {
     });
 
     it('should still import valid paths while ignoring non-existent paths', async () => {
-      const content = '使用 @./valid.md 文件和 @中文路径 注解';
+      const content = 'Use @./valid.md file and @みつからないパス note';
       const basePath = testPath('test', 'path');
       const importedContent = 'Valid imported content';
 
-      // Mock: valid.md exists, 中文路径 doesn't exist
+      // Mock: valid.md exists, みつからないパス doesn't exist
       mockedFs.access
         .mockResolvedValueOnce(undefined) // ./valid.md exists
         .mockRejectedValueOnce(
           Object.assign(new Error('ENOENT'), { code: 'ENOENT' }),
-        ); // 中文路径 doesn't exist
+        ); // みつからないパス doesn't exist
       mockedFs.readFile.mockResolvedValue(importedContent);
 
       const result = await processImports(content, basePath);
@@ -600,14 +600,14 @@ describe('memoryImportProcessor', () => {
       expect(result.content).toContain(importedContent);
       expect(result.content).toContain('<!-- Imported from: ./valid.md -->');
       // The non-existent path should remain as-is
-      expect(result.content).toContain('@中文路径');
+      expect(result.content).toContain('@みつからないパス');
     });
 
-    it('should import Chinese file names if they exist', async () => {
-      const content = '导入 @./中文文档.md 文件';
+    it('should import Japanese file names if they exist', async () => {
+      const content = 'Import @./ドキュメント.md file';
       const projectRoot = testPath('test', 'project');
       const basePath = testPath(projectRoot, 'src');
-      const importedContent = '这是中文文档的内容';
+      const importedContent = 'Content of the Japanese-named document';
 
       mockedFs.access.mockResolvedValue(undefined);
       mockedFs.readFile.mockResolvedValue(importedContent);
@@ -619,9 +619,11 @@ describe('memoryImportProcessor', () => {
         projectRoot,
       );
 
-      // Should successfully import the Chinese-named file
+      // Should successfully import the Japanese-named file
       expect(result.content).toContain(importedContent);
-      expect(result.content).toContain('<!-- Imported from: ./中文文档.md -->');
+      expect(result.content).toContain(
+        '<!-- Imported from: ./ドキュメント.md -->',
+      );
     });
 
     it('should allow imports from parent and subdirectories within project root', async () => {

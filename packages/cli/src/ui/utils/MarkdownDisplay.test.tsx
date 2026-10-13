@@ -1733,7 +1733,7 @@ flowchart TD
     });
 
     it('counts wide/CJK wrapping so a pending block stays within the viewport', () => {
-      const wide = '一二三四五六七八九十'.repeat(6); // ~120 display cols
+      const wide = 'あいうえおかきくけこ'.repeat(6); // ~120 display cols
       const text = Array.from({ length: 20 }, () => wide).join('\n');
       const { lastFrame } = renderWithProviders(
         <MarkdownDisplay

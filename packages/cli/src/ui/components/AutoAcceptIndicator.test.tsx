@@ -43,13 +43,13 @@ describe('<AutoAcceptIndicator />', () => {
     expect(frame).not.toContain('auto mode (classifier-evaluated)');
   });
 
-  it('renders AUTO mode indicator with the active Chinese locale', async () => {
-    await setLanguageAsync('zh');
+  it('renders AUTO mode indicator with the active locale', async () => {
+    await setLanguageAsync('fr');
     try {
       const { lastFrame } = render(
         <AutoAcceptIndicator approvalMode={ApprovalMode.AUTO} />,
       );
-      expect(lastFrame()).toContain('自动模式');
+      expect(lastFrame()).toContain('Mode auto');
     } finally {
       await setLanguageAsync('en');
     }

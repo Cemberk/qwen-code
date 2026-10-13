@@ -198,9 +198,9 @@ describe('parseWorkflowMetaLiteral', () => {
 
     it('preserves non-ASCII text verbatim', () => {
       const { name } = parseWorkflowMetaLiteral(
-        `{ name: '工作流 🪜', description: 'd' }`,
+        `{ name: 'ワークフロー 🪜', description: 'd' }`,
       ) as { name: string };
-      expect(name).toBe('工作流 🪜');
+      expect(name).toBe('ワークフロー 🪜');
     });
 
     it.each([

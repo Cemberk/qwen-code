@@ -117,7 +117,7 @@ export type HookExecutionOutcome =
 export interface FunctionHookContext {
   /** Optional messages for conversation context */
   messages?: Array<Record<string, unknown>>;
-  /** Optional tool use ID for关联 to specific tool call */
+  /** Optional tool use ID for linking to a specific tool call */
   toolUseID?: string;
   /** Optional abort signal for cancellation */
   signal?: AbortSignal;

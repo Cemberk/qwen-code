@@ -207,7 +207,7 @@ describe('textUtils', () => {
       expect(sanitizeFilenameForDisplay('packages/cli/src/index.ts')).toBe(
         'packages/cli/src/index.ts',
       );
-      expect(sanitizeFilenameForDisplay('文件.txt')).toBe('文件.txt');
+      expect(sanitizeFilenameForDisplay('ファイル.txt')).toBe('ファイル.txt');
       expect(sanitizeFilenameForDisplay('')).toBe('');
     });
 
@@ -367,7 +367,7 @@ describe('textUtils', () => {
 
     it('bounds CJK text by display width, not character count', () => {
       // 5 CJK characters (10 cells) plus the ellipsis fit an 11-cell budget.
-      expect(truncateToWidth('目标配置参数设置', 11)).toBe('目标配置参…');
+      expect(truncateToWidth('ターゲット設定値', 11)).toBe('ターゲット…');
     });
   });
 
@@ -407,12 +407,12 @@ describe('textUtils', () => {
       );
 
       expect(getCachedStringWidth('héllo')).toBe(5);
-      expect(getCachedStringWidth('目标')).toBe(4);
+      expect(getCachedStringWidth('かな')).toBe(4);
     });
 
     it('does not cache long string width keys', () => {
       clearStringWidthCache();
-      const longCjk = '目'.repeat(1001);
+      const longCjk = 'あ'.repeat(1001);
 
       expect(getCachedStringWidth(longCjk)).toBe(2002);
       expect(__getTextUtilsCacheSizes().stringWidth).toBe(0);
@@ -420,7 +420,7 @@ describe('textUtils', () => {
 
     it('caches string width keys at the length limit', () => {
       clearStringWidthCache();
-      const limitCjk = '目'.repeat(1000);
+      const limitCjk = 'あ'.repeat(1000);
 
       expect(getCachedStringWidth(limitCjk)).toBe(2000);
       expect(__getTextUtilsCacheSizes().stringWidth).toBe(1);

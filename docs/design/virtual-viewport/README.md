@@ -3,7 +3,7 @@
 Status: **implemented**, PR #4146 ships:
 core viewport, ASCII scrollbar with auto-hide animation, SGR mouse-wheel, `ui.useTerminalBuffer` gate, keyboard scroll keys.
 Scrollbar drag / in-app search / alt-buffer mode / dual-write to host scrollback are scoped out to V.3+ (see §7).
-Author: 秦奇
+Author: Qin Qi
 Tracking branch: `feat/virtual-viewport-on-ink7` (base: `main`)
 
 ## 1. Problem

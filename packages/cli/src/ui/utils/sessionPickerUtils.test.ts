@@ -58,13 +58,13 @@ describe('sessionPickerUtils', () => {
     });
 
     it('truncates CJK text by display width', () => {
-      const result = truncateText('修复登录问题'.repeat(8), 20);
+      const result = truncateText('ログイン修正'.repeat(8), 20);
       expect(getCachedStringWidth(result)).toBeLessThanOrEqual(20);
-      expect(result).toBe('修复登录问题修复...');
+      expect(result).toBe('ログイン修正ログ...');
     });
 
     it('does not split complex emoji grapheme clusters', () => {
-      expect(truncateText('🇨🇳abcdef', 2)).toBe('🇨🇳');
+      expect(truncateText('🇯🇵abcdef', 2)).toBe('🇯🇵');
       expect(truncateText('👩🏽abcdef', 6)).toBe('👩🏽a...');
       expect(truncateText('👨‍👩‍👧‍👦abcdef', 6)).toBe('👨‍👩‍👧‍👦a...');
     });

@@ -10,7 +10,7 @@ is gated in one place, `queueContinuation` in `goal-runtime.ts`, and the only
 thing that stops it there is a spent `tokenBudget` -- 30,000,000 tokens by
 default. (State at the time of writing. The gate now reads three ceilings
 through one `spentBudget` reader; see
-`2026-09-09-goal-turn-and-time-budget.md` and its Chinese twin. The bound
+`2026-09-09-goal-turn-and-time-budget.md`. The bound
 described here yields to all three, not only to the token budget.) A model that answers each turn with a paragraph of status and calls
 no tools never records evidence, so the verifier is never asked to judge
 anything, and the Goal continues. The user sees turn after turn go by and the

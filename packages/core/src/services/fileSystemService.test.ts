@@ -256,7 +256,7 @@ describe('StandardFileSystemService', () => {
 
     it('should return encoding info for GBK file', async () => {
       vi.mocked(readFileWithLineAndLimit).mockResolvedValue({
-        content: '你好世界',
+        content: 'こんにちは',
         bom: false,
         encoding: 'gb18030',
         originalLineCount: 1,
@@ -266,7 +266,7 @@ describe('StandardFileSystemService', () => {
 
       const result = await fileSystem.readTextFile({ path: '/test/gbk.txt' });
 
-      expect(result.content).toBe('你好世界');
+      expect(result.content).toBe('こんにちは');
       expect(result._meta?.encoding).toBe('gb18030');
       expect(result._meta?.bom).toBe(false);
     });
@@ -373,7 +373,7 @@ describe('StandardFileSystemService', () => {
 
       await fileSystem.writeTextFile({
         path: '/test/file.txt',
-        content: '你好世界',
+        content: 'こんにちは',
         _meta: { encoding: 'gbk' },
       });
 

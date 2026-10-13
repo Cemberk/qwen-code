@@ -84,7 +84,7 @@ const makeWideFrame = (): ReadonlyFrame => ({
       },
       {
         type: 'char',
-        value: '中',
+        value: 'あ',
         fullWidth: true,
         styles: [],
         selectable: true,
@@ -649,7 +649,7 @@ describe('TextSelectionController', () => {
       ex: 3,
       ey: 0,
     });
-    expect(copyToClipboard).toHaveBeenCalledWith('中b');
+    expect(copyToClipboard).toHaveBeenCalledWith('あb');
   });
 
   it('records clipboard failures in the debug log', async () => {

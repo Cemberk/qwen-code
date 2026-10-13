@@ -13,7 +13,7 @@ import {
 
 describe('looksLikeText', () => {
   it('accepts printable UTF-8, rejects NUL bytes and invalid sequences', () => {
-    expect(looksLikeText(Buffer.from('plain text\nwith 中文 too\n'))).toBe(
+    expect(looksLikeText(Buffer.from('plain text\nwith 日本語 too\n'))).toBe(
       true,
     );
     expect(looksLikeText(Buffer.from([0x68, 0x00, 0x69]))).toBe(false);

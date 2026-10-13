@@ -11772,7 +11772,7 @@ describe('useLlmStream', () => {
         await waitForNextChunk;
         yield {
           type: ServerLlmEventType.Content,
-          value: '哈哈',
+          value: 'ハハ',
         };
         await holdStream;
       })();
@@ -11808,7 +11808,7 @@ describe('useLlmStream', () => {
       expect(result.current.pendingHistoryItems).toEqual([
         expect.objectContaining({
           type: 'gemini',
-          text: '哈哈',
+          text: 'ハハ',
         }),
       ]);
 

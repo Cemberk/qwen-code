@@ -35,7 +35,7 @@ const debugLogger = createDebugLogger('CODE_COLORIZER');
 // appear in real code — their presence is a reliable signal of diagram content.
 const STRUCTURAL_BOX_RE = /[│├└┌┐┘┬┴┼]/;
 
-// Regex for detecting high ratio of CJK characters (for Chinese text blocks).
+// Regex for detecting high ratio of CJK characters (for CJK text blocks).
 const CJK_RE = /[\u4E00-\u9FFF\u3400-\u4DBF]/g; // CJK Unified + Extension A
 
 /**
@@ -46,7 +46,7 @@ const CJK_RE = /[\u4E00-\u9FFF\u3400-\u4DBF]/g; // CJK Unified + Extension A
  *
  * Detection strategy:
  * 1. Any structural box-drawing char (│ ├ └ ┌ etc.) → almost certainly a diagram
- * 2. High CJK ratio (>30%) → Chinese text block that confuses auto-detection
+ * 2. High CJK ratio (>30%) → CJK text block that confuses auto-detection
  *
  * Returns `true` if the line should skip `highlightAuto` and render as plain text.
  */
@@ -60,7 +60,7 @@ export function looksLikeDiagramOrArt(line: string): boolean {
     return true;
   }
 
-  // Strategy 2: High CJK ratio indicates a Chinese text block.
+  // Strategy 2: High CJK ratio indicates a CJK text block.
   const cjkMatches = trimmed.match(CJK_RE) || [];
   const totalChars = trimmed.replace(/\s/g, '').length;
   if (totalChars > 0 && cjkMatches.length / totalChars > 0.3) {

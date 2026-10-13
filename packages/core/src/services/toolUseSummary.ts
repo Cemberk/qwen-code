@@ -201,7 +201,7 @@ function preTruncate(value: unknown, maxLength: number, depth = 0): unknown {
  */
 /**
  * Character class covering ASCII and common Unicode quote / bracket-quote
- * pairs. Chinese-instruct models frequently emit U+2018/U+2019 (curly single),
+ * pairs. Some instruct models frequently emit U+2018/U+2019 (curly single),
  * U+201C/U+201D (curly double), U+300C-F (CJK corner brackets). Bounded
  * quantifier keeps the regex linear (js/polynomial-redos).
  */
@@ -211,8 +211,7 @@ const TRAILING_QUOTES_RE = new RegExp(`[${QUOTE_CHARS}]{1,10}$`);
 
 /**
  * Error/refusal-like response markers, matched case-insensitively anywhere
- * the label should not produce. Covers English and Chinese refusals common
- * in mixed-provider deployments.
+ * the label should not produce. Covers common English refusals.
  */
 const REFUSAL_PREFIXES = [
   /^api error\b/i,
@@ -224,10 +223,6 @@ const REFUSAL_PREFIXES = [
   /^failed to\b/i,
   /^sorry[,，]/i,
   /^request failed\b/i,
-  /^我无法/,
-  /^我不能/,
-  /^抱歉[,，]?/,
-  /^无法/,
 ];
 
 export function cleanSummary(raw: string): string {
@@ -257,7 +252,7 @@ export function cleanSummary(raw: string): string {
 
   if (!text) return '';
 
-  // Reject error/refusal-like responses (English + Chinese variants).
+  // Reject error/refusal-like responses.
   for (const re of REFUSAL_PREFIXES) {
     if (re.test(text)) return '';
   }

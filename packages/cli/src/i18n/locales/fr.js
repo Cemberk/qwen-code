@@ -958,7 +958,6 @@ export default {
     'Utilisation : /language ui [{{options}}]',
   'Usage: /language output <language>':
     'Utilisation : /language output <langue>',
-  'Example: /language output 中文': 'Exemple : /language output 中文',
   'Example: /language output English': 'Exemple : /language output English',
   'Example: /language output 日本語': 'Exemple : /language output 日本語',
   'UI language changed to {{lang}}':

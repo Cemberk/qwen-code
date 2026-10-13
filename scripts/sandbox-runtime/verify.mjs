@@ -796,7 +796,7 @@ try {
           name: 'write_file',
           args: {
             file_path: created,
-            content: '中文🙂 first\nrepeat repeat\n',
+            content: 'かな🙂 first\nrepeat repeat\n',
           },
         },
         {
@@ -831,7 +831,7 @@ try {
         ]),
       );
       assert.equal((await fs.stat(wide)).mode & 0o777, 0o600);
-      assert.equal(await read(created), '中文🙂 first\nchanged changed\n');
+      assert.equal(await read(created), 'かな🙂 first\nchanged changed\n');
       assert.equal(await read(editedNew), 'new-file\n');
       return {
         fixture: f.dir,
@@ -1014,7 +1014,7 @@ try {
     async () => {
       const f = await fixture('file-large');
       const file = path.join(f.workspace, 'large.txt');
-      const content = '中文🙂'.repeat(110000) + '\n';
+      const content = 'かな🙂'.repeat(110000) + '\n';
       assert.ok(Buffer.byteLength(content) > 1024 * 1024);
       const run = await invoke(f, {}, [
         { name: 'write_file', args: { file_path: file, content } },

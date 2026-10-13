@@ -187,7 +187,7 @@ describe('BaseTextInput', () => {
 
   it.each([
     { columns: 11, label: 'session', expectedLabel: 'sessi…' },
-    { columns: 12, label: '会话标题', expectedLabel: '会话标…' },
+    { columns: 12, label: 'タイトル', expectedLabel: 'タイト…' },
     { columns: 20, label: 'session', expectedLabel: 'session' },
     { columns: 4, label: 'session', expectedLabel: '' },
   ])(

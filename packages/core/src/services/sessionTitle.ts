@@ -32,7 +32,7 @@ const TITLE_PROMPT_EXAMPLE_TITLES = [
   'Fix login button on mobile',
   'Add OAuth authentication flow',
   'Debug failing CI pipeline tests',
-  '重构用户鉴权中间件',
+  'Refactor user auth middleware',
 ];
 
 const TITLE_SYSTEM_PROMPT = `Generate a concise, sentence-case title (3-7 words) that captures what this programming-assistant session is about. Think of it as a git commit subject for the session.

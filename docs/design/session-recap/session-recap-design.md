@@ -95,10 +95,10 @@ recap, not a leak.
 
 Bullets below correspond 1:1 with `RECAP_SYSTEM_PROMPT`:
 
-- Under 40 words, 1-2 plain sentences (no markdown / lists / headings). For Chinese, treat the budget as roughly 80 characters total.
+- Under 40 words, 1-2 plain sentences (no markdown / lists / headings).
 - First sentence: the high-level task. Then: the concrete next step.
 - Explicitly forbid: listing what was done, reciting tool calls, status reports.
-- Match the dominant language of the conversation (English or Chinese).
+- Match the dominant language of the conversation.
 - Wrap output in `<recap>...</recap>`; nothing outside the tags.
 
 ### Structured Output + Extraction

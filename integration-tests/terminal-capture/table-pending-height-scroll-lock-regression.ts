@@ -15,7 +15,7 @@
  * under-charged, overflows the viewport, and Ink repaints from scratch by
  * emitting a full-screen clear (`\x1b[2J\x1b[3J\x1b[H`). Each such clear
  * resets the terminal's scroll position — so a user who scrolled up to read
- * gets yanked back to the top ("跳頂"). With the fix the estimator charges the
+ * gets yanked back to the top. With the fix the estimator charges the
  * table's real (wrapped / vertical) height, the frame stays inside the
  * viewport budget, and the app updates in place instead of clearing.
  *

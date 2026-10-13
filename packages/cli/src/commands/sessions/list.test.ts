@@ -32,10 +32,10 @@ const sampleSession = {
   cwd: '/Users/test/project',
   startTime: '2026-06-15T10:30:00.000Z',
   mtime: 1718447400000,
-  prompt: '帮我写一个 React 组件',
+  prompt: 'Help me write a React component',
   gitBranch: 'main',
   filePath: '/path/to/chats/a1b2c3d4.jsonl',
-  customTitle: 'React 组件开发',
+  customTitle: 'React component work',
   titleSource: 'auto',
 };
 
@@ -71,7 +71,9 @@ describe('sessions list command', () => {
     expect(calls.some((c) => c.includes('BRANCH'))).toBe(true);
     expect(calls.some((c) => c.includes('PROMPT'))).toBe(true);
     expect(
-      calls.some((c) => c.includes('a1b2c3d4') && c.includes('React 组件开发')),
+      calls.some(
+        (c) => c.includes('a1b2c3d4') && c.includes('React component work'),
+      ),
     ).toBe(true);
   });
 
@@ -97,7 +99,7 @@ describe('sessions list command', () => {
         {
           ...sampleSession,
           customTitle: undefined,
-          prompt: '你好',
+          prompt: 'Hello there',
         },
       ],
       hasMore: false,
@@ -110,7 +112,7 @@ describe('sessions list command', () => {
       (c) => c.includes('a1b2c3d4') && !c.includes('SESSION ID'),
     );
     expect(dataLine).toBeDefined();
-    expect(dataLine).toContain('你好');
+    expect(dataLine).toContain('Hello there');
   });
 
   it('should not fall back to prompt when customTitle is empty string', async () => {
@@ -119,7 +121,7 @@ describe('sessions list command', () => {
         {
           ...sampleSession,
           customTitle: '',
-          prompt: '你好',
+          prompt: 'Hello there',
         },
       ],
       hasMore: false,
@@ -159,7 +161,7 @@ describe('sessions list command', () => {
     expect(parsed.mtime).toBe(sampleSession.mtime);
     expect(parsed.prompt).toBe(sampleSession.prompt);
     expect(parsed.gitBranch).toBe('main');
-    expect(parsed.customTitle).toBe('React 组件开发');
+    expect(parsed.customTitle).toBe('React component work');
     expect(parsed.titleSource).toBe('auto');
     expect(parsed.filePath).toBe(sampleSession.filePath);
     expect(parsed.cwd).toBe(sampleSession.cwd);
@@ -286,7 +288,7 @@ describe('sessions list command', () => {
   });
 
   it('should truncate CJK characters correctly', async () => {
-    const longCjk = '这是一个非常非常长的中文测试标题文本内容'.repeat(5);
+    const longCjk = 'これはとても長い日本語のタイトルです'.repeat(5);
     mockListSessions.mockResolvedValue({
       items: [{ ...sampleSession, customTitle: undefined, prompt: longCjk }],
       hasMore: false,

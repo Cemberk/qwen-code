@@ -48,10 +48,10 @@ describe('SubagentValidator', () => {
         'code_reviewer',
         'agent123',
         'my-helper',
-        '项目管理',
+        '翻訳',
         'コードレビュー',
         '코드리뷰',
-        '项目-manager',
+        '翻訳-manager',
         'проект_менеджер',
       ];
 
@@ -153,7 +153,7 @@ describe('SubagentValidator', () => {
     });
 
     it('should not warn about case for non-Latin names', () => {
-      const result = validator.validateName('项目管理');
+      const result = validator.validateName('翻訳');
       expect(result.isValid).toBe(true);
       expect(result.warnings).not.toContain(
         'Consider using lowercase names for consistency',

@@ -1,6 +1,6 @@
 import type { ScenarioConfig } from '../scenario-runner.js';
 
-const prompt = String.raw`请只输出以下 7 行测试文本，不要解释，不要编号，不要使用代码块，也不要改变任何字符。尤其要原样保留所有美元符号和反斜杠：
+const prompt = String.raw`Output only the following 7 lines of test text. Do not explain, do not number the lines, do not use a code block, and do not change any character. In particular, keep every dollar sign and backslash exactly as written:
 $x^2$ is valid math
 it costs $5 and $10
 $5-$10

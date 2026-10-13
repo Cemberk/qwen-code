@@ -749,7 +749,7 @@ describe('computeApiTruncationIndex', () => {
       const ui: HistoryItem[] = [
         userItem(1, 'hello'),
         llmItem(2),
-        userItem(3, '/api/apiFunction/接口的实现'),
+        userItem(3, '/api/apiFunction/インターフェース'),
         llmItem(4),
         userItem(5, 'world'),
         llmItem(6),
@@ -757,7 +757,7 @@ describe('computeApiTruncationIndex', () => {
       const api: Content[] = [
         userContent('hello'),
         modelContent('response 1'),
-        userContent('/api/apiFunction/接口的实现'),
+        userContent('/api/apiFunction/インターフェース'),
         modelContent('response 2'),
         userContent('world'),
         modelContent('response 3'),
@@ -828,12 +828,12 @@ describe('isRealUserTurn', () => {
   });
 
   it('returns true for path-like slash prompts', () => {
-    expect(isRealUserTurn(userItem(1, '/api/apiFunction/接口的实现'))).toBe(
-      true,
-    );
-    expect(isRealUserTurn(userItem(1, '/Users/name/project 帮我安装'))).toBe(
-      true,
-    );
+    expect(
+      isRealUserTurn(userItem(1, '/api/apiFunction/インターフェース')),
+    ).toBe(true);
+    expect(
+      isRealUserTurn(userItem(1, '/Users/name/project install it for me')),
+    ).toBe(true);
   });
 
   it('returns false for ? commands', () => {

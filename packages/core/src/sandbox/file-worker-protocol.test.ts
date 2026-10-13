@@ -37,7 +37,7 @@ describe('sandbox file protocol and versions', () => {
     writeFileSync(target, 'old');
     const request = {
       operation: 'write' as const,
-      destination: path.join(root, '世界.txt'),
+      destination: path.join(root, 'ファイル.txt'),
       expected: getSandboxFileVersion(target),
       content: Buffer.alloc(2 * 1024 * 1024, 0xff),
     };

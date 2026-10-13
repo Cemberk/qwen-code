@@ -27,15 +27,17 @@ describe('approval mode display', () => {
     });
 
     it('formats mode names with the active locale', async () => {
-      await setLanguageAsync('zh');
+      await setLanguageAsync('fr');
       try {
-        expect(formatApprovalModeName(ApprovalMode.PLAN)).toBe('规划模式');
-        expect(formatApprovalModeName(ApprovalMode.DEFAULT)).toBe('请求授权');
-        expect(formatApprovalModeName(ApprovalMode.AUTO_EDIT)).toBe(
-          '自动接受编辑',
+        expect(formatApprovalModeName(ApprovalMode.PLAN)).toBe('mode plan');
+        expect(formatApprovalModeName(ApprovalMode.DEFAULT)).toBe(
+          "Demander l'autorisation",
         );
-        expect(formatApprovalModeName(ApprovalMode.AUTO)).toBe('自动模式');
-        expect(formatApprovalModeName(ApprovalMode.YOLO)).toBe('YOLO 模式');
+        expect(formatApprovalModeName(ApprovalMode.AUTO_EDIT)).toBe(
+          'acceptation automatique des modifications',
+        );
+        expect(formatApprovalModeName(ApprovalMode.AUTO)).toBe('Mode auto');
+        expect(formatApprovalModeName(ApprovalMode.YOLO)).toBe('Mode YOLO');
       } finally {
         await setLanguageAsync('en');
       }
@@ -65,22 +67,22 @@ describe('approval mode display', () => {
     });
 
     it('formats descriptions with the active locale', async () => {
-      await setLanguageAsync('zh');
+      await setLanguageAsync('fr');
       try {
         expect(formatApprovalModeDescription(ApprovalMode.PLAN)).toBe(
-          '仅分析，不修改文件或执行命令',
+          'Analyser uniquement, ne pas modifier les fichiers ni exécuter des commandes',
         );
         expect(formatApprovalModeDescription(ApprovalMode.DEFAULT)).toBe(
-          '需要批准文件编辑或 shell 命令',
+          "Demander l'approbation pour les modifications de fichiers ou les commandes shell",
         );
         expect(formatApprovalModeDescription(ApprovalMode.AUTO_EDIT)).toBe(
-          '自动批准文件编辑',
+          'Approuver automatiquement les modifications de fichiers',
         );
         expect(formatApprovalModeDescription(ApprovalMode.AUTO)).toBe(
-          '使用分类器自动批准安全的工具调用',
+          'Utiliser le classificateur pour approuver automatiquement les appels d’outils sûrs',
         );
         expect(formatApprovalModeDescription(ApprovalMode.YOLO)).toBe(
-          '自动批准所有工具',
+          'Approuver automatiquement tous les outils',
         );
       } finally {
         await setLanguageAsync('en');

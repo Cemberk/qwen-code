@@ -117,7 +117,7 @@ function ScrollableList<T>(
   // Terminal mouse reporting emits one event per row the pointer crosses, so a
   // brisk wheel spin or scrollbar drag fires a rapid burst. Applying each event
   // synchronously forced one Ink reflow + terminal flush per event — the source
-  // of the "一顿一顿" stutter. Accumulate the intent in refs and let
+  // of the "stop-and-go" stutter. Accumulate the intent in refs and let
   // useFrameCoalescedFlush apply the latest at most once per frame. A drag is
   // absolute (snap to the newest row); a wheel burst is relative (sum the
   // ticks); a drag in the same window wins.

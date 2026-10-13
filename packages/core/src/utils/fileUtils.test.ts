@@ -393,7 +393,7 @@ describe('fileUtils', () => {
 
     describe('readFileWithEncoding', () => {
       it('should read UTF-8 BOM file correctly', async () => {
-        const content = 'Hello, 世界! 🌍';
+        const content = 'Hello, こんにちは! 🌍';
         const utf8Bom = Buffer.from([0xef, 0xbb, 0xbf]);
         const utf8Content = Buffer.from(content, 'utf8');
         const fullBuffer = Buffer.concat([utf8Bom, utf8Content]);
@@ -406,7 +406,7 @@ describe('fileUtils', () => {
       });
 
       it('should read UTF-16 LE BOM file correctly', async () => {
-        const content = 'Hello, 世界! 🌍';
+        const content = 'Hello, こんにちは! 🌍';
         const utf16leBom = Buffer.from([0xff, 0xfe]);
         const utf16leContent = Buffer.from(content, 'utf16le');
         const fullBuffer = Buffer.concat([utf16leBom, utf16leContent]);
@@ -419,7 +419,7 @@ describe('fileUtils', () => {
       });
 
       it('should read UTF-16 BE BOM file correctly', async () => {
-        const content = 'Hello, 世界! 🌍';
+        const content = 'Hello, こんにちは! 🌍';
         // Manually encode UTF-16 BE: each char as big-endian 16-bit
         const utf16beBom = Buffer.from([0xfe, 0xff]);
         const chars = Array.from(content);
@@ -449,7 +449,7 @@ describe('fileUtils', () => {
       });
 
       it('should read UTF-32 LE BOM file correctly', async () => {
-        const content = 'Hello, 世界! 🌍';
+        const content = 'Hello, こんにちは! 🌍';
         const utf32leBom = Buffer.from([0xff, 0xfe, 0x00, 0x00]);
 
         const utf32leBytes: number[] = [];
@@ -474,7 +474,7 @@ describe('fileUtils', () => {
       });
 
       it('should read UTF-32 BE BOM file correctly', async () => {
-        const content = 'Hello, 世界! 🌍';
+        const content = 'Hello, こんにちは! 🌍';
         const utf32beBom = Buffer.from([0x00, 0x00, 0xfe, 0xff]);
 
         const utf32beBytes: number[] = [];
@@ -499,7 +499,7 @@ describe('fileUtils', () => {
       });
 
       it('should read file without BOM as UTF-8', async () => {
-        const content = 'Hello, 世界!';
+        const content = 'Hello, こんにちは!';
         const filePath = path.join(testDir, 'no-bom.txt');
         await fsPromises.writeFile(filePath, content, 'utf8');
 
@@ -515,41 +515,43 @@ describe('fileUtils', () => {
         expect(result).toBe('');
       });
 
-      it('should read GBK-encoded file with Chinese characters correctly', async () => {
-        // GBK encoding of "你好世界这是中文内容用于测试编码检测"
+      it('should read GBK-encoded file with CJK characters correctly', async () => {
+        // GBK encoding of "日本語の文字列を使って文字コード検出を試験する"
         // Needs enough content for chardet to reliably detect the encoding
         const gbkBuffer = Buffer.from([
-          0xc4, 0xe3, 0xba, 0xc3, 0xca, 0xc0, 0xbd, 0xe7, 0xd5, 0xe2, 0xca,
-          0xc7, 0xd6, 0xd0, 0xce, 0xc4, 0xc4, 0xda, 0xc8, 0xdd, 0xd3, 0xc3,
-          0xd3, 0xda, 0xb2, 0xe2, 0xca, 0xd4, 0xb1, 0xe0, 0xc2, 0xeb, 0xbc,
-          0xec, 0xb2, 0xe2,
+          0xc8, 0xd5, 0xb1, 0xbe, 0xd5, 0x5a, 0xa4, 0xce, 0xce, 0xc4, 0xd7,
+          0xd6, 0xc1, 0xd0, 0xa4, 0xf2, 0xca, 0xb9, 0xa4, 0xc3, 0xa4, 0xc6,
+          0xce, 0xc4, 0xd7, 0xd6, 0xa5, 0xb3, 0xa9, 0x60, 0xa5, 0xc9, 0x97,
+          0xca, 0xb3, 0xf6, 0xa4, 0xf2, 0xd4, 0x87, 0xf2, 0x59, 0xa4, 0xb9,
+          0xa4, 0xeb,
         ]);
-        const filePath = path.join(testDir, 'gbk-chinese.txt');
+        const filePath = path.join(testDir, 'gbk-cjk.txt');
         await fsPromises.writeFile(filePath, gbkBuffer);
 
         const result = await readFileWithEncoding(filePath);
-        expect(result).toBe('你好世界这是中文内容用于测试编码检测');
+        expect(result).toBe('日本語の文字列を使って文字コード検出を試験する');
       });
 
-      it('should read GBK-encoded file with mixed ASCII and Chinese correctly', async () => {
-        // GBK encoding of "// 这是注释内容用于测试\nhello你好世界测试中文编码检测\n函数返回值正确"
-        // Needs enough Chinese content for chardet to reliably detect as GB18030/GBK
+      it('should read GBK-encoded file with mixed ASCII and CJK correctly', async () => {
+        // GBK encoding of "// これはテスト用のコメントです\nhello日本語の文字コード検出テスト\n関数の戻り値は正しい"
+        // Needs enough CJK content for chardet to reliably detect as GB18030/GBK
         const gbkBuffer = Buffer.from([
-          0x2f, 0x2f, 0x20, 0xd5, 0xe2, 0xca, 0xc7, 0xd7, 0xa2, 0xca, 0xcd,
-          0xc4, 0xda, 0xc8, 0xdd, 0xd3, 0xc3, 0xd3, 0xda, 0xb2, 0xe2, 0xca,
-          0xd4, 0x0a, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0xc4, 0xe3, 0xba, 0xc3,
-          0xca, 0xc0, 0xbd, 0xe7, 0xb2, 0xe2, 0xca, 0xd4, 0xd6, 0xd0, 0xce,
-          0xc4, 0xb1, 0xe0, 0xc2, 0xeb, 0xbc, 0xec, 0xb2, 0xe2, 0x0a, 0xba,
-          0xaf, 0xca, 0xfd, 0xb7, 0xb5, 0xbb, 0xd8, 0xd6, 0xb5, 0xd5, 0xfd,
-          0xc8, 0xb7,
+          0x2f, 0x2f, 0x20, 0xa4, 0xb3, 0xa4, 0xec, 0xa4, 0xcf, 0xa5, 0xc6,
+          0xa5, 0xb9, 0xa5, 0xc8, 0xd3, 0xc3, 0xa4, 0xce, 0xa5, 0xb3, 0xa5,
+          0xe1, 0xa5, 0xf3, 0xa5, 0xc8, 0xa4, 0xc7, 0xa4, 0xb9, 0x0a, 0x68,
+          0x65, 0x6c, 0x6c, 0x6f, 0xc8, 0xd5, 0xb1, 0xbe, 0xd5, 0x5a, 0xa4,
+          0xce, 0xce, 0xc4, 0xd7, 0xd6, 0xa5, 0xb3, 0xa9, 0x60, 0xa5, 0xc9,
+          0x97, 0xca, 0xb3, 0xf6, 0xa5, 0xc6, 0xa5, 0xb9, 0xa5, 0xc8, 0x0a,
+          0xe9, 0x76, 0xca, 0xfd, 0xa4, 0xce, 0x91, 0xf8, 0xa4, 0xea, 0x82,
+          0x8e, 0xa4, 0xcf, 0xd5, 0xfd, 0xa4, 0xb7, 0xa4, 0xa4,
         ]);
         const filePath = path.join(testDir, 'gbk-mixed.txt');
         await fsPromises.writeFile(filePath, gbkBuffer);
 
         const result = await readFileWithEncoding(filePath);
         expect(result).toContain('hello');
-        expect(result).toContain('你好世界');
-        expect(result).toContain('函数返回值正确');
+        expect(result).toContain('日本語');
+        expect(result).toContain('関数の戻り値は正しい');
       });
     });
 
@@ -596,10 +598,11 @@ describe('fileUtils', () => {
 
       it('should return bom: false for GBK file (no BOM)', async () => {
         const gbkBuffer = Buffer.from([
-          0xc4, 0xe3, 0xba, 0xc3, 0xca, 0xc0, 0xbd, 0xe7, 0xd5, 0xe2, 0xca,
-          0xc7, 0xd6, 0xd0, 0xce, 0xc4, 0xc4, 0xda, 0xc8, 0xdd, 0xd3, 0xc3,
-          0xd3, 0xda, 0xb2, 0xe2, 0xca, 0xd4, 0xb1, 0xe0, 0xc2, 0xeb, 0xbc,
-          0xec, 0xb2, 0xe2,
+          0xc8, 0xd5, 0xb1, 0xbe, 0xd5, 0x5a, 0xa4, 0xce, 0xce, 0xc4, 0xd7,
+          0xd6, 0xc1, 0xd0, 0xa4, 0xf2, 0xca, 0xb9, 0xa4, 0xc3, 0xa4, 0xc6,
+          0xce, 0xc4, 0xd7, 0xd6, 0xa5, 0xb3, 0xa9, 0x60, 0xa5, 0xc9, 0x97,
+          0xca, 0xb3, 0xf6, 0xa4, 0xf2, 0xd4, 0x87, 0xf2, 0x59, 0xa4, 0xb9,
+          0xa4, 0xeb,
         ]);
         const filePath = path.join(testDir, 'info-gbk.txt');
         await fsPromises.writeFile(filePath, gbkBuffer);
@@ -607,7 +610,9 @@ describe('fileUtils', () => {
         const result = await readFileWithEncodingInfo(filePath);
         expect(result.bom).toBe(false);
         expect(result.encoding).toBe('gb18030');
-        expect(result.content).toBe('你好世界这是中文内容用于测试编码检测');
+        expect(result.content).toBe(
+          '日本語の文字列を使って文字コード検出を試験する',
+        );
       });
     });
 
@@ -630,14 +635,15 @@ describe('fileUtils', () => {
         expect(encoding).toBe('utf-8');
       });
 
-      it('should detect GBK encoding for Chinese text in GBK', async () => {
-        // GBK encoding of "你好世界这是中文内容用于测试编码检测"
+      it('should detect GBK encoding for CJK text in GBK', async () => {
+        // GBK encoding of "日本語の文字列を使って文字コード検出を試験する"
         // Needs enough content for chardet to reliably detect
         const gbkBuffer = Buffer.from([
-          0xc4, 0xe3, 0xba, 0xc3, 0xca, 0xc0, 0xbd, 0xe7, 0xd5, 0xe2, 0xca,
-          0xc7, 0xd6, 0xd0, 0xce, 0xc4, 0xc4, 0xda, 0xc8, 0xdd, 0xd3, 0xc3,
-          0xd3, 0xda, 0xb2, 0xe2, 0xca, 0xd4, 0xb1, 0xe0, 0xc2, 0xeb, 0xbc,
-          0xec, 0xb2, 0xe2,
+          0xc8, 0xd5, 0xb1, 0xbe, 0xd5, 0x5a, 0xa4, 0xce, 0xce, 0xc4, 0xd7,
+          0xd6, 0xc1, 0xd0, 0xa4, 0xf2, 0xca, 0xb9, 0xa4, 0xc3, 0xa4, 0xc6,
+          0xce, 0xc4, 0xd7, 0xd6, 0xa5, 0xb3, 0xa9, 0x60, 0xa5, 0xc9, 0x97,
+          0xca, 0xb3, 0xf6, 0xa4, 0xf2, 0xd4, 0x87, 0xf2, 0x59, 0xa4, 0xb9,
+          0xa4, 0xeb,
         ]);
         const filePath = path.join(testDir, 'gbk-detect.txt');
         await fsPromises.writeFile(filePath, gbkBuffer);
@@ -3493,7 +3499,7 @@ describe('fileUtils', () => {
     });
 
     it('should propagate large non-UTF-8 errors through bounded reads', async () => {
-      const gbkLine = (await loadIconvLite()).encode('中文日志行\n', 'gbk');
+      const gbkLine = (await loadIconvLite()).encode('日本語のログ行\n', 'gbk');
       const gbkChunk = Buffer.concat(
         Array.from({ length: 1024 }, () => gbkLine),
       );
@@ -3587,7 +3593,7 @@ describe('fileUtils', () => {
     });
 
     it('should not byte-truncate multibyte text before the character limit', async () => {
-      const content = '你'.repeat(1000);
+      const content = 'あ'.repeat(1000);
       actualNodeFs.writeFileSync(testTextFilePath, content, 'utf-8');
 
       const result = await processSingleFileContent(

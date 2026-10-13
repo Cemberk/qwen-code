@@ -135,7 +135,7 @@ both parents; the Critical fix is commit `1643d93c3e`.
 The lock helper and upstream semantic test file are unchanged
 from the main parent. The implementation restores locked search and allocates
 spare rows to read-only results; it also replaces the old count wording in all
-nine locales and updates the complete English/Chinese design pair.
+nine locales and updates the design doc.
 
 After installing dependencies from the merged lockfile with
 `QWEN_SKIP_PREPARE=true npm ci`, the following checks passed:

@@ -9,7 +9,7 @@ import type { ExtensionSetting } from './extensionSettings.js';
 
 /**
  * A string field that can be either a plain string or a locale map.
- * Keys in the record are locale codes (e.g., 'en', 'zh', 'zh-TW', 'ja').
+ * Keys in the record are locale codes (e.g., 'en', 'pt', 'pt-BR', 'ja').
  */
 export type LocalizableString = string | Record<string, string>;
 
@@ -33,7 +33,7 @@ export interface RawExtensionSetting
  * Resolves a LocalizableString to a plain string for the given locale.
  *
  * Fallback chain:
- *   exact match (e.g., 'zh-TW') → base language (e.g., 'zh') → 'en' → first value
+ *   exact match (e.g., 'pt-BR') → base language (e.g., 'pt') → 'en' → first value
  */
 export function resolveLocalizableString(
   value: LocalizableString | undefined,

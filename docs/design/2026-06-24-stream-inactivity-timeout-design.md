@@ -8,7 +8,7 @@
 
 ## Problem
 
-A DataAgent incident ("一直运行不返回") root-caused to the model gateway
+A DataAgent incident ("hangs, never returns") root-caused to the model gateway
 (Aliyun PrivateLink → DashScope/Bailian `compatible-mode`, qwen3.7-max) accepting
 a request (HTTP 200) but then **streaming nothing** — the SSE body stayed open
 and silent for ~595s with no `finish_reason`.

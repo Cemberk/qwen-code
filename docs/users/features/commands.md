@@ -70,11 +70,11 @@ Commands specifically for controlling interface and output language.
 | Command               | Description                      | Usage Examples             |
 | --------------------- | -------------------------------- | -------------------------- |
 | `/language`           | View or change language settings | `/language`                |
-| → `ui [language]`     | Set UI interface language        | `/language ui zh-CN`       |
-| → `output [language]` | Set LLM output language          | `/language output Chinese` |
+| → `ui [language]`     | Set UI interface language        | `/language ui ja-JP`       |
+| → `output [language]` | Set LLM output language          | `/language output English` |
 
-- Available built-in UI languages: `zh-CN` (Simplified Chinese), `en-US` (English), `ru-RU` (Russian), `de-DE` (German), `ja-JP` (Japanese), `pt-BR` (Portuguese - Brazil), `fr-FR` (French), `ca-ES` (Catalan)
-- Output language examples: `Chinese`, `English`, `Japanese`, etc.
+- Available built-in UI languages: `en-US` (English), `ru-RU` (Russian), `de-DE` (German), `ja-JP` (Japanese), `pt-BR` (Portuguese - Brazil), `fr-FR` (French), `ca-ES` (Catalan)
+- Output language examples: `English`, `Japanese`, `French`, etc.
 
 ### 1.4 Tool and Model Management
 

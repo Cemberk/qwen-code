@@ -763,10 +763,10 @@ const RECOVERY_OVERLAP_MIN_BYTES = 6;
 
 /**
  * Companion floor in *code points* for prose overlaps. The byte floor alone is
- * too permissive for CJK: a single Chinese character is 3 UTF-8 bytes, so
+ * too permissive for CJK: a single CJK character is 3 UTF-8 bytes, so
  * `RECOVERY_OVERLAP_MIN_BYTES = 6` would accept a coincidental 2-character
- * overlap like `"我们"` / `"但是"` that is extremely common across unrelated
- * Chinese turns. Requiring at least 4 code points in addition to the byte
+ * overlap like `"まず"` / `"では"` that is extremely common across unrelated
+ * CJK turns. Requiring at least 4 code points in addition to the byte
  * floor makes CJK collisions need a 4-character coincidence (~10⁻⁵ when
  * each character is independent), without raising the bar for ASCII (4 ASCII
  * chars is only 4 bytes — still gated by the 6-byte floor, so ASCII effectively

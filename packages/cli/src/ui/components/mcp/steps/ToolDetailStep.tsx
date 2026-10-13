@@ -11,7 +11,7 @@ import { t } from '../../../../i18n/index.js';
 import type { ToolDetailStepProps } from '../types.js';
 
 /**
- * 渲染单个参数
+ * Render a single parameter
  */
 const renderParameter = (
   name: string,
@@ -34,7 +34,7 @@ const renderParameter = (
 };
 
 /**
- * 渲染参数列表
+ * Render the parameter list
  */
 const ParametersList: React.FC<{
   properties: Record<string, unknown>;
@@ -61,7 +61,7 @@ const ParametersList: React.FC<{
 };
 
 /**
- * 提取并展示schema的关键信息，使用类似示例的格式
+ * Extract and show the key schema info in an example-like format
  */
 const SchemaSummary: React.FC<{ schema: object }> = ({ schema }) => {
   const obj = schema as Record<string, unknown>;
@@ -70,7 +70,7 @@ const SchemaSummary: React.FC<{ schema: object }> = ({ schema }) => {
 
   return (
     <Box flexDirection="column">
-      {/* 参数列表 */}
+      {/* Parameter list */}
       {properties && Object.keys(properties).length > 0 && (
         <ParametersList properties={properties} required={required} />
       )}
@@ -102,7 +102,7 @@ export const ToolDetailStep: React.FC<ToolDetailStepProps> = ({
 
   return (
     <Box flexDirection="column" gap={1}>
-      {/* 无效工具警告 */}
+      {/* Invalid tool warning */}
       {!tool.isValid && (
         <Box flexDirection="column" marginBottom={1}>
           <Text color={theme.status.error} bold>
@@ -119,7 +119,7 @@ export const ToolDetailStep: React.FC<ToolDetailStepProps> = ({
         </Box>
       )}
 
-      {/* 工具描述 */}
+      {/* Tool description */}
       {tool.description && (
         <Box flexDirection="column">
           <Text color={theme.text.primary} bold>

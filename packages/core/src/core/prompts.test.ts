@@ -1532,10 +1532,13 @@ describe('resident tool gating (#12032)', () => {
     const full = promptFor();
     const trimmed = promptFor(FILE_WORK_TOOLS);
 
-    // 无声明快照的基线假定所有工具都可用，因此共移除 1,135 字符：
-    // 委派与搜索规则占 818，未列入白名单的 monitor 规则占 317。
-    // 示例仅调用文件工具和 shell，全部保留。字符区间允许措辞精简，
-    // 同时检测节省量丢失；此口径不同于默认不声明 monitor 的真实会话。
+    // The undeclared baseline assumes every tool is available, so 1,135
+    // characters are removed in total: 818 of delegation and search rules
+    // and 317 of monitor rules, since monitor is not on the allowlist. The
+    // examples only call file tools and the shell, so all of them are kept.
+    // The range tolerates tighter wording while still catching a lost
+    // saving; this differs from a real session, which does not declare
+    // monitor by default.
     const saved = full.length - trimmed.length;
     expect(saved).toBeGreaterThan(900);
     expect(saved).toBeLessThan(1_500);

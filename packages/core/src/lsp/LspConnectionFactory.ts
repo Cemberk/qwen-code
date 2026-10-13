@@ -264,7 +264,7 @@ interface LspConnection {
 
 export class LspConnectionFactory {
   /**
-   * 创建基于 stdio 的 LSP 连接
+   * Create a stdio-based LSP connection
    */
   static async createStdioConnection(
     command: string,

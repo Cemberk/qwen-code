@@ -57,7 +57,7 @@ describe('getCommandSourceBadge', () => {
       getCommandSourceBadge(
         makeCmd({
           source: 'skill-dir-command',
-          sourceLabel: '用户',
+          sourceLabel: 'ユーザー',
           sourceDetail: 'user',
         }),
       ),
@@ -77,7 +77,7 @@ describe('getCommandSourceBadge', () => {
       getCommandSourceBadge(
         makeCmd({
           source: 'skill-dir-command',
-          sourceLabel: '项目',
+          sourceLabel: 'プロジェクト',
           sourceDetail: 'project',
         }),
       ),
@@ -108,11 +108,11 @@ describe('getCommandSourceBadge', () => {
       getCommandSourceBadge(
         makeCmd({
           source: 'plugin-command',
-          sourceLabel: '扩展：my-ext',
+          sourceLabel: '拡張機能：my-ext',
           sourceDetail: 'extension',
         }),
       ),
-    ).toBe('[扩展：my-ext]');
+    ).toBe('[拡張機能：my-ext]');
   });
 
   it('badges an extension skill command with its owner', () => {

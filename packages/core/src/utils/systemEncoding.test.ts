@@ -297,7 +297,7 @@ describe('Shell Command Processor - Encoding Functions', () => {
       mockedOsPlatform.mockReturnValue('win32');
       mockedExecSync.mockReturnValue('Active code page: 936');
 
-      const buffer = Buffer.from('Hello 你好', 'utf-8');
+      const buffer = Buffer.from('Hello こんにちは', 'utf-8');
       const result = getCachedEncodingForBuffer(buffer);
       expect(result).toBe('utf-8');
     });
@@ -556,7 +556,7 @@ describe('Shell Command Processor - Encoding Functions', () => {
 
     it('should handle Unicode content', () => {
       mockedOsPlatform.mockReturnValue('linux');
-      const unicodeText = '你好世界 🌍 ñoño';
+      const unicodeText = 'こんにちは 🌍 ñoño';
 
       // System encoding fails
       mockedExecSync.mockImplementation(() => {

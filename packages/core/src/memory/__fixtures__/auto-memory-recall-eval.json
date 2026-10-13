@@ -64,32 +64,32 @@
       "body": "_No entries yet._"
     },
     {
-      "id": "zh-deploy",
+      "id": "ja-rollout",
       "type": "project",
-      "title": "生产部署流程",
-      "description": "发布检查清单",
-      "body": "上线前确认监控和回滚开关。"
+      "title": "本番配備工程",
+      "description": "公開点検一覧",
+      "body": "公開前に監視と切戻しを確認する。"
     },
     {
-      "id": "zh-api",
+      "id": "ja-api",
       "type": "reference",
-      "title": "接口延迟排查",
-      "description": "API 性能看板",
-      "body": "记录服务响应时间和告警入口。"
+      "title": "応答遅延調査",
+      "description": "API 性能監視",
+      "body": "サービス応答時間と警報入口を記録する。"
     },
     {
-      "id": "zh-auth",
+      "id": "ja-access",
       "type": "project",
-      "title": "认证配置",
-      "description": "登录问题排查",
-      "body": "会话过期和权限配置检查。"
+      "title": "権限付与規則",
+      "description": "利用者権限監査",
+      "body": "期限切れの権限を定期的に見直す。"
     },
     {
-      "id": "zh-perf",
+      "id": "ja-perf",
       "type": "project",
-      "title": "性能优化目标",
-      "description": "季度性能指标",
-      "body": "降低冷启动时间。"
+      "title": "性能改善目標",
+      "description": "四半期性能指標",
+      "body": "起動時間を短縮する。"
     },
     {
       "id": "ja-auth",
@@ -143,15 +143,15 @@
     {
       "id": "mixed-api",
       "type": "reference",
-      "title": "Qwen API 限流",
+      "title": "Qwen API 流量制限",
       "description": "Rate limit dashboard",
-      "body": "检查 quota 和请求速率。"
+      "body": "quota とリクエスト速度を確認する。"
     },
     {
       "id": "mixed-deploy",
       "type": "project",
-      "title": "Deployment 发布说明",
-      "description": "Release 流程",
+      "title": "Deployment 変更履歴",
+      "description": "Release 工程",
       "body": "Mixed-language deployment notes."
     },
     {
@@ -255,46 +255,46 @@
       "expectedTopId": "en-owner"
     },
     {
-      "id": "zh-deploy-title",
-      "category": "chinese",
-      "query": "生产部署",
-      "relevantIds": ["zh-deploy"],
-      "expectedTopId": "zh-deploy"
+      "id": "ja-rollout-title",
+      "category": "japanese",
+      "query": "本番配備",
+      "relevantIds": ["ja-rollout"],
+      "expectedTopId": "ja-rollout"
     },
     {
-      "id": "zh-deploy-description",
-      "category": "chinese",
-      "query": "发布检查",
-      "relevantIds": ["zh-deploy"],
-      "expectedTopId": "zh-deploy"
+      "id": "ja-rollout-checklist",
+      "category": "japanese",
+      "query": "公開点検",
+      "relevantIds": ["ja-rollout"],
+      "expectedTopId": "ja-rollout"
     },
     {
-      "id": "zh-api-title",
-      "category": "chinese",
-      "query": "接口延迟",
-      "relevantIds": ["zh-api"],
-      "expectedTopId": "zh-api"
+      "id": "ja-api-title",
+      "category": "japanese",
+      "query": "応答遅延",
+      "relevantIds": ["ja-api"],
+      "expectedTopId": "ja-api"
     },
     {
-      "id": "zh-api-troubleshooting",
-      "category": "chinese",
-      "query": "延迟排查",
-      "relevantIds": ["zh-api"],
-      "expectedTopId": "zh-api"
+      "id": "ja-api-troubleshooting",
+      "category": "japanese",
+      "query": "遅延調査",
+      "relevantIds": ["ja-api"],
+      "expectedTopId": "ja-api"
     },
     {
-      "id": "zh-auth-config",
-      "category": "chinese",
-      "query": "认证配置",
-      "relevantIds": ["zh-auth"],
-      "expectedTopId": "zh-auth"
+      "id": "ja-access-rules",
+      "category": "japanese",
+      "query": "権限付与",
+      "relevantIds": ["ja-access"],
+      "expectedTopId": "ja-access"
     },
     {
-      "id": "zh-performance-goal",
-      "category": "chinese",
-      "query": "性能优化目标",
-      "relevantIds": ["zh-perf"],
-      "expectedTopId": "zh-perf"
+      "id": "ja-performance-goal",
+      "category": "japanese",
+      "query": "性能改善目標",
+      "relevantIds": ["ja-perf"],
+      "expectedTopId": "ja-perf"
     },
     {
       "id": "ja-auth-title",
@@ -376,7 +376,7 @@
     {
       "id": "mixed-rate-limit-han",
       "category": "mixed",
-      "query": "qwen api 限流",
+      "query": "qwen api 流量制限",
       "relevantIds": ["mixed-api"],
       "expectedTopId": "mixed-api"
     },
@@ -390,7 +390,7 @@
     {
       "id": "mixed-deployment-han",
       "category": "mixed",
-      "query": "deployment 发布说明",
+      "query": "deployment 変更履歴",
       "relevantIds": ["mixed-deploy"],
       "expectedTopId": "mixed-deploy"
     },
@@ -460,9 +460,9 @@
       "relevantIds": []
     },
     {
-      "id": "no-result-single-han",
+      "id": "no-result-single-katakana",
       "category": "no-result",
-      "query": "部",
+      "query": "デ",
       "relevantIds": []
     },
     {
@@ -498,8 +498,8 @@
     {
       "id": "semantic-slow-first-paint",
       "category": "semantic-no-lexical",
-      "query": "首屏加载太久了",
-      "relevantIds": ["zh-perf"]
+      "query": "初回表示が遅すぎる",
+      "relevantIds": ["ja-perf"]
     },
     {
       "id": "other-script-ru-deploy",

@@ -335,7 +335,7 @@ describe('ChatRecordingService - auto-title trigger', () => {
     chatRecordingService.recordUserMessage(
       [{ text: 'hidden channel instructions' }],
       undefined,
-      { displayText: '你好', hookContext: '' },
+      { displayText: 'Hi there', hookContext: '' },
     );
 
     chatRecordingService.recordAssistantTurn({
@@ -347,7 +347,7 @@ describe('ChatRecordingService - auto-title trigger', () => {
     expect(tryGenerateSessionTitleMock).toHaveBeenCalledWith(
       mockConfig,
       expect.any(AbortSignal),
-      ['你好'],
+      ['Hi there'],
     );
   });
 
@@ -363,7 +363,7 @@ describe('ChatRecordingService - auto-title trigger', () => {
         cwd: '/test/project/root',
         version: '1.0.0',
         message: { role: 'user', parts: [{ text: 'hidden first prompt' }] },
-        systemPayload: { displayText: '你好', hookContext: '' },
+        systemPayload: { displayText: 'Hi there', hookContext: '' },
       },
       {
         uuid: 'assistant-1',
@@ -386,7 +386,7 @@ describe('ChatRecordingService - auto-title trigger', () => {
         cwd: '/test/project/root',
         version: '1.0.0',
         message: { role: 'user', parts: [{ text: 'hidden second prompt' }] },
-        systemPayload: { displayText: '再见', hookContext: '' },
+        systemPayload: { displayText: 'See you later', hookContext: '' },
       },
     ];
     const resumedConfig = {
@@ -398,7 +398,10 @@ describe('ChatRecordingService - auto-title trigger', () => {
     } as unknown as Config;
     const service = new ChatRecordingService(resumedConfig);
 
-    expect(service.getUserDisplayTextsForTitle()).toEqual(['你好', '再见']);
+    expect(service.getUserDisplayTextsForTitle()).toEqual([
+      'Hi there',
+      'See you later',
+    ]);
 
     mockOk('Answer greetings');
     service.recordAssistantTurn({
@@ -410,7 +413,7 @@ describe('ChatRecordingService - auto-title trigger', () => {
     expect(tryGenerateSessionTitleMock).toHaveBeenCalledWith(
       resumedConfig,
       expect.any(AbortSignal),
-      ['你好', '再见'],
+      ['Hi there', 'See you later'],
     );
   });
 

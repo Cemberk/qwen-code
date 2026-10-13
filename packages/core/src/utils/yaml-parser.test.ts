@@ -197,7 +197,7 @@ describe('yaml-parser', () => {
         ['containing hash', 'value#with#hash'],
         ['leading/trailing spaces', ' value with spaces '],
         ['multiline newlines', 'line one\nline two\nline three'],
-        ['unicode', '中文 — naïve café'],
+        ['unicode', '日本語 — naïve café'],
       ])('round-trips: %s', (_label, str) => {
         const obj = { key: str };
         expect(parse(stringify(obj))).toEqual(obj);

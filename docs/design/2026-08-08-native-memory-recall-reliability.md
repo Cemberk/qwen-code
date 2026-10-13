@@ -155,7 +155,7 @@ selector-failure fallback:
   and accented Latin produce tokens instead of none. CJK is excluded per
   character rather than by alternation order, because `\p{L}` also matches
   Han and a Latin-initial run would otherwise swallow the CJK after it and
-  turn `abc漢字` into a single token;
+  turn `abc日本語` into a single token;
 - generate Unicode code-point bigrams for Han, Hiragana, Katakana, and Hangul
   runs;
 - ignore isolated CJK characters;
@@ -204,7 +204,7 @@ flatters every design; the floor is what makes the headline readable.
 - Cancellation ends the bounded wait and prevents stale delivery.
 - A fast result never crosses a query boundary.
 - No-result queries stay silent under both designs.
-- A labeled set covers Chinese, English, Japanese, Korean, mixed text,
+- A labeled set covers English, Japanese, Korean, mixed text,
   NFKC normalization, body-only matches, no-result queries, answerable
   queries that share no token with their document, and alphabetic scripts
   outside ASCII and CJK (Cyrillic, Greek, accented Latin).

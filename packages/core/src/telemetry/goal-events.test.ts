@@ -208,7 +208,7 @@ describe('goalStateEventFromSnapshot', () => {
 
   it('counts the objective in code points', () => {
     const event = goalStateEventFromSnapshot(
-      snapshot(goal({ objective: '发布说明🚀' })),
+      snapshot(goal({ objective: 'リリース🚀' })),
       'create',
       NOW,
     );

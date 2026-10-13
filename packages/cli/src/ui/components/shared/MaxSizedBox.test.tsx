@@ -307,16 +307,16 @@ Line 3`);
       <OverflowProvider>
         <MaxSizedBox maxWidth={5} maxHeight={5}>
           <Box>
-            <Text wrap="wrap">你好世界</Text>
+            <Text wrap="wrap">ひらがな</Text>
           </Box>
         </MaxSizedBox>
       </OverflowProvider>,
     );
 
-    // "你好" has a visual width of 4. "世界" has a visual width of 4.
+    // "ひら" has a visual width of 4. "がな" has a visual width of 4.
     // With maxWidth=5, it should wrap after the second character.
-    expect(lastFrame()).equals(`你好
-世界`);
+    expect(lastFrame()).equals(`ひら
+がな`);
   });
 
   it('wraps text with multi-byte emoji characters correctly', () => {

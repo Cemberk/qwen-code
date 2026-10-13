@@ -177,9 +177,10 @@ const ClickableThinkMessage: React.FC<{
         const press = pressRef.current;
         pressRef.current = null;
         if (isInside && press?.col === event.col && press.row === event.row) {
-          // 鼠标事件广播给所有订阅者：单击落在 OSC 8 链接上时，
-          // ContentMouseController 负责打开链接，这里不再切换折叠，
-          // 否则一次单击会既折叠思考块又打开链接。
+          // Mouse events go to all subscribers: when a click lands on an OSC 8
+          // link, ContentMouseController opens it, so don't toggle collapse
+          // here, or one click would collapse the thinking block and open the
+          // link.
           const url = hyperlinkAtCell(
             getScreenBuffer(stdout)?.frame ?? null,
             col,

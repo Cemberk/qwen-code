@@ -275,7 +275,7 @@ describe('ContentMouseController', () => {
       const { fire } = mount();
       fire(makeEvent('left-press', 2, 1));
       fire(makeEvent('left-release', 2, 1));
-      // 窗口内的再次按下可能是双击的起始，必须取消挂起的打开。
+      // A second press inside the window may start a double-click, so it must cancel the pending open.
       fire(makeEvent('left-press', 7, 1));
       runOutWindow();
       expect(copyToClipboard).not.toHaveBeenCalled();

@@ -120,7 +120,9 @@ describe('cleanSummary', () => {
   });
 
   it('preserves CJK labels', () => {
-    expect(cleanSummary('搜索了 auth 模块')).toBe('搜索了 auth 模块');
+    expect(cleanSummary('auth モジュールをチェック')).toBe(
+      'auth モジュールをチェック',
+    );
   });
 
   it('strips Unicode curly quotes', () => {
@@ -129,7 +131,9 @@ describe('cleanSummary', () => {
   });
 
   it('strips CJK corner brackets', () => {
-    expect(cleanSummary('「搜索了 auth 模块」')).toBe('搜索了 auth 模块');
+    expect(cleanSummary('「auth モジュールをチェック」')).toBe(
+      'auth モジュールをチェック',
+    );
     expect(cleanSummary('『Fixed bug』')).toBe('Fixed bug');
   });
 
@@ -137,14 +141,6 @@ describe('cleanSummary', () => {
     expect(cleanSummary('**Read 4 files**')).toBe('Read 4 files');
     expect(cleanSummary('_Searched auth_')).toBe('Searched auth');
     expect(cleanSummary('__Fixed NPE__')).toBe('Fixed NPE');
-  });
-
-  it('rejects Chinese refusal responses', () => {
-    expect(cleanSummary('我无法生成摘要')).toBe('');
-    expect(cleanSummary('我不能回答这个')).toBe('');
-    expect(cleanSummary('抱歉，我不能帮助')).toBe('');
-    expect(cleanSummary('无法确定')).toBe('');
-    expect(cleanSummary('无法完成')).toBe('');
   });
 
   it('rejects curly-apostrophe English refusals', () => {

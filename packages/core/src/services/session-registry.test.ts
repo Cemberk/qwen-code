@@ -160,10 +160,10 @@ describe('deriveSessionName', () => {
     // An ASCII-only character class reduces every CJK basename to the
     // same bare dash — zero identifying information for exactly the
     // projects whose names are not ASCII.
-    const a = deriveSessionName('/home/u/项目', 's1');
-    const b = deriveSessionName('/home/u/別項目', 's1');
-    expect(a).toMatch(/^项目-[0-9a-f]{2}$/);
-    expect(b).toMatch(/^別項目-[0-9a-f]{2}$/);
+    const a = deriveSessionName('/home/u/プロジェクト', 's1');
+    const b = deriveSessionName('/home/u/日本語', 's1');
+    expect(a).toMatch(/^プロジェクト-[0-9a-f]{2}$/);
+    expect(b).toMatch(/^日本語-[0-9a-f]{2}$/);
     expect(a).not.toBe(b);
   });
 

@@ -95,8 +95,8 @@ describe('osc8 helpers', () => {
     });
 
     it('keeps printable ASCII and unicode intact', () => {
-      expect(sanitizeForOsc('https://example.com/路径?q=v')).toBe(
-        'https://example.com/路径?q=v',
+      expect(sanitizeForOsc('https://example.com/パス?q=v')).toBe(
+        'https://example.com/パス?q=v',
       );
     });
   });
@@ -303,7 +303,7 @@ describe('osc8 helpers', () => {
       'https://ja.example.com/〼道と〻次',
       'https://example.com/〱〢',
       'https://example.com/a︳b︴c',
-      'https://zh.wikipedia.org/wiki/北京',
+      'https://ja.wikipedia.org/wiki/東京',
     ])('keeps word-forming CJK characters in %s', (url) => {
       expect(new RegExp(BARE_URL_PATTERN).exec(url)?.[0]).toBe(url);
     });
@@ -317,7 +317,7 @@ describe('osc8 helpers', () => {
     });
 
     it.each([
-      ['https://example.com/page。下一步', 'https://example.com/page'],
+      ['https://example.com/page。次へ', 'https://example.com/page'],
       ['https://example.com/page、続き', 'https://example.com/page'],
       ['https://example.com/page：説明', 'https://example.com/page'],
       ['https://example.com/page？質問', 'https://example.com/page'],
@@ -327,7 +327,7 @@ describe('osc8 helpers', () => {
     });
 
     it.each([
-      ['https://example.com/x﹙備註﹚', 'https://example.com/x'],
+      ['https://example.com/x﹙備考﹚', 'https://example.com/x'],
       ['https://example.com/a︒後続', 'https://example.com/a'],
       ['https://example.com/p﹖説明', 'https://example.com/p'],
     ])('stops before CJK compat/vertical forms in %s', (input, expected) => {

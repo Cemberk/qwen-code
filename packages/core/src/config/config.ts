@@ -984,7 +984,7 @@ export interface ConfigParameters {
   emitToolUseSummaries?: boolean;
 
   overrideExtensions?: string[];
-  /** Locale code for resolving localizable extension fields (e.g., 'en', 'zh'). */
+  /** Locale code for resolving localizable extension fields (e.g., 'en', 'ja'). */
   locale?: string;
   allowedMcpServers?: string[];
   /**

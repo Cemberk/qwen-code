@@ -273,6 +273,10 @@ function sourceWarning(sourceStatus?: MemorySourceStatus): string[] {
   return warnings;
 }
 
+function selectedNotShown(count: number): string {
+  return `${count} more selected ${count === 1 ? 'memory' : 'memories'} not shown`;
+}
+
 function renderFocusedLeafLines(
   leaf: AutoMemoryTreeLeaf,
   prefix: string,
@@ -282,20 +286,20 @@ function renderFocusedLeafLines(
   const marker = isLast ? '└──' : '├──';
   if (bodyState === 'present') {
     return [
-      `${prefix}${marker} [内容已在当前上下文] [${leaf.memoryRef}] ${leaf.title}`,
+      `${prefix}${marker} [already in current context] [${leaf.memoryRef}] ${leaf.title}`,
     ];
   }
 
-  const state = bodyState === 'stale' ? '[内容已更新，需要重新读取] ' : '';
+  const state = bodyState === 'stale' ? '[updated, re-read needed] ' : '';
   const lines = [
     `${prefix}${marker} ${state}[${leaf.memoryRef}] ${leaf.title}`,
   ];
   const detailPrefix = `${prefix}${isLast ? '    ' : '│   '}`;
   if (leaf.description) {
-    lines.push(`${detailPrefix}摘要：${leaf.description}`);
+    lines.push(`${detailPrefix}Summary: ${leaf.description}`);
   }
   if (leaf.usageScenarios.length > 0) {
-    lines.push(`${detailPrefix}适用：${leaf.usageScenarios.join('; ')}`);
+    lines.push(`${detailPrefix}Use when: ${leaf.usageScenarios.join('; ')}`);
   }
   return lines;
 }
@@ -344,7 +348,7 @@ export function renderAutoMemoryFocusedSubtree(
       const prefix = groupIsLast ? '    ' : '│   ';
       lines.push(`${groupIsLast ? '└──' : '├──'} ${group.category}`);
       if (keywords.length > 0) {
-        lines.push(`${prefix}关键词：${keywords.join(', ')}`);
+        lines.push(`${prefix}Keywords: ${keywords.join(', ')}`);
       }
       group.leaves.forEach((leaf, index) => {
         const presentVersion = bodyPresentVersions.get(leaf.memoryRef);
@@ -365,7 +369,7 @@ export function renderAutoMemoryFocusedSubtree(
       });
     }
     const omitted = selectedDocs.length - docsToRender.length;
-    if (omitted > 0) lines.push('', `另 ${omitted} 条已选记忆未展示`);
+    if (omitted > 0) lines.push('', selectedNotShown(omitted));
     return lines.join('\n');
   };
 
@@ -380,7 +384,7 @@ export function renderAutoMemoryFocusedSubtree(
     }
   }
   return {
-    prompt: `## Memory focus for this turn\n\n另 ${selectedDocs.length} 条已选记忆未展示`,
+    prompt: `## Memory focus for this turn\n\n${selectedNotShown(selectedDocs.length)}`,
     displayed: 0,
     omitted: selectedDocs.length,
   };

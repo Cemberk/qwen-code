@@ -295,7 +295,7 @@ describe('<AskUserQuestionDialog />', () => {
       // them correctly rather than by character count.
       const details = createConfirmationDetails({
         questions: [
-          createSingleQuestion({ header: '目标配置参数设置' }),
+          createSingleQuestion({ header: 'ターゲット設定値' }),
           createSingleQuestion({
             header: 'Q2',
             question: 'Second question?',
@@ -312,7 +312,7 @@ describe('<AskUserQuestionDialog />', () => {
       );
 
       const output = lastFrame();
-      expect(output).not.toContain('目标配置参数设置'); // clipped
+      expect(output).not.toContain('ターゲット設定値'); // clipped
       expect(output).toContain('…');
     });
 

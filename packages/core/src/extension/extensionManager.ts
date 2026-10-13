@@ -218,7 +218,7 @@ export interface ExtensionManagerOptions {
   /** Override list of enabled extension names (from CLI -e flag) */
   enabledExtensionOverrides?: string[];
   isWorkspaceTrusted: boolean;
-  /** Locale code for resolving localizable fields (e.g., 'en', 'zh'). Defaults to 'en'. */
+  /** Locale code for resolving localizable fields (e.g., 'en', 'ja'). Defaults to 'en'. */
   locale?: string;
   config?: Config;
   requestConsent?: (options?: ExtensionRequestOptions) => Promise<void>;

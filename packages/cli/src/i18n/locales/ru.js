@@ -905,7 +905,6 @@ export default {
     'Использование: /language ui [{{options}}]',
   'Usage: /language output <language>':
     'Использование: /language output <language>',
-  'Example: /language output 中文': 'Пример: /language output 中文',
   'Example: /language output English': 'Пример: /language output English',
   'Example: /language output 日本語': 'Пример: /language output 日本語',
   'UI language changed to {{lang}}': 'Язык интерфейса изменен на {{lang}}',

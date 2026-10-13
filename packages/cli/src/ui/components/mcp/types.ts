@@ -10,7 +10,7 @@ import type {
 } from '@qwen-code/qwen-code-core';
 
 /**
- * MCP管理步骤定义
+ * MCP management step definitions
  */
 export const MCP_MANAGEMENT_STEPS = {
   SERVER_LIST: 'server-list',
@@ -23,52 +23,52 @@ export const MCP_MANAGEMENT_STEPS = {
 } as const;
 
 /**
- * MCP服务器显示信息
+ * MCP server display info
  */
 export interface MCPServerDisplayInfo {
-  /** 服务器名称 */
+  /** Server name */
   name: string;
-  /** 连接状态 */
+  /** Connection status */
   status: MCPServerStatus;
-  /** 来源类型 */
+  /** Source type */
   source: 'user' | 'project' | 'workspace' | 'system' | 'extension';
-  /** 配置文件路径 */
+  /** Config file path */
   configPath?: string;
-  /** 服务器配置 */
+  /** Server config */
   config: MCPServerConfig;
-  /** 工具数量 */
+  /** Tool count */
   toolCount: number;
-  /** 无效工具数量（缺少name或description） */
+  /** Invalid tool count (missing name or description) */
   invalidToolCount?: number;
-  /** Prompt数量 */
+  /** Prompt count */
   promptCount: number;
-  /** Resource数量 */
+  /** Resource count */
   resourceCount: number;
-  /** 错误信息 */
+  /** Error message */
   errorMessage?: string;
-  /** 是否被禁用（在排除列表中） */
+  /** Whether disabled (in the exclusion list) */
   isDisabled: boolean;
   /**
-   * 对于受门控（gated，#4615）但尚未审批的 server：discovery 跳过它（保持
-   * disconnected）的原因。`pending`=等待首次/重新审批，`rejected`=已被拒绝。
-   * 仅 gated scope 有值，其余为 undefined。
+   * For gated (#4615) servers not yet approved: why discovery skipped it
+   * (left disconnected). `pending` = awaiting first/re-approval,
+   * `rejected` = rejected. Set only for gated scopes, else undefined.
    */
   approvalState?: 'pending' | 'rejected';
 }
 
 /**
- * MCP工具显示信息
+ * MCP tool display info
  */
 export interface MCPToolDisplayInfo {
-  /** 工具名称 */
+  /** Tool name */
   name: string;
-  /** 工具描述 */
+  /** Tool description */
   description?: string;
-  /** 所属服务器 */
+  /** Owning server */
   serverName: string;
-  /** 工具schema */
+  /** Tool schema */
   schema?: object;
-  /** 工具注解 */
+  /** Tool annotations */
   annotations?: {
     title?: string;
     readOnlyHint?: boolean;
@@ -76,150 +76,150 @@ export interface MCPToolDisplayInfo {
     idempotentHint?: boolean;
     openWorldHint?: boolean;
   };
-  /** 工具是否有效（有name和description才能被LLM调用） */
+  /** Valid if it has a name and description (required for LLM calls) */
   isValid: boolean;
-  /** 无效原因（当isValid为false时） */
+  /** Reason it is invalid (when isValid is false) */
   invalidReason?: string;
 }
 
 /**
- * MCP Resource显示信息
+ * MCP resource display info
  */
 export interface MCPResourceDisplayInfo {
-  /** 资源 URI（在对话中通过 @server:uri 引用） */
+  /** Resource URI (referenced in chat via @server:uri) */
   uri: string;
-  /** 资源名称 */
+  /** Resource name */
   name?: string;
-  /** 资源标题（更友好的展示名，若有） */
+  /** Resource title (friendlier display name, if any) */
   title?: string;
-  /** 资源描述 */
+  /** Resource description */
   description?: string;
-  /** MIME 类型 */
+  /** MIME type */
   mimeType?: string;
-  /** 资源大小（字节） */
+  /** Resource size (bytes) */
   size?: number;
-  /** 所属服务器 */
+  /** Owning server */
   serverName: string;
 }
 
 /**
- * 分组后的服务器列表
+ * Grouped server list
  */
 export interface GroupedServers {
-  /** 来源标识 */
+  /** Source identifier */
   source: string;
-  /** 来源显示名称 */
+  /** Source display name */
   displayName: string;
-  /** 配置文件路径 */
+  /** Config file path */
   configPath?: string;
-  /** 服务器列表 */
+  /** Server list */
   servers: MCPServerDisplayInfo[];
 }
 
 /**
- * ServerListStep组件属性
+ * ServerListStep component props
  */
 export interface ServerListStepProps {
-  /** 服务器列表 */
+  /** Server list */
   servers: MCPServerDisplayInfo[];
-  /** 选择回调 */
+  /** Selection callback */
   onSelect: (index: number) => void;
 }
 
 /**
- * ServerDetailStep 组件属性
+ * ServerDetailStep component props
  */
 export interface ServerDetailStepProps {
-  /** 选中的服务器 */
+  /** Selected server */
   server: MCPServerDisplayInfo | null;
-  /** 查看工具列表回调 */
+  /** View tool list callback */
   onViewTools: () => void;
-  /** 查看资源列表回调 */
+  /** View resource list callback */
   onViewResources?: () => void;
-  /** 重新连接回调 */
+  /** Reconnect callback */
   onReconnect?: () => void;
-  /** 审批服务器回调（解除 needs-approval 门控） */
+  /** Approve server callback (lifts the needs-approval gate) */
   onApprove?: () => void;
-  /** 禁用服务器回调 */
+  /** Disable server callback */
   onDisable?: () => void;
-  /** 返回回调 */
+  /** Back callback */
   onBack: () => void;
-  /** 是否响应键盘输入（默认 true） */
+  /** Whether to respond to keyboard input (default true) */
   isActive?: boolean;
 }
 
 /**
- * DisableScopeSelectStep组件属性
+ * DisableScopeSelectStep component props
  */
 export interface DisableScopeSelectStepProps {
-  /** 选中的服务器 */
+  /** Selected server */
   server: MCPServerDisplayInfo | null;
-  /** 选择 scope 回调 */
+  /** Scope selection callback */
   onSelectScope: (scope: 'user' | 'workspace') => void;
-  /** 返回回调 */
+  /** Back callback */
   onBack: () => void;
 }
 
 /**
- * ToolListStep组件属性
+ * ToolListStep component props
  */
 export interface ToolListStepProps {
-  /** 工具列表 */
+  /** Tool list */
   tools: MCPToolDisplayInfo[];
-  /** 服务器名称 */
+  /** Server name */
   serverName: string;
-  /** 选择回调 */
+  /** Selection callback */
   onSelect: (tool: MCPToolDisplayInfo) => void;
-  /** 返回回调 */
+  /** Back callback */
   onBack: () => void;
-  /** 是否响应键盘输入（默认 true） */
+  /** Whether to respond to keyboard input (default true) */
   isActive?: boolean;
 }
 
 /**
- * ToolDetailStep 组件属性
+ * ToolDetailStep component props
  */
 export interface ToolDetailStepProps {
-  /** 工具信息 */
+  /** Tool info */
   tool: MCPToolDisplayInfo | null;
-  /** 返回回调 */
+  /** Back callback */
   onBack: () => void;
-  /** 是否响应键盘输入（默认 true） */
+  /** Whether to respond to keyboard input (default true) */
   isActive?: boolean;
 }
 
 /**
- * ResourceListStep 组件属性
+ * ResourceListStep component props
  */
 export interface ResourceListStepProps {
-  /** 资源列表 */
+  /** Resource list */
   resources: MCPResourceDisplayInfo[];
-  /** 服务器名称 */
+  /** Server name */
   serverName: string;
-  /** 选择回调 */
+  /** Selection callback */
   onSelect: (resource: MCPResourceDisplayInfo) => void;
-  /** 返回回调 */
+  /** Back callback */
   onBack: () => void;
-  /** 是否响应键盘输入（默认 true） */
+  /** Whether to respond to keyboard input (default true) */
   isActive?: boolean;
 }
 
 /**
- * ResourceDetailStep 组件属性
+ * ResourceDetailStep component props
  */
 export interface ResourceDetailStepProps {
-  /** 资源信息 */
+  /** Resource info */
   resource: MCPResourceDisplayInfo | null;
-  /** 返回回调 */
+  /** Back callback */
   onBack: () => void;
-  /** 是否响应键盘输入（默认 true） */
+  /** Whether to respond to keyboard input (default true) */
   isActive?: boolean;
 }
 
 /**
- * MCP管理对话框属性
+ * MCP management dialog props
  */
 export interface MCPManagementDialogProps {
-  /** 关闭回调 */
+  /** Close callback */
   onClose: () => void;
 }

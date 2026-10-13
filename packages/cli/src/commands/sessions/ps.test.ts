@@ -286,7 +286,7 @@ describe('qwen sessions ps', () => {
   });
 
   it('keeps a CJK name inside its column instead of shifting the row', async () => {
-    listLiveSessions.mockResolvedValue([record({ name: '项目'.repeat(20) })]);
+    listLiveSessions.mockResolvedValue([record({ name: 'かな'.repeat(20) })]);
     await run({ json: false });
 
     // Padding is measured in terminal cells, not code units: a 2-cell CJK

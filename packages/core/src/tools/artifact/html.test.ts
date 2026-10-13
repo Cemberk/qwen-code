@@ -247,7 +247,7 @@ describe('artifact html helpers', () => {
   describe('byteLength', () => {
     it('counts UTF-8 bytes', () => {
       expect(byteLength('abc')).toBe(3);
-      expect(byteLength('你好')).toBe(6);
+      expect(byteLength('かな')).toBe(6);
     });
   });
 });

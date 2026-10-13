@@ -3334,14 +3334,14 @@ describe('AppContainer State Management', () => {
         />,
       );
 
-      capturedUIActions.handleFinalSubmit(' \n你好 🌏\nsecond line \n ', {
-        submittedPrompt: ' \n你好 🌏\nsecond line \n ',
+      capturedUIActions.handleFinalSubmit(' \nこんにちは 🌏\nsecond line \n ', {
+        submittedPrompt: ' \nこんにちは 🌏\nsecond line \n ',
       });
 
       expect(mockQueueMessage).toHaveBeenCalledWith(
-        ' \n你好 🌏\nsecond line \n ',
+        ' \nこんにちは 🌏\nsecond line \n ',
         false,
-        '你好 🌏\nsecond line',
+        'こんにちは 🌏\nsecond line',
         false,
       );
     });

@@ -6652,8 +6652,9 @@ describe('Gemini Client (client.ts)', () => {
       );
       const fast = {
         treeSnapshot: fastTreeSnapshot('resident-revision'),
-        focusedPrompt: '## Memory focus for this turn\n\n[内容已在当前上下文]',
-        prompt: '## Memory focus for this turn\n\n[内容已在当前上下文]',
+        focusedPrompt:
+          '## Memory focus for this turn\n\n[already in current context]',
+        prompt: '## Memory focus for this turn\n\n[already in current context]',
         selectedDocs: [fastDoc('/m/resident.md', '- resident body')],
         strategy: 'heuristic' as const,
       };
@@ -6674,7 +6675,7 @@ describe('Gemini Client (client.ts)', () => {
       const delivery = await client.consumeManagedAutoMemoryRecall('initial');
 
       expect(delivery?.prompt).toContain('[user:resident.md] User Memory');
-      expect(delivery?.prompt).not.toContain('[内容已在当前上下文]');
+      expect(delivery?.prompt).not.toContain('[already in current context]');
     });
 
     it('delivers the deterministic fast result on a tool-free turn when the selector is still in flight', async () => {
@@ -7351,7 +7352,7 @@ describe('Gemini Client (client.ts)', () => {
     it('should prepend relevant managed auto-memory prompt when recall returns content', async () => {
       mockMemoryManager.recall.mockResolvedValue({
         prompt:
-          '## Memory overview\n\n└── communication_preference (本轮显示 1 / 共 1 条，可见关键词：无)\n    └── [user:user.md] User Memory：无：User preferences',
+          '## Memory overview\n\n└── communication_preference (shown 1 of 1 this turn, visible keywords: none)\n    └── [user:user.md] User Memory: none: User preferences',
         selectedDocs: [
           {
             scope: 'user',
@@ -7414,7 +7415,7 @@ describe('Gemini Client (client.ts)', () => {
       mockMemoryManager.recall
         .mockResolvedValueOnce({
           prompt:
-            '## Memory overview\n\n└── communication_preference (本轮显示 1 / 共 1 条，可见关键词：无)\n    └── [user:user.md] User Memory：无：User preferences',
+            '## Memory overview\n\n└── communication_preference (shown 1 of 1 this turn, visible keywords: none)\n    └── [user:user.md] User Memory: none: User preferences',
           selectedDocs: [
             {
               scope: 'user',

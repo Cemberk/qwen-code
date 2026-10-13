@@ -255,7 +255,7 @@ describe('createGoalVerifier', () => {
       })),
     ];
     const objective = '"o\\'.repeat(6_000);
-    const reason = '界'.repeat(Math.floor(GOAL_PROPOSAL_REASON_MAX_BYTES / 3));
+    const reason = 'あ'.repeat(Math.floor(GOAL_PROPOSAL_REASON_MAX_BYTES / 3));
     const proposal = {
       status: 'blocked' as const,
       reason,

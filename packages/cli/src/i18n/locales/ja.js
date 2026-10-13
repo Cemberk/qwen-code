@@ -686,7 +686,6 @@ export default {
   'Set LLM output language': 'LLM出力言語を設定',
   'Usage: /language ui [{{options}}]': '使い方: /language ui [{{options}}]',
   'Usage: /language output <language>': '使い方: /language output <言語>',
-  'Example: /language output 中文': '例: /language output 中文',
   'Example: /language output English': '例: /language output English',
   'Example: /language output 日本語': '例: /language output 日本語',
   'UI language changed to {{lang}}': 'UI言語を {{lang}} に変更しました',

@@ -18544,8 +18544,8 @@ describe('LlmChat', async () => {
               {
                 text: [
                   'Intro',
-                  '### 常用语法速查',
-                  '| 语法 | 说明 |',
+                  '### コマンドリスト',
+                  '| コマンド | メモ |',
                   'tail that was truncated',
                 ].join('\n'),
               },
@@ -18558,8 +18558,8 @@ describe('LlmChat', async () => {
             [
               {
                 text: [
-                  '### 常用语法速查',
-                  '| 语法 | 说明 |',
+                  '### コマンドリスト',
+                  '| コマンド | メモ |',
                   'new suffix',
                 ].join('\n'),
               },
@@ -18592,8 +18592,8 @@ describe('LlmChat', async () => {
       expect(text).toBe(
         [
           'Intro',
-          '### 常用语法速查',
-          '| 语法 | 说明 |',
+          '### コマンドリスト',
+          '| コマンド | メモ |',
           'tail that was truncated',
           'new suffix',
         ].join('\n'),
@@ -19193,15 +19193,15 @@ describe('LlmChat', async () => {
 
     it('should preserve a coincidental 2-character CJK overlap (byte floor insufficient for CJK)', async () => {
       // Regression: `RECOVERY_OVERLAP_MIN_BYTES = 6` admits a 2-character
-      // CJK overlap (each Chinese char is 3 UTF-8 bytes). Two-character
-      // boundary coincidences such as "我们" / "但是" are extremely common
-      // across unrelated Chinese sentences. The companion char-floor must
+      // CJK overlap (each kana is 3 UTF-8 bytes). Two-character
+      // boundary coincidences such as "まず" / "では" are extremely common
+      // across unrelated CJK sentences. The companion char-floor must
       // require ≥4 code points so a 2-char CJK collision does not silently
-      // strip legitimate continuation. The longer "需要" tail of `previous`
+      // strip legitimate continuation. The "まず" opening of `continuation`
       // is meaningful continuation, NOT a replayed suffix of the previous
       // turn — the continuation must survive verbatim.
-      const previous = '在分析数据之前我们';
-      const continuation = '我们需要先完成准备工作。';
+      const previous = 'データをしらべるまえに、まず';
+      const continuation = 'まずじゅんびをすませます。';
       const streams = [
         makeStream([makeChunk([{ text: 'discarded initial' }], 'MAX_TOKENS')]),
         makeStream([makeChunk([{ text: previous }], 'MAX_TOKENS')]),
@@ -19214,7 +19214,7 @@ describe('LlmChat', async () => {
 
       const stream = await chat.sendMessageStream(
         'gemini-pro',
-        { message: '帮我分析数据' },
+        { message: 'analyze the data' },
         'prompt-recovery-cjk-floor',
       );
       for await (const _event of stream) {
@@ -19236,7 +19236,7 @@ describe('LlmChat', async () => {
       // matching against the previous tail — otherwise the replayed block
       // never finds its mirror in `previousTail` and the duplicate leaks
       // into history.
-      const replayedBlock = '### 常用语法速查\n| 语法 | 说明 |';
+      const replayedBlock = '### コマンドリスト\n| コマンド | メモ |';
       const previous = ['Intro', replayedBlock, 'tail that was truncated'].join(
         '\n',
       );
@@ -19266,7 +19266,7 @@ describe('LlmChat', async () => {
       const text = lastEntry.parts
         ?.map((part) => ('text' in part ? part.text : ''))
         .join('');
-      // The duplicated `### 常用语法速查\n| 语法 | 说明 |` block must NOT
+      // The duplicated `### コマンドリスト\n| コマンド | メモ |` block must NOT
       // appear twice; only the new suffix should follow the previous tail.
       expect(text).toBe(`${previous}\nnew suffix`);
     });

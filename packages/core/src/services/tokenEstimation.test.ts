@@ -21,8 +21,8 @@ const textContent = (text: string): Content => ({
 describe('estimateContextTextTokens', () => {
   it('uses the shared ASCII and CJK context-reporting heuristic', () => {
     expect(estimateContextTextTokens('abcdefgh')).toBe(2);
-    expect(estimateContextTextTokens('中文')).toBe(3);
-    expect(estimateContextTextTokens('abcd中')).toBe(3);
+    expect(estimateContextTextTokens('かな')).toBe(3);
+    expect(estimateContextTextTokens('abcdあ')).toBe(3);
   });
 
   it('returns zero for empty text', () => {
@@ -157,7 +157,7 @@ describe('estimatePromptTokens', () => {
             functionResponse: {
               name: 'read_file',
               // A realistic stand-in for a CJK-dense design doc chunk.
-              response: { output: '设计文档章节内容。'.repeat(2000) },
+              response: { output: '設計文書の章内容。'.repeat(2000) },
             },
           },
         ],

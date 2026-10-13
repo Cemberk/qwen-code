@@ -41,12 +41,12 @@ describe('looksLikeDiagramOrArt', () => {
 
   describe('CJK characters', () => {
     it('returns true for lines with high CJK ratio', () => {
-      expect(looksLikeDiagramOrArt('这是一个中文句子')).toBe(true);
-      expect(looksLikeDiagramOrArt('初始化项目上下文')).toBe(true);
+      expect(looksLikeDiagramOrArt('日本語の文章です')).toBe(true);
+      expect(looksLikeDiagramOrArt('初期化処理を実行')).toBe(true);
     });
 
     it('returns false for lines with low CJK ratio', () => {
-      expect(looksLikeDiagramOrArt('testing 测试 testing')).toBe(false);
+      expect(looksLikeDiagramOrArt('testing 試験 testing')).toBe(false);
     });
   });
 
@@ -104,19 +104,21 @@ describe('looksLikeDiagramOrArt', () => {
 
     it('handles code with comments containing CJK', () => {
       // Code line with CJK comment - ratio is low
-      expect(looksLikeDiagramOrArt('const x = 42; // 这是注释')).toBe(false);
+      expect(looksLikeDiagramOrArt('const x = 42; // 日本語の注釈')).toBe(
+        false,
+      );
     });
   });
 
   describe('threshold behavior', () => {
     it('returns true when CJK ratio > 30%', () => {
       // 4 CJK chars out of 10 non-whitespace = 40%
-      expect(looksLikeDiagramOrArt('test 测试测试 test')).toBe(true);
+      expect(looksLikeDiagramOrArt('test 試験試験 test')).toBe(true);
     });
 
     it('returns false when CJK ratio <= 30%', () => {
       // 2 CJK chars out of 10 non-whitespace = 20%
-      expect(looksLikeDiagramOrArt('testing 测试 testing')).toBe(false);
+      expect(looksLikeDiagramOrArt('testing 試験 testing')).toBe(false);
     });
   });
 });

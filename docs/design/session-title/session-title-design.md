@@ -113,12 +113,11 @@ Bullets below correspond 1:1 with `TITLE_SYSTEM_PROMPT`:
 
 - 3-7 words, sentence case (only first word and proper nouns capitalized).
 - No trailing punctuation, no markdown, no quotes.
-- Match the dominant language of the conversation; for Chinese, budget
-  roughly 12-20 characters.
+- Match the dominant language of the conversation.
 - Be specific about the user's actual goal — name the feature, bug, or
   subject area. Avoid vague catch-alls like "Code changes" or "Help
   request".
-- Four good examples (three English + one Chinese) and four bad examples
+- Four good examples and four bad examples
   (too vague / too long / wrong case / trailing punctuation).
 - Return only a JSON object with a single `title` key.
 

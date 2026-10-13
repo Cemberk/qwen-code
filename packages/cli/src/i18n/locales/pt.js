@@ -896,7 +896,6 @@ export default {
   'Set LLM output language': 'Definir idioma de saída do LLM',
   'Usage: /language ui [{{options}}]': 'Uso: /language ui [{{options}}]',
   'Usage: /language output <language>': 'Uso: /language output <idioma>',
-  'Example: /language output 中文': 'Exemplo: /language output Português',
   'Example: /language output English': 'Exemplo: /language output Inglês',
   'Example: /language output 日本語': 'Exemplo: /language output Japonês',
   'UI language changed to {{lang}}':

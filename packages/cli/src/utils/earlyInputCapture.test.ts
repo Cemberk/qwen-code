@@ -347,11 +347,11 @@ describe('earlyInputCapture', () => {
 
     it('should capture UTF-8 multibyte characters', () => {
       startEarlyInputCapture();
-      mockStdin.write(Buffer.from('你好世界'));
+      mockStdin.write(Buffer.from('こんにちは'));
       stopEarlyInputCapture();
 
       const input = getAndClearCapturedInput();
-      expect(input.toString()).toBe('你好世界');
+      expect(input.toString()).toBe('こんにちは');
     });
 
     it('should capture emoji', () => {

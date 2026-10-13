@@ -21,20 +21,20 @@ export const ToolListStep: React.FC<ToolListStepProps> = ({
 }) => {
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  // 动态计算工具名称列的最大宽度（基于实际内容）
+  // Compute the tool name column width from actual content
   const toolNameWidth = useMemo(() => {
     if (tools.length === 0) return 30;
     const maxLength = Math.max(...tools.map((t) => t.name.length));
-    // 最小 30，最大 50，留一些余量
+    // Min 30, max 50, with some padding
     return Math.min(Math.max(maxLength + 2, 30), 50);
   }, [tools]);
 
-  // 计算可视区域的起始索引（滚动窗口）
+  // Compute the start index of the visible area (scroll window)
   const scrollOffset = useMemo(() => {
     if (tools.length <= VISIBLE_TOOLS_COUNT) {
       return 0;
     }
-    // 确保选中项在可视区域内
+    // Keep the selected item in the visible area
     if (selectedIndex < VISIBLE_TOOLS_COUNT - 1) {
       return 0;
     }
@@ -44,7 +44,7 @@ export const ToolListStep: React.FC<ToolListStepProps> = ({
     );
   }, [selectedIndex, tools.length]);
 
-  // 当前可视的工具列表
+  // Currently visible tools
   const displayTools = useMemo(
     () => tools.slice(scrollOffset, scrollOffset + VISIBLE_TOOLS_COUNT),
     [tools, scrollOffset],
@@ -88,7 +88,7 @@ export const ToolListStep: React.FC<ToolListStepProps> = ({
 
   return (
     <Box flexDirection="column">
-      {/* 工具列表 */}
+      {/* Tool list */}
       <Box flexDirection="column">
         {displayTools.map((tool, index) => {
           const actualIndex = scrollOffset + index;
@@ -97,7 +97,7 @@ export const ToolListStep: React.FC<ToolListStepProps> = ({
 
           return (
             <Box key={tool.name}>
-              {/* 选择器 */}
+              {/* Selector */}
               <Box minWidth={2}>
                 <Text
                   color={isSelected ? theme.text.accent : theme.text.primary}
@@ -105,7 +105,7 @@ export const ToolListStep: React.FC<ToolListStepProps> = ({
                   {isSelected ? '❯' : ' '}
                 </Text>
               </Box>
-              {/* 工具名称 - 固定宽度 */}
+              {/* Tool name - fixed width */}
               <Box width={toolNameWidth}>
                 <Text
                   color={isSelected ? theme.text.accent : theme.text.primary}
@@ -114,7 +114,7 @@ export const ToolListStep: React.FC<ToolListStepProps> = ({
                   {tool.name}
                 </Text>
               </Box>
-              {/* 显示无效工具警告 */}
+              {/* Invalid tool warning */}
               {!tool.isValid && (
                 <Text color={theme.status.warning}>
                   {t('invalid: {{reason}}', {
@@ -130,7 +130,7 @@ export const ToolListStep: React.FC<ToolListStepProps> = ({
         })}
       </Box>
 
-      {/* 滚动提示 */}
+      {/* Scroll hint */}
       {tools.length > VISIBLE_TOOLS_COUNT && (
         <Box marginTop={1}>
           <Text color={theme.text.secondary}>

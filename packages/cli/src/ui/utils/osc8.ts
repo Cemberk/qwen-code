@@ -194,7 +194,7 @@ export const MD_LINK_CAPTURE = /^\[(.*?)\]\(((?:[^()]|\([^()]*\))*)\)$/;
 
 /**
  * Bare-URL pattern shared between the React and ANSI renderers. Unlike a
- * plain `\S+` run it stops at CJK / full-width punctuation: Chinese prose
+ * plain `\S+` run it stops at CJK / full-width punctuation: CJK prose
  * routinely glues `（…）`/`。` onto a URL with no space
  * (`https://x.com（2 commits）`), and `\S` swallows the punctuation plus
  * everything up to the next ASCII space, turning the OSC 8 target into a

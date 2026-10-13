@@ -133,7 +133,7 @@ describe('commandUtils', () => {
     });
 
     it('should return false for slash-prefixed file paths', () => {
-      expect(isSlashCommand('/api/apiFunction/接口的实现')).toBe(false);
+      expect(isSlashCommand('/api/apiFunction/インターフェース')).toBe(false);
       expect(isSlashCommand('/Users/me/project/src/index.ts')).toBe(false);
       expect(isSlashCommand('/var/log/syslog check this')).toBe(false);
       expect(isSlashCommand('/home/user/.qwen/settings.json')).toBe(false);

@@ -5950,21 +5950,22 @@ describe('SessionService', () => {
           version: 'test',
           message: {
             role: 'user',
-            parts: [{ text: '创建 MR 描述生成 Skill(1)' }],
+            parts: [{ text: 'Create MR description generator Skill(1)' }],
           },
         }) + '\n',
       );
 
-      const titles =
-        await service.findSessionTitlesByPrefix('创建 MR 描述生成 Skill(');
-      expect(titles).toEqual(['创建 MR 描述生成 Skill(1)']);
+      const titles = await service.findSessionTitlesByPrefix(
+        'Create MR description generator Skill(',
+      );
+      expect(titles).toEqual(['Create MR description generator Skill(1)']);
       expect(
         vi
           .mocked(jsonl.readLines)
           .mock.calls.filter(([filePath]) => filePath === file),
       ).toEqual([[file, 10]]);
       await expect(service.getSessionDisplayName(sessionId)).resolves.toBe(
-        '创建 MR 描述生成 Skill(1)',
+        'Create MR description generator Skill(1)',
       );
     });
 
@@ -6003,17 +6004,20 @@ describe('SessionService', () => {
         findSessionTitlesByPrefix: vi
           .fn()
           .mockResolvedValue([
-            '创建 MR 描述生成 Skill(1)',
-            '创建 MR 描述生成 Skill(2)',
-            '创建 MR 描述生成 Skill(4)',
+            'Create MR description generator Skill(1)',
+            'Create MR description generator Skill(2)',
+            'Create MR description generator Skill(4)',
           ]),
       } as unknown as SessionService;
 
       await expect(
-        computeUniqueBranchTitle('创建 MR 描述生成 Skill', service),
-      ).resolves.toBe('创建 MR 描述生成 Skill(3)');
+        computeUniqueBranchTitle(
+          'Create MR description generator Skill',
+          service,
+        ),
+      ).resolves.toBe('Create MR description generator Skill(3)');
       expect(service.findSessionTitlesByPrefix).toHaveBeenCalledWith(
-        '创建 MR 描述生成 Skill(',
+        'Create MR description generator Skill(',
       );
     });
 

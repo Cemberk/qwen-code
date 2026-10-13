@@ -893,7 +893,6 @@ export default {
   'Usage: /language ui [{{options}}]': 'Verwendung: /language ui [{{options}}]',
   'Usage: /language output <language>':
     'Verwendung: /language output <Sprache>',
-  'Example: /language output 中文': 'Beispiel: /language output Deutsch',
   'Example: /language output English': 'Beispiel: /language output Englisch',
   'Example: /language output 日本語': 'Beispiel: /language output Japanisch',
   'UI language changed to {{lang}}': 'UI-Sprache geändert zu {{lang}}',

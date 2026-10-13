@@ -24,26 +24,26 @@ afterEach(() => {
 
 describe('ScreenBuffer (Ink frame-controller M0)', () => {
   it('exposes the composited frame as addressable cells', () => {
-    current = render(<Text>hello 中文</Text>);
+    current = render(<Text>hello かな</Text>);
     const buffer = getScreenBuffer(
       current.stdout as unknown as NodeJS.WriteStream,
     );
 
     expect(buffer).toBeDefined();
     expect(buffer!.dimensions.height).toBeGreaterThan(0);
-    expect(buffer!.lineText(0)).toBe('hello 中文');
+    expect(buffer!.lineText(0)).toBe('hello かな');
     expect(buffer!.frame?.cells[0]?.[0]?.value).toBe('h');
   });
 
   it('handles wide characters with a leading cell and a spacer', () => {
-    current = render(<Text>hello 中文</Text>);
+    current = render(<Text>hello かな</Text>);
     const buffer = getScreenBuffer(
       current.stdout as unknown as NodeJS.WriteStream,
     )!;
 
     // "hello " occupies columns 0-5; the first wide glyph starts at column 6.
     const row = buffer.frame?.cells[0];
-    expect(row?.[6]?.value).toBe('中');
+    expect(row?.[6]?.value).toBe('か');
     expect(row?.[6]?.fullWidth).toBe(true);
     // The trailing half of a wide glyph is an empty spacer cell.
     expect(row?.[7]?.value).toBe('');
@@ -247,7 +247,7 @@ describe('ScreenBuffer (Ink frame-controller M0)', () => {
   });
 
   it('rejoins styled CJK and emoji text without duplicating wide cells', () => {
-    const source = '你好 世界🙂';
+    const source = 'ねこ いぬ🙂';
     current = render(
       <Box width={5}>
         <Text color="cyan">{source}</Text>

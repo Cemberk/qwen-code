@@ -122,7 +122,7 @@ describe('hyperlinkAtCell', () => {
     const frame = makeFrame([
       [
         {
-          value: '中',
+          value: 'あ',
           fullWidth: true,
           styles: [
             {

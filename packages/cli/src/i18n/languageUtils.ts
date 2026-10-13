@@ -31,7 +31,7 @@ export function isAutoLanguage(value: string | undefined | null): boolean {
 
 /**
  * Normalizes a language input to its canonical form.
- * Converts known locale codes (e.g., "zh", "ru") to full names (e.g., "Chinese", "Russian").
+ * Converts known locale codes (e.g., "ja", "ru") to full names (e.g., "Japanese", "Russian").
  * Unknown inputs are returned as-is to support any language name.
  */
 export function normalizeOutputLanguage(language: string): string {
@@ -146,7 +146,7 @@ You MUST always respond in **${language}** regardless of the user's input langua
 This is a mandatory requirement, not a preference.
 
 ## Exception
-If the user **explicitly** requests a response in a specific language (e.g., "please reply in English", "用中文回答"), switch to the user's requested language for the remainder of the conversation.
+If the user **explicitly** requests a response in a specific language (e.g., "please reply in English", "réponds en français"), switch to the user's requested language for the remainder of the conversation.
 
 ## Keep technical artifacts unchanged
 Do **not** translate or rewrite:
@@ -163,7 +163,7 @@ Raw tool/system outputs may contain fixed-format English. Preserve them verbatim
  * Supports both the new marker format and legacy heading format.
  */
 function parseOutputLanguageFromContent(content: string): string | null {
-  // Primary: machine-readable marker (e.g., <!-- qwen-code:llm-output-language: 中文 -->)
+  // Primary: machine-readable marker (e.g., <!-- qwen-code:llm-output-language: Japanese -->)
   const markerRegex = new RegExp(
     String.raw`<!--\s*${LLM_OUTPUT_LANGUAGE_MARKER_PREFIX}\s*(.*?)\s*-->`,
     'i',
@@ -173,7 +173,7 @@ function parseOutputLanguageFromContent(content: string): string | null {
     return markerMatch[1].trim();
   }
 
-  // Fallback: legacy heading format (e.g., # CRITICAL: Chinese Output Language Rule)
+  // Fallback: legacy heading format (e.g., # CRITICAL: Japanese Output Language Rule)
   const headingMatch = content.match(
     /^#.*?CRITICAL:\s*(.*?)\s+Output Language Rule\b/im,
   );
@@ -279,7 +279,7 @@ export function writeOutputLanguageAndRegisterPath(
 /**
  * Initializes the LLM output language rule file on application startup.
  *
- * @param outputLanguage - The output language setting value (e.g., 'auto', 'Chinese', etc.)
+ * @param outputLanguage - The output language setting value (e.g., 'auto', 'Japanese', etc.)
  *
  * Behavior:
  * - If the rule file already exists and contains a valid language setting, do nothing (preserve user modifications)

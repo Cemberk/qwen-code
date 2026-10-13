@@ -539,18 +539,18 @@ index 1111111..2222222 100644
 
   it('decodes octal escapes in quoted paths (legacy quotepath=true output)', () => {
     // Even with `core.quotepath=false` set on our git invocations, callers
-    // could feed us output produced by a different command. \346\226\207
-    // is the UTF-8 byte sequence for `文`.
-    const diff = `diff --git "a/\\346\\226\\207.txt" "b/\\346\\226\\207.txt"
+    // could feed us output produced by a different command. \343\201\202
+    // is the UTF-8 byte sequence for `あ`.
+    const diff = `diff --git "a/\\343\\201\\202.txt" "b/\\343\\201\\202.txt"
 index 1111111..2222222 100644
---- "a/\\346\\226\\207.txt"
-+++ "b/\\346\\226\\207.txt"
+--- "a/\\343\\201\\202.txt"
++++ "b/\\343\\201\\202.txt"
 @@ -1 +1 @@
 -x
 +y
 `;
     const result = parseGitDiff(diff);
-    expect([...result.keys()]).toEqual(['文.txt']);
+    expect([...result.keys()]).toEqual(['あ.txt']);
   });
 
   it('preserves non-BMP code points in quoted paths instead of splitting surrogates', () => {

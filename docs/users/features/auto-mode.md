@@ -213,7 +213,7 @@ ask you for explicit approval rather than route around the denial.
 
 Classifier reasons are produced by the LLM and are not translated. If you
 want non-English reasons, add a hint like
-`Respond reasons in Chinese` to `permissions.autoMode.environment`.
+`Respond reasons in French` to `permissions.autoMode.environment`.
 
 ## Fallback to manual approval
 

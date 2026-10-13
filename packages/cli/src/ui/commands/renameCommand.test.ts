@@ -126,7 +126,7 @@ describe('renameCommand', () => {
       ok: false,
       reason: 'empty_history',
     });
-    const displayTexts = ['你好', '/rename   --auto'];
+    const displayTexts = ['Hello there', '/rename   --auto'];
     const mockConfig = {
       getChatRecordingService: vi.fn().mockReturnValue({
         getUserDisplayTextsForTitle: vi.fn().mockReturnValue(displayTexts),
@@ -141,7 +141,7 @@ describe('renameCommand', () => {
     expect(tryGenerateSessionTitleMock).toHaveBeenCalledWith(
       mockConfig,
       expect.any(AbortSignal),
-      ['你好'],
+      ['Hello there'],
     );
   });
 

@@ -328,7 +328,7 @@ describe('resolveCustomBanner', () => {
     // 200 fullwidth CJK characters render at ~400 cells; before the fix
     // the .length cap let them through. The cap is now visual width, so
     // ~100 fullwidth chars max per line.
-    const fullwidth = '一'.repeat(150); // 150 chars × 2 cells = 300 cells
+    const fullwidth = 'あ'.repeat(150); // 150 chars × 2 cells = 300 cells
     const out = resolveCustomBanner(
       makeSettings({ userUi: { customAsciiArt: fullwidth } }),
     );
@@ -338,7 +338,7 @@ describe('resolveCustomBanner', () => {
     expect(small.length).toBeLessThanOrEqual(100);
     // And it's a valid string of fullwidth chars (no surrogate / split
     // mid-codepoint — every char is a full BMP code point here).
-    expect(/^一+$/.test(small)).toBe(true);
+    expect(/^あ+$/.test(small)).toBe(true);
   });
 
   it('falls back when a {path} entry lives in a scope with no associated file path', () => {

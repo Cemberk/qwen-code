@@ -4406,7 +4406,7 @@ describe('ChatCompressionService.compress — customInstructions plumbing', () =
         firePreCompactEvent: vi
           .fn()
           .mockResolvedValue(
-            makeHookOutput({ additionalContext: 'prefer Chinese summaries' }),
+            makeHookOutput({ additionalContext: 'prefer French summaries' }),
           ),
         firePostCompactEvent: vi.fn().mockResolvedValue(undefined),
       },
@@ -4422,7 +4422,7 @@ describe('ChatCompressionService.compress — customInstructions plumbing', () =
 
     const passed = spy.mock.calls[0]![1] as { systemInstruction: string };
     expect(passed.systemInstruction).toContain('Additional Instructions:');
-    expect(passed.systemInstruction).toContain('prefer Chinese summaries');
+    expect(passed.systemInstruction).toContain('prefer French summaries');
   });
 
   it('orders user instructions before hook additionalContext', async () => {

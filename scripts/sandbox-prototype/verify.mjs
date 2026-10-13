@@ -609,7 +609,7 @@ async function verify() {
         const request = {
           operation: 'write',
           destination: path.join(workspace, 'client.txt'),
-          content: Buffer.from('hello\n世界'),
+          content: Buffer.from('hello\nせかい'),
           expected: null,
         };
         await writeSandboxFile(policy, request, new AbortController().signal);

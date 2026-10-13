@@ -18,36 +18,36 @@ describe('resolveLocalizableString', () => {
 
   it('should return plain string unchanged', () => {
     expect(resolveLocalizableString('hello', 'en')).toBe('hello');
-    expect(resolveLocalizableString('hello', 'zh')).toBe('hello');
+    expect(resolveLocalizableString('hello', 'pt')).toBe('hello');
   });
 
   it('should resolve exact locale match', () => {
-    const value = { en: 'Hello', zh: '你好', ja: 'こんにちは' };
-    expect(resolveLocalizableString(value, 'zh')).toBe('你好');
+    const value = { en: 'Hello', pt: 'Olá', ja: 'こんにちは' };
+    expect(resolveLocalizableString(value, 'pt')).toBe('Olá');
     expect(resolveLocalizableString(value, 'ja')).toBe('こんにちは');
   });
 
   it('should fall back to base language', () => {
-    const value = { en: 'Hello', zh: '你好' };
-    expect(resolveLocalizableString(value, 'zh-TW')).toBe('你好');
-    expect(resolveLocalizableString(value, 'zh-CN')).toBe('你好');
+    const value = { en: 'Hello', pt: 'Olá' };
+    expect(resolveLocalizableString(value, 'pt-BR')).toBe('Olá');
+    expect(resolveLocalizableString(value, 'pt-PT')).toBe('Olá');
   });
 
   it('should prefer exact match over base language', () => {
-    const value = { en: 'Hello', zh: '你好', 'zh-TW': '你好（繁體）' };
-    expect(resolveLocalizableString(value, 'zh-TW')).toBe('你好（繁體）');
-    expect(resolveLocalizableString(value, 'zh')).toBe('你好');
+    const value = { en: 'Hello', pt: 'Olá', 'pt-BR': 'Olá (Brasil)' };
+    expect(resolveLocalizableString(value, 'pt-BR')).toBe('Olá (Brasil)');
+    expect(resolveLocalizableString(value, 'pt')).toBe('Olá');
   });
 
   it('should fall back to en when no match', () => {
-    const value = { en: 'Hello', zh: '你好' };
+    const value = { en: 'Hello', pt: 'Olá' };
     expect(resolveLocalizableString(value, 'ja')).toBe('Hello');
     expect(resolveLocalizableString(value, 'de')).toBe('Hello');
   });
 
   it('should fall back to first value when no en', () => {
-    const value = { zh: '你好', ja: 'こんにちは' };
-    expect(resolveLocalizableString(value, 'de')).toBe('你好');
+    const value = { pt: 'Olá', ja: 'こんにちは' };
+    expect(resolveLocalizableString(value, 'de')).toBe('Olá');
   });
 
   it('should return undefined for empty record', () => {
@@ -55,12 +55,15 @@ describe('resolveLocalizableString', () => {
   });
 
   it('should skip non-string values in locale map', () => {
-    const value = { en: 123, zh: '中文' } as unknown as Record<string, string>;
-    expect(resolveLocalizableString(value, 'en')).toBe('中文');
+    const value = { en: 123, pt: 'Português' } as unknown as Record<
+      string,
+      string
+    >;
+    expect(resolveLocalizableString(value, 'en')).toBe('Português');
   });
 
   it('should return undefined when all values are non-string', () => {
-    const value = { en: 123, zh: 456 } as unknown as Record<string, string>;
+    const value = { en: 123, pt: 456 } as unknown as Record<string, string>;
     expect(resolveLocalizableString(value, 'en')).toBeUndefined();
   });
 });
@@ -86,10 +89,10 @@ describe('resolveExtensionConfigLocale', () => {
   it('should resolve locale map description', () => {
     const raw: RawExtensionConfig = {
       ...baseConfig,
-      description: { en: 'English desc', zh: '中文描述' },
+      description: { en: 'English desc', pt: 'Descrição em português' },
     };
-    expect(resolveExtensionConfigLocale(raw, 'zh').description).toBe(
-      '中文描述',
+    expect(resolveExtensionConfigLocale(raw, 'pt').description).toBe(
+      'Descrição em português',
     );
     expect(resolveExtensionConfigLocale(raw, 'en').description).toBe(
       'English desc',
@@ -99,10 +102,10 @@ describe('resolveExtensionConfigLocale', () => {
   it('should resolve locale map displayName', () => {
     const raw: RawExtensionConfig = {
       ...baseConfig,
-      displayName: { en: 'My Extension', zh: '我的扩展' },
+      displayName: { en: 'My Extension', pt: 'Minha extensão' },
     };
-    expect(resolveExtensionConfigLocale(raw, 'zh').displayName).toBe(
-      '我的扩展',
+    expect(resolveExtensionConfigLocale(raw, 'pt').displayName).toBe(
+      'Minha extensão',
     );
     expect(resolveExtensionConfigLocale(raw, 'en').displayName).toBe(
       'My Extension',
@@ -115,7 +118,7 @@ describe('resolveExtensionConfigLocale', () => {
       settings: [
         {
           name: 'api-key',
-          description: { en: 'API key', zh: 'API 密钥' },
+          description: { en: 'API key', pt: 'Chave de API' },
           envVar: 'API_KEY',
         },
         {
@@ -125,8 +128,8 @@ describe('resolveExtensionConfigLocale', () => {
         },
       ],
     };
-    const resolved = resolveExtensionConfigLocale(raw, 'zh');
-    expect(resolved.settings![0]!.description).toBe('API 密钥');
+    const resolved = resolveExtensionConfigLocale(raw, 'pt');
+    expect(resolved.settings![0]!.description).toBe('Chave de API');
     expect(resolved.settings![1]!.description).toBe('A plain setting');
   });
 

@@ -23,7 +23,7 @@ const NOTIFICATION_TITLE = 'Qwen Code';
 //     transition AND on long-task idle.
 //   - 'task-complete' — suppress per-approval notifications; only fire on
 //     long-task idle. Requested in #6898: users driving many tool approvals
-//     otherwise get "几十次弹窗" per task.
+//     otherwise get "dozens of popups" per task.
 // The value read from settings is defensively narrowed at the call site — an
 // unknown value falls back to 'all' rather than silently disabling approval
 // notifications.

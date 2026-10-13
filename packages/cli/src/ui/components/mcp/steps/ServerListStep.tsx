@@ -32,7 +32,7 @@ export const ServerListStep: React.FC<ServerListStepProps> = ({
   const serverNameWidth = useMemo(() => {
     if (servers.length === 0) return 20;
     const maxLength = Math.max(...servers.map((s) => s.name.length));
-    // 最小 20，最大 35，留一些余量
+    // Min 20, max 35, with some padding
     return Math.min(Math.max(maxLength + 2, 20), 35);
   }, [servers]);
 
@@ -88,7 +88,7 @@ export const ServerListStep: React.FC<ServerListStepProps> = ({
 
   return (
     <Box flexDirection="column">
-      {/* 分组服务器列表 */}
+      {/* Grouped server list */}
       {groupedServers.map((group, groupIndex) => (
         <Box
           key={group.source}
@@ -109,8 +109,8 @@ export const ServerListStep: React.FC<ServerListStepProps> = ({
               const isSelected =
                 groupIndex === currentPosition.groupIndex &&
                 itemIndex === currentPosition.itemIndex;
-              // 受门控（#4615）但未审批的 server：discovery 直接跳过，不会进入
-              // 连接流程，所以审批原因优先展示。
+              // Gated (#4615) but unapproved servers are skipped by discovery
+              // and never connect, so the approval reason takes precedence.
               const awaitingApproval =
                 !server.isDisabled && !!server.approvalState;
               const statusColor =
@@ -129,7 +129,7 @@ export const ServerListStep: React.FC<ServerListStepProps> = ({
                       {isSelected ? '❯' : ' '}
                     </Text>
                   </Box>
-                  {/* 服务器名称 - 固定宽度 */}
+                  {/* Server name - fixed width */}
                   <Box width={serverNameWidth}>
                     <Text
                       color={
@@ -141,7 +141,7 @@ export const ServerListStep: React.FC<ServerListStepProps> = ({
                     </Text>
                   </Box>
                   <Text color={theme.text.secondary}> · </Text>
-                  {/* 状态图标和文本 */}
+                  {/* Status icon and text */}
                   <Text
                     color={
                       statusColor === 'green'
@@ -160,7 +160,7 @@ export const ServerListStep: React.FC<ServerListStepProps> = ({
                           : t('needs approval')
                         : t(server.status)}
                   </Text>
-                  {/* 显示无效工具警告 */}
+                  {/* Invalid tool warning */}
                   {!!server.invalidToolCount && server.invalidToolCount > 0 && (
                     <Text color={theme.status.warning}>
                       {' '}
@@ -176,8 +176,8 @@ export const ServerListStep: React.FC<ServerListStepProps> = ({
         </Box>
       ))}
 
-      {/* 提示信息：仅针对"真正连接失败"的 server；被门控跳过（awaiting
-          approval）不是错误，不提示查日志 */}
+      {/* Hint only for servers that truly failed to connect; a gated skip
+          (awaiting approval) is not an error, so no "check logs" hint */}
       {servers.some(
         (s) => s.status === 'disconnected' && !s.isDisabled && !s.approvalState,
       ) && (

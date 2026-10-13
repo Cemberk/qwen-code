@@ -570,12 +570,12 @@ describe('StreamingToolCallParser', () => {
     it('should handle JSON with unicode characters', () => {
       const result = parser.addChunk(
         0,
-        '{"emoji": "🚀", "chinese": "你好"}',
+        '{"emoji": "🚀", "japanese": "こんにちは"}',
         'call_1',
         'function1',
       );
       expect(result.complete).toBe(true);
-      expect(result.value).toEqual({ emoji: '🚀', chinese: '你好' });
+      expect(result.value).toEqual({ emoji: '🚀', japanese: 'こんにちは' });
     });
 
     it('should handle JSON with null and boolean values', () => {

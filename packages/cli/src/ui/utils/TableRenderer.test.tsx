@@ -165,8 +165,14 @@ describe('<TableRenderer />', () => {
 
   it('keeps all rendered lines at the same visible width for mixed content', () => {
     const output = renderTable(
-      ['项目', 'ANSI', 'Markdown'],
-      [['中文内容', '\u001b[31mRed\u001b[0m Blue', '**bold** and `code`']],
+      ['アイテム', 'ANSI', 'Markdown'],
+      [
+        [
+          '日本語のテキスト',
+          '\u001b[31mRed\u001b[0m Blue',
+          '**bold** and `code`',
+        ],
+      ],
       80,
       ['left', 'center', 'right'],
     );
@@ -175,31 +181,31 @@ describe('<TableRenderer />', () => {
 
   it('handles CJK characters with correct column alignment', () => {
     const output = renderTable(
-      ['项目', '描述'],
-      [['名称', '这是一个很长的描述']],
+      ['名前', '説明'],
+      [['テスト', 'これはとても長い説明です']],
     );
 
-    expect(output).toContain('项目');
-    expect(output).toContain('描述');
-    expect(output).toContain('名称');
-    expect(output).toContain('这是一个很长的描述');
+    expect(output).toContain('名前');
+    expect(output).toContain('説明');
+    expect(output).toContain('テスト');
+    expect(output).toContain('これはとても長い説明です');
   });
 
   it('handles mixed CJK and ASCII content', () => {
     const output = renderTable(
-      ['Feature', '功能'],
+      ['Feature', '機能'],
       [
-        ['Speed', '速度很快'],
-        ['Quality', '质量很高'],
+        ['Speed', 'とても速い'],
+        ['Quality', '品質が高い'],
       ],
     );
 
     expect(output).toContain('Feature');
-    expect(output).toContain('功能');
+    expect(output).toContain('機能');
     expect(output).toContain('Speed');
-    expect(output).toContain('速度很快');
+    expect(output).toContain('とても速い');
     expect(output).toContain('Quality');
-    expect(output).toContain('质量很高');
+    expect(output).toContain('品質が高い');
   });
 
   it('wraps long cell content instead of truncating', () => {
@@ -274,21 +280,21 @@ describe('<TableRenderer />', () => {
     // This is the classic failure case: CJK chars counted as width 1
     // causes column misalignment
     const output = renderTable(
-      ['对比项', 'Claude Code', 'Qwen Code'],
+      ['比較項目', 'Claude Code', 'Qwen Code'],
       [
-        ['性能', '优秀', '优秀'],
-        ['中文支持', '一般', '很好'],
-        ['开源', '否', '是'],
+        ['性能', '優秀', '優秀'],
+        ['日本語対応', '普通', 'とても良い'],
+        ['オープンソース', 'いいえ', 'はい'],
       ],
       50,
     );
 
-    expect(output).toContain('对比项');
+    expect(output).toContain('比較項目');
     expect(output).toContain('Claude Code');
     expect(output).toContain('Qwen Code');
     expect(output).toContain('性能');
-    expect(output).toContain('中文支持');
-    expect(output).toContain('开源');
+    expect(output).toContain('日本語対応');
+    expect(output).toContain('オープンソース');
   });
 
   it('handles inline markdown in cells', () => {
@@ -355,15 +361,15 @@ describe('<TableRenderer />', () => {
 
   it('handles cell content that is all CJK', () => {
     const output = renderTable(
-      ['项目名', '状态'],
+      ['テスト名', '状態'],
       [
-        ['数据库连接测试', '成功'],
-        ['缓存压力测试', '失败'],
+        ['データベース接続', '成功'],
+        ['キャッシュ負荷', '失敗'],
       ],
       40,
     );
-    expect(output).toContain('数据库连接测试');
-    expect(output).toContain('缓存压力测试');
+    expect(output).toContain('データベース接続');
+    expect(output).toContain('キャッシュ負荷');
   });
 
   it('handles row with more columns than headers (truncation)', () => {
@@ -402,30 +408,30 @@ describe('<TableRenderer />', () => {
   });
 
   it('preserves ANSI escape sequences in non-markdown cells', () => {
-    const red = '\u001b[31m红色\u001b[0m';
-    const output = renderTable(['状态', '值'], [[red, 'OK']], 40);
+    const red = '\u001b[31m赤い\u001b[0m';
+    const output = renderTable(['状態', '値'], [[red, 'OK']], 40);
     expect(output).toContain('\u001b[31m');
-    expect(output).toContain('红色');
+    expect(output).toContain('赤い');
   });
 
   it('wraps complex ANSI-colored content without losing segments', () => {
     const colorful =
-      '\u001b[31m红色\u001b[0m and \u001b[32mgreen\u001b[0m then \u001b[34mblue文本\u001b[0m';
-    const output = renderTable(['状态'], [[colorful]], 24);
+      '\u001b[31m赤い\u001b[0m and \u001b[32mgreen\u001b[0m then \u001b[34mblue文字\u001b[0m';
+    const output = renderTable(['状態'], [[colorful]], 24);
     expect(output).toContain('\u001b[31m');
     expect(output).toContain('\u001b[32m');
     expect(output).toContain('\u001b[34m');
-    expect(output).toContain('红色');
+    expect(output).toContain('赤い');
     expect(output).toContain('green');
     expect(output).toContain('blue');
-    expect(output).toContain('文本');
+    expect(output).toContain('文字');
     expectAllLinesToHaveSameVisibleWidth(output);
   });
 
   it('preserves truecolor inline-code foreground across wrapped lines', () => {
     const tableName =
       'deleted_t_spark_odps_sql_type_system2_test_view_more_times_expand_view_f44c82c06096_244650615';
-    const output = renderTable(['表名'], [[`\`${tableName}\``]], 64);
+    const output = renderTable(['テーブル名'], [[`\`${tableName}\``]], 64);
 
     expect(output).toContain('244650615');
     expectWrappedContinuation(output, tableName, '244650615');
@@ -472,22 +478,26 @@ describe('<TableRenderer />', () => {
   });
 
   it('handles ANSI + CJK mixed width without losing content', () => {
-    const green = '\u001b[32m中文ABC\u001b[0m';
-    const output = renderTable(['列1', '列2'], [[green, '普通文本']], 40);
+    const green = '\u001b[32m日本語ABC\u001b[0m';
+    const output = renderTable(
+      ['カラム1', 'カラム2'],
+      [[green, '普通のテキスト']],
+      40,
+    );
     expect(output).toContain('\u001b[32m');
-    expect(output).toContain('中文ABC');
-    expect(output).toContain('普通文本');
+    expect(output).toContain('日本語ABC');
+    expect(output).toContain('普通のテキスト');
   });
 
   it('keeps markdown cells readable while preserving layout', () => {
     const output = renderTable(
-      ['名称', '描述'],
-      [['**加粗**', '`code` 和 普通文本']],
+      ['名前', '説明'],
+      [['**太字**', '`code` と 普通のテキスト']],
       40,
     );
-    expect(output).toContain('加粗');
+    expect(output).toContain('太字');
     expect(output).toContain('code');
-    expect(output).toContain('普通文本');
+    expect(output).toContain('普通のテキスト');
   });
 
   it('handles ANSI and markdown mixed across different columns', () => {
@@ -585,40 +595,40 @@ describe('<TableRenderer />', () => {
   });
 
   it('keeps CJK + ANSI + wrapping stable near width boundary', () => {
-    const cyan = '\u001b[36m中文对比ABC\u001b[0m';
+    const cyan = '\u001b[36m和文比較ABC\u001b[0m';
     const output = renderTable(
-      ['项目', '结果说明'],
-      [[cyan, '这是一个接近边界宽度的说明文本']],
+      ['項目', '結果説明'],
+      [[cyan, 'これは境界幅に近い説明テキスト']],
       26,
     );
     expect(output).toContain('\u001b[36m');
-    expect(output).toContain('中文');
-    expect(output).toContain('对比');
+    expect(output).toContain('和文');
+    expect(output).toContain('比較');
     expect(output).toContain('ABC');
-    expect(output).toContain('说明文本');
+    expect(output).toContain('テキスト');
   });
 
   it('keeps alignment stable with mixed widths near boundary', () => {
     const output = renderTable(
-      ['短', 'LongHeader'],
-      [['中文', 'abcdefghi']],
+      ['ア', 'LongHeader'],
+      [['かな', 'abcdefghi']],
       24,
       ['center', 'right'],
     );
-    expect(output).toContain('中');
-    expect(output).toContain('文');
+    expect(output).toContain('か');
+    expect(output).toContain('な');
     expect(output).toContain('abcdefghi');
     expect(output).not.toContain('NaN');
   });
 
   it('renders vertical fallback with CJK labels readably', () => {
     const output = renderTable(
-      ['字段一', '字段二', '字段三'],
-      [['很长的值一', '很长的值二', '很长的值三']],
+      ['項目一', '項目二', '項目三'],
+      [['長い値・一', '長い値・二', '長い値・三']],
       10,
     );
-    expect(output).toContain('字段一');
-    expect(output).toContain('很长的值一');
+    expect(output).toContain('項目一');
+    expect(output).toContain('長い値・一');
   });
 
   describe('OSC 8 markdown links in cells', () => {
@@ -652,7 +662,7 @@ describe('<TableRenderer />', () => {
     it('stops a bare URL before glued-on CJK punctuation', () => {
       enableHyperlinks();
       const url = 'https://github.com/QwenLM/qwen-code/pull/8742';
-      const suffix = '（2 commits，等 CI）';
+      const suffix = '（2 commits、CI 待ち）';
       const output = renderTable(['PR'], [[`PR：${url}${suffix}`]], 100);
       expect(output).toContain(`\x1b]8;;${url}\x07`);
       expect(output).not.toContain(`\x1b]8;;${url}（`);
@@ -665,18 +675,22 @@ describe('<TableRenderer />', () => {
       const secondUrl = 'https://b.com/y';
       const output = renderTable(
         ['PR'],
-        [[`见 ${firstUrl}（说明_1）和 ${secondUrl}_。`]],
+        [[`参照 ${firstUrl}（説明_1）と ${secondUrl}_。`]],
         100,
       );
 
       expect(output).toContain(`\x1b]8;;${firstUrl}\x07`);
       expect(output).toContain(`\x1b]8;;${secondUrl}\x07`);
-      expect(stripAnsi(output)).toContain('（说明_1）和');
+      expect(stripAnsi(output)).toContain('（説明_1）と');
       expect(stripAnsi(output)).toContain(`${secondUrl}_。`);
     });
 
     it('preserves dunder identifiers as visible text', () => {
-      const output = renderTable(['Value'], [['Python 的 __init__ 方法']], 60);
+      const output = renderTable(
+        ['Value'],
+        [['Python の __init__ メソッド']],
+        60,
+      );
 
       expect(stripAnsi(output)).toContain('__init__');
     });
@@ -819,12 +833,12 @@ describe('<TableRenderer />', () => {
   it('stays stable across multiple content widths', () => {
     for (const width of [8, 10, 12, 16, 20, 30, 40, 60]) {
       const output = renderTable(
-        ['项目', '状态', '说明'],
+        ['項目', '状態', '説明'],
         [
           [
-            '中文ABC',
+            '和文ABC',
             '\u001b[33mWARN\u001b[0m',
-            '**long** explanation with mixed 中英 content',
+            '**long** explanation with mixed 和英 content',
           ],
         ],
         width,
@@ -833,9 +847,9 @@ describe('<TableRenderer />', () => {
       expect(output).toBeDefined();
       expect(output).not.toContain('NaN');
       expect(output).not.toContain('Infinity');
-      expect(output).toContain('项目');
-      expect(output).toContain('状态');
-      expect(output).toContain('说明');
+      expect(output).toContain('項目');
+      expect(output).toContain('状態');
+      expect(output).toContain('説明');
       if (output.includes('┌')) {
         expectAllLinesToHaveSameVisibleWidth(output);
       }

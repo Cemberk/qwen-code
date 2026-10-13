@@ -10,7 +10,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { setLanguageAsync, t } from './index.js';
 import { SUPPORTED_LANGUAGES } from './languages.js';
 import { MUST_TRANSLATE_KEYS } from './mustTranslateKeys.js';
-import { BuiltinCommandLoader } from '../services/BuiltinCommandLoader.js';
 import { advisorCommand } from '../ui/commands/advisor-command.js';
 import { approvalModeCommand } from '../ui/commands/approvalModeCommand.js';
 import { arenaCommand } from '../ui/commands/arenaCommand.js';
@@ -22,7 +21,6 @@ import { memoryCommand } from '../ui/commands/memoryCommand.js';
 import { planCommand } from '../ui/commands/planCommand.js';
 import { rememberCommand } from '../ui/commands/rememberCommand.js';
 import { statuslineCommand } from '../ui/commands/statuslineCommand.js';
-import type { SlashCommand } from '../ui/commands/types.js';
 
 const FORK_COMMAND_REQUIRED_KEYS = [
   'Spawn a background agent that inherits the full conversation',
@@ -37,9 +35,6 @@ const FORK_COMMAND_REQUIRED_KEYS = [
 
 const NON_ENGLISH_LANGUAGES = SUPPORTED_LANGUAGES.filter(
   (language) => language.code !== 'en',
-);
-const STRICT_PARITY_NON_ENGLISH_LANGUAGES = NON_ENGLISH_LANGUAGES.filter(
-  (language) => language.strictParity,
 );
 
 type TranslationValue = string | string[];
@@ -56,29 +51,6 @@ async function loadEnglishBaselineTranslations(): Promise<TranslationDict> {
   };
 
   return module.default ?? {};
-}
-
-function flattenCommandDescriptions(
-  commands: SlashCommand[],
-  prefix = '',
-): Array<{ path: string; description: string }> {
-  const flattened: Array<{ path: string; description: string }> = [];
-
-  for (const command of commands) {
-    const commandPath = prefix ? `${prefix} ${command.name}` : command.name;
-    flattened.push({
-      path: commandPath,
-      description: command.description ?? '',
-    });
-
-    if (command.subCommands) {
-      flattened.push(
-        ...flattenCommandDescriptions(command.subCommands, commandPath),
-      );
-    }
-  }
-
-  return flattened;
 }
 
 // Switching locales and loading built-in commands triggers dynamic locale
@@ -162,33 +134,6 @@ describe('must-translate locale coverage', () => {
       expect(statuslineCommand.description).not.toBe(
         "Set up Qwen Code's status line UI",
       );
-    },
-    SLOW_LOCALE_TEST_TIMEOUT_MS,
-  );
-
-  it.each(STRICT_PARITY_NON_ENGLISH_LANGUAGES)(
-    'does not fall back to English for any built-in command description in strict-parity locale %s',
-    async (language) => {
-      const loader = new BuiltinCommandLoader(null);
-
-      await setLanguageAsync('en');
-      const englishDescriptions = new Map(
-        flattenCommandDescriptions(
-          await loader.loadCommands(new AbortController().signal),
-        ).map(({ path, description }) => [path, description]),
-      );
-
-      await setLanguageAsync(language.code);
-      const fallbackDescriptions = flattenCommandDescriptions(
-        await loader.loadCommands(new AbortController().signal),
-      )
-        .filter(
-          ({ path, description }) =>
-            englishDescriptions.get(path) === description,
-        )
-        .map(({ path }) => path);
-
-      expect(fallbackDescriptions).toEqual([]);
     },
     SLOW_LOCALE_TEST_TIMEOUT_MS,
   );

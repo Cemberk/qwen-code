@@ -93,7 +93,7 @@ describe('fork profiles', () => {
     });
   });
 
-  it.each(['ro-research', 'review_2', '研究-2'])(
+  it.each(['ro-research', 'review_2', 'リサーチ-2'])(
     'accepts safe profile name %s',
     (name) => {
       expect(validateForkProfileName(name)).toBeUndefined();

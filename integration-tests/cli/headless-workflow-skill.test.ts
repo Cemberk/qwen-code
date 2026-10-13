@@ -51,7 +51,8 @@ describe('headless extension workflow Skill entry', () => {
       const qwenHome = join(rig.testDir!, '.qwen-home');
       const extensionDir = join(qwenHome, 'extensions', EXTENSION_NAME);
       mkdirSync(join(extensionDir, 'workflows'), { recursive: true });
-      // workflow 开关仅接受用户等可信设置层，项目设置会被过滤。
+      // The workflow switch is only honored from trusted settings layers such as
+      // user settings; project settings are filtered out.
       writeFileSync(
         join(qwenHome, 'settings.json'),
         JSON.stringify({
@@ -102,7 +103,8 @@ describe('headless extension workflow Skill entry', () => {
       vi.stubEnv('OPENAI_MODEL', 'fake-model');
       vi.stubEnv('QWEN_MODEL', 'fake-model');
 
-      // 不预先执行 slash 命令或查询 supported_commands，直接验证自然语言首轮。
+      // Do not run a slash command or query supported_commands first; verify the
+      // natural-language first turn directly.
       const output = await rig.run(
         'Please analyze the local sample.',
         '--output-format',

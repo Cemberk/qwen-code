@@ -236,7 +236,7 @@ math then literal: $x^2\$$`;
       enableHyperlinks();
       const url = 'https://github.com/QwenLM/qwen-code/pull/8742';
       const { lastFrame } = renderWithProviders(
-        <RenderInline text={`PR：${url}（2 commits，等 CI）`} />,
+        <RenderInline text={`PR：${url}（2 commits、CI 待ち）`} />,
       );
 
       const out = lastFrame() ?? '';
@@ -245,7 +245,7 @@ math then literal: $x^2\$$`;
       expect(out).toContain(`\x1b]8;;${url}\x07`);
       expect(out).not.toContain(`\x1b]8;;${url}（`);
       // The glued-on punctuation renders as plain text after the link.
-      expect(out.replace(/\s+/g, ' ')).toContain('（2 commits，等 CI）');
+      expect(out.replace(/\s+/g, ' ')).toContain('（2 commits、CI 待ち）');
     });
 
     it('does not treat underscores around a later URL as emphasis', () => {
@@ -253,19 +253,19 @@ math then literal: $x^2\$$`;
       const firstUrl = 'https://a.com/x';
       const secondUrl = 'https://b.com/y';
       const { lastFrame } = renderWithProviders(
-        <RenderInline text={`见 ${firstUrl}（说明_1）和 ${secondUrl}_。`} />,
+        <RenderInline text={`参照 ${firstUrl}（説明_1）と ${secondUrl}_。`} />,
       );
 
       const out = lastFrame() ?? '';
       expect(out).toContain(`\x1b]8;;${firstUrl}\x07`);
       expect(out).toContain(`\x1b]8;;${secondUrl}\x07`);
-      expect(out.replace(/\s+/g, ' ')).toContain('（说明_1）和');
+      expect(out.replace(/\s+/g, ' ')).toContain('（説明_1）と');
       expect(stripAnsi(out)).toContain(`${secondUrl}_`);
     });
 
     it('preserves dunder identifiers as visible text', () => {
       const { lastFrame } = renderWithProviders(
-        <RenderInline text="Python 的 __init__ 方法" />,
+        <RenderInline text="Python の __init__ メソッド" />,
       );
 
       expect(stripAnsi(lastFrame() ?? '')).toContain('__init__');

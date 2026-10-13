@@ -88,7 +88,7 @@ describe('Interactive protocol tag retry guard', () => {
 
       try {
         const isReady = await rig.poll(
-          () => /YOLO (模式|mode)/i.test(stripAnsi(rig._interactiveOutput)),
+          () => /YOLO mode/i.test(stripAnsi(rig._interactiveOutput)),
           30000,
           200,
         );

@@ -450,8 +450,8 @@ function computeRanks(graph: FlowGraph): Map<string, number> {
 function branchPreference(label: string | undefined): number {
   if (!label) return 0;
   const normalized = label.trim().toLowerCase();
-  if (/^(no|false|fail|failed|否|不|失败)$/.test(normalized)) return -1;
-  if (/^(yes|true|pass|passed|是|成功)$/.test(normalized)) return 1;
+  if (/^(no|false|fail|failed)$/.test(normalized)) return -1;
+  if (/^(yes|true|pass|passed)$/.test(normalized)) return 1;
   return 0;
 }
 

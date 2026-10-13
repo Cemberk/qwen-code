@@ -35,13 +35,13 @@ export const ResourceDetailStep: React.FC<ResourceDetailStepProps> = ({
     );
   }
 
-  // 与 URI 不同时才展示友好名称，避免重复信息。
+  // Show the friendly name only if it differs from the URI (no repetition).
   const friendlyName = resource.title || resource.name;
   const showName = friendlyName && friendlyName !== resource.uri;
 
   return (
     <Box flexDirection="column" gap={1}>
-      {/* 资源元信息 */}
+      {/* Resource metadata */}
       <Box flexDirection="column">
         <Box>
           <Box width={LABEL_WIDTH}>
@@ -88,7 +88,7 @@ export const ResourceDetailStep: React.FC<ResourceDetailStepProps> = ({
         )}
       </Box>
 
-      {/* 资源描述 */}
+      {/* Resource description */}
       {resource.description && (
         <Box flexDirection="column">
           <Text color={theme.text.primary} bold>
@@ -98,7 +98,7 @@ export const ResourceDetailStep: React.FC<ResourceDetailStepProps> = ({
         </Box>
       )}
 
-      {/* 如何引用：告诉用户在对话里输入 @server:uri 即可注入内容 */}
+      {/* How to reference: typing @server:uri in chat injects the content */}
       <Box flexDirection="column">
         <Text color={theme.text.primary} bold>
           {t('Reference in chat')}:

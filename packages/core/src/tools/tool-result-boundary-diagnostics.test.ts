@@ -33,7 +33,7 @@ describe('tool-result boundary diagnostics', () => {
       logger: { debug, isEnabled: () => true },
       thresholdBytes: 0,
     });
-    const secret = 'secret "汉😀\ud800" output';
+    const secret = 'secret "あ😀\ud800" output';
 
     expect(
       observe({
@@ -282,7 +282,7 @@ describe('tool-result boundary diagnostics', () => {
       '\x7f',
       'é',
       '\u07ff',
-      '汉',
+      'あ',
       '😀',
       '\ud800',
       '\udc00',

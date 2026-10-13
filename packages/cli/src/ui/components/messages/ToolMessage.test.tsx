@@ -2047,15 +2047,15 @@ describe('<ToolMessage /> localized badge', () => {
     await setLanguageAsync('en');
   });
 
-  it('shows the localized display name under the zh locale', async () => {
+  it('shows the localized display name under the ca locale', async () => {
     const { setLanguageAsync } = await import('../../../i18n/index.js');
-    await setLanguageAsync('zh');
+    await setLanguageAsync('ca');
     const { lastFrame } = renderWithContext(
       <ToolMessage {...localizedProps} />,
       StreamingState.Idle,
     );
     const output = lastFrame() ?? '';
-    expect(output).toContain('读取文件');
+    expect(output).toContain('Llegeix fitxer');
     expect(output).not.toContain('ReadFile');
     // 15s timeout (not the 5s default): setLanguageAsync() loads locale
     // resources lazily and intermittently exceeds 5s on the heavily
@@ -2187,12 +2187,12 @@ describe('ToolMessage inline tool-call arguments (ui.showToolCallArgs)', () => {
     });
 
     it('measures the row in columns, so full-width args wrap at half the count', () => {
-      // Columns, not code points, are what decide where ink wraps: a CJK
-      // argument fills the row in half the characters.
-      const args = { a: '固'.repeat(500) };
+      // Columns, not code points, are what decide where ink wraps: a
+      // full-width argument fills the row in half the characters.
+      const args = { a: 'あ'.repeat(500) };
       const out = formatInlineToolArgs(args, 'summary', false, 40);
       const head = out?.slice(0, out.indexOf('…')) ?? '';
-      const cjkCount = (head.match(/固/g) ?? []).length;
+      const cjkCount = (head.match(/あ/g) ?? []).length;
 
       // 80 columns total, ~21 reserved for the marker: ~59 columns of head,
       // which is ~29 double-width characters, not ~59.

@@ -88,7 +88,7 @@ async function awaitFrame<T>(request: Promise<T>): Promise<T> {
   }
 }
 
-const DOCUMENT_SYMBOLS = { symbols: [{ name: '标题甲' }] };
+const DOCUMENT_SYMBOLS = { symbols: [{ name: 'タイトルA' }] };
 const SYMBOLS_BODY = JSON.stringify({
   jsonrpc: '2.0',
   id: 1,
@@ -158,9 +158,9 @@ describe('LspConnectionFactory', () => {
       'parses a body whose multi-byte character is split across chunks',
       async () => {
         const bytes = frame(SYMBOLS_BODY);
-        // Lead byte of the three-byte UTF-8 sequence for 标; the ASCII framing
+        // Lead byte of the three-byte UTF-8 sequence for タ; the ASCII framing
         // around it contains no byte >= 0x80, so this is the body's first one.
-        const leadByte = bytes.indexOf(0xe6);
+        const leadByte = bytes.indexOf(0xe3);
         expect(leadByte).toBeGreaterThan(0);
 
         const server = await startStubServer([
@@ -185,7 +185,7 @@ describe('LspConnectionFactory', () => {
               JSON.stringify({
                 jsonrpc: '2.0',
                 method: 'window/logMessage',
-                params: { type: 3, message: '日志：标题甲' },
+                params: { type: 3, message: 'ログ：タイトルA' },
               }),
             ),
             frame(SYMBOLS_BODY),
@@ -202,7 +202,7 @@ describe('LspConnectionFactory', () => {
           {
             jsonrpc: '2.0',
             method: 'window/logMessage',
-            params: { type: 3, message: '日志：标题甲' },
+            params: { type: 3, message: 'ログ：タイトルA' },
           },
         ]);
       },

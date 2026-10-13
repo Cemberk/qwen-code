@@ -17,7 +17,6 @@ vi.mock('../../i18n/index.js', () => ({
   detectSystemLanguage: vi.fn().mockReturnValue('en'),
   getLanguageNameFromLocale: vi.fn((locale: string) => {
     const map: Record<string, string> = {
-      zh: 'Chinese',
       en: 'English',
       ru: 'Russian',
       de: 'German',
@@ -187,7 +186,7 @@ describe('languageCommand', () => {
       // Set the outputLanguage setting explicitly
       mockContext.services.settings = {
         ...mockContext.services.settings,
-        merged: { general: { outputLanguage: 'Chinese' } },
+        merged: { general: { outputLanguage: 'Japanese' } },
         setValue: vi.fn(),
       } as unknown as LoadedSettings;
 
@@ -212,11 +211,11 @@ describe('languageCommand', () => {
         messageType: 'info',
         content: expect.stringContaining('Current UI language:'),
       });
-      // Verify it shows "Chinese" for the explicitly set language
+      // Verify it shows "Japanese" for the explicitly set language
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',
-        content: expect.stringContaining('Chinese'),
+        content: expect.stringContaining('Japanese'),
       });
     });
 
@@ -251,7 +250,7 @@ describe('languageCommand', () => {
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',
-        content: expect.not.stringContaining('Chinese'),
+        content: expect.not.stringContaining('Japanese'),
       });
     });
   });
@@ -336,14 +335,14 @@ describe('languageCommand', () => {
       });
     });
 
-    it('should set Chinese with "zh"', async () => {
+    it('should set Japanese with "ja"', async () => {
       if (!languageCommand.action) {
         throw new Error('The language command must have an action.');
       }
 
-      const result = await languageCommand.action(mockContext, 'ui zh');
+      const result = await languageCommand.action(mockContext, 'ui ja');
 
-      expect(i18n.setLanguageAsync).toHaveBeenCalledWith('zh');
+      expect(i18n.setLanguageAsync).toHaveBeenCalledWith('ja');
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',
@@ -351,14 +350,14 @@ describe('languageCommand', () => {
       });
     });
 
-    it('should set Chinese with "zh-CN"', async () => {
+    it('should set Japanese with "ja-JP"', async () => {
       if (!languageCommand.action) {
         throw new Error('The language command must have an action.');
       }
 
-      const result = await languageCommand.action(mockContext, 'ui zh-CN');
+      const result = await languageCommand.action(mockContext, 'ui ja-JP');
 
-      expect(i18n.setLanguageAsync).toHaveBeenCalledWith('zh');
+      expect(i18n.setLanguageAsync).toHaveBeenCalledWith('ja');
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',
@@ -366,14 +365,14 @@ describe('languageCommand', () => {
       });
     });
 
-    it('should set Chinese with "chinese"', async () => {
+    it('should set Japanese with "japanese"', async () => {
       if (!languageCommand.action) {
         throw new Error('The language command must have an action.');
       }
 
-      const result = await languageCommand.action(mockContext, 'ui chinese');
+      const result = await languageCommand.action(mockContext, 'ui japanese');
 
-      expect(i18n.setLanguageAsync).toHaveBeenCalledWith('zh');
+      expect(i18n.setLanguageAsync).toHaveBeenCalledWith('ja');
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',
@@ -436,13 +435,13 @@ describe('languageCommand', () => {
       (mockContext.services.settings as { isTrusted?: boolean }).isTrusted =
         true;
 
-      await languageCommand.action(mockContext, 'ui zh --project');
+      await languageCommand.action(mockContext, 'ui ja --project');
 
-      expect(i18n.setLanguageAsync).toHaveBeenCalledWith('zh');
+      expect(i18n.setLanguageAsync).toHaveBeenCalledWith('ja');
       expect(mockContext.services.settings.setValue).toHaveBeenCalledWith(
         'workspace',
         'general.language',
-        'zh',
+        'ja',
         undefined,
         { throwOnWriteFailure: true },
       );
@@ -509,14 +508,14 @@ describe('languageCommand', () => {
 
       const result = await languageCommand.action(
         mockContext,
-        'output Chinese',
+        'output Portuguese',
       );
 
       // Verify the setting was persisted.
       expect(mockContext.services.settings?.setValue).toHaveBeenCalledWith(
         expect.anything(), // SettingScope.User
         'general.outputLanguage',
-        'Chinese',
+        'Portuguese',
       );
       // Verify path registration on first-time creation (getOutputLanguageFilePath returned undefined)
       expect(
@@ -566,7 +565,7 @@ describe('languageCommand', () => {
       expect(writtenContent).toContain(
         "Respond in the same language as the user's input.",
       );
-      expect(writtenContent).not.toContain('Chinese');
+      expect(writtenContent).not.toContain('Portuguese');
       expect(i18n.detectSystemLanguage).not.toHaveBeenCalled();
       expect(result).toEqual({
         type: 'message',
@@ -725,14 +724,14 @@ describe('languageCommand', () => {
     });
   });
   describe('backward compatibility - direct language arguments', () => {
-    it('should set Chinese with direct "zh" argument', async () => {
+    it('should set Portuguese with direct "pt" argument', async () => {
       if (!languageCommand.action) {
         throw new Error('The language command must have an action.');
       }
 
-      const result = await languageCommand.action(mockContext, 'zh');
+      const result = await languageCommand.action(mockContext, 'pt');
 
-      expect(i18n.setLanguageAsync).toHaveBeenCalledWith('zh');
+      expect(i18n.setLanguageAsync).toHaveBeenCalledWith('pt');
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',
@@ -841,8 +840,8 @@ describe('languageCommand', () => {
     const uiSubcommand = languageCommand.subCommands?.find(
       (c) => c.name === 'ui',
     );
-    const zhCNSubcommand = uiSubcommand?.subCommands?.find(
-      (c) => c.name === 'zh-CN',
+    const ptBRSubcommand = uiSubcommand?.subCommands?.find(
+      (c) => c.name === 'pt-BR',
     );
     const enUSSubcommand = uiSubcommand?.subCommands?.find(
       (c) => c.name === 'en-US',
@@ -851,14 +850,14 @@ describe('languageCommand', () => {
       (c) => c.name === 'de-DE',
     );
 
-    it('zh-CN action should set Chinese', async () => {
-      if (!zhCNSubcommand?.action) {
-        throw new Error('zh-CN subcommand must have an action.');
+    it('pt-BR action should set Portuguese', async () => {
+      if (!ptBRSubcommand?.action) {
+        throw new Error('pt-BR subcommand must have an action.');
       }
 
-      const result = await zhCNSubcommand.action(mockContext, '');
+      const result = await ptBRSubcommand.action(mockContext, '');
 
-      expect(i18n.setLanguageAsync).toHaveBeenCalledWith('zh');
+      expect(i18n.setLanguageAsync).toHaveBeenCalledWith('pt');
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',
@@ -915,11 +914,11 @@ describe('languageCommand', () => {
     });
 
     it('should reject extra arguments', async () => {
-      if (!zhCNSubcommand?.action) {
-        throw new Error('zh-CN subcommand must have an action.');
+      if (!ptBRSubcommand?.action) {
+        throw new Error('pt-BR subcommand must have an action.');
       }
 
-      const result = await zhCNSubcommand.action(mockContext, 'extra args');
+      const result = await ptBRSubcommand.action(mockContext, 'extra args');
 
       expect(result).toEqual({
         type: 'message',
@@ -931,18 +930,18 @@ describe('languageCommand', () => {
     // Regression for #8592: the web-shell settings panel switches language
     // via `/language ui <id> --global|--project`, and the router descends
     // into these nested subcommands, so scope flags must not be rejected.
-    it('zh-CN action should accept --global and persist to user scope', async () => {
-      if (!zhCNSubcommand?.action) {
-        throw new Error('zh-CN subcommand must have an action.');
+    it('pt-BR action should accept --global and persist to user scope', async () => {
+      if (!ptBRSubcommand?.action) {
+        throw new Error('pt-BR subcommand must have an action.');
       }
 
-      const result = await zhCNSubcommand.action(mockContext, '--global');
+      const result = await ptBRSubcommand.action(mockContext, '--global');
 
-      expect(i18n.setLanguageAsync).toHaveBeenCalledWith('zh');
+      expect(i18n.setLanguageAsync).toHaveBeenCalledWith('pt');
       expect(mockContext.services.settings.setValue).toHaveBeenCalledWith(
         'user',
         'general.language',
-        'zh',
+        'pt',
         undefined,
         { throwOnWriteFailure: true },
       );
@@ -953,20 +952,20 @@ describe('languageCommand', () => {
       });
     });
 
-    it('zh-CN action should accept --project and persist to workspace scope when trusted', async () => {
-      if (!zhCNSubcommand?.action) {
-        throw new Error('zh-CN subcommand must have an action.');
+    it('pt-BR action should accept --project and persist to workspace scope when trusted', async () => {
+      if (!ptBRSubcommand?.action) {
+        throw new Error('pt-BR subcommand must have an action.');
       }
       (mockContext.services.settings as { isTrusted?: boolean }).isTrusted =
         true;
 
-      const result = await zhCNSubcommand.action(mockContext, '--project');
+      const result = await ptBRSubcommand.action(mockContext, '--project');
 
-      expect(i18n.setLanguageAsync).toHaveBeenCalledWith('zh');
+      expect(i18n.setLanguageAsync).toHaveBeenCalledWith('pt');
       expect(mockContext.services.settings.setValue).toHaveBeenCalledWith(
         'workspace',
         'general.language',
-        'zh',
+        'pt',
         undefined,
         { throwOnWriteFailure: true },
       );
@@ -978,8 +977,8 @@ describe('languageCommand', () => {
     });
 
     it('reports a workspace persistence failure without changing the language', async () => {
-      if (!zhCNSubcommand?.action) {
-        throw new Error('zh-CN subcommand must have an action.');
+      if (!ptBRSubcommand?.action) {
+        throw new Error('pt-BR subcommand must have an action.');
       }
       (mockContext.services.settings as { isTrusted?: boolean }).isTrusted =
         true;
@@ -989,7 +988,7 @@ describe('languageCommand', () => {
         },
       );
 
-      const result = await zhCNSubcommand.action(mockContext, '--project');
+      const result = await ptBRSubcommand.action(mockContext, '--project');
 
       expect(i18n.setLanguageAsync).not.toHaveBeenCalled();
       expect(mockContext.ui.reloadCommands).not.toHaveBeenCalled();
@@ -999,14 +998,14 @@ describe('languageCommand', () => {
       });
     });
 
-    it('zh-CN action should reject --project in an untrusted workspace without persisting', async () => {
-      if (!zhCNSubcommand?.action) {
-        throw new Error('zh-CN subcommand must have an action.');
+    it('pt-BR action should reject --project in an untrusted workspace without persisting', async () => {
+      if (!ptBRSubcommand?.action) {
+        throw new Error('pt-BR subcommand must have an action.');
       }
       (mockContext.services.settings as { isTrusted?: boolean }).isTrusted =
         false;
 
-      const result = await zhCNSubcommand.action(mockContext, '--project');
+      const result = await ptBRSubcommand.action(mockContext, '--project');
 
       expect(i18n.setLanguageAsync).not.toHaveBeenCalled();
       expect(mockContext.services.settings.setValue).not.toHaveBeenCalled();
@@ -1016,12 +1015,12 @@ describe('languageCommand', () => {
       });
     });
 
-    it('zh-CN action should reject using both --project and --global together', async () => {
-      if (!zhCNSubcommand?.action) {
-        throw new Error('zh-CN subcommand must have an action.');
+    it('pt-BR action should reject using both --project and --global together', async () => {
+      if (!ptBRSubcommand?.action) {
+        throw new Error('pt-BR subcommand must have an action.');
       }
 
-      const result = await zhCNSubcommand.action(
+      const result = await ptBRSubcommand.action(
         mockContext,
         '--project --global',
       );
@@ -1034,12 +1033,12 @@ describe('languageCommand', () => {
       });
     });
 
-    it('zh-CN action should still reject extra arguments after a scope flag', async () => {
-      if (!zhCNSubcommand?.action) {
-        throw new Error('zh-CN subcommand must have an action.');
+    it('pt-BR action should still reject extra arguments after a scope flag', async () => {
+      if (!ptBRSubcommand?.action) {
+        throw new Error('pt-BR subcommand must have an action.');
       }
 
-      const result = await zhCNSubcommand.action(mockContext, '--global extra');
+      const result = await ptBRSubcommand.action(mockContext, '--global extra');
 
       expect(i18n.setLanguageAsync).not.toHaveBeenCalled();
       expect(mockContext.services.settings.setValue).not.toHaveBeenCalled();
@@ -1107,7 +1106,7 @@ describe('languageCommand', () => {
 
     it('should preserve auto setting as same-language mode', () => {
       vi.mocked(fs.existsSync).mockReturnValue(false);
-      vi.mocked(i18n.detectSystemLanguage).mockReturnValue('zh');
+      vi.mocked(i18n.detectSystemLanguage).mockReturnValue('pt');
 
       initializeLlmOutputLanguage('auto');
 
@@ -1122,7 +1121,7 @@ describe('languageCommand', () => {
     });
 
     it('should migrate an existing generated fixed-language file when setting is explicitly auto', () => {
-      writeOutputLanguageFile('Chinese');
+      writeOutputLanguageFile('Portuguese');
       const generatedFixedLanguageContent = vi.mocked(fs.writeFileSync).mock
         .calls[0][1] as string;
       vi.mocked(fs.writeFileSync).mockClear();
@@ -1140,18 +1139,6 @@ describe('languageCommand', () => {
         'utf-8',
       );
       expect(i18n.detectSystemLanguage).not.toHaveBeenCalled();
-    });
-
-    it('should normalize Chinese locale and create Chinese rule file', () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
-
-      initializeLlmOutputLanguage('zh');
-
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
-        expect.stringContaining('output-language.md'),
-        expect.stringContaining('Chinese'),
-        'utf-8',
-      );
     });
 
     it('should normalize Russian locale and create Russian rule file', () => {

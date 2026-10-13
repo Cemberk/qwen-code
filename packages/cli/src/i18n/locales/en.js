@@ -94,8 +94,8 @@ export default {
   // Namespaced `toolDisplayName.<English display name>` keys (from core
   // `ToolDisplayNames`). Per this file's key-is-default-text convention each
   // English entry maps to itself; `localizeToolDisplayName` detects that
-  // self-mapping and returns the bare display name. Localized values live in
-  // zh.js / zh-TW.js; other locales fall back to the English display name.
+  // self-mapping and returns the bare display name. No locale translates them,
+  // so every locale shows the English display name.
   // ============================================================================
   'toolDisplayName.Exec': 'toolDisplayName.Exec',
   'toolDisplayName.Edit': 'toolDisplayName.Edit',
@@ -1164,7 +1164,6 @@ export default {
   'Set LLM output language': 'Set LLM output language',
   'Usage: /language ui [{{options}}]': 'Usage: /language ui [{{options}}]',
   'Usage: /language output <language>': 'Usage: /language output <language>',
-  'Example: /language output 中文': 'Example: /language output 中文',
   'Example: /language output English': 'Example: /language output English',
   'Example: /language output 日本語': 'Example: /language output 日本語',
   'UI language changed to {{lang}}': 'UI language changed to {{lang}}',

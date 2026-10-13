@@ -1597,7 +1597,7 @@ describe('createTranscriptReplayMachine', () => {
         version: 1 as const,
         text: 'Display text differs from model envelope',
         output: outcome === 'completed' ? '' : 'partial 😀 output',
-        directory: '/workspace/项目',
+        directory: '/workspace/プロジェクト',
         exitCode: outcome === 'completed' ? 0 : null,
         signal: outcome === 'cancelled' ? 15 : null,
         pid: 42,

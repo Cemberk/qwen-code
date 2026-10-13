@@ -25,7 +25,7 @@ describe('JSON string byte projection', () => {
       'plain ASCII',
       '"\\\n\b\f\r\t',
       '\0\u0001\u001f',
-      '汉字',
+      'かな',
       '😀',
       '\ud800',
       '\udc00',
@@ -45,7 +45,7 @@ describe('JSON string byte projection', () => {
       '\\',
       '\n',
       '\0',
-      '汉',
+      'あ',
       '😀',
       '\ud800',
       '\udc00',
@@ -79,7 +79,7 @@ describe('JSON string byte projection', () => {
   );
 
   it.each([
-    ['CJK', '汉'.repeat(100_000)],
+    ['CJK', 'あ'.repeat(100_000)],
     ['JSON escapes', '"\\\n\0'.repeat(30_000)],
     ['lone high surrogate', '\ud800'.repeat(100_000)],
     ['lone low surrogate', '\udc00'.repeat(100_000)],

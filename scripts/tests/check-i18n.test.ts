@@ -17,7 +17,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LanguageDefinition } from '../../packages/cli/src/i18n/languages.js';
 import {
   checkI18n,
-  findForbiddenZhTwPatterns,
   printCheckI18nResult,
   shouldWriteUnusedKeysJson,
   type CheckI18nOptions,
@@ -75,8 +74,7 @@ function languages(
   return definitions.map((definition) => {
     const language =
       typeof definition === 'string' ? { code: definition } : definition;
-    const strictParity =
-      language.strictParity ?? ['zh', 'zh-TW'].includes(language.code);
+    const strictParity = language.strictParity ?? false;
 
     return {
       id: `${language.code}-test`,
@@ -140,43 +138,6 @@ describe('checkI18n', () => {
     expect(result.stats.locales).toEqual([]);
     expect(result.errors).toContainEqual(
       expect.stringContaining('Failed to load en.js:'),
-    );
-  });
-
-  it('enforces strict key parity for zh and zh-TW', async () => {
-    const { localesDir, sourceDir } = makeFixture();
-    writeLocale(localesDir, 'en', {
-      Used: 'Used',
-      MissingInStrict: 'MissingInStrict',
-    });
-    writeLocale(localesDir, 'zh', {
-      Used: '已使用',
-      ExtraStrict: '额外',
-    });
-    writeLocale(localesDir, 'zh-TW', {
-      Used: '已使用',
-      ExtraStrict: '額外',
-    });
-    writeSource(sourceDir, "t('Used');\nt('MissingInStrict');\n");
-
-    const result = await checkI18n({
-      localesDir,
-      sourceDir,
-      supportedLanguages: languages('en', 'zh', 'zh-TW'),
-      mustTranslateKeys: [],
-    });
-
-    expect(result.errors).toContain(
-      'Missing translation in zh.js: "MissingInStrict"',
-    );
-    expect(result.errors).toContain(
-      'Extra key in zh.js (not in en.js): "ExtraStrict"',
-    );
-    expect(result.errors).toContain(
-      'Missing translation in zh-TW.js: "MissingInStrict"',
-    );
-    expect(result.errors).toContain(
-      'Extra key in zh-TW.js (not in en.js): "ExtraStrict"',
     );
   });
 
@@ -370,84 +331,6 @@ describe('checkI18n', () => {
     });
 
     expect(result.stats.unusedKeys).toEqual([]);
-  });
-
-  it('flags Mainland-Chinese vocabulary and variant Traditional chars in zh-TW values', async () => {
-    const { localesDir, sourceDir } = makeFixture();
-    writeLocale(localesDir, 'en', {
-      Open: 'Open',
-      Server: 'Server',
-      Menu: 'Menu',
-      Disable: 'Disable',
-      Config: 'Config',
-    });
-    writeLocale(localesDir, 'zh', {
-      Open: '打开',
-      Server: '服务器',
-      Menu: '菜单',
-      Disable: '禁用',
-      Config: '配置',
-    });
-    writeLocale(localesDir, 'zh-TW', {
-      // Regressions we expect the check to catch
-      Open: '啓動', // variant Traditional 啓 (OpenCC s2t artifact)
-      Server: '服務器', // Mainland vocabulary
-      Menu: '菜單', // Mainland vocabulary
-      // Taiwan-standard vocabulary — must NOT be flagged
-      Disable: '禁用',
-      Config: '配置',
-    });
-    writeSource(
-      sourceDir,
-      "t('Open');\nt('Server');\nt('Menu');\nt('Disable');\nt('Config');\n",
-    );
-
-    const result = await checkI18n({
-      localesDir,
-      sourceDir,
-      supportedLanguages: languages('en', 'zh', 'zh-TW'),
-      mustTranslateKeys: [],
-    });
-
-    expect(result.errors).toContain(
-      'Non-Taiwan vocabulary in zh-TW.js at "Open": "啓" should be "啟"',
-    );
-    expect(result.errors).toContain(
-      'Non-Taiwan vocabulary in zh-TW.js at "Server": "服務器" should be "伺服器"',
-    );
-    expect(result.errors).toContain(
-      'Non-Taiwan vocabulary in zh-TW.js at "Menu": "菜單" should be "選單"',
-    );
-    expect(result.errors).not.toContainEqual(
-      expect.stringContaining('at "Disable"'),
-    );
-    expect(result.errors).not.toContainEqual(
-      expect.stringContaining('at "Config"'),
-    );
-  });
-
-  it('returns no findings for clean Taiwan Traditional translations', () => {
-    const findings = findForbiddenZhTwPatterns({
-      Open: '開啟',
-      Server: '伺服器',
-      Menu: '選單',
-      Disable: '禁用',
-      Config: '配置',
-      Link: '連結',
-      History: '歷史',
-    });
-    expect(findings).toEqual([]);
-  });
-
-  it('reports only the most specific pattern per value (no duplicate findings)', () => {
-    // `历史` (Simplified) overlaps with the single-char pattern `历`.
-    // We expect exactly one finding for the longer/more specific pattern.
-    const findings = findForbiddenZhTwPatterns({
-      History: '历史',
-    });
-    expect(findings).toEqual([
-      { key: 'History', pattern: '历史', preferred: '歷史' },
-    ]);
   });
 
   it('detects the unused-keys JSON flag from argv or env', () => {

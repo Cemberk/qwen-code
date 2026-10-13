@@ -67,7 +67,7 @@ describe('estimateWrappedRows', () => {
 
   it('counts CJK double-width characters when wrapping', () => {
     // 10 CJK chars = 20 display cols; at width 10 → 2 rows.
-    expect(estimateWrappedRows('一二三四五六七八九十', 10)).toBe(2);
+    expect(estimateWrappedRows('あいうえおかきくけこ', 10)).toBe(2);
   });
 
   it('falls back to 1 row when width is zero or negative', () => {
@@ -204,7 +204,7 @@ describe('fitPendingSlice', () => {
 
   it('returns keptLines=0 when the first line alone overflows (wide/CJK line)', () => {
     // One line of 200 CJK cols at width 10 → 20 rows > budget 5.
-    const lines = ['一'.repeat(100)];
+    const lines = ['あ'.repeat(100)];
     const { keptLines, clipped } = fitPendingSlice(lines, 10, 5, CLAMP);
     expect(clipped).toBe(true);
     expect(keptLines).toBe(0);

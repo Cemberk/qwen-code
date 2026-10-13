@@ -506,7 +506,7 @@ describe('readTextRange', () => {
   });
 
   it('rejects large non-UTF-8 files with a targeted error', async () => {
-    const gbkLine = (await loadIconvLite()).encode('中文日志行\n', 'gbk');
+    const gbkLine = (await loadIconvLite()).encode('日本語ログ行\n', 'gbk');
     const repeatCount = Math.ceil((11 * 1024 * 1024) / gbkLine.length);
     const filePath = await writeFile(
       'gbk.log',
@@ -526,7 +526,7 @@ describe('readTextRange', () => {
   it('rejects large files with invalid UTF-8 beyond the encoding sample', async () => {
     const mostlyAsciiThenGbk = Buffer.concat([
       Buffer.alloc(9 * 1024, 'a'),
-      (await loadIconvLite()).encode('你好', 'gbk'),
+      (await loadIconvLite()).encode('こんにちは', 'gbk'),
       Buffer.alloc(11 * 1024 * 1024, 'b'),
     ]);
     const filePath = await writeFile('late-gbk.log', mostlyAsciiThenGbk);

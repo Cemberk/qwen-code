@@ -14,7 +14,7 @@ import {
 describe('estimateTextTokens', () => {
   describe('character-based estimation', () => {
     it('keeps token-unit estimates aligned with token estimates', () => {
-      for (const text of ['', 'Hello', '你好世界', 'Hello 世界']) {
+      for (const text of ['', 'Hello', 'おはよう', 'Hello かな']) {
         expect(
           Math.ceil(
             estimateTextTokenUnits(text) / TOKEN_ESTIMATE_UNITS_PER_TOKEN,
@@ -50,14 +50,14 @@ describe('estimateTextTokens', () => {
     });
 
     it('should calculate tokens for non-ASCII text (CJK)', () => {
-      const unicodeText = '你好世界'; // 4 non-ASCII chars
+      const unicodeText = 'おはよう'; // 4 non-ASCII chars
       const result = estimateTextTokens(unicodeText);
       // 4 * 1.1 = 4.4 -> ceil = 5
       expect(result).toBe(5);
     });
 
     it('should calculate tokens for mixed ASCII and non-ASCII text', () => {
-      const mixedText = 'Hello 世界'; // 6 ASCII + 2 non-ASCII
+      const mixedText = 'Hello かな'; // 6 ASCII + 2 non-ASCII
       const result = estimateTextTokens(mixedText);
       // (6 / 4) + (2 * 1.1) = 1.5 + 2.2 = 3.7 -> ceil = 4
       expect(result).toBe(4);
@@ -178,8 +178,8 @@ describe('estimateTextTokens', () => {
       // 1000 / 4 = 250
       expect(estimateTextTokens(ascii)).toBe(250);
       // 1000 / 4 + 1 * 1.1 = 251.1 -> ceil = 252, wherever the char sits
-      expect(estimateTextTokens(ascii + '中')).toBe(252);
-      expect(estimateTextTokens('中' + ascii)).toBe(252);
+      expect(estimateTextTokens(ascii + 'あ')).toBe(252);
+      expect(estimateTextTokens('あ' + ascii)).toBe(252);
     });
 
     it('should count surrogate pairs as two non-ASCII units within mixed text', () => {

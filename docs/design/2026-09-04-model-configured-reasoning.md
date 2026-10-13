@@ -28,7 +28,7 @@ This PR configures only the native `deepseek-v4-pro` entry:
 - default: `high`;
 - disable: `thinking.type = disabled`.
 
-Evidence: [DeepSeek Chat Completions](https://api-docs.deepseek.com/zh-cn/api/create-chat-completion/).
+Evidence: [DeepSeek Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/).
 
 No DeepSeek model id or endpoint is added to generic control code. The model's
 configuration is the only source of its new capability.

@@ -3065,7 +3065,7 @@ describe('goal runtime', () => {
     expect(() =>
       runtime.recordTerminalProposal(permit, {
         status: 'complete',
-        reason: '界'.repeat(Math.floor(GOAL_PROPOSAL_REASON_MAX_BYTES / 3) + 1),
+        reason: 'あ'.repeat(Math.floor(GOAL_PROPOSAL_REASON_MAX_BYTES / 3) + 1),
         evidenceRefs: ['oversized'],
       }),
     ).toThrow(/UTF-8 bytes/i);

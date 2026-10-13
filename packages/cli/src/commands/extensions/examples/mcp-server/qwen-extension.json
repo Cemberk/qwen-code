@@ -1,12 +1,10 @@
 {
   "name": "mcp-server-example",
   "displayName": {
-    "en": "MCP Server Example",
-    "zh": "MCP 服务器示例"
+    "en": "MCP Server Example"
   },
   "description": {
-    "en": "Example extension that provides an MCP server",
-    "zh": "提供 MCP 服务器的示例扩展"
+    "en": "Example extension that provides an MCP server"
   },
   "version": "1.0.0",
   "mcpServers": {

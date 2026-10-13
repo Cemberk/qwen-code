@@ -30,21 +30,21 @@ flowchart TD
     const preview = renderMermaidVisual(
       `
 flowchart TD
-  A[用户登录] --> B{是否登录?}
-  B -->|是| C[显示主页]
-  B -->|否| D[显示登录页]
+  A[ユーザー] --> B{ログイン?}
+  B -->|はい| C[ホーム]
+  B -->|いいえ| D[サインイン]
 `,
       60,
     );
     const output = preview.lines.join('\n');
 
     expect(preview.title).toBe('Mermaid flowchart (TD)');
-    expect(output).toContain('用户登录');
-    expect(output).toContain('是否登录?');
-    expect(output).toContain('显示主页');
-    expect(output).toContain('显示登录页');
-    expect(output).toContain('是');
-    expect(output).toContain('否');
+    expect(output).toContain('ユーザー');
+    expect(output).toContain('ログイン?');
+    expect(output).toContain('ホーム');
+    expect(output).toContain('サインイン');
+    expect(output).toContain('はい');
+    expect(output).toContain('いいえ');
   });
 
   it('strips terminal control sequences from rendered labels', () => {

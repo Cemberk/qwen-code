@@ -545,7 +545,7 @@ describe('collectContextData (contextCommand)', () => {
       // `compressFast()` and resume seeding stamp a total measured by core's
       // char/4 estimator. These categories use the CJK-aware one, up to ~6x
       // larger on CJK text, so dividing the two deflated every row.
-      const cjk = '中'.repeat(100_000);
+      const cjk = 'あ'.repeat(100_000);
       const history = [prelude, { role: 'user', parts: [{ text: cjk }] }];
       const estimatedTotal = Math.ceil(cjk.length / 4);
 
@@ -574,14 +574,14 @@ describe('collectContextData (contextCommand)', () => {
     it('does not deflate overhead rows against a provider total when only the conversation overshoots', async () => {
       // Two ordinary triggers push `rawContent` past a provider-reported total
       // without any overhead row being wrong: the CJK-aware estimator runs
-      // several times higher than the provider's count on zh-heavy text, and
+      // several times higher than the provider's count on CJK-heavy text, and
       // `totalTokens` is the last request's prompt count, which excludes the
       // answer added since. Scaling the rows by total/rawContent deflated every
       // exactly-measured row; only an overhead-side overshoot may scale them.
       // A conversation-side overshoot is absorbed by the `messages` cap.
       const cjkHistory: Content[] = [
         prelude,
-        { role: 'user', parts: [{ text: '中'.repeat(100_000) }] },
+        { role: 'user', parts: [{ text: 'あ'.repeat(100_000) }] },
       ];
       const cjkUnscaled = await collectContextData(
         makeChatConfig({ total: 0, history: cjkHistory }),

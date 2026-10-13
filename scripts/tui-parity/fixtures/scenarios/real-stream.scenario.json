@@ -10,7 +10,7 @@
   "timeoutMs": 60000,
   "input": [
     {
-      "data": "用一句话介绍你自己",
+      "data": "Introduce yourself in one sentence",
       "delayMs": 2000
     },
     {

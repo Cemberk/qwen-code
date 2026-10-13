@@ -626,7 +626,7 @@ describe('useAutoAcceptIndicator', () => {
   });
 
   it('should emit the AUTO mode entry notice with the active locale', async () => {
-    await setLanguageAsync('zh');
+    await setLanguageAsync('fr');
     try {
       const mockAddItem = vi.fn();
 
@@ -639,9 +639,9 @@ describe('useAutoAcceptIndicator', () => {
         {
           type: MessageType.INFO,
           text:
-            '已启用自动模式。\n' +
-            '   LLM 分类器会评估每次工具调用 — 安全操作将自动批准，\n' +
-            '   有风险的操作将被阻止。退出：Shift+Tab 或 /approval-mode default。',
+            'Mode auto activé.\n' +
+            "   Un classificateur LLM évalue chaque appel d'outil — les actions sûres sont approuvées automatiquement,\n" +
+            '   les actions risquées sont bloquées. Quitter : Shift+Tab ou /approval-mode default.',
         },
         expect.any(Number),
       );

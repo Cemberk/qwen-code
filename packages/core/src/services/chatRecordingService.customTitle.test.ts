@@ -607,7 +607,7 @@ describe('ChatRecordingService - recordCustomTitle', () => {
       await chatRecordingService.recordCustomTitle('cjk-session');
       vi.mocked(jsonl.writeLine).mockClear();
 
-      const cjkText = '汉'.repeat(1500);
+      const cjkText = 'あ'.repeat(1500);
       for (let i = 0; i < 12; i++) {
         chatRecordingService.recordUserMessage([{ text: cjkText }]);
       }

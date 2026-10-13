@@ -476,7 +476,7 @@ describe('useSlashCommandProcessor', () => {
       let actionResult;
       await act(async () => {
         actionResult = await result.current.handleSlashCommand(
-          '/api/apiFunction/接口的实现',
+          '/api/apiFunction/implementation',
         );
       });
 
@@ -485,7 +485,7 @@ describe('useSlashCommandProcessor', () => {
       let absPathResult;
       await act(async () => {
         absPathResult = await result.current.handleSlashCommand(
-          '/Users/zhoushuo/Desktop/dw-operator-skill 帮我安装',
+          '/Users/alice/Desktop/dw-operator-skill please install it',
         );
       });
 

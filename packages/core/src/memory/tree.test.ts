@@ -68,7 +68,7 @@ describe('auto memory tree rendering', () => {
     const focused = renderAutoMemoryFocusedSubtree([memory]).prompt;
 
     expect(focused).toContain(description.trim());
-    expect(focused).not.toContain('适用：');
+    expect(focused).not.toContain('Use when:');
   });
 
   it('dedupes the legacy description fallback when the 64-char cut lands on a space', () => {
@@ -85,8 +85,8 @@ describe('auto memory tree rendering', () => {
 
     const focused = renderAutoMemoryFocusedSubtree([memory]).prompt;
 
-    expect(focused).toContain('摘要：');
-    expect(focused).not.toContain('适用：');
+    expect(focused).toContain('Summary:');
+    expect(focused).not.toContain('Use when:');
   });
 
   it('builds a two-level tree sorted by fixed category order', () => {
@@ -305,9 +305,9 @@ describe('auto memory tree rendering', () => {
     expect(focused.match(/shared phrase/giu)).toHaveLength(1);
     expect(focused).toContain('first-7');
     expect(focused).toContain('second-7');
-    expect(focused).not.toContain('本轮显示');
-    expect(focused).not.toContain('可见关键词');
-    expect(focused).not.toContain('另 5 个未展示');
+    expect(focused).not.toContain('shown this turn');
+    expect(focused).not.toContain('visible keywords');
+    expect(focused).not.toContain('5 more not shown');
   });
 
   it('deduplicates category keywords while preserving leaf metadata', () => {
@@ -342,9 +342,9 @@ describe('auto memory tree rendering', () => {
       bodyPresentVersions: new Map([['project:project/present.md', 42]]),
     }).prompt;
 
-    expect(present).toContain('关键词：present keyword');
+    expect(present).toContain('Keywords: present keyword');
     expect(present).toContain(
-      '[内容已在当前上下文] [project:project/present.md]',
+      '[already in current context] [project:project/present.md]',
     );
     expect(present).not.toContain('Detailed metadata summary');
     expect(present).not.toContain('using the present memory');
@@ -353,13 +353,13 @@ describe('auto memory tree rendering', () => {
       bodyPresentVersions: new Map([['project:project/present.md', 41]]),
     }).prompt;
 
-    expect(changed).not.toContain('[内容已在当前上下文]');
-    expect(changed).toContain('[内容已更新，需要重新读取]');
-    expect(changed).toContain('摘要：Detailed metadata summary');
-    expect(changed).toContain('适用：using the present memory');
+    expect(changed).not.toContain('[already in current context]');
+    expect(changed).toContain('[updated, re-read needed]');
+    expect(changed).toContain('Summary: Detailed metadata summary');
+    expect(changed).toContain('Use when: using the present memory');
 
     const unread = renderAutoMemoryFocusedSubtree([memory]).prompt;
-    expect(unread).not.toContain('[内容已更新，需要重新读取]');
+    expect(unread).not.toContain('[updated, re-read needed]');
     expect(unread).toContain(
       '└── [project:project/present.md] project/present.md',
     );
@@ -380,7 +380,9 @@ describe('auto memory tree rendering', () => {
     expect(focused.displayed).toBeGreaterThan(0);
     expect(focused.displayed).toBeLessThan(memories.length);
     expect(focused.omitted).toBe(memories.length - focused.displayed);
-    expect(focused.prompt).toContain(`另 ${focused.omitted} 条已选记忆未展示`);
+    expect(focused.prompt).toContain(
+      `${focused.omitted} more selected memories not shown`,
+    );
     expect(focused.prompt).not.toContain('project/4.md');
   });
 
@@ -390,7 +392,8 @@ describe('auto memory tree rendering', () => {
     });
 
     expect(focused).toEqual({
-      prompt: '## Memory focus for this turn\n\n另 1 条已选记忆未展示',
+      prompt:
+        '## Memory focus for this turn\n\n1 more selected memory not shown',
       displayed: 0,
       omitted: 1,
     });

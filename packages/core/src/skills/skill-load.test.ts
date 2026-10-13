@@ -707,7 +707,7 @@ Symlinked skill body.
       // non-ASCII name, silently dropping CJK skills on upgrade. The
       // structural-injection guard targets <>"'/\\\n\r\t etc — entire
       // Unicode planes are not the threat.
-      expect(() => validateSkillName('中文助手')).not.toThrow();
+      expect(() => validateSkillName('アシスタント')).not.toThrow();
       expect(() => validateSkillName('помощник')).not.toThrow();
       expect(() => validateSkillName('café-helper')).not.toThrow();
       expect(() => validateSkillName('日本語_v2')).not.toThrow();

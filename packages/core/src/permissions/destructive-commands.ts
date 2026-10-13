@@ -60,9 +60,6 @@ const DISCARD_KEYWORDS: readonly RegExp[] = Object.freeze([
   /\bstart\s+over\b/i,
   /\bstart\s+fresh\b/i,
   /\bclean\s+slate\b/i,
-  /丢弃/,
-  /清除/,
-  /重置/,
 ]);
 
 /**
@@ -237,8 +234,6 @@ function userMentionsStack(userPrompt: string, toolName: string): boolean {
     (lower.includes('destroy') ||
       lower.includes('tear down') ||
       lower.includes('delete stack') ||
-      lower.includes('remove stack') ||
-      lower.includes('销毁') ||
-      lower.includes('删除'))
+      lower.includes('remove stack'))
   );
 }

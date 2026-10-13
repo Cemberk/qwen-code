@@ -6,8 +6,6 @@
 
 export type SupportedLanguage =
   | 'en'
-  | 'zh'
-  | 'zh-TW'
   | 'ru'
   | 'de'
   | 'ja'
@@ -17,13 +15,13 @@ export type SupportedLanguage =
   | string;
 
 export interface LanguageDefinition {
-  /** The internal locale code used by the i18n system (e.g., 'en', 'zh'). */
+  /** The internal locale code used by the i18n system (e.g., 'en', 'ja'). */
   code: SupportedLanguage;
-  /** The standard name used in UI settings (e.g., 'en-US', 'zh-CN'). */
+  /** The standard name used in UI settings (e.g., 'en-US', 'ja-JP'). */
   id: string;
-  /** The full English name of the language (e.g., 'English', 'Chinese'). */
+  /** The full English name of the language (e.g., 'English', 'Japanese'). */
   fullName: string;
-  /** The native name of the language (e.g., 'English', '中文'). */
+  /** The native name of the language (e.g., 'English', 'Deutsch'). */
   nativeName?: string;
   /**
    * Whether tooling should require this locale to keep exact key parity with
@@ -38,20 +36,6 @@ export const SUPPORTED_LANGUAGES: readonly LanguageDefinition[] = [
     id: 'en-US',
     fullName: 'English',
     nativeName: 'English',
-  },
-  {
-    code: 'zh-TW',
-    id: 'zh-TW',
-    fullName: 'Traditional Chinese',
-    nativeName: '繁體中文',
-    strictParity: true,
-  },
-  {
-    code: 'zh',
-    id: 'zh-CN',
-    fullName: 'Chinese',
-    nativeName: '中文',
-    strictParity: true,
   },
   {
     code: 'ru',
@@ -187,7 +171,7 @@ export function getLanguageSettingsOptions(): Array<{
 }
 
 /**
- * Gets a string containing all supported language IDs (e.g., "en-US|zh-CN").
+ * Gets a string containing all supported language IDs (e.g., "en-US|ja-JP").
  */
 export function getSupportedLanguageIds(separator = '|'): string {
   return SUPPORTED_LANGUAGES.map((l) => l.id).join(separator);

@@ -1020,20 +1020,20 @@ describe('executeSearchMemory', () => {
   });
 
   it('bounds window selection work for densely repeated body matches', async () => {
-    const body = '内存'.repeat(10_000);
+    const body = 'メモ'.repeat(10_000);
     const docs = Array.from({ length: 5 }, (_, index) =>
       doc(`project/dense-${index}.md`, { body }),
     );
 
     const result = await executeSearchMemory(
-      { mode: 'search', keywords: ['内存'], limit: 5 },
+      { mode: 'search', keywords: ['メモ'], limit: 5 },
       options(docs),
     );
 
     const searchResult = expectContentResult(result, 'search');
     expect(searchResult.results).toHaveLength(5);
     expect(
-      searchResult.results.every((item) => item.content?.includes('内存')),
+      searchResult.results.every((item) => item.content?.includes('メモ')),
     ).toBe(true);
   }, 500);
 

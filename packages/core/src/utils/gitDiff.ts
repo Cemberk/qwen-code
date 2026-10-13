@@ -526,7 +526,7 @@ export function parseGitDiff(
  * must decode them ourselves to preserve the real on-disk filename.
  *
  * Octal escapes are decoded as raw byte values then UTF-8-decoded en
- * masse so multi-byte sequences like `\346\226\207` (文) round-trip
+ * masse so multi-byte sequences like `\343\201\202` (あ) round-trip
  * correctly even though we never set quotepath=true ourselves.
  */
 export function unquoteCStylePath(s: string): string {

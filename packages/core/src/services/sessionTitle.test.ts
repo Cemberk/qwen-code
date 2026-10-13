@@ -190,8 +190,8 @@ describe('tryGenerateSessionTitle', () => {
       // the bare example.
       '  Add OAuth authentication flow  ',
       'Debug failing CI pipeline tests.',
-      // The CJK example.
-      '重构用户鉴权中间件',
+      // The refactor example.
+      'Refactor User Auth Middleware',
     ];
     for (const title of echoes) {
       const { config } = makeConfig({
@@ -218,7 +218,7 @@ describe('tryGenerateSessionTitle', () => {
       '(Fix login button on mobile)',
       '[Add OAuth authentication flow]',
       '{Debug failing CI pipeline tests}',
-      '（重构用户鉴权中间件）',
+      '（Refactor user auth middleware）',
       // Wrappers that survive sanitizeTitle with inner punctuation intact —
       // the guard must not depend on an enumerated bracket family.
       '["Fix login button on mobile"]',
@@ -292,14 +292,14 @@ describe('tryGenerateSessionTitle', () => {
     });
 
     await tryGenerateSessionTitle(config, new AbortController().signal, [
-      '你好',
+      'Hi there',
     ]);
 
     const call = generateJson.mock.calls[0][0] as {
       contents: Content[];
     };
     const prompt = call.contents[0]?.parts?.[0]?.text;
-    expect(prompt).toContain('你好');
+    expect(prompt).toContain('Hi there');
     expect(prompt).not.toContain('hidden channel instructions');
   });
 
@@ -316,14 +316,14 @@ describe('tryGenerateSessionTitle', () => {
     });
 
     await tryGenerateSessionTitle(config, new AbortController().signal, [
-      '你好',
-      '再见',
+      'Hi there',
+      'See you later',
     ]);
 
     const call = generateJson.mock.calls[0][0] as { contents: Content[] };
     const prompt = call.contents[0]?.parts?.[0]?.text;
-    expect(prompt).toContain('你好');
-    expect(prompt).toContain('再见');
+    expect(prompt).toContain('Hi there');
+    expect(prompt).toContain('See you later');
     expect(prompt).not.toContain('hidden first instructions');
     expect(prompt).not.toContain('hidden second instructions');
   });
@@ -393,12 +393,12 @@ describe('tryGenerateSessionTitle', () => {
     await tryGenerateSessionTitle(config, new AbortController().signal, [
       undefined,
       undefined,
-      '当前消息',
+      'Latest user message',
     ]);
 
     const call = generateJson.mock.calls[0][0] as { contents: Content[] };
     const prompt = call.contents[0]?.parts?.[0]?.text;
-    expect(prompt).toContain('当前消息');
+    expect(prompt).toContain('Latest user message');
     expect(prompt).not.toContain('undefined');
     expect(prompt).not.toContain('older hidden instructions');
     expect(prompt).not.toContain('current hidden instructions');
@@ -665,8 +665,8 @@ describe('sanitizeTitle', () => {
 
   it('strips trailing punctuation in ASCII and CJK', () => {
     expect(sanitizeTitle('Fix login button.')).toBe('Fix login button');
-    expect(sanitizeTitle('修复登录按钮。')).toBe('修复登录按钮');
-    expect(sanitizeTitle('修复登录按钮，')).toBe('修复登录按钮');
+    expect(sanitizeTitle('Fix login button。')).toBe('Fix login button');
+    expect(sanitizeTitle('Fix login button，')).toBe('Fix login button');
   });
 
   it('normalizes internal whitespace', () => {
@@ -716,8 +716,8 @@ describe('normalizeForEchoCompare', () => {
     expect(normalizeForEchoCompare('"Fix CI!"')).toBe(
       normalizeForEchoCompare('fix ci'),
     );
-    expect(normalizeForEchoCompare('重构鉴权！')).toBe(
-      normalizeForEchoCompare('重构鉴权'),
+    expect(normalizeForEchoCompare('Refactor auth！')).toBe(
+      normalizeForEchoCompare('Refactor auth'),
     );
   });
 

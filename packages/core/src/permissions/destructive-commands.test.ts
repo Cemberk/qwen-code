@@ -35,13 +35,6 @@ describe('userMentionsDiscard', () => {
     }
   });
 
-  it('returns true for Chinese discard keywords', () => {
-    const prompts = ['丢弃所有修改', '清除工作区', '重置到初始状态'];
-    for (const prompt of prompts) {
-      expect(userMentionsDiscard(prompt)).toBe(true);
-    }
-  });
-
   it('returns false for normal prompts', () => {
     const prompts = [
       'add a new feature',

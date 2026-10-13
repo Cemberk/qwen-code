@@ -21,7 +21,7 @@ function frameFromLines(lines: string[]): ReadonlyFrame {
   const cells: FrameCell[][] = lines.map((line) => {
     const row: FrameCell[] = [];
     for (const ch of line) {
-      if (/[一-鿿]/u.test(ch)) {
+      if (/[\u3040-\u30ff\u4e00-\u9fff]/u.test(ch)) {
         row.push(cell(ch, true));
         row.push(cell(''));
       } else {
@@ -58,8 +58,8 @@ describe('wordSpanAt', () => {
   });
 
   it('includes a wide glyph and its spacer in the run', () => {
-    const frame = frameFromLines(['a中b']);
-    // a=0, 中=1 (spacer=2), b=3 -> one non-space run 0..3
+    const frame = frameFromLines(['aあb']);
+    // a=0, あ=1 (spacer=2), b=3 -> one non-space run 0..3
     expect(wordSpanAt(frame, 1, 0)).toEqual({ sx: 0, sy: 0, ex: 3, ey: 0 });
   });
 });
@@ -126,7 +126,7 @@ describe('lineSpanAt', () => {
   });
 
   it('snaps a non-selectable wide-character spacer to its glyph', () => {
-    const frame = frameFromLines(['中']);
+    const frame = frameFromLines(['あ']);
     (frame.cells[0][1] as FrameCell).selectable = false;
 
     expect(lineSpanAt(frame, 1, 0)).toEqual({

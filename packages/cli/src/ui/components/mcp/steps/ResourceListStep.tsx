@@ -34,20 +34,20 @@ export const ResourceListStep: React.FC<ResourceListStepProps> = ({
 }) => {
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  // 动态计算 URI 列的最大宽度（基于实际内容）。URI 是用户实际要输入的内容，
-  // 因此给它更宽的列（最小 30，最大 60）。
+  // Compute the URI column width from actual content. The URI is what users
+  // actually type, so give it a wider column (min 30, max 60).
   const uriWidth = useMemo(() => {
     if (resources.length === 0) return 30;
     const maxLength = Math.max(...resources.map((r) => r.uri.length));
     return Math.min(Math.max(maxLength + 2, 30), 60);
   }, [resources]);
 
-  // 计算可视区域的起始索引（滚动窗口）
+  // Compute the start index of the visible area (scroll window)
   const scrollOffset = useMemo(() => {
     if (resources.length <= VISIBLE_RESOURCES_COUNT) {
       return 0;
     }
-    // 确保选中项在可视区域内
+    // Keep the selected item in the visible area
     if (selectedIndex < VISIBLE_RESOURCES_COUNT - 1) {
       return 0;
     }
@@ -57,7 +57,7 @@ export const ResourceListStep: React.FC<ResourceListStepProps> = ({
     );
   }, [selectedIndex, resources.length]);
 
-  // 当前可视的资源列表
+  // Currently visible resources
   const displayResources = useMemo(
     () => resources.slice(scrollOffset, scrollOffset + VISIBLE_RESOURCES_COUNT),
     [resources, scrollOffset],
@@ -92,7 +92,7 @@ export const ResourceListStep: React.FC<ResourceListStepProps> = ({
 
   return (
     <Box flexDirection="column">
-      {/* 资源列表 */}
+      {/* Resource list */}
       <Box flexDirection="column">
         {displayResources.map((resource, index) => {
           const actualIndex = scrollOffset + index;
@@ -101,7 +101,7 @@ export const ResourceListStep: React.FC<ResourceListStepProps> = ({
 
           return (
             <Box key={resource.uri}>
-              {/* 选择器 */}
+              {/* Selector */}
               <Box minWidth={2}>
                 <Text
                   color={isSelected ? theme.text.accent : theme.text.primary}
@@ -109,7 +109,7 @@ export const ResourceListStep: React.FC<ResourceListStepProps> = ({
                   {isSelected ? '❯' : ' '}
                 </Text>
               </Box>
-              {/* 资源 URI - 固定宽度 */}
+              {/* Resource URI - fixed width */}
               <Box width={uriWidth}>
                 <Text
                   color={isSelected ? theme.text.accent : theme.text.primary}
@@ -118,7 +118,7 @@ export const ResourceListStep: React.FC<ResourceListStepProps> = ({
                   {resource.uri}
                 </Text>
               </Box>
-              {/* 友好名称（若与 URI 不同） */}
+              {/* Friendly name (if different from URI) */}
               {label && (
                 <Text color={theme.text.secondary} wrap="truncate">
                   {label}
@@ -129,7 +129,7 @@ export const ResourceListStep: React.FC<ResourceListStepProps> = ({
         })}
       </Box>
 
-      {/* 滚动提示 */}
+      {/* Scroll hint */}
       {resources.length > VISIBLE_RESOURCES_COUNT && (
         <Box marginTop={1}>
           <Text color={theme.text.secondary}>

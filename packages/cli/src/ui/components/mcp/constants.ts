@@ -5,15 +5,15 @@
  */
 
 /**
- * MCP管理相关常量
+ * MCP management constants
  */
 /**
- * 工具列表可视区域最大显示数量
+ * Max number of tools shown in the visible area of the tool list
  */
 export const VISIBLE_TOOLS_COUNT = 10;
 
 /**
- * 资源列表可视区域最大显示数量
+ * Max number of resources shown in the visible area of the resource list
  */
 export const VISIBLE_RESOURCES_COUNT = 10;
 

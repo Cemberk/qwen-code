@@ -602,7 +602,7 @@ describe('estimateCompactToolGroupHeight', () => {
   it('uses terminal display width for wide characters', () => {
     const tool = toolCall({
       name: 'ReadFile',
-      description: '中文中文中文中文',
+      description: 'ひらがなひらがな',
     });
 
     expect(estimateCompactToolGroupHeight([tool], 12)).toBe(3);

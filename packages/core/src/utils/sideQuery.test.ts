@@ -149,12 +149,15 @@ describe('runSideQuery', () => {
       const dir = await mkdtemp(path.join(tmpdir(), 'qwen-side-query-'));
       try {
         const outputLanguagePath = path.join(dir, 'output-language.md');
-        await writeFile(outputLanguagePath, '请始终用中文回答用户可见文本。');
+        await writeFile(
+          outputLanguagePath,
+          'Always write user-visible text in French.',
+        );
         vi.mocked(mockConfig.getOutputLanguageFilePath).mockReturnValue(
           outputLanguagePath,
         );
         vi.mocked(mockBaseLlmClient.generateJson).mockResolvedValue({
-          title: '测试标题',
+          title: 'Test title',
         });
 
         await runSideQuery<{ title: string }>(mockConfig, {
@@ -173,7 +176,7 @@ describe('runSideQuery', () => {
           .calls[0][0];
         expect(callArg.systemInstruction).toContain('Generate a short title.');
         expect(callArg.systemInstruction).toContain(
-          '请始终用中文回答用户可见文本。',
+          'Always write user-visible text in French.',
         );
       } finally {
         await rm(dir, { recursive: true, force: true });
@@ -184,12 +187,15 @@ describe('runSideQuery', () => {
       const dir = await mkdtemp(path.join(tmpdir(), 'qwen-side-query-'));
       try {
         const outputLanguagePath = path.join(dir, 'output-language.md');
-        await writeFile(outputLanguagePath, '请始终用中文回答用户可见文本。');
+        await writeFile(
+          outputLanguagePath,
+          'Always write user-visible text in French.',
+        );
         vi.mocked(mockConfig.getOutputLanguageFilePath).mockReturnValue(
           outputLanguagePath,
         );
         vi.mocked(mockBaseLlmClient.generateJson).mockResolvedValue({
-          title: '测试标题',
+          title: 'Test title',
         });
 
         await runSideQuery<{ title: string }>(mockConfig, {

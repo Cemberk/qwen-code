@@ -42,9 +42,9 @@ describe('bundled locale fallback', () => {
       '../ui/commands/languageCommand.js'
     );
 
-    await setLanguageAsync('zh');
+    await setLanguageAsync('fr');
 
-    expect(t('show version info')).toBe('显示版本信息');
+    expect(t('show version info')).toBe('afficher les informations de version');
     expect(languageCommand.description).not.toBe(
       'View or change the language setting',
     );
@@ -57,7 +57,7 @@ describe('bundled locale fallback', () => {
     const localesDir = path.join(tempDir, 'locales');
     await fs.mkdir(localesDir, { recursive: true });
     await fs.writeFile(
-      path.join(localesDir, 'zh.js'),
+      path.join(localesDir, 'fr.js'),
       "globalThis.__qwenUserLocaleLoaded = true;\nexport default { 'show version info': 'user override' };\n",
       'utf-8',
     );
@@ -65,9 +65,11 @@ describe('bundled locale fallback', () => {
 
     try {
       const { setLanguageAsync, t } = await import('./index.js');
-      await setLanguageAsync('zh');
+      await setLanguageAsync('fr');
 
-      expect(t('show version info')).toBe('显示版本信息');
+      expect(t('show version info')).toBe(
+        'afficher les informations de version',
+      );
       expect(
         (globalThis as { __qwenUserLocaleLoaded?: boolean })
           .__qwenUserLocaleLoaded,
@@ -126,7 +128,7 @@ describe('locale code validation', () => {
     const { initializeI18n, resolveLanguageSetting, getCurrentLanguage } =
       await import('./index.js');
 
-    await initializeI18n(resolveLanguageSetting('zh'));
+    await initializeI18n(resolveLanguageSetting('fr'));
 
     expect(getCurrentLanguage()).toBe('en');
     expect(
@@ -139,7 +141,7 @@ describe('locale code validation', () => {
     const { resolveLanguage } = await import('./index.js');
 
     expect(resolveLanguage('es' as never)).toBe('en');
-    expect(resolveLanguage('zh-CN' as never)).toBe('zh');
+    expect(resolveLanguage('pt-BR' as never)).toBe('pt');
   });
 });
 
@@ -167,10 +169,10 @@ describe('language normalization', () => {
       './index.js'
     );
 
-    await setLanguageAsync('zh-CN');
+    await setLanguageAsync('ja-JP');
 
-    expect(getCurrentLanguage()).toBe('zh');
-    expect(t('show version info')).toBe('显示版本信息');
+    expect(getCurrentLanguage()).toBe('ja');
+    expect(t('show version info')).toBe('バージョン情報を表示');
   });
 
   it('normalizes explicit POSIX locale strings before loading translations', async () => {
@@ -186,43 +188,18 @@ describe('language normalization', () => {
 });
 
 describe('supported language resolution', () => {
-  it('prefers the longest supported locale match', async () => {
+  it('resolves locale IDs and POSIX spellings to a shipped language', async () => {
     const { resolveSupportedLanguage } = await import('./languages.js');
 
-    expect(resolveSupportedLanguage('zh-TW')).toBe('zh-TW');
-    expect(resolveSupportedLanguage('zh_TW')).toBe('zh-TW');
-    expect(resolveSupportedLanguage('zh-TW.UTF-8')).toBe('zh-TW');
-  });
-
-  it('keeps existing fallback behavior for generic Chinese locales', async () => {
-    const { resolveSupportedLanguage } = await import('./languages.js');
-
-    expect(resolveSupportedLanguage('zh-CN')).toBe('zh');
-    expect(resolveSupportedLanguage('zh-HK')).toBe('zh');
+    expect(resolveSupportedLanguage('pt-BR')).toBe('pt');
+    expect(resolveSupportedLanguage('pt_BR')).toBe('pt');
+    expect(resolveSupportedLanguage('pt-BR.UTF-8')).toBe('pt');
   });
 });
 
 describe('localizeToolDisplayName', () => {
   beforeEach(() => {
     vi.resetModules();
-  });
-
-  it('translates tool badges without colliding with generic UI strings', async () => {
-    const { setLanguageAsync, localizeToolDisplayName, t } = await import(
-      './index.js'
-    );
-    await setLanguageAsync('zh');
-
-    // The namespaced `toolDisplayName.*` key translates the badge...
-    expect(localizeToolDisplayName('Shell')).toBe('运行命令');
-    expect(localizeToolDisplayName('TodoList')).toBe('任务清单');
-    // Proper tool names / acronyms are intentionally kept in English.
-    expect(localizeToolDisplayName('Agent')).toBe('Agent');
-    expect(localizeToolDisplayName('Grep')).toBe('Grep');
-    expect(localizeToolDisplayName('Glob')).toBe('Glob');
-    expect(localizeToolDisplayName('Lsp')).toBe('LSP');
-    // ...while a same-spelled standalone UI string keeps its own value.
-    expect(t('Shell')).toBe('Shell');
   });
 
   it('falls back to the English display name for untranslated tools', async () => {
@@ -235,46 +212,5 @@ describe('localizeToolDisplayName', () => {
     expect(localizeToolDisplayName('Shell')).toBe('Shell');
     // An unknown tool name passes through unchanged.
     expect(localizeToolDisplayName('MysteryTool')).toBe('MysteryTool');
-  });
-
-  // Both translating locales, not just zh: `t()` has no cross-locale
-  // fallback, so a tool added to zh.js alone renders its raw English badge
-  // in a zh-TW session, next to fully-translated siblings.
-  it.each(['zh', 'zh-TW'] as const)(
-    'has a %s translation for every core tool display name',
-    async (locale) => {
-      const { setLanguageAsync, localizeToolDisplayName } = await import(
-        './index.js'
-      );
-      const { ToolDisplayNames } = await import('@qwen-code/qwen-code-core');
-      await setLanguageAsync(locale);
-
-      const KEEP_ENGLISH = new Set(['Agent', 'Grep', 'Glob']);
-      const untranslated = Object.values(ToolDisplayNames).filter(
-        (name) =>
-          !KEEP_ENGLISH.has(name) && localizeToolDisplayName(name) === name,
-      );
-      expect(untranslated).toEqual([]);
-    },
-  );
-
-  it('has a zh translation for every core tool display name', async () => {
-    const { setLanguageAsync, localizeToolDisplayName } = await import(
-      './index.js'
-    );
-    const { ToolDisplayNames } = await import('@qwen-code/qwen-code-core');
-    await setLanguageAsync('zh');
-
-    // Guards against a new tool landing without a `toolDisplayName.*` entry:
-    // every English display name (except the intentionally-English ones below)
-    // must resolve to a different (translated) zh string. check-i18n can't catch
-    // this because the keys are built dynamically, never as
-    // `t('toolDisplayName.X')` string literals.
-    const KEEP_ENGLISH = new Set(['Agent', 'Grep', 'Glob']);
-    const untranslated = Object.values(ToolDisplayNames).filter(
-      (name) =>
-        !KEEP_ENGLISH.has(name) && localizeToolDisplayName(name) === name,
-    );
-    expect(untranslated).toEqual([]);
   });
 });

@@ -812,7 +812,7 @@ describe('UpdateGoalTool', () => {
     expect(() =>
       build({
         status: 'complete',
-        reason: '界'.repeat(Math.floor(GOAL_PROPOSAL_REASON_MAX_BYTES / 3) + 1),
+        reason: 'あ'.repeat(Math.floor(GOAL_PROPOSAL_REASON_MAX_BYTES / 3) + 1),
       }),
     ).toThrow(/UTF-8 bytes/i);
   });

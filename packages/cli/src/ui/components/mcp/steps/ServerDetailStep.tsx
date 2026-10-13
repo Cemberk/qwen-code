@@ -17,7 +17,7 @@ import {
   formatServerCommand,
 } from '../utils.js';
 
-// 标签列宽度
+// Label column width
 const LABEL_WIDTH = 15;
 
 type ServerAction =
@@ -37,8 +37,8 @@ export const ServerDetailStep: React.FC<ServerDetailStepProps> = ({
   onBack,
   isActive = true,
 }) => {
-  // 受门控（#4615）但未审批的 server 被 discovery 跳过，不会进入连接流程，
-  // 审批原因优先展示。
+  // Gated (#4615) but unapproved servers are skipped by discovery and never
+  // connect, so the approval reason takes precedence.
   const awaitingApproval =
     !!server && !server.isDisabled && !!server.approvalState;
   const statusColor = server
@@ -47,7 +47,7 @@ export const ServerDetailStep: React.FC<ServerDetailStepProps> = ({
       : getStatusColor(server.status)
     : 'gray';
 
-  // 根据服务器状态动态生成可用操作
+  // Build the available actions from the server state
   const actions = useMemo(() => {
     const result: Array<{
       key: string;
@@ -59,7 +59,7 @@ export const ServerDetailStep: React.FC<ServerDetailStepProps> = ({
       return result;
     }
 
-    // 只在服务器未禁用且有工具时显示"查看工具"选项
+    // Show "View tools" only when the server is enabled and has tools
     if (!server.isDisabled && (server.toolCount ?? 0) > 0) {
       result.push({
         key: 'view-tools',
@@ -68,10 +68,10 @@ export const ServerDetailStep: React.FC<ServerDetailStepProps> = ({
       });
     }
 
-    // 只在调用方接入了 onViewResources 回调、且服务器未禁用并有资源时显示
-    // "查看资源"。onViewResources 是可选 prop：像扩展管理器（McpServerActionsView）
-    // 这类同样复用 ServerDetailStep 的调用方，若未接入资源子视图就不应出现一个
-    // 点了没反应的死操作。
+    // Show "View resources" only when the caller wired onViewResources and the
+    // server is enabled and has resources. onViewResources is optional: callers
+    // that reuse ServerDetailStep, like the extension manager
+    // (McpServerActionsView), must not get a dead action without that subview.
     if (
       onViewResources &&
       !server.isDisabled &&
@@ -84,8 +84,9 @@ export const ServerDetailStep: React.FC<ServerDetailStepProps> = ({
       });
     }
 
-    // 只在服务器未禁用且已断开连接时显示"重新连接"选项。受门控但未审批的 server
-    // 被 discovery 跳过，重连无法推进（仍是 pending/rejected），故隐藏以与状态文案一致。
+    // Show "Reconnect" only when the server is enabled and disconnected.
+    // Gated but unapproved servers are skipped by discovery, so reconnecting
+    // cannot progress (still pending/rejected); hide it to match the status.
     if (
       !server.isDisabled &&
       !awaitingApproval &&
@@ -98,8 +99,8 @@ export const ServerDetailStep: React.FC<ServerDetailStepProps> = ({
       });
     }
 
-    // 受门控但未审批的 server 显示"审批"按钮，让用户可以在 /mcp 中直接审批
-    // 而不必等待启动时的弹窗。
+    // Gated but unapproved servers get an "Approve" action so users can approve
+    // directly in /mcp instead of waiting for the startup prompt.
     if (awaitingApproval && onApprove) {
       result.push({
         key: 'approve',
@@ -108,7 +109,8 @@ export const ServerDetailStep: React.FC<ServerDetailStepProps> = ({
       });
     }
 
-    // 始终显示启用/禁用选项（扩展提供的服务器走扩展级禁用记录）
+    // Always show enable/disable (extension servers use extension-level
+    // disable records)
     result.push({
       key: 'toggle-disable',
       label: server.isDisabled ? t('Enable') : t('Disable'),
@@ -137,7 +139,7 @@ export const ServerDetailStep: React.FC<ServerDetailStepProps> = ({
 
   return (
     <Box flexDirection="column" gap={1}>
-      {/* 服务器详情 */}
+      {/* Server details */}
       <Box flexDirection="column">
         <Box>
           <Box width={LABEL_WIDTH}>
@@ -264,7 +266,7 @@ export const ServerDetailStep: React.FC<ServerDetailStepProps> = ({
         )}
       </Box>
 
-      {/* 操作列表 */}
+      {/* Action list */}
       <Box>
         <RadioButtonSelect<ServerAction>
           items={actions}

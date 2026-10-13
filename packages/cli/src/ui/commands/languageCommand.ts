@@ -50,14 +50,14 @@ function getCurrentOutputLanguage(context?: CommandContext): {
 
 /**
  * Parses user input to find a matching supported UI language.
- * Accepts locale codes (e.g., "zh"), IDs (e.g., "zh-CN"), or full names (e.g., "Chinese").
+ * Accepts locale codes (e.g., "ja"), IDs (e.g., "ja-JP"), or full names (e.g., "Japanese").
  */
 function parseUiLanguageArg(input: string): SupportedLanguage | null {
   return resolveSupportedLanguage(input) ?? null;
 }
 
 /**
- * Formats a UI language code for display (e.g., "zh" -> "中文 (Chinese) [zh-CN]").
+ * Formats a UI language code for display (e.g., "ja" -> "日本語 (Japanese) [ja-JP]").
  */
 function formatUiLanguageDisplay(lang: SupportedLanguage): string {
   const option = SUPPORTED_LANGUAGES.find((o) => o.code === lang);
@@ -291,7 +291,7 @@ export const languageCommand: SlashCommand = {
         }
       }
 
-      // Backward compatibility: direct language code (e.g., /language zh)
+      // Backward compatibility: direct language code (e.g., /language ja)
       const targetLang = parseUiLanguageArg(trimmedArgs);
       if (targetLang) {
         return setUiLanguage(context, targetLang);
@@ -389,7 +389,7 @@ export const languageCommand: SlashCommand = {
         return setUiLanguage(context, targetLang, parsed.scope);
       },
 
-      // Nested subcommands for each supported language (e.g., /language ui zh-CN)
+      // Nested subcommands for each supported language (e.g., /language ui ja-JP)
       subCommands: SUPPORTED_LANGUAGES.map(
         (lang): SlashCommand => ({
           name: lang.id,
@@ -447,7 +447,6 @@ export const languageCommand: SlashCommand = {
               t('Set LLM output language'),
               '',
               t('Usage: /language output <language>'),
-              `  ${t('Example: /language output 中文')}`,
               `  ${t('Example: /language output English')}`,
               `  ${t('Example: /language output 日本語')}`,
             ].join('\n'),

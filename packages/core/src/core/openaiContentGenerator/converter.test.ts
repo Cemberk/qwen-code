@@ -4009,7 +4009,7 @@ describe('OpenAIContentConverter', () => {
               message: {
                 role: 'assistant',
                 content: 'answer',
-                reasoning_content: '先仔细想',
+                reasoning_content: 'じっくり',
               },
               finish_reason: 'stop',
               logprobs: null,
@@ -4036,7 +4036,7 @@ describe('OpenAIContentConverter', () => {
               message: {
                 role: 'assistant',
                 content: 'answer',
-                reasoning: '先仔细想',
+                reasoning: 'じっくり',
               },
               finish_reason: 'stop',
               logprobs: null,
@@ -4063,7 +4063,7 @@ describe('OpenAIContentConverter', () => {
               message: {
                 role: 'assistant',
                 content: 'answer',
-                reasoning_content: '想'.repeat(10),
+                reasoning_content: 'あ'.repeat(10),
               },
               finish_reason: 'stop',
               logprobs: null,
@@ -4092,7 +4092,7 @@ describe('OpenAIContentConverter', () => {
                 message: {
                   role: 'assistant',
                   content: 'answer',
-                  reasoning_content: '先仔细想',
+                  reasoning_content: 'じっくり',
                 },
                 finish_reason: 'stop',
                 logprobs: null,
@@ -4135,11 +4135,11 @@ describe('OpenAIContentConverter', () => {
         }) as unknown as OpenAI.Chat.ChatCompletionChunk;
 
       converter.convertOpenAIChunkToLlm(
-        reasoningChunk('chunk-reasoning-1', '想'.repeat(1024)),
+        reasoningChunk('chunk-reasoning-1', 'あ'.repeat(1024)),
         context,
       );
       converter.convertOpenAIChunkToLlm(
-        reasoningChunk('chunk-reasoning-2', '想'),
+        reasoningChunk('chunk-reasoning-2', 'あ'),
         context,
       );
       const response = converter.convertOpenAIChunkToLlm(
@@ -4180,11 +4180,11 @@ describe('OpenAIContentConverter', () => {
         }) as unknown as OpenAI.Chat.ChatCompletionChunk;
 
       converter.convertOpenAIChunkToLlm(
-        reasoningChunk('chunk-short-reasoning-1', '先'),
+        reasoningChunk('chunk-short-reasoning-1', 'じ'),
         context,
       );
       converter.convertOpenAIChunkToLlm(
-        reasoningChunk('chunk-short-reasoning-2', '仔细想'),
+        reasoningChunk('chunk-short-reasoning-2', 'っくり'),
         context,
       );
       const response = converter.convertOpenAIChunkToLlm(
@@ -4204,7 +4204,7 @@ describe('OpenAIContentConverter', () => {
 
     it('estimates normalized cumulative reasoning without a completion count', () => {
       const context = withStreamParser();
-      for (const reasoning_content of ['先仔细想', '先仔细想再检查']) {
+      for (const reasoning_content of ['じっくり', 'じっくり見直す']) {
         converter.convertOpenAIChunkToLlm(
           {
             object: 'chat.completion.chunk',
@@ -4249,7 +4249,7 @@ describe('OpenAIContentConverter', () => {
           choices: [
             {
               index: 0,
-              delta: { reasoning_content: '想'.repeat(10) },
+              delta: { reasoning_content: 'あ'.repeat(10) },
               finish_reason: null,
               logprobs: null,
             },
@@ -4285,7 +4285,7 @@ describe('OpenAIContentConverter', () => {
             choices: [
               {
                 index: 0,
-                delta: { reasoning_content: '先仔细想' },
+                delta: { reasoning_content: 'じっくり' },
                 finish_reason: null,
                 logprobs: null,
               },

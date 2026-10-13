@@ -99,7 +99,7 @@ describe('WriteFileTool.toAutoClassifierInput', () => {
   });
 
   it('handles multi-byte characters correctly in byte count', () => {
-    const content = '你好世界';
+    const content = 'ひらがな';
     const result = tool.toAutoClassifierInput({
       file_path: '/x/y.ts',
       content,

@@ -851,7 +851,7 @@ describe('crawler', () => {
     it('should preserve non-ASCII tracked paths from git output', async () => {
       tmpDir = await createTmpDir({
         'café.txt': '',
-        '文档.md': '',
+        'ドキュメント.md': '',
         plain: ['nested.txt'],
       });
       await initGitRepo(tmpDir);
@@ -872,7 +872,11 @@ describe('crawler', () => {
       });
 
       expect(results).toEqual(
-        expect.arrayContaining(['café.txt', '文档.md', 'plain/nested.txt']),
+        expect.arrayContaining([
+          'café.txt',
+          'ドキュメント.md',
+          'plain/nested.txt',
+        ]),
       );
     });
 

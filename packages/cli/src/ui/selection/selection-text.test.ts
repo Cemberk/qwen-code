@@ -23,8 +23,8 @@ function frameFromLines(lines: string[]): ReadonlyFrame {
   const cells: FrameCell[][] = lines.map((line) => {
     const row: FrameCell[] = [];
     for (const ch of line) {
-      // Treat CJK as width-2: leading cell + empty spacer.
-      if (/[一-鿿]/u.test(ch)) {
+      // Treat kana as width-2: leading cell + empty spacer.
+      if (/[\u3040-\u30ff]/u.test(ch)) {
         row.push(cell(ch, true));
         row.push(cell(''));
       } else {
@@ -104,11 +104,11 @@ describe('getSelectedText', () => {
   });
 
   it('emits a wide glyph once and skips its spacer', () => {
-    const frame = frameFromLines(['a中b']);
-    // columns: a=0, 中=1 (spacer=2), b=3
-    expect(getSelectedText(frame, { sx: 0, sy: 0, ex: 3, ey: 0 })).toBe('a中b');
+    const frame = frameFromLines(['aあb']);
+    // columns: a=0, あ=1 (spacer=2), b=3
+    expect(getSelectedText(frame, { sx: 0, sy: 0, ex: 3, ey: 0 })).toBe('aあb');
     // Selecting only the wide glyph and its spacer yields the glyph once.
-    expect(getSelectedText(frame, { sx: 1, sy: 0, ex: 2, ey: 0 })).toBe('中');
+    expect(getSelectedText(frame, { sx: 1, sy: 0, ex: 2, ey: 0 })).toBe('あ');
   });
 
   it('preserves selectable source whitespace', () => {

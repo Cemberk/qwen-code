@@ -159,7 +159,7 @@ const MOCK_DATA: InsightData = {
             "You spent significant time in sessions that never progressed beyond greetings or warmups, with 28 out of 48 analyzed sessions being minimal interactions that didn't result in actual work being completed.",
           examples: [
             "28 sessions were just warmup_minimal with 'hi' greetings and no actual requests, consuming your time without delivering value",
-            "Multiple sessions had only 'hi' or 'nihao' exchanges in Chinese where you greeted back but no task was ever requested or completed",
+            "Multiple sessions had only 'hi' or 'hello' exchanges where you greeted back but no task was ever requested or completed",
           ],
         },
         {

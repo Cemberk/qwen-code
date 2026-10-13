@@ -218,8 +218,8 @@ Here are the most important commands for daily use:
 | `/clear`              | Clear conversation history and free up context   | `/clear` (aliases: `reset`, `new`) |
 | `/theme`              | Change Qwen Code visual theme                    | `/theme`                           |
 | `/language`           | View or change language settings                 | `/language`                        |
-| → `ui [language]`     | Set UI interface language                        | `/language ui zh-CN`               |
-| → `output [language]` | Set LLM output language                          | `/language output Chinese`         |
+| → `ui [language]`     | Set UI interface language                        | `/language ui ja-JP`               |
+| → `output [language]` | Set LLM output language                          | `/language output English`         |
 | `/quit`               | Exit Qwen Code immediately                       | `/quit` or `/exit`                 |
 
 See the [CLI reference](./features/commands) for a complete list of commands.

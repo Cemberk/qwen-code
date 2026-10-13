@@ -6837,7 +6837,7 @@ describe('runNonInteractive', () => {
         content: [
           {
             type: 'text',
-            text: '来自 envelope 的消息',
+            text: 'Message from the envelope',
           },
         ],
       },

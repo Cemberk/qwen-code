@@ -22,7 +22,7 @@ import { getErrorStatus } from '../../utils/errors.js';
  * End-to-end repro for #10693: an OpenAI-compatible route that serves
  * text fine but 400s any request carrying an inline media part (the
  * idealab preset family rejecting `image_url` data URLs with
- * "用户没有正确设置模型参数"). A real local HTTP server plays the gateway:
+ * "model parameters were not set correctly"). A real local HTTP server plays the gateway:
  * bodies containing an inline media part get a 400, everything else gets
  * a valid chat completion. Drives the real OpenAI SDK + pipeline path.
  *
@@ -34,7 +34,7 @@ import { getErrorStatus } from '../../utils/errors.js';
 
 const GATEWAY_REJECTION = JSON.stringify({
   error: {
-    message: '用户没有正确设置模型参数',
+    message: 'model parameters were not set correctly',
     type: 'invalid_request_error',
     code: 'invalid_parameter',
   },

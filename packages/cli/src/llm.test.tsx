@@ -1488,7 +1488,7 @@ describe('llm.tsx main function', () => {
       'isRaw',
     );
     Object.defineProperty(process.stdin, 'isTTY', {
-      value: false, // 在 stream-json 模式下应为 false
+      value: false, // should be false in stream-json mode
       configurable: true,
     });
     Object.defineProperty(process.stdin, 'isRaw', {

@@ -67,7 +67,7 @@ model instead of printing one edge at a time:
 - Top-down diagrams are ranked into horizontal layers.
 - Left-to-right diagrams are ranked into vertical columns when they fit.
 - Multiple outgoing edges from the same node are drawn as one fork with
-  bracketed edge labels such as `[Yes]`, `[No]`, `[是]`, and `[否]`.
+  bracketed edge labels such as `[Yes]` and `[No]` (wide CJK labels too).
 - Back edges and cycles are summarized in a `Cycles:` section with explicit
   `↩ to <node>` markers. This avoids unstable long cross-diagram routes in
   terminal fonts while keeping the loop semantics visible.

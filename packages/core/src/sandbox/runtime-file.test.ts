@@ -82,14 +82,14 @@ describe('runtime file mutation routing', () => {
       config,
       {
         path: path.join(root, 'a'),
-        content: '世界\nline',
+        content: 'こんにちは\nline',
         _meta: { bom: true, lineEnding: 'crlf' },
       },
       null,
       new AbortController().signal,
     );
     expect(vi.mocked(writeSandboxFile).mock.calls[0][1].content).toEqual(
-      Buffer.from('\ufeff世界\r\nline'),
+      Buffer.from('\ufeffこんにちは\r\nline'),
     );
     expect(write).not.toHaveBeenCalled();
     expect(fs.existsSync(path.join(root, 'a'))).toBe(false);

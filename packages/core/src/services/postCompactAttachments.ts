@@ -359,7 +359,7 @@ export async function readFileSizeAdaptive(
   }
 
   // Decode once and compare against the cap by character length, not
-  // byte length. A 3-byte UTF-8 character (e.g. Chinese) would otherwise
+  // byte length. A 3-byte UTF-8 character (e.g. CJK) would otherwise
   // be triple-counted against the budget. The decoded value is reused
   // for the embed branch so this costs nothing extra.
   const decoded = buffer.toString('utf-8');

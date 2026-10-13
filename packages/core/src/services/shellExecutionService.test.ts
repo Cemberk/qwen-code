@@ -790,13 +790,13 @@ describe('ShellExecutionService', () => {
     });
 
     it('should correctly decode multi-byte characters split across chunks', async () => {
-      const { result } = await simulateExecution('echo "你好"', (pty) => {
-        const multiByteChar = '你好';
+      const { result } = await simulateExecution('echo "こんにちは"', (pty) => {
+        const multiByteChar = 'こんにちは';
         pty.onData.mock.calls[0][0](multiByteChar.slice(0, 1));
         pty.onData.mock.calls[0][0](multiByteChar.slice(1));
         pty.onExit.mock.calls[0][0]({ exitCode: 0, signal: null });
       });
-      expect(result.output.trim()).toBe('你好');
+      expect(result.output.trim()).toBe('こんにちは');
     });
 
     it('bounds buffered PTY output before building the final string', async () => {
@@ -3212,14 +3212,14 @@ describe('ShellExecutionService child_process fallback', () => {
     });
 
     it('should correctly decode multi-byte characters split across chunks', async () => {
-      const { result } = await simulateExecution('echo "你好"', (cp) => {
-        const multiByteChar = Buffer.from('你好', 'utf-8');
+      const { result } = await simulateExecution('echo "こんにちは"', (cp) => {
+        const multiByteChar = Buffer.from('こんにちは', 'utf-8');
         cp.stdout?.emit('data', multiByteChar.slice(0, 2));
         cp.stdout?.emit('data', multiByteChar.slice(2));
         cp.emit('exit', 0, null);
         cp.emit('close', 0, null);
       });
-      expect(result.output.trim()).toBe('你好');
+      expect(result.output.trim()).toBe('こんにちは');
     });
 
     it('bounds buffered child_process output before building the final string', async () => {
