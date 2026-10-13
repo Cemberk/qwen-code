@@ -19,7 +19,7 @@ Model files come from the Hugging Face cache (`~/.cache/huggingface/hub`, or
 from the `huggingface_hub` package, naming the repository and the GGUF file:
 
 ```bash
-hf download Qwen/Qwen3-8B-GGUF Qwen3-8B-Q4_K_M.gguf
+hf download unsloth/Qwen3.6-35B-A3B-GGUF Qwen3.6-35B-A3B-UD-IQ3_S.gguf
 ```
 
 This command contacts huggingface.co; Qwen Code itself does not. If you pick
@@ -28,12 +28,18 @@ run.
 
 ## The built-in list
 
-| `id`                  | Repository and file                                                                     | Size    |
-| --------------------- | --------------------------------------------------------------------------------------- | ------- |
-| `qwen3-8b` (default)  | `Qwen/Qwen3-8B-GGUF`, `Qwen3-8B-Q4_K_M.gguf`                                            | ~5.0 GB |
-| `qwen3-4b`            | `Qwen/Qwen3-4B-GGUF`, `Qwen3-4B-Q4_K_M.gguf`                                            | ~2.5 GB |
-| `qwen3-14b`           | `Qwen/Qwen3-14B-GGUF`, `Qwen3-14B-Q4_K_M.gguf`                                          | ~9.0 GB |
-| `qwen3-coder-30b-a3b` | `unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF`, `Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf` | ~19 GB  |
+| `id`                        | Repository and file                                             | Size    | Context |
+| --------------------------- | --------------------------------------------------------------- | ------- | ------- |
+| `qwen3.6-35b-a3b` (default) | `unsloth/Qwen3.6-35B-A3B-GGUF`, `Qwen3.6-35B-A3B-UD-IQ3_S.gguf` | 13.7 GB | 64K     |
+| `qwen3-14b`                 | `Qwen/Qwen3-14B-GGUF`, `Qwen3-14B-Q4_K_M.gguf`                  | ~9.0 GB | 32K     |
+| `qwen3-8b`                  | `Qwen/Qwen3-8B-GGUF`, `Qwen3-8B-Q4_K_M.gguf`                    | ~5.0 GB | 32K     |
+| `qwen3-4b`                  | `Qwen/Qwen3-4B-GGUF`, `Qwen3-4B-Q4_K_M.gguf`                    | 2.5 GB  | 32K     |
+
+The default, Qwen3.6 35B A3B, is a mixture-of-experts model: 35B parameters,
+of which 3B are used per token, so it generates about as fast as a 4B model.
+At this quantization it is the largest Qwen that fits the GPU memory of a
+24 GB Mac (16 GB by default) together with a 64K context. Close memory-heavy
+apps while it runs; otherwise macOS moves their memory to swap.
 
 A model needs roughly its size in memory, plus room for the context. On a Mac
 with 24 GB, models up to about 14B fit comfortably.
@@ -115,8 +121,8 @@ supplies.
 ## Limits
 
 - The first reply of a session takes longest: Qwen Code's instructions and tool
-  definitions come to about 17,500 tokens, which a 4B model on an M4 takes
-  about 90 seconds to read (a larger model takes longer). Later replies reuse
+  definitions come to about 17,500 tokens, which Qwen3.6 35B A3B on an M4
+  takes about 70 seconds to read. Later replies reuse
   the engine's cache and start within a second. `qwen -p` starts a new engine
   each time, so every run pays this cost.
 - Each Qwen Code session runs its own engine and loads its own copy of the

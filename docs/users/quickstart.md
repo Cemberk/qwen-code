@@ -38,10 +38,10 @@ You can also run the bundle directly with `node dist/cli.js`.
 ## Step 2: Pick a model
 
 Qwen Code comes with a list of Qwen models that it runs itself. With nothing
-configured it runs the first one, `qwen3-8b`. Download it once:
+configured it runs the first one, `qwen3.6-35b-a3b` (13.7 GB). Download it once:
 
 ```bash
-hf download Qwen/Qwen3-8B-GGUF Qwen3-8B-Q4_K_M.gguf
+hf download unsloth/Qwen3.6-35B-A3B-GGUF Qwen3.6-35B-A3B-UD-IQ3_S.gguf
 ```
 
 Then start Qwen Code and send a prompt; the engine starts on the first

@@ -36,8 +36,25 @@ export const LOCAL_MODEL_BASE_URL = 'http://127.0.0.1:0/v1';
 export const LOCAL_MODEL_KEY_ENV = 'QWEN_LOCAL_MODEL_KEY';
 export const LOCAL_MODEL_KEY_PLACEHOLDER = 'local';
 
-/** The default `localModels`. */
+/**
+ * The default `localModels`. The first, a 35B mixture-of-experts model with
+ * 3B active parameters, is the largest Qwen that fits a 24 GB Mac's GPU
+ * memory with room for a 64K context.
+ */
 export const BUILT_IN_LOCAL_MODELS: readonly LocalModelConfig[] = [
+  {
+    id: 'qwen3.6-35b-a3b',
+    name: 'Qwen3.6 35B A3B (UD-IQ3_S, 13.7 GB)',
+    repo: 'unsloth/Qwen3.6-35B-A3B-GGUF',
+    file: 'Qwen3.6-35B-A3B-UD-IQ3_S.gguf',
+    contextSize: 65536,
+  },
+  {
+    id: 'qwen3-14b',
+    name: 'Qwen3 14B (Q4_K_M)',
+    repo: 'Qwen/Qwen3-14B-GGUF',
+    file: 'Qwen3-14B-Q4_K_M.gguf',
+  },
   {
     id: 'qwen3-8b',
     name: 'Qwen3 8B (Q4_K_M)',
@@ -49,18 +66,6 @@ export const BUILT_IN_LOCAL_MODELS: readonly LocalModelConfig[] = [
     name: 'Qwen3 4B (Q4_K_M)',
     repo: 'Qwen/Qwen3-4B-GGUF',
     file: 'Qwen3-4B-Q4_K_M.gguf',
-  },
-  {
-    id: 'qwen3-14b',
-    name: 'Qwen3 14B (Q4_K_M)',
-    repo: 'Qwen/Qwen3-14B-GGUF',
-    file: 'Qwen3-14B-Q4_K_M.gguf',
-  },
-  {
-    id: 'qwen3-coder-30b-a3b',
-    name: 'Qwen3 Coder 30B A3B (Q4_K_M, ~19 GB)',
-    repo: 'unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF',
-    file: 'Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf',
   },
 ];
 

@@ -60,9 +60,10 @@ itself.
 | `file`        | Yes      | The `.gguf` file in the repository. For split files, the first part.      |
 | `contextSize` | No       | Context window in tokens, default 32768. Sizes the engine and compaction. |
 
-- The default value is a built-in list: Qwen3 8B (the default), 4B and 14B
-  at Q4_K_M, and Qwen3 Coder 30B A3B. Setting `localModels` in
-  `~/.qwen/settings.json` replaces it; `[]` turns local models off.
+- The default value is a built-in list: Qwen3.6 35B A3B at UD-IQ3_S with a
+  64K context (the default), then Qwen3 14B, 8B and 4B at Q4_K_M. Setting
+  `localModels` in `~/.qwen/settings.json` replaces it; `[]` turns local
+  models off.
 - `localModels` is read from user and system settings only. A workspace's
   settings cannot add a model, because an entry decides which file the engine
   loads.
@@ -165,6 +166,20 @@ itself.
   the draft reads the prompt too. N-gram speculation needs no extra model,
   costs about 5% on new text and made an edit-style reply 6× faster
   (30 → 185 tokens/s).
+- **Qwen3.6 35B A3B as the default.** It is a mixture-of-experts model with
+  3B of 35B parameters active per token and hybrid attention (three Gated
+  DeltaNet layers per attention layer), so its context cache is small. On the
+  M4 the UD-IQ3_S file needs 12.7 GiB for weights, 0.6 GiB of cache per 32K
+  tokens and 0.4 GiB of fixed state and buffers: 14.8 GiB at 64K, inside the
+  16 GiB GPU limit; at 128K llama.cpp moves layers to the CPU. Against Qwen3
+  4B in the same 17,500-token context it reached the first token in 70 s
+  instead of 88 s and generated 21.3 tokens/s instead of 17.6. Larger
+  quantizations (17–22 GB) exceed the GPU limit, and larger models do not fit
+  the disk or would stream from the SSD.
+- **No MTP, no 8-bit cache.** The model's multi-token-prediction head (a
+  separate 1.2 GB GGUF, `--spec-type draft-mtp`) ran out of GPU memory next
+  to the weights. An 8-bit context cache made generation slower (16.9 tokens/s)
+  for a cache that is already small.
 - **No downloads in qwen.** Every earlier phase removed network code. The user
   runs `hf download` knowingly.
 - **Placeholder base URL** instead of a port reserved at startup: a persisted
@@ -186,9 +201,15 @@ itself.
   small models and longer for large ones. Fast, vision and subagent models
   that differ from the main model cause such switches.
 - Each qwen session runs its own engine and its own copy of the model.
-- Preset repository and file names come from the author's knowledge; qwen
-  cannot check them. A wrong name shows up when `hf download` fails. The 4B
-  preset was downloaded and run.
+- Preset repository and file names for the Qwen3 8B and 14B entries come from
+  the author's knowledge; qwen cannot check them. A wrong name shows up when
+  `hf download` fails. The Qwen3.6 and Qwen3 4B presets were downloaded and
+  run.
+- Running Qwen3.6 35B A3B next to memory-heavy apps on a 24 GB Mac pushes
+  their memory to swap (swap use rose from 5 GB to 9 GB in testing).
+- In one of three runs Qwen3.6 35B A3B answered in Chinese after an English
+  prompt, although its reasoning was in English; `general.outputLanguage`
+  pins the reply language.
 - On Linux the engine runs without the Seatbelt profile.
 
 ## Validation
@@ -216,8 +237,10 @@ itself.
   auth dialog. An interactive `/model` switch between two local models sent
   the next prompt to the newly loaded engine. A model that is not downloaded
   failed within a second with the `hf download` command.
-- Speed: the measurements under Decisions, from cold engines, one or two runs
-  each.
+- Qwen3.6 35B A3B through `qwen -p`: wrote and ran the Python file and
+  reported `42` in three runs (111–116 s each, including the cold prompt).
+- Speed and memory: the measurements under Decisions, from cold engines, one
+  or two runs each.
 
 ## Acceptance criteria
 
@@ -233,5 +256,5 @@ itself.
 
 - Share one engine between qwen sessions, so two sessions do not load two
   copies of a model and `qwen -p` keeps a warm prompt cache.
-- Run Mixture-of-Experts models larger than memory by keeping expert weights
-  memory-mapped (`--n-cpu-moe`), for example Qwen3 Coder 30B A3B on 24 GB.
+- Use the multi-token-prediction head once there is GPU memory for it (a
+  raised `iogpu.wired_limit_mb`, or a smaller quantization).
