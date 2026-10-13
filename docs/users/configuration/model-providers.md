@@ -4,6 +4,8 @@ Qwen Code connects only to local OpenAI-compatible model servers (Ollama, LM Stu
 
 For first-time setup (the `/auth` wizard, environment variables and CLI flags), see [Authentication](auth.md).
 
+To have Qwen Code run Qwen models itself, without a server of your own, see [Local Models](local-models.md). Those models are listed in `/model` ahead of the `modelProviders` entries.
+
 ## Overview
 
 `modelProviders` accepts exactly one key, `openai`. Its value is **an array of model definitions** (`ModelConfig[]`). Any other key, such as `anthropic` or `gemini`, is a configuration error, and so is a model entry without a valid loopback `baseUrl`.

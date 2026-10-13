@@ -51,6 +51,17 @@ describe('PROJECT_ENV_HARDCODED_EXCLUSIONS', () => {
     );
   });
 
+  // Local models load from the Hugging Face cache; a project .env must not
+  // point qwen at model files the repository supplies.
+  it.each([
+    'HF_HUB_CACHE',
+    'HUGGINGFACE_HUB_CACHE',
+    'HF_HOME',
+    'XDG_CACHE_HOME',
+  ])('keeps the model cache location %s operator-owned', (key) => {
+    expect(PROJECT_ENV_HARDCODED_EXCLUSIONS).toContain(key);
+  });
+
   it('keeps daemon memory scope operator-owned', () => {
     expect(PROJECT_ENV_HARDCODED_EXCLUSIONS).toContain(
       'QWEN_CODE_MEMORY_PROJECT_SCOPE',

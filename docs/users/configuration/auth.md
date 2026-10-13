@@ -8,9 +8,11 @@ Qwen Code talks only to a **local OpenAI-compatible model server** running on yo
 
 The only supported auth type is `openai` (OpenAI Chat Completions).
 
+None of this is needed for the built-in [Local Models](local-models.md): Qwen Code runs those itself and selects the first one when nothing else is configured. The rest of this page is about servers you run yourself.
+
 > [!important]
 >
-> **The base URL is required and must be loopback.** It must use `http` or `https` and its host must be exactly `127.0.0.1`, `::1` (written `[::1]` in a URL), or `localhost`. Qwen Code rejects any other host (LAN addresses, `0.0.0.0`, other host names) at startup or when you save the configuration. There is no default base URL and no default model ID. Requests to the model server never follow HTTP redirects.
+> **The base URL is required and must be loopback.** It must use `http` or `https` and its host must be exactly `127.0.0.1`, `::1` (written `[::1]` in a URL), or `localhost`. Qwen Code rejects any other host (LAN addresses, `0.0.0.0`, other host names) at startup or when you save the configuration. There is no default base URL for a server you run yourself. Requests to the model server never follow HTTP redirects.
 
 Common base URLs:
 
@@ -25,7 +27,7 @@ Set the base URL to the API's `/v1` root, not the full `/v1/chat/completions` pa
 
 ## Option 1: Interactive setup with `/auth`
 
-Start `qwen`. If no model server is configured yet, Qwen Code opens the setup wizard. You can reopen it at any time with the `/auth` command. The wizard ("Local OpenAI-compatible server") has these steps:
+Start `qwen`. If no model server is configured and `localModels` is empty, Qwen Code opens the setup wizard. You can reopen it at any time with the `/auth` command. The wizard ("Local OpenAI-compatible server") has these steps:
 
 1. **Base URL**: the loopback URL of your server, for example `http://127.0.0.1:11434/v1`.
 2. **API Key**: any non-empty value if your server doesn't check keys (for example `ollama` or `lm-studio`). If you started the server with a key (for example vLLM's or `llama-server`'s `--api-key`), enter that key.

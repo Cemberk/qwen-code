@@ -20,6 +20,9 @@ import {
   StrictMissingModelIdError,
 } from '../models/modelConfigErrors.js';
 import { getLocalBaseUrlError } from '../utils/local-base-url.js';
+import { LOCAL_MODEL_BASE_URL } from '../local-models/local-models.js';
+import { LocalModelContentGenerator } from '../local-models/local-model-content-generator.js';
+import { getLocalModelServer } from '../local-models/local-model-server.js';
 import { PROVIDER_SOURCED_FIELDS } from '../models/constants.js';
 import { preloadRuntimeFetchModule } from '../utils/runtimeFetchOptions.js';
 import type { ReasoningEffort } from './reasoning-effort.js';
@@ -409,20 +412,32 @@ export async function createContentGenerator(
   // (issue #7264).
   await preloadRuntimeFetchModule();
 
-  return new LazyContentGenerator(async () => {
-    try {
-      const [{ createOpenAIContentGenerator }, { LoggingContentGenerator }] =
-        await Promise.all([
-          import('./openaiContentGenerator/index.js'),
-          import('./loggingContentGenerator/index.js'),
-        ]);
-      return new LoggingContentGenerator(
-        createOpenAIContentGenerator(generatorConfig, config),
-        config,
-        generatorConfig,
-      );
-    } catch (error) {
-      throw wrapProviderLoadError(error);
-    }
-  });
+  const load = (loadConfig: ContentGeneratorConfig) =>
+    new LazyContentGenerator(async () => {
+      try {
+        const [{ createOpenAIContentGenerator }, { LoggingContentGenerator }] =
+          await Promise.all([
+            import('./openaiContentGenerator/index.js'),
+            import('./loggingContentGenerator/index.js'),
+          ]);
+        return new LoggingContentGenerator(
+          createOpenAIContentGenerator(loadConfig, config),
+          config,
+          loadConfig,
+        );
+      } catch (error) {
+        throw wrapProviderLoadError(error);
+      }
+    });
+
+  // A local model's entry carries a placeholder base URL; each request goes to
+  // the engine qwen runs for that model.
+  if (generatorConfig.baseUrl === LOCAL_MODEL_BASE_URL) {
+    return new LocalModelContentGenerator(
+      generatorConfig,
+      getLocalModelServer(),
+      load,
+    );
+  }
+  return load(generatorConfig);
 }

@@ -464,6 +464,37 @@ describe('modelConfigUtils', () => {
       );
     });
 
+    it('uses the first configured provider when nothing names a model', () => {
+      const first: ProviderModelConfig = {
+        id: 'first-model',
+        baseUrl: 'http://127.0.0.1:0/v1',
+      };
+      const settings = makeMockSettings({
+        model: {},
+        modelProviders: {
+          [AuthType.USE_OPENAI]: [
+            first,
+            { id: 'second-model', baseUrl: 'http://127.0.0.1:1/v1' },
+          ],
+        },
+      });
+      vi.mocked(resolveModelConfig).mockReturnValue({
+        config: { model: 'first-model', apiKey: '', baseUrl: '' },
+        sources: {},
+        warnings: [],
+      });
+
+      resolveCliGenerationConfig({
+        argv: {},
+        settings,
+        selectedAuthType: AuthType.USE_OPENAI,
+      });
+
+      expect(vi.mocked(resolveModelConfig)).toHaveBeenCalledWith(
+        expect.objectContaining({ modelProvider: first }),
+      );
+    });
+
     describe('provider disambiguation by settings.model.baseUrl', () => {
       const ollama: ProviderModelConfig = {
         id: 'qwen3.7-max',

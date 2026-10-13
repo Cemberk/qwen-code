@@ -10,7 +10,7 @@ Make sure you have:
 
 - A **terminal** or command prompt open
 - A code project to work with
-- A local OpenAI-compatible model server running on this machine, such as [Ollama](https://ollama.com), [LM Studio](https://lmstudio.ai), [vLLM](https://docs.vllm.ai) or llama.cpp (`llama-server`), with at least one model available
+- A model engine: `mlx-lm` (`uv tool install mlx-lm`) on Apple Silicon or llama.cpp (`brew install llama.cpp`), and a Qwen model downloaded with `hf download` (see [Local Models](./configuration/local-models)). Alternatively, any OpenAI-compatible model server running on this machine, such as [Ollama](https://ollama.com), [LM Studio](https://lmstudio.ai) or [vLLM](https://docs.vllm.ai)
 
 ## Step 1: Build Qwen Code
 
@@ -35,28 +35,33 @@ alias qwen="node $PWD/dist/cli.js"
 
 You can also run the bundle directly with `node dist/cli.js`.
 
-## Step 2: Connect your local model server
+## Step 2: Pick a model
 
-When you start an interactive session with the `qwen` command, you'll be prompted to connect a model server:
-
-```bash
-# You'll be prompted to connect a local model server on first use
-qwen
-```
+Qwen Code comes with a list of Qwen models that it runs itself. With nothing
+configured it runs the first one, `qwen3-8b-mlx`. Download it once:
 
 ```bash
-# Or run /auth anytime to change the server or models
-/auth
+hf download mlx-community/Qwen3-8B-4bit
 ```
 
-The setup wizard asks for:
+Then start Qwen Code and send a prompt; the engine starts on the first
+request and stops when you exit. Use `/model` to switch to another model from
+the list. See [Local Models](./configuration/local-models) for the full list,
+the GGUF models for llama.cpp, and how to change the list.
+
+Qwen Code only connects to model servers on this machine, and never
+downloads anything itself.
+
+### Using your own model server
+
+To use a server you run yourself, run `/auth`. The setup wizard asks for:
 
 1. **Base URL** of the server's OpenAI-compatible API. The host must be `127.0.0.1`, `::1` or `localhost`. For example: Ollama `http://127.0.0.1:11434/v1`, LM Studio `http://localhost:1234/v1`, vLLM `http://127.0.0.1:8000/v1`, llama.cpp `http://127.0.0.1:8080/v1`.
 2. **API key**: any non-empty value if your server doesn't check keys (for example `ollama`).
 3. **Model IDs**: picked from the server's model list when it provides one, or typed in.
 4. Optional advanced settings, then a review of the JSON saved to `settings.json`.
 
-Qwen Code only connects to model servers on this machine. Remote and cloud endpoints are rejected.
+Remote and cloud endpoints are rejected.
 
 > [!note]
 >
@@ -64,7 +69,7 @@ Qwen Code only connects to model servers on this machine. Remote and cloud endpo
 
 > [!tip]
 >
-> To connect a model server, start Qwen Code and run `/auth`. Use `/doctor` to check your current configuration at any time. See the [Authentication](./configuration/auth) page for details.
+> Use `/doctor` to check your current configuration at any time. See the [Authentication](./configuration/auth) page for details.
 
 ## Step 3: Start your first session
 

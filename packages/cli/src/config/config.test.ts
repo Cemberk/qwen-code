@@ -20,6 +20,8 @@ import {
   Storage,
   SessionIdCaseConflictError,
   FatalConfigError,
+  BUILT_IN_LOCAL_MODELS,
+  LOCAL_MODEL_BASE_URL,
 } from '@qwen-code/qwen-code-core';
 import { normalizeModelProposedGoals } from './config.js';
 import {
@@ -3530,19 +3532,55 @@ describe('loadCliConfig model selection', () => {
     expect(config.getModel()).toBe('qwen3-coder-plus');
   });
 
-  it('has no default model if nothing is set', async () => {
+  it('runs the first local model if nothing is set', async () => {
     process.argv = ['node', 'script.js']; // No model set.
     const argv = await parseArguments();
     const config = await loadCliConfig(
       {
-        // No model set.
+        // No model or auth type set.
       },
       argv,
       undefined,
       [],
     );
 
+    expect(config.getModelsConfig().getCurrentAuthType()).toBe(
+      AuthType.USE_OPENAI,
+    );
+    expect(config.getModel()).toBe(BUILT_IN_LOCAL_MODELS[0].id);
+    expect(config.getModelsConfig().getGenerationConfig().baseUrl).toBe(
+      LOCAL_MODEL_BASE_URL,
+    );
+  });
+
+  it('has no default model if nothing is set and localModels is empty', async () => {
+    process.argv = ['node', 'script.js']; // No model set.
+    const argv = await parseArguments();
+    const config = await loadCliConfig(
+      { localModels: [] },
+      argv,
+      undefined,
+      [],
+    );
+
+    expect(config.getModelsConfig().getCurrentAuthType()).toBeUndefined();
     expect(config.getModel()).toBe('');
+  });
+
+  it('reports an invalid localModels entry as a config error', async () => {
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments();
+    const err = await loadCliConfig(
+      {
+        localModels: [
+          { id: 'q', format: 'gguf', repo: 'Qwen/Qwen3-8B-GGUF' },
+        ] as Settings['localModels'],
+      },
+      argv,
+    ).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(FatalConfigError);
+    expect((err as Error).message).toContain('localModels[0].file');
   });
 
   it('always prefers model from argvs', async () => {

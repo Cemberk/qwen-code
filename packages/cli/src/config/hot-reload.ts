@@ -8,9 +8,15 @@ import equal from 'fast-deep-equal';
 import {
   createDebugLogger,
   ApprovalMode,
+  BUILT_IN_LOCAL_MODELS,
   type Config,
+  getLocalModelServer,
   getMCPServerStatus,
+  type LocalModelConfig,
   type MCPServerConfig,
+  type ModelProvidersConfig,
+  validateLocalModels,
+  withLocalModelProviders,
 } from '@qwen-code/qwen-code-core';
 import type { LoadedSettings } from './settings.js';
 import type { SettingsWatcher } from './settingsWatcher.js';
@@ -298,8 +304,32 @@ export function registerModelProvidersHotReload(
   // skip every later unchanged event — re-attempt ONLY refreshAuth on
   // subsequent events (never the registry reload) until it succeeds.
   let refreshAuthRetryPending = false;
+  // The last localModels error shown, so an unrelated edit does not repeat it.
+  let shownLocalModelsError: string | undefined;
   const reconcile = async () => {
-    const next = settings.merged.modelProviders;
+    let localModels: LocalModelConfig[];
+    let next: ModelProvidersConfig | undefined;
+    try {
+      localModels = validateLocalModels(
+        settings.merged.localModels ?? BUILT_IN_LOCAL_MODELS,
+      );
+      next = withLocalModelProviders(
+        settings.merged.modelProviders,
+        localModels,
+      );
+      shownLocalModelsError = undefined;
+    } catch (err) {
+      // Applied state is unchanged, so the next event retries.
+      const message = err instanceof Error ? err.message : String(err);
+      if (message !== shownLocalModelsError) {
+        shownLocalModelsError = message;
+        appEvents.emit(
+          AppEvent.LogError,
+          `localModels in settings is invalid and was not applied: ${message}`,
+        );
+      }
+      return;
+    }
     const providersUnchanged = equal(
       config.getModelProvidersConfig() ?? {},
       next ?? {},
@@ -323,6 +353,7 @@ export function registerModelProvidersHotReload(
         return;
       }
     }
+    getLocalModelServer().setModels(localModels);
 
     const authType = config.getAuthType();
     if (!authType) {

@@ -7,7 +7,8 @@
 import {
   type ModelProposedGoalsMode,
   ApprovalMode,
-  type AuthType,
+  AuthType,
+  BUILT_IN_LOCAL_MODELS,
   Config,
   FileDiscoveryService,
   getAllMemoryFilenames,
@@ -42,6 +43,13 @@ import {
   stripAnsiAndControl,
   type OutputStyleDefinition,
   validateModelProvidersConfig,
+  getLocalModelServer,
+  LOCAL_MODEL_KEY_ENV,
+  LOCAL_MODEL_KEY_PLACEHOLDER,
+  type LocalModelConfig,
+  type ModelProvidersConfig,
+  validateLocalModels,
+  withLocalModelProviders,
 } from '@qwen-code/qwen-code-core';
 import { extensionsCommand } from '../commands/extensions.js';
 import {
@@ -1800,25 +1808,41 @@ export async function loadCliConfig(
       : undefined;
   }
 
-  const selectedAuthType =
-    (argv.authType as AuthType | undefined) ||
-    (bareMode ? undefined : settings.security?.auth?.selectedType) ||
-    /* getAuthTypeFromEnv means no authType was explicitly provided, we infer the authType from env vars */
-    getAuthTypeFromEnv();
-
-  // Validate modelProviders up front (only `openai` entries with a loopback
-  // baseUrl are accepted). The registry validator throws a bare Error, and
-  // every startup shape passes through here, even without a selected
+  // Validate modelProviders and localModels up front (only `openai` entries
+  // with a loopback baseUrl are accepted). The validators throw a bare Error,
+  // and every startup shape passes through here, even without a selected
   // model/auth type — classify it as a FatalConfigError so the user gets the
   // message and the "please fix the configuration file(s)" hint instead of a
   // stack trace before the TUI starts.
+  let localModels: LocalModelConfig[];
+  let modelProviders: ModelProvidersConfig | undefined;
   try {
+    // Before the local entries go in front, so errors name the user's indexes.
     validateModelProvidersConfig(settings.modelProviders);
+    localModels = validateLocalModels(
+      settings.localModels ?? BUILT_IN_LOCAL_MODELS,
+    );
+    modelProviders = withLocalModelProviders(
+      settings.modelProviders,
+      localModels,
+    );
   } catch (err) {
     throw new FatalConfigError(
       err instanceof Error ? err.message : String(err),
     );
   }
+  getLocalModelServer().setModels(localModels);
+  if (localModels.length > 0) {
+    process.env[LOCAL_MODEL_KEY_ENV] = LOCAL_MODEL_KEY_PLACEHOLDER;
+  }
+
+  const selectedAuthType =
+    (argv.authType as AuthType | undefined) ||
+    (bareMode ? undefined : settings.security?.auth?.selectedType) ||
+    /* getAuthTypeFromEnv means no authType was explicitly provided, we infer the authType from env vars */
+    getAuthTypeFromEnv() ||
+    // With nothing configured, run the first local model.
+    (localModels.length > 0 ? AuthType.USE_OPENAI : undefined);
 
   // Unified resolution of generation config with source attribution. Note the
   // up-front provider validation above is what classifies invalid configuration;
@@ -1832,7 +1856,7 @@ export async function loadCliConfig(
       openaiLogging: argv.openaiLogging,
       openaiLoggingDir: argv.openaiLoggingDir,
     },
-    settings,
+    settings: { ...settings, modelProviders },
     selectedAuthType,
     env: process.env as Record<string, string | undefined>,
   });
@@ -1951,7 +1975,7 @@ export async function loadCliConfig(
     sessionId = normalizeSessionIdForLookup(argv['sessionId']);
   }
 
-  const modelProvidersConfig = settings.modelProviders;
+  const modelProvidersConfig = modelProviders;
 
   // Assemble MCP servers across all sources in precedence order (user/default
   // settings < project `.mcp.json` < workspace/system settings < `--mcp-config`)

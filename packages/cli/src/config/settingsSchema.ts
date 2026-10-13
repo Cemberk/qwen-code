@@ -9,10 +9,12 @@ import type {
   TelemetrySettings,
   AuthType,
   ChatCompressionSettings,
+  LocalModelConfig,
   ModelProvidersConfig,
 } from '@qwen-code/qwen-code-core';
 import {
   ApprovalMode,
+  BUILT_IN_LOCAL_MODELS,
   DEFAULT_MAX_SUBAGENT_DEPTH,
   GOAL_MAX_ACTIVE_MINUTES_CAP,
   GOAL_MAX_TURNS_CAP,
@@ -277,6 +279,18 @@ const SETTINGS_SCHEMA = {
     default: {} as ModelProvidersConfig,
     description:
       'Models served by the local OpenAI-compatible server. The only supported key is "openai", an array of model configurations; every entry needs a baseUrl whose host is 127.0.0.1, ::1 or localhost.',
+    showInDialog: false,
+    mergeStrategy: MergeStrategy.REPLACE,
+  },
+
+  localModels: {
+    type: 'array',
+    label: 'Local Models',
+    category: 'Model',
+    requiresRestart: false,
+    default: BUILT_IN_LOCAL_MODELS as LocalModelConfig[],
+    description:
+      'Qwen models qwen runs itself from the Hugging Face cache, listed in /model ahead of modelProviders. Each entry has an id, an optional name, a format ("mlx", run by mlx_lm.server, or "gguf", run by llama-server), a Hugging Face repo, the .gguf file for gguf models, and an optional contextSize. Replaces the built-in list.',
     showInDialog: false,
     mergeStrategy: MergeStrategy.REPLACE,
   },

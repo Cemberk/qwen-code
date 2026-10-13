@@ -15,6 +15,9 @@ import {
   applyProviderInstallPlan,
   type ProviderConfig,
   type ProviderSetupInputs,
+  BUILT_IN_LOCAL_MODELS,
+  validateLocalModels,
+  withLocalModelProviders,
 } from '@qwen-code/qwen-code-core';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { LoadedSettings } from '../../config/settings.js';
@@ -123,7 +126,16 @@ export const useAuthCommand = (
         );
         await applyProviderInstallPlan(plan, {
           settings: createLoadedSettingsAdapter(settings),
-          reloadModelProviders: (mp) => config.reloadModelProvidersConfig(mp),
+          // Keep the local models listed ahead of the saved providers.
+          reloadModelProviders: (mp) =>
+            config.reloadModelProvidersConfig(
+              withLocalModelProviders(
+                mp,
+                validateLocalModels(
+                  settings.merged.localModels ?? BUILT_IN_LOCAL_MODELS,
+                ),
+              ),
+            ),
           syncAuthState: (authType, modelId, baseUrl) =>
             config.syncModelSelection(authType, modelId, baseUrl),
           refreshAuth: (authType) => config.refreshAuth(authType),

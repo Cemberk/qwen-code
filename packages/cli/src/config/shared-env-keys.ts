@@ -44,6 +44,12 @@ export const PROJECT_ENV_HARDCODED_EXCLUSIONS = [
   // tools.workflowNameOnly, which a workspace may only turn on; a project
   // .env must not be able to unset the operator's exported value.
   'QWEN_CODE_WORKFLOW_NAME_ONLY',
+  // These locate the Hugging Face cache that local models load from. A
+  // project must not point qwen at model files the repository supplies.
+  'HF_HUB_CACHE',
+  'HUGGINGFACE_HUB_CACHE',
+  'HF_HOME',
+  'XDG_CACHE_HOME',
   // NODE_TLS_REJECT_UNAUTHORIZED=0 makes Node skip TLS certificate
   // verification process-wide. A project `.env` must never set it — that would
   // let an untrusted repo silently turn off MITM protection. The initial `.env`

@@ -23,6 +23,7 @@ import {
   SessionService,
   setStartupEventSink,
   createDebugLogger,
+  getLocalModelServer,
   persistSessionUsage,
   uiTelemetryService,
 } from '@qwen-code/qwen-code-core';
@@ -923,6 +924,7 @@ export async function main() {
     // Register cleanup for MCP clients as early as possible
     // This ensures MCP server subprocesses are properly terminated on exit
     registerCleanup(() => config.shutdown());
+    registerCleanup(() => getLocalModelServer().stop());
 
     // Install the uncaughtException handler once the session ID is known.
     // Before this point VP mode is not active, so Node's default stderr

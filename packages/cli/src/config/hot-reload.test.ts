@@ -19,10 +19,14 @@ import * as fs from 'node:fs';
 import {
   ApprovalMode,
   AuthType,
+  BUILT_IN_LOCAL_MODELS,
+  getLocalModelServer,
   ModelRegistry,
   type Config,
+  type LocalModelConfig,
   type MCPServerConfig,
   type ModelProvidersConfig,
+  withLocalModelProviders,
 } from '@qwen-code/qwen-code-core';
 import type { LoadedSettings, Settings } from './settings.js';
 import type {
@@ -619,7 +623,8 @@ describe('registerModelProvidersHotReload', () => {
       }),
     } as unknown as SettingsWatcher;
 
-    merged = {} as Settings;
+    // No local models, so the registry holds exactly the configured providers.
+    merged = { localModels: [] } as Settings;
     settings = { merged } as LoadedSettings;
     makeModelConfig(undefined);
   });
@@ -920,5 +925,58 @@ describe('registerModelProvidersHotReload', () => {
       merged.modelProviders,
     );
     expect(refreshAuth).toHaveBeenCalledOnce();
+  });
+
+  it('lists edited local models ahead of the providers and gives them to the engine manager', async () => {
+    const setModels = vi.spyOn(getLocalModelServer(), 'setModels');
+    try {
+      registerModelProvidersHotReload(watcher, settings, config);
+      const local: LocalModelConfig[] = [
+        { id: 'q', format: 'mlx', repo: 'mlx-community/Qwen3-8B-4bit' },
+      ];
+      merged.localModels = local;
+      merged.modelProviders = {
+        openai: [{ id: 'gpt-x', baseUrl: 'http://127.0.0.1:11434/v1' }],
+      } as ModelProvidersConfig;
+      await listener([]);
+
+      expect(reloadModelProvidersConfig).toHaveBeenLastCalledWith(
+        withLocalModelProviders(merged.modelProviders, local),
+      );
+      expect(setModels).toHaveBeenLastCalledWith(local);
+      expect(refreshAuth).toHaveBeenCalledWith(AuthType.USE_OPENAI);
+    } finally {
+      setModels.mockRestore();
+    }
+  });
+
+  it('uses the built-in local models when localModels is unset', async () => {
+    delete merged.localModels;
+    registerModelProvidersHotReload(watcher, settings, config);
+    await Promise.resolve();
+
+    expect(reloadModelProvidersConfig).toHaveBeenCalledWith(
+      withLocalModelProviders(undefined, BUILT_IN_LOCAL_MODELS),
+    );
+  });
+
+  it('reports an invalid localModels edit once and keeps the applied models', async () => {
+    registerModelProvidersHotReload(watcher, settings, config);
+    const spy = vi.fn();
+    appEvents.on(AppEvent.LogError, spy);
+    try {
+      merged.localModels = [
+        { id: 'q', format: 'gguf', repo: 'Qwen/Qwen3-8B-GGUF' },
+      ];
+      await listener([]);
+      await listener([]);
+
+      expect(spy).toHaveBeenCalledOnce();
+      expect(String(spy.mock.calls[0][0])).toContain('localModels[0].file');
+      expect(reloadModelProvidersConfig).not.toHaveBeenCalled();
+      expect(refreshAuth).not.toHaveBeenCalled();
+    } finally {
+      appEvents.off(AppEvent.LogError, spy);
+    }
   });
 });

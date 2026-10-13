@@ -152,6 +152,11 @@ export function resolveCliGenerationConfig(
       }
     }
   }
+  // Nothing chose a model: use the first configured one, as the model
+  // registry does.
+  if (!resolvedModel && selectedAuthType) {
+    resolvedModel = getProviderModels(settings.modelProviders)[0]?.id;
+  }
 
   const authType = selectedAuthType;
 

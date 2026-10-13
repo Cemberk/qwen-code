@@ -294,6 +294,7 @@ export const WORKSPACE_RESTRICTED_ROOT_SETTINGS = [
   'hooks',
   'disableAllHooks',
   'modelProviders',
+  'localModels',
   'model',
   'fastModel',
   'compactionModel',

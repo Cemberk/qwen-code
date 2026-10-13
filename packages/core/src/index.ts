@@ -44,6 +44,8 @@ export {
   assertLocalBaseUrl,
   getLocalBaseUrlError,
 } from './utils/local-base-url.js';
+export * from './local-models/local-models.js';
+export { getLocalModelServer } from './local-models/local-model-server.js';
 
 // Output formatting
 export * from './output/json-formatter.js';
