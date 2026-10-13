@@ -176,7 +176,7 @@ itself.
   generated 17.6 tokens/s, llama.cpp 16.5, MLX with a Qwen3 0.6B draft model
   15.4 and MLX 13.1. MLX read a cold prompt about 10% faster (80 s against
   88 s to the first token). MLX also lacks authentication and loads whatever
-  model a request names. The user chose to drop it.
+  model a request names, so it was removed.
 - **N-gram speculation, no draft model.** On short prompts a 0.6B draft
   doubled MLX's generation but slowed llama.cpp (32 → 27 tokens/s); at agent
   context it added 18% to MLX and made each cold start 17% slower, because
