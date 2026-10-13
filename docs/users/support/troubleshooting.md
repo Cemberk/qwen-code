@@ -71,8 +71,8 @@ This guide provides solutions to common issues and debugging tips, including top
 - **Error: Command not found (when attempting to run Qwen Code with `qwen`).**
   - **Cause:** The CLI is not correctly installed or it is not in your system's `PATH`.
   - **Solution:**
-    - If you linked `qwen` with `npm link packages/cli`, check that your `npm` global binary directory is in your `PATH`.
-    - Otherwise, run the bundle directly (e.g. `node dist/cli.js ...`). To update, pull the latest changes from the repository, and then rebuild using the commands `npm run build` and `npm run bundle`.
+    - Check that `~/.local/bin/qwen` exists and that `~/.local/bin` is on your `PATH`; see [Add the `qwen` command](../quickstart#add-the-qwen-command).
+    - Otherwise, run the bundle directly with Node.js 22 (e.g. `node dist/cli.js ...`). To update, pull the latest changes from the repository, and then rebuild using the commands `npm run build` and `npm run bundle`.
 
 - **Error: `MODULE_NOT_FOUND` or import errors.**
   - **Cause:** Dependencies are not installed correctly, or the project hasn't been built.

@@ -8,49 +8,123 @@ This quickstart guide will have you using AI-powered coding assistance in just a
 
 Make sure you have:
 
-- A **terminal** or command prompt open
+- A **terminal** open
+- A Mac with Apple silicon and [Homebrew](https://brew.sh). The default model
+  needs 24 GB of memory; smaller Macs can use a smaller model (see
+  [Step 2](#step-2-pick-a-model))
 - A code project to work with
-- llama.cpp (`brew install llama.cpp`) and a Qwen model downloaded with `hf download` (see [Local Models](./configuration/local-models)). Alternatively, any OpenAI-compatible model server running on this machine, such as [Ollama](https://ollama.com), [LM Studio](https://lmstudio.ai) or [vLLM](https://docs.vllm.ai)
 
-## Step 1: Build Qwen Code
+## Step 1: Install Qwen Code
 
 This fork is built from source. It is not published to a package registry, and
-there is no installer or update channel.
+there is no installer or update channel. The steps below download tools,
+dependencies and a model. After that, Qwen Code itself connects only to this
+machine.
 
-### Build from source
+### Install the tools
 
-**Prerequisites**
+| Tool       | What it is for                     | Install                                                    |
+| ---------- | ---------------------------------- | ---------------------------------------------------------- |
+| Node.js 22 | Builds and runs Qwen Code          | `nvm install 22` with [nvm](https://github.com/nvm-sh/nvm) |
+| llama.cpp  | Runs the models (`llama-server`)   | `brew install llama.cpp`                                   |
+| `hf`       | Downloads models from Hugging Face | `brew install hf`                                          |
 
-Make sure you have Node.js 22 or later installed.
+Node.js 22 does not have to be your default Node.js version. The `qwen`
+command you create below always runs Node.js 22, so tools that need another
+default version keep working.
+
+### Build Qwen Code
 
 ```bash
 git clone <your fork of this repository> qwen-code
 cd qwen-code
+nvm use 22
 corepack pnpm install --frozen-lockfile
 npm run build && npm run bundle
-
-# Define a `qwen` command, e.g. in ~/.zshrc or ~/.bashrc
-alias qwen="node $PWD/dist/cli.js"
 ```
 
-You can also run the bundle directly with `node dist/cli.js`.
+The build produces a single file, `dist/cli.js`.
 
-## Step 2: Pick a model
+### Add the `qwen` command
 
-Qwen Code comes with a list of Qwen models that it runs itself. With nothing
-configured it runs the first one, `qwen3.6-35b-a3b` (13.7 GB). Download it once:
+In the same terminal, still in the checkout with Node.js 22 active, create a
+script named `qwen` in `~/.local/bin`:
+
+```bash
+mkdir -p ~/.local/bin
+cat > ~/.local/bin/qwen <<EOF
+#!/bin/sh
+exec "$(command -v node)" "$PWD/dist/cli.js" "\$@"
+EOF
+chmod +x ~/.local/bin/qwen
+```
+
+This writes the full paths of Node.js 22 and of your checkout into the
+script, for example:
+
+```sh
+#!/bin/sh
+exec "/Users/you/.nvm/versions/node/v22.22.0/bin/node" "/Users/you/qwen-code/dist/cli.js" "$@"
+```
+
+Unlike a shell alias, the script works in every shell and from other scripts,
+whatever your default Node.js version is. If `~/.local/bin` is not on your
+`PATH` yet, add this line to `~/.zshrc` (or `~/.bashrc`) and open a new
+terminal:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Check that the command works from another directory:
+
+```bash
+cd ~
+qwen --version
+```
+
+### Download the default model
+
+With nothing configured, Qwen Code runs Qwen3.6 35B A3B (13.7 GB). Download it
+once into the Hugging Face cache:
 
 ```bash
 hf download unsloth/Qwen3.6-35B-A3B-GGUF Qwen3.6-35B-A3B-UD-IQ3_S.gguf
 ```
 
-Then start Qwen Code and send a prompt; the engine starts on the first
-request and stops when you exit. Use `/model` to switch to another model from
-the list. See [Local Models](./configuration/local-models) for the full list
-and how to change it.
+### Update Qwen Code
 
-Qwen Code only connects to model servers on this machine, and never
-downloads anything itself.
+After pulling new changes into your checkout, rebuild it with Node.js 22:
+
+```bash
+cd qwen-code
+nvm use 22
+corepack pnpm install --frozen-lockfile   # only when pnpm-lock.yaml changed
+npm run build && npm run bundle
+```
+
+The `qwen` command runs the new build. Create it again only if you move the
+checkout, or remove the Node.js version it names (for example with
+`nvm uninstall`).
+
+## Step 2: Pick a model
+
+Qwen Code comes with a list of Qwen models that it runs itself with llama.cpp.
+It starts the engine on your first prompt and stops it when you exit. With
+nothing configured it runs the first one, `qwen3.6-35b-a3b`.
+
+- `/models` lists the models and marks the downloaded ones.
+  `/models download <id>` and `/models remove <id>` download and delete a
+  model with `hf`.
+- `/model` switches to another model in the list and saves the choice.
+  `qwen --model qwen3-8b` picks one for a single session.
+
+On a Mac with less than 24 GB of memory, use `qwen3-8b` or `qwen3-4b`. See
+[Local Models](./configuration/local-models) for the full list and how to
+change it.
+
+Qwen Code connects only to model servers on this machine. It downloads a
+model only when you run `/models download`.
 
 ### Using your own model server
 
@@ -76,13 +150,27 @@ Remote and cloud endpoints are rejected.
 Open your terminal in any project directory and start Qwen Code:
 
 ```bash
-# optional
 cd /path/to/your/project
-# start qwen
 qwen
 ```
 
-You'll see the Qwen Code welcome screen with your session information, recent conversations, and latest updates. Type `/help` for available commands.
+The first time you open a folder, Qwen Code asks whether you trust it. Trust
+it only if you trust its code; see [Trusted Folders](./configuration/trusted-folders).
+
+You'll see the Qwen Code welcome screen with your session information and
+recent conversations. Type `/help` for available commands.
+
+Qwen models occasionally switch language partway through a reply. To keep
+replies in English, run this once, before your first prompt. Qwen Code saves
+it for later sessions:
+
+```
+/language output English
+```
+
+Your first prompt starts the model. With the default model, the first reply
+of a session takes about 70 seconds while the model reads Qwen Code's
+instructions. Later replies in the same session start within about a second.
 
 ## Chat with Qwen Code
 

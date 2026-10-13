@@ -115,7 +115,7 @@ To start the Qwen Code application from the source code (after building), run th
 npm start
 ```
 
-If you'd like to run the source build outside of the qwen-code folder, you can utilize `npm link path/to/qwen-code/packages/cli` (see: [docs](https://docs.npmjs.com/cli/v9/commands/npm-link)) to run with `qwen`
+To run the build from any folder as `qwen`, add the `qwen` command described in the [Quickstart](../users/quickstart#add-the-qwen-command).
 
 ### Running Tests
 

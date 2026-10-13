@@ -15,8 +15,9 @@ brew install llama.cpp
 ```
 
 Model files come from the Hugging Face cache (`~/.cache/huggingface/hub`, or
-`HF_HUB_CACHE` / `HF_HOME` when set). Download a model with the `hf` command
-from the `huggingface_hub` package, naming the repository and the GGUF file:
+`HF_HUB_CACHE` / `HF_HOME` when set). Install the `hf` command
+(`brew install hf`) and download a model, naming the repository
+and the GGUF file:
 
 ```bash
 hf download unsloth/Qwen3.6-35B-A3B-GGUF Qwen3.6-35B-A3B-UD-IQ3_S.gguf

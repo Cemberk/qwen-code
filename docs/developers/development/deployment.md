@@ -19,12 +19,9 @@ npm run bundle
 node dist/cli.js
 ```
 
-To get a `qwen` command on your `PATH`, link the local package:
-
-```bash
-npm link packages/cli
-qwen
-```
+To get a `qwen` command on your `PATH` that runs this build, add the `qwen`
+command described in the
+[Quickstart](../../users/quickstart#add-the-qwen-command).
 
 ### 2. Development mode
 

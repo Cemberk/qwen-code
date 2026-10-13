@@ -3,18 +3,28 @@
 This fork is built from source, so uninstalling means removing what the build
 created.
 
-## Remove the linked `qwen` command
+## Remove the `qwen` command
 
-If you linked the CLI with `npm link packages/cli`, unlink it:
+Delete the script the [Quickstart](../quickstart#add-the-qwen-command)
+created:
 
 ```bash
-npm uninstall -g @qwen-code/qwen-code
+rm ~/.local/bin/qwen
 ```
 
 ## Remove the source checkout
 
 Delete the directory you cloned the repository into. The build output
 (`dist/` and each package's `dist/`) lives inside it.
+
+## Remove downloaded models (optional)
+
+Models live in the Hugging Face cache. Remove each model's repository with
+`/models remove <id>` before you uninstall, or with `hf`:
+
+```bash
+hf cache rm model/unsloth/Qwen3.6-35B-A3B-GGUF
+```
 
 ## Remove your configuration and data (optional)
 

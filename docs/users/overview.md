@@ -4,19 +4,12 @@
 
 ## Get started in 30 seconds
 
-### Build Qwen Code:
+### Install Qwen Code:
 
-This fork is built from source and needs Node.js 22 or later:
-
-```bash
-git clone <your fork of this repository> qwen-code
-cd qwen-code
-corepack pnpm install --frozen-lockfile
-npm run build && npm run bundle
-alias qwen="node $PWD/dist/cli.js"
-```
-
-See [Quickstart](./quickstart#build-from-source) for details.
+This fork is built from source. Follow
+[Step 1 of the Quickstart](./quickstart#step-1-install-qwen-code): install
+Node.js 22, llama.cpp and `hf`, build Qwen Code, add the `qwen` command and
+download a model.
 
 ### Start using Qwen Code:
 
@@ -25,7 +18,7 @@ cd your-project
 qwen
 ```
 
-Qwen Code runs against a local OpenAI-compatible model server on this machine, such as Ollama, LM Studio, vLLM or llama.cpp. On first launch you'll be prompted for the server's base URL (for example `http://127.0.0.1:11434/v1` for Ollama), an API key value and the model IDs to use. See [Authentication](./configuration/auth) for details. Then let's start with understanding your codebase. Try one of these commands:
+Qwen Code runs a Qwen model on this machine with llama.cpp. The first reply of a session takes about 70 seconds while the model loads. To use your own model server on this machine instead, such as Ollama, LM Studio or vLLM, run `/auth`; see [Authentication](./configuration/auth). Then let's start with understanding your codebase. Try one of these commands:
 
 ```
 what does this project do?
