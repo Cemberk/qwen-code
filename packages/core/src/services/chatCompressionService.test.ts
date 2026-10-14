@@ -3298,24 +3298,33 @@ describe('ChatCompressionService.compress cheap-gate uses estimated tokens', () 
 });
 
 describe('computeThresholds', () => {
-  it('32K window — degenerate ceiling, proportional floor governs auto', () => {
-    // effectiveWindow 12K, ceiling = 12K - 13K = -1K (≤ 0) → auto falls back to
-    // the proportional floor (0.85 * 32K).
+  it('32K window — reserves scale to a quarter; the ceiling governs auto', () => {
+    // scale 0.25: reserve 5K, buffers 3.25K / 5K / 0.75K. ew = 27K,
+    // ceiling = 27K - 3.25K = 23.75K < proportional(27.2K) → auto = ceiling.
     const t = computeThresholds(32_000);
-    expect(t.warn).toBe(7_200); // auto - WARN_BUFFER = 27.2K - 20K
-    expect(t.auto).toBe(27_200); // proportional floor: 0.85 * 32K
-    expect(t.hard).toBe(30_200); // auto + HARD_BUFFER = 27.2K + 3K
-    expect(t.effectiveWindow).toBe(12_000);
+    expect(t.warn).toBe(18_750); // auto - 5K
+    expect(t.auto).toBe(23_750);
+    expect(t.hard).toBe(26_250); // ew - 0.75K
+    expect(t.effectiveWindow).toBe(27_000);
   });
 
-  it('60K window — ceiling governs auto; hard stays above auto (issue #4945)', () => {
-    // ceiling = ew(40K) - 13K = 27K < proportional(51K) → auto = ceiling.
+  it('60K window — reserves scale with the window; hard stays above auto (issue #4945)', () => {
+    // scale 0.46875: reserve 9,375, buffers 6,094 / 9,375 / 1,406.
+    // ceiling = ew(50,625) - 6,094 = 44,531 < proportional(51K) → auto = ceiling.
     const t = computeThresholds(60_000);
-    expect(t.warn).toBe(7_000); // auto - WARN_BUFFER = 27K - 20K
-    expect(t.auto).toBe(27_000); // min(0.85*60K=51K, ew-13K=27K)
-    expect(t.hard).toBe(37_000); // ew - HARD_BUFFER = 40K - 3K
+    expect(t.warn).toBe(35_156);
+    expect(t.auto).toBe(44_531);
+    expect(t.hard).toBe(49_219); // ew - 1,406
     expect(t.hard).toBeGreaterThan(t.auto);
-    expect(t.effectiveWindow).toBe(40_000);
+    expect(t.effectiveWindow).toBe(50_625);
+  });
+
+  it('64K local-model window compacts at about 75%, not half', () => {
+    // scale 0.512: reserve 10,240, buffers 6,656 / 10,240 / 1,536.
+    const t = computeThresholds(65_536);
+    expect(t.auto).toBe(48_640); // ew(55,296) - 6,656
+    expect(t.warn).toBe(38_400);
+    expect(t.hard).toBe(53_760);
   });
 
   it('128K window — ceiling governs auto (leaves room to compress)', () => {
@@ -3350,12 +3359,10 @@ describe('computeThresholds', () => {
     expect(t.warn).toBeGreaterThanOrEqual(0);
     expect(t.warn).toBeLessThanOrEqual(t.auto);
     expect(t.auto).toBeLessThanOrEqual(t.hard);
-    // window < SUMMARY_RESERVE: effectiveWindow clamps to 0 and the ceiling is
-    // negative, so auto falls back to the proportional floor (0.85 * 10K = 8.5K);
-    // warn = max(0, 8.5K - 20K) = 0.
-    expect(t.auto).toBe(8_500);
-    expect(t.warn).toBe(0);
-    expect(t.effectiveWindow).toBe(0);
+    // scale 0.078125: reserve 1,563, buffer 1,016 → ceiling 7,421 < 8.5K.
+    expect(t.auto).toBe(7_421);
+    expect(t.warn).toBe(5_858);
+    expect(t.effectiveWindow).toBe(8_437);
   });
 
   it('zero window returns effectiveWindow=0 and non-negative tiers', () => {
@@ -3383,17 +3390,17 @@ describe('computeThresholds', () => {
       expect(explicitDefault).toEqual(defaultResult);
     });
 
-    it('custom pct=0.5 lowers the proportional floor on a degenerate window', () => {
-      // 32K: ceiling ≤ 0 → auto = proportional floor = 0.5 * 32K.
+    it('custom pct=0.5 pulls auto below the ceiling on a small window', () => {
+      // 32K: proportional 16K < ceiling 23.75K → auto = 0.5 * 32K.
       const t = computeThresholds(32_000, 0.5);
       expect(t.auto).toBe(16_000); // 0.5 * 32K
-      expect(t.warn).toBe(0); // max(0, 16K - 20K)
+      expect(t.warn).toBe(11_000); // 16K - 5K
     });
 
-    it('custom pct=0.9 raises the proportional floor on a degenerate window', () => {
+    it('custom pct=0.9 cannot push auto past the ceiling on a small window', () => {
       const t = computeThresholds(32_000, 0.9);
-      expect(t.auto).toBe(28_800); // 0.9 * 32K
-      expect(t.warn).toBe(8_800); // 28.8K - 20K
+      expect(t.auto).toBe(23_750); // ceiling < 0.9 * 32K
+      expect(t.warn).toBe(18_750); // 23.75K - 5K
     });
 
     it('custom pct DOES pull auto earlier on large windows (ceiling semantics)', () => {
@@ -3416,9 +3423,9 @@ describe('computeThresholds', () => {
       }
     });
 
-    it('pct=0 produces auto=0 for small windows (proportional floor is 0)', () => {
+    it('pct=0 produces auto=0 for small windows', () => {
       const t = computeThresholds(32_000, 0);
-      // 0 * 32000 = 0; ceiling is negative → auto = proportional floor = 0.
+      // 0 * 32000 = 0 < ceiling → auto = 0.
       expect(t.auto).toBe(0);
       // warn = max(0, 0 - WARN_BUFFER) = 0
       expect(t.warn).toBeLessThanOrEqual(t.auto);
@@ -3426,12 +3433,11 @@ describe('computeThresholds', () => {
       expect(t.hard).toBeGreaterThan(t.auto);
     });
 
-    it('pct=1 sets proportional auto to full window; hard may equal auto for small windows', () => {
+    it('pct=1 on a small window: the scaled ceiling still caps auto', () => {
       const t = computeThresholds(32_000, 1);
-      expect(t.auto).toBe(32_000);
+      expect(t.auto).toBe(23_750);
       expect(t.warn).toBeLessThanOrEqual(t.auto);
-      // For 32K window: hard = min(32000, max(effectiveWindow - HARD_BUFFER, 32000 + HARD_BUFFER)) = 32000
-      expect(t.hard).toBeLessThanOrEqual(t.auto);
+      expect(t.hard).toBe(26_250);
     });
 
     it('pct=1 on a large window: ceiling still caps auto below the window', () => {

@@ -129,6 +129,13 @@ export const WARN_BUFFER = 20_000;
 export const HARD_BUFFER = 3_000;
 
 /**
+ * Smallest window that gets the reserves and buffers above in full. They are
+ * sized for 128K+ cloud models; a smaller window scales all four down in
+ * proportion, or a 64K local model would compact at half its window.
+ */
+export const FULL_RESERVE_WINDOW = 128_000;
+
+/**
  * Auto-compaction consecutive-failure circuit breaker. After this many
  * consecutive failures the cheap-gate NOOPs until a successful force
  * compress resets the counter. Co-located here with other compaction-
@@ -179,7 +186,7 @@ export interface CompactionThresholds {
   readonly auto: number;
   /** Token count at which auto-compaction is force-triggered (bypasses the consecutive-failure breaker). */
   readonly hard: number;
-  /** Window minus SUMMARY_RESERVE; the budget available for input + summary. */
+  /** Window minus the summary reserve; the budget available for input + summary. */
   readonly effectiveWindow: number;
 }
 
@@ -193,12 +200,13 @@ export interface CompactionThresholds {
  *   warn = max(0, auto - WARN_BUFFER)
  *   hard = min(window, max(effectiveWindow - HARD_BUFFER, auto + HARD_BUFFER))
  *
- * So large windows compact at ~pct (never crowding the ceiling), smaller
- * windows compact at the ceiling (leaving room for the summary), and a window
- * too small for even the ceiling (≤ SUMMARY_RESERVE + AUTOCOMPACT_BUFFER) falls
- * back to the proportional value as a floor. This mirrors claude-code
- * (autoCompact.ts), which combines its percentage override with the absolute
- * ceiling via Math.min. `pct` defaults to DEFAULT_PCT.
+ * So large windows compact at ~pct (never crowding the ceiling) and smaller
+ * windows compact at the ceiling (leaving room for the summary). Below
+ * FULL_RESERVE_WINDOW the four constants scale with the window, so every
+ * window under 128K compacts at about 75% of it; only a zero window still
+ * reaches the proportional fallback. This mirrors claude-code (autoCompact.ts),
+ * which combines its percentage override with the absolute ceiling via
+ * Math.min. `pct` defaults to DEFAULT_PCT.
  *
  * Pure function — no I/O, no shared state — safe to call repeatedly.
  */
@@ -210,9 +218,17 @@ export function computeThresholds(
     1,
     Math.max(0, pct !== undefined && Number.isFinite(pct) ? pct : DEFAULT_PCT),
   );
-  // Clamp to 0 for tiny windows (window < SUMMARY_RESERVE) so the surfaced
-  // value in `/context` stays meaningful.
-  const effectiveWindow = Math.max(0, window - SUMMARY_RESERVE);
+  // Below FULL_RESERVE_WINDOW every reserve and buffer is the same fraction
+  // of the window, so a smaller window never loses more of itself to them.
+  const scale =
+    window >= FULL_RESERVE_WINDOW
+      ? 1
+      : Math.max(0, window) / FULL_RESERVE_WINDOW;
+  const summaryReserve = Math.round(SUMMARY_RESERVE * scale);
+  const autocompactBuffer = Math.round(AUTOCOMPACT_BUFFER * scale);
+  const warnBuffer = Math.round(WARN_BUFFER * scale);
+  const hardBuffer = Math.round(HARD_BUFFER * scale);
+  const effectiveWindow = Math.max(0, window - summaryReserve);
 
   // The absolute term is a ceiling: compact before the prompt leaves too little
   // room for the summarization side-query (which needs up to SUMMARY_RESERVE of
@@ -220,7 +236,7 @@ export function computeThresholds(
   // window is so small the ceiling is non-positive, fall back to the
   // proportional value as a floor so the trigger stays usable.
   const proportional = effectivePct * window;
-  const absoluteCeiling = effectiveWindow - AUTOCOMPACT_BUFFER;
+  const absoluteCeiling = effectiveWindow - autocompactBuffer;
   const auto =
     absoluteCeiling > 0
       ? Math.min(proportional, absoluteCeiling)
@@ -228,14 +244,14 @@ export function computeThresholds(
 
   // Warn fires WARN_BUFFER below auto (claude-code positions its warning tier
   // the same way, relative to the auto threshold).
-  const warn = Math.max(0, auto - WARN_BUFFER);
+  const warn = Math.max(0, auto - warnBuffer);
 
   // hard is the last-ditch force-compaction point: the window edge (hardEdge),
   // but never below auto + HARD_BUFFER so it stays a distinct tier above auto on
   // degenerate small windows (where auto is the proportional floor and can
   // exceed hardEdge). Clamp to the window so hard never exceeds the actual limit.
-  const hardEdge = effectiveWindow - HARD_BUFFER;
-  const hard = Math.min(window, Math.max(hardEdge, auto + HARD_BUFFER));
+  const hardEdge = effectiveWindow - hardBuffer;
+  const hard = Math.min(window, Math.max(hardEdge, auto + hardBuffer));
 
   return { warn, auto, hard, effectiveWindow };
 }
