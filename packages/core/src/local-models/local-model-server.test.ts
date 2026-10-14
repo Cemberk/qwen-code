@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { LocalModelEngine } from './engine.js';
+import type { LocalModelEngine, LocalModelEngineOptions } from './engine.js';
 import type { LocalModelConfig } from './local-models.js';
 import { LocalModelServer } from './local-model-server.js';
 
@@ -16,14 +16,20 @@ const b: LocalModelConfig = { id: 'b', repo: 'o/b', file: 'b.gguf' };
 function fakeEngines() {
   const events: string[] = [];
   const engines: Array<LocalModelEngine & { die(): void }> = [];
+  const options: LocalModelEngineOptions[] = [];
   let failNext: Error | undefined;
-  const start = async (model: LocalModelConfig) => {
+  const start = async (
+    model: LocalModelConfig,
+    _apiKey: string,
+    engineOptions: LocalModelEngineOptions,
+  ) => {
     if (failNext) {
       const error = failNext;
       failNext = undefined;
       throw error;
     }
     events.push(`start ${model.id}`);
+    options.push(engineOptions);
     let alive = true;
     const engine = {
       model,
@@ -45,6 +51,7 @@ function fakeEngines() {
   return {
     events,
     engines,
+    options,
     start,
     failNextStart(error: Error) {
       failNext = error;
@@ -122,6 +129,36 @@ describe('LocalModelServer', () => {
     await server.acquire('a');
     expect(fake.events).toEqual(['start a', 'stop a', 'start a']);
     expect(fake.engines[1].model.repo).toBe('o/a-v2');
+  });
+
+  it('restarts with speculation switched once the request in flight finishes', async () => {
+    const fake = fakeEngines();
+    const server = new LocalModelServer(fake.start);
+    server.setModels([a]);
+    expect(server.isSpeculationEnabled()).toBe(true);
+    const inFlight = await server.acquire('a');
+
+    server.setSpeculation(false);
+    expect(server.isSpeculationEnabled()).toBe(false);
+    let next: Awaited<ReturnType<typeof server.acquire>> | undefined;
+    void server.acquire('a').then((lease) => (next = lease));
+    await tick();
+    expect(next).toBeUndefined();
+
+    inFlight.release();
+    await tick();
+    expect(next?.baseUrl).toBe('http://127.0.0.1:1001/v1');
+    expect(fake.events).toEqual(['start a', 'stop a', 'start a']);
+    expect(fake.options).toEqual([
+      { speculation: true },
+      { speculation: false },
+    ]);
+
+    // Setting the same value again keeps the engine.
+    next!.release();
+    server.setSpeculation(false);
+    await server.acquire('a');
+    expect(fake.events).toHaveLength(3);
   });
 
   it('rejects the waiting request when its engine cannot start, then serves the next', async () => {

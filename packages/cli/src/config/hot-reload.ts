@@ -330,6 +330,10 @@ export function registerModelProvidersHotReload(
       }
       return;
     }
+    // Applies at the engine's next start, so it needs no registry reload.
+    getLocalModelServer().setSpeculation(
+      settings.merged.speculativeDecoding !== false,
+    );
     const providersUnchanged = equal(
       config.getModelProvidersConfig() ?? {},
       next ?? {},

@@ -1832,6 +1832,7 @@ export async function loadCliConfig(
     );
   }
   getLocalModelServer().setModels(localModels);
+  getLocalModelServer().setSpeculation(settings.speculativeDecoding !== false);
   if (localModels.length > 0) {
     process.env[LOCAL_MODEL_KEY_ENV] = LOCAL_MODEL_KEY_PLACEHOLDER;
   }

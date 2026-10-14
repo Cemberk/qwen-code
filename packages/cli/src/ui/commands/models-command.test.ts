@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LoadedSettings } from '../../config/settings.js';
 import { SettingScope } from '../../config/settings.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { getLocalModelServer } from '@qwen-code/qwen-code-core/local-models/local-model-server.js';
 import { modelsCommand } from './models-command.js';
 
 const COMMIT = '75f1b73b657a50f5092502799457ccb4a4a1f9df';
@@ -182,5 +183,76 @@ describe('/models', () => {
     const result = await sub('remove').action!(context(), '--all');
     expect(result).toMatchObject({ messageType: 'error' });
     expect(() => recorded()).toThrow();
+  });
+});
+
+describe('/models speculation', () => {
+  afterEach(() => getLocalModelServer().setSpeculation(true));
+
+  /** Settings whose `merged` follows setValue, like LoadedSettings. */
+  function speculationContext(systemValue?: boolean) {
+    let user: boolean | undefined;
+    const setValue = vi.fn((_scope: SettingScope, _key: string, value) => {
+      user = value as boolean;
+    });
+    const ctx = createMockCommandContext();
+    ctx.services.settings = {
+      get merged() {
+        return { localModels: local, speculativeDecoding: systemValue ?? user };
+      },
+      setValue,
+    } as unknown as LoadedSettings;
+    return { ctx, setValue };
+  }
+  const speculation = sub('speculation');
+  const turn = (name: string) =>
+    speculation.subCommands!.find((command) => command.name === name)!;
+
+  it('reports whether it is on', async () => {
+    const result = await speculation.action!(speculationContext().ctx, '');
+    expect(result).toMatchObject({
+      messageType: 'info',
+      content: expect.stringContaining('Speculative decoding is on.'),
+    });
+  });
+
+  it('turns it off and on in the user settings and the engine', async () => {
+    const { ctx, setValue } = speculationContext();
+    const off = await turn('off').action!(ctx, '');
+    expect(setValue).toHaveBeenLastCalledWith(
+      SettingScope.User,
+      'speculativeDecoding',
+      false,
+    );
+    expect(getLocalModelServer().isSpeculationEnabled()).toBe(false);
+    expect(off).toMatchObject({
+      messageType: 'info',
+      content: expect.stringContaining('Speculative decoding is off.'),
+    });
+
+    await turn('on').action!(ctx, '');
+    expect(setValue).toHaveBeenLastCalledWith(
+      SettingScope.User,
+      'speculativeDecoding',
+      true,
+    );
+    expect(getLocalModelServer().isSpeculationEnabled()).toBe(true);
+  });
+
+  it('says when a system setting keeps it on', async () => {
+    const result = await turn('off').action!(speculationContext(true).ctx, '');
+    expect(getLocalModelServer().isSpeculationEnabled()).toBe(true);
+    expect(result).toMatchObject({
+      messageType: 'error',
+      content: expect.stringContaining('stays on'),
+    });
+  });
+
+  it('shows the state under /models', async () => {
+    getLocalModelServer().setSpeculation(false);
+    const result = await modelsCommand.action!(context(), '');
+    expect((result as { content: string }).content).toContain(
+      'Speculative decoding is off',
+    );
   });
 });

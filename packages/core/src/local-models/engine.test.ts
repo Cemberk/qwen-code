@@ -14,7 +14,11 @@ import {
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { engineCommand, startLocalModelEngine } from './engine.js';
+import {
+  DEFAULT_ENGINE_OPTIONS,
+  engineCommand,
+  startLocalModelEngine,
+} from './engine.js';
 import type { LocalModelConfig } from './local-models.js';
 
 const model: LocalModelConfig = {
@@ -74,6 +78,7 @@ describe('engineCommand', () => {
       '/m.gguf',
       4321,
       'k',
+      DEFAULT_ENGINE_OPTIONS,
       env(bin),
       'linux',
     );
@@ -114,9 +119,32 @@ describe('engineCommand', () => {
     });
   });
 
+  it('leaves out speculative decoding when it is turned off', () => {
+    const bin = installFakeEngine();
+    const command = engineCommand(
+      model,
+      '/m.gguf',
+      1,
+      'k',
+      { speculation: false },
+      env(bin),
+      'linux',
+    );
+    expect(command.args).not.toContain('--spec-type');
+    expect(command.args).toContain('--offline');
+  });
+
   it('wraps the engine in a Seatbelt profile that confines its network and writes on macOS', () => {
     const bin = installFakeEngine();
-    const command = engineCommand(model, '/m.gguf', 1, 'k', env(bin), 'darwin');
+    const command = engineCommand(
+      model,
+      '/m.gguf',
+      1,
+      'k',
+      DEFAULT_ENGINE_OPTIONS,
+      env(bin),
+      'darwin',
+    );
     expect(command.command).toBe('/usr/bin/sandbox-exec');
     expect(command.args.slice(0, 3)).toEqual(['-D', 'HOME=/home/u', '-p']);
     const profile = command.args[3];
@@ -135,6 +163,7 @@ describe('engineCommand', () => {
       '/m.gguf',
       1,
       'k',
+      DEFAULT_ENGINE_OPTIONS,
       { ...env(bin), SANDBOX: 'sandbox-exec' },
       'darwin',
     );
@@ -152,6 +181,7 @@ describe('engineCommand', () => {
         '/m.gguf',
         1,
         'k',
+        DEFAULT_ENGINE_OPTIONS,
         { PATH: path.relative(process.cwd(), relative) },
         'linux',
       ),

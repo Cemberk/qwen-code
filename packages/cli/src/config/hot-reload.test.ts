@@ -653,6 +653,23 @@ describe('registerModelProvidersHotReload', () => {
     expect(refreshAuth).toHaveBeenCalledWith(AuthType.USE_OPENAI);
   });
 
+  it('applies speculativeDecoding without reloading the registry', async () => {
+    registerModelProvidersHotReload(watcher, settings, config);
+    const server = getLocalModelServer();
+    try {
+      merged.speculativeDecoding = false;
+      await listener([]);
+      expect(server.isSpeculationEnabled()).toBe(false);
+      expect(reloadModelProvidersConfig).not.toHaveBeenCalled();
+
+      delete merged.speculativeDecoding;
+      await listener([]);
+      expect(server.isSpeculationEnabled()).toBe(true);
+    } finally {
+      server.setSpeculation(true);
+    }
+  });
+
   it('skips the reload when an unrelated settings key changed', async () => {
     merged.modelProviders = {
       openai: [{ id: 'gpt-x', baseUrl: 'http://127.0.0.1:11434/v1' }],

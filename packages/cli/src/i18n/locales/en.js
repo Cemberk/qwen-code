@@ -360,6 +360,10 @@ export default {
     'Theme "{{themeName}}" not found in selected scope.',
   'List, download or remove local models':
     'List, download or remove local models',
+  'Show or switch speculative decoding: /models speculation on|off':
+    'Show or switch speculative decoding: /models speculation on|off',
+  'Turn speculative decoding on': 'Turn speculative decoding on',
+  'Turn speculative decoding off': 'Turn speculative decoding off',
   'Turn web access on or off: /web on, /web off':
     'Turn web access on or off: /web on, /web off',
   'Let the model fetch web pages, asking you before each fetch':

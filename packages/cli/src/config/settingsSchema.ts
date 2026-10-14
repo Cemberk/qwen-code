@@ -295,6 +295,17 @@ const SETTINGS_SCHEMA = {
     mergeStrategy: MergeStrategy.REPLACE,
   },
 
+  speculativeDecoding: {
+    type: 'boolean',
+    label: 'Speculative Decoding',
+    category: 'Model',
+    requiresRestart: false,
+    default: true,
+    description:
+      'N-gram speculative decoding for the local models: the engine drafts tokens from text already in the conversation, which speeds up file edits without changing what the model writes. Turn it on or off with /models speculation; the engine restarts with the change at the next request.',
+    showInDialog: false,
+  },
+
   plansDirectory: {
     type: 'string',
     label: 'Plans Directory',

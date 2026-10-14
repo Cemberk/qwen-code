@@ -70,6 +70,8 @@ cannot run them.
 | `/models download <id>`           | Runs `hf download <repo> <file>` for a model in the list.                                                  |
 | `/models download <repo> <file>`  | Adds that file to `localModels` (its id is the file name in lower case, without `.gguf`) and downloads it. |
 | `/models remove <id>` or `<repo>` | Runs `hf cache rm model/<repo> -y`, deleting every downloaded file of that repository.                     |
+| `/models speculation`             | Shows whether speculative decoding is on.                                                                  |
+| `/models speculation on` or `off` | Turns speculative decoding on or off (see [How the engine runs](#how-the-engine-runs)).                    |
 
 `hf` runs without your Hugging Face token and with telemetry off. Downloading
 contacts huggingface.co; the `hf` tool also checks PyPI for a newer version of
@@ -128,7 +130,11 @@ supplies.
 - It uses Qwen3's recommended sampling (temperature 0.6, top-p 0.95, top-k 20)
   unless a request sets its own, and n-gram speculative decoding, which
   speeds up replies that repeat text from the conversation, such as file
-  edits, without changing what the model writes.
+  edits, without changing what the model writes. It costs about 5% on new
+  text. It is on by default; turn it off with `/models speculation off`
+  (saved as `speculativeDecoding` in your user settings). If the engine is
+  running, it restarts with the change at your next prompt, so that reply
+  takes as long as the first one of a session.
 - On macOS the engine runs in a sandbox that blocks network traffic to
   anything except this machine, and lets it write files only in temporary
   and cache folders.

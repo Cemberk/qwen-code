@@ -7,7 +7,12 @@
 import { randomBytes } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { LocalModelConfig } from './local-models.js';
-import { startLocalModelEngine, type LocalModelEngine } from './engine.js';
+import {
+  DEFAULT_ENGINE_OPTIONS,
+  startLocalModelEngine,
+  type LocalModelEngine,
+  type LocalModelEngineOptions,
+} from './engine.js';
 
 /** Permission to send requests to the engine while it serves the leased model. */
 export interface LocalModelLease {
@@ -27,20 +32,25 @@ interface Waiter {
 export type StartEngine = (
   model: LocalModelConfig,
   apiKey: string,
+  options: LocalModelEngineOptions,
 ) => Promise<LocalModelEngine>;
 
 /**
  * Runs one engine for this process and loads the model each request needs.
  * Requests take leases in order. A lease for the loaded model is granted at
  * once; a lease for another model waits until the outstanding leases are
- * released, then the engine restarts with that model. An engine that exited
- * is restarted by the next lease.
+ * released, then the engine restarts with that model. The same happens when
+ * the engine options changed. An engine that exited is restarted by the next
+ * lease.
  */
 export class LocalModelServer {
   /** Engines started by this server accept only this key. */
   readonly apiKey = randomBytes(24).toString('hex');
   private models: readonly LocalModelConfig[] = [];
+  private options: LocalModelEngineOptions = DEFAULT_ENGINE_OPTIONS;
   private engine?: LocalModelEngine;
+  /** The options the running engine started with. */
+  private engineOptions?: LocalModelEngineOptions;
   private active = 0;
   private readonly queue: Waiter[] = [];
   private pumping = false;
@@ -51,6 +61,19 @@ export class LocalModelServer {
 
   setModels(models: readonly LocalModelConfig[]): void {
     this.models = models;
+  }
+
+  /**
+   * Turn n-gram speculative decoding on or off. A running engine started
+   * with the other setting restarts at the next request, once the requests
+   * in flight finish.
+   */
+  setSpeculation(enabled: boolean): void {
+    this.options = { ...this.options, speculation: enabled };
+  }
+
+  isSpeculationEnabled(): boolean {
+    return this.options.speculation;
   }
 
   /**
@@ -118,17 +141,27 @@ export class LocalModelServer {
       while (this.queue.length > 0) {
         const head = this.queue[0];
         const engine = this.engine;
-        if (engine?.alive && isDeepStrictEqual(engine.model, head.model)) {
+        if (
+          engine?.alive &&
+          isDeepStrictEqual(engine.model, head.model) &&
+          isDeepStrictEqual(this.engineOptions, this.options)
+        ) {
           this.queue.shift();
           head.resolve(this.lease(engine));
           continue;
         }
-        // Switching models would cut off requests still on the loaded one.
+        // Restarting would cut off requests still on the running engine.
         if (this.active > 0) return;
         this.engine = undefined;
         try {
           await engine?.stop();
-          this.engine = await this.startEngine(head.model, this.apiKey);
+          const options = this.options;
+          this.engine = await this.startEngine(
+            head.model,
+            this.apiKey,
+            options,
+          );
+          this.engineOptions = options;
         } catch (error) {
           // The waiter may have been aborted while the engine started.
           const index = this.queue.indexOf(head);

@@ -7,6 +7,7 @@
 import { spawn } from 'node:child_process';
 import { findExecutable } from '@qwen-code/qwen-code-core/local-models/engine.js';
 import { resolveLocalModelPath } from '@qwen-code/qwen-code-core/local-models/hf-cache.js';
+import { getLocalModelServer } from '@qwen-code/qwen-code-core/local-models/local-model-server.js';
 import {
   BUILT_IN_LOCAL_MODELS,
   isHuggingFaceRepo,
@@ -176,6 +177,71 @@ const removeCommand: SlashCommand = {
   },
 };
 
+const speculationState = () =>
+  getLocalModelServer().isSpeculationEnabled() ? 'on' : 'off';
+
+/** Save `speculativeDecoding` in the user settings and apply it. */
+function setSpeculation(
+  context: CommandContext,
+  enabled: boolean,
+): MessageActionReturn {
+  const { settings } = context.services;
+  settings.setValue(SettingScope.User, 'speculativeDecoding', enabled);
+  const applied = settings.merged.speculativeDecoding !== false;
+  getLocalModelServer().setSpeculation(applied);
+  if (applied !== enabled) {
+    return error(
+      `Your system settings set speculativeDecoding, so speculative decoding stays ${speculationState()}.`,
+    );
+  }
+  return {
+    type: 'message',
+    messageType: 'info',
+    content: `Speculative decoding is ${speculationState()}. If the local model engine is running, it restarts at your next prompt, so that reply takes longer.`,
+  };
+}
+
+const speculationCommand: SlashCommand = {
+  name: 'speculation',
+  get description() {
+    return t('Show or switch speculative decoding: /models speculation on|off');
+  },
+  kind: CommandKind.BUILT_IN,
+  supportedModes: ['interactive'] as const,
+  subCommands: [
+    {
+      name: 'on',
+      get description() {
+        return t('Turn speculative decoding on');
+      },
+      kind: CommandKind.BUILT_IN,
+      supportedModes: ['interactive'] as const,
+      action: (context: CommandContext) => setSpeculation(context, true),
+    },
+    {
+      name: 'off',
+      get description() {
+        return t('Turn speculative decoding off');
+      },
+      kind: CommandKind.BUILT_IN,
+      supportedModes: ['interactive'] as const,
+      action: (context: CommandContext) => setSpeculation(context, false),
+    },
+  ],
+  action: (_context: CommandContext, args: string): MessageActionReturn => {
+    if (args.trim()) {
+      return error(
+        'Usage: /models speculation, /models speculation on or /models speculation off',
+      );
+    }
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: `Speculative decoding is ${speculationState()}. When it is on, the local model engine drafts tokens from text already in the conversation, which speeds up file edits without changing what the model writes. Switch it with /models speculation on or /models speculation off.`,
+    };
+  },
+};
+
 export const modelsCommand: SlashCommand = {
   name: 'models',
   get description() {
@@ -196,8 +262,9 @@ export const modelsCommand: SlashCommand = {
         ...lines,
         '',
         'Switch with /model <id>. Download with /models download <id> (or <repo> <file> to add one). Delete with /models remove <id>.',
+        `Speculative decoding is ${speculationState()}; switch it with /models speculation on or off.`,
       ].join('\n'),
     };
   },
-  subCommands: [downloadCommand, removeCommand],
+  subCommands: [downloadCommand, removeCommand, speculationCommand],
 };

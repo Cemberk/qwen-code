@@ -182,7 +182,10 @@ itself.
   context it added 18% to MLX and made each cold start 17% slower, because
   the draft reads the prompt too. N-gram speculation needs no extra model,
   costs about 5% on new text and made an edit-style reply 6× faster
-  (30 → 185 tokens/s).
+  (30 → 185 tokens/s). It is on by default and can be switched off
+  (`/models speculation on|off`, `speculativeDecoding`, since 2026-10-13). A
+  change restarts the engine at the next request, after the requests in
+  flight finish, like a model switch.
 - **Qwen3.6 35B A3B as the default.** It is a mixture-of-experts model with
   3B of 35B parameters active per token and hybrid attention (three Gated
   DeltaNet layers per attention layer), so its context cache is small. On the

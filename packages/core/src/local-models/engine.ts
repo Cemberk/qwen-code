@@ -65,6 +65,16 @@ export interface LocalModelEngine {
   stop(): Promise<void>;
 }
 
+/** Engine settings the user can change; changing one restarts the engine. */
+export interface LocalModelEngineOptions {
+  /** N-gram speculative decoding (`--spec-type ngram-simple`). */
+  speculation: boolean;
+}
+
+export const DEFAULT_ENGINE_OPTIONS: LocalModelEngineOptions = {
+  speculation: true,
+};
+
 export interface EngineCommand {
   command: string;
   args: string[];
@@ -96,6 +106,7 @@ export function engineCommand(
   modelPath: string,
   port: number,
   apiKey: string,
+  options: LocalModelEngineOptions = DEFAULT_ENGINE_OPTIONS,
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
 ): EngineCommand {
@@ -130,9 +141,8 @@ export function engineCommand(
     ...SAMPLING_ARGS,
     // N-gram speculation drafts tokens from text already in the context,
     // which an agent echoes when it edits files: 6x faster there on an M4,
-    // about 5% slower on new text.
-    '--spec-type',
-    'ngram-simple',
+    // about 5% slower on new text. It does not change the output.
+    ...(options.speculation ? ['--spec-type', 'ngram-simple'] : []),
   ];
   // Inside qwen's own Seatbelt sandbox the engine inherits that sandbox;
   // sandboxes cannot nest.
@@ -186,10 +196,11 @@ function answers(url: string): Promise<boolean> {
 export async function startLocalModelEngine(
   model: LocalModelConfig,
   apiKey: string,
+  options: LocalModelEngineOptions = DEFAULT_ENGINE_OPTIONS,
 ): Promise<LocalModelEngine> {
   const modelPath = resolveLocalModelPath(model);
   const port = await freeLoopbackPort();
-  const command = engineCommand(model, modelPath, port, apiKey);
+  const command = engineCommand(model, modelPath, port, apiKey, options);
   const child = spawn(command.command, command.args, {
     stdio: ['ignore', 'pipe', 'pipe'],
     env: command.env,
