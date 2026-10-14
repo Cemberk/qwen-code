@@ -1569,6 +1569,17 @@ describe('loadCliConfig', () => {
     });
   });
 
+  it('runs loop detection unless model.skipLoopDetection is true', async () => {
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments();
+    expect((await loadCliConfig({}, argv)).getSkipLoopDetection()).toBe(false);
+    expect(
+      (
+        await loadCliConfig({ model: { skipLoopDetection: true } }, argv)
+      ).getSkipLoopDetection(),
+    ).toBe(true);
+  });
+
   it('passes tools.shell.defaultTimeoutMs from settings to core config', async () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments();

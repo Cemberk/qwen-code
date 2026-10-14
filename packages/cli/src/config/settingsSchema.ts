@@ -1339,9 +1339,9 @@ const SETTINGS_SCHEMA = {
         label: 'Skip Loop Detection',
         category: 'Model',
         requiresRestart: false,
-        default: true,
+        default: false,
         description:
-          'Skip the opt-in streaming loop-detection heuristics (content/thought repetition, read-file and action stagnation, global-duplicate and alternating tool-call patterns). Defaults to true to avoid false-positive interruptions; set to false to re-enable them as an unattended-run guardrail. Sessions keep a minimal always-on guard regardless of this setting (consecutive identical tool calls, shell inspection-command stagnation, and a per-turn tool-call cap, see model.maxToolCallsPerTurn).',
+          'Skip the streaming loop-detection heuristics (content/thought repetition, read-file and action stagnation, global-duplicate and alternating tool-call patterns). Defaults to false: local models repeat themselves more often, and a detected loop stops the turn and asks whether to keep detecting. Set to true to turn the heuristics off. Sessions keep a minimal always-on guard regardless of this setting (consecutive identical tool calls, shell inspection-command stagnation, and a per-turn tool-call cap, see model.maxToolCallsPerTurn).',
         showInDialog: false,
       },
       maxToolCallsPerTurn: {

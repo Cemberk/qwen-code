@@ -2206,7 +2206,8 @@ export async function loadCliConfig(
     preventSystemSleep: settings.general?.preventSystemSleep ?? true,
     skipNextSpeakerCheck: settings.model?.skipNextSpeakerCheck,
     skipWorkflowUsageWarning: settings.model?.skipWorkflowUsageWarning ?? false,
-    skipLoopDetection: settings.model?.skipLoopDetection ?? true,
+    // On by default: local models fall into repetition loops more often.
+    skipLoopDetection: settings.model?.skipLoopDetection ?? false,
     maxToolCallsPerTurn: settings.model?.maxToolCallsPerTurn,
     skipStartupContext: settings.model?.skipStartupContext ?? false,
     truncateToolOutputThreshold: settings.tools?.truncateToolOutputThreshold,
