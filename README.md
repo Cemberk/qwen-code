@@ -64,7 +64,7 @@ qwen
 ```
 
 Run `/language output English` once to keep replies in English. The first
-reply of a session takes about 70 seconds while the model loads. `/model`
+reply of a session takes about a minute while the model loads. `/model`
 switches models, and `/models` downloads and removes them; see
 [Local Models](./docs/users/configuration/local-models.md).
 

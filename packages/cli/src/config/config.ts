@@ -1369,6 +1369,24 @@ function warnAboutOutputStyle(warning: string): void {
   console.error(`WARNING: ${warning}`);
 }
 
+/**
+ * Tools whose schemas go to the model up front when `tools.eager` is unset.
+ * The others stay registered and load through tool_search when the model
+ * needs them, which keeps the fixed prompt small enough for a local model's
+ * context window. tool_search, tool_call and the plan-mode tools are exempt
+ * from the allowlist and always go up front.
+ */
+export const DEFAULT_EAGER_TOOLS: readonly string[] = [
+  'run_shell_command',
+  'read_file',
+  'edit',
+  'write_file',
+  'grep_search',
+  'glob',
+  'ask_user_question',
+  'web_fetch',
+];
+
 export async function loadCliConfig(
   settings: Settings,
   argv: CliArgs,
@@ -2083,7 +2101,22 @@ export async function loadCliConfig(
             .map((d) => d.trim()),
     disabledTools: disabledTools.length > 0 ? disabledTools : undefined,
     visibleTools: visibleTools.length > 0 ? visibleTools : undefined,
-    eagerTools,
+    // Without the tool_search + tool_call bridge nothing could load the
+    // deferred tools back, so the default allowlist needs both halves.
+    eagerTools:
+      eagerTools ??
+      (bareMode ||
+      safeMode ||
+      ['tool_search', 'tool_call'].some(
+        (name) =>
+          !isToolEnabled(
+            name as ToolName,
+            [],
+            [...mergedDeny, ...disabledTools],
+          ),
+      )
+        ? undefined
+        : [...DEFAULT_EAGER_TOOLS]),
     codeModeOnly:
       !bareMode && !safeMode && settings.tools?.codeModeOnly === true,
     toolSearchThreshold:

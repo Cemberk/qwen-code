@@ -161,13 +161,40 @@ supplies.
 - The engine stops when Qwen Code exits. If Qwen Code is killed with
   `kill -9`, the engine keeps running until you stop it.
 
+## Fitting in the context window
+
+The built-in models have a 32K or 64K context window, far less than cloud
+models. Qwen Code adapts to it:
+
+- Only the core coding tools go to the model up front: shell, read, edit,
+  write, grep, glob, asking you a question, and `web_fetch` when web access is
+  on. The others (subagents, memory, goals, artifacts and more) load through
+  `tool_search` when the model needs them. Set `tools.eager` to change the
+  list.
+- Auto-compaction starts at about 75% of the window: at 48.6K tokens of a
+  64K window.
+- One tool result is cut at about 12,800 characters on a 64K window (shell
+  output at 15,360), unless you set `tools.truncateToolOutputThreshold`.
+- Loop detection is on, so a model that keeps repeating itself is stopped and
+  you are asked whether to keep detecting.
+
+About 14,000 tokens stay fixed in a folder without context files: the system
+prompt (3.8K), tool definitions (5.5K), memory (1.9K), the list of skills
+(1.8K) and startup context (1.2K). Context files such as `QWEN.md` or
+`AGENTS.md` add to that. `/context` shows the breakdown. To save the 1.8K of
+the skill list, hide the bundled skills:
+
+```json
+{ "skills": { "disabledLevels": ["bundled"] } }
+```
+
 ## Limits
 
-- The first reply of a session takes longest: Qwen Code's instructions and tool
-  definitions come to about 17,500 tokens, which Qwen3.6 35B A3B on an M4
-  takes about 70 seconds to read. Later replies reuse
-  the engine's cache and start within a second. `qwen -p` starts a new engine
-  each time, so every run pays this cost.
+- The first reply of a session takes longest: the fixed prompt above, about
+  14,000 tokens or more, has to be read first, and Qwen3.6 35B A3B on an M4
+  reads about 250 tokens a second. Later replies reuse the engine's cache and
+  start within a second. `qwen -p` starts a new engine each time, so every run
+  pays this cost.
 - Each Qwen Code session runs its own engine and loads its own copy of the
   model.
 - Local models do not run inside the Docker sandbox, which has no network.

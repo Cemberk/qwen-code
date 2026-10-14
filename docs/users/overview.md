@@ -18,7 +18,7 @@ cd your-project
 qwen
 ```
 
-Qwen Code runs a Qwen model on this machine with llama.cpp. The first reply of a session takes about 70 seconds while the model loads. To use your own model server on this machine instead, such as Ollama, LM Studio or vLLM, run `/auth`; see [Authentication](./configuration/auth). Then let's start with understanding your codebase. Try one of these commands:
+Qwen Code runs a Qwen model on this machine with llama.cpp. The first reply of a session takes about a minute while the model loads. To use your own model server on this machine instead, such as Ollama, LM Studio or vLLM, run `/auth`; see [Authentication](./configuration/auth). Then let's start with understanding your codebase. Try one of these commands:
 
 ```
 what does this project do?

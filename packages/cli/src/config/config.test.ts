@@ -27,6 +27,7 @@ import { normalizeModelProposedGoals } from './config.js';
 import {
   buildSkillSettingsListsProvider,
   isValidSessionId,
+  DEFAULT_EAGER_TOOLS,
   loadCliConfig,
   parseArguments,
   type CliArgs,
@@ -4185,9 +4186,9 @@ describe('loadCliConfig tools.eager wiring (#9827, #10075)', () => {
     const config = await loadCliConfig(settings, argv, undefined, []);
 
     // Pure auto-approval grant (#10075) — the eager surface is driven
-    // solely by tools.eager and stays unrestricted here.
+    // solely by tools.eager, so the default allowlist applies here.
     expect(config.getPermissionsAllow()).toContain('ReadFile');
-    expect(config.getEagerTools()).toBeUndefined();
+    expect(config.getEagerTools()).toEqual(DEFAULT_EAGER_TOOLS);
   });
 
   it('does not treat --allowed-tools as the eager allowlist', async () => {
@@ -4195,10 +4196,50 @@ describe('loadCliConfig tools.eager wiring (#9827, #10075)', () => {
     const argv = await parseArguments();
     const config = await loadCliConfig({}, argv, undefined, []);
 
-    // Auto-approval grant only — the eager surface stays unrestricted.
+    // Auto-approval grant only — the eager surface keeps its default.
     expect(config.getPermissionsAllow()).toContain('ReadFile');
-    expect(config.getEagerTools()).toBeUndefined();
+    expect(config.getEagerTools()).toEqual(DEFAULT_EAGER_TOOLS);
   });
+
+  it('sends only the core coding tools up front when tools.eager is unset', async () => {
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments();
+    const config = await loadCliConfig({}, argv, undefined, []);
+
+    expect(config.getEagerTools()).toEqual([
+      'run_shell_command',
+      'read_file',
+      'edit',
+      'write_file',
+      'grep_search',
+      'glob',
+      'ask_user_question',
+      'web_fetch',
+    ]);
+  });
+
+  it.each([
+    [
+      'tools.toolSearch.enabled is false',
+      { tools: { toolSearch: { enabled: false } } },
+    ],
+    ['tool_search is denied', { permissions: { deny: ['tool_search'] } }],
+    ['tool_call is disabled', { tools: { disabled: ['tool_call'] } }],
+  ])(
+    'leaves every tool up front when %s, since nothing could load them back',
+    async (_label, settings) => {
+      process.argv = ['node', 'script.js'];
+      const argv = await parseArguments();
+      const config = await loadCliConfig(
+        settings as Settings,
+        argv,
+        undefined,
+        [],
+      );
+
+      expect(config.getEagerTools()).toBeUndefined();
+    },
+  );
 
   it('strips tools.eager in safe mode', async () => {
     process.argv = ['node', 'script.js', '--safe-mode'];

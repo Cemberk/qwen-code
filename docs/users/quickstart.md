@@ -170,7 +170,7 @@ it for later sessions:
 ```
 
 Your first prompt starts the model. With the default model, the first reply
-of a session takes about 70 seconds while the model reads Qwen Code's
+of a session takes about a minute while the model reads Qwen Code's
 instructions. Later replies in the same session start within about a second.
 
 ## Chat with Qwen Code
