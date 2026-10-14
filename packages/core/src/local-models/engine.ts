@@ -13,6 +13,11 @@ import path from 'node:path';
 import type { LocalModelConfig } from './local-models.js';
 import { DEFAULT_LOCAL_MODEL_CONTEXT_SIZE } from './local-models.js';
 import { resolveLocalModelPath } from './hf-cache.js';
+import {
+  appleGpuMemoryLimit,
+  localModelBytes,
+  modelSizeProblem,
+} from './gpu-memory.js';
 
 const READY_TIMEOUT_MS = 5 * 60_000;
 const READY_POLL_MS = 250;
@@ -189,9 +194,9 @@ function answers(url: string): Promise<boolean> {
 /**
  * Start an engine for `model` and wait until it serves requests.
  *
- * @throws Error when the model is not downloaded, the engine is missing, or
- *   the engine exits or does not answer in time; the message carries the end
- *   of the engine's output.
+ * @throws Error when the model is not downloaded, is too big for the GPU
+ *   memory of this Mac, the engine is missing, or the engine exits or does
+ *   not answer in time; the message carries the end of the engine's output.
  */
 export async function startLocalModelEngine(
   model: LocalModelConfig,
@@ -199,6 +204,15 @@ export async function startLocalModelEngine(
   options: LocalModelEngineOptions = DEFAULT_ENGINE_OPTIONS,
 ): Promise<LocalModelEngine> {
   const modelPath = resolveLocalModelPath(model);
+  // A model too big for the GPU loads for minutes, then fails mid-request.
+  const sizeProblem = modelSizeProblem(
+    model,
+    localModelBytes(model),
+    appleGpuMemoryLimit(),
+  );
+  if (sizeProblem) {
+    throw new Error(sizeProblem);
+  }
   const port = await freeLoopbackPort();
   const command = engineCommand(model, modelPath, port, apiKey, options);
   const child = spawn(command.command, command.args, {

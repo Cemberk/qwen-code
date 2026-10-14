@@ -20,6 +20,18 @@ import { SettingScope } from '../../config/settings.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { getLocalModelServer } from '@qwen-code/qwen-code-core/local-models/local-model-server.js';
 import { modelsCommand } from './models-command.js';
+
+// The GPU memory limit of the test machine must not decide these tests.
+const gpu = vi.hoisted(() => ({ limit: undefined as number | undefined }));
+vi.mock(
+  '@qwen-code/qwen-code-core/local-models/gpu-memory.js',
+  async (importActual) => ({
+    ...(await importActual<
+      typeof import('@qwen-code/qwen-code-core/local-models/gpu-memory.js')
+    >()),
+    appleGpuMemoryLimit: () => gpu.limit,
+  }),
+);
 import type { CommandContext } from './types.js';
 
 const COMMIT = '75f1b73b657a50f5092502799457ccb4a4a1f9df';
@@ -46,6 +58,9 @@ require('node:fs').appendFileSync(${JSON.stringify(calls)}, JSON.stringify({
   implicitToken: process.env.HF_HUB_DISABLE_IMPLICIT_TOKEN ?? null,
 }) + '\\n');
 if (process.argv.includes('fail.gguf')) { console.error('404 not found'); process.exit(1); }
+if (process.argv.includes('--dry-run')) {
+  console.log('[dry-run] Will download 1 files (out of 1) totalling ' + (process.env.FAKE_HF_SIZE || '1.0G') + '.');
+}
 `,
   );
   chmodSync(path.join(bin, 'hf'), 0o755);
@@ -179,6 +194,48 @@ describe('/models', () => {
     } finally {
       setModels.mockRestore();
     }
+  });
+
+  describe('on a Mac with a GPU memory limit', () => {
+    beforeEach(() => {
+      gpu.limit = 16 * 1024 ** 3;
+    });
+    afterEach(() => {
+      gpu.limit = undefined;
+    });
+
+    it('refuses a file too big for the GPU before downloading or listing it', async () => {
+      vi.stubEnv('FAKE_HF_SIZE', '20.1G');
+      const setValue = vi.fn();
+      const result = await sub('download').action!(
+        context(setValue),
+        'Abiray/Qwen3.6-35B-A3B-heretic-GGUF Qwen3.6-35B-A3B-heretic-Q4_K_S.gguf',
+      );
+      expect(result).toMatchObject({
+        messageType: 'error',
+        content: expect.stringContaining(
+          'Not downloaded. qwen3.6-35b-a3b-heretic-q4_k_s is 20.1 GB, but macOS lets the GPU use only about 17.2 GB',
+        ),
+      });
+      expect(recorded().map((call) => call.args)).toEqual([
+        [
+          'download',
+          'Abiray/Qwen3.6-35B-A3B-heretic-GGUF',
+          'Qwen3.6-35B-A3B-heretic-Q4_K_S.gguf',
+          '--dry-run',
+        ],
+      ]);
+      expect(setValue).not.toHaveBeenCalled();
+    });
+
+    it('downloads a file that fits', async () => {
+      vi.stubEnv('FAKE_HF_SIZE', '13.7G');
+      await sub('download').action!(context(), 'q-small');
+      expect(recorded().map((call) => call.args)).toEqual([
+        ['download', 'Qwen/Qwen3-4B-GGUF', 'Qwen3-4B-Q4_K_M.gguf', '--dry-run'],
+        ['download', 'Qwen/Qwen3-4B-GGUF', 'Qwen3-4B-Q4_K_M.gguf'],
+      ]);
+    });
   });
 
   it('reports a failed download with the output of hf', async () => {

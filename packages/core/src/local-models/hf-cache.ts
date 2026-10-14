@@ -97,3 +97,18 @@ export function resolveLocalModelPath(
   }
   return path.join(snapshot, model.file);
 }
+
+/**
+ * Paths of every file of a downloaded model: the one file, or each part of a
+ * split GGUF.
+ *
+ * @throws Error naming the download command when the model is not downloaded.
+ */
+export function resolveLocalModelFiles(
+  model: LocalModelConfig,
+  cacheDir: string = huggingFaceHubCacheDir(),
+): string[] {
+  const first = resolveLocalModelPath(model, cacheDir);
+  const snapshot = first.slice(0, first.length - model.file.length);
+  return ggufParts(model.file).map((file) => path.join(snapshot, file));
+}

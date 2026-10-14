@@ -6,6 +6,11 @@
 
 import { spawn } from 'node:child_process';
 import { findExecutable } from '@qwen-code/qwen-code-core/local-models/engine.js';
+import {
+  appleGpuMemoryLimit,
+  localModelBytes,
+  modelSizeProblem,
+} from '@qwen-code/qwen-code-core/local-models/gpu-memory.js';
 import { resolveLocalModelPath } from '@qwen-code/qwen-code-core/local-models/hf-cache.js';
 import { getLocalModelServer } from '@qwen-code/qwen-code-core/local-models/local-model-server.js';
 import {
@@ -79,6 +84,14 @@ const error = (content: string): MessageActionReturn => ({
   content,
 });
 
+/** Bytes `hf download --dry-run` would download, from its summary line. */
+function dryRunBytes(output: string): number | undefined {
+  const match = /totalling\s+(\d+(?:\.\d+)?)([KMGTPEZY]?)/.exec(output);
+  if (!match) return undefined;
+  const power = match[2] ? 'KMGTPEZY'.indexOf(match[2]) + 1 : 0;
+  return Number(match[1]) * 1000 ** power;
+}
+
 const downloadCommand: SlashCommand = {
   name: 'download',
   get description() {
@@ -102,9 +115,10 @@ const downloadCommand: SlashCommand = {
             (candidate) =>
               candidate.repo === parts[0] && candidate.file === parts[1],
           );
+    let added: LocalModelConfig | undefined;
     if (!model && parts.length === 2) {
       const [repo, file] = parts;
-      const added: LocalModelConfig = {
+      added = {
         id: file.replace(/\.gguf$/i, '').toLowerCase(),
         repo,
         file,
@@ -114,6 +128,40 @@ const downloadCommand: SlashCommand = {
       } catch (err) {
         return error(err instanceof Error ? err.message : String(err));
       }
+      model = added;
+    }
+    if (!model || parts.length === 0 || parts.length > 2) {
+      return error(
+        'Usage: /models download <id>, or /models download <repo> <file.gguf>',
+      );
+    }
+
+    // On Apple silicon, refuse a file too big for the GPU before downloading
+    // it. hf reports the size without downloading; if its output cannot be
+    // read, the check after the download still catches it.
+    const limit = appleGpuMemoryLimit();
+    if (limit !== undefined) {
+      context.ui.addItem(
+        {
+          type: MessageType.INFO,
+          text: `Checking the size: hf download ${model.repo} ${model.file} --dry-run`,
+        },
+        Date.now(),
+      );
+      const dryRun = await runHf([
+        'download',
+        model.repo,
+        model.file,
+        '--dry-run',
+      ]);
+      const bytes = dryRun.ok ? dryRunBytes(dryRun.output) : undefined;
+      const problem = bytes ? modelSizeProblem(model, bytes, limit) : undefined;
+      if (problem) {
+        return error(`Not downloaded. ${problem}`);
+      }
+    }
+
+    if (added) {
       // Listed so /model can switch to it once it is downloaded.
       settings.setValue(SettingScope.User, 'localModels', [...models, added]);
       // The settings watcher skips the CLI's own writes, so apply the new
@@ -122,12 +170,6 @@ const downloadCommand: SlashCommand = {
       getLocalModelServer().setModels(listed);
       context.services.config?.reloadModelProvidersConfig(
         withLocalModelProviders(settings.merged.modelProviders, listed),
-      );
-      model = added;
-    }
-    if (!model || parts.length === 0 || parts.length > 2) {
-      return error(
-        'Usage: /models download <id>, or /models download <repo> <file.gguf>',
       );
     }
     context.ui.addItem(
@@ -138,13 +180,24 @@ const downloadCommand: SlashCommand = {
       Date.now(),
     );
     const { ok, output } = await runHf(['download', model.repo, model.file]);
-    return ok
-      ? {
+    if (!ok) {
+      return error(`hf download failed:\n${output.trim()}`);
+    }
+    let problem: string | undefined;
+    if (limit !== undefined) {
+      try {
+        problem = modelSizeProblem(model, localModelBytes(model), limit);
+      } catch {
+        // Not all of it is in the cache (e.g. other parts of a split file).
+      }
+    }
+    return problem
+      ? error(`Downloaded, but it cannot run on this Mac. ${problem}`)
+      : {
           type: 'message',
           messageType: 'info',
           content: `Downloaded ${model.name ?? model.id}. Switch to it with /model ${model.id}.`,
-        }
-      : error(`hf download failed:\n${output.trim()}`);
+        };
   },
 };
 

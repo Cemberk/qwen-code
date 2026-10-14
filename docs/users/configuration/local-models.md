@@ -77,6 +77,26 @@ cannot run them.
 contacts huggingface.co; the `hf` tool also checks PyPI for a newer version of
 itself once a day.
 
+On a Mac with Apple silicon, `/models download` first asks `hf` for the file's
+size (`hf download --dry-run`) and refuses a file too big for the GPU; see
+[Model size](#model-size).
+
+`/models remove` deletes the whole repository from the cache, including a file
+of it that is still downloading. Wait for downloads from that repository to
+finish first.
+
+## Model size
+
+On Apple silicon the GPU can use about two thirds of the Mac's memory (three
+quarters above 36 GB), or the limit you set with `sudo sysctl
+iogpu.wired_limit_mb=<MB>`. A model's file must fit in that with about 1 GB to
+spare for its context, or llama.cpp loads it for minutes and then fails with
+`Compute error.`. Qwen Code checks this before it downloads a model and before
+it starts one, and names the file size and the limit instead.
+
+On a 24 GB Mac the limit is about 17 GB, so 3-bit builds of a 35B model (about
+14 GB) fit and 4-bit builds (about 20 GB) do not.
+
 ## Changing the list
 
 Set `localModels` in `~/.qwen/settings.json`. It replaces the built-in list, so

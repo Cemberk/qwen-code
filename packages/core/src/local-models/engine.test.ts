@@ -21,6 +21,13 @@ import {
 } from './engine.js';
 import type { LocalModelConfig } from './local-models.js';
 
+// The GPU memory limit of the test machine must not decide these tests.
+const gpu = vi.hoisted(() => ({ limit: undefined as number | undefined }));
+vi.mock('./gpu-memory.js', async (importActual) => ({
+  ...(await importActual<typeof import('./gpu-memory.js')>()),
+  appleGpuMemoryLimit: () => gpu.limit,
+}));
+
 const model: LocalModelConfig = {
   id: 'q',
   name: 'Qwen GGUF',
@@ -228,6 +235,18 @@ describe('startLocalModelEngine', () => {
     await expect(startLocalModelEngine(broken, 'k')).rejects.toThrow(
       /Qwen GGUF failed to start: the engine exited \(code 3\)\.\nerror loading model: .*broken\.gguf/,
     );
+  });
+
+  it('refuses a model too big for the GPU memory before starting the engine', async () => {
+    download(model.file);
+    gpu.limit = 1024;
+    try {
+      await expect(startLocalModelEngine(model, 'k')).rejects.toThrow(
+        /is 0\.0 GB, but macOS lets the GPU use only about 0\.0 GB on this Mac/,
+      );
+    } finally {
+      gpu.limit = undefined;
+    }
   });
 
   it('fails before starting anything when the model is not downloaded', async () => {
