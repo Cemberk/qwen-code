@@ -100,7 +100,8 @@ const APPENDED_METADATA_SEPARATOR = '\n\n';
 function getShellOutputThreshold(config: Config): number {
   return config.isTruncateToolOutputThresholdExplicit()
     ? config.getTruncateToolOutputThreshold()
-    : DEFAULT_SHELL_OUTPUT_THRESHOLD;
+    : (config.scaleOutputCap?.(DEFAULT_SHELL_OUTPUT_THRESHOLD) ??
+        DEFAULT_SHELL_OUTPUT_THRESHOLD);
 }
 
 /**

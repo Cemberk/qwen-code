@@ -9641,6 +9641,48 @@ describe('Server Config (config.ts)', () => {
       expect(config.getTruncateToolOutputThreshold()).toBe(expectedThreshold);
       expect(config.isTruncateToolOutputThresholdExplicit()).toBe(true);
     });
+
+    describe('scaled to the context window', () => {
+      const withWindow = (
+        contextWindowSize: number | undefined,
+        params: Partial<ConfigParameters> = {},
+      ) => {
+        const config = new Config({ ...baseParams, ...params });
+        vi.spyOn(config, 'getContentGeneratorConfig').mockReturnValue({
+          contextWindowSize,
+        } as ReturnType<Config['getContentGeneratorConfig']>);
+        return config;
+      };
+
+      it('shrinks the default caps below a 128K window', () => {
+        const config = withWindow(65_536);
+        expect(config.getTruncateToolOutputThreshold()).toBe(12_800);
+        expect(config.getToolOutputBatchBudget()).toBe(102_400);
+        expect(config.scaleOutputCap(30_000)).toBe(15_360);
+      });
+
+      it('keeps the defaults for large or unknown windows', () => {
+        expect(withWindow(200_000).getTruncateToolOutputThreshold()).toBe(
+          25_000,
+        );
+        expect(withWindow(undefined).getTruncateToolOutputThreshold()).toBe(
+          25_000,
+        );
+      });
+
+      it('never scales explicit settings', () => {
+        const config = withWindow(65_536, {
+          truncateToolOutputThreshold: 40_000,
+          toolOutputBatchBudget: 300_000,
+        });
+        expect(config.getTruncateToolOutputThreshold()).toBe(40_000);
+        expect(config.getToolOutputBatchBudget()).toBe(300_000);
+      });
+
+      it('keeps a floor for tiny windows', () => {
+        expect(withWindow(4_096).getTruncateToolOutputThreshold()).toBe(2_000);
+      });
+    });
   });
 
   describe('getMaxToolCallsPerTurn', () => {

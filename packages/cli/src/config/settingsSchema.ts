@@ -2612,7 +2612,7 @@ const SETTINGS_SCHEMA = {
         requiresRestart: true,
         default: DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
         description:
-          'Truncate tool output if it is larger than this many characters. Set to -1 to disable.',
+          'Truncate tool output if it is larger than this many characters. When unset, models with a context window under 128K tokens get a proportionally smaller limit (12,800 for a 64K window). Set to -1 to disable.',
         showInDialog: false,
       },
       truncateToolOutputLines: {
@@ -2631,7 +2631,7 @@ const SETTINGS_SCHEMA = {
         requiresRestart: true,
         default: DEFAULT_TOOL_OUTPUT_BATCH_BUDGET,
         description:
-          'Per-message character budget for the combined text output of one batch of tool calls. Oversized batches are reduced deterministically and recoverable output is persisted when possible. Set to -1 to disable.',
+          'Per-message character budget for the combined text output of one batch of tool calls. Oversized batches are reduced deterministically and recoverable output is persisted when possible. When unset, models with a context window under 128K tokens get a proportionally smaller budget. Set to -1 to disable.',
         showInDialog: false,
       },
     },

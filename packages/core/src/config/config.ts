@@ -624,6 +624,13 @@ export interface ExtensionInstallMetadata {
 export const DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD = 25_000;
 export const DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES = 1000;
 /**
+ * Smallest context window that gets the default tool-output caps in full.
+ * Smaller windows scale the defaults down in proportion (never below
+ * MIN_SCALED_OUTPUT_CAP), so one result cannot fill a small model's window.
+ */
+export const FULL_OUTPUT_CAP_WINDOW = 128_000;
+export const MIN_SCALED_OUTPUT_CAP = 2_000;
+/**
  * Per-message budget (chars) for the combined model-facing output of one
  * batch of tool calls. When a batch's total output exceeds this, the largest
  * results are offloaded to disk (with a recoverable pointer). `<= 0` disables.
@@ -2454,6 +2461,7 @@ export class Config {
   private readonly truncateToolOutputThresholdExplicit: boolean;
   private readonly truncateToolOutputLines: number;
   private readonly toolOutputBatchBudget: number;
+  private readonly toolOutputBatchBudgetExplicit: boolean;
   private readonly shellDefaultTimeoutMs: number | undefined;
   private readonly shellHeartbeatIntervalMs: number | undefined;
   private readonly eventEmitter?: EventEmitter;
@@ -2799,6 +2807,7 @@ export class Config {
       params.truncateToolOutputLines ?? DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES;
     this.toolOutputBatchBudget =
       params.toolOutputBatchBudget ?? DEFAULT_TOOL_OUTPUT_BATCH_BUDGET;
+    this.toolOutputBatchBudgetExplicit = params.toolOutputBatchBudget != null;
     // Guard: nothing validates settings.json on the load path (the schema only
     // runs on the /config write path), so this is the only real gate. The value
     // reaches `AbortSignal.timeout()`, which requires an integer in [0, 2^31-1];
@@ -8305,7 +8314,26 @@ export class Config {
       return Number.POSITIVE_INFINITY;
     }
 
-    return this.truncateToolOutputThreshold;
+    return this.truncateToolOutputThresholdExplicit
+      ? this.truncateToolOutputThreshold
+      : this.scaleOutputCap(this.truncateToolOutputThreshold);
+  }
+
+  /**
+   * Scale a default tool-output cap to the current model's context window:
+   * unchanged at FULL_OUTPUT_CAP_WINDOW and above or when the window is
+   * unknown, proportionally smaller below it. Explicit settings are never
+   * scaled; callers pass only defaults.
+   */
+  scaleOutputCap(cap: number): number {
+    const window = this.getContentGeneratorConfig()?.contextWindowSize;
+    if (!window || window <= 0 || window >= FULL_OUTPUT_CAP_WINDOW) {
+      return cap;
+    }
+    return Math.max(
+      MIN_SCALED_OUTPUT_CAP,
+      Math.round((cap * window) / FULL_OUTPUT_CAP_WINDOW),
+    );
   }
 
   isTruncateToolOutputThresholdExplicit(): boolean {
@@ -8344,7 +8372,9 @@ export class Config {
       return Number.POSITIVE_INFINITY;
     }
 
-    return this.toolOutputBatchBudget;
+    return this.toolOutputBatchBudgetExplicit
+      ? this.toolOutputBatchBudget
+      : this.scaleOutputCap(this.toolOutputBatchBudget);
   }
 
   trackToolResultBytes(n: number): void {
