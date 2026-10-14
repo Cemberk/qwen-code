@@ -20,6 +20,7 @@ import { SettingScope } from '../../config/settings.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { getLocalModelServer } from '@qwen-code/qwen-code-core/local-models/local-model-server.js';
 import { modelsCommand } from './models-command.js';
+import type { CommandContext } from './types.js';
 
 const COMMIT = '75f1b73b657a50f5092502799457ccb4a4a1f9df';
 const local = [
@@ -144,6 +145,40 @@ describe('/models', () => {
       'unsloth/Qwen3.6-35B-A3B-GGUF',
       'Qwen3.6-35B-A3B-UD-IQ4_XS.gguf',
     ]);
+  });
+
+  it('lists an added model in this session, so /model can switch to it', async () => {
+    let listed: unknown = local;
+    const settings = {
+      get merged() {
+        return { localModels: listed };
+      },
+      setValue: vi.fn((_scope: SettingScope, _key: string, value: unknown) => {
+        listed = value;
+      }),
+    } as unknown as LoadedSettings;
+    const reloadModelProvidersConfig = vi.fn();
+    const setModels = vi.spyOn(getLocalModelServer(), 'setModels');
+    const ctx = createMockCommandContext();
+    ctx.services.settings = settings;
+    ctx.services.config = {
+      reloadModelProvidersConfig,
+    } as unknown as CommandContext['services']['config'];
+    try {
+      await sub('download').action!(
+        ctx,
+        'unsloth/Qwen3.6-35B-A3B-GGUF Qwen3.6-35B-A3B-UD-IQ4_XS.gguf',
+      );
+      const ids = (
+        reloadModelProvidersConfig.mock.calls[0][0] as {
+          openai: Array<{ id: string }>;
+        }
+      ).openai.map((entry) => entry.id);
+      expect(ids).toEqual(['q-small', 'q-big', 'qwen3.6-35b-a3b-ud-iq4_xs']);
+      expect(setModels).toHaveBeenCalledWith(listed);
+    } finally {
+      setModels.mockRestore();
+    }
   });
 
   it('reports a failed download with the output of hf', async () => {

@@ -12,6 +12,7 @@ import {
   BUILT_IN_LOCAL_MODELS,
   isHuggingFaceRepo,
   validateLocalModels,
+  withLocalModelProviders,
   type LocalModelConfig,
 } from '@qwen-code/qwen-code-core/local-models/local-models.js';
 import { SettingScope, type LoadedSettings } from '../../config/settings.js';
@@ -115,6 +116,13 @@ const downloadCommand: SlashCommand = {
       }
       // Listed so /model can switch to it once it is downloaded.
       settings.setValue(SettingScope.User, 'localModels', [...models, added]);
+      // The settings watcher skips the CLI's own writes, so apply the new
+      // list to this session here, as /auth does for its providers.
+      const listed = localModels(settings);
+      getLocalModelServer().setModels(listed);
+      context.services.config?.reloadModelProvidersConfig(
+        withLocalModelProviders(settings.merged.modelProviders, listed),
+      );
       model = added;
     }
     if (!model || parts.length === 0 || parts.length > 2) {
