@@ -94,6 +94,10 @@ export function warnOnUnmatchedEagerToolEntries(config: Config): void {
     if (!config.getPermissionManager()?.isEagerToolAllowListActive()) {
       return;
     }
+    // The default list names tools some sessions do not register.
+    if (config.isEagerToolsDefault?.()) {
+      return;
+    }
     const registry = config.getToolRegistry();
     if (!registry) {
       return;

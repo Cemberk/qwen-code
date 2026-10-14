@@ -34,6 +34,7 @@ const neverCalledFactory: ToolFactory = async () => {
  */
 function makeSession(opts: {
   eagerTools: string[];
+  eagerToolsDefault?: boolean;
   registered?: string[];
   mcpServers?: Record<string, { command: string; args?: string[] }>;
 }): {
@@ -43,6 +44,7 @@ function makeSession(opts: {
 } {
   const config = makeFakeConfig({
     eagerTools: opts.eagerTools,
+    eagerToolsDefault: opts.eagerToolsDefault,
     trustedFolder: true,
     ...(opts.mcpServers ? { mcpServers: opts.mcpServers } : {}),
   });
@@ -167,6 +169,20 @@ describe('tools.eager entries that match no discovered tool (#12435)', () => {
 
     expect(eagerWarnings()).toHaveLength(1);
     expect(eagerWarnings()[0]).toContain('read_flie');
+  });
+
+  it('stays quiet about the default list, whose tools some sessions lack', async () => {
+    // web_fetch exists only with web access on, ask_user_question only in
+    // interactive sessions.
+    const { config, registry } = makeSession({
+      eagerTools: ['read_file', 'web_fetch', 'ask_user_question'],
+      eagerToolsDefault: true,
+      registered: ['read_file', 'run_shell_command'],
+    });
+
+    await runDiscoveryPass(registry, config);
+
+    expect(eagerWarnings()).toEqual([]);
   });
 
   it('stays quiet when every entry names a registered tool', async () => {

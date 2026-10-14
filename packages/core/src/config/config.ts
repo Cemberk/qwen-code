@@ -833,6 +833,12 @@ export interface ConfigParameters {
    * auto-approval and never affects registration (#10075).
    */
   eagerTools?: string[];
+  /**
+   * `eagerTools` is Qwen Code's default list, not the user's `tools.eager`.
+   * Its entries may name tools a session does not register (for example
+   * `web_fetch` with web access off), so no warning is given for them.
+   */
+  eagerToolsDefault?: boolean;
   /** Replace ordinary model-facing tools with the isolated exec bridge. */
   codeModeOnly?: boolean;
   /**
@@ -2227,6 +2233,7 @@ export class Config {
   private readonly disabledTools: ReadonlySet<string>;
   private readonly visibleTools: ReadonlySet<string>;
   private readonly eagerTools: readonly string[] | undefined;
+  private readonly eagerToolsDefault: boolean;
   private readonly toolSearchThreshold: number;
   private readonly toolMode: ToolModeValue;
   private readonly permissionsAllow: string[];
@@ -2595,6 +2602,7 @@ export class Config {
     // An explicitly empty array is preserved as an ACTIVE-but-empty
     // allowlist (defer everything); only `undefined` means "no
     // restriction". `tools.core` differs: its empty list is treated as unset.
+    this.eagerToolsDefault = params.eagerToolsDefault === true;
     this.eagerTools =
       params.eagerTools === undefined
         ? undefined
@@ -5795,6 +5803,11 @@ export class Config {
    */
   getEagerTools(): readonly string[] | undefined {
     return this.eagerTools;
+  }
+
+  /** Whether the eager allowlist is Qwen Code's default, not `tools.eager`. */
+  isEagerToolsDefault(): boolean {
+    return this.eagerToolsDefault;
   }
 
   /**

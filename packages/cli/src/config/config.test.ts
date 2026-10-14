@@ -4134,6 +4134,7 @@ describe('loadCliConfig tools.eager wiring (#9827, #10075)', () => {
     const config = await loadCliConfig(settings, argv, undefined, []);
 
     expect(config.getEagerTools()).toEqual(['ReadFile', 'Shell']);
+    expect(config.isEagerToolsDefault()).toBe(false);
   });
 
   it('keeps an explicitly empty tools.eager list active', async () => {
@@ -4216,6 +4217,8 @@ describe('loadCliConfig tools.eager wiring (#9827, #10075)', () => {
       'ask_user_question',
       'web_fetch',
     ]);
+    // Marked as the default, so unregistered entries are not warned about.
+    expect(config.isEagerToolsDefault()).toBe(true);
   });
 
   it.each([

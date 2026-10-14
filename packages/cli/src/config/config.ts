@@ -1896,6 +1896,16 @@ export async function loadCliConfig(
     }
   }
 
+  // The default eager allowlist (DEFAULT_EAGER_TOOLS) applies only when the
+  // tool_search + tool_call bridge is available: without it nothing could
+  // load the deferred tools back.
+  const useDefaultEagerTools =
+    !bareMode &&
+    !safeMode &&
+    ['tool_search', 'tool_call'].every((name) =>
+      isToolEnabled(name as ToolName, [], [...mergedDeny, ...disabledTools]),
+    );
+
   const sandboxConfig = await loadSandboxConfig(
     bareMode || safeMode ? ({} as Settings) : settings,
     argv,
@@ -2101,22 +2111,10 @@ export async function loadCliConfig(
             .map((d) => d.trim()),
     disabledTools: disabledTools.length > 0 ? disabledTools : undefined,
     visibleTools: visibleTools.length > 0 ? visibleTools : undefined,
-    // Without the tool_search + tool_call bridge nothing could load the
-    // deferred tools back, so the default allowlist needs both halves.
     eagerTools:
       eagerTools ??
-      (bareMode ||
-      safeMode ||
-      ['tool_search', 'tool_call'].some(
-        (name) =>
-          !isToolEnabled(
-            name as ToolName,
-            [],
-            [...mergedDeny, ...disabledTools],
-          ),
-      )
-        ? undefined
-        : [...DEFAULT_EAGER_TOOLS]),
+      (useDefaultEagerTools ? [...DEFAULT_EAGER_TOOLS] : undefined),
+    eagerToolsDefault: eagerTools === undefined && useDefaultEagerTools,
     codeModeOnly:
       !bareMode && !safeMode && settings.tools?.codeModeOnly === true,
     toolSearchThreshold:
