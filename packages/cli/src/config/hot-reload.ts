@@ -402,3 +402,33 @@ export function registerModelProvidersHotReload(
   void reconcile();
   return watcher.addChangeListener(reconcile);
 }
+
+const webFetchDebugLogger = createDebugLogger('WEB_FETCH_HOT_RELOAD');
+
+/**
+ * Apply `tools.webFetch` edits to the running session, so editing
+ * settings.json turns web access on or off the way `/web` does.
+ */
+export function registerWebFetchHotReload(
+  watcher: SettingsWatcher,
+  settings: LoadedSettings,
+  config: Config,
+): () => void {
+  const reconcile = async () => {
+    const enabled = settings.merged.tools?.webFetch === true;
+    if (enabled === config.isWebFetchEnabled()) {
+      return;
+    }
+    try {
+      await config.setWebFetchEnabled(enabled);
+    } catch (err) {
+      webFetchDebugLogger.error(
+        `setWebFetchEnabled(${enabled}) threw: ${
+          err instanceof Error ? (err.stack ?? err.message) : String(err)
+        }`,
+      );
+    }
+  };
+  void reconcile();
+  return watcher.addChangeListener(reconcile);
+}

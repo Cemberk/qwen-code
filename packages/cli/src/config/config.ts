@@ -2244,6 +2244,7 @@ export async function loadCliConfig(
     fastModel: settings.fastModel || undefined,
     advisorModel,
     advisorMaxUses: settings.advisorMaxUses,
+    webFetch: settings.tools?.webFetch === true,
     visionModel: settings.visionModel || undefined,
     compactionModel: settings.compactionModel || undefined,
     visionBridgeTimeoutMs: settings.visionBridgeTimeoutMs,

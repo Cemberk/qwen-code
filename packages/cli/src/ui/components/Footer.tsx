@@ -157,6 +157,12 @@ export const Footer: React.FC<FooterProps> = ({ containerRef }) => {
       node: <Text color={theme.status.success}>{sandboxInfo}</Text>,
     });
   }
+  if (config.isWebFetchEnabled()) {
+    rightItems.push({
+      key: 'web',
+      node: <Text color={theme.status.warning}>web on</Text>,
+    });
+  }
   if (config.isSafeMode()) {
     rightItems.push({
       key: 'safe-mode',

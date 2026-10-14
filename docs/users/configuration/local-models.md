@@ -3,7 +3,7 @@
 Qwen Code comes with a list of Qwen models that it runs itself with llama.cpp.
 Download a model once, pick it with `/model`, and Qwen Code starts
 `llama-server` when you send your first prompt and stops it when you exit.
-Qwen Code never connects to the internet: you download the model files
+Qwen Code does not download models by itself: you download the model files
 yourself.
 
 ## Setup

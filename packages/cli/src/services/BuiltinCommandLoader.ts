@@ -48,6 +48,7 @@ import { forgetCommand } from '../ui/commands/forgetCommand.js';
 import { memoryCommand } from '../ui/commands/memoryCommand.js';
 import { modelCommand } from '../ui/commands/modelCommand.js';
 import { modelsCommand } from '../ui/commands/models-command.js';
+import { webCommand } from '../ui/commands/web-command.js';
 import { outputStyleCommand } from '../ui/commands/output-style-command.js';
 import { rememberCommand } from '../ui/commands/rememberCommand.js';
 import { planCommand } from '../ui/commands/planCommand.js';
@@ -156,6 +157,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       toolsCommand,
       settingsCommand,
       vimCommand,
+      webCommand,
       terminalSetupCommand,
       insightCommand,
       statuslineCommand,

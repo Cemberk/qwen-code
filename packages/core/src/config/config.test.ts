@@ -5375,6 +5375,74 @@ describe('Server Config (config.ts)', () => {
       expect(registeredNames).toContain(ToolNames.READ_MCP_RESOURCE);
     });
 
+    it('registers web_fetch only when web access is on', async () => {
+      const off = new Config({ ...baseParams });
+      await off.initialize();
+      const names = () =>
+        (ToolRegistry.prototype.registerFactory as Mock).mock.calls.map(
+          (call) => call[0],
+        );
+      expect(off.isWebFetchEnabled()).toBe(false);
+      expect(names()).not.toContain(ToolNames.WEB_FETCH);
+
+      const on = new Config({ ...baseParams, webFetch: true });
+      await on.initialize();
+      expect(on.isWebFetchEnabled()).toBe(true);
+      expect(names()).toContain(ToolNames.WEB_FETCH);
+      expect(on.getToolRegistry().ensureTool).toHaveBeenCalledWith(
+        ToolNames.WEB_FETCH,
+      );
+    });
+
+    it('adds and removes web_fetch when web access is switched', async () => {
+      const config = new Config({ ...baseParams });
+      await config.initialize();
+      const setTools = vi.fn().mockResolvedValue(undefined);
+      (
+        config as unknown as {
+          llmClient: { setTools: typeof setTools };
+        }
+      ).llmClient = { setTools };
+      const registry = config.getToolRegistry();
+      vi.mocked(registry.registerFactory).mockClear();
+
+      await config.setWebFetchEnabled(true);
+
+      expect(config.isWebFetchEnabled()).toBe(true);
+      expect(registry.registerFactory).toHaveBeenCalledWith(
+        ToolNames.WEB_FETCH,
+        expect.any(Function),
+      );
+      expect(registry.ensureTool).toHaveBeenCalledWith(ToolNames.WEB_FETCH);
+      expect(setTools).toHaveBeenCalledTimes(1);
+
+      vi.mocked(registry.registerFactory).mockClear();
+      await config.setWebFetchEnabled(false);
+
+      expect(config.isWebFetchEnabled()).toBe(false);
+      expect(registry.unregisterTool).toHaveBeenLastCalledWith(
+        ToolNames.WEB_FETCH,
+      );
+      expect(registry.registerFactory).not.toHaveBeenCalled();
+      expect(setTools).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not register web_fetch when the tool is disabled or in safe mode', async () => {
+      for (const params of [
+        { disabledTools: [ToolNames.WEB_FETCH] },
+        { safeMode: true },
+      ]) {
+        vi.mocked(ToolRegistry.prototype.registerFactory).mockClear();
+        const config = new Config({ ...baseParams, ...params, webFetch: true });
+        await config.initialize();
+        const names = (
+          ToolRegistry.prototype.registerFactory as Mock
+        ).mock.calls.map((call) => call[0]);
+        expect(names).not.toContain(ToolNames.WEB_FETCH);
+        expect(config.isWebFetchEnabled()).toBe(!('safeMode' in params));
+      }
+    });
+
     it('registers and removes Advisor with the runtime model setting', async () => {
       const config = new Config({ ...baseParams });
       await config.initialize();

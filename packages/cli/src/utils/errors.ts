@@ -6,6 +6,7 @@
 
 import type { Config } from '@qwen-code/qwen-code-core';
 import {
+  ApprovalMode,
   OutputFormat,
   JsonFormatter,
   parseAndFormatApiError,
@@ -235,10 +236,16 @@ export function handleToolError(
   if (isExecutionDenied && isNonInteractive && isTextMode) {
     const displayName = sanitizeForStderr(toolName, TOOL_NAME_ECHO_LIMIT);
     if (options.approvalRequired) {
+      // Under YOLO, a call still denied for approval comes from a tool that
+      // asks on every call (web_fetch, ask_user_question): -y cannot help.
+      const hint =
+        config.getApprovalMode() === ApprovalMode.YOLO
+          ? `It asks on every call, even in YOLO mode, so it only runs in an interactive session.\n\n`
+          : `To enable automatic tool execution, use the -y flag (YOLO mode):\n` +
+            `Example: qwen -p 'your prompt' -y\n\n`;
       process.stderr.write(
         `Warning: Tool "${displayName}" requires user approval but cannot execute in non-interactive mode.\n` +
-          `To enable automatic tool execution, use the -y flag (YOLO mode):\n` +
-          `Example: qwen -p 'your prompt' -y\n\n`,
+          hint,
       );
     } else {
       const reason = sanitizeForStderr(

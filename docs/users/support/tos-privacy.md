@@ -1,15 +1,25 @@
 # Qwen Code: Privacy Notice
 
 This build of Qwen Code is a local-only fork of the open-source AI coding
-assistant. It talks to exactly one service: the OpenAI-compatible model server
-that you run and configure yourself on the loopback interface (`127.0.0.1`,
-`::1` or `localhost`), for example Ollama, LM Studio, vLLM or llama.cpp.
+assistant. It talks to the model server on this machine: one it runs itself
+with llama.cpp, or an OpenAI-compatible server that you run and configure on
+the loopback interface (`127.0.0.1`, `::1` or `localhost`), for example
+Ollama, LM Studio, vLLM or llama.cpp.
 
 ## What leaves your machine
 
-Nothing. Qwen Code has no telemetry upload, no usage statistics, no crash or
-feedback reporting, no update checks and no cloud providers. A model base URL
-whose host is not a loopback address is rejected at startup.
+Nothing, unless you ask for it. Qwen Code has no telemetry upload, no usage
+statistics, no crash or feedback reporting, no update checks and no cloud
+providers. A model base URL whose host is not a loopback address is rejected
+at startup.
+
+Two features contact the internet, and only when you use them:
+
+- [Web access](../features/web-fetch), off by default. When it is on, each
+  web page you approve is requested from its site, which sees the URL, your
+  IP address and the user agent `Mozilla/5.0 (compatible; QwenCode)`.
+- `/models download` and `/models remove` run the `hf` tool, which contacts
+  Hugging Face.
 
 The terms and data practices of the model server you run are your own; no
 third party is involved.

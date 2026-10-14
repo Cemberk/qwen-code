@@ -120,6 +120,11 @@ export const TOOL_NAME_ALIASES: Readonly<Record<string, string>> = {
   advisor: 'advisor',
   Advisor: 'advisor',
 
+  // Web fetch tool (only registered while web access is on)
+  web_fetch: 'web_fetch',
+  WebFetch: 'web_fetch',
+  WebFetchTool: 'web_fetch',
+
   // Agent (subagent) tool
   agent: 'agent',
   Agent: 'agent',

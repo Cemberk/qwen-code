@@ -271,6 +271,8 @@ export const WORKSPACE_RESTRICTED_SETTINGS = [
   // Sandbox, credentials, trust and storage locations.
   { section: 'tools', key: 'sandbox' },
   { section: 'tools', key: 'sandboxImage' },
+  // Network access beyond this machine.
+  { section: 'tools', key: 'webFetch' },
   { section: 'security', key: 'auth' },
   { section: 'security', key: 'folderTrust' },
   { section: 'advanced', key: 'runtimeOutputDir' },

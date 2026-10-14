@@ -74,6 +74,7 @@ const createMockConfig = (overrides = {}) => ({
   getSessionId: vi.fn(() => 'test-session'),
   getMemoryManager: vi.fn(createMockMemoryManager),
   isSafeMode: vi.fn(() => false),
+  isWebFetchEnabled: vi.fn(() => false),
   ...overrides,
 });
 
@@ -577,6 +578,17 @@ describe('<Footer />', () => {
     expect(frame).toContain('⏸');
     expect(frame).toContain('Ask permissions');
     expect(frame).not.toContain('? for shortcuts');
+  });
+
+  it('shows "web on" only while web access is on', () => {
+    expect(renderWithWidth(120, createMockUIState()).lastFrame()).not.toContain(
+      'web on',
+    );
+    expect(
+      renderWithWidth(120, createMockUIState(), {
+        isWebFetchEnabled: vi.fn(() => true),
+      }).lastFrame(),
+    ).toContain('web on');
   });
 
   it('does not display the working directory or branch name', () => {

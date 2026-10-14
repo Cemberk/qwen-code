@@ -19,7 +19,7 @@ Make sure you have:
 This fork is built from source. It is not published to a package registry, and
 there is no installer or update channel. The steps below download tools,
 dependencies and a model. After that, Qwen Code itself connects only to this
-machine.
+machine, unless you turn on [web access](./features/web-fetch).
 
 ### Install the tools
 
@@ -123,8 +123,9 @@ On a Mac with less than 24 GB of memory, use `qwen3-8b` or `qwen3-4b`. See
 [Local Models](./configuration/local-models) for the full list and how to
 change it.
 
-Qwen Code connects only to model servers on this machine. It downloads a
-model only when you run `/models download`.
+Qwen Code connects only to model servers on this machine, unless you turn on
+[web access](./features/web-fetch). It downloads a model only when you run
+`/models download`.
 
 ### Using your own model server
 

@@ -360,6 +360,12 @@ export default {
     'Theme "{{themeName}}" not found in selected scope.',
   'List, download or remove local models':
     'List, download or remove local models',
+  'Turn web access on or off: /web on, /web off':
+    'Turn web access on or off: /web on, /web off',
+  'Let the model fetch web pages, asking you before each fetch':
+    'Let the model fetch web pages, asking you before each fetch',
+  'Remove web access: the model cannot fetch web pages':
+    'Remove web access: the model cannot fetch web pages',
   'Download a local model: /models download <id>, or <repo> <file> to add one':
     'Download a local model: /models download <id>, or <repo> <file> to add one',
   'Delete a local model from disk: /models remove <id or repo>':

@@ -51,6 +51,7 @@ import { SettingsWatcher } from './config/settingsWatcher.js';
 import {
   registerMcpHotReload,
   registerModelProvidersHotReload,
+  registerWebFetchHotReload,
 } from './config/hot-reload.js';
 import { LspConfigWatcher } from './config/lsp-config-watcher.js';
 import { ExtensionFileWatcher } from './config/extension-file-watcher.js';
@@ -822,6 +823,11 @@ export async function main() {
         config,
       );
       registerCleanup(disposeModelProvidersHotReload);
+    }
+    if (settingsWatcher) {
+      registerCleanup(
+        registerWebFetchHotReload(settingsWatcher, settings, config),
+      );
     }
 
     registerLspHotReload(config, registerCleanup);

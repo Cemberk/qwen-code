@@ -9,6 +9,7 @@ import type { Config } from '../config/config.js';
 import type { AnyDeclarativeTool } from './tools.js';
 import { ToolNames } from './tool-names.js';
 import { AdvisorTool } from './advisor.js';
+import { WebFetchTool } from './web-fetch.js';
 import { ArtifactTool } from './artifact/artifact-tool.js';
 import type { ArtifactPublisher } from './artifact/publisher.js';
 import { AskUserQuestionTool } from './askUserQuestion.js';
@@ -157,6 +158,8 @@ const RESIDENT: ReadonlyArray<[name: string, build: Build, budget: number]> = [
   ['list_directory', (c) => new LSTool(c), 1_100],
   ['grep_search (fallback)', (c) => new GrepTool(c), 1_050],
   ['glob', (c) => new GlobTool(c), 800],
+  // Registered only while web access is on (`/web on`).
+  ['web_fetch', (c) => new WebFetchTool(c), 750],
   ['task_create', (c) => new TaskCreateTool(c), 650],
   ['tool_call', () => new ToolCallTool(), 650],
   ['team_plan_approval', (c) => new TeamPlanApprovalTool(c), 600],

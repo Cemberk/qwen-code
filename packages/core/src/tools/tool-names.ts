@@ -68,6 +68,7 @@ export const ToolNames = {
   UPDATE_GOAL: 'update_goal',
   PROPOSE_GOAL: 'propose_goal',
   DISPLAY_IMAGE: 'display_image',
+  WEB_FETCH: 'web_fetch',
 } as const;
 
 /**
@@ -126,6 +127,7 @@ export const ToolDisplayNames = {
   UPDATE_GOAL: 'UpdateGoal',
   PROPOSE_GOAL: 'ProposeGoal',
   DISPLAY_IMAGE: 'DisplayImage',
+  WEB_FETCH: 'WebFetch',
 } as const;
 
 // Migration from old tool names to new tool names

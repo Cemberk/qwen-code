@@ -7,6 +7,7 @@
 import { vi, type Mock, type MockInstance } from 'vitest';
 import type { Config } from '@qwen-code/qwen-code-core';
 import {
+  ApprovalMode,
   OutputFormat,
   FatalInputError,
   ToolErrorType,
@@ -113,6 +114,7 @@ describe('errors', () => {
       getContentGeneratorConfig: vi.fn().mockReturnValue({ authType: 'test' }),
       getDebugMode: vi.fn().mockReturnValue(true),
       isInteractive: vi.fn().mockReturnValue(false),
+      getApprovalMode: vi.fn().mockReturnValue(ApprovalMode.DEFAULT),
     } as unknown as Config;
   });
 
@@ -566,6 +568,27 @@ describe('errors', () => {
           expect.stringContaining('use the -y flag (YOLO mode)'),
         );
         expect(processExitSpy).not.toHaveBeenCalled();
+      });
+
+      it('does not suggest -y when YOLO mode is already on', () => {
+        (mockConfig.getDebugMode as Mock).mockReturnValue(false);
+        (mockConfig.getApprovalMode as Mock).mockReturnValue(ApprovalMode.YOLO);
+
+        handleToolError(
+          toolName,
+          toolError,
+          mockConfig,
+          ToolErrorType.EXECUTION_DENIED,
+          undefined,
+          { approvalRequired: true },
+        );
+
+        expect(processStderrWriteSpy).toHaveBeenCalledWith(
+          expect.stringContaining('even in YOLO mode'),
+        );
+        expect(processStderrWriteSpy).not.toHaveBeenCalledWith(
+          expect.stringContaining('-y flag'),
+        );
       });
 
       it('reports the denial reason instead of the approval hint for other denials', () => {

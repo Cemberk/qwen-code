@@ -2230,6 +2230,16 @@ const SETTINGS_SCHEMA = {
           },
         },
       },
+      webFetch: {
+        type: 'boolean',
+        label: 'Web Fetch',
+        category: 'Tools',
+        requiresRestart: false,
+        default: false,
+        description:
+          "Give the model the web_fetch tool, which reads web pages. Every fetch asks for your approval. Off by default. Turn it on or off with /web. A project's settings cannot change it.",
+        showInDialog: false,
+      },
       codeModeOnly: {
         type: 'boolean',
         label: 'Code Mode Only (Experimental)',

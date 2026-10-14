@@ -1143,6 +1143,11 @@ export interface ConfigParameters {
   advisorModel?: string;
   advisorMaxUses?: number;
   /**
+   * Register the web_fetch tool (`tools.webFetch`). Off by default; every
+   * fetch still asks the user.
+   */
+  webFetch?: boolean;
+  /**
    * Safe mode: disables all user customizations (context files, hooks,
    * extensions, skills, MCP servers, rules) for troubleshooting.
    * Activated via `--safe-mode` CLI flag or `QWEN_CODE_SAFE_MODE=true` env var.
@@ -2476,6 +2481,7 @@ export class Config {
   private advisorModel?: string;
   private readonly advisorMaxUses: number;
   private readonly advisorUsage = { calls: 0 };
+  private webFetchEnabled: boolean;
   private visionModel?: string;
   private compactionModel?: string;
   private reasoningSnapshot?: ReasoningSnapshot;
@@ -2935,6 +2941,7 @@ export class Config {
         : undefined;
     this.fastModel = params.fastModel || undefined;
     this.advisorModel = normalizeAdvisorModel(params.advisorModel);
+    this.webFetchEnabled = params.webFetch === true;
     // Nothing validates settings.json on the load path, so a hand-edited
     // -1, 1.5 or "5" reaches this constructor. Fall back to the default
     // (unlimited) like the neighbouring numeric settings instead of refusing
@@ -4860,6 +4867,24 @@ export class Config {
 
   getAdvisorModel(): string | undefined {
     return this.advisorModel;
+  }
+
+  /**
+   * Whether web access is on: the user turned it on (`/web on`,
+   * `tools.webFetch`) and the session is not in bare or safe mode.
+   */
+  isWebFetchEnabled(): boolean {
+    return this.webFetchEnabled && !this.getBareMode() && !this.isSafeMode();
+  }
+
+  /** Add or remove the web_fetch tool in the running session. */
+  async setWebFetchEnabled(enabled: boolean): Promise<void> {
+    this.webFetchEnabled = enabled;
+    if (!this.initialized || !this.toolRegistry) {
+      return;
+    }
+    await this.syncWebFetchToolRegistration(this.toolRegistry);
+    await this.llmClient?.setTools();
   }
 
   async setAdvisorModel(model: string | undefined): Promise<boolean> {
@@ -8830,6 +8855,25 @@ export class Config {
     await registry.ensureTool(ToolNames.ADVISOR);
   }
 
+  private async syncWebFetchToolRegistration(
+    registry: ToolRegistry,
+  ): Promise<void> {
+    registry.unregisterTool(ToolNames.WEB_FETCH);
+    if (
+      !this.isWebFetchEnabled() ||
+      this.getDisabledTools().has(ToolNames.WEB_FETCH)
+    ) {
+      return;
+    }
+    await this.registerLazyTool(registry, ToolNames.WEB_FETCH, async () => {
+      const { WebFetchTool } = await import('../tools/web-fetch.js');
+      return new WebFetchTool(this);
+    });
+    // Build it now: unregisterTool only removes built tools, so a pending
+    // factory would survive `/web off`.
+    await registry.ensureTool(ToolNames.WEB_FETCH);
+  }
+
   async createToolRegistry(
     sendSdkMcpMessage?: SendSdkMcpMessage,
     options?: { skipDiscovery?: boolean; forSubAgent?: boolean },
@@ -9026,6 +9070,7 @@ export class Config {
     await registerExecIfEnabled();
     await registerGoalWorkerTools();
     await this.syncAdvisorToolRegistration(registry);
+    await this.syncWebFetchToolRegistration(registry);
     await registerLazy(ToolNames.TOOL_CALL, async () => {
       const { ToolCallTool } = await import('../tools/tool-call.js');
       return new ToolCallTool(registry);

@@ -36,6 +36,7 @@ import type {
 import {
   registerMcpHotReload,
   registerModelProvidersHotReload,
+  registerWebFetchHotReload,
   mcpServersEqual,
   mcpGatingEqual,
 } from './hot-reload.js';
@@ -983,5 +984,48 @@ describe('registerModelProvidersHotReload', () => {
     } finally {
       appEvents.off(AppEvent.LogError, spy);
     }
+  });
+});
+
+describe('registerWebFetchHotReload', () => {
+  it('applies tools.webFetch edits to the session', async () => {
+    let listener: SettingsChangeListener | undefined;
+    const unsubscribe = vi.fn();
+    const watcher = {
+      addChangeListener: vi.fn((l: SettingsChangeListener) => {
+        listener = l;
+        return unsubscribe;
+      }),
+    } as unknown as SettingsWatcher;
+    let enabled = false;
+    const setWebFetchEnabled = vi.fn(async (value: boolean) => {
+      enabled = value;
+    });
+    const config = {
+      isWebFetchEnabled: () => enabled,
+      setWebFetchEnabled,
+    } as unknown as Config;
+    const merged = { tools: {} } as Settings;
+    const settings = { merged } as LoadedSettings;
+
+    const dispose = registerWebFetchHotReload(watcher, settings, config);
+    await vi.waitFor(() =>
+      expect(watcher.addChangeListener).toHaveBeenCalled(),
+    );
+    expect(setWebFetchEnabled).not.toHaveBeenCalled();
+
+    merged.tools = { webFetch: true };
+    await listener!([]);
+    expect(setWebFetchEnabled).toHaveBeenLastCalledWith(true);
+
+    await listener!([]);
+    expect(setWebFetchEnabled).toHaveBeenCalledTimes(1);
+
+    merged.tools = { webFetch: false };
+    await listener!([]);
+    expect(setWebFetchEnabled).toHaveBeenLastCalledWith(false);
+
+    dispose();
+    expect(unsubscribe).toHaveBeenCalledOnce();
   });
 });

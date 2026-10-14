@@ -6,15 +6,18 @@ your own machine.**
 This fork of Qwen Code runs the interactive terminal CLI (`qwen`) and headless
 mode (`qwen -p`) against Qwen models it runs itself with llama.cpp, or against
 your own OpenAI-compatible model server on this machine, such as Ollama,
-LM Studio, vLLM or llama.cpp. It makes no other network connections:
+LM Studio, vLLM or llama.cpp. Unless you turn on web access, it makes no other
+network connections:
 
 - Model servers must be on `127.0.0.1`, `::1` or `localhost`; anything else is
   rejected at startup. Model requests never follow HTTP redirects.
 - The built-in models run offline from the Hugging Face cache. Qwen Code
   downloads a model only when you run `/models download`.
 - No cloud providers, no sign-in, no telemetry uploads, no usage statistics,
-  no update checks, no web tools and no remote MCP servers or extension
-  installs.
+  no update checks and no remote MCP servers or extension installs.
+- Web access is off by default. `/web on` gives the model a `web_fetch` tool
+  that reads web pages, and every fetch asks for your approval; see
+  [Web Access](./docs/users/features/web-fetch.md).
 - It is built from source. There is no installer, package-registry release or
   update channel.
 
