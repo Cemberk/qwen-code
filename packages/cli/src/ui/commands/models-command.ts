@@ -5,7 +5,10 @@
  */
 
 import { spawn } from 'node:child_process';
-import { findExecutable } from '@qwen-code/qwen-code-core/local-models/engine.js';
+import {
+  findExecutable,
+  resolveDraftPath,
+} from '@qwen-code/qwen-code-core/local-models/engine.js';
 import {
   appleGpuMemoryLimit,
   localModelBytes,
@@ -183,6 +186,25 @@ const downloadCommand: SlashCommand = {
     if (!ok) {
       return error(`hf download failed:\n${output.trim()}`);
     }
+    if (model.draft) {
+      context.ui.addItem(
+        {
+          type: MessageType.INFO,
+          text: `Running: hf download ${model.draft.repo} ${model.draft.file}`,
+        },
+        Date.now(),
+      );
+      const draft = await runHf([
+        'download',
+        model.draft.repo,
+        model.draft.file,
+      ]);
+      if (!draft.ok) {
+        return error(
+          `Downloaded ${model.name ?? model.id}, but its draft model failed; it runs without it:\n${draft.output.trim()}`,
+        );
+      }
+    }
     let problem: string | undefined;
     if (limit !== undefined) {
       try {
@@ -313,7 +335,10 @@ export const modelsCommand: SlashCommand = {
   action: (context: CommandContext): MessageActionReturn => {
     const lines = localModels(context.services.settings).map(
       (model) =>
-        `${isDownloaded(model) ? '✓' : ' '} ${model.id}  ${model.repo}/${model.file}`,
+        `${isDownloaded(model) ? '✓' : ' '} ${model.id}  ${model.repo}/${model.file}` +
+        (model.draft
+          ? `\n      draft ${model.draft.repo}/${model.draft.file}${resolveDraftPath(model) ? ' ✓' : ' (not downloaded)'}`
+          : ''),
     );
     return {
       type: 'message',

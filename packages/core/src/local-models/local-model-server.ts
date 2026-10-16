@@ -13,14 +13,34 @@ import {
   type LocalModelEngine,
   type LocalModelEngineOptions,
 } from './engine.js';
+import {
+  ensurePromptCacheDir,
+  pickPromptState,
+  promptStateFile,
+  prunePromptStates,
+} from './prompt-cache.js';
 
 /** Permission to send requests to the engine while it serves the leased model. */
 export interface LocalModelLease {
   /** The engine's OpenAI-compatible `/v1` root. */
   readonly baseUrl: string;
   readonly apiKey: string;
-  /** Idempotent. */
-  release(): void;
+  /**
+   * The engine has a prompt cache: conversation turns must run in
+   * CONVERSATION_SLOT and side queries in SIDE_QUERY_SLOT.
+   */
+  readonly pinSlots: boolean;
+  /**
+   * Idempotent. `saveState` marks the end of a conversation turn: the
+   * engine's prompt is saved before the next request runs.
+   */
+  release(options?: { saveState?: boolean }): void;
+}
+
+/** Where saved prompt states go, and which project and session is running. */
+export interface PromptCacheConfig {
+  directory: string;
+  context: () => { project: string; session: string } | undefined;
 }
 
 interface Waiter {
@@ -33,6 +53,7 @@ export type StartEngine = (
   model: LocalModelConfig,
   apiKey: string,
   options: LocalModelEngineOptions,
+  promptCacheDir?: string,
 ) => Promise<LocalModelEngine>;
 
 /**
@@ -42,6 +63,10 @@ export type StartEngine = (
  * released, then the engine restarts with that model. The same happens when
  * the engine options changed. An engine that exited is restarted by the next
  * lease.
+ *
+ * With a prompt cache, a started engine first restores the session's saved
+ * prompt (or the project's latest one), and the prompt is saved again at the
+ * end of each conversation turn, before any other request runs.
  */
 export class LocalModelServer {
   /** Engines started by this server accept only this key. */
@@ -54,6 +79,10 @@ export class LocalModelServer {
   private active = 0;
   private readonly queue: Waiter[] = [];
   private pumping = false;
+  private promptCache?: PromptCacheConfig;
+  private saveRequested = false;
+  /** The running engine was started with a prompt cache folder. */
+  private engineCaches = false;
 
   constructor(
     private readonly startEngine: StartEngine = startLocalModelEngine,
@@ -74,6 +103,14 @@ export class LocalModelServer {
 
   isSpeculationEnabled(): boolean {
     return this.options.speculation;
+  }
+
+  /**
+   * Save and restore the engine's processed prompt per session. Applies to
+   * engines started from now on; `undefined` turns it off.
+   */
+  setPromptCache(cache: PromptCacheConfig | undefined): void {
+    this.promptCache = cache;
   }
 
   /**
@@ -125,10 +162,12 @@ export class LocalModelServer {
     return {
       baseUrl: engine.baseUrl,
       apiKey: this.apiKey,
-      release: () => {
+      pinSlots: this.engineCaches,
+      release: (options) => {
         if (released) return;
         released = true;
         this.active--;
+        if (options?.saveState && this.engineCaches) this.saveRequested = true;
         void this.pump();
       },
     };
@@ -138,7 +177,15 @@ export class LocalModelServer {
     if (this.pumping) return;
     this.pumping = true;
     try {
-      while (this.queue.length > 0) {
+      for (;;) {
+        // Save the turn's prompt before the slot serves anything else.
+        if (this.saveRequested) {
+          if (this.active > 0) return;
+          this.saveRequested = false;
+          await this.savePrompt();
+          continue;
+        }
+        if (this.queue.length === 0) break;
         const head = this.queue[0];
         const engine = this.engine;
         if (
@@ -156,12 +203,17 @@ export class LocalModelServer {
         try {
           await engine?.stop();
           const options = this.options;
-          this.engine = await this.startEngine(
+          const directory = this.usablePromptCacheDir();
+          const started = await this.startEngine(
             head.model,
             this.apiKey,
             options,
+            directory,
           );
+          await this.restorePrompt(started);
+          this.engine = started;
           this.engineOptions = options;
+          this.engineCaches = directory !== undefined;
         } catch (error) {
           // The waiter may have been aborted while the engine started.
           const index = this.queue.indexOf(head);
@@ -171,6 +223,56 @@ export class LocalModelServer {
       }
     } finally {
       this.pumping = false;
+    }
+  }
+
+  /** The prompt cache folder, created if needed; none if it cannot be. */
+  private usablePromptCacheDir(): string | undefined {
+    const directory = this.promptCache?.directory;
+    if (!directory) return undefined;
+    try {
+      ensurePromptCacheDir(directory);
+      return directory;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async restorePrompt(engine: LocalModelEngine): Promise<void> {
+    const cache = this.promptCache;
+    const context = cache?.context();
+    if (!cache || !context) return;
+    // A missing, unreadable or stale state only means the prompt is read in
+    // full, so nothing here may fail the request.
+    try {
+      const file = pickPromptState(
+        cache.directory,
+        context.project,
+        engine.stateKey,
+        context.session,
+      );
+      if (file) await engine.slot('restore', file);
+    } catch {
+      // Read the prompt in full.
+    }
+  }
+
+  private async savePrompt(): Promise<void> {
+    const engine = this.engine;
+    const cache = this.promptCache;
+    const context = cache?.context();
+    if (!engine?.alive || !this.engineCaches || !cache || !context) return;
+    const file = promptStateFile(
+      context.project,
+      engine.stateKey,
+      context.session,
+    );
+    if (await engine.slot('save', file)) {
+      try {
+        prunePromptStates(cache.directory);
+      } catch {
+        // Pruning is best effort; the next save tries again.
+      }
     }
   }
 }

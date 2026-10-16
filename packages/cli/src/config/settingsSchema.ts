@@ -295,6 +295,17 @@ const SETTINGS_SCHEMA = {
     mergeStrategy: MergeStrategy.REPLACE,
   },
 
+  localModelPromptCache: {
+    type: 'boolean',
+    label: 'Local Model Prompt Cache',
+    category: 'Model',
+    requiresRestart: true,
+    default: true,
+    description:
+      "Save the local model engine's processed prompt at the end of each turn (in the user cache folder), so resuming a session, or starting a new one in the same project, does not read it again. Uses up to 4 GB of disk; the oldest states are deleted first.",
+    showInDialog: false,
+  },
+
   speculativeDecoding: {
     type: 'boolean',
     label: 'Speculative Decoding',

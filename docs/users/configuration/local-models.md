@@ -14,6 +14,19 @@ Install llama.cpp; Qwen Code finds `llama-server` on your `PATH`:
 brew install llama.cpp
 ```
 
+[Saved prompts](#saved-prompts) need llama.cpp from 2026-10-08 or later, and
+Homebrew's 0.6.0 is older. To build the current version instead (static, with
+Metal, without its download support) and put it ahead of Homebrew's on your
+`PATH`:
+
+```bash
+git clone --depth 1 https://github.com/ggml-org/llama.cpp ~/.local/src/llama.cpp
+cd ~/.local/src/llama.cpp
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DLLAMA_OPENSSL=OFF -DGGML_METAL=ON
+cmake --build build --target llama-server -j
+cp build/bin/llama-server ~/.local/bin/
+```
+
 Model files come from the Hugging Face cache (`~/.cache/huggingface/hub`, or
 `HF_HUB_CACHE` / `HF_HOME` when set). Install the `hf` command
 (`brew install hf`) and download a model, naming the repository
@@ -122,13 +135,14 @@ copy the entries you want to keep. Edits apply without a restart.
 }
 ```
 
-| Field         | Required | Description                                                                                     |
-| ------------- | -------- | ----------------------------------------------------------------------------------------------- |
-| `id`          | Yes      | The name `/model`, `model.name` and `--model` use. Must be unique.                              |
-| `name`        | No       | Display name in `/model`. Defaults to `id`.                                                     |
-| `repo`        | Yes      | Hugging Face repository, `owner/name`.                                                          |
-| `file`        | Yes      | The `.gguf` file in the repository. For a split file, the first part (`…-00001-of-0000N.gguf`). |
-| `contextSize` | No       | Context window in tokens. Default `32768`.                                                      |
+| Field         | Required | Description                                                                                                         |
+| ------------- | -------- | ------------------------------------------------------------------------------------------------------------------- |
+| `id`          | Yes      | The name `/model`, `model.name` and `--model` use. Must be unique.                                                  |
+| `name`        | No       | Display name in `/model`. Defaults to `id`.                                                                         |
+| `repo`        | Yes      | Hugging Face repository, `owner/name`.                                                                              |
+| `file`        | Yes      | The `.gguf` file in the repository. For a split file, the first part (`…-00001-of-0000N.gguf`).                     |
+| `contextSize` | No       | Context window in tokens. Default `32768`.                                                                          |
+| `draft`       | No       | A draft model for speculative decoding: `{ "repo": "...", "file": "....gguf" }`. See [Draft models](#draft-models). |
 
 Set `"localModels": []` to turn local models off and use only
 `modelProviders`.
@@ -160,6 +174,60 @@ supplies.
   and cache folders.
 - The engine stops when Qwen Code exits. If Qwen Code is killed with
   `kill -9`, the engine keeps running until you stop it.
+
+## Saved prompts
+
+At the end of each turn, Qwen Code saves the engine's processed prompt for
+the session, much like it saves the session's history. When an engine
+starts, it restores the session's saved prompt, or else the latest one from
+the same project:
+
+- `qwen --continue` and `/resume` continue without reading the conversation
+  again.
+- A new session in the same project skips reading the system prompt and
+  tool definitions, which another session already read.
+
+The files are in `~/Library/Caches/qwen-code/prompt-cache` on macOS
+(`~/.cache/qwen-code/prompt-cache` on Linux), readable only by you. A state is
+several hundred MB and grows with the conversation; beyond 4 GB in total the
+oldest are deleted. A state is only restored into the same model file,
+context size and speculative decoding setup. Saving takes one to a few
+seconds after a turn. Set `"localModelPromptCache": false` to turn it off.
+
+With llama.cpp older than 2026-10-08 the state is restored but the prompt is
+still read again in full, because those versions do not save the
+checkpoints the Qwen3.6 models need.
+
+## Draft models
+
+Speculative decoding can use a small draft model that guesses several tokens
+for the main model to check at once. Name it in the model's entry:
+
+```json
+{
+  "id": "qwen3.8-27b",
+  "repo": "unsloth/Qwen3.8-27B-GGUF",
+  "file": "Qwen3.8-27B-UD-IQ3_XXS.gguf",
+  "draft": {
+    "repo": "z-lab/Qwen3.8-27B-DFlash2-GGUF",
+    "file": "Qwen3.8-27B-DFlash2-Q4_K_M.gguf"
+  }
+}
+```
+
+The draft must be a DFlash, DSpark or MTP GGUF made for the model; llama.cpp
+reads which kind it is from the file. A plain small model of the same family
+loads but is not used.
+
+`/models download` fetches the draft with the model. Until the draft is
+downloaded, or with speculative decoding off, the engine drafts from the
+conversation instead (n-gram). The draft needs GPU memory beside the model;
+if they do not fit together, the engine stops at once and says so.
+
+Draft models help dense models most. For Qwen3.6 35B A3B on an M4 they did
+not pay: with z-lab's DFlash draft, file edits ran at 63 tokens per second
+against 61 with n-gram drafting, and new text at 22 against 28, and the draft
+only fit with a 32K context. The built-in models use n-gram drafting.
 
 ## Fitting in the context window
 

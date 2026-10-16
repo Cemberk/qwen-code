@@ -44,6 +44,7 @@ import {
   type OutputStyleDefinition,
   validateModelProvidersConfig,
   getLocalModelServer,
+  promptCacheDir,
   LOCAL_MODEL_KEY_ENV,
   LOCAL_MODEL_KEY_PLACEHOLDER,
   type LocalModelConfig,
@@ -2344,6 +2345,19 @@ export async function loadCliConfig(
   };
 
   const config = new Config(configParams);
+  // Save the local engine's processed prompt per session, so resuming it or
+  // starting another session in this project skips reading it again.
+  getLocalModelServer().setPromptCache(
+    settings.localModelPromptCache === false
+      ? undefined
+      : {
+          directory: promptCacheDir(),
+          context: () => ({
+            project: config.getProjectRoot(),
+            session: config.getSessionId(),
+          }),
+        },
+  );
   if (advisorModel) {
     validateCliAdvisorModel(config, advisorModel, {
       fastModel: settings.fastModel,

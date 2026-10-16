@@ -23,8 +23,16 @@ const config = {
   apiKey: 'local',
 } as ContentGeneratorConfig;
 
-function setup(baseUrls: string[]) {
+function setup(
+  baseUrls: string[],
+  chunks: GenerateContentResponse[] = [
+    { text: 'a' } as unknown as GenerateContentResponse,
+    { text: 'b' } as unknown as GenerateContentResponse,
+  ],
+  pinSlots = false,
+) {
   const released: string[] = [];
+  const saves: boolean[] = [];
   const acquired: string[] = [];
   const server = {
     acquire: vi.fn(async (modelId: string) => {
@@ -33,7 +41,11 @@ function setup(baseUrls: string[]) {
       return {
         baseUrl,
         apiKey: 'real-key',
-        release: () => released.push(modelId),
+        pinSlots,
+        release: (options?: { saveState?: boolean }) => {
+          released.push(modelId);
+          saves.push(options?.saveState === true);
+        },
       };
     }),
   } as unknown as LocalModelServer;
@@ -48,8 +60,7 @@ function setup(baseUrls: string[]) {
       },
       async generateContentStream() {
         return (async function* () {
-          yield { text: 'a' } as unknown as GenerateContentResponse;
-          yield { text: 'b' } as unknown as GenerateContentResponse;
+          yield* chunks;
         })();
       },
     } satisfies ContentGenerator;
@@ -59,6 +70,7 @@ function setup(baseUrls: string[]) {
     generator,
     acquired,
     released,
+    saves,
     created,
     failNext: () => (failNext = true),
   };
@@ -116,5 +128,67 @@ describe('LocalModelContentGenerator', () => {
       'http://127.0.0.1:5000/v1',
       'http://127.0.0.1:6000/v1',
     ]);
+  });
+
+  describe('end of a conversation turn', () => {
+    const drain = async (stream: AsyncGenerator<GenerateContentResponse>) => {
+      for await (const _chunk of stream) {
+        // consume
+      }
+    };
+    const toolCall = {
+      candidates: [
+        { content: { parts: [{ functionCall: { name: 'read_file' } }] } },
+      ],
+    } as unknown as GenerateContentResponse;
+
+    it('asks for the prompt to be saved after a main-session answer', async () => {
+      const t = setup(['http://127.0.0.1:5000/v1']);
+      await drain(
+        await t.generator.generateContentStream(request(), 's1########3'),
+      );
+      expect(t.saves).toEqual([true]);
+    });
+
+    it('does not after a tool call, a side query or an interrupted stream', async () => {
+      const t = setup(Array(3).fill('http://127.0.0.1:5000/v1'), [toolCall]);
+      await drain(
+        await t.generator.generateContentStream(request(), 's1########4'),
+      );
+      const side = setup(['http://127.0.0.1:5000/v1']);
+      await drain(
+        await side.generator.generateContentStream(
+          request(),
+          's1#managed-auto-memory-extractor-1#0',
+        ),
+      );
+      const cut = setup(['http://127.0.0.1:5000/v1']);
+      const stream = await cut.generator.generateContentStream(
+        request(),
+        's1########5',
+      );
+      await stream.next();
+      await stream.return(undefined);
+      expect([...t.saves, ...side.saves, ...cut.saves]).toEqual([
+        false,
+        false,
+        false,
+      ]);
+    });
+  });
+
+  it('runs conversation turns in slot 0 and side queries in slot 1 when the engine caches prompts', async () => {
+    const url = 'http://127.0.0.1:5000/v1';
+    const t = setup([url, url, url], undefined, true);
+    await t.generator.generateContent(request(), 's1########1');
+    await t.generator.generateContent(request(), 's1#memory#0');
+    await t.generator.generateContent(request(), 's1########2');
+    expect(t.created.map((c) => c.extra_body)).toEqual([
+      { id_slot: 0 },
+      { id_slot: 1 },
+    ]);
+    const plain = setup([url]);
+    await plain.generator.generateContent(request(), 's1########1');
+    expect(plain.created[0].extra_body).toBeUndefined();
   });
 });

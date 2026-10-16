@@ -249,6 +249,74 @@ describe('/models', () => {
     });
   });
 
+  describe('a model with a draft', () => {
+    const drafted = (draftFile = 'Qwen3.8-27B-DFlash2-Q4_K_M.gguf') => ({
+      id: 'q-drafted',
+      repo: 'unsloth/Qwen3.8-27B-GGUF',
+      file: 'Qwen3.8-27B-UD-IQ3_XXS.gguf',
+      draft: { repo: 'z-lab/Qwen3.8-27B-DFlash2-GGUF', file: draftFile },
+    });
+    const withDraft = (draftFile?: string) =>
+      createMockCommandContext({
+        services: {
+          settings: {
+            merged: { localModels: [drafted(draftFile)] },
+            setValue: vi.fn(),
+          } as unknown as LoadedSettings,
+        },
+      });
+
+    it('downloads the draft after the model', async () => {
+      const result = await sub('download').action!(withDraft(), 'q-drafted');
+      expect(recorded().map((call) => call.args)).toEqual([
+        ['download', 'unsloth/Qwen3.8-27B-GGUF', 'Qwen3.8-27B-UD-IQ3_XXS.gguf'],
+        [
+          'download',
+          'z-lab/Qwen3.8-27B-DFlash2-GGUF',
+          'Qwen3.8-27B-DFlash2-Q4_K_M.gguf',
+        ],
+      ]);
+      expect(result).toMatchObject({ messageType: 'info' });
+    });
+
+    it('says the model runs without a draft that failed to download', async () => {
+      const result = await sub('download').action!(
+        withDraft('fail.gguf'),
+        'q-drafted',
+      );
+      expect(result).toMatchObject({
+        messageType: 'error',
+        content:
+          'Downloaded q-drafted, but its draft model failed; it runs without it:\n404 not found',
+      });
+    });
+
+    it('shows under /models whether the draft is downloaded', async () => {
+      const before = await modelsCommand.action!(withDraft(), '');
+      expect((before as { content: string }).content).toContain(
+        'draft z-lab/Qwen3.8-27B-DFlash2-GGUF/Qwen3.8-27B-DFlash2-Q4_K_M.gguf (not downloaded)',
+      );
+
+      const repo = path.join(
+        dir,
+        'hub',
+        'models--z-lab--Qwen3.8-27B-DFlash2-GGUF',
+      );
+      mkdirSync(path.join(repo, 'snapshots', COMMIT), { recursive: true });
+      writeFileSync(
+        path.join(repo, 'snapshots', COMMIT, 'Qwen3.8-27B-DFlash2-Q4_K_M.gguf'),
+        'x',
+      );
+      mkdirSync(path.join(repo, 'refs'));
+      writeFileSync(path.join(repo, 'refs', 'main'), COMMIT);
+
+      const after = await modelsCommand.action!(withDraft(), '');
+      expect((after as { content: string }).content).toContain(
+        'draft z-lab/Qwen3.8-27B-DFlash2-GGUF/Qwen3.8-27B-DFlash2-Q4_K_M.gguf ✓',
+      );
+    });
+  });
+
   it.each([
     ['nothing', ''],
     ['an unknown id', 'nope'],

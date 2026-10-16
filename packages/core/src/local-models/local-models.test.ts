@@ -43,8 +43,28 @@ describe('validateLocalModels', () => {
       [{ ...gguf, contextSize: 1.5 }],
       /contextSize/,
     ],
+    [
+      'a draft that is not an object',
+      [{ ...gguf, draft: 'd.gguf' }],
+      /\.draft must be/,
+    ],
+    [
+      'a draft without a repo',
+      [{ ...gguf, draft: { repo: 'nope', file: 'd.gguf' } }],
+      /\.draft\.repo/,
+    ],
+    [
+      'a draft file outside its repo',
+      [{ ...gguf, draft: { repo: 'o/d', file: '../d.gguf' } }],
+      /\.draft\.file/,
+    ],
   ])('rejects %s', (_label, value, message) => {
     expect(() => validateLocalModels(value)).toThrow(message);
+  });
+
+  it('accepts a draft model', () => {
+    const entry = { ...gguf, draft: { repo: 'o/d', file: 'sub/d.gguf' } };
+    expect(validateLocalModels([entry])).toEqual([entry]);
   });
 });
 

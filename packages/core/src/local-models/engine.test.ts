@@ -126,6 +126,50 @@ describe('engineCommand', () => {
     });
   });
 
+  it('drafts with the draft model instead of n-grams when one is given', () => {
+    const bin = installFakeEngine();
+    const args = (speculation: boolean) =>
+      engineCommand(
+        model,
+        '/m.gguf',
+        1,
+        'k',
+        { speculation },
+        env(bin),
+        'linux',
+        { draftPath: '/d.gguf' },
+      ).args;
+    expect(args(true).slice(-4)).toEqual([
+      '--spec-draft-model',
+      '/d.gguf',
+      '--spec-draft-n-max',
+      '6',
+    ]);
+    expect(args(true)).not.toContain('ngram-simple');
+    expect(args(false)).not.toContain('--spec-draft-model');
+  });
+
+  it('gives the engine a conversation slot, a side-query slot and the prompt cache folder', () => {
+    const bin = installFakeEngine();
+    const command = engineCommand(
+      model,
+      '/m.gguf',
+      1,
+      'k',
+      DEFAULT_ENGINE_OPTIONS,
+      env(bin),
+      'linux',
+      { promptCacheDir: '/cache/prompts' },
+    );
+    expect(command.args.slice(-5)).toEqual([
+      '--parallel',
+      '2',
+      '--kv-unified',
+      '--slot-save-path',
+      '/cache/prompts/',
+    ]);
+  });
+
   it('leaves out speculative decoding when it is turned off', () => {
     const bin = installFakeEngine();
     const command = engineCommand(

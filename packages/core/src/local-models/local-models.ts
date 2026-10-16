@@ -18,6 +18,19 @@ export interface LocalModelConfig {
   file: string;
   /** Context window in tokens. */
   contextSize?: number;
+  /**
+   * A draft model for speculative decoding: a DFlash, DSpark or MTP GGUF,
+   * whose kind llama.cpp reads from the file. Used while speculative
+   * decoding is on and the file is downloaded; otherwise the engine drafts
+   * from the conversation (n-gram).
+   */
+  draft?: LocalModelDraft;
+}
+
+/** The GGUF of a draft model, in the Hugging Face cache. */
+export interface LocalModelDraft {
+  repo: string;
+  file: string;
 }
 
 export const DEFAULT_LOCAL_MODEL_CONTEXT_SIZE = 32768;
@@ -71,6 +84,18 @@ export const BUILT_IN_LOCAL_MODELS: readonly LocalModelConfig[] = [
 
 const REPO_PATTERN = /^[A-Za-z0-9][\w.-]*\/[A-Za-z0-9][\w.-]*$/;
 
+function isGgufPath(file: unknown): file is string {
+  return (
+    typeof file === 'string' &&
+    file.endsWith('.gguf') &&
+    !file.startsWith('/') &&
+    !file.includes('\\') &&
+    !file
+      .split('/')
+      .some((part) => part === '' || part === '..' || part.startsWith('-'))
+  );
+}
+
 /** Whether `value` names a Hugging Face repository, `owner/name`. */
 export function isHuggingFaceRepo(value: string): boolean {
   return REPO_PATTERN.test(value);
@@ -110,19 +135,25 @@ export function validateLocalModels(value: unknown): LocalModelConfig[] {
         `${at}.repo must be a Hugging Face repository such as "Qwen/Qwen3-8B-GGUF".`,
       );
     }
-    const file = model['file'];
-    if (
-      typeof file !== 'string' ||
-      !file.endsWith('.gguf') ||
-      file.startsWith('/') ||
-      file.includes('\\') ||
-      file
-        .split('/')
-        .some((part) => part === '' || part === '..' || part.startsWith('-'))
-    ) {
+    if (!isGgufPath(model['file'])) {
       throw new Error(
         `${at}.file must be the path of a .gguf file inside the repository.`,
       );
+    }
+    const draft = model['draft'];
+    if (draft !== undefined) {
+      if (typeof draft !== 'object' || draft === null || Array.isArray(draft)) {
+        throw new Error(`${at}.draft must be an object with repo and file.`);
+      }
+      const { repo, file } = draft as Record<string, unknown>;
+      if (typeof repo !== 'string' || !REPO_PATTERN.test(repo)) {
+        throw new Error(`${at}.draft.repo must be a Hugging Face repository.`);
+      }
+      if (!isGgufPath(file)) {
+        throw new Error(
+          `${at}.draft.file must be the path of a .gguf file inside the repository.`,
+        );
+      }
     }
     const contextSize = model['contextSize'];
     if (
