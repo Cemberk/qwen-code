@@ -91,8 +91,8 @@ contacts huggingface.co; the `hf` tool also checks PyPI for a newer version of
 itself once a day.
 
 On a Mac with Apple silicon, `/models download` first asks `hf` for the file's
-size (`hf download --dry-run`) and refuses a file too big for the GPU; see
-[Model size](#model-size).
+size (`hf download --dry-run`) and refuses a file too big for the Mac's memory;
+see [Model size](#model-size).
 
 `/models remove` deletes the whole repository from the cache, including a file
 of it that is still downloading. Wait for downloads from that repository to
@@ -102,13 +102,29 @@ finish first.
 
 On Apple silicon the GPU can use about two thirds of the Mac's memory (three
 quarters above 36 GB), or the limit you set with `sudo sysctl
-iogpu.wired_limit_mb=<MB>`. A model's file must fit in that with about 1 GB to
-spare for its context, or llama.cpp loads it for minutes and then fails with
-`Compute error.`. Qwen Code checks this before it downloads a model and before
-it starts one, and names the file size and the limit instead.
+iogpu.wired_limit_mb=<MB>`. A model whose file fits in that with about 1 GB to
+spare for its context runs entirely on the GPU.
 
-On a 24 GB Mac the limit is about 17 GB, so 3-bit builds of a 35B model (about
-14 GB) fit and 4-bit builds (about 20 GB) do not.
+A mixture-of-experts model that does not fit, such as Qwen3.6 35B A3B in a
+larger quantization, keeps the experts of its first few layers in ordinary
+memory, where the CPU runs them (llama.cpp's `--n-cpu-moe`). Qwen Code moves
+as few layers as leave the GPU about 1.5 GB to spare, and reads them into
+memory rather than mapping the file (`--load-mode none`). After
+`/models download`, it says how many layers will run on the CPU. On an M4
+with 24 GB, at a 32K context with speculative decoding on:
+
+| Model                                 | Reading an 8.7K-token prompt | File edit | New text |
+| ------------------------------------- | ---------------------------- | --------- | -------- |
+| UD-IQ3_S (13.7 GB), all on the GPU    | 26 s                         | 58 tok/s  | 28 tok/s |
+| Q3_K_M (16.8 GB), 3 layers on the CPU | 33 s                         | 52 tok/s  | 26 tok/s |
+
+A dense model that does not fit cannot run, nor can a model that would leave
+macOS and other apps less than 4 GB of memory. Qwen Code checks this before it
+downloads a model and before it starts one, and says why instead.
+
+On a 24 GB Mac the GPU limit is about 17 GB: 3-bit builds of a 35B A3B model
+(about 14 GB) fit, builds up to about 20 GB run partly on the CPU, and larger
+ones cannot run.
 
 ## Changing the list
 
@@ -221,8 +237,9 @@ loads but is not used.
 
 `/models download` fetches the draft with the model. Until the draft is
 downloaded, or with speculative decoding off, the engine drafts from the
-conversation instead (n-gram). The draft needs GPU memory beside the model;
-if they do not fit together, the engine stops at once and says so.
+conversation instead (n-gram). The draft needs GPU memory beside the model and
+counts toward its [size](#model-size); if the engine still cannot answer with
+it, the engine stops at once and says so.
 
 Draft models help dense models most. For Qwen3.6 35B A3B on an M4 they did
 not pay: with z-lab's DFlash draft, file edits ran at 63 tokens per second

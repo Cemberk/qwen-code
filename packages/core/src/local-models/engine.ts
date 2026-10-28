@@ -16,8 +16,10 @@ import { resolveLocalModelPath } from './hf-cache.js';
 import { engineStateKey } from './prompt-cache.js';
 import {
   appleGpuMemoryLimit,
+  fitModel,
   localModelBytes,
-  modelSizeProblem,
+  localModelExpertBytes,
+  systemMemoryBytes,
 } from './gpu-memory.js';
 
 const READY_TIMEOUT_MS = 5 * 60_000;
@@ -90,6 +92,8 @@ export interface EngineLaunch {
   draftPath?: string;
   /** Folder for saved prompt states (`--slot-save-path`). */
   promptCacheDir?: string;
+  /** Layers whose experts stay in system memory (`--n-cpu-moe`). */
+  cpuMoeLayers?: number;
 }
 
 /** Tokens the draft model proposes per step (`--spec-draft-n-max`). */
@@ -197,6 +201,12 @@ export function engineCommand(
     '--no-slots',
     ...SAMPLING_ARGS,
     ...speculationArgs(options, launch.draftPath),
+    // A mixture-of-experts model too big for the GPU runs the experts of
+    // its first layers on the CPU. Read into memory rather than mapped from
+    // the file, they read prompts faster and more steadily.
+    ...(launch.cpuMoeLayers
+      ? ['--n-cpu-moe', String(launch.cpuMoeLayers), '--load-mode', 'none']
+      : []),
     // Slot 0 holds the conversation, so its state can be saved and restored
     // whole; side queries run beside it in slot 1. Both share one cache, so
     // either can use the whole context.
@@ -347,10 +357,11 @@ export function resolveDraftPath(model: LocalModelConfig): string | undefined {
 
 /**
  * Start an engine for `model` and wait until it serves requests. With a
- * downloaded draft, it also answers one short request first.
+ * downloaded draft, it also answers one short request first. A
+ * mixture-of-experts model too big for the GPU runs partly on the CPU.
  *
- * @throws Error when the model is not downloaded, is too big for the GPU
- *   memory of this Mac, the engine is missing, or the engine exits or does
+ * @throws Error when the model is not downloaded, cannot fit this Mac's GPU
+ *   and memory (see fitModel), the engine is missing, or the engine exits or does
  *   not answer in time; the message carries the end of the engine's output.
  *   Also when the engine cannot answer with its draft model.
  */
@@ -363,14 +374,17 @@ export async function startLocalModelEngine(
   const modelPath = resolveLocalModelPath(model);
   // Without a downloaded draft the engine falls back to n-gram drafting.
   const draftPath = options.speculation ? resolveDraftPath(model) : undefined;
-  // A model too big for the GPU loads for minutes, then fails mid-request.
-  const sizeProblem = modelSizeProblem(
+  // Past the GPU limit a model runs at a fraction of its speed, or fails
+  // mid-request.
+  const fit = fitModel(
     model,
     localModelBytes(model) + (draftPath ? statSync(draftPath).size : 0),
+    () => localModelExpertBytes(model),
     appleGpuMemoryLimit(),
+    systemMemoryBytes(),
   );
-  if (sizeProblem) {
-    throw new Error(sizeProblem);
+  if ('problem' in fit) {
+    throw new Error(fit.problem);
   }
   const port = await freeLoopbackPort();
   const command = engineCommand(
@@ -381,7 +395,7 @@ export async function startLocalModelEngine(
     options,
     process.env,
     process.platform,
-    { draftPath, promptCacheDir },
+    { draftPath, promptCacheDir, cpuMoeLayers: fit.cpuMoeLayers },
   );
   const child = spawn(command.command, command.args, {
     stdio: ['ignore', 'pipe', 'pipe'],

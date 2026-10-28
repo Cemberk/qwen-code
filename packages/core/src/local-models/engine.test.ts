@@ -21,12 +21,23 @@ import {
 } from './engine.js';
 import type { LocalModelConfig } from './local-models.js';
 
-// The GPU memory limit of the test machine must not decide these tests.
-const gpu = vi.hoisted(() => ({ limit: undefined as number | undefined }));
-vi.mock('./gpu-memory.js', async (importActual) => ({
-  ...(await importActual<typeof import('./gpu-memory.js')>()),
-  appleGpuMemoryLimit: () => gpu.limit,
+// The GPU and memory of the test machine must not decide these tests.
+const gpu = vi.hoisted(() => ({
+  limit: undefined as number | undefined,
+  bytes: undefined as number | undefined,
+  experts: [] as number[],
 }));
+vi.mock('./gpu-memory.js', async (importActual) => {
+  const actual = await importActual<typeof import('./gpu-memory.js')>();
+  return {
+    ...actual,
+    appleGpuMemoryLimit: () => gpu.limit,
+    systemMemoryBytes: () => 24 * 1024 ** 3,
+    localModelBytes: (model: LocalModelConfig) =>
+      gpu.bytes ?? actual.localModelBytes(model),
+    localModelExpertBytes: () => gpu.experts,
+  };
+});
 
 const model: LocalModelConfig = {
   id: 'q',
@@ -46,7 +57,7 @@ if (model.includes('broken')) {
   process.exit(3);
 }
 require('node:http')
-  .createServer((req, res) => res.end('{}'))
+  .createServer((req, res) => res.end(req.url === '/args' ? JSON.stringify(args) : '{}'))
   .listen(Number(args[args.indexOf('--port') + 1]), '127.0.0.1');
 `;
 
@@ -170,6 +181,24 @@ describe('engineCommand', () => {
     ]);
   });
 
+  it('keeps the experts of the first layers in memory when asked to', () => {
+    const bin = installFakeEngine();
+    const args = (cpuMoeLayers?: number) =>
+      engineCommand(
+        model,
+        '/m.gguf',
+        1,
+        'k',
+        DEFAULT_ENGINE_OPTIONS,
+        env(bin),
+        'linux',
+        { cpuMoeLayers },
+      ).args;
+    expect(args(3).join(' ')).toContain('--n-cpu-moe 3 --load-mode none');
+    expect(args(0)).not.toContain('--n-cpu-moe');
+    expect(args()).not.toContain('--load-mode');
+  });
+
   it('leaves out speculative decoding when it is turned off', () => {
     const bin = installFakeEngine();
     const command = engineCommand(
@@ -281,16 +310,38 @@ describe('startLocalModelEngine', () => {
     );
   });
 
-  it('refuses a model too big for the GPU memory before starting the engine', async () => {
-    download(model.file);
-    gpu.limit = 1024;
-    try {
-      await expect(startLocalModelEngine(model, 'k')).rejects.toThrow(
-        /is 0\.0 GB, but macOS lets the GPU use only about 0\.0 GB on this Mac/,
-      );
-    } finally {
+  describe('with a model too big for the GPU', () => {
+    const GIB = 1024 ** 3;
+    beforeEach(() => {
+      gpu.limit = 16 * GIB;
+      gpu.bytes = 16 * GIB;
+    });
+    afterEach(() => {
       gpu.limit = undefined;
-    }
+      gpu.bytes = undefined;
+      gpu.experts = [];
+    });
+
+    it('runs the experts of as few first layers as needed on the CPU', async () => {
+      download(model.file);
+      gpu.experts = Array<number>(40).fill(0.4 * GIB);
+      const engine = await startLocalModelEngine(model, 'k');
+      try {
+        const args = (await (
+          await fetch(engine.baseUrl.replace('/v1', '/args'))
+        ).json()) as string[];
+        expect(args.join(' ')).toContain('--n-cpu-moe 4 --load-mode none');
+      } finally {
+        await engine.stop();
+      }
+    });
+
+    it('refuses a dense model before starting the engine', async () => {
+      download(model.file);
+      await expect(startLocalModelEngine(model, 'k')).rejects.toThrow(
+        /is 17\.2 GB, but macOS lets the GPU use only about 17\.2 GB on this Mac/,
+      );
+    });
   });
 
   it('fails before starting anything when the model is not downloaded', async () => {

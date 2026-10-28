@@ -21,16 +21,28 @@ import { createMockCommandContext } from '../../test-utils/mockCommandContext.js
 import { getLocalModelServer } from '@qwen-code/qwen-code-core/local-models/local-model-server.js';
 import { modelsCommand } from './models-command.js';
 
-// The GPU memory limit of the test machine must not decide these tests.
-const gpu = vi.hoisted(() => ({ limit: undefined as number | undefined }));
+// The GPU and memory of the test machine must not decide these tests.
+const gpu = vi.hoisted(() => ({
+  limit: undefined as number | undefined,
+  bytes: undefined as number | undefined,
+  experts: [] as number[],
+}));
 vi.mock(
   '@qwen-code/qwen-code-core/local-models/gpu-memory.js',
-  async (importActual) => ({
-    ...(await importActual<
-      typeof import('@qwen-code/qwen-code-core/local-models/gpu-memory.js')
-    >()),
-    appleGpuMemoryLimit: () => gpu.limit,
-  }),
+  async (importActual) => {
+    const actual =
+      await importActual<
+        typeof import('@qwen-code/qwen-code-core/local-models/gpu-memory.js')
+      >();
+    return {
+      ...actual,
+      appleGpuMemoryLimit: () => gpu.limit,
+      systemMemoryBytes: () => 24 * 1024 ** 3,
+      localModelBytes: (model: Parameters<typeof actual.localModelBytes>[0]) =>
+        gpu.bytes ?? actual.localModelBytes(model),
+      localModelExpertBytes: () => gpu.experts,
+    };
+  },
 );
 import type { CommandContext } from './types.js';
 
@@ -202,10 +214,12 @@ describe('/models', () => {
     });
     afterEach(() => {
       gpu.limit = undefined;
+      gpu.bytes = undefined;
+      gpu.experts = [];
     });
 
-    it('refuses a file too big for the GPU before downloading or listing it', async () => {
-      vi.stubEnv('FAKE_HF_SIZE', '20.1G');
+    it('refuses a file too big for the memory of the Mac before downloading or listing it', async () => {
+      vi.stubEnv('FAKE_HF_SIZE', '22.0G');
       const setValue = vi.fn();
       const result = await sub('download').action!(
         context(setValue),
@@ -214,7 +228,7 @@ describe('/models', () => {
       expect(result).toMatchObject({
         messageType: 'error',
         content: expect.stringContaining(
-          'Not downloaded. qwen3.6-35b-a3b-heretic-q4_k_s is 20.1 GB, but macOS lets the GPU use only about 17.2 GB',
+          'Not downloaded. qwen3.6-35b-a3b-heretic-q4_k_s is 22.0 GB, more than a 24 GB Mac can hold beside macOS and other apps.',
         ),
       });
       expect(recorded().map((call) => call.args)).toEqual([
@@ -235,6 +249,33 @@ describe('/models', () => {
         ['download', 'Qwen/Qwen3-4B-GGUF', 'Qwen3-4B-Q4_K_M.gguf', '--dry-run'],
         ['download', 'Qwen/Qwen3-4B-GGUF', 'Qwen3-4B-Q4_K_M.gguf'],
       ]);
+    });
+
+    it('downloads a mixture-of-experts file too big for the GPU and says it runs partly on the CPU', async () => {
+      vi.stubEnv('FAKE_HF_SIZE', '16.8G');
+      gpu.bytes = 16_764_764_768;
+      gpu.experts = [396, 396, ...Array<number>(38).fill(364)].map(
+        (mib) => mib * 1024 ** 2,
+      );
+      const result = await sub('download').action!(context(), 'q-big');
+      expect(recorded()).toHaveLength(2);
+      expect(result).toMatchObject({
+        messageType: 'info',
+        content:
+          'Downloaded q-big. Switch to it with /model q-big. It is too big for the GPU, so the experts of 3 of its layers run on the CPU, which makes it slower.',
+      });
+    });
+
+    it('says when a downloaded dense file cannot run', async () => {
+      vi.stubEnv('FAKE_HF_SIZE', '18.0G');
+      gpu.bytes = 18e9;
+      const result = await sub('download').action!(context(), 'q-big');
+      expect(result).toMatchObject({
+        messageType: 'error',
+        content: expect.stringContaining(
+          'Downloaded, but it cannot run on this Mac. q-big is 18.0 GB, but macOS lets the GPU use only about 17.2 GB',
+        ),
+      });
     });
   });
 

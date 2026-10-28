@@ -11,8 +11,11 @@ import {
 } from '@qwen-code/qwen-code-core/local-models/engine.js';
 import {
   appleGpuMemoryLimit,
+  downloadSizeProblem,
+  fitModel,
   localModelBytes,
-  modelSizeProblem,
+  localModelExpertBytes,
+  systemMemoryBytes,
 } from '@qwen-code/qwen-code-core/local-models/gpu-memory.js';
 import { resolveLocalModelPath } from '@qwen-code/qwen-code-core/local-models/hf-cache.js';
 import { getLocalModelServer } from '@qwen-code/qwen-code-core/local-models/local-model-server.js';
@@ -139,9 +142,11 @@ const downloadCommand: SlashCommand = {
       );
     }
 
-    // On Apple silicon, refuse a file too big for the GPU before downloading
-    // it. hf reports the size without downloading; if its output cannot be
-    // read, the check after the download still catches it.
+    // On Apple silicon, refuse a file too big for the Mac's memory before
+    // downloading it. hf reports the size without downloading; if its output
+    // cannot be read, the check after the download still catches it. Whether
+    // a file too big for the GPU can run partly on the CPU depends on its
+    // layers, which are only known after the download.
     const limit = appleGpuMemoryLimit();
     if (limit !== undefined) {
       context.ui.addItem(
@@ -158,7 +163,9 @@ const downloadCommand: SlashCommand = {
         '--dry-run',
       ]);
       const bytes = dryRun.ok ? dryRunBytes(dryRun.output) : undefined;
-      const problem = bytes ? modelSizeProblem(model, bytes, limit) : undefined;
+      const problem = bytes
+        ? downloadSizeProblem(model, bytes, limit, systemMemoryBytes())
+        : undefined;
       if (problem) {
         return error(`Not downloaded. ${problem}`);
       }
@@ -205,21 +212,33 @@ const downloadCommand: SlashCommand = {
         );
       }
     }
-    let problem: string | undefined;
+    let fit: ReturnType<typeof fitModel> = { cpuMoeLayers: 0 };
     if (limit !== undefined) {
+      const downloaded = model;
       try {
-        problem = modelSizeProblem(model, localModelBytes(model), limit);
+        fit = fitModel(
+          downloaded,
+          localModelBytes(downloaded),
+          () => localModelExpertBytes(downloaded),
+          limit,
+          systemMemoryBytes(),
+        );
       } catch {
         // Not all of it is in the cache (e.g. other parts of a split file).
       }
     }
-    return problem
-      ? error(`Downloaded, but it cannot run on this Mac. ${problem}`)
-      : {
-          type: 'message',
-          messageType: 'info',
-          content: `Downloaded ${model.name ?? model.id}. Switch to it with /model ${model.id}.`,
-        };
+    if ('problem' in fit) {
+      return error(`Downloaded, but it cannot run on this Mac. ${fit.problem}`);
+    }
+    return {
+      type: 'message',
+      messageType: 'info',
+      content:
+        `Downloaded ${model.name ?? model.id}. Switch to it with /model ${model.id}.` +
+        (fit.cpuMoeLayers
+          ? ` It is too big for the GPU, so the experts of ${fit.cpuMoeLayers} of its layers run on the CPU, which makes it slower.`
+          : ''),
+    };
   },
 };
 
