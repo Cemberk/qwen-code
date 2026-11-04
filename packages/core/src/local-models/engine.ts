@@ -171,7 +171,11 @@ export function engineCommand(
   platform: NodeJS.Platform = process.platform,
   launch: EngineLaunch = {},
 ): EngineCommand {
-  const binary = findExecutable(LLAMA_SERVER, env['PATH'] ?? '');
+  //const binary = findExecutable(LLAMA_SERVER, env['PATH'] ?? '');
+  const binary = findExecutable(
+      platform === 'win32' ? 'llama-server.exe' : LLAMA_SERVER,
+      env['PATH'] ?? '',
+  );
   if (!binary) {
     throw new Error(
       `${LLAMA_SERVER} was not found on PATH; ${model.name ?? model.id} needs it. ` +
