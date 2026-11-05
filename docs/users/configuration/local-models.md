@@ -27,8 +27,16 @@ CMake, the Visual Studio Build Tools (C++) and the Vulkan SDK:
 git clone https://github.com/Cemberk/llama.cpp
 cd llama.cpp
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DLLAMA_OPENSSL=OFF -DGGML_VULKAN=ON
-cmake --build build --config Release --target llama-server -j
+cmake --build build --config Release --target llama-server -j 4
 ```
+
+The Vulkan SDK installer needs administrator rights. Without them, run
+`powershell -ExecutionPolicy Bypass -File scripts\windows-vulkan-noadmin.ps1`
+in the checkout instead: it gathers the Vulkan and SPIR-V headers, builds
+`vulkan-1.lib` from the GPU driver's `vulkan-1.dll`, downloads Google's
+prebuilt `glslc` under `%USERPROFILE%\vulkan-local`, and prints the `cmake`
+command that uses them. Each compile job of the Vulkan shaders takes a lot of
+memory: keep `-j` low (2 to 4) on a machine with 32 GB or less.
 
 `-DBUILD_SHARED_LIBS=OFF` makes one self-contained program, and
 `-DLLAMA_OPENSSL=OFF` leaves out HTTPS, so the engine cannot download
@@ -224,6 +232,30 @@ Options that choose where the engine listens, its key, its model or where
 it saves prompts, or that download (`--host`, `--port`, `-m`, `-hf`,
 `--model-url`, ...), are refused. A change restarts a running engine at your
 next prompt. Compare runs with `/models bench`.
+
+### The MoE cache (llama.cpp fork)
+
+On a discrete GPU, a mixture-of-experts model too big for VRAM keeps
+experts in RAM. The fork's MoE cache keeps the experts a conversation
+uses in a slice of VRAM:
+
+```json
+{
+  "localModelEngineArgs": ["--moe-cache-mib", "4096"]
+}
+```
+
+With it on, Qwen Code also gives the engine a profile of the experts each
+project used (`--moe-cache-profile`, in `moe-profiles` beside the prompt
+cache, one file per project and model): the engine loads the most used ones
+before the first token of the next session, and saves the profile when it
+stops. Add `"--moe-cache-policy", "lfu"` to evict the least used expert
+instead of the least recently used. `/models bench` reports the cache's hit
+rate.
+
+To compare policies offline, record a trace with
+`"--moe-cache-trace", "<file>"` and replay it with
+`python tools/moe-sim/moe_cache_sim.py <file>` in the fork's checkout.
 
 ## How the engine runs
 

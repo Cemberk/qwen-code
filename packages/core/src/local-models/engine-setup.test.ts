@@ -59,6 +59,10 @@ describe('engineSetup', () => {
       'git clone https://github.com/Cemberk/llama.cpp',
     );
     expect(setup.lines.at(-1)).toMatch(/localModelEngine/);
+    expect(setup.lines).toContain(
+      'cmake --build build --config Release --target llama-server -j 4',
+    );
+    expect(setup.lines.join('\n')).toMatch(/windows-vulkan-noadmin\.ps1/);
   });
 
   it('builds CUDA on Linux and names no Vulkan packages', () => {

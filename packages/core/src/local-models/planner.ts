@@ -103,6 +103,19 @@ export function planEngine(input: PlanInput): EnginePlan {
 }
 
 /**
+ * Whether the engine should keep a MoE cache profile for the project:
+ * the user turned the fork's MoE cache on (--moe-cache-mib) without naming a
+ * profile of their own.
+ */
+export function wantsMoeProfile(args: readonly string[] | undefined): boolean {
+  const options = (args ?? []).map((arg) => arg.split('=')[0]);
+  return (
+    options.includes('--moe-cache-mib') &&
+    !options.includes('--moe-cache-profile')
+  );
+}
+
+/**
  * Options `localModelEngineArgs` may not set: qwen chooses where the engine
  * listens, its key, the model and where it saves prompts, and the engine
  * must never download.

@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { planEngine, validateEngineArgs } from './planner.js';
+import { planEngine, validateEngineArgs, wantsMoeProfile } from './planner.js';
 import type { ModelCapabilities } from './model-inspector.js';
 
 const GIB = 1024 ** 3;
@@ -122,5 +122,17 @@ describe('planEngine with a build that has no GPU backend', () => {
       cpuOnlyBuild: true,
     });
     expect(plan.notes[0]).toMatch(/no GPU backend[\s\S]*\/models setup/);
+  });
+});
+
+describe('wantsMoeProfile', () => {
+  it('is true when the MoE cache is on without a profile of its own', () => {
+    expect(wantsMoeProfile(['--moe-cache-mib', '4096'])).toBe(true);
+    expect(wantsMoeProfile(['--moe-cache-mib=4096'])).toBe(true);
+    expect(
+      wantsMoeProfile(['--moe-cache-mib', '4096', '--moe-cache-profile=x']),
+    ).toBe(false);
+    expect(wantsMoeProfile(['-ub', '1024'])).toBe(false);
+    expect(wantsMoeProfile(undefined)).toBe(false);
   });
 });

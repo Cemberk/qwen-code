@@ -116,6 +116,8 @@ export interface EngineLaunch {
   confinement?: Confinement;
   /** Options from the planner (see planner.ts), the user's last. */
   planArgs?: string[];
+  /** The project's MoE cache profile (--moe-cache-profile). */
+  moeProfile?: string;
 }
 
 /** Where the engine listens: a loopback port, or a Unix socket. */
@@ -333,6 +335,7 @@ export function engineCommand(
     ...SAMPLING_ARGS,
     ...speculationArgs(options, launch.draftPath),
     ...(launch.planArgs ?? []),
+    ...(launch.moeProfile ? ['--moe-cache-profile', launch.moeProfile] : []),
     // A mixture-of-experts model too big for the GPU runs the experts of
     // its first layers on the CPU. Read into memory rather than mapped from
     // the file, they read prompts faster and more steadily.
@@ -606,6 +609,7 @@ export async function startLocalModelEngine(
   apiKey: string,
   options: LocalModelEngineOptions = DEFAULT_ENGINE_OPTIONS,
   promptCacheDir?: string,
+  moeProfile?: string,
 ): Promise<LocalModelEngine> {
   // Past the GPU limit a model runs at a fraction of its speed, or fails
   // mid-request.
@@ -642,6 +646,7 @@ export async function startLocalModelEngine(
       cpuMoeLayers: process.platform === 'darwin' ? fit.cpuMoeLayers : 0,
       ...(socketPath ? { socketPath, confinement } : {}),
       planArgs: plan.args,
+      ...(moeProfile ? { moeProfile } : {}),
     },
   );
   const child = spawn(command.command, command.args, {

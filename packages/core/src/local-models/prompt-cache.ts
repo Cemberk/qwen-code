@@ -50,6 +50,23 @@ function sessionPart(session: string): string {
   return session.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 100);
 }
 
+/**
+ * The MoE cache profile of a model in a project (--moe-cache-profile): the
+ * experts the project used, which the engine loads before the first token.
+ * Kept beside the prompt cache, in `moe-profiles`.
+ */
+export function moeProfileFile(
+  promptCacheDirectory: string,
+  project: string,
+  model: { repo: string; file: string },
+): string {
+  return path.join(
+    path.dirname(promptCacheDirectory),
+    'moe-profiles',
+    `${hash(project)}-${hash(`${model.repo}/${model.file}`)}.txt`,
+  );
+}
+
 export function promptStateFile(
   project: string,
   engineKey: string,

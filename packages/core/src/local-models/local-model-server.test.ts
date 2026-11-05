@@ -4,14 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { LocalModelEngine, LocalModelEngineOptions } from './engine.js';
 import type { LocalModelConfig } from './local-models.js';
 import { LocalModelServer } from './local-model-server.js';
-import { promptStateFile } from './prompt-cache.js';
+import { moeProfileFile, promptStateFile } from './prompt-cache.js';
 
 const a: LocalModelConfig = { id: 'a', repo: 'o/a', file: 'a.gguf' };
 const b: LocalModelConfig = { id: 'b', repo: 'o/b', file: 'b.gguf' };
@@ -21,11 +21,14 @@ function fakeEngines() {
   const events: string[] = [];
   const engines: Array<LocalModelEngine & { die(): void }> = [];
   const options: LocalModelEngineOptions[] = [];
+  const profiles: Array<string | undefined> = [];
   let failNext: Error | undefined;
   const start = async (
     model: LocalModelConfig,
     _apiKey: string,
     engineOptions: LocalModelEngineOptions,
+    _promptCacheDir?: string,
+    moeProfile?: string,
   ) => {
     if (failNext) {
       const error = failNext;
@@ -34,6 +37,7 @@ function fakeEngines() {
     }
     events.push(`start ${model.id}`);
     options.push(engineOptions);
+    profiles.push(moeProfile);
     let alive = true;
     const engine = {
       model,
@@ -61,6 +65,7 @@ function fakeEngines() {
     events,
     engines,
     options,
+    profiles,
     start,
     failNextStart(error: Error) {
       failNext = error;
@@ -227,6 +232,26 @@ describe('LocalModelServer', () => {
       });
       return { fake, server, file: promptStateFile('/p', 'key-a', session) };
     };
+
+    it('gives the engine a MoE cache profile per project and model when the MoE cache is on', async () => {
+      const { fake, server } = withCache();
+      server.setEngineArgs(['--moe-cache-mib', '4096']);
+      await server.acquire('a');
+      expect(fake.profiles).toEqual([moeProfileFile(dir, '/p', a)]);
+      expect(existsSync(path.dirname(fake.profiles[0]!))).toBe(true);
+    });
+
+    it("keeps no profile without the MoE cache, or with the user's own", async () => {
+      const { fake, server } = withCache();
+      (await server.acquire('a')).release();
+      server.setEngineArgs([
+        '--moe-cache-mib=4096',
+        '--moe-cache-profile',
+        '/mine.txt',
+      ]);
+      await server.acquire('a');
+      expect(fake.profiles).toEqual([undefined, undefined]);
+    });
 
     it("restores the session's saved prompt before the first request", async () => {
       const { fake, server, file } = withCache();

@@ -5,6 +5,8 @@
  */
 
 import { randomBytes } from 'node:crypto';
+import { mkdirSync } from 'node:fs';
+import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import type { LocalModelConfig } from './local-models.js';
 import {
@@ -15,10 +17,12 @@ import {
 } from './engine.js';
 import {
   ensurePromptCacheDir,
+  moeProfileFile,
   pickPromptState,
   promptStateFile,
   prunePromptStates,
 } from './prompt-cache.js';
+import { wantsMoeProfile } from './planner.js';
 
 /** Permission to send requests to the engine while it serves the leased model. */
 export interface LocalModelLease {
@@ -56,6 +60,7 @@ export type StartEngine = (
   apiKey: string,
   options: LocalModelEngineOptions,
   promptCacheDir?: string,
+  moeProfile?: string,
 ) => Promise<LocalModelEngine>;
 
 /**
@@ -241,6 +246,7 @@ export class LocalModelServer {
             this.apiKey,
             options,
             directory,
+            this.moeProfileFor(head.model, options),
           );
           await this.restorePrompt(started);
           this.engine = started;
@@ -256,6 +262,29 @@ export class LocalModelServer {
     } finally {
       this.pumping = false;
     }
+  }
+
+  /**
+   * The project's MoE cache profile for `model`, when the user turned the
+   * fork's MoE cache on; its folder is created. None without a prompt cache
+   * folder or a project.
+   */
+  private moeProfileFor(
+    model: LocalModelConfig,
+    options: LocalModelEngineOptions,
+  ): string | undefined {
+    const directory = this.promptCache?.directory;
+    const project = this.promptCache?.context()?.project;
+    if (!directory || !project || !wantsMoeProfile(options.extraArgs)) {
+      return undefined;
+    }
+    const file = moeProfileFile(directory, project, model);
+    try {
+      mkdirSync(path.dirname(file), { recursive: true });
+    } catch {
+      return undefined;
+    }
+    return file;
   }
 
   /** The prompt cache folder, created if needed; none if it cannot be. */

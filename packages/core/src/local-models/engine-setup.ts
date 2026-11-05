@@ -41,6 +41,9 @@ export function recommendedBackend(profile: HardwareProfile): EngineBackend {
 const BASE_FLAGS =
   ' -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DLLAMA_OPENSSL=OFF';
 
+/** Parallel compile jobs for the engine build. */
+const BUILD_JOBS = 4;
+
 const CMAKE_FLAGS: Record<EngineBackend, string> = {
   metal: '',
   cuda: ' -DGGML_CUDA=ON',
@@ -88,8 +91,15 @@ export function engineSetup(profile: HardwareProfile): EngineSetup {
     `git clone ${ENGINE_REPO_URL}`,
     'cd llama.cpp',
     `cmake -B build${BASE_FLAGS}${CMAKE_FLAGS[backend]}`,
-    'cmake --build build --config Release --target llama-server -j',
+    // A compiler process per core runs a 32 GB machine out of memory on the
+    // Vulkan shaders.
+    `cmake --build build --config Release --target llama-server -j ${BUILD_JOBS}`,
   ];
+  if (windows && backend === 'vulkan') {
+    lines.push(
+      'Without administrator rights (the Vulkan SDK installer needs them), run powershell -ExecutionPolicy Bypass -File scripts\\windows-vulkan-noadmin.ps1 in the checkout instead of installing the SDK: it gathers the headers, vulkan-1.lib and glslc under %USERPROFILE%\\vulkan-local and prints the cmake command that uses them.',
+    );
+  }
   const amd = profile.gpus.find((gpu) => gpu.vendor === 'amd');
   if (amd && profile.platform === 'linux') {
     const target = amd.gfxTarget ? ` -DGPU_TARGETS=${amd.gfxTarget}` : '';
