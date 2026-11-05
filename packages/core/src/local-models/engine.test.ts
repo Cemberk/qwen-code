@@ -135,6 +135,7 @@ describe('engineCommand', () => {
         '--offline',
         '--no-webui',
         '--no-slots',
+        '--metrics',
         '--temp',
         '0.6',
         '--top-p',

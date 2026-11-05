@@ -308,6 +308,8 @@ export function engineCommand(
     '--offline',
     '--no-webui',
     '--no-slots',
+    // Counters for /models bench: draft acceptance, MoE cache hits.
+    '--metrics',
     ...SAMPLING_ARGS,
     ...speculationArgs(options, launch.draftPath),
     ...(launch.planArgs ?? []),

@@ -14,6 +14,10 @@ export interface BenchResult {
   promptPerSecond: number;
   generatedTokens: number;
   generatedPerSecond: number;
+  /** Share of drafted tokens the model accepted (speculative decoding). */
+  draftAcceptance?: number;
+  /** Share of selected experts found in the MoE cache (--moe-cache-mib). */
+  moeCacheHitRate?: number;
 }
 
 /** Tokens the benchmark generates. */
@@ -71,12 +75,108 @@ export function benchResult(response: unknown): BenchResult {
   };
 }
 
+/** One HTTP request to a leased engine; the status and the body. */
+function engineRequest(
+  lease: LocalModelLease,
+  method: 'GET' | 'POST',
+  urlPath: string,
+  timeoutMs: number,
+  body?: string,
+): Promise<{ status: number; text: string }> {
+  const url = new URL(lease.baseUrl);
+  const target: http.RequestOptions = lease.socketPath
+    ? { socketPath: lease.socketPath }
+    : { host: url.hostname, port: Number(url.port) };
+  return new Promise((resolve, reject) => {
+    const request = http.request(
+      {
+        ...target,
+        path: urlPath,
+        method,
+        timeout: timeoutMs,
+        headers: {
+          authorization: `Bearer ${lease.apiKey}`,
+          ...(body === undefined
+            ? {}
+            : {
+                'content-type': 'application/json',
+                'content-length': Buffer.byteLength(body),
+              }),
+        },
+      },
+      (response) => {
+        let text = '';
+        response.on('data', (chunk) => (text += chunk));
+        response.on('end', () =>
+          resolve({ status: response.statusCode ?? 0, text }),
+        );
+      },
+    );
+    request.on('timeout', () => request.destroy(new Error('timed out')));
+    request.on('error', reject);
+    request.end(body);
+  });
+}
+
+/** Counters from llama-server's Prometheus `/metrics`, by name. */
+export function parseMetrics(text: string): Map<string, number> {
+  const metrics = new Map<string, number>();
+  for (const line of text.split('\n')) {
+    const match = /^llamacpp:([a-z_]+)\s+(\S+)$/.exec(line.trim());
+    if (match) metrics.set(match[1], Number(match[2]));
+  }
+  return metrics;
+}
+
+/** The engine's counters, or an empty map when it does not serve them. */
+async function readMetrics(
+  lease: LocalModelLease,
+): Promise<Map<string, number>> {
+  try {
+    const { status, text } = await engineRequest(
+      lease,
+      'GET',
+      '/metrics',
+      10_000,
+    );
+    return status === 200 ? parseMetrics(text) : new Map();
+  } catch {
+    return new Map();
+  }
+}
+
+/**
+ * What changed in the counters during a run: the share of drafted tokens the
+ * model accepted, and the MoE cache hit rate, when the engine counted them.
+ */
+export function counterRates(
+  before: ReadonlyMap<string, number>,
+  after: ReadonlyMap<string, number>,
+): Pick<BenchResult, 'draftAcceptance' | 'moeCacheHitRate'> {
+  const delta = (name: string) =>
+    after.has(name)
+      ? (after.get(name) ?? 0) - (before.get(name) ?? 0)
+      : undefined;
+  const drafted = delta('spec_decode_num_draft_tokens_total');
+  const accepted = delta('spec_decode_num_accepted_tokens_total');
+  const hits = delta('moe_cache_hits_total');
+  const misses = delta('moe_cache_misses_total');
+  return {
+    ...(drafted && accepted !== undefined
+      ? { draftAcceptance: accepted / drafted }
+      : {}),
+    ...(hits !== undefined && misses !== undefined && hits + misses > 0
+      ? { moeCacheHitRate: hits / (hits + misses) }
+      : {}),
+  };
+}
+
 /**
  * Run the benchmark on a leased engine: the prompt is read without the
  * prompt cache, and generation runs at temperature 0. With a prompt cache it
  * runs in the side-query slot, so the conversation's cache stays.
  */
-export function runBench(
+export async function runBench(
   lease: LocalModelLease,
   timeoutMs = 10 * 60_000,
 ): Promise<BenchResult> {
@@ -89,45 +189,21 @@ export function runBench(
     ignore_eos: true,
     ...(lease.pinSlots ? { id_slot: SIDE_QUERY_SLOT } : {}),
   });
-  const url = new URL(lease.baseUrl);
-  const target: http.RequestOptions = lease.socketPath
-    ? { socketPath: lease.socketPath }
-    : { host: url.hostname, port: Number(url.port) };
-  return new Promise((resolve, reject) => {
-    const request = http.request(
-      {
-        ...target,
-        path: `${url.pathname.replace(/\/$/, '')}/chat/completions`,
-        method: 'POST',
-        timeout: timeoutMs,
-        headers: {
-          authorization: `Bearer ${lease.apiKey}`,
-          'content-type': 'application/json',
-          'content-length': Buffer.byteLength(body),
-        },
-      },
-      (response) => {
-        let text = '';
-        response.on('data', (chunk) => (text += chunk));
-        response.on('end', () => {
-          if (response.statusCode !== 200) {
-            reject(
-              new Error(
-                `The engine answered HTTP ${response.statusCode}: ${text.slice(0, 300)}`,
-              ),
-            );
-            return;
-          }
-          try {
-            resolve(benchResult(JSON.parse(text)));
-          } catch (error) {
-            reject(error);
-          }
-        });
-      },
+  const before = await readMetrics(lease);
+  const root = new URL(lease.baseUrl).pathname.replace(/\/$/, '');
+  const { status, text } = await engineRequest(
+    lease,
+    'POST',
+    `${root}/chat/completions`,
+    timeoutMs,
+    body,
+  );
+  if (status !== 200) {
+    throw new Error(
+      `The engine answered HTTP ${status}: ${text.slice(0, 300)}`,
     );
-    request.on('timeout', () => request.destroy(new Error('timed out')));
-    request.on('error', reject);
-    request.end(body);
-  });
+  }
+  const result = benchResult(JSON.parse(text));
+  const after = await readMetrics(lease);
+  return { ...result, ...counterRates(before, after) };
 }

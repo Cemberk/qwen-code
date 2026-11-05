@@ -11,6 +11,8 @@ import {
   BENCH_GENERATED_TOKENS,
   benchPrompt,
   benchResult,
+  counterRates,
+  parseMetrics,
   runBench,
 } from './bench.js';
 
@@ -59,10 +61,26 @@ describe('runBench', () => {
       auth?: string;
       body?: Record<string, unknown>;
     } = {};
+    let scrapes = 0;
     server = http.createServer((req, res) => {
       let text = '';
       req.on('data', (chunk) => (text += chunk));
       req.on('end', () => {
+        if (req.url === '/metrics') {
+          // 30 of 40 drafted tokens accepted, and 90 of 120 experts found
+          // in the cache, between the two scrapes.
+          const n = scrapes++;
+          res.end(
+            [
+              '# TYPE llamacpp:spec_decode_num_draft_tokens_total counter',
+              `llamacpp:spec_decode_num_draft_tokens_total ${100 + 40 * n}`,
+              `llamacpp:spec_decode_num_accepted_tokens_total ${50 + 30 * n}`,
+              `llamacpp:moe_cache_hits_total ${1000 + 90 * n}`,
+              `llamacpp:moe_cache_misses_total ${500 + 30 * n}`,
+            ].join('\n'),
+          );
+          return;
+        }
         request = {
           url: req.url,
           auth: req.headers.authorization,
@@ -91,6 +109,8 @@ describe('runBench', () => {
       release: () => {},
     });
     expect(result.generatedPerSecond).toBe(25);
+    expect(result.draftAcceptance).toBe(0.75);
+    expect(result.moeCacheHitRate).toBe(0.75);
     expect(request.url).toBe('/v1/chat/completions');
     expect(request.auth).toBe('Bearer k');
     expect(request.body).toMatchObject({
@@ -119,5 +139,27 @@ describe('runBench', () => {
         release: () => {},
       }),
     ).rejects.toThrow(/HTTP 500: out of memory/);
+  });
+});
+
+describe('counterRates', () => {
+  it('reports nothing an engine did not count', () => {
+    expect(counterRates(new Map(), new Map())).toEqual({});
+    // Counters that did not move: no drafts, no cached layers used.
+    const same = new Map([
+      ['spec_decode_num_draft_tokens_total', 10],
+      ['spec_decode_num_accepted_tokens_total', 5],
+      ['moe_cache_hits_total', 7],
+      ['moe_cache_misses_total', 3],
+    ]);
+    expect(counterRates(same, same)).toEqual({});
+  });
+
+  it('reads Prometheus lines', () => {
+    expect(
+      parseMetrics(
+        '# HELP llamacpp:n_decode_total x\nllamacpp:n_decode_total 12\nother 3\n',
+      ),
+    ).toEqual(new Map([['n_decode_total', 12]]));
   });
 });

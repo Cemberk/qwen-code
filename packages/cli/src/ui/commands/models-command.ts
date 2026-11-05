@@ -509,6 +509,16 @@ const benchCommand: SlashCommand = {
       content: [
         `${model.id}: prompt ${result.promptPerSecond.toFixed(1)} tok/s (${result.promptTokens} tokens), generation ${result.generatedPerSecond.toFixed(1)} tok/s (${result.generatedTokens} tokens).`,
         `Options: ${planned.plan.args.join(' ') || '(llama.cpp defaults)'}; speculative decoding ${server.isSpeculationEnabled() ? 'on' : 'off'}.`,
+        ...(result.draftAcceptance !== undefined
+          ? [
+              `Drafted tokens accepted: ${(100 * result.draftAcceptance).toFixed(1)}%.`,
+            ]
+          : []),
+        ...(result.moeCacheHitRate !== undefined
+          ? [
+              `MoE cache hit rate: ${(100 * result.moeCacheHitRate).toFixed(1)}%.`,
+            ]
+          : []),
         `Saved to ${benchLogFile()}.`,
       ].join('\n'),
     };
