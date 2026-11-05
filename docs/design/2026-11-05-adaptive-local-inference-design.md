@@ -248,6 +248,66 @@ Fork work, in order:
   logs prompt and generation speed with the machine and options to
   `~/.qwen/local-model-bench.jsonl`. Further rules wait for bench results
   from each machine class.
+- Phase 2, second part: the planner asks the engine build for its devices
+  (`--list-devices`), so a CPU-only build is planned for the CPU;
+  `/models bench` reads `/metrics` for draft acceptance and the MoE cache
+  hit rate; `/models` says how each downloaded model runs here. Verified
+  end to end on Windows (780M laptop) with a CPU build of the fork.
+- Phase 3 in the fork (branch `adaptive-moe` of `Cemberk/llama.cpp`):
+  - Item 1: `llama_moe_cache_get_stats()`, `llamacpp:moe_cache_*` in
+    `/metrics`, `--moe-cache-trace FILE`. Compiled (CPU build).
+  - Item 2: `tools/moe-sim/moe_cache_sim.py` (slru, lru, lfu, warm,
+    belady); its lfu and warm model the engine exactly.
+  - Items 3 and 4: `--moe-cache-profile FILE` (decayed usage per expert,
+    warm start of up to half the slots, saved at exit) and
+    `--moe-cache-policy lfu`. qwen-code passes a profile per project and
+    model whenever `localModelEngineArgs` turns the cache on. Not yet
+    compiled.
+  - Gated n-gram drafting: `ngram-simple` pauses after a run of rejected
+    drafts (backoff 8 to 256 steps). Not yet compiled.
+  - `scripts/windows-vulkan-noadmin.ps1`: Vulkan build without the SDK
+    installer's administrator rights; done by hand on the 780M laptop.
+- Already upstream, so no work: checkpoints at user-message boundaries and
+  near the prompt end (also written into slot save files), and
+  confidence-based early stop of model drafts (`--spec-draft-p-min`).
+
+## Item 5, hybrid miss compute: design, waiting for traces
+
+Today a miss is uploaded to the GPU before the layer runs, one host round
+trip per cached layer per step. With about 128 misses per token at a 25%
+cache (the synthetic run of the simulator), uploads cannot keep up on
+PCIe; the CPU should compute the missed experts from RAM while the GPU
+computes the cached ones:
+
+1. Let `mul_mat_id` skip ids of -1, leaving zeros: CPU first, then the
+   CUDA, HIP and Vulkan kernels (`ggml/src/ggml-*/`), with tests in
+   `tests/test-backend-ops.cpp`.
+2. In `build_moe_ffn` with a cache, compute each FFN twice: on the device
+   over the banks with the cached slots (misses as -1), and on the CPU
+   over the host experts with the missed ids (hits as -1); add the two
+   before the weighted sum.
+3. The copy callback fills both id lists from the slot map instead of
+   uploading; uploads move to a background stream for experts whose score
+   says they will keep missing.
+
+It touches kernels on every backend, so it waits until real traces from a
+discrete-GPU machine show the miss rate the cache leaves after warm start
+and LFU.
+
+## Testing at the end
+
+1. Build the fork (`adaptive-moe`) on each machine with its backend; on
+   Windows without admin rights, with `scripts\windows-vulkan-noadmin.ps1`,
+   and with `-j 2` to `-j 4`.
+2. `/models setup`, `/models plan` and `/models bench` with the default
+   model; the engine starts on Windows, Linux (`bwrap`, socket) and macOS.
+3. On a discrete GPU with a model that spills: bench without and with
+   `--moe-cache-mib`, then with `--moe-cache-policy lfu`; a second session
+   in the same project should log "warm start" and a higher hit rate.
+4. Record `--moe-cache-trace` and compare policies in the simulator.
+5. Speculation on: the bench's draft acceptance on code and on prose.
+6. Run the unit tests on Linux or macOS too: the engine-start and `hf`
+   tests use shell-script stand-ins that Windows cannot run.
 
 ## Decisions (2026-11-05)
 
