@@ -6,11 +6,13 @@
 
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -21,6 +23,7 @@ import {
   startLocalModelEngine,
 } from './engine.js';
 import type { LocalModelConfig } from './local-models.js';
+import { setConfinementForTesting } from './confinement.js';
 
 // The GPU and memory of the test machine must not decide these tests.
 const gpu = vi.hoisted(() => ({
@@ -58,9 +61,22 @@ if (model.includes('broken')) {
   console.error('error loading model: ' + model);
   process.exit(3);
 }
-require('node:http')
-  .createServer((req, res) => res.end(req.url === '/args' ? JSON.stringify(args) : '{}'))
-  .listen(Number(args[args.indexOf('--port') + 1]), '127.0.0.1');
+const host = args[args.indexOf('--host') + 1];
+const server = require('node:http').createServer((req, res) =>
+  res.end(req.url === '/args' ? JSON.stringify(args) : '{}'),
+);
+if (host.endsWith('.sock')) server.listen(host);
+else server.listen(Number(args[args.indexOf('--port') + 1]), host);
+`;
+
+// Stands in for unshare: runs the command after "--", as unshare would in a
+// new network namespace.
+const FAKE_UNSHARE = `#!${process.execPath}
+const args = process.argv.slice(2);
+const rest = args.slice(args.indexOf('--') + 1);
+const child = require('node:child_process').spawn(rest[0], rest.slice(1), { stdio: 'inherit' });
+child.on('exit', (code) => process.exit(code ?? 1));
+process.on('SIGTERM', () => child.kill('SIGTERM'));
 `;
 
 let dir: string;
@@ -196,6 +212,34 @@ describe('engineCommand', () => {
     expect(() => command(path.join(dir, 'missing'))).toThrow(
       /not a program qwen can run[\s\S]*\/models setup/,
     );
+  });
+
+  it('listens on a socket inside bwrap without network access when confined on Linux', () => {
+    const bin = installFakeEngine();
+    const command = engineCommand(
+      model,
+      '/m.gguf',
+      8080,
+      'k',
+      DEFAULT_ENGINE_OPTIONS,
+      env(bin),
+      'linux',
+      {
+        socketPath: '/tmp/qwen-engine-x/engine.sock',
+        confinement: { kind: 'bwrap', tool: '/usr/bin/bwrap' },
+      },
+    );
+    expect(command.command).toBe('/usr/bin/bwrap');
+    expect(command.args.slice(0, 7)).toEqual([
+      '--dev-bind',
+      '/',
+      '/',
+      '--unshare-net',
+      '--die-with-parent',
+      '--',
+      path.join(bin, 'llama-server'),
+    ]);
+    expect(command.args).toContain('/tmp/qwen-engine-x/engine.sock');
   });
 
   it('drafts with the draft model instead of n-grams when one is given', () => {
@@ -348,7 +392,41 @@ describe('startLocalModelEngine', () => {
     vi.stubEnv('HF_HUB_CACHE', path.join(dir, 'hub'));
     // The tests may already run inside a Seatbelt sandbox, which cannot nest.
     vi.stubEnv('SANDBOX', 'sandbox-exec');
+    // The tools of the test machine must not decide these tests.
+    setConfinementForTesting({ kind: 'none' });
   });
+  afterEach(() => setConfinementForTesting(undefined));
+
+  it.runIf(process.platform === 'linux')(
+    'runs the engine without network access on Linux, reached through a Unix socket',
+    async () => {
+      download(model.file);
+      const unshare = path.join(dir, 'unshare');
+      writeFileSync(unshare, FAKE_UNSHARE);
+      chmodSync(unshare, 0o755);
+      setConfinementForTesting({ kind: 'unshare', tool: unshare });
+      const engine = await startLocalModelEngine(model, 'k');
+      try {
+        expect(engine.baseUrl).toBe('http://localhost/v1');
+        expect(engine.socketPath).toMatch(/qwen-engine-.*engine\.sock$/);
+        const args = await new Promise<string[]>((resolve, reject) => {
+          http
+            .get({ socketPath: engine.socketPath, path: '/args' }, (res) => {
+              let text = '';
+              res.on('data', (chunk) => (text += chunk));
+              res.on('end', () => resolve(JSON.parse(text)));
+            })
+            .on('error', reject);
+        });
+        expect(
+          args.slice(args.indexOf('--host'), args.indexOf('--host') + 2),
+        ).toEqual(['--host', engine.socketPath]);
+      } finally {
+        await engine.stop();
+      }
+      expect(existsSync(path.dirname(engine.socketPath!))).toBe(false);
+    },
+  );
 
   it('starts the engine on a loopback port, waits until it answers, and stops it', async () => {
     download(model.file);

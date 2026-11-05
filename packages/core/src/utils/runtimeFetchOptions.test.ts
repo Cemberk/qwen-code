@@ -83,6 +83,26 @@ describe('buildRuntimeFetchOptions (node runtime)', () => {
     });
   });
 
+  it('connects through a Unix socket with one Agent per socket', () => {
+    const first = buildRuntimeFetchOptions('/tmp/a/engine.sock');
+    expect(getDispatcherOptions(first)).toEqual({
+      headersTimeout: 0,
+      bodyTimeout: 0,
+      keepAliveTimeout: 60_000,
+      connect: { socketPath: '/tmp/a/engine.sock' },
+    });
+    const dispatcher = first.fetchOptions.dispatcher;
+    expect(
+      buildRuntimeFetchOptions('/tmp/a/engine.sock').fetchOptions.dispatcher,
+    ).toBe(dispatcher);
+    expect(
+      buildRuntimeFetchOptions('/tmp/b/engine.sock').fetchOptions.dispatcher,
+    ).not.toBe(dispatcher);
+    expect(buildRuntimeFetchOptions().fetchOptions.dispatcher).not.toBe(
+      dispatcher,
+    );
+  });
+
   it('reuses the cached dispatcher across calls', () => {
     const first = buildRuntimeFetchOptions().fetchOptions?.dispatcher;
     const second = buildRuntimeFetchOptions().fetchOptions?.dispatcher;

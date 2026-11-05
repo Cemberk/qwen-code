@@ -90,6 +90,39 @@ describe('LocalModelContentGenerator', () => {
     expect(t.released).toEqual(['q-main']);
   });
 
+  it('reaches an engine that listens on a Unix socket through it', async () => {
+    const server = {
+      acquire: vi.fn(async () => ({
+        baseUrl: 'http://localhost/v1',
+        socketPath: '/tmp/qwen-engine-x/engine.sock',
+        apiKey: 'real-key',
+        pinSlots: false,
+        release: () => {},
+      })),
+    } as unknown as LocalModelServer;
+    const created: ContentGeneratorConfig[] = [];
+    const generator = new LocalModelContentGenerator(
+      config,
+      server,
+      (generatorConfig) => {
+        created.push(generatorConfig);
+        return {
+          generateContent: async () =>
+            ({ text: 'ok' }) as unknown as GenerateContentResponse,
+        } as unknown as ContentGenerator;
+      },
+    );
+    await generator.generateContent(request(), 'p');
+    expect(created).toEqual([
+      {
+        ...config,
+        baseUrl: 'http://localhost/v1',
+        socketPath: '/tmp/qwen-engine-x/engine.sock',
+        apiKey: 'real-key',
+      },
+    ]);
+  });
+
   it('leases the model the request names', async () => {
     const t = setup(['http://127.0.0.1:5000/v1']);
     await t.generator.generateContent(request('q-side'), 'p');

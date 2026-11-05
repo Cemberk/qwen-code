@@ -117,7 +117,7 @@ export class DefaultOpenAICompatibleProvider
       timeout,
       maxRetries,
       defaultHeaders,
-      ...buildRuntimeFetchOptions(),
+      ...buildRuntimeFetchOptions(this.contentGeneratorConfig.socketPath),
     });
   }
 

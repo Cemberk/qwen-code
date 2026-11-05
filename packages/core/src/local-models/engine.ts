@@ -5,7 +5,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { statSync } from 'node:fs';
+import { mkdtempSync, rmSync, statSync } from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
 import os from 'node:os';
@@ -15,6 +15,11 @@ import { DEFAULT_LOCAL_MODEL_CONTEXT_SIZE } from './local-models.js';
 import { resolveLocalModelPath } from './hf-cache.js';
 import { engineStateKey } from './prompt-cache.js';
 import { findExecutable, isExecutableFile } from './executables.js';
+import {
+  confinedCommand,
+  getConfinement,
+  type Confinement,
+} from './confinement.js';
 import {
   fitModel,
   gpuBudget,
@@ -71,6 +76,11 @@ export interface LocalModelEngine {
   readonly model: LocalModelConfig;
   /** The engine's OpenAI-compatible `/v1` root. */
   readonly baseUrl: string;
+  /**
+   * The Unix socket that reaches `baseUrl`, when the engine runs without
+   * network access (Linux) and listens on one.
+   */
+  readonly socketPath?: string;
   readonly alive: boolean;
   /**
    * Identifies the model file, draft, context size and speculation setup:
@@ -95,6 +105,19 @@ export interface EngineLaunch {
   promptCacheDir?: string;
   /** Layers whose experts stay in system memory (`--n-cpu-moe`). */
   cpuMoeLayers?: number;
+  /** Listen on this Unix socket instead of loopback TCP. */
+  socketPath?: string;
+  /** Run the engine without network access (Linux). */
+  confinement?: Confinement;
+}
+
+/** Where the engine listens: a loopback port, or a Unix socket. */
+export type EngineAddress = { port: number } | { socketPath: string };
+
+function connectOptions(address: EngineAddress): http.RequestOptions {
+  return 'socketPath' in address
+    ? { socketPath: address.socketPath }
+    : { host: '127.0.0.1', port: address.port };
 }
 
 /** Tokens the draft model proposes per step (`--spec-draft-n-max`). */
@@ -246,7 +269,10 @@ export function engineEnv(
   return childEnv;
 }
 
-/** The command that runs `model` from `modelPath` on `127.0.0.1:port`. */
+/**
+ * The command that runs `model` from `modelPath` on `127.0.0.1:port`, or on
+ * `launch.socketPath`.
+ */
 export function engineCommand(
   model: LocalModelConfig,
   modelPath: string,
@@ -263,7 +289,8 @@ export function engineCommand(
     '--model',
     modelPath,
     '--host',
-    '127.0.0.1',
+    // llama-server listens on a Unix socket when the host ends in .sock.
+    launch.socketPath ?? '127.0.0.1',
     '--port',
     String(port),
     '--ctx-size',
@@ -313,7 +340,25 @@ export function engineCommand(
       env: childEnv,
     };
   }
+  if (platform === 'linux' && launch.confinement) {
+    return {
+      ...confinedCommand(launch.confinement, binary, args),
+      env: childEnv,
+    };
+  }
   return { command: binary, args, env: childEnv };
+}
+
+/** llama-server needs a port even when it listens on a socket. */
+const SOCKET_PORT = 8080;
+
+/**
+ * Where the socket's private folder goes. A socket path must stay under
+ * about 100 bytes, so a long TMPDIR falls back to /tmp.
+ */
+function socketParent(): string {
+  const tmp = os.tmpdir();
+  return path.join(tmp.length > 60 ? '/tmp' : tmp, 'qwen-engine-');
 }
 
 function freeLoopbackPort(): Promise<number> {
@@ -330,7 +375,7 @@ function freeLoopbackPort(): Promise<number> {
 
 /** A two-token completion; resolves to the engine's error, or undefined. */
 function tryCompletion(
-  port: number,
+  address: EngineAddress,
   apiKey: string,
 ): Promise<string | undefined> {
   const body = JSON.stringify({
@@ -340,8 +385,7 @@ function tryCompletion(
   return new Promise((resolve) => {
     const request = http.request(
       {
-        host: '127.0.0.1',
-        port,
+        ...connectOptions(address),
         path: '/v1/chat/completions',
         method: 'POST',
         timeout: SLOT_TIMEOUT_MS,
@@ -374,7 +418,7 @@ function tryCompletion(
 
 /** POST `/slots/<conversation>?action=<action>`; resolves to whether the engine did it. */
 function slotAction(
-  port: number,
+  address: EngineAddress,
   apiKey: string,
   action: 'save' | 'restore',
   filename: string,
@@ -383,8 +427,7 @@ function slotAction(
   return new Promise((resolve) => {
     const request = http.request(
       {
-        host: '127.0.0.1',
-        port,
+        ...connectOptions(address),
         path: `/slots/${CONVERSATION_SLOT}?action=${action}`,
         method: 'POST',
         timeout: SLOT_TIMEOUT_MS,
@@ -405,9 +448,14 @@ function slotAction(
   });
 }
 
-function answers(url: string): Promise<boolean> {
+function answers(address: EngineAddress, urlPath: string): Promise<boolean> {
   return new Promise((resolve) => {
-    const request = http.get(url, { timeout: 2000 }, (response) => {
+    const options = {
+      ...connectOptions(address),
+      path: urlPath,
+      timeout: 2000,
+    };
+    const request = http.get(options, (response) => {
       response.resume();
       resolve(response.statusCode === 200);
     });
@@ -461,7 +509,19 @@ export async function startLocalModelEngine(
   if ('problem' in fit) {
     throw new Error(fit.problem);
   }
-  const port = await freeLoopbackPort();
+  // On Linux the engine runs in an empty network namespace where possible,
+  // reached only through a Unix socket in a private folder.
+  const confinement =
+    process.platform === 'linux' ? getConfinement() : { kind: 'none' as const };
+  const socketDir =
+    confinement.kind === 'none' ? undefined : mkdtempSync(socketParent());
+  const socketPath = socketDir && path.join(socketDir, 'engine.sock');
+  const removeSocketDir = () => {
+    if (socketDir) rmSync(socketDir, { recursive: true, force: true });
+  };
+  // A socket ignores the port, but llama-server wants one.
+  const port = socketPath ? SOCKET_PORT : await freeLoopbackPort();
+  const address: EngineAddress = socketPath ? { socketPath } : { port };
   const command = engineCommand(
     model,
     modelPath,
@@ -476,6 +536,7 @@ export async function startLocalModelEngine(
       // Elsewhere llama.cpp's --fit (on by default) measures each device's
       // free memory and places what does not fit itself.
       cpuMoeLayers: process.platform === 'darwin' ? fit.cpuMoeLayers : 0,
+      ...(socketPath ? { socketPath, confinement } : {}),
     },
   );
   const child = spawn(command.command, command.args, {
@@ -501,9 +562,15 @@ export async function startLocalModelEngine(
     });
   });
   // qwen must not leave an engine behind, including on process.exit().
-  const killOnExit = () => child.kill('SIGKILL');
+  const killOnExit = () => {
+    child.kill('SIGKILL');
+    removeSocketDir();
+  };
   process.once('exit', killOnExit);
-  void exited.then(() => process.removeListener('exit', killOnExit));
+  void exited.then(() => {
+    process.removeListener('exit', killOnExit);
+    removeSocketDir();
+  });
 
   const name = model.name ?? model.id;
   const failure = (reason: string) =>
@@ -513,10 +580,9 @@ export async function startLocalModelEngine(
     );
   const deadline = Date.now() + READY_TIMEOUT_MS;
   // llama-server answers 200 here once the model is loaded.
-  const readyUrl = `http://127.0.0.1:${port}/health`;
   for (;;) {
     if (exitDetail) throw failure(`the engine exited (${exitDetail})`);
-    if (await answers(readyUrl)) break;
+    if (await answers(address, '/health')) break;
     if (Date.now() > deadline) {
       child.kill('SIGKILL');
       throw failure('the engine did not answer within 5 minutes');
@@ -527,7 +593,7 @@ export async function startLocalModelEngine(
   // A draft that does not fit the GPU passes startup and then fails every
   // request, so try one before handing the engine out.
   if (draftPath) {
-    const problem = await tryCompletion(port, apiKey);
+    const problem = await tryCompletion(address, apiKey);
     if (problem) {
       child.kill('SIGKILL');
       throw new Error(
@@ -538,7 +604,9 @@ export async function startLocalModelEngine(
 
   return {
     model,
-    baseUrl: `http://127.0.0.1:${port}/v1`,
+    // With a socket, the URL only names the API; the socket carries it.
+    baseUrl: socketPath ? 'http://localhost/v1' : `http://127.0.0.1:${port}/v1`,
+    ...(socketPath ? { socketPath } : {}),
     stateKey: engineStateKey([
       modelPath,
       draftPath ?? '',
@@ -552,7 +620,7 @@ export async function startLocalModelEngine(
     },
     slot: (action, filename) =>
       promptCacheDir && exitDetail === undefined
-        ? slotAction(port, apiKey, action, filename)
+        ? slotAction(address, apiKey, action, filename)
         : Promise.resolve(false),
     async stop() {
       if (exitDetail !== undefined) return;

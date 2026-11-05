@@ -24,6 +24,8 @@ import {
 export interface LocalModelLease {
   /** The engine's OpenAI-compatible `/v1` root. */
   readonly baseUrl: string;
+  /** The Unix socket that reaches `baseUrl`, when the engine listens on one. */
+  readonly socketPath?: string;
   readonly apiKey: string;
   /**
    * The engine has a prompt cache: conversation turns must run in
@@ -175,6 +177,7 @@ export class LocalModelServer {
     let released = false;
     return {
       baseUrl: engine.baseUrl,
+      ...(engine.socketPath ? { socketPath: engine.socketPath } : {}),
       apiKey: this.apiKey,
       pinSlots: this.engineCaches,
       release: (options) => {

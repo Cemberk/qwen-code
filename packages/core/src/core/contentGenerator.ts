@@ -83,6 +83,11 @@ export type ContentGeneratorConfig = {
    * be 127.0.0.1, ::1 or localhost (see {@link validateModelConfig}).
    */
   baseUrl?: string;
+  /**
+   * Reach `baseUrl` through this Unix socket instead of TCP: a local engine
+   * confined to an empty network namespace listens on one.
+   */
+  socketPath?: string;
   authType?: AuthType | undefined;
   enableOpenAILogging?: boolean;
   openAILoggingDir?: string;

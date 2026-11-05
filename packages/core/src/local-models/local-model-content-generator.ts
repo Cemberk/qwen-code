@@ -45,13 +45,13 @@ export class LocalModelContentGenerator implements ContentGenerator {
     lease: LocalModelLease,
     userPromptId: string,
   ): ContentGenerator {
-    const { baseUrl, apiKey } = lease;
+    const { baseUrl, socketPath, apiKey } = lease;
     const slot = lease.pinSlots
       ? isMainTurn(userPromptId)
         ? CONVERSATION_SLOT
         : SIDE_QUERY_SLOT
       : undefined;
-    const engineKey = `${baseUrl}\0${apiKey}`;
+    const engineKey = `${socketPath ?? baseUrl}\0${apiKey}`;
     const key = `${engineKey}\0${slot ?? ''}`;
     let generator = this.generators.get(key);
     if (!generator) {
@@ -62,6 +62,7 @@ export class LocalModelContentGenerator implements ContentGenerator {
       generator = this.create({
         ...this.generatorConfig,
         baseUrl,
+        ...(socketPath ? { socketPath } : {}),
         apiKey,
         ...(slot === undefined
           ? {}

@@ -184,7 +184,7 @@ describe('DefaultOpenAICompatibleProvider', () => {
           fetch: runtimeFetch,
         }),
       );
-      expect(buildRuntimeFetchOptions).toHaveBeenCalledWith();
+      expect(buildRuntimeFetchOptions).toHaveBeenCalledWith(undefined);
 
       expect(client).toBeDefined();
     });

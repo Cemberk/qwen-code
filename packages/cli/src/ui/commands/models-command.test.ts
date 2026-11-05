@@ -20,7 +20,7 @@ import { SettingScope } from '../../config/settings.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { setHardwareProfileForTesting } from '@qwen-code/qwen-code-core/local-models/hardware.js';
 import { getLocalModelServer } from '@qwen-code/qwen-code-core/local-models/local-model-server.js';
-import { modelsCommand } from './models-command.js';
+import { modelsCommand, networkConfinement } from './models-command.js';
 
 // The GPU and memory of the test machine must not decide these tests.
 // By default a GPU that holds any model.
@@ -510,5 +510,26 @@ describe('/models setup', () => {
     );
     expect(content).toContain('Engine: C:\\llama.cpp\\llama-server.exe');
     expect(content).toContain('-DLLAMA_OPENSSL=OFF -DGGML_VULKAN=ON');
+  });
+});
+
+describe('networkConfinement', () => {
+  it('names how the engine is kept off the network on each platform', () => {
+    const unused = () => {
+      throw new Error('probed');
+    };
+    expect(networkConfinement('darwin', unused)).toMatch(/Seatbelt/);
+    expect(networkConfinement('win32', unused)).toMatch(/--offline/);
+    expect(
+      networkConfinement('linux', () => ({
+        kind: 'bwrap',
+        tool: '/usr/bin/bwrap',
+      })),
+    ).toMatch(
+      /without network access \(bwrap\), reached through a Unix socket/,
+    );
+    expect(networkConfinement('linux', () => ({ kind: 'none' }))).toMatch(
+      /Install bubblewrap/,
+    );
   });
 });

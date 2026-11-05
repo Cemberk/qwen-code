@@ -9,6 +9,10 @@ import {
   findExecutable,
   resolveDraftPath,
 } from '@qwen-code/qwen-code-core/local-models/engine.js';
+import {
+  getConfinement,
+  type Confinement,
+} from '@qwen-code/qwen-code-core/local-models/confinement.js';
 import { engineSetup } from '@qwen-code/qwen-code-core/local-models/engine-setup.js';
 import {
   downloadSizeProblem,
@@ -355,6 +359,23 @@ const speculationCommand: SlashCommand = {
   },
 };
 
+/** How the engine is kept off the network on this machine. */
+export function networkConfinement(
+  platform: NodeJS.Platform,
+  confinement: () => Confinement,
+): string {
+  if (platform === 'darwin') {
+    return 'a Seatbelt sandbox lets the engine reach only this machine.';
+  }
+  if (platform === 'linux') {
+    const found = confinement();
+    return found.kind === 'none'
+      ? 'the engine listens on loopback only. Install bubblewrap (bwrap) to run it without network access; this system refused an unprivileged network namespace or has neither bwrap nor unshare.'
+      : `the engine runs without network access (${found.kind}), reached through a Unix socket.`;
+  }
+  return 'the engine listens on loopback only and runs with --offline.';
+}
+
 const setupCommand: SlashCommand = {
   name: 'setup',
   get description() {
@@ -380,6 +401,7 @@ const setupCommand: SlashCommand = {
         ...describeHardware(profile).map((line) => `  ${line}`),
         '',
         `Engine: ${engine}`,
+        `Network: ${networkConfinement(profile.platform, () => getConfinement())}`,
         '',
         ...setup.lines,
       ].join('\n'),

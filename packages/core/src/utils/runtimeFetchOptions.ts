@@ -95,6 +95,7 @@ function withRedirectError<F extends (...args: never[]) => unknown>(
 }
 
 let sharedDispatcher: Dispatcher | undefined;
+const socketDispatchers = new Map<string, Dispatcher>();
 
 /**
  * Build fetch options for the OpenAI SDK: undici's own fetch over a cached
@@ -105,15 +106,29 @@ let sharedDispatcher: Dispatcher | undefined;
  * the total request time, and undici's 300s default bodyTimeout must never
  * abort a long-running request to a local server.
  */
-export function buildRuntimeFetchOptions(): OpenAIRuntimeFetchOptions {
+export function buildRuntimeFetchOptions(
+  socketPath?: string,
+): OpenAIRuntimeFetchOptions {
   const { Agent, fetch: undiciFetch } = requireUndici();
-  sharedDispatcher ??= new Agent({
+  const options = {
     headersTimeout: 0,
     bodyTimeout: 0,
     keepAliveTimeout: 60_000,
-  });
+  };
+  let dispatcher: Dispatcher;
+  if (socketPath) {
+    // Every request of this client goes to the socket, whatever the URL's
+    // host and port.
+    dispatcher =
+      socketDispatchers.get(socketPath) ??
+      new Agent({ ...options, connect: { socketPath } });
+    socketDispatchers.set(socketPath, dispatcher);
+  } else {
+    sharedDispatcher ??= new Agent(options);
+    dispatcher = sharedDispatcher;
+  }
   return {
-    fetchOptions: { dispatcher: sharedDispatcher },
+    fetchOptions: { dispatcher },
     fetch: withRedirectError(undiciFetch),
   };
 }
@@ -124,4 +139,5 @@ export function buildRuntimeFetchOptions(): OpenAIRuntimeFetchOptions {
  */
 export function resetDispatcherCache(): void {
   sharedDispatcher = undefined;
+  socketDispatchers.clear();
 }

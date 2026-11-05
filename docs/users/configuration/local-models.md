@@ -224,8 +224,14 @@ supplies.
   takes as long as the first one of a session.
 - On macOS the engine runs in a sandbox that blocks network traffic to
   anything except this machine, and lets it write files only in temporary
-  and cache folders. On Windows and Linux it listens on loopback only and runs
-  with `--offline`; a build without OpenSSL cannot reach HTTPS at all.
+  and cache folders. On Linux it runs in an empty network namespace of its
+  own (with `bwrap`, or `unshare` when bubblewrap is missing) and listens on a
+  Unix socket in a private temporary folder, so it has no network at all;
+  with bwrap it also ends when Qwen Code does, even after `kill -9`. Where
+  the system forbids unprivileged namespaces, it listens on loopback instead.
+  On Windows it listens on loopback only and runs with `--offline`. A build
+  without OpenSSL cannot reach HTTPS anywhere. `/models setup` says which
+  applies.
 - The engine stops when Qwen Code exits. If Qwen Code is killed with
   `kill -9`, the engine keeps running until you stop it.
 
