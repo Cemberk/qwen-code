@@ -508,7 +508,9 @@ describe('/models setup', () => {
     expect(content).toContain(
       'AMD Radeon(TM) 780M: shares system memory, 1.0 GB reserved, up to 17.0 GB usable',
     );
-    expect(content).toContain('Engine: C:\\llama.cpp\\llama-server.exe');
+    expect(content).toContain(
+      'Engine: C:\\llama.cpp\\llama-server.exe is not a program qwen can run',
+    );
     expect(content).toContain('-DLLAMA_OPENSSL=OFF -DGGML_VULKAN=ON');
   });
 });

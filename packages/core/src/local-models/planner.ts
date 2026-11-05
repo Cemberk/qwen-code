@@ -41,6 +41,8 @@ export interface PlanInput {
   hasDraft: boolean;
   /** `localModelEngineArgs`: the user's own options, applied last. */
   userArgs?: readonly string[];
+  /** The llama-server build has no GPU backend, but this machine has a GPU. */
+  cpuOnlyBuild?: boolean;
 }
 
 /**
@@ -54,7 +56,11 @@ export function planEngine(input: PlanInput): EnginePlan {
   const { gpu, fit, model } = input;
 
   if (gpu === undefined) {
-    notes.push('No GPU: the model runs on the CPU.');
+    notes.push(
+      input.cpuOnlyBuild
+        ? 'This llama-server has no GPU backend, so the model runs on the CPU although this machine has a GPU. /models setup shows how to build it for the GPU.'
+        : 'No GPU: the model runs on the CPU.',
+    );
   } else if ('problem' in fit) {
     notes.push(fit.problem);
   } else if (fit.partial) {

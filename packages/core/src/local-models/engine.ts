@@ -16,6 +16,7 @@ import { resolveLocalModelPath } from './hf-cache.js';
 import { engineStateKey } from './prompt-cache.js';
 import { findExecutable, isExecutableFile } from './executables.js';
 import { inspectModel, type ModelCapabilities } from './model-inspector.js';
+import { engineDevices, type EngineDevice } from './engine-devices.js';
 import { planEngine, type EnginePlan } from './planner.js';
 import {
   confinedCommand,
@@ -25,6 +26,7 @@ import {
 import {
   fitModel,
   gpuBudget,
+  type GpuBudget,
   type ModelFit,
   localModelBytes,
   localModelExpertBytes,
@@ -185,6 +187,24 @@ function speculationArgs(
  *
  * @throws Error saying how to set it up when there is none.
  */
+/**
+ * The llama-server qwen would run, or undefined when there is none: the one
+ * `localModelEngine` names, else the first on PATH.
+ */
+export function locateEngine(
+  options: LocalModelEngineOptions,
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): string | undefined {
+  if (options.enginePath) {
+    return path.isAbsolute(options.enginePath) &&
+      isExecutableFile(options.enginePath)
+      ? options.enginePath
+      : undefined;
+  }
+  return findExecutable(LLAMA_SERVER, env['PATH'] ?? '', platform);
+}
+
 function engineBinary(
   model: LocalModelConfig,
   options: LocalModelEngineOptions,
@@ -505,7 +525,29 @@ export interface LocalModelPlan {
   bytes: number;
   fit: ModelFit;
   capabilities?: ModelCapabilities;
+  /**
+   * The GPUs the llama-server build can use (`--list-devices`): empty for a
+   * build without a GPU backend, undefined when it could not be asked.
+   */
+  devices?: EngineDevice[];
   plan: EnginePlan;
+}
+
+/**
+ * The GPU memory the engine can use: the devices the build reports, which
+ * share system memory when this machine's GPU does. Without the build's
+ * answer, the machine's own GPUs.
+ */
+export function engineGpuBudget(
+  devices: readonly EngineDevice[] | undefined,
+  machine: GpuBudget | undefined,
+): GpuBudget | undefined {
+  if (devices === undefined) return machine;
+  if (devices.length === 0) return undefined;
+  return {
+    limit: devices.reduce((sum, device) => sum + device.totalBytes, 0),
+    unified: machine?.unified ?? false,
+  };
 }
 
 /**
@@ -523,7 +565,12 @@ export function planLocalModel(
   const draftPath = options.speculation ? resolveDraftPath(model) : undefined;
   const bytes =
     localModelBytes(model) + (draftPath ? statSync(draftPath).size : 0);
-  const gpu = gpuBudget();
+  const machine = gpuBudget();
+  const binary = locateEngine(options);
+  const devices = binary
+    ? engineDevices(binary, engineEnv('', process.env, process.platform))
+    : undefined;
+  const gpu = engineGpuBudget(devices, machine);
   const fit = fitModel(
     model,
     bytes,
@@ -539,6 +586,9 @@ export function planLocalModel(
     hasDraft: draftPath !== undefined,
     ...(capabilities ? { model: capabilities } : {}),
     ...(options.extraArgs ? { userArgs: options.extraArgs } : {}),
+    ...(devices !== undefined && devices.length === 0 && machine
+      ? { cpuOnlyBuild: true }
+      : {}),
   });
   return {
     modelPath,
@@ -546,6 +596,7 @@ export function planLocalModel(
     bytes,
     fit,
     ...(capabilities ? { capabilities } : {}),
+    ...(devices ? { devices } : {}),
     plan,
   };
 }

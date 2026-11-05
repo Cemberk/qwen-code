@@ -56,6 +56,8 @@ const model: LocalModelConfig = {
 // error when the model path says "broken".
 const FAKE_ENGINE = `#!${process.execPath}
 const args = process.argv.slice(2);
+// Answers no device list, so planning falls back to the machine's GPUs.
+if (args.includes('--list-devices')) process.exit(1);
 const model = args[args.indexOf('--model') + 1];
 if (model.includes('broken')) {
   console.error('error loading model: ' + model);

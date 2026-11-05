@@ -13,10 +13,16 @@ import {
   type BenchResult,
 } from '@qwen-code/qwen-code-core/local-models/bench.js';
 import {
+  engineEnv,
   findExecutable,
+  locateEngine,
   planLocalModel,
   resolveDraftPath,
 } from '@qwen-code/qwen-code-core/local-models/engine.js';
+import {
+  describeEngineDevices,
+  engineDevices,
+} from '@qwen-code/qwen-code-core/local-models/engine-devices.js';
 import { describeCapabilities } from '@qwen-code/qwen-code-core/local-models/model-inspector.js';
 import {
   getConfinement,
@@ -430,6 +436,9 @@ const planCommand: SlashCommand = {
         planned.capabilities
           ? `  ${describeCapabilities(planned.capabilities)}`
           : '  Its GGUF metadata could not be read.',
+        planned.devices
+          ? `  Engine: ${describeEngineDevices(planned.devices)}`
+          : '  Engine: its devices could not be read; planned from the GPUs of this machine.',
         '',
         ...planned.plan.notes.map((note) => `- ${note}`),
         '',
@@ -537,11 +546,16 @@ const setupCommand: SlashCommand = {
   action: (): MessageActionReturn => {
     const profile = getHardwareProfile();
     const setup = engineSetup(profile);
-    const enginePath = getLocalModelServer().getEnginePath();
-    const engine =
-      enginePath ??
-      findExecutable('llama-server') ??
-      'none (not on PATH, and localModelEngine is not set)';
+    const options = getLocalModelServer().getEngineOptions();
+    const binary = locateEngine(options);
+    const devices = binary
+      ? engineDevices(binary, engineEnv('', process.env, process.platform))
+      : undefined;
+    const engine = binary
+      ? `${binary}\n  ${devices ? describeEngineDevices(devices) : 'its devices could not be read (--list-devices)'}`
+      : options.enginePath
+        ? `${options.enginePath} is not a program qwen can run`
+        : 'none (not on PATH, and localModelEngine is not set)';
     return {
       type: 'message',
       messageType: 'info',

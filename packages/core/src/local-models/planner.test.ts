@@ -111,3 +111,16 @@ describe('validateEngineArgs', () => {
     expect(() => validateEngineArgs([1024])).toThrow(/must be a list/);
   });
 });
+
+describe('planEngine with a build that has no GPU backend', () => {
+  it('says the machine has a GPU the build cannot use', () => {
+    const plan = planEngine({
+      bytes: 5 * GIB,
+      gpu: undefined,
+      fit: { cpuMoeLayers: 0, partial: true },
+      hasDraft: false,
+      cpuOnlyBuild: true,
+    });
+    expect(plan.notes[0]).toMatch(/no GPU backend[\s\S]*\/models setup/);
+  });
+});
