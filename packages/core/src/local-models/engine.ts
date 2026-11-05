@@ -5,7 +5,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { accessSync, constants, statSync } from 'node:fs';
+import { statSync } from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
 import os from 'node:os';
@@ -14,9 +14,10 @@ import type { LocalModelConfig } from './local-models.js';
 import { DEFAULT_LOCAL_MODEL_CONTEXT_SIZE } from './local-models.js';
 import { resolveLocalModelPath } from './hf-cache.js';
 import { engineStateKey } from './prompt-cache.js';
+import { findExecutable, isExecutableFile } from './executables.js';
 import {
-  appleGpuMemoryLimit,
   fitModel,
+  gpuBudget,
   localModelBytes,
   localModelExpertBytes,
   systemMemoryBytes,
@@ -108,6 +109,11 @@ export const SIDE_QUERY_SLOT = 1;
 export interface LocalModelEngineOptions {
   /** N-gram speculative decoding (`--spec-type ngram-simple`). */
   speculation: boolean;
+  /**
+   * The llama-server to run (`localModelEngine`); otherwise the first
+   * llama-server on PATH.
+   */
+  enginePath?: string;
 }
 
 export const DEFAULT_ENGINE_OPTIONS: LocalModelEngineOptions = {
@@ -120,24 +126,7 @@ export interface EngineCommand {
   env: NodeJS.ProcessEnv;
 }
 
-/** An executable named `name` in an absolute `PATH` entry. */
-export function findExecutable(
-  name: string,
-  searchPath: string = process.env['PATH'] ?? '',
-): string | undefined {
-  for (const dir of searchPath.split(path.delimiter)) {
-    // A relative entry would resolve against the workspace.
-    if (!path.isAbsolute(dir)) continue;
-    const candidate = path.join(dir, name);
-    try {
-      accessSync(candidate, constants.X_OK);
-      if (statSync(candidate).isFile()) return candidate;
-    } catch {
-      // Not here.
-    }
-  }
-  return undefined;
-}
+export { findExecutable } from './executables.js';
 
 /**
  * Speculative decoding: the target model checks several drafted tokens in
@@ -160,6 +149,103 @@ function speculationArgs(
   ];
 }
 
+/**
+ * The llama-server to run: `localModelEngine` when it is set, otherwise the
+ * first on PATH.
+ *
+ * @throws Error saying how to set it up when there is none.
+ */
+function engineBinary(
+  model: LocalModelConfig,
+  options: LocalModelEngineOptions,
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
+): string {
+  const name = model.name ?? model.id;
+  if (options.enginePath) {
+    if (!path.isAbsolute(options.enginePath)) {
+      throw new Error(
+        `localModelEngine must be the full path of llama-server, not "${options.enginePath}".`,
+      );
+    }
+    if (!isExecutableFile(options.enginePath)) {
+      throw new Error(
+        `localModelEngine is ${options.enginePath}, which is not a program qwen can run; ${name} needs it. Run /models setup to see how to build llama-server for this machine.`,
+      );
+    }
+    return options.enginePath;
+  }
+  const binary = findExecutable(LLAMA_SERVER, env['PATH'] ?? '', platform);
+  if (!binary) {
+    throw new Error(
+      `${LLAMA_SERVER} was not found on PATH, and localModelEngine is not set; ${name} needs it. Run /models setup to see how to build it for this machine.`,
+    );
+  }
+  return binary;
+}
+
+/** Variables the engine keeps on every platform. */
+const ENGINE_ENV = ['PATH', 'HOME', 'TMPDIR'];
+
+/**
+ * Variables Windows programs need: Winsock and driver DLLs fail to load
+ * without SystemRoot, and temporary files go to TEMP and TMP.
+ */
+const WINDOWS_ENGINE_ENV = [
+  'SystemRoot',
+  'windir',
+  'TEMP',
+  'TMP',
+  'USERPROFILE',
+  'LOCALAPPDATA',
+  'APPDATA',
+  'ProgramData',
+  'PATHEXT',
+  'NUMBER_OF_PROCESSORS',
+  'PROCESSOR_ARCHITECTURE',
+];
+
+/** Shared libraries of CUDA or ROCm installed outside the system paths. */
+const LINUX_ENGINE_ENV = ['LD_LIBRARY_PATH'];
+
+/** Which GPUs the engine uses, and driver settings (ROCm, Vulkan). */
+const GPU_ENGINE_ENV = [
+  'CUDA_VISIBLE_DEVICES',
+  'CUDA_PATH',
+  'HIP_PATH',
+  'HIP_VISIBLE_DEVICES',
+  'ROCR_VISIBLE_DEVICES',
+  'HSA_OVERRIDE_GFX_VERSION',
+  'VK_ICD_FILENAMES',
+  'VK_DRIVER_FILES',
+];
+
+/**
+ * The engine's environment. It gets no credentials or settings from qwen's
+ * environment: variables such as LLAMA_ARG_HF_REPO or HF_TOKEN would make it
+ * download. ggml's own tuning variables (GGML_*) pass through.
+ */
+export function engineEnv(
+  apiKey: string,
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
+): NodeJS.ProcessEnv {
+  const childEnv: NodeJS.ProcessEnv = { LLAMA_API_KEY: apiKey };
+  const names = [
+    ...ENGINE_ENV,
+    ...(platform === 'win32' ? WINDOWS_ENGINE_ENV : []),
+    ...(platform === 'linux' ? LINUX_ENGINE_ENV : []),
+    ...GPU_ENGINE_ENV,
+  ];
+  for (const name of names) {
+    if (env[name] !== undefined) childEnv[name] = env[name];
+  }
+  for (const [name, value] of Object.entries(env)) {
+    if (name.startsWith('GGML_') && value !== undefined) childEnv[name] = value;
+  }
+  return childEnv;
+}
+
 /** The command that runs `model` from `modelPath` on `127.0.0.1:port`. */
 export function engineCommand(
   model: LocalModelConfig,
@@ -171,23 +257,8 @@ export function engineCommand(
   platform: NodeJS.Platform = process.platform,
   launch: EngineLaunch = {},
 ): EngineCommand {
-  //const binary = findExecutable(LLAMA_SERVER, env['PATH'] ?? '');
-  const binary = findExecutable(
-      platform === 'win32' ? 'llama-server.exe' : LLAMA_SERVER,
-      env['PATH'] ?? '',
-  );
-  if (!binary) {
-    throw new Error(
-      `${LLAMA_SERVER} was not found on PATH; ${model.name ?? model.id} needs it. ` +
-        'Install it with:\n  brew install llama.cpp',
-    );
-  }
-  // The engine gets no credentials or settings from qwen's environment:
-  // variables such as LLAMA_ARG_HF_REPO or HF_TOKEN would make it download.
-  const childEnv: NodeJS.ProcessEnv = { LLAMA_API_KEY: apiKey };
-  for (const name of ['PATH', 'HOME', 'TMPDIR']) {
-    if (env[name] !== undefined) childEnv[name] = env[name];
-  }
+  const binary = engineBinary(model, options, env, platform);
+  const childEnv = engineEnv(apiKey, env, platform);
   const args = [
     '--model',
     modelPath,
@@ -364,7 +435,7 @@ export function resolveDraftPath(model: LocalModelConfig): string | undefined {
  * downloaded draft, it also answers one short request first. A
  * mixture-of-experts model too big for the GPU runs partly on the CPU.
  *
- * @throws Error when the model is not downloaded, cannot fit this Mac's GPU
+ * @throws Error when the model is not downloaded, cannot fit this machine's GPU
  *   and memory (see fitModel), the engine is missing, or the engine exits or does
  *   not answer in time; the message carries the end of the engine's output.
  *   Also when the engine cannot answer with its draft model.
@@ -384,7 +455,7 @@ export async function startLocalModelEngine(
     model,
     localModelBytes(model) + (draftPath ? statSync(draftPath).size : 0),
     () => localModelExpertBytes(model),
-    appleGpuMemoryLimit(),
+    gpuBudget(),
     systemMemoryBytes(),
   );
   if ('problem' in fit) {
@@ -399,7 +470,13 @@ export async function startLocalModelEngine(
     options,
     process.env,
     process.platform,
-    { draftPath, promptCacheDir, cpuMoeLayers: fit.cpuMoeLayers },
+    {
+      draftPath,
+      promptCacheDir,
+      // Elsewhere llama.cpp's --fit (on by default) measures each device's
+      // free memory and places what does not fit itself.
+      cpuMoeLayers: process.platform === 'darwin' ? fit.cpuMoeLayers : 0,
+    },
   );
   const child = spawn(command.command, command.args, {
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -467,6 +544,8 @@ export async function startLocalModelEngine(
       draftPath ?? '',
       String(model.contextSize ?? DEFAULT_LOCAL_MODEL_CONTEXT_SIZE),
       String(options.speculation),
+      // Another build may not read the states this one saved.
+      options.enginePath ?? '',
     ]),
     get alive() {
       return exitDetail === undefined;

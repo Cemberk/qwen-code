@@ -8,29 +8,50 @@ yourself.
 
 ## Setup
 
-Install llama.cpp; Qwen Code finds `llama-server` on your `PATH`:
+Qwen Code runs the models with `llama-server`, built from the llama.cpp fork
+at <https://github.com/Cemberk/llama.cpp>. Run `/models setup` to see this
+machine's GPUs and the exact commands for it. The build depends on the GPU:
 
-```bash
-brew install llama.cpp
+| Machine                | Backend | CMake option       | Needs                                                               |
+| ---------------------- | ------- | ------------------ | ------------------------------------------------------------------- |
+| Apple silicon          | Metal   | (default)          | Xcode command line tools, CMake                                     |
+| NVIDIA                 | CUDA    | `-DGGML_CUDA=ON`   | CUDA Toolkit                                                        |
+| AMD, Intel (any OS)    | Vulkan  | `-DGGML_VULKAN=ON` | Vulkan SDK (Windows) or `libvulkan-dev glslc spirv-headers` (Linux) |
+| AMD on Linux with ROCm | HIP     | `-DGGML_HIP=ON`    | ROCm; optional instead of Vulkan                                    |
+| No GPU                 | CPU     | (default)          | CMake                                                               |
+
+For example, on Windows with an AMD or Intel GPU, after installing Git,
+CMake, the Visual Studio Build Tools (C++) and the Vulkan SDK:
+
+```powershell
+git clone https://github.com/Cemberk/llama.cpp
+cd llama.cpp
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DLLAMA_OPENSSL=OFF -DGGML_VULKAN=ON
+cmake --build build --config Release --target llama-server -j
 ```
 
-[Saved prompts](#saved-prompts) need llama.cpp from 2026-10-08 or later, and
-Homebrew's 0.6.0 is older. To build the current version instead (static, with
-Metal, without its download support) and put it ahead of Homebrew's on your
-`PATH`:
+`-DBUILD_SHARED_LIBS=OFF` makes one self-contained program, and
+`-DLLAMA_OPENSSL=OFF` leaves out HTTPS, so the engine cannot download
+anything. Then point Qwen Code at it in your user settings
+(`~/.qwen/settings.json`), or put its folder on your `PATH`:
 
-```bash
-git clone --depth 1 https://github.com/ggml-org/llama.cpp ~/.local/src/llama.cpp
-cd ~/.local/src/llama.cpp
-cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DLLAMA_OPENSSL=OFF -DGGML_METAL=ON
-cmake --build build --target llama-server -j
-cp build/bin/llama-server ~/.local/bin/
+```json
+{
+  "localModelEngine": "C:\\src\\llama.cpp\\build\\bin\\Release\\llama-server.exe"
+}
 ```
+
+The build lands in `build\bin\Release\` on Windows and `build/bin/` elsewhere.
+`localModelEngine` is read from your user settings only, and a change
+restarts a running engine at your next prompt. A stock llama.cpp also works
+(`brew install llama.cpp`, `winget install llama.cpp`), without the fork's
+changes; [saved prompts](#saved-prompts) need llama.cpp from 2026-10-08 or
+later.
 
 Model files come from the Hugging Face cache (`~/.cache/huggingface/hub`, or
 `HF_HUB_CACHE` / `HF_HOME` when set). Install the `hf` command
-(`brew install hf`) and download a model, naming the repository
-and the GGUF file:
+(`brew install hf` on macOS, `pip install -U "huggingface_hub[cli]"`
+elsewhere) and download a model, naming the repository and the GGUF file:
 
 ```bash
 hf download unsloth/Qwen3.6-35B-A3B-GGUF Qwen3.6-35B-A3B-UD-IQ3_S.gguf
@@ -85,6 +106,7 @@ cannot run them.
 | `/models remove <id>` or `<repo>` | Runs `hf cache rm model/<repo> -y`, deleting every downloaded file of that repository.                     |
 | `/models speculation`             | Shows whether speculative decoding is on.                                                                  |
 | `/models speculation on` or `off` | Turns speculative decoding on or off (see [How the engine runs](#how-the-engine-runs)).                    |
+| `/models setup`                   | Shows this machine's GPUs and memory, the engine in use, and how to build `llama-server` for it.           |
 
 `hf` runs without your Hugging Face token and with telemetry off. Downloading
 contacts huggingface.co; the `hf` tool also checks PyPI for a newer version of
@@ -99,6 +121,17 @@ of it that is still downloading. Wait for downloads from that repository to
 finish first.
 
 ## Model size
+
+Qwen Code reads this machine's GPUs and memory (`/models setup` lists them)
+and refuses, before it downloads or starts a model, one that cannot run:
+
+- Discrete GPUs (NVIDIA, Radeon, Arc): what does not fit in VRAM runs from
+  RAM, placed by llama.cpp's `--fit`, which measures each GPU's free memory.
+  A model too big for VRAM and RAM together cannot run.
+- Integrated graphics (Radeon 780M, Strix Halo, Intel): the GPU shares RAM.
+  It can use its reserved memory plus, on Windows, up to half of RAM, and on
+  Linux its GTT (by default half of RAM). The whole model must fit in RAM.
+- No GPU: the model runs on the CPU and must fit in RAM.
 
 On Apple silicon the GPU can use about two thirds of the Mac's memory (three
 quarters above 36 GB), or the limit you set with `sudo sysctl
@@ -175,6 +208,10 @@ supplies.
   quit.
 - The engine gets a minimal environment: no credentials, and none of the
   variables that make llama.cpp download models or enable its built-in tools.
+  It keeps what Windows programs need (`SystemRoot`, `TEMP`, ...), the GPU
+  selection variables (`CUDA_VISIBLE_DEVICES`, `HIP_VISIBLE_DEVICES`,
+  `HSA_OVERRIDE_GFX_VERSION`, ...), `LD_LIBRARY_PATH` on Linux, and ggml's own
+  `GGML_*` settings.
 - `llama-server` runs with `--offline`, without its web UI, and with a random
   key per session that only Qwen Code knows.
 - It uses Qwen3's recommended sampling (temperature 0.6, top-p 0.95, top-k 20)
@@ -187,7 +224,8 @@ supplies.
   takes as long as the first one of a session.
 - On macOS the engine runs in a sandbox that blocks network traffic to
   anything except this machine, and lets it write files only in temporary
-  and cache folders.
+  and cache folders. On Windows and Linux it listens on loopback only and runs
+  with `--offline`; a build without OpenSSL cannot reach HTTPS at all.
 - The engine stops when Qwen Code exits. If Qwen Code is killed with
   `kill -9`, the engine keeps running until you stop it.
 

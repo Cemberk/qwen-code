@@ -10,40 +10,63 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   GPU_HEADROOM_BYTES,
-  appleGpuMemoryLimit,
   downloadSizeProblem,
   expertBytesByLayer,
   fitModel,
+  gpuBudget,
   localModelBytes,
+  type GpuBudget,
 } from './gpu-memory.js';
+import type { GpuDevice, HardwareProfile } from './hardware.js';
 import type { LocalModelConfig } from './local-models.js';
 
 const GIB = 1024 ** 3;
-const unset = () => 0;
 
-describe('appleGpuMemoryLimit', () => {
-  it('is two thirds of RAM up to 36 GiB and three quarters above', () => {
-    expect(appleGpuMemoryLimit('darwin', 'arm64', 24 * GIB, unset)).toBe(
-      16 * GIB,
-    );
-    expect(appleGpuMemoryLimit('darwin', 'arm64', 64 * GIB, unset)).toBe(
-      48 * GIB,
+/** An Apple silicon GPU limit, which shares system memory. */
+const mac = (limit: number): GpuBudget => ({ limit, unified: true });
+const discrete = (limit: number): GpuBudget => ({ limit, unified: false });
+
+function profile(gpus: GpuDevice[]): HardwareProfile {
+  return {
+    platform: 'linux',
+    arch: 'x64',
+    totalMemory: 32 * GIB,
+    logicalCores: 16,
+    gpus,
+  };
+}
+
+describe('gpuBudget', () => {
+  const radeon780m: GpuDevice = {
+    name: 'AMD Radeon(TM) 780M',
+    vendor: 'amd',
+    dedicatedBytes: GIB,
+    integrated: true,
+    sharedBytes: 16 * GIB,
+  };
+  const rtx4090: GpuDevice = {
+    name: 'NVIDIA GeForce RTX 4090',
+    vendor: 'nvidia',
+    dedicatedBytes: 24 * GIB,
+    integrated: false,
+    sharedBytes: 0,
+  };
+
+  it('adds up the discrete GPUs and ignores integrated graphics beside them', () => {
+    expect(gpuBudget(profile([radeon780m, rtx4090, rtx4090]))).toEqual(
+      discrete(48 * GIB),
     );
   });
 
-  it('uses iogpu.wired_limit_mb when it is set', () => {
-    expect(appleGpuMemoryLimit('darwin', 'arm64', 24 * GIB, () => 20480)).toBe(
-      20 * GIB,
-    );
+  it('counts the carve-out and shared memory of an integrated GPU', () => {
+    expect(gpuBudget(profile([radeon780m]))).toEqual({
+      limit: 17 * GIB,
+      unified: true,
+    });
   });
 
-  it('has no limit off Apple silicon', () => {
-    expect(
-      appleGpuMemoryLimit('linux', 'x64', 24 * GIB, unset),
-    ).toBeUndefined();
-    expect(
-      appleGpuMemoryLimit('darwin', 'x64', 24 * GIB, unset),
-    ).toBeUndefined();
+  it('is undefined without a GPU', () => {
+    expect(gpuBudget(profile([]))).toBeUndefined();
   });
 });
 
@@ -95,12 +118,23 @@ describe('fitModel', () => {
         model,
         16 * GIB - GPU_HEADROOM_BYTES,
         unread,
-        16 * GIB,
+        mac(16 * GIB),
         24 * GIB,
+        'darwin',
       ),
     ).toEqual({ cpuMoeLayers: 0 });
-    expect(fitModel(model, 100 * GIB, unread, undefined, 24 * GIB)).toEqual({
+  });
+
+  it('runs a model on the CPU without a GPU, if it fits in RAM', () => {
+    expect(fitModel(model, 10 * GIB, unread, undefined, 24 * GIB)).toEqual({
       cpuMoeLayers: 0,
+      partial: true,
+    });
+    expect(
+      fitModel(model, 21 * GIB, unread, undefined, 24 * GIB, 'linux'),
+    ).toEqual({
+      problem:
+        "Big (Q4_K_M) is 22.5 GB, more than this computer's 24 GB of memory can hold beside the system and other apps. Pick a smaller quantization of the model.",
     });
   });
 
@@ -108,51 +142,125 @@ describe('fitModel', () => {
     // 3 layers leave about 0.9 GB of the GPU free at a 32K context; 2 leave
     // 0.5 GB, where it runs at half speed.
     expect(
-      fitModel(model, Q3_K_M_BYTES, () => Q3_K_M_EXPERTS, 16 * GIB, 24 * GIB),
-    ).toEqual({ cpuMoeLayers: 3 });
+      fitModel(
+        model,
+        Q3_K_M_BYTES,
+        () => Q3_K_M_EXPERTS,
+        mac(16 * GIB),
+        24 * GIB,
+        'darwin',
+      ),
+    ).toEqual({ cpuMoeLayers: 3, partial: true });
     expect(
       fitModel(
         model,
         16 * GIB + GPU_HEADROOM_BYTES,
         () => [0, GIB, 2 * GIB],
-        16 * GIB,
+        mac(16 * GIB),
         24 * GIB,
+        'darwin',
       ),
-    ).toEqual({ cpuMoeLayers: 3 });
+    ).toEqual({ cpuMoeLayers: 3, partial: true });
   });
 
   it('cannot run a dense model, or experts that do not free enough, past the GPU limit', () => {
     const problem =
       'Big (Q4_K_M) is 18.3 GB, but macOS lets the GPU use only about 17.2 GB on this Mac, and the model also needs room for its context. Pick a smaller quantization of the model.';
-    expect(fitModel(model, 17 * GIB, () => [], 16 * GIB, 24 * GIB)).toEqual({
-      problem,
-    });
     expect(
-      fitModel(model, 17 * GIB, () => [GIB / 4], 16 * GIB, 24 * GIB),
+      fitModel(model, 17 * GIB, () => [], mac(16 * GIB), 24 * GIB, 'darwin'),
+    ).toEqual({ problem });
+    expect(
+      fitModel(
+        model,
+        17 * GIB,
+        () => [GIB / 4],
+        mac(16 * GIB),
+        24 * GIB,
+        'darwin',
+      ),
     ).toEqual({ problem });
   });
 
   it("cannot run a model that leaves too little of the Mac's memory, without reading its layers", () => {
-    expect(fitModel(model, 21_166_758_496, unread, 16 * GIB, 24 * GIB)).toEqual(
-      {
-        problem:
-          'Big (Q4_K_M) is 21.2 GB, more than a 24 GB Mac can hold beside macOS and other apps. Pick a smaller quantization of the model.',
-      },
-    );
+    expect(
+      fitModel(
+        model,
+        21_166_758_496,
+        unread,
+        mac(16 * GIB),
+        24 * GIB,
+        'darwin',
+      ),
+    ).toEqual({
+      problem:
+        'Big (Q4_K_M) is 21.2 GB, more than a 24 GB Mac can hold beside macOS and other apps. Pick a smaller quantization of the model.',
+    });
+  });
+
+  it('names the GPU limit of integrated graphics off the Mac', () => {
+    expect(
+      fitModel(model, 17 * GIB, () => [], mac(16 * GIB), 32 * GIB, 'win32'),
+    ).toEqual({
+      problem:
+        'Big (Q4_K_M) is 18.3 GB, but the GPU can use only about 17.2 GB of memory, and the model also needs room for its context. Pick a smaller quantization of the model.',
+    });
+  });
+
+  it('runs what does not fit discrete GPUs from RAM', () => {
+    expect(
+      fitModel(model, 16 * GIB, unread, discrete(24 * GIB), 32 * GIB),
+    ).toEqual({ cpuMoeLayers: 0 });
+    // A dense model past VRAM still runs, partly on the CPU.
+    expect(
+      fitModel(model, 30 * GIB, () => [], discrete(16 * GIB), 32 * GIB),
+    ).toEqual({ cpuMoeLayers: 0, partial: true });
+    expect(
+      fitModel(
+        model,
+        Q3_K_M_BYTES,
+        () => Q3_K_M_EXPERTS,
+        discrete(12 * GIB),
+        32 * GIB,
+      ),
+    ).toMatchObject({ partial: true });
+  });
+
+  it('cannot run a model too big for VRAM and RAM together', () => {
+    expect(
+      fitModel(model, 50 * GIB, unread, discrete(16 * GIB), 32 * GIB, 'linux'),
+    ).toEqual({
+      problem:
+        "Big (Q4_K_M) is 53.7 GB, more than this computer's 48 GB of memory can hold beside the system and other apps. Pick a smaller quantization of the model.",
+    });
   });
 });
 
 describe('downloadSizeProblem', () => {
   it('refuses only a file too big for the memory of the Mac', () => {
     expect(
-      downloadSizeProblem(model, 19 * GIB, 16 * GIB, 24 * GIB),
+      downloadSizeProblem(model, 19 * GIB, mac(16 * GIB), 24 * GIB, 'darwin'),
     ).toBeUndefined();
     expect(
-      downloadSizeProblem(model, 100 * GIB, undefined, 24 * GIB),
+      downloadSizeProblem(model, 20 * GIB, mac(16 * GIB), 24 * GIB, 'darwin'),
+    ).toMatch(/^Big \(Q4_K_M\) is 21\.5 GB, more than a 24 GB Mac can hold/);
+  });
+
+  it('counts VRAM and RAM together beside discrete GPUs', () => {
+    expect(
+      downloadSizeProblem(model, 40 * GIB, discrete(24 * GIB), 32 * GIB),
     ).toBeUndefined();
-    expect(downloadSizeProblem(model, 20 * GIB, 16 * GIB, 24 * GIB)).toMatch(
-      /^Big \(Q4_K_M\) is 21\.5 GB, more than a 24 GB Mac can hold/,
-    );
+    expect(
+      downloadSizeProblem(model, 60 * GIB, discrete(24 * GIB), 32 * GIB),
+    ).toBeDefined();
+  });
+
+  it('checks RAM alone without a GPU', () => {
+    expect(
+      downloadSizeProblem(model, 100 * GIB, undefined, 24 * GIB),
+    ).toBeDefined();
+    expect(
+      downloadSizeProblem(model, 10 * GIB, undefined, 24 * GIB),
+    ).toBeUndefined();
   });
 });
 

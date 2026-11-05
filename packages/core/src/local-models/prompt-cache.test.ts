@@ -38,14 +38,22 @@ function write(name: string, bytes: number, ageSeconds: number) {
 
 describe('promptCacheDir', () => {
   it('uses the user cache folder, not ~/.qwen', () => {
+    const at = (...parts: string[]) =>
+      path.join(...parts, 'qwen-code', 'prompt-cache');
     expect(promptCacheDir({}, 'darwin', '/Users/u')).toBe(
-      '/Users/u/Library/Caches/qwen-code/prompt-cache',
+      at('/Users/u', 'Library', 'Caches'),
     );
     expect(promptCacheDir({}, 'linux', '/home/u')).toBe(
-      '/home/u/.cache/qwen-code/prompt-cache',
+      at('/home/u', '.cache'),
     );
     expect(promptCacheDir({ XDG_CACHE_HOME: '/c' }, 'linux', '/home/u')).toBe(
-      '/c/qwen-code/prompt-cache',
+      at('/c'),
+    );
+    expect(
+      promptCacheDir({ LOCALAPPDATA: 'C:\\L' }, 'win32', 'C:\\Users\\u'),
+    ).toBe(at('C:\\L'));
+    expect(promptCacheDir({}, 'win32', 'C:\\Users\\u')).toBe(
+      at('C:\\Users\\u', 'AppData', 'Local'),
     );
   });
 });

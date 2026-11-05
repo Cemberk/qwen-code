@@ -334,6 +334,9 @@ export function registerModelProvidersHotReload(
     getLocalModelServer().setSpeculation(
       settings.merged.speculativeDecoding !== false,
     );
+    getLocalModelServer().setEnginePath(
+      settings.merged.localModelEngine || undefined,
+    );
     const providersUnchanged = equal(
       config.getModelProvidersConfig() ?? {},
       next ?? {},

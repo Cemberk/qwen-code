@@ -106,6 +106,20 @@ export class LocalModelServer {
   }
 
   /**
+   * The llama-server to run (`localModelEngine`); `undefined` uses the one on
+   * PATH. A running engine started with another one restarts at the next
+   * request, once the requests in flight finish.
+   */
+  setEnginePath(enginePath: string | undefined): void {
+    const { enginePath: _previous, ...rest } = this.options;
+    this.options = enginePath ? { ...rest, enginePath } : rest;
+  }
+
+  getEnginePath(): string | undefined {
+    return this.options.enginePath;
+  }
+
+  /**
    * Save and restore the engine's processed prompt per session. Applies to
    * engines started from now on; `undefined` turns it off.
    */

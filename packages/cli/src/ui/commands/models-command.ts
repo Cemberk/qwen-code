@@ -9,14 +9,19 @@ import {
   findExecutable,
   resolveDraftPath,
 } from '@qwen-code/qwen-code-core/local-models/engine.js';
+import { engineSetup } from '@qwen-code/qwen-code-core/local-models/engine-setup.js';
 import {
-  appleGpuMemoryLimit,
   downloadSizeProblem,
   fitModel,
+  gpuBudget,
   localModelBytes,
   localModelExpertBytes,
   systemMemoryBytes,
 } from '@qwen-code/qwen-code-core/local-models/gpu-memory.js';
+import {
+  describeHardware,
+  getHardwareProfile,
+} from '@qwen-code/qwen-code-core/local-models/hardware.js';
 import { resolveLocalModelPath } from '@qwen-code/qwen-code-core/local-models/hf-cache.js';
 import { getLocalModelServer } from '@qwen-code/qwen-code-core/local-models/local-model-server.js';
 import {
@@ -51,14 +56,19 @@ function isDownloaded(model: LocalModelConfig): boolean {
   }
 }
 
+function hfInstallHint(platform: NodeJS.Platform = process.platform): string {
+  return platform === 'darwin'
+    ? 'Install it with: brew install huggingface-cli'
+    : 'Install it with: pip install -U "huggingface_hub[cli]"';
+}
+
 /** Run the user's `hf` tool without their token or telemetry. */
 function runHf(args: string[]): Promise<{ ok: boolean; output: string }> {
   const hf = findExecutable('hf');
   if (!hf) {
     return Promise.resolve({
       ok: false,
-      output:
-        'The hf tool was not found on PATH. Install it with: brew install huggingface-cli',
+      output: `The hf tool was not found on PATH. ${hfInstallHint()}`,
     });
   }
   const env: NodeJS.ProcessEnv = {
@@ -142,33 +152,31 @@ const downloadCommand: SlashCommand = {
       );
     }
 
-    // On Apple silicon, refuse a file too big for the Mac's memory before
-    // downloading it. hf reports the size without downloading; if its output
-    // cannot be read, the check after the download still catches it. Whether
-    // a file too big for the GPU can run partly on the CPU depends on its
-    // layers, which are only known after the download.
-    const limit = appleGpuMemoryLimit();
-    if (limit !== undefined) {
-      context.ui.addItem(
-        {
-          type: MessageType.INFO,
-          text: `Checking the size: hf download ${model.repo} ${model.file} --dry-run`,
-        },
-        Date.now(),
-      );
-      const dryRun = await runHf([
-        'download',
-        model.repo,
-        model.file,
-        '--dry-run',
-      ]);
-      const bytes = dryRun.ok ? dryRunBytes(dryRun.output) : undefined;
-      const problem = bytes
-        ? downloadSizeProblem(model, bytes, limit, systemMemoryBytes())
-        : undefined;
-      if (problem) {
-        return error(`Not downloaded. ${problem}`);
-      }
+    // Refuse a file too big for this machine's memory before downloading
+    // it. hf reports the size without downloading; if its output cannot be
+    // read, the check after the download still catches it. Whether a file too
+    // big for the GPU can run partly on the CPU depends on its layers, which
+    // are only known after the download.
+    const gpu = gpuBudget();
+    context.ui.addItem(
+      {
+        type: MessageType.INFO,
+        text: `Checking the size: hf download ${model.repo} ${model.file} --dry-run`,
+      },
+      Date.now(),
+    );
+    const dryRun = await runHf([
+      'download',
+      model.repo,
+      model.file,
+      '--dry-run',
+    ]);
+    const bytes = dryRun.ok ? dryRunBytes(dryRun.output) : undefined;
+    const problem = bytes
+      ? downloadSizeProblem(model, bytes, gpu, systemMemoryBytes())
+      : undefined;
+    if (problem) {
+      return error(`Not downloaded. ${problem}`);
     }
 
     if (added) {
@@ -213,31 +221,34 @@ const downloadCommand: SlashCommand = {
       }
     }
     let fit: ReturnType<typeof fitModel> = { cpuMoeLayers: 0 };
-    if (limit !== undefined) {
-      const downloaded = model;
-      try {
-        fit = fitModel(
-          downloaded,
-          localModelBytes(downloaded),
-          () => localModelExpertBytes(downloaded),
-          limit,
-          systemMemoryBytes(),
-        );
-      } catch {
-        // Not all of it is in the cache (e.g. other parts of a split file).
-      }
+    try {
+      fit = fitModel(
+        model,
+        localModelBytes(model),
+        () => localModelExpertBytes(model),
+        gpu,
+        systemMemoryBytes(),
+      );
+    } catch {
+      // Not all of it is in the cache (e.g. other parts of a split file).
     }
     if ('problem' in fit) {
-      return error(`Downloaded, but it cannot run on this Mac. ${fit.problem}`);
+      return error(
+        `Downloaded, but it cannot run on this machine. ${fit.problem}`,
+      );
     }
     return {
       type: 'message',
       messageType: 'info',
       content:
         `Downloaded ${model.name ?? model.id}. Switch to it with /model ${model.id}.` +
-        (fit.cpuMoeLayers
-          ? ` It is too big for the GPU, so the experts of ${fit.cpuMoeLayers} of its layers run on the CPU, which makes it slower.`
-          : ''),
+        (gpu === undefined
+          ? ' No GPU was found, so it runs on the CPU.'
+          : fit.cpuMoeLayers && process.platform === 'darwin'
+            ? ` It is too big for the GPU, so the experts of ${fit.cpuMoeLayers} of its layers run on the CPU, which makes it slower.`
+            : fit.partial
+              ? ' It is too big for the GPU, so part of it runs on the CPU, which makes it slower.'
+              : ''),
     };
   },
 };
@@ -344,6 +355,38 @@ const speculationCommand: SlashCommand = {
   },
 };
 
+const setupCommand: SlashCommand = {
+  name: 'setup',
+  get description() {
+    return t(
+      'Show the GPUs of this machine and how to build the local model engine for them',
+    );
+  },
+  kind: CommandKind.BUILT_IN,
+  supportedModes: ['interactive'] as const,
+  action: (): MessageActionReturn => {
+    const profile = getHardwareProfile();
+    const setup = engineSetup(profile);
+    const enginePath = getLocalModelServer().getEnginePath();
+    const engine =
+      enginePath ??
+      findExecutable('llama-server') ??
+      'none (not on PATH, and localModelEngine is not set)';
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: [
+        'This machine:',
+        ...describeHardware(profile).map((line) => `  ${line}`),
+        '',
+        `Engine: ${engine}`,
+        '',
+        ...setup.lines,
+      ].join('\n'),
+    };
+  },
+};
+
 export const modelsCommand: SlashCommand = {
   name: 'models',
   get description() {
@@ -368,8 +411,14 @@ export const modelsCommand: SlashCommand = {
         '',
         'Switch with /model <id>. Download with /models download <id> (or <repo> <file> to add one). Delete with /models remove <id>.',
         `Speculative decoding is ${speculationState()}; switch it with /models speculation on or off.`,
+        'See the GPUs of this machine and how to build the engine with /models setup.',
       ].join('\n'),
     };
   },
-  subCommands: [downloadCommand, removeCommand, speculationCommand],
+  subCommands: [
+    downloadCommand,
+    removeCommand,
+    speculationCommand,
+    setupCommand,
+  ],
 };

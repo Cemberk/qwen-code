@@ -306,6 +306,17 @@ const SETTINGS_SCHEMA = {
     showInDialog: false,
   },
 
+  localModelEngine: {
+    type: 'string',
+    label: 'Local Model Engine',
+    category: 'Model',
+    requiresRestart: false,
+    default: undefined as string | undefined,
+    description:
+      'Full path of the llama-server that runs the local models, such as a build of the llama.cpp fork. When unset, the first llama-server on PATH runs them. /models setup shows how to build it for this machine. Read from user settings only.',
+    showInDialog: false,
+  },
+
   speculativeDecoding: {
     type: 'boolean',
     label: 'Speculative Decoding',

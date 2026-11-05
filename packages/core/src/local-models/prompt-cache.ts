@@ -31,7 +31,9 @@ export function promptCacheDir(
   const base =
     platform === 'darwin'
       ? path.join(home, 'Library', 'Caches')
-      : env['XDG_CACHE_HOME'] || path.join(home, '.cache');
+      : platform === 'win32'
+        ? env['LOCALAPPDATA'] || path.join(home, 'AppData', 'Local')
+        : env['XDG_CACHE_HOME'] || path.join(home, '.cache');
   return path.join(base, 'qwen-code', 'prompt-cache');
 }
 

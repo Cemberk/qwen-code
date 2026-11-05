@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_ENGINE_OPTIONS,
   engineCommand,
+  engineEnv,
   startLocalModelEngine,
 } from './engine.js';
 import type { LocalModelConfig } from './local-models.js';
@@ -31,7 +32,8 @@ vi.mock('./gpu-memory.js', async (importActual) => {
   const actual = await importActual<typeof import('./gpu-memory.js')>();
   return {
     ...actual,
-    appleGpuMemoryLimit: () => gpu.limit,
+    gpuBudget: () =>
+      gpu.limit === undefined ? undefined : { limit: gpu.limit, unified: true },
     systemMemoryBytes: () => 24 * 1024 ** 3,
     localModelBytes: (model: LocalModelConfig) =>
       gpu.bytes ?? actual.localModelBytes(model),
@@ -135,6 +137,65 @@ describe('engineCommand', () => {
         LLAMA_API_KEY: 'k',
       },
     });
+  });
+
+  it('keeps what Windows programs and GPU drivers need, and ggml tuning, but no llama.cpp settings', () => {
+    expect(
+      engineEnv(
+        'k',
+        {
+          PATH: 'C:\\bin',
+          SystemRoot: 'C:\\Windows',
+          TEMP: 'C:\\t',
+          LOCALAPPDATA: 'C:\\Users\\u\\AppData\\Local',
+          HIP_VISIBLE_DEVICES: '0',
+          HSA_OVERRIDE_GFX_VERSION: '11.0.0',
+          GGML_VK_VISIBLE_DEVICES: '1',
+          LLAMA_ARG_HF_REPO: 'someone/else',
+          HF_TOKEN: 'secret',
+          LD_LIBRARY_PATH: '/opt/rocm/lib',
+        },
+        'win32',
+      ),
+    ).toEqual({
+      LLAMA_API_KEY: 'k',
+      PATH: 'C:\\bin',
+      SystemRoot: 'C:\\Windows',
+      TEMP: 'C:\\t',
+      LOCALAPPDATA: 'C:\\Users\\u\\AppData\\Local',
+      HIP_VISIBLE_DEVICES: '0',
+      HSA_OVERRIDE_GFX_VERSION: '11.0.0',
+      GGML_VK_VISIBLE_DEVICES: '1',
+    });
+    expect(
+      engineEnv(
+        'k',
+        { LD_LIBRARY_PATH: '/opt/rocm/lib', SystemRoot: 'x' },
+        'linux',
+      ),
+    ).toEqual({ LLAMA_API_KEY: 'k', LD_LIBRARY_PATH: '/opt/rocm/lib' });
+  });
+
+  it('runs the llama-server named by localModelEngine instead of the one on PATH', () => {
+    const bin = installFakeEngine();
+    const own = path.join(dir, 'own-llama-server');
+    writeFileSync(own, FAKE_ENGINE);
+    chmodSync(own, 0o755);
+    const command = (enginePath: string) =>
+      engineCommand(
+        model,
+        '/m.gguf',
+        1,
+        'k',
+        { speculation: true, enginePath },
+        env(bin),
+        'linux',
+      );
+    expect(command(own).command).toBe(own);
+    expect(() => command('llama-server')).toThrow(/must be the full path/);
+    expect(() => command(path.join(dir, 'missing'))).toThrow(
+      /not a program qwen can run[\s\S]*\/models setup/,
+    );
   });
 
   it('drafts with the draft model instead of n-grams when one is given', () => {
@@ -265,9 +326,7 @@ describe('engineCommand', () => {
         { PATH: path.relative(process.cwd(), relative) },
         'linux',
       ),
-    ).toThrow(
-      /llama-server was not found on PATH[\s\S]*brew install llama\.cpp/,
-    );
+    ).toThrow(/llama-server was not found on PATH[\s\S]*\/models setup/);
   });
 });
 
@@ -330,7 +389,12 @@ describe('startLocalModelEngine', () => {
         const args = (await (
           await fetch(engine.baseUrl.replace('/v1', '/args'))
         ).json()) as string[];
-        expect(args.join(' ')).toContain('--n-cpu-moe 4 --load-mode none');
+        // Elsewhere llama.cpp's --fit places what does not fit.
+        if (process.platform === 'darwin') {
+          expect(args.join(' ')).toContain('--n-cpu-moe 4 --load-mode none');
+        } else {
+          expect(args).not.toContain('--n-cpu-moe');
+        }
       } finally {
         await engine.stop();
       }
@@ -339,7 +403,7 @@ describe('startLocalModelEngine', () => {
     it('refuses a dense model before starting the engine', async () => {
       download(model.file);
       await expect(startLocalModelEngine(model, 'k')).rejects.toThrow(
-        /is 17\.2 GB, but macOS lets the GPU use only about 17\.2 GB on this Mac/,
+        /is 17\.2 GB, but (?:macOS lets the GPU use only about 17\.2 GB on this Mac|the GPU can use only about 17\.2 GB of memory)/,
       );
     });
   });

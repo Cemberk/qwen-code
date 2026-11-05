@@ -18,12 +18,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LoadedSettings } from '../../config/settings.js';
 import { SettingScope } from '../../config/settings.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { setHardwareProfileForTesting } from '@qwen-code/qwen-code-core/local-models/hardware.js';
 import { getLocalModelServer } from '@qwen-code/qwen-code-core/local-models/local-model-server.js';
 import { modelsCommand } from './models-command.js';
 
 // The GPU and memory of the test machine must not decide these tests.
+// By default a GPU that holds any model.
 const gpu = vi.hoisted(() => ({
-  limit: undefined as number | undefined,
+  budget: { limit: 1024 ** 4, unified: false } as
+    | { limit: number; unified: boolean }
+    | undefined,
   bytes: undefined as number | undefined,
   experts: [] as number[],
 }));
@@ -36,7 +40,7 @@ vi.mock(
       >();
     return {
       ...actual,
-      appleGpuMemoryLimit: () => gpu.limit,
+      gpuBudget: () => gpu.budget,
       systemMemoryBytes: () => 24 * 1024 ** 3,
       localModelBytes: (model: Parameters<typeof actual.localModelBytes>[0]) =>
         gpu.bytes ?? actual.localModelBytes(model),
@@ -139,13 +143,18 @@ describe('/models', () => {
     const ctx = context();
     const result = await sub('download').action!(ctx, 'q-big');
 
-    expect(recorded()).toEqual([
-      {
-        args: ['download', 'Qwen/Qwen3-14B-GGUF', 'Qwen3-14B-Q4_K_M.gguf'],
+    expect(recorded()).toEqual(
+      [['--dry-run'], []].map((extra) => ({
+        args: [
+          'download',
+          'Qwen/Qwen3-14B-GGUF',
+          'Qwen3-14B-Q4_K_M.gguf',
+          ...extra,
+        ],
         token: null,
         implicitToken: '1',
-      },
-    ]);
+      })),
+    );
     expect(result).toMatchObject({
       messageType: 'info',
       content: 'Downloaded q-big. Switch to it with /model q-big.',
@@ -167,7 +176,7 @@ describe('/models', () => {
         file: 'Qwen3.6-35B-A3B-UD-IQ4_XS.gguf',
       },
     ]);
-    expect(recorded()[0].args).toEqual([
+    expect(recorded()[1].args).toEqual([
       'download',
       'unsloth/Qwen3.6-35B-A3B-GGUF',
       'Qwen3.6-35B-A3B-UD-IQ4_XS.gguf',
@@ -208,12 +217,13 @@ describe('/models', () => {
     }
   });
 
-  describe('on a Mac with a GPU memory limit', () => {
+  describe('with a GPU that shares system memory', () => {
+    const mac = process.platform === 'darwin';
     beforeEach(() => {
-      gpu.limit = 16 * 1024 ** 3;
+      gpu.budget = { limit: 16 * 1024 ** 3, unified: true };
     });
     afterEach(() => {
-      gpu.limit = undefined;
+      gpu.budget = { limit: 1024 ** 4, unified: false };
       gpu.bytes = undefined;
       gpu.experts = [];
     });
@@ -228,7 +238,9 @@ describe('/models', () => {
       expect(result).toMatchObject({
         messageType: 'error',
         content: expect.stringContaining(
-          'Not downloaded. qwen3.6-35b-a3b-heretic-q4_k_s is 22.0 GB, more than a 24 GB Mac can hold beside macOS and other apps.',
+          mac
+            ? 'Not downloaded. qwen3.6-35b-a3b-heretic-q4_k_s is 22.0 GB, more than a 24 GB Mac can hold beside macOS and other apps.'
+            : "Not downloaded. qwen3.6-35b-a3b-heretic-q4_k_s is 22.0 GB, more than this computer's 24 GB of memory can hold beside the system and other apps.",
         ),
       });
       expect(recorded().map((call) => call.args)).toEqual([
@@ -261,8 +273,9 @@ describe('/models', () => {
       expect(recorded()).toHaveLength(2);
       expect(result).toMatchObject({
         messageType: 'info',
-        content:
-          'Downloaded q-big. Switch to it with /model q-big. It is too big for the GPU, so the experts of 3 of its layers run on the CPU, which makes it slower.',
+        content: mac
+          ? 'Downloaded q-big. Switch to it with /model q-big. It is too big for the GPU, so the experts of 3 of its layers run on the CPU, which makes it slower.'
+          : 'Downloaded q-big. Switch to it with /model q-big. It is too big for the GPU, so part of it runs on the CPU, which makes it slower.',
       });
     });
 
@@ -273,7 +286,9 @@ describe('/models', () => {
       expect(result).toMatchObject({
         messageType: 'error',
         content: expect.stringContaining(
-          'Downloaded, but it cannot run on this Mac. q-big is 18.0 GB, but macOS lets the GPU use only about 17.2 GB',
+          mac
+            ? 'Downloaded, but it cannot run on this machine. q-big is 18.0 GB, but macOS lets the GPU use only about 17.2 GB'
+            : 'Downloaded, but it cannot run on this machine. q-big is 18.0 GB, but the GPU can use only about 17.2 GB',
         ),
       });
     });
@@ -310,6 +325,12 @@ describe('/models', () => {
     it('downloads the draft after the model', async () => {
       const result = await sub('download').action!(withDraft(), 'q-drafted');
       expect(recorded().map((call) => call.args)).toEqual([
+        [
+          'download',
+          'unsloth/Qwen3.8-27B-GGUF',
+          'Qwen3.8-27B-UD-IQ3_XXS.gguf',
+          '--dry-run',
+        ],
         ['download', 'unsloth/Qwen3.8-27B-GGUF', 'Qwen3.8-27B-UD-IQ3_XXS.gguf'],
         [
           'download',
@@ -455,5 +476,39 @@ describe('/models speculation', () => {
     expect((result as { content: string }).content).toContain(
       'Speculative decoding is off',
     );
+  });
+});
+
+describe('/models setup', () => {
+  afterEach(() => {
+    setHardwareProfileForTesting(undefined);
+    getLocalModelServer().setEnginePath(undefined);
+  });
+
+  it('shows the GPUs and the build of the engine for this machine', async () => {
+    setHardwareProfileForTesting({
+      platform: 'win32',
+      arch: 'x64',
+      totalMemory: 32e9,
+      logicalCores: 16,
+      physicalCores: 8,
+      gpus: [
+        {
+          name: 'AMD Radeon(TM) 780M',
+          vendor: 'amd',
+          dedicatedBytes: 1e9,
+          integrated: true,
+          sharedBytes: 16e9,
+        },
+      ],
+    });
+    getLocalModelServer().setEnginePath('C:\\llama.cpp\\llama-server.exe');
+    const result = await sub('setup').action!(context(), '');
+    const content = (result as { content: string }).content;
+    expect(content).toContain(
+      'AMD Radeon(TM) 780M: shares system memory, 1.0 GB reserved, up to 17.0 GB usable',
+    );
+    expect(content).toContain('Engine: C:\\llama.cpp\\llama-server.exe');
+    expect(content).toContain('-DLLAMA_OPENSSL=OFF -DGGML_VULKAN=ON');
   });
 });
