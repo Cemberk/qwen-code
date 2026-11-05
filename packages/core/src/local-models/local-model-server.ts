@@ -122,6 +122,21 @@ export class LocalModelServer {
   }
 
   /**
+   * The user's own llama-server options (`localModelEngineArgs`), already
+   * validated. A running engine started with others restarts at the next
+   * request, once the requests in flight finish.
+   */
+  setEngineArgs(args: readonly string[] | undefined): void {
+    const { extraArgs: _previous, ...rest } = this.options;
+    this.options =
+      args && args.length > 0 ? { ...rest, extraArgs: [...args] } : rest;
+  }
+
+  getEngineOptions(): LocalModelEngineOptions {
+    return this.options;
+  }
+
+  /**
    * Save and restore the engine's processed prompt per session. Applies to
    * engines started from now on; `undefined` turns it off.
    */

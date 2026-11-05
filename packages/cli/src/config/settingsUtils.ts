@@ -298,6 +298,7 @@ export const WORKSPACE_RESTRICTED_ROOT_SETTINGS = [
   'modelProviders',
   'localModels',
   'localModelEngine',
+  'localModelEngineArgs',
   'speculativeDecoding',
   'localModelPromptCache',
   'model',

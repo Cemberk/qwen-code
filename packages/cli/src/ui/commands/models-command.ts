@@ -5,10 +5,19 @@
  */
 
 import { spawn } from 'node:child_process';
+import { appendFileSync, mkdirSync } from 'node:fs';
+import path from 'node:path';
+import { Storage } from '@qwen-code/qwen-code-core/config/storage.js';
+import {
+  runBench,
+  type BenchResult,
+} from '@qwen-code/qwen-code-core/local-models/bench.js';
 import {
   findExecutable,
+  planLocalModel,
   resolveDraftPath,
 } from '@qwen-code/qwen-code-core/local-models/engine.js';
+import { describeCapabilities } from '@qwen-code/qwen-code-core/local-models/model-inspector.js';
 import {
   getConfinement,
   type Confinement,
@@ -376,6 +385,136 @@ export function networkConfinement(
   return 'the engine listens on loopback only and runs with --offline.';
 }
 
+/**
+ * The local model named by `args`, else the session's model when it is a
+ * local one, else the first in the list.
+ */
+function pickLocalModel(
+  context: CommandContext,
+  args: string,
+): LocalModelConfig | string {
+  const models = localModels(context.services.settings);
+  const wanted = args.trim() || context.services.config?.getModel?.() || '';
+  const model =
+    models.find((candidate) => candidate.id === wanted) ??
+    (args.trim() ? undefined : models[0]);
+  if (!model) {
+    return args.trim()
+      ? `${args.trim()} is not a local model; /models lists them.`
+      : 'There are no local models; see /models.';
+  }
+  return model;
+}
+
+const planCommand: SlashCommand = {
+  name: 'plan',
+  get description() {
+    return t('Show how a local model runs on this machine: /models plan [id]');
+  },
+  kind: CommandKind.BUILT_IN,
+  supportedModes: ['interactive'] as const,
+  action: (context: CommandContext, args: string): MessageActionReturn => {
+    const model = pickLocalModel(context, args);
+    if (typeof model === 'string') return error(model);
+    let planned: ReturnType<typeof planLocalModel>;
+    try {
+      planned = planLocalModel(model, getLocalModelServer().getEngineOptions());
+    } catch (err) {
+      return error(err instanceof Error ? err.message : String(err));
+    }
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: [
+        `${model.name ?? model.id} (${(planned.bytes / 1e9).toFixed(1)} GB)`,
+        planned.capabilities
+          ? `  ${describeCapabilities(planned.capabilities)}`
+          : '  Its GGUF metadata could not be read.',
+        '',
+        ...planned.plan.notes.map((note) => `- ${note}`),
+        '',
+        `Planned options: ${planned.plan.args.join(' ') || '(llama.cpp defaults)'}`,
+        'Add your own with localModelEngineArgs in your user settings; measure with /models bench.',
+      ].join('\n'),
+    };
+  },
+};
+
+/** Where /models bench appends its results, one JSON object per line. */
+export function benchLogFile(): string {
+  return path.join(Storage.getGlobalQwenDir(), 'local-model-bench.jsonl');
+}
+
+const benchCommand: SlashCommand = {
+  name: 'bench',
+  get description() {
+    return t(
+      'Measure prompt and generation speed of a local model: /models bench [id]',
+    );
+  },
+  kind: CommandKind.BUILT_IN,
+  supportedModes: ['interactive'] as const,
+  action: async (
+    context: CommandContext,
+    args: string,
+  ): Promise<MessageActionReturn> => {
+    const model = pickLocalModel(context, args);
+    if (typeof model === 'string') return error(model);
+    const server = getLocalModelServer();
+    let planned: ReturnType<typeof planLocalModel>;
+    try {
+      planned = planLocalModel(model, server.getEngineOptions());
+    } catch (err) {
+      return error(err instanceof Error ? err.message : String(err));
+    }
+    context.ui.addItem(
+      {
+        type: MessageType.INFO,
+        text: `Measuring ${model.id}: a 4K-token prompt, then 128 tokens. Starting the engine if needed takes longer.`,
+      },
+      Date.now(),
+    );
+    let result: BenchResult;
+    const lease = await server.acquire(model.id);
+    try {
+      result = await runBench(lease);
+    } catch (err) {
+      return error(
+        `The benchmark failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
+      lease.release();
+    }
+    const profile = getHardwareProfile();
+    const record = {
+      date: new Date().toISOString(),
+      model: model.id,
+      file: `${model.repo}/${model.file}`,
+      hardware: describeHardware(profile),
+      engine:
+        server.getEnginePath() ?? findExecutable('llama-server') ?? 'unknown',
+      options: planned.plan.args,
+      speculation: server.isSpeculationEnabled(),
+      ...result,
+    };
+    try {
+      mkdirSync(path.dirname(benchLogFile()), { recursive: true });
+      appendFileSync(benchLogFile(), JSON.stringify(record) + '\n');
+    } catch {
+      // The result is still shown.
+    }
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: [
+        `${model.id}: prompt ${result.promptPerSecond.toFixed(1)} tok/s (${result.promptTokens} tokens), generation ${result.generatedPerSecond.toFixed(1)} tok/s (${result.generatedTokens} tokens).`,
+        `Options: ${planned.plan.args.join(' ') || '(llama.cpp defaults)'}; speculative decoding ${server.isSpeculationEnabled() ? 'on' : 'off'}.`,
+        `Saved to ${benchLogFile()}.`,
+      ].join('\n'),
+    };
+  },
+};
+
 const setupCommand: SlashCommand = {
   name: 'setup',
   get description() {
@@ -442,5 +581,7 @@ export const modelsCommand: SlashCommand = {
     removeCommand,
     speculationCommand,
     setupCommand,
+    planCommand,
+    benchCommand,
   ],
 };

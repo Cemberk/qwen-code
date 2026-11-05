@@ -91,6 +91,102 @@ class Reader {
   string(): string {
     return this.bytes(this.u64()).toString('utf8');
   }
+
+  /** A fixed-size value of GGUF type `type`. */
+  scalar(type: number): number | boolean {
+    const bytes = this.bytes(VALUE_BYTES[type]);
+    switch (type) {
+      case 0:
+        return bytes.readUInt8(0);
+      case 1:
+        return bytes.readInt8(0);
+      case 2:
+        return bytes.readUInt16LE(0);
+      case 3:
+        return bytes.readInt16LE(0);
+      case 4:
+        return bytes.readUInt32LE(0);
+      case 5:
+        return bytes.readInt32LE(0);
+      case 6:
+        return bytes.readFloatLE(0);
+      case 7:
+        return bytes.readUInt8(0) !== 0;
+      case 10:
+        return Number(bytes.readBigUInt64LE(0));
+      case 11:
+        return Number(bytes.readBigInt64LE(0));
+      default:
+        return bytes.readDoubleLE(0);
+    }
+  }
+}
+
+/** A metadata value: numbers, flags, strings and short numeric arrays. */
+export type GgufValue = number | boolean | string | number[];
+
+/** Numeric arrays longer than this (token scores, ...) are skipped. */
+const MAX_ARRAY_ITEMS = 4096;
+
+/** Reads a value, or skips it and returns undefined when it is not kept. */
+function readValue(reader: Reader, type: number): GgufValue | undefined {
+  if (type === STRING) return reader.string();
+  if (type === ARRAY) {
+    const itemType = reader.u32();
+    const count = reader.u64();
+    const size = VALUE_BYTES[itemType];
+    if (size !== undefined && itemType !== 7 && count <= MAX_ARRAY_ITEMS) {
+      const items: number[] = [];
+      for (let i = 0; i < count; i++) {
+        items.push(Number(reader.scalar(itemType)));
+      }
+      return items;
+    }
+    if (size !== undefined) {
+      reader.skip(size * count);
+    } else {
+      for (let i = 0; i < count; i++) skipValue(reader, itemType);
+    }
+    return undefined;
+  }
+  if (VALUE_BYTES[type] !== undefined) return reader.scalar(type);
+  throw new Error(`Unknown GGUF value type ${type}.`);
+}
+
+function openGguf(file: string, fd: number): Reader {
+  const reader = new Reader(fd);
+  if (reader.u32() !== GGUF_MAGIC) {
+    throw new Error(`${file} is not a GGUF file.`);
+  }
+  const version = reader.u32();
+  if (version !== 2 && version !== 3) {
+    throw new Error(`${file} is GGUF version ${version}.`);
+  }
+  return reader;
+}
+
+/**
+ * The metadata of a GGUF file (the first part of a split model holds it):
+ * `general.architecture`, `<arch>.block_count`, `<arch>.expert_count`, ...
+ *
+ * @throws Error when the file is not a GGUF file of version 2 or 3.
+ */
+export function ggufMetadata(file: string): Map<string, GgufValue> {
+  const fd = openSync(file, 'r');
+  try {
+    const reader = openGguf(file, fd);
+    reader.u64(); // tensor count
+    const keyCount = reader.u64();
+    const metadata = new Map<string, GgufValue>();
+    for (let i = 0; i < keyCount; i++) {
+      const key = reader.string();
+      const value = readValue(reader, reader.u32());
+      if (value !== undefined) metadata.set(key, value);
+    }
+    return metadata;
+  } finally {
+    closeSync(fd);
+  }
 }
 
 function skipValue(reader: Reader, type: number): void {
@@ -121,14 +217,7 @@ function skipValue(reader: Reader, type: number): void {
 function tensorBytes(file: string): Map<string, number> {
   const fd = openSync(file, 'r');
   try {
-    const reader = new Reader(fd);
-    if (reader.u32() !== GGUF_MAGIC) {
-      throw new Error(`${file} is not a GGUF file.`);
-    }
-    const version = reader.u32();
-    if (version !== 2 && version !== 3) {
-      throw new Error(`${file} is GGUF version ${version}.`);
-    }
+    const reader = openGguf(file, fd);
     const tensorCount = reader.u64();
     const keyCount = reader.u64();
     let alignment = DEFAULT_ALIGNMENT;

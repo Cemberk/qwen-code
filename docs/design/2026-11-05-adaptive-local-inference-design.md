@@ -235,6 +235,20 @@ Fork work, in order:
   possible (`llama-moe-cache.cpp` already is one).
 - The fork is for personal use and is not upstreamed.
 
+## Progress
+
+- Phase 1 (branch `adaptive-local-inference`): hardware probe, fitting on
+  every platform, Windows engine environment, `localModelEngine`,
+  `/models setup`; Linux engine in an empty network namespace on a Unix
+  socket.
+- Phase 2, first part: GGUF metadata reader and model inspector
+  (`model-inspector.ts`), planner (`planner.ts`) with one rule (2048-token
+  prompt batches when the GPU has 2 GiB to spare), `localModelEngineArgs`
+  for per-machine experiments, `/models plan`, and `/models bench`, which
+  logs prompt and generation speed with the machine and options to
+  `~/.qwen/local-model-bench.jsonl`. Further rules wait for bench results
+  from each machine class.
+
 ## Decisions (2026-11-05)
 
 1. Not upstreamed; the fork is personal.

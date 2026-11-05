@@ -533,3 +533,47 @@ describe('networkConfinement', () => {
     );
   });
 });
+
+describe('/models plan', () => {
+  it('says how to download a model that is not downloaded', async () => {
+    const result = await sub('plan').action!(context(), 'q-big');
+    expect(result).toMatchObject({
+      messageType: 'error',
+      content: expect.stringMatching(/not downloaded/),
+    });
+  });
+
+  it('refuses a name that is not a local model', async () => {
+    const result = await sub('plan').action!(context(), 'nope');
+    expect(result).toMatchObject({
+      messageType: 'error',
+      content: 'nope is not a local model; /models lists them.',
+    });
+  });
+
+  it('shows the planned options of a downloaded model', async () => {
+    const snapshot = path.join(
+      dir,
+      'hub',
+      'models--Qwen--Qwen3-4B-GGUF',
+      'snapshots',
+      COMMIT,
+    );
+    mkdirSync(snapshot, { recursive: true });
+    writeFileSync(path.join(snapshot, 'Qwen3-4B-Q4_K_M.gguf'), 'x');
+    mkdirSync(path.join(dir, 'hub', 'models--Qwen--Qwen3-4B-GGUF', 'refs'));
+    writeFileSync(
+      path.join(dir, 'hub', 'models--Qwen--Qwen3-4B-GGUF', 'refs', 'main'),
+      COMMIT,
+    );
+    gpu.bytes = 2.5 * 1024 ** 3;
+    try {
+      const result = await sub('plan').action!(context(), 'q-small');
+      const content = (result as { content: string }).content;
+      expect(content).toContain('Its GGUF metadata could not be read.');
+      expect(content).toContain('Planned options: -b 2048 -ub 2048');
+    } finally {
+      gpu.bytes = undefined;
+    }
+  });
+});

@@ -317,6 +317,18 @@ const SETTINGS_SCHEMA = {
     showInDialog: false,
   },
 
+  localModelEngineArgs: {
+    type: 'array',
+    label: 'Local Model Engine Options',
+    category: 'Model',
+    requiresRestart: false,
+    default: undefined as string[] | undefined,
+    description:
+      'Extra llama-server options for the local models, applied after the ones qwen plans for this machine (see /models plan), such as ["-ub", "1024"] or ["--moe-cache-mib", "4096"]. Options that choose where the engine listens, its key or its model, or that download, are refused. A change restarts the engine at the next request. Read from user settings only.',
+    showInDialog: false,
+    mergeStrategy: MergeStrategy.REPLACE,
+  },
+
   speculativeDecoding: {
     type: 'boolean',
     label: 'Speculative Decoding',

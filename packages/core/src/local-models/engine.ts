@@ -15,6 +15,8 @@ import { DEFAULT_LOCAL_MODEL_CONTEXT_SIZE } from './local-models.js';
 import { resolveLocalModelPath } from './hf-cache.js';
 import { engineStateKey } from './prompt-cache.js';
 import { findExecutable, isExecutableFile } from './executables.js';
+import { inspectModel, type ModelCapabilities } from './model-inspector.js';
+import { planEngine, type EnginePlan } from './planner.js';
 import {
   confinedCommand,
   getConfinement,
@@ -23,6 +25,7 @@ import {
 import {
   fitModel,
   gpuBudget,
+  type ModelFit,
   localModelBytes,
   localModelExpertBytes,
   systemMemoryBytes,
@@ -109,6 +112,8 @@ export interface EngineLaunch {
   socketPath?: string;
   /** Run the engine without network access (Linux). */
   confinement?: Confinement;
+  /** Options from the planner (see planner.ts), the user's last. */
+  planArgs?: string[];
 }
 
 /** Where the engine listens: a loopback port, or a Unix socket. */
@@ -137,6 +142,8 @@ export interface LocalModelEngineOptions {
    * llama-server on PATH.
    */
   enginePath?: string;
+  /** `localModelEngineArgs`: the user's own llama-server options. */
+  extraArgs?: string[];
 }
 
 export const DEFAULT_ENGINE_OPTIONS: LocalModelEngineOptions = {
@@ -303,6 +310,7 @@ export function engineCommand(
     '--no-slots',
     ...SAMPLING_ARGS,
     ...speculationArgs(options, launch.draftPath),
+    ...(launch.planArgs ?? []),
     // A mixture-of-experts model too big for the GPU runs the experts of
     // its first layers on the CPU. Read into memory rather than mapped from
     // the file, they read prompts faster and more steadily.
@@ -488,24 +496,67 @@ export function resolveDraftPath(model: LocalModelConfig): string | undefined {
  *   not answer in time; the message carries the end of the engine's output.
  *   Also when the engine cannot answer with its draft model.
  */
+/** How a downloaded model runs on this machine. */
+export interface LocalModelPlan {
+  modelPath: string;
+  draftPath?: string;
+  bytes: number;
+  fit: ModelFit;
+  capabilities?: ModelCapabilities;
+  plan: EnginePlan;
+}
+
+/**
+ * Fit and plan a downloaded model for this machine, as the engine will run
+ * it.
+ *
+ * @throws Error when the model is not downloaded.
+ */
+export function planLocalModel(
+  model: LocalModelConfig,
+  options: LocalModelEngineOptions = DEFAULT_ENGINE_OPTIONS,
+): LocalModelPlan {
+  const modelPath = resolveLocalModelPath(model);
+  // Without a downloaded draft the engine falls back to n-gram drafting.
+  const draftPath = options.speculation ? resolveDraftPath(model) : undefined;
+  const bytes =
+    localModelBytes(model) + (draftPath ? statSync(draftPath).size : 0);
+  const gpu = gpuBudget();
+  const fit = fitModel(
+    model,
+    bytes,
+    () => localModelExpertBytes(model),
+    gpu,
+    systemMemoryBytes(),
+  );
+  const capabilities = inspectModel(modelPath);
+  const plan = planEngine({
+    bytes,
+    gpu,
+    fit,
+    hasDraft: draftPath !== undefined,
+    ...(capabilities ? { model: capabilities } : {}),
+    ...(options.extraArgs ? { userArgs: options.extraArgs } : {}),
+  });
+  return {
+    modelPath,
+    ...(draftPath ? { draftPath } : {}),
+    bytes,
+    fit,
+    ...(capabilities ? { capabilities } : {}),
+    plan,
+  };
+}
+
 export async function startLocalModelEngine(
   model: LocalModelConfig,
   apiKey: string,
   options: LocalModelEngineOptions = DEFAULT_ENGINE_OPTIONS,
   promptCacheDir?: string,
 ): Promise<LocalModelEngine> {
-  const modelPath = resolveLocalModelPath(model);
-  // Without a downloaded draft the engine falls back to n-gram drafting.
-  const draftPath = options.speculation ? resolveDraftPath(model) : undefined;
   // Past the GPU limit a model runs at a fraction of its speed, or fails
   // mid-request.
-  const fit = fitModel(
-    model,
-    localModelBytes(model) + (draftPath ? statSync(draftPath).size : 0),
-    () => localModelExpertBytes(model),
-    gpuBudget(),
-    systemMemoryBytes(),
-  );
+  const { modelPath, draftPath, fit, plan } = planLocalModel(model, options);
   if ('problem' in fit) {
     throw new Error(fit.problem);
   }
@@ -537,6 +588,7 @@ export async function startLocalModelEngine(
       // free memory and places what does not fit itself.
       cpuMoeLayers: process.platform === 'darwin' ? fit.cpuMoeLayers : 0,
       ...(socketPath ? { socketPath, confinement } : {}),
+      planArgs: plan.args,
     },
   );
   const child = spawn(command.command, command.args, {
@@ -614,6 +666,7 @@ export async function startLocalModelEngine(
       String(options.speculation),
       // Another build may not read the states this one saved.
       options.enginePath ?? '',
+      plan.args.join(' '),
     ]),
     get alive() {
       return exitDetail === undefined;

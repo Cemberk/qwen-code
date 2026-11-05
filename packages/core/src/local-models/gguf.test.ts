@@ -8,7 +8,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ggufTensorBytes } from './gguf.js';
+import { ggufMetadata, ggufTensorBytes } from './gguf.js';
 
 let dir: string;
 beforeEach(() => {
@@ -34,6 +34,7 @@ function gguf(
   name: string,
   tensors: Array<[string, number]>,
   alignment?: number,
+  extraKeys: Buffer[] = [],
 ): string {
   const align = alignment ?? 32;
   const keys = [
@@ -58,6 +59,7 @@ function gguf(
     ...(alignment
       ? [Buffer.concat([str('general.alignment'), u32(4), u32(align)])]
       : []),
+    ...extraKeys,
   ];
   let offset = 0;
   const infos = tensors.map(([tensor, bytes]) => {
@@ -131,5 +133,45 @@ describe('ggufTensorBytes', () => {
     const file = path.join(dir, 'x.gguf');
     writeFileSync(file, 'not a model');
     expect(() => ggufTensorBytes([file])).toThrow('is not a GGUF file');
+  });
+});
+
+describe('ggufMetadata', () => {
+  const f32 = (value: number) => {
+    const buffer = Buffer.alloc(4);
+    buffer.writeFloatLE(value);
+    return buffer;
+  };
+
+  it('reads numbers, flags, strings and short numeric arrays, and skips string arrays', () => {
+    const file = gguf('m.gguf', [['a', 32]], undefined, [
+      Buffer.concat([str('qwen35moe.block_count'), u32(4), u32(40)]),
+      Buffer.concat([str('qwen35moe.expert_count'), u32(4), u32(256)]),
+      Buffer.concat([str('qwen35moe.context_length'), u32(10), u64(262144)]),
+      Buffer.concat([str('qwen35moe.rope.freq_base'), u32(6), f32(1e6)]),
+      Buffer.concat([str('general.flag'), u32(7), Buffer.from([1])]),
+      Buffer.concat([
+        str('qwen35moe.attention.head_count_kv'),
+        u32(9),
+        u32(4),
+        u64(4),
+        u32(0),
+        u32(0),
+        u32(0),
+        u32(2),
+      ]),
+    ]);
+    const metadata = ggufMetadata(file);
+    expect(metadata.get('general.architecture')).toBe('qwen35moe');
+    expect(metadata.get('qwen35moe.block_count')).toBe(40);
+    expect(metadata.get('qwen35moe.expert_count')).toBe(256);
+    expect(metadata.get('qwen35moe.context_length')).toBe(262144);
+    expect(metadata.get('qwen35moe.rope.freq_base')).toBe(1e6);
+    expect(metadata.get('general.flag')).toBe(true);
+    expect(metadata.get('qwen35moe.attention.head_count_kv')).toEqual([
+      0, 0, 0, 2,
+    ]);
+    expect(metadata.get('tokenizer.ggml.token_type')).toEqual([0, 0, 0]);
+    expect(metadata.has('tokenizer.ggml.tokens')).toBe(false);
   });
 });

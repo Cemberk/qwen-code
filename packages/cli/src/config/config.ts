@@ -49,6 +49,7 @@ import {
   LOCAL_MODEL_KEY_PLACEHOLDER,
   type LocalModelConfig,
   type ModelProvidersConfig,
+  validateEngineArgs,
   validateLocalModels,
   withLocalModelProviders,
 } from '@qwen-code/qwen-code-core';
@@ -1834,6 +1835,7 @@ export async function loadCliConfig(
   // message and the "please fix the configuration file(s)" hint instead of a
   // stack trace before the TUI starts.
   let localModels: LocalModelConfig[];
+  let engineArgs: string[] | undefined;
   let modelProviders: ModelProvidersConfig | undefined;
   try {
     // Before the local entries go in front, so errors name the user's indexes.
@@ -1841,6 +1843,10 @@ export async function loadCliConfig(
     localModels = validateLocalModels(
       settings.localModels ?? BUILT_IN_LOCAL_MODELS,
     );
+    engineArgs =
+      settings.localModelEngineArgs === undefined
+        ? undefined
+        : validateEngineArgs(settings.localModelEngineArgs);
     modelProviders = withLocalModelProviders(
       settings.modelProviders,
       localModels,
@@ -1853,6 +1859,7 @@ export async function loadCliConfig(
   getLocalModelServer().setModels(localModels);
   getLocalModelServer().setSpeculation(settings.speculativeDecoding !== false);
   getLocalModelServer().setEnginePath(settings.localModelEngine || undefined);
+  getLocalModelServer().setEngineArgs(engineArgs);
   if (localModels.length > 0) {
     process.env[LOCAL_MODEL_KEY_ENV] = LOCAL_MODEL_KEY_PLACEHOLDER;
   }

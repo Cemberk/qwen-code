@@ -15,6 +15,7 @@ import {
   type LocalModelConfig,
   type MCPServerConfig,
   type ModelProvidersConfig,
+  validateEngineArgs,
   validateLocalModels,
   withLocalModelProviders,
 } from '@qwen-code/qwen-code-core';
@@ -337,6 +338,18 @@ export function registerModelProvidersHotReload(
     getLocalModelServer().setEnginePath(
       settings.merged.localModelEngine || undefined,
     );
+    try {
+      const args = settings.merged.localModelEngineArgs;
+      getLocalModelServer().setEngineArgs(
+        args === undefined ? undefined : validateEngineArgs(args),
+      );
+    } catch (err) {
+      // The engine keeps the options it has.
+      appEvents.emit(
+        AppEvent.LogError,
+        `localModelEngineArgs in settings is invalid and was not applied: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
     const providersUnchanged = equal(
       config.getModelProvidersConfig() ?? {},
       next ?? {},

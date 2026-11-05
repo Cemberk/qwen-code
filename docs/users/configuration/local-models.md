@@ -98,15 +98,17 @@ engine, so leave those unset or set them to the main model.
 These commands run the `hf` tool for you, only when you type them. The model
 cannot run them.
 
-| Command                           | What it does                                                                                               |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `/models`                         | Lists the local models and marks the downloaded ones.                                                      |
-| `/models download <id>`           | Runs `hf download <repo> <file>` for a model in the list.                                                  |
-| `/models download <repo> <file>`  | Adds that file to `localModels` (its id is the file name in lower case, without `.gguf`) and downloads it. |
-| `/models remove <id>` or `<repo>` | Runs `hf cache rm model/<repo> -y`, deleting every downloaded file of that repository.                     |
-| `/models speculation`             | Shows whether speculative decoding is on.                                                                  |
-| `/models speculation on` or `off` | Turns speculative decoding on or off (see [How the engine runs](#how-the-engine-runs)).                    |
-| `/models setup`                   | Shows this machine's GPUs and memory, the engine in use, and how to build `llama-server` for it.           |
+| Command                           | What it does                                                                                                                                                                            |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/models`                         | Lists the local models and marks the downloaded ones.                                                                                                                                   |
+| `/models download <id>`           | Runs `hf download <repo> <file>` for a model in the list.                                                                                                                               |
+| `/models download <repo> <file>`  | Adds that file to `localModels` (its id is the file name in lower case, without `.gguf`) and downloads it.                                                                              |
+| `/models remove <id>` or `<repo>` | Runs `hf cache rm model/<repo> -y`, deleting every downloaded file of that repository.                                                                                                  |
+| `/models speculation`             | Shows whether speculative decoding is on.                                                                                                                                               |
+| `/models speculation on` or `off` | Turns speculative decoding on or off (see [How the engine runs](#how-the-engine-runs)).                                                                                                 |
+| `/models setup`                   | Shows this machine's GPUs and memory, the engine in use, and how to build `llama-server` for it.                                                                                        |
+| `/models plan [id]`               | Shows what the model is (from its GGUF metadata), how it fits this machine, and the `llama-server` options planned for it.                                                              |
+| `/models bench [id]`              | Measures the model's prompt and generation speed (a fixed 4K-token prompt, then 128 tokens) and appends the result, with the machine and options, to `~/.qwen/local-model-bench.jsonl`. |
 
 `hf` runs without your Hugging Face token and with telemetry off. Downloading
 contacts huggingface.co; the `hf` tool also checks PyPI for a newer version of
@@ -200,6 +202,28 @@ Set `"localModels": []` to turn local models off and use only
 `.qwen/settings.json` cannot change it, and a project `.env` cannot move the
 Hugging Face cache, so a repository cannot make Qwen Code load model files it
 supplies.
+
+## Engine options
+
+Qwen Code plans the `llama-server` options for each model on each machine;
+`/models plan` shows them with the reason for each. Today it reads prompts
+in batches of 2048 tokens (`-b 2048 -ub 2048`) when the model fits the GPU
+with at least 2 GiB to spare, and otherwise keeps llama.cpp's defaults
+(threads from the physical cores, `--fit` placement).
+
+To try other options, list them in `localModelEngineArgs` in your user
+settings; they apply after the planned ones, so they win:
+
+```json
+{
+  "localModelEngineArgs": ["-ub", "1024", "--moe-cache-mib", "4096"]
+}
+```
+
+Options that choose where the engine listens, its key, its model or where
+it saves prompts, or that download (`--host`, `--port`, `-m`, `-hf`,
+`--model-url`, ...), are refused. A change restarts a running engine at your
+next prompt. Compare runs with `/models bench`.
 
 ## How the engine runs
 
