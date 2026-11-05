@@ -31,6 +31,7 @@ import {
 import { engineSetup } from '@qwen-code/qwen-code-core/local-models/engine-setup.js';
 import {
   downloadSizeProblem,
+  type ModelFit,
   fitModel,
   gpuBudget,
   localModelBytes,
@@ -572,6 +573,30 @@ const setupCommand: SlashCommand = {
   },
 };
 
+/** How a downloaded model runs on this machine, in a few words. */
+export function fitSummary(fit: ModelFit, gpu: boolean): string {
+  if ('problem' in fit) return `cannot run here: ${fit.problem}`;
+  if (!gpu) return 'runs on the CPU';
+  return fit.partial ? 'partly on the CPU (slower)' : 'fits the GPU';
+}
+
+function howItRuns(
+  model: LocalModelConfig,
+  options: ReturnType<
+    ReturnType<typeof getLocalModelServer>['getEngineOptions']
+  >,
+): string {
+  try {
+    const planned = planLocalModel(model, options);
+    const gpu = planned.devices
+      ? planned.devices.length > 0
+      : gpuBudget() !== undefined;
+    return fitSummary(planned.fit, gpu);
+  } catch {
+    return 'not all of it is in the cache';
+  }
+}
+
 export const modelsCommand: SlashCommand = {
   name: 'models',
   get description() {
@@ -580,9 +605,11 @@ export const modelsCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   supportedModes: ['interactive'] as const,
   action: (context: CommandContext): MessageActionReturn => {
+    const options = getLocalModelServer().getEngineOptions();
     const lines = localModels(context.services.settings).map(
       (model) =>
         `${isDownloaded(model) ? '✓' : ' '} ${model.id}  ${model.repo}/${model.file}` +
+        (isDownloaded(model) ? `\n      ${howItRuns(model, options)}` : '') +
         (model.draft
           ? `\n      draft ${model.draft.repo}/${model.draft.file}${resolveDraftPath(model) ? ' ✓' : ' (not downloaded)'}`
           : ''),

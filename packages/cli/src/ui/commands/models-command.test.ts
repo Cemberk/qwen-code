@@ -20,7 +20,11 @@ import { SettingScope } from '../../config/settings.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { setHardwareProfileForTesting } from '@qwen-code/qwen-code-core/local-models/hardware.js';
 import { getLocalModelServer } from '@qwen-code/qwen-code-core/local-models/local-model-server.js';
-import { modelsCommand, networkConfinement } from './models-command.js';
+import {
+  fitSummary,
+  modelsCommand,
+  networkConfinement,
+} from './models-command.js';
 
 // The GPU and memory of the test machine must not decide these tests.
 // By default a GPU that holds any model.
@@ -577,5 +581,20 @@ describe('/models plan', () => {
     } finally {
       gpu.bytes = undefined;
     }
+  });
+});
+
+describe('fitSummary', () => {
+  it('says in a few words how a model runs here', () => {
+    expect(fitSummary({ cpuMoeLayers: 0 }, true)).toBe('fits the GPU');
+    expect(fitSummary({ cpuMoeLayers: 3, partial: true }, true)).toBe(
+      'partly on the CPU (slower)',
+    );
+    expect(fitSummary({ cpuMoeLayers: 0, partial: true }, false)).toBe(
+      'runs on the CPU',
+    );
+    expect(fitSummary({ problem: 'Too big.' }, true)).toBe(
+      'cannot run here: Too big.',
+    );
   });
 });
