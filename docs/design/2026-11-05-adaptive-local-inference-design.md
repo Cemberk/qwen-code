@@ -297,9 +297,32 @@ the other. Making them overlap (the CPU part while the device part runs)
 needs the scheduler to launch the device split before waiting on the CPU
 split's inputs: the next step once measurements show the CPU part matters.
 
+## JITEngine (skydiscover-ai/jitengine), 2026-11-06
+
+Engines that coding agents built and tuned per model and Mac, keeping a
+change only when it passed every check (outputs bit-identical) and won a
+head-to-head benchmark. What carries over:
+
+| Idea                                                                                                                                                                      | Their result                                                                                | Here                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Evict the expert needed last: the layer that just ran is next needed a full pass later                                                                                    | Flash-Next on an M2: 110.3 misses per step against 112.6 (LFU) and 121.9 (LRU); oracle 58.3 | `--moe-cache-policy next` (fork `cbfb34844`) and `next` in the simulator |
+| Speculation pays only where checking a guess is cheap: 21% of a step on an M4 Pro, 65 to 73% on an M2                                                                     | MTP on for one Mac, off for the other                                                       | `/models bench compare`, with a prose and an edit workload               |
+| The GPU looks up the cache itself (a device copy of the slot map) and the next layer is queued before the CPU checks; a miss is computed alone and only the sum is redone | Wait on the router 24.5 to 7.9 ms; a token 62.6 to 50.9 ms                                  | The design for overlapping hybrid mode, below                            |
+| While a layer's misses load, run the next layer's router on the provisional output and fetch what it names                                                                | 91.4% of the early reads used; 21.54 to 22.64 tok/s                                         | Next-layer prefetch, below                                               |
+| Take turns between requests (64 tokens each) rather than batching them                                                                                                    | SSD reads per token 243.5 to 140.9 (Flash-Next, M2)                                         | Only with several requests; later                                        |
+| Exact 3-bit Metal kernels, MLX quantizer packing                                                                                                                          | Qwen3.6 3-bit on a 24 GB M2: 1.36x llama.cpp with MTP                                       | MLX-specific; llama.cpp's Metal kernels would need their own work        |
+
 ## Still open
 
-- Overlap of the device and CPU parts in hybrid mode (above).
+- Overlap in hybrid mode, after JITEngine: keep a device copy of the slot
+  map, refreshed from the host map after each lookup, so the device reads
+  its cached experts without waiting; read the selected experts back
+  asynchronously, compute the misses on the CPU when they arrive, and
+  correct the layer's sum. That moves the per-layer synchronization off
+  the device's path; it changes how the scheduler orders splits.
+- Next-layer prefetch: in hybrid mode, run the next layer's router on the
+  current layer's output and admit (upload) the experts it names ahead of
+  that layer's lookup.
 - Phase 4: models larger than RAM. The planner refuses them today;
   allowing them means mmap from SSD with per-expert prefetch hints
   (`madvise`/`PrefetchVirtualMemory`) chosen from the profile scores, and a
