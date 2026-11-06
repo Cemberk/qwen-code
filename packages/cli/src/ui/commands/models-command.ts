@@ -9,8 +9,11 @@ import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { Storage } from '@qwen-code/qwen-code-core/config/storage.js';
 import {
+  adviseSpeculation,
+  BENCH_WORKLOADS,
   runBench,
   type BenchResult,
+  type BenchWorkload,
 } from '@qwen-code/qwen-code-core/local-models/bench.js';
 import {
   engineEnv,
@@ -455,47 +458,21 @@ export function benchLogFile(): string {
   return path.join(Storage.getGlobalQwenDir(), 'local-model-bench.jsonl');
 }
 
-const benchCommand: SlashCommand = {
-  name: 'bench',
-  get description() {
-    return t(
-      'Measure prompt and generation speed of a local model: /models bench [id]',
-    );
-  },
-  kind: CommandKind.BUILT_IN,
-  supportedModes: ['interactive'] as const,
-  action: async (
-    context: CommandContext,
-    args: string,
-  ): Promise<MessageActionReturn> => {
-    const model = pickLocalModel(context, args);
-    if (typeof model === 'string') return error(model);
-    const server = getLocalModelServer();
-    let planned: ReturnType<typeof planLocalModel>;
-    try {
-      planned = planLocalModel(model, server.getEngineOptions());
-    } catch (err) {
-      return error(err instanceof Error ? err.message : String(err));
-    }
-    context.ui.addItem(
-      {
-        type: MessageType.INFO,
-        text: `Measuring ${model.id}: a 4K-token prompt, then 128 tokens. Starting the engine if needed takes longer.`,
-      },
-      Date.now(),
-    );
-    let result: BenchResult;
+/** One benchmark run per workload, each appended to the bench log. */
+async function measure(
+  model: LocalModelConfig,
+  planned: ReturnType<typeof planLocalModel>,
+): Promise<Map<BenchWorkload, BenchResult>> {
+  const server = getLocalModelServer();
+  const results = new Map<BenchWorkload, BenchResult>();
+  const profile = getHardwareProfile();
+  for (const workload of BENCH_WORKLOADS) {
     const lease = await server.acquire(model.id);
     try {
-      result = await runBench(lease);
-    } catch (err) {
-      return error(
-        `The benchmark failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      results.set(workload, await runBench(lease, workload));
     } finally {
       lease.release();
     }
-    const profile = getHardwareProfile();
     const record = {
       date: new Date().toISOString(),
       model: model.id,
@@ -505,7 +482,8 @@ const benchCommand: SlashCommand = {
         server.getEnginePath() ?? findExecutable('llama-server') ?? 'unknown',
       options: planned.plan.args,
       speculation: server.isSpeculationEnabled(),
-      ...result,
+      workload,
+      ...results.get(workload),
     };
     try {
       mkdirSync(path.dirname(benchLogFile()), { recursive: true });
@@ -513,22 +491,145 @@ const benchCommand: SlashCommand = {
     } catch {
       // The result is still shown.
     }
+  }
+  return results;
+}
+
+function describeResult(workload: BenchWorkload, result: BenchResult): string {
+  return (
+    `${workload}: prompt ${result.promptPerSecond.toFixed(1)} tok/s (${result.promptTokens} tokens), generation ${result.generatedPerSecond.toFixed(1)} tok/s` +
+    (result.draftAcceptance !== undefined
+      ? `, ${(100 * result.draftAcceptance).toFixed(1)}% of drafted tokens accepted`
+      : '') +
+    (result.moeCacheHitRate !== undefined
+      ? `, MoE cache hit rate ${(100 * result.moeCacheHitRate).toFixed(1)}%`
+      : '')
+  );
+}
+
+/** The model to measure and its plan, or an error to show. */
+function benchTarget(
+  context: CommandContext,
+  args: string,
+):
+  | { model: LocalModelConfig; planned: ReturnType<typeof planLocalModel> }
+  | MessageActionReturn {
+  const model = pickLocalModel(context, args);
+  if (typeof model === 'string') return error(model);
+  try {
+    return {
+      model,
+      planned: planLocalModel(model, getLocalModelServer().getEngineOptions()),
+    };
+  } catch (err) {
+    return error(err instanceof Error ? err.message : String(err));
+  }
+}
+
+const benchCompareCommand: SlashCommand = {
+  name: 'compare',
+  get description() {
+    return t(
+      'Measure a local model with speculative decoding on and off, and advise which to use here: /models bench compare [id]',
+    );
+  },
+  kind: CommandKind.BUILT_IN,
+  supportedModes: ['interactive'] as const,
+  action: async (
+    context: CommandContext,
+    args: string,
+  ): Promise<MessageActionReturn> => {
+    const target = benchTarget(context, args);
+    if ('type' in target) return target;
+    const { model, planned } = target;
+    const server = getLocalModelServer();
+    const original = server.isSpeculationEnabled();
+    context.ui.addItem(
+      {
+        type: MessageType.INFO,
+        text: `Measuring ${model.id} four times (prose and an edit, with speculative decoding on and off); the engine restarts between them.`,
+      },
+      Date.now(),
+    );
+    const runs = new Map<boolean, Map<BenchWorkload, BenchResult>>();
+    try {
+      for (const speculation of [true, false]) {
+        server.setSpeculation(speculation);
+        runs.set(speculation, await measure(model, planned));
+      }
+    } catch (err) {
+      return error(
+        `The benchmark failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
+      server.setSpeculation(original);
+    }
+    const on = runs.get(true)!;
+    const off = runs.get(false)!;
+    const { ratio, advice } = adviseSpeculation(on, off);
+    const verdict =
+      advice === 'either'
+        ? `Speculative decoding makes no clear difference here (${ratio.toFixed(2)}x).`
+        : advice === 'on'
+          ? `Speculative decoding pays here: ${ratio.toFixed(2)}x generation speed. ${original ? 'It is on.' : 'Turn it on with /models speculation on.'}`
+          : `Speculative decoding costs more than it saves here: ${ratio.toFixed(2)}x generation speed. ${original ? 'Turn it off with /models speculation off.' : 'It is off.'}`;
     return {
       type: 'message',
       messageType: 'info',
       content: [
-        `${model.id}: prompt ${result.promptPerSecond.toFixed(1)} tok/s (${result.promptTokens} tokens), generation ${result.generatedPerSecond.toFixed(1)} tok/s (${result.generatedTokens} tokens).`,
-        `Options: ${planned.plan.args.join(' ') || '(llama.cpp defaults)'}; speculative decoding ${server.isSpeculationEnabled() ? 'on' : 'off'}.`,
-        ...(result.draftAcceptance !== undefined
-          ? [
-              `Drafted tokens accepted: ${(100 * result.draftAcceptance).toFixed(1)}%.`,
-            ]
-          : []),
-        ...(result.moeCacheHitRate !== undefined
-          ? [
-              `MoE cache hit rate: ${(100 * result.moeCacheHitRate).toFixed(1)}%.`,
-            ]
-          : []),
+        `${model.id}, speculative decoding on:`,
+        ...BENCH_WORKLOADS.map((w) => `  ${describeResult(w, on.get(w)!)}`),
+        `${model.id}, speculative decoding off:`,
+        ...BENCH_WORKLOADS.map((w) => `  ${describeResult(w, off.get(w)!)}`),
+        verdict,
+        `Saved to ${benchLogFile()}.`,
+      ].join('\n'),
+    };
+  },
+};
+
+const benchCommand: SlashCommand = {
+  name: 'bench',
+  get description() {
+    return t(
+      'Measure prompt and generation speed of a local model: /models bench [id], or /models bench compare [id]',
+    );
+  },
+  kind: CommandKind.BUILT_IN,
+  supportedModes: ['interactive'] as const,
+  subCommands: [benchCompareCommand],
+  action: async (
+    context: CommandContext,
+    args: string,
+  ): Promise<MessageActionReturn> => {
+    const target = benchTarget(context, args);
+    if ('type' in target) return target;
+    const { model, planned } = target;
+    const server = getLocalModelServer();
+    context.ui.addItem(
+      {
+        type: MessageType.INFO,
+        text: `Measuring ${model.id}: a 4K-token prompt, then 128 tokens, once writing prose and once repeating code with an edit. Starting the engine if needed takes longer.`,
+      },
+      Date.now(),
+    );
+    let results: Map<BenchWorkload, BenchResult>;
+    try {
+      results = await measure(model, planned);
+    } catch (err) {
+      return error(
+        `The benchmark failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: [
+        `${model.id}:`,
+        ...BENCH_WORKLOADS.map(
+          (w) => `  ${describeResult(w, results.get(w)!)}`,
+        ),
+        `Options: ${planned.plan.args.join(' ') || '(llama.cpp defaults)'}; speculative decoding ${server.isSpeculationEnabled() ? 'on' : 'off'}. /models bench compare tells whether it pays here.`,
         `Saved to ${benchLogFile()}.`,
       ].join('\n'),
     };

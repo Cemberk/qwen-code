@@ -9,6 +9,7 @@ import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   BENCH_GENERATED_TOKENS,
+  adviseSpeculation,
   benchPrompt,
   benchResult,
   counterRates,
@@ -161,5 +162,50 @@ describe('counterRates', () => {
         '# HELP llamacpp:n_decode_total x\nllamacpp:n_decode_total 12\nother 3\n',
       ),
     ).toEqual(new Map([['n_decode_total', 12]]));
+  });
+});
+
+describe('the edit workload', () => {
+  it('asks for the code again with one change, so drafting from the context can pay', () => {
+    expect(benchPrompt('edit')).toMatch(/Rewrite the module[\s\S]*code only/);
+    expect(
+      benchPrompt('edit').startsWith(
+        benchPrompt('prose').split('\n\nDescribe')[0],
+      ),
+    ).toBe(true);
+  });
+});
+
+describe('adviseSpeculation', () => {
+  const result = (generatedPerSecond: number) => ({
+    promptTokens: 4000,
+    promptPerSecond: 500,
+    generatedTokens: 128,
+    generatedPerSecond,
+  });
+  const runs = (prose: number, edit: number) =>
+    new Map([
+      ['prose' as const, result(prose)],
+      ['edit' as const, result(edit)],
+    ]);
+
+  it('advises on when it speeds generation up overall', () => {
+    expect(adviseSpeculation(runs(20, 60), runs(21, 30)).advice).toBe('on');
+  });
+
+  it('advises off when checking drafts costs more than it saves', () => {
+    const { ratio, advice } = adviseSpeculation(runs(14, 15), runs(20, 20));
+    expect(advice).toBe('off');
+    expect(ratio).toBeCloseTo(Math.sqrt(0.7 * 0.75), 5);
+  });
+
+  it('calls a difference within 3% no clear difference', () => {
+    expect(adviseSpeculation(runs(20, 20.4), runs(20, 20)).advice).toBe(
+      'either',
+    );
+    expect(adviseSpeculation(new Map(), new Map())).toEqual({
+      ratio: 1,
+      advice: 'either',
+    });
   });
 });

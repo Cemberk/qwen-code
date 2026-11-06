@@ -20,6 +20,39 @@ export interface BenchResult {
   moeCacheHitRate?: number;
 }
 
+/** What `/models bench compare` advises about speculative decoding. */
+export interface SpeculationAdvice {
+  /** Generation speed with speculation on over off, averaged over workloads. */
+  ratio: number;
+  advice: 'on' | 'off' | 'either';
+}
+
+/**
+ * Whether speculative decoding pays on this machine: the generation speeds
+ * with it on and off, per workload, averaged as a geometric mean. Within 3%
+ * either way it makes no clear difference.
+ */
+export function adviseSpeculation(
+  on: ReadonlyMap<BenchWorkload, BenchResult>,
+  off: ReadonlyMap<BenchWorkload, BenchResult>,
+): SpeculationAdvice {
+  const ratios: number[] = [];
+  for (const [workload, withSpec] of on) {
+    const without = off.get(workload);
+    if (without && without.generatedPerSecond > 0) {
+      ratios.push(withSpec.generatedPerSecond / without.generatedPerSecond);
+    }
+  }
+  if (ratios.length === 0) return { ratio: 1, advice: 'either' };
+  const ratio = Math.exp(
+    ratios.reduce((sum, r) => sum + Math.log(r), 0) / ratios.length,
+  );
+  return {
+    ratio,
+    advice: ratio > 1.03 ? 'on' : ratio < 0.97 ? 'off' : 'either',
+  };
+}
+
 /** Tokens the benchmark generates. */
 export const BENCH_GENERATED_TOKENS = 128;
 
@@ -27,7 +60,19 @@ export const BENCH_GENERATED_TOKENS = 128;
  * A fixed prompt of about 4K tokens of code, so runs compare across machines
  * and builds: the same text every time.
  */
-export function benchPrompt(functions = 48): string {
+/**
+ * What the benchmark has the model write: new text about the code (prose),
+ * or the code again with one change (edit), as an agent's file edits do,
+ * where drafting from the context pays most.
+ */
+export type BenchWorkload = 'prose' | 'edit';
+
+export const BENCH_WORKLOADS: readonly BenchWorkload[] = ['prose', 'edit'];
+
+export function benchPrompt(
+  workload: BenchWorkload = 'prose',
+  functions = 48,
+): string {
   const parts: string[] = [];
   for (let i = 0; i < functions; i++) {
     parts.push(
@@ -44,7 +89,9 @@ export function benchPrompt(functions = 48): string {
   return (
     'Here is a TypeScript module:\n\n' +
     parts.join('\n\n') +
-    '\n\nDescribe in one paragraph what these functions have in common.'
+    (workload === 'edit'
+      ? '\n\nRewrite the module with every function renamed from stepN to stageN and nothing else changed. Reply with the code only.'
+      : '\n\nDescribe in one paragraph what these functions have in common.')
   );
 }
 
@@ -178,13 +225,16 @@ export function counterRates(
  */
 export async function runBench(
   lease: LocalModelLease,
+  workload: BenchWorkload = 'prose',
   timeoutMs = 10 * 60_000,
 ): Promise<BenchResult> {
   const body = JSON.stringify({
-    messages: [{ role: 'user', content: benchPrompt() }],
+    messages: [{ role: 'user', content: benchPrompt(workload) }],
     max_tokens: BENCH_GENERATED_TOKENS,
     temperature: 0,
     cache_prompt: false,
+    // Answer at once: a thinking block would make every run write prose.
+    chat_template_kwargs: { enable_thinking: false },
     // Generate the whole budget, so every run measures the same work.
     ignore_eos: true,
     ...(lease.pinSlots ? { id_slot: SIDE_QUERY_SLOT } : {}),
