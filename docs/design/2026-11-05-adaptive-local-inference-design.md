@@ -261,38 +261,51 @@ Fork work, in order:
   - Items 3 and 4: `--moe-cache-profile FILE` (decayed usage per expert,
     warm start of up to half the slots, saved at exit) and
     `--moe-cache-policy lfu`. qwen-code passes a profile per project and
-    model whenever `localModelEngineArgs` turns the cache on. Not yet
-    compiled.
+    model whenever `localModelEngineArgs` turns the cache on. Compiled.
   - Gated n-gram drafting: `ngram-simple` pauses after a run of rejected
-    drafts (backoff 8 to 256 steps). Not yet compiled.
+    drafts (backoff 8 to 256 steps). Compiled; the CPU build runs
+    with it.
   - `scripts/windows-vulkan-noadmin.ps1`: Vulkan build without the SDK
     installer's administrator rights; done by hand on the 780M laptop.
 - Already upstream, so no work: checkpoints at user-message boundaries and
   near the prompt end (also written into slot save files), and
   confidence-based early stop of model drafts (`--spec-draft-p-min`).
 
-## Item 5, hybrid miss compute: design, waiting for traces
+## Item 5, hybrid miss compute: done, without kernel changes
 
-Today a miss is uploaded to the GPU before the layer runs, one host round
-trip per cached layer per step. With about 128 misses per token at a 25%
-cache (the synthetic run of the simulator), uploads cannot keep up on
-PCIe; the CPU should compute the missed experts from RAM while the GPU
-computes the cached ones:
+`--moe-cache-hybrid` (fork commit `ec1c40af7`, compiled): a miss is no
+longer uploaded before its layer runs, which cost a PCIe transfer per miss
+(about 128 misses per token at a 25% cache in the simulator's synthetic
+run). Instead:
 
-1. Let `mul_mat_id` skip ids of -1, leaving zeros: CPU first, then the
-   CUDA, HIP and Vulkan kernels (`ggml/src/ggml-*/`), with tests in
-   `tests/test-backend-ops.cpp`.
-2. In `build_moe_ffn` with a cache, compute each FFN twice: on the device
-   over the banks with the cached slots (misses as -1), and on the CPU
-   over the host experts with the missed ids (hits as -1); add the two
-   before the weighted sum.
-3. The copy callback fills both id lists from the slot map instead of
-   uploading; uploads move to a background stream for experts whose score
-   says they will keep missing.
+1. Each cached layer has a host map (F32 [3, n_expert]): the device slot
+   (a zero expert after the last slot for a miss), the CPU expert (the
+   miss, or one expert read anyway for the hits) and a miss flag. The copy
+   callback fills it, as it filled the slot map.
+2. `build_moe_ffn` runs its expert computation twice: on the device over
+   the cache with the hits' router weights, on the CPU over the host
+   experts with the misses' weights, and adds them. The zero expert and
+   zeroed weights make the parts that do not count exactly zero, so no
+   kernel needed to learn to skip ids.
+3. Up to 2 misses per layer and ubatch, with a decayed score of 2 or more,
+   are admitted; their uploads go out at the group's next lookup, before
+   anything reads their slots.
 
-It touches kernels on every backend, so it waits until real traces from a
-discrete-GPU machine show the miss rate the cache leaves after warm start
-and LFU.
+Limits: ubatches of up to 16 tokens (larger ones would be offloaded whole
+and keep the upload path), and the scheduler runs the two parts one after
+the other. Making them overlap (the CPU part while the device part runs)
+needs the scheduler to launch the device split before waiting on the CPU
+split's inputs: the next step once measurements show the CPU part matters.
+
+## Still open
+
+- Overlap of the device and CPU parts in hybrid mode (above).
+- Phase 4: models larger than RAM. The planner refuses them today;
+  allowing them means mmap from SSD with per-expert prefetch hints
+  (`madvise`/`PrefetchVirtualMemory`) chosen from the profile scores, and a
+  planner rule that opts in only on fast NVMe. It waits for the hit rates
+  the cache reaches with warm start, LFU and hybrid mode.
+- Planner rules from the bench results of each machine class.
 
 ## Testing at the end
 
@@ -302,8 +315,11 @@ and LFU.
 2. `/models setup`, `/models plan` and `/models bench` with the default
    model; the engine starts on Windows, Linux (`bwrap`, socket) and macOS.
 3. On a discrete GPU with a model that spills: bench without and with
-   `--moe-cache-mib`, then with `--moe-cache-policy lfu`; a second session
-   in the same project should log "warm start" and a higher hit rate.
+   `--moe-cache-mib`, then with `--moe-cache-policy lfu`, then with
+   `--moe-cache-hybrid`; a second session in the same project should log
+   "warm start" and a higher hit rate. Hybrid mode should give the same
+   tokens as the upload path at temperature 0 (same experts, same
+   weights), up to floating-point order.
 4. Record `--moe-cache-trace` and compare policies in the simulator.
 5. Speculation on: the bench's draft acceptance on code and on prose.
 6. Run the unit tests on Linux or macOS too: the engine-start and `hf`

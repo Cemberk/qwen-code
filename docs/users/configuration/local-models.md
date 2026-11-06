@@ -250,8 +250,10 @@ project used (`--moe-cache-profile`, in `moe-profiles` beside the prompt
 cache, one file per project and model): the engine loads the most used ones
 before the first token of the next session, and saves the profile when it
 stops. Add `"--moe-cache-policy", "lfu"` to evict the least used expert
-instead of the least recently used. `/models bench` reports the cache's hit
-rate.
+instead of the least recently used, and `"--moe-cache-hybrid"` to compute
+the experts missing from the cache on the CPU from RAM instead of uploading
+them to the GPU first (for generation and short drafts; prompts keep the
+upload path). `/models bench` reports the cache's hit rate.
 
 To compare policies offline, record a trace with
 `"--moe-cache-trace", "<file>"` and replay it with
