@@ -348,6 +348,21 @@ Every cache configuration generated more slowly than no cache on this GPU
 (its "VRAM" is the same RAM); the planner says so. The MoE cache's speed is
 for a discrete GPU to show.
 
+The simulator replaying that run's trace (96 tokens, `tools/moe-sim`)
+reproduces the engine's hit rates at about 70 slots (slru 0.06% against
+0.1%, lfu 31.3% against 28.7%, next 31.9% against 29.1%), so it can rank
+policies offline. On this real trace `next` is the best policy at every
+size:
+
+| Slots | slru  | lru   | lfu   | next  | optimum |
+| ----- | ----- | ----- | ----- | ----- | ------- |
+| 70    | 0.06% | 0.01% | 31.3% | 31.9% | 43.7%   |
+| 140   | 33.5% | 45.9% | 50.1% | 50.5% | 65.2%   |
+| 280   | 66.9% | 65.4% | 70.7% | 71.4% | 81.5%   |
+
+The 12 to 15 points between `next` and the optimum are what a better
+prediction of each expert's next use could still win.
+
 ## Still open
 
 - Overlap in hybrid mode, after JITEngine: keep a device copy of the slot
@@ -366,23 +381,34 @@ for a discrete GPU to show.
   the cache reaches with warm start, LFU and hybrid mode.
 - Planner rules from the bench results of each machine class.
 
-## Testing at the end
+## Testing on a machine, from fresh clones
 
-1. Build the fork (`adaptive-moe`) on each machine with its backend; on
-   Windows without admin rights, with `scripts\windows-vulkan-noadmin.ps1`,
-   and with `-j 2` to `-j 4`.
-2. `/models setup`, `/models plan` and `/models bench` with the default
-   model; the engine starts on Windows, Linux (`bwrap`, socket) and macOS.
-3. On a discrete GPU with a model that spills: bench without and with
-   `--moe-cache-mib`, then with `--moe-cache-policy lfu`, then with
-   `--moe-cache-hybrid`; a second session in the same project should log
-   "warm start" and a higher hit rate. Hybrid mode should give the same
-   tokens as the upload path at temperature 0 (same experts, same
-   weights), up to floating-point order.
-4. Record `--moe-cache-trace` and compare policies in the simulator.
-5. Speculation on: the bench's draft acceptance on code and on prose.
-6. Run the unit tests on Linux or macOS too: the engine-start and `hf`
-   tests use shell-script stand-ins that Windows cannot run.
+Everything below is in the two repositories; nothing comes from elsewhere
+but the toolchain, the GPU SDK (or the no-admin script) and the models.
+
+1. qwen-code (branch `adaptive-local-inference`): `npm install` (behind a
+   TLS-inspecting proxy, `NODE_OPTIONS=--use-system-ca`), `npm run build`.
+2. The fork (branch `adaptive-moe` of `Cemberk/llama.cpp`): the commands
+   `/models setup` prints for the machine's backend; on Windows without
+   administrator rights, `scripts\windows-vulkan-noadmin.ps1` first; build
+   with `-j 2` to `-j 4` on 32 GB.
+3. Models: `hf download Qwen/Qwen3-4B-GGUF Qwen3-4B-Q4_K_M.gguf` (dense,
+   2.5 GB) and `hf download allenai/OLMoE-1B-7B-0924-Instruct-GGUF
+olmoe-1b-7b-0924-instruct-q4_k_m.gguf` (MoE, 4.2 GB).
+4. The engine through qwen-code's own code, speculation on and off:
+   `node scripts/local-engine-e2e.mjs --engine <llama-server>` and again
+   with `--no-spec`; with `--args -b 512 -ub 512` to compare batches.
+5. The CLI end to end, in a temporary home:
+   `node scripts/local-cli-e2e.mjs --engine <llama-server>`.
+6. The MoE cache (fork): `node tools/moe-cache-check/check.mjs --server
+<llama-server> --model <olmoe gguf>`, and again with `--probs`; it exits
+   1 when the cache is not exact or the profile is not saved. Replay its
+   trace with `tools/moe-sim/moe_cache_sim.py`.
+7. Unit tests: `npm run test` in qwen-code. On Windows the engine-start and
+   `hf` tests fail, as before: their stand-ins are shell scripts; they run
+   on Linux and macOS.
+8. Linux: `/models setup` reports `bwrap` or `unshare`; the engine test in
+   step 4 then runs over the Unix socket.
 
 ## Decisions (2026-11-05)
 
