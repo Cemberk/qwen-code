@@ -136,3 +136,63 @@ describe('wantsMoeProfile', () => {
     expect(wantsMoeProfile(undefined)).toBe(false);
   });
 });
+
+describe('planEngine and the MoE cache', () => {
+  const moe: ModelCapabilities = { ...qwen36, recurrent: false };
+
+  it('warns that the cache only adds copies on a GPU that shares memory', () => {
+    const plan = planEngine({
+      bytes: 4 * GIB,
+      gpu: { limit: 16 * GIB, unified: true },
+      fit: { cpuMoeLayers: 0 },
+      model: moe,
+      hasDraft: false,
+      userArgs: ['--moe-cache-mib', '256'],
+    });
+    expect(plan.notes.join('\n')).toMatch(/only adds copies/);
+  });
+
+  it('suggests the cache when experts spill from VRAM to RAM', () => {
+    const plan = planEngine({
+      bytes: 30 * GIB,
+      gpu: { limit: 16 * GIB, unified: false },
+      fit: { cpuMoeLayers: 40, partial: true },
+      model: moe,
+      hasDraft: false,
+    });
+    expect(plan.notes.join('\n')).toMatch(/--moe-cache-hybrid/);
+  });
+
+  it('says nothing about it for a dense model or a model that fits', () => {
+    const dense = planEngine({
+      bytes: 30 * GIB,
+      gpu: { limit: 16 * GIB, unified: false },
+      fit: { cpuMoeLayers: 0, partial: true },
+      model: { ...moe, experts: 0 },
+      hasDraft: false,
+    });
+    const fits = planEngine({
+      bytes: 10 * GIB,
+      gpu: { limit: 24 * GIB, unified: false },
+      fit: { cpuMoeLayers: 0 },
+      model: moe,
+      hasDraft: false,
+    });
+    expect(`${dense.notes} ${fits.notes}`).not.toMatch(/MoE cache/);
+  });
+});
+
+describe('planEngine on a GPU that shares system memory', () => {
+  it('keeps default batches even with room to spare', () => {
+    const plan = planEngine({
+      bytes: 2.5 * GIB,
+      gpu: { limit: 17 * GIB, unified: true },
+      fit: { cpuMoeLayers: 0 },
+      hasDraft: false,
+    });
+    expect(plan.args).toEqual([]);
+    expect(plan.notes[0]).toMatch(
+      /shares system memory: prompts are read in default batches/,
+    );
+  });
+});

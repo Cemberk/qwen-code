@@ -71,7 +71,14 @@ export function planEngine(input: PlanInput): EnginePlan {
     );
   } else {
     const spare = gpu.limit - input.bytes - GPU_HEADROOM_BYTES;
-    if (spare >= LARGE_BATCH_SPARE_BYTES) {
+    // Larger batches sped prompts up on discrete GPUs (Strata, Radeon R9700);
+    // on a Radeon 780M, which shares RAM, they read prompts no faster than
+    // the default 512 and generated a little slower.
+    if (gpu.unified) {
+      notes.push(
+        'Fits the GPU, which shares system memory: prompts are read in default batches, which measured as fast as larger ones there.',
+      );
+    } else if (spare >= LARGE_BATCH_SPARE_BYTES) {
       const tokens = String(LARGE_BATCH_TOKENS);
       args.push('-b', tokens, '-ub', tokens);
       notes.push(
@@ -95,11 +102,32 @@ export function planEngine(input: PlanInput): EnginePlan {
     );
   }
 
+  // The fork's MoE cache keeps the experts a session uses in VRAM. It pays
+  // only where VRAM is separate from RAM: on a Radeon 780M, whose "VRAM" is
+  // the same RAM, every cache configuration ran slower than none.
+  const moeCacheOn = wantsMoeCache(input.userArgs);
+  if (gpu && 'cpuMoeLayers' in fit && model && model.experts > 0) {
+    if (gpu.unified && moeCacheOn) {
+      notes.push(
+        'The MoE cache (--moe-cache-mib) only adds copies on a GPU that shares system memory, and measured slower than none there: consider removing it from localModelEngineArgs.',
+      );
+    } else if (!gpu.unified && fit.partial && !moeCacheOn) {
+      notes.push(
+        'Experts run from RAM: the MoE cache can keep the ones this session uses in VRAM. Try localModelEngineArgs ["--moe-cache-mib", "<MiB of spare VRAM>", "--moe-cache-hybrid"] and compare with /models bench.',
+      );
+    }
+  }
+
   if (input.userArgs && input.userArgs.length > 0) {
     args.push(...input.userArgs);
     notes.push(`Your localModelEngineArgs: ${input.userArgs.join(' ')}`);
   }
   return { args, notes };
+}
+
+/** Whether the user's options turn the fork's MoE cache on. */
+export function wantsMoeCache(args: readonly string[] | undefined): boolean {
+  return (args ?? []).some((arg) => arg.split('=')[0] === '--moe-cache-mib');
 }
 
 /**

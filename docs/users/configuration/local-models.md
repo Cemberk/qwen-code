@@ -216,9 +216,13 @@ supplies.
 
 Qwen Code plans the `llama-server` options for each model on each machine;
 `/models plan` shows them with the reason for each. Today it reads prompts
-in batches of 2048 tokens (`-b 2048 -ub 2048`) when the model fits the GPU
-with at least 2 GiB to spare, and otherwise keeps llama.cpp's defaults
-(threads from the physical cores, `--fit` placement).
+in batches of 2048 tokens (`-b 2048 -ub 2048`) when the model fits a
+discrete GPU with at least 2 GiB to spare, and otherwise keeps llama.cpp's
+defaults (threads from the physical cores, `--fit` placement). On a GPU that
+shares system memory (Apple silicon, integrated Radeon or Intel graphics),
+larger batches read prompts no faster, so the defaults stay. It also tells
+you when the MoE cache would help (experts spilling from VRAM to RAM) or
+only slow things down (a GPU that shares system memory).
 
 To try other options, list them in `localModelEngineArgs` in your user
 settings; they apply after the planned ones, so they win:
@@ -249,12 +253,21 @@ uses in a slice of VRAM:
 With it on, Qwen Code also gives the engine a profile of the experts each
 project used (`--moe-cache-profile`, in `moe-profiles` beside the prompt
 cache, one file per project and model): the engine loads the most used ones
-before the first token of the next session, and saves the profile when it
-stops. Add `"--moe-cache-policy", "lfu"` to evict the least used expert
-instead of the least recently used, and `"--moe-cache-hybrid"` to compute
-the experts missing from the cache on the CPU from RAM instead of uploading
-them to the GPU first (for generation and short drafts; prompts keep the
-upload path). `/models bench` reports the cache's hit rate.
+before the first token of the next session, and saves the profile every 30
+seconds and when it stops. Add `"--moe-cache-hybrid"` to compute the experts
+missing from the cache on the CPU from RAM instead of uploading them to the
+GPU first (for generation and short drafts; prompts keep the upload path):
+the GPU never waits for the CPU within a step, and the cache learns which
+experts were used once the step is done. `/models bench` reports the
+cache's hit rate.
+
+The cache evicts by default the expert whose next use is expected furthest
+away (`next`): a pass runs through the layers in order, so plain least
+recently used evicts exactly the experts needed next whenever a token's
+experts outnumber the cache (0.1% of hits against 29% for `next` on
+OLMoE-1B-7B with a 256 MiB cache). `"--moe-cache-policy", "lfu"` or
+`"slru"` choose the others. The cache only pays on a discrete GPU: on one
+that shares system memory its "VRAM" is the same RAM.
 
 To compare policies offline, record a trace with
 `"--moe-cache-trace", "<file>"` and replay it with

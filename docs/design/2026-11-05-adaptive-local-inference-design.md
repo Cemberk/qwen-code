@@ -312,6 +312,42 @@ head-to-head benchmark. What carries over:
 | Take turns between requests (64 tokens each) rather than batching them                                                                                                    | SSD reads per token 243.5 to 140.9 (Flash-Next, M2)                                         | Only with several requests; later                                        |
 | Exact 3-bit Metal kernels, MLX quantizer packing                                                                                                                          | Qwen3.6 3-bit on a 24 GB M2: 1.36x llama.cpp with MTP                                       | MLX-specific; llama.cpp's Metal kernels would need their own work        |
 
+## Measured on the 780M laptop (2026-11-06)
+
+Windows 11, Radeon 780M (Vulkan build of the fork, built without the SDK
+installer by `scripts/windows-vulkan-noadmin.ps1`), 32 GB RAM.
+
+Qwen3 4B Q4_K_M through qwen-code's engine path (`/models bench`
+workloads, 4.3K-token prompt, 128 tokens):
+
+| Build, options                     | Prompt      | Prose         | Edit       | Drafts accepted |
+| ---------------------------------- | ----------- | ------------- | ---------- | --------------- |
+| CPU                                | 25-37 tok/s | 1.6-4.2 tok/s | 3.2 tok/s  | 80%             |
+| Vulkan, speculation on, `-ub 2048` | 84 tok/s    | 5.3 tok/s     | 10.4 tok/s | 80%             |
+| Vulkan, speculation off            | 84 tok/s    | 5.2 tok/s     | 5.1 tok/s  |                 |
+| Vulkan, speculation on, `-ub 512`  | 85 tok/s    | 6.0 tok/s     | 14.2 tok/s | 80%             |
+
+So: n-gram drafting doubles code edits and costs nothing on prose with the
+gate (`/models bench compare` would advise on, about 1.44x); larger prompt
+batches bring nothing on this shared-memory GPU, so the planner keeps them
+for discrete GPUs only. Speeds drift between runs on this laptop by up to
+30%; compare within a run.
+
+OLMoE-1B-7B Q4_K_M (64 experts, 8 per token, 16 layers), experts in RAM,
+256 MiB MoE cache (about 70 slots, fewer than a token's 128 selections),
+96 tokens at temperature 0:
+
+| Configuration                                  | Output against all-GPU                       | Hit rate             |
+| ---------------------------------------------- | -------------------------------------------- | -------------------- |
+| cache, slru / lfu / next                       | bit-identical (logprobs equal to 4 decimals) | 0.1% / 28.7% / 29.1% |
+| hybrid, waiting per layer                      | CPU/GPU rounding (logprobs within 0.24)      | 23.6%                |
+| hybrid, async (one wait per step)              | CPU/GPU rounding                             | 32.3%                |
+| hybrid, async, second session with the profile | CPU/GPU rounding                             | 34.1% (first: 31.2%) |
+
+Every cache configuration generated more slowly than no cache on this GPU
+(its "VRAM" is the same RAM); the planner says so. The MoE cache's speed is
+for a discrete GPU to show.
+
 ## Still open
 
 - Overlap in hybrid mode, after JITEngine: keep a device copy of the slot
