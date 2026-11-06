@@ -26,6 +26,27 @@ import {
   networkConfinement,
 } from './models-command.js';
 
+// The stand-ins below are Node scripts with a shebang line, which Windows
+// cannot run: there, start them with Node. Other platforms run them as is.
+vi.mock('node:child_process', async (importActual) => {
+  const actual = await importActual<typeof import('node:child_process')>();
+  const { readFileSync } = await import('node:fs');
+  const isScript = (command: string) => {
+    try {
+      return readFileSync(command, 'utf8').startsWith('#!');
+    } catch {
+      return false;
+    }
+  };
+  return {
+    ...actual,
+    spawn: ((command: string, args: readonly string[], options: object) =>
+      process.platform === 'win32' && isScript(command)
+        ? actual.spawn(process.execPath, [command, ...args], options)
+        : actual.spawn(command, args, options)) as typeof actual.spawn,
+  };
+});
+
 // The GPU and memory of the test machine must not decide these tests.
 // By default a GPU that holds any model.
 const gpu = vi.hoisted(() => ({
