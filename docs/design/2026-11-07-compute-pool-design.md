@@ -386,6 +386,34 @@ Each phase lands with before/after numbers on at least two machine classes
 fork at `4a478859c` and run `tools/moe-cache-check`; benchmark Qwen3.6-35B-A3B
 on the 780M; the two-project prefix reuse run.
 
+P0 results (2026-11-07, Radeon 780M, Windows, Vulkan):
+
+- Fork `4a478859c`, OLMoE: every cache policy gives the same text as all
+  experts on the GPU, and `--probs` the same log-probabilities; hybrid
+  within CPU/GPU rounding. Hit rates: SLRU 0.1%, LFU 28.7%, next 29.1%,
+  hybrid 32.7% (31.7% -> 33.9% with the saved profile); the simulator on
+  the same trace: hybrid 33.4%, optimum 43.7%. The admission rule changed
+  hybrid little (32.3% before).
+- Qwen3.6-35B-A3B (UD-IQ3_S, 13.7 GB) **did not start**: Vulkan told the
+  engine 15.6 GB of the 16.5 GB shared budget was free, but Windows shares
+  that budget between all programs and the desktop (`dwm.exe`) held 5.6 GB
+  of it; allocation failed past about 13 GB, wherever the layers went,
+  because experts moved to the CPU were read into pinned, GPU-visible
+  memory that counts against the same budget. Fixed in `db801a2353`: the
+  plan takes other programs' shared GPU memory off the budget (Windows
+  counters; amdgpu GTT in use on Linux), places the experts itself, and
+  keeps CPU experts mapped from the file. The counter sum errs high (it
+  left 9.3 GB where about 11 GB worked), so the planner is cautious; it
+  should learn the real limit from starts that succeed and fail.
+- Qwen3.6-35B-A3B with that plan (21 layers of experts on the CPU): prose
+  prompt 42.1 tok/s, generation 3.9 tok/s; code edit prompt 54.5 tok/s,
+  generation 7.3 tok/s, 84% of drafts accepted. By hand with 12 layers on
+  the CPU: 54.6 / 3.7 and 58.5 / 6.9.
+- Two-project prefix reuse: not measured; stopped twice by low memory on
+  this machine. When the run was stopped, the `qwen` process died and its
+  engine stayed alive holding 7.7 GB: the teardown gap of the daemon
+  design, seen in practice.
+
 **P1, machine daemon (goal 1).** qwen-code: daemon process and client,
 session leases, slot affinity, save/restore of idle sessions, per-session
 subagent slots, memory ledger and LRU unload, multiple models at once,
