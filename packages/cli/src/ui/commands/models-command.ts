@@ -7,9 +7,9 @@
 import { spawn } from 'node:child_process';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { Storage } from '@qwen-code/qwen-code-core/config/storage.js';
 import {
   adviseSpeculation,
+  benchLogFile,
   BENCH_WORKLOADS,
   runBench,
   type BenchResult,
@@ -454,9 +454,6 @@ const planCommand: SlashCommand = {
 };
 
 /** Where /models bench appends its results, one JSON object per line. */
-export function benchLogFile(): string {
-  return path.join(Storage.getGlobalQwenDir(), 'local-model-bench.jsonl');
-}
 
 /** One benchmark run per workload, each appended to the bench log. */
 async function measure(

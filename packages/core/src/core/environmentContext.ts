@@ -532,6 +532,13 @@ export interface InitialChatHistoryOptions {
   // that excludes the Skill tool, so announcing skills they can't invoke wastes
   // turns — mirrors includeDeferredToolsReminder).
   includeAvailableSkillsReminder?: boolean;
+  /**
+   * Context files, git status and memory that the system prompt leaves out
+   * so it stays the same in every project (a local model's engine then
+   * shares its processed state across projects). Placed after the skills
+   * listing and before the startup context.
+   */
+  projectContext?: string | null;
 }
 
 /**
@@ -577,6 +584,7 @@ export async function getInitialChatHistory(
   const reminderParts = [
     buildMcpServerInstructionsReminder(toolRegistry),
     skillsResult?.reminder ?? null,
+    options.projectContext ? wrapSystemReminder(options.projectContext) : null,
     startupReminder,
     includeDeferredToolsReminder
       ? buildDeferredToolsReminder(toolRegistry)

@@ -10,6 +10,7 @@ import {
   type ModelFit,
 } from './gpu-memory.js';
 import type { ModelCapabilities } from './model-inspector.js';
+import type { SpeculationAdvice } from './bench.js';
 
 const GIB = 1024 ** 3;
 
@@ -43,6 +44,8 @@ export interface PlanInput {
   userArgs?: readonly string[];
   /** The llama-server build has no GPU backend, but this machine has a GPU. */
   cpuOnlyBuild?: boolean;
+  /** What /models bench measured about speculative decoding here, and whether it is on. */
+  speculation?: { advice?: SpeculationAdvice; enabled: boolean };
 }
 
 /**
@@ -114,6 +117,24 @@ export function planEngine(input: PlanInput): EnginePlan {
     } else if (!gpu.unified && fit.partial && !moeCacheOn) {
       notes.push(
         'Experts run from RAM: the MoE cache can keep the ones this session uses in VRAM. Try localModelEngineArgs ["--moe-cache-mib", "<MiB of spare VRAM>", "--moe-cache-hybrid"] and compare with /models bench.',
+      );
+    }
+  }
+
+  const advice = input.speculation?.advice;
+  if (advice && input.speculation) {
+    const measured = `measured on this machine (/models bench compare): ${advice.ratio.toFixed(2)}x generation speed`;
+    if (advice.advice === 'off' && input.speculation.enabled) {
+      notes.push(
+        `Speculative decoding costs more than it saves here, ${measured}: turn it off with /models speculation off.`,
+      );
+    } else if (advice.advice === 'on' && !input.speculation.enabled) {
+      notes.push(
+        `Speculative decoding pays here, ${measured}: turn it on with /models speculation on.`,
+      );
+    } else if (advice.advice !== 'either') {
+      notes.push(
+        `Speculative decoding is ${input.speculation.enabled ? 'on' : 'off'}, as ${measured} advises.`,
       );
     }
   }

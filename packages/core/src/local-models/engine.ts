@@ -18,6 +18,12 @@ import { findExecutable, isExecutableFile } from './executables.js';
 import { inspectModel, type ModelCapabilities } from './model-inspector.js';
 import { engineDevices, type EngineDevice } from './engine-devices.js';
 import { planEngine, type EnginePlan } from './planner.js';
+import { readBenchLog, speculationAdviceFromLog } from './bench.js';
+import {
+  describeHardware,
+  getHardwareProfile,
+  isIntegratedGpuName,
+} from './hardware.js';
 import {
   confinedCommand,
   getConfinement,
@@ -549,8 +555,22 @@ export function engineGpuBudget(
   if (devices.length === 0) return undefined;
   return {
     limit: devices.reduce((sum, device) => sum + device.totalBytes, 0),
-    unified: machine?.unified ?? false,
+    // Without the hardware probe (it can time out on a busy machine), the
+    // devices' own names tell integrated graphics and Metal apart.
+    unified: machine?.unified ?? devices.every(isSharedMemoryDevice),
   };
+}
+
+/** A device that shares system memory: Metal, or integrated graphics by name. */
+function isSharedMemoryDevice(device: EngineDevice): boolean {
+  if (device.backend === 'metal') return true;
+  const name = device.description;
+  const vendor = /radeon|amd/i.test(name)
+    ? 'amd'
+    : /intel/i.test(name)
+      ? 'intel'
+      : 'other';
+  return vendor !== 'other' && isIntegratedGpuName(vendor, name);
 }
 
 /**
@@ -586,6 +606,14 @@ export function planLocalModel(
     bytes,
     gpu,
     fit,
+    speculation: {
+      enabled: options.speculation,
+      advice: speculationAdviceFromLog(readBenchLog(), {
+        model: model.id,
+        engine: binary ?? 'unknown',
+        hardware: describeHardware(getHardwareProfile()),
+      }),
+    },
     hasDraft: draftPath !== undefined,
     ...(capabilities ? { model: capabilities } : {}),
     ...(options.extraArgs ? { userArgs: options.extraArgs } : {}),
@@ -724,7 +752,9 @@ export async function startLocalModelEngine(
       String(options.speculation),
       // Another build may not read the states this one saved.
       options.enginePath ?? '',
-      plan.args.join(' '),
+      // The user's options may change the cache (-ctk, -ctv, ...); the
+      // planner's batch sizes do not, and must not orphan saved states.
+      (options.extraArgs ?? []).join(' '),
     ]),
     get alive() {
       return exitDetail === undefined;

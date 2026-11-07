@@ -112,3 +112,39 @@ describe('withLocalModelProviders', () => {
     expect(withLocalModelProviders(own, [])).toBe(own);
   });
 });
+
+describe('withLocalModelProviders and the default model', () => {
+  const models = [
+    { id: 'big', repo: 'o/big', file: 'big.gguf' },
+    { id: 'small', repo: 'o/small', file: 'small.gguf' },
+    { id: 'tiny', repo: 'o/tiny', file: 'tiny.gguf' },
+  ];
+
+  it('puts the downloaded models first, in their order, so the default is one that runs', () => {
+    const providers = withLocalModelProviders(
+      undefined,
+      models,
+      (model) => model.id !== 'big',
+    );
+    expect(providers?.['openai']?.map((entry) => entry.id)).toEqual([
+      'small',
+      'tiny',
+      'big',
+    ]);
+  });
+
+  it('keeps the list order when nothing or everything is downloaded', () => {
+    for (const downloaded of [false, true]) {
+      const providers = withLocalModelProviders(
+        undefined,
+        models,
+        () => downloaded,
+      );
+      expect(providers?.['openai']?.map((entry) => entry.id)).toEqual([
+        'big',
+        'small',
+        'tiny',
+      ]);
+    }
+  });
+});

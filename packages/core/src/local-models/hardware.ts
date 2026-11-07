@@ -73,7 +73,7 @@ const runCommand: CommandRunner = (command, args) => {
   try {
     return execFileSync(command, args, {
       encoding: 'utf8',
-      timeout: 10_000,
+      timeout: 30_000,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'ignore'],
     });

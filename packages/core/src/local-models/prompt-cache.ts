@@ -88,14 +88,29 @@ export function pickPromptState(
 ): string | undefined {
   const own = promptStateFile(project, engineKey, session);
   const prefix = `${hash(project)}-${engineKey}-`;
+  const shared = sharedPromptStateFile(engineKey);
   let newest: { name: string; mtime: number } | undefined;
+  let hasShared = false;
   for (const name of listStates(dir)) {
     if (name === own) return own;
+    if (name === shared) hasShared = true;
     if (!name.startsWith(prefix)) continue;
     const mtime = statSync(path.join(dir, name)).mtimeMs;
     if (!newest || mtime > newest.mtime) newest = { name, mtime };
   }
-  return newest?.name;
+  return newest?.name ?? (hasShared ? shared : undefined);
+}
+
+/**
+ * The state every project of an engine can start from: the first turn of a
+ * fresh session. With a local model the system turn (instructions and tools)
+ * is the same in every project and the project's own context starts the first
+ * user message, where llama-server keeps a checkpoint, so a new project reads
+ * only what is its own. A first turn, because a long session's file may have
+ * dropped that checkpoint (llama-server keeps the newest 32).
+ */
+export function sharedPromptStateFile(engineKey: string): string {
+  return `shared-${engineKey}.bin`;
 }
 
 /** Delete the oldest saved states until the rest fit in `maxBytes`. */

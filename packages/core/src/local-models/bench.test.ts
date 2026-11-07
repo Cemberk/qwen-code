@@ -13,6 +13,7 @@ import {
   benchPrompt,
   benchResult,
   counterRates,
+  speculationAdviceFromLog,
   parseMetrics,
   runBench,
 } from './bench.js';
@@ -207,5 +208,51 @@ describe('adviseSpeculation', () => {
       ratio: 1,
       advice: 'either',
     });
+  });
+});
+
+describe('speculationAdviceFromLog', () => {
+  const machine = ['win32 x64, 32.9 GB RAM', 'AMD Radeon(TM) 780M'];
+  const record = (
+    speculation: boolean,
+    workload: 'prose' | 'edit',
+    generatedPerSecond: number,
+    extra: Partial<{ model: string; date: string; hardware: string[] }> = {},
+  ) => ({
+    date: extra.date ?? '2026-11-06T10:00:00.000Z',
+    model: extra.model ?? 'qwen3-4b',
+    engine: '/e',
+    hardware: extra.hardware ?? machine,
+    speculation,
+    workload,
+    promptTokens: 4000,
+    promptPerSecond: 85,
+    generatedTokens: 128,
+    generatedPerSecond,
+  });
+  const match = { model: 'qwen3-4b', engine: '/e', hardware: machine };
+
+  it('compares the newest runs with speculation on and off on this machine', () => {
+    const advice = speculationAdviceFromLog(
+      [
+        record(true, 'prose', 5.3),
+        record(true, 'edit', 10.4),
+        record(false, 'prose', 5.2),
+        record(false, 'edit', 5.1),
+        // An older run, another model and another machine do not count.
+        record(false, 'edit', 50, { date: '2026-11-01T00:00:00.000Z' }),
+        record(false, 'edit', 50, { model: 'other' }),
+        record(false, 'edit', 50, { hardware: ['elsewhere'] }),
+      ],
+      match,
+    );
+    expect(advice?.advice).toBe('on');
+    expect(advice?.ratio).toBeCloseTo(Math.sqrt((5.3 / 5.2) * (10.4 / 5.1)), 5);
+  });
+
+  it('has no advice until both settings were measured', () => {
+    expect(
+      speculationAdviceFromLog([record(true, 'prose', 5)], match),
+    ).toBeUndefined();
   });
 });

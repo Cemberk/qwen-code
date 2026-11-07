@@ -5,6 +5,7 @@
  */
 
 import type { ModelConfig, ModelProvidersConfig } from '../models/types.js';
+import { resolveLocalModelPath } from './hf-cache.js';
 
 /** A GGUF model qwen runs itself with llama-server, from the Hugging Face cache (`localModels`). */
 export interface LocalModelConfig {
@@ -166,18 +167,35 @@ export function validateLocalModels(value: unknown): LocalModelConfig[] {
   return value as LocalModelConfig[];
 }
 
+function downloaded(model: LocalModelConfig): boolean {
+  try {
+    resolveLocalModelPath(model);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Add a provider entry for each local model ahead of the configured
  * `modelProviders.openai` entries, so the first local model is the default.
+ * Downloaded models come first, in their order: with no model configured,
+ * qwen starts with one it can run rather than one whose first request fails.
  */
 export function withLocalModelProviders(
   modelProviders: ModelProvidersConfig | undefined,
   localModels: readonly LocalModelConfig[],
+  isDownloaded: (model: LocalModelConfig) => boolean = downloaded,
 ): ModelProvidersConfig | undefined {
   if (localModels.length === 0) {
     return modelProviders;
   }
-  const entries: ModelConfig[] = localModels.map((model) => ({
+  const ready = localModels.filter(isDownloaded);
+  const ordered = [
+    ...ready,
+    ...localModels.filter((model) => !ready.includes(model)),
+  ];
+  const entries: ModelConfig[] = ordered.map((model) => ({
     id: model.id,
     name: model.name ?? model.id,
     description: `${model.repo}/${model.file}`,

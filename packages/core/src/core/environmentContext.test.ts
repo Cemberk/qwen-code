@@ -302,6 +302,22 @@ describe('getInitialChatHistory', () => {
     );
   });
 
+  it('puts the project context of a local model before the startup context', async () => {
+    const [history] = await getInitialChatHistory(
+      mockConfig as Config,
+      undefined,
+      { projectContext: 'Context of this project:\n\nUse tabs.' },
+    );
+    const texts = (history[0]?.parts ?? []).map((part) => part.text ?? '');
+    const project = texts.findIndex((text) => text.includes('Use tabs.'));
+    const startup = texts.findIndex((text) =>
+      text.includes("I'm currently working in the directory"),
+    );
+    expect(project).toBeGreaterThanOrEqual(0);
+    expect(project).toBeLessThan(startup);
+    expect(texts[project]).toContain(SYSTEM_REMINDER_OPEN);
+  });
+
   it('prepends the startup reminder before extra history', async () => {
     const extraHistory: Content[] = [
       { role: 'user', parts: [{ text: 'custom context' }] },

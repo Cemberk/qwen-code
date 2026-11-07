@@ -275,8 +275,56 @@ describe('LocalModelServer', () => {
 
       sideQuery.release();
       await tick();
-      expect(fake.events).toEqual(['start a', `save ${file}`]);
+      // A fresh session's first turn is also the engine's shared prefix.
+      expect(fake.events).toEqual([
+        'start a',
+        'save shared-key-a.bin',
+        `save ${file}`,
+      ]);
       expect(next).toBeDefined();
+    });
+
+    it('shares only the first turn of a fresh session', async () => {
+      const { fake, server, file } = withCache();
+      (await server.acquire('a')).release({ saveState: true });
+      await tick();
+      (await server.acquire('a')).release({ saveState: true });
+      await tick();
+      expect(fake.events).toEqual([
+        'start a',
+        'save shared-key-a.bin',
+        `save ${file}`,
+        `save ${file}`,
+      ]);
+    });
+
+    it('shares nothing from a session that had its own state', async () => {
+      const { fake, server, file } = withCache();
+      writeFileSync(path.join(dir, file), 'state');
+      (await server.acquire('a')).release({ saveState: true });
+      await tick();
+      expect(fake.events).toEqual([
+        'start a',
+        `restore ${file}`,
+        `save ${file}`,
+      ]);
+    });
+
+    it("starts a new project from the shared prefix, not another project's session", async () => {
+      const { fake, server } = withCache();
+      writeFileSync(
+        path.join(dir, promptStateFile('/other', 'key-a', 'old')),
+        'state',
+      );
+      writeFileSync(path.join(dir, 'shared-key-a.bin'), 'state');
+      (await server.acquire('a')).release({ saveState: true });
+      await tick();
+      // A recent shared prefix is kept, not rewritten by every new project.
+      expect(fake.events).toEqual([
+        'start a',
+        'restore shared-key-a.bin',
+        `save ${promptStateFile('/p', 'key-a', 's1')}`,
+      ]);
     });
 
     it('serves requests without the cache when its folder cannot be created', async () => {

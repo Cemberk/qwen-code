@@ -196,3 +196,32 @@ describe('planEngine on a GPU that shares system memory', () => {
     );
   });
 });
+
+describe('planEngine and measured speculation', () => {
+  const base = {
+    bytes: 2.5 * GIB,
+    gpu: { limit: 17 * GIB, unified: true },
+    fit: { cpuMoeLayers: 0 },
+    hasDraft: false,
+  };
+
+  it('says to turn speculation off where it was measured to cost', () => {
+    const plan = planEngine({
+      ...base,
+      speculation: { enabled: true, advice: { ratio: 0.8, advice: 'off' } },
+    });
+    expect(plan.notes.join('\n')).toMatch(
+      /costs more than it saves here[\s\S]*0\.80x[\s\S]*\/models speculation off/,
+    );
+  });
+
+  it('confirms a setting the measurements agree with, and is quiet without them', () => {
+    const agrees = planEngine({
+      ...base,
+      speculation: { enabled: true, advice: { ratio: 1.44, advice: 'on' } },
+    });
+    expect(agrees.notes.join('\n')).toMatch(/is on, as measured/);
+    const none = planEngine({ ...base, speculation: { enabled: true } });
+    expect(none.notes.join('\n')).not.toMatch(/Speculative decoding/);
+  });
+});

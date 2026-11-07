@@ -5,7 +5,7 @@
  */
 
 import { randomBytes } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import type { LocalModelConfig } from './local-models.js';
@@ -20,6 +20,7 @@ import {
   moeProfileFile,
   pickPromptState,
   promptStateFile,
+  sharedPromptStateFile,
   prunePromptStates,
 } from './prompt-cache.js';
 import { wantsMoeProfile } from './planner.js';
@@ -90,6 +91,8 @@ export class LocalModelServer {
   private saveRequested = false;
   /** The running engine was started with a prompt cache folder. */
   private engineCaches = false;
+  /** The running engine serves a session that had no saved state. */
+  private freshSession = false;
 
   constructor(
     private readonly startEngine: StartEngine = startLocalModelEngine,
@@ -312,6 +315,15 @@ export class LocalModelServer {
         engine.stateKey,
         context.session,
       );
+      // The first turn of a session that started from nothing becomes the
+      // shared prefix; so does one that started from a shared prefix older
+      // than a week, which a newer qwen's system prompt may have outdated.
+      const shared = sharedPromptStateFile(engine.stateKey);
+      this.freshSession =
+        file === undefined ||
+        (file === shared &&
+          Date.now() - statSync(path.join(cache.directory, shared)).mtimeMs >
+            SHARED_PREFIX_MAX_AGE_MS);
       if (file) await engine.slot('restore', file);
     } catch {
       // Read the prompt in full.
@@ -328,6 +340,12 @@ export class LocalModelServer {
       engine.stateKey,
       context.session,
     );
+    // The first turn of a fresh session also becomes the engine's shared
+    // prefix, which new projects start from.
+    if (this.freshSession) {
+      this.freshSession = false;
+      await engine.slot('save', sharedPromptStateFile(engine.stateKey));
+    }
     if (await engine.slot('save', file)) {
       try {
         prunePromptStates(cache.directory);
@@ -337,6 +355,9 @@ export class LocalModelServer {
     }
   }
 }
+
+/** A shared prefix older than this is saved again from a fresh session. */
+const SHARED_PREFIX_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 let server: LocalModelServer | undefined;
 

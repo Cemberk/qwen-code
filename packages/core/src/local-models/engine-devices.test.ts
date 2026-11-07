@@ -120,3 +120,42 @@ describe('engineGpuBudget', () => {
     expect(engineGpuBudget(undefined, machine)).toBe(machine);
   });
 });
+
+describe('engineGpuBudget without the hardware probe', () => {
+  const device = (
+    name: string,
+    description: string,
+    backend: 'vulkan' | 'cuda' | 'metal',
+  ) => ({
+    name,
+    description,
+    backend,
+    totalBytes: 16 * 1024 * MIB,
+    freeBytes: 15 * 1024 * MIB,
+  });
+
+  it('tells shared memory from the devices themselves', () => {
+    expect(
+      engineGpuBudget(
+        [device('Vulkan0', 'AMD Radeon(TM) 780M', 'vulkan')],
+        undefined,
+      )?.unified,
+    ).toBe(true);
+    expect(
+      engineGpuBudget([device('MTL0', 'Apple M4 Pro', 'metal')], undefined)
+        ?.unified,
+    ).toBe(true);
+    expect(
+      engineGpuBudget(
+        [device('CUDA0', 'NVIDIA GeForce RTX 4090', 'cuda')],
+        undefined,
+      )?.unified,
+    ).toBe(false);
+    expect(
+      engineGpuBudget(
+        [device('Vulkan0', 'AMD Radeon RX 7900 XTX', 'vulkan')],
+        undefined,
+      )?.unified,
+    ).toBe(false);
+  });
+});

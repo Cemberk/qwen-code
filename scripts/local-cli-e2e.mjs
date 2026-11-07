@@ -17,6 +17,12 @@
 //            Hugging Face cache of this user
 // --timeout  seconds before giving up (default 900): the first prompt of a
 //            session reads qwen's whole system prompt, minutes on a small GPU
+// --home     keep this folder as the home (created if missing, not deleted),
+//            so a later run finds the saved prompt states
+// --project  the project folder's name inside the home (default work); a
+//            second project in the same home starts from the shared prefix
+// --log-requests DIR  write every model request and response to DIR
+//            (model.enableOpenAILogging)
 //
 // Exits with 1 unless the model answers with the expected words.
 
@@ -65,10 +71,13 @@ const hfCache =
     ? path.join(process.env['HF_HOME'], 'hub')
     : path.join(os.homedir(), '.cache', 'huggingface', 'hub'));
 
-const home = mkdtempSync(path.join(os.tmpdir(), 'qwen-cli-e2e-'));
-const work = path.join(home, 'work');
+const keepHome = option('home');
+const home = keepHome
+  ? path.resolve(keepHome)
+  : mkdtempSync(path.join(os.tmpdir(), 'qwen-cli-e2e-'));
+const work = path.join(home, option('project') ?? 'work');
 mkdirSync(path.join(home, '.qwen'), { recursive: true });
-mkdirSync(work);
+mkdirSync(work, { recursive: true });
 writeFileSync(
   path.join(home, '.qwen', 'settings.json'),
   JSON.stringify(
@@ -77,7 +86,15 @@ writeFileSync(
       ...(option('engine')
         ? { localModelEngine: path.resolve(option('engine')) }
         : {}),
-      model: { name: model.id },
+      model: {
+        name: model.id,
+        ...(option('log-requests')
+          ? {
+              enableOpenAILogging: true,
+              openAILoggingDir: path.resolve(option('log-requests')),
+            }
+          : {}),
+      },
     },
     null,
     2,
@@ -100,6 +117,10 @@ const child = spawn(
       ...process.env,
       HOME: home,
       USERPROFILE: home,
+      // The prompt cache goes under the cache folder (LOCALAPPDATA on
+      // Windows, XDG_CACHE_HOME elsewhere): keep it in the temporary home too.
+      LOCALAPPDATA: path.join(home, 'AppData', 'Local'),
+      XDG_CACHE_HOME: path.join(home, '.cache'),
       HF_HUB_CACHE: hfCache,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -113,7 +134,7 @@ const code = await new Promise((resolve) => child.once('exit', resolve));
 clearTimeout(timer);
 const seconds = ((Date.now() - started) / 1000).toFixed(0);
 console.log(output.trim().split('\n').slice(-15).join('\n'));
-rmSync(home, { recursive: true, force: true });
+if (!keepHome) rmSync(home, { recursive: true, force: true });
 if (code === 0 && output.toLowerCase().includes(expected)) {
   console.log(`\nOK: the CLI answered with the local model in ${seconds} s.`);
   process.exit(0);

@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { readFileSync } from 'node:fs';
 import http from 'node:http';
+import path from 'node:path';
+import { Storage } from '../config/storage.js';
 import { SIDE_QUERY_SLOT } from './engine.js';
 import type { LocalModelLease } from './local-model-server.js';
 
@@ -51,6 +54,77 @@ export function adviseSpeculation(
     ratio,
     advice: ratio > 1.03 ? 'on' : ratio < 0.97 ? 'off' : 'either',
   };
+}
+
+/** Where /models bench appends its results, one JSON object per line. */
+export function benchLogFile(): string {
+  return path.join(Storage.getGlobalQwenDir(), 'local-model-bench.jsonl');
+}
+
+/** One line of the bench log. */
+export interface BenchRecord extends BenchResult {
+  date: string;
+  model: string;
+  hardware: string[];
+  engine: string;
+  speculation: boolean;
+  workload?: BenchWorkload;
+}
+
+/** The bench log's records; none when it cannot be read. */
+export function readBenchLog(file: string = benchLogFile()): BenchRecord[] {
+  let text: string;
+  try {
+    text = readFileSync(file, 'utf8');
+  } catch {
+    return [];
+  }
+  const records: BenchRecord[] = [];
+  for (const line of text.split('\n')) {
+    try {
+      const record = JSON.parse(line) as BenchRecord;
+      if (typeof record.generatedPerSecond === 'number') records.push(record);
+    } catch {
+      // A partial or foreign line.
+    }
+  }
+  return records;
+}
+
+/**
+ * What the bench log says about speculative decoding for this model, engine
+ * and machine: the newest run of each workload with it on and off, compared
+ * as /models bench compare does. Undefined until both have been measured.
+ */
+export function speculationAdviceFromLog(
+  records: readonly BenchRecord[],
+  match: { model: string; engine: string; hardware: readonly string[] },
+): SpeculationAdvice | undefined {
+  const hardware = JSON.stringify(match.hardware);
+  const newest = new Map<string, BenchRecord>();
+  for (const record of records) {
+    if (
+      record.model !== match.model ||
+      record.engine !== match.engine ||
+      JSON.stringify(record.hardware) !== hardware
+    ) {
+      continue;
+    }
+    const key = `${record.speculation}\0${record.workload ?? 'prose'}`;
+    const seen = newest.get(key);
+    if (!seen || record.date > seen.date) newest.set(key, record);
+  }
+  const on = new Map<BenchWorkload, BenchResult>();
+  const off = new Map<BenchWorkload, BenchResult>();
+  for (const [key, record] of newest) {
+    const [speculation, workload] = key.split('\0') as [string, BenchWorkload];
+    (speculation === 'true' ? on : off).set(workload, record);
+  }
+  for (const workload of [...on.keys()]) {
+    if (!off.has(workload)) on.delete(workload);
+  }
+  if (on.size === 0) return undefined;
+  return adviseSpeculation(on, off);
 }
 
 /** Tokens the benchmark generates. */

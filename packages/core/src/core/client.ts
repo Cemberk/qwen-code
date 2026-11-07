@@ -21,6 +21,7 @@ import process from 'node:process';
 import type { Config } from '../config/config.js';
 import { ApprovalMode } from '../config/approval-mode.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
+import { LOCAL_MODEL_BASE_URL } from '../local-models/local-models.js';
 import { cleanupOldToolResults } from '../utils/toolResultCleanup.js';
 import { Storage } from '../config/storage.js';
 import { recordStartupEvent } from '../utils/startupEventSink.js';
@@ -528,6 +529,12 @@ export class LlmClient {
    * startup-context date which is still current within the same session.
    */
   private lastInjectedDate: string | undefined;
+  /**
+   * The project's context files, git status and memory start the first user
+   * message instead of ending the system prompt (local models; see
+   * getProjectContext).
+   */
+  private projectContextInHistory = false;
 
   /**
    * Promises for pending background memory tasks (dream / extract / skill review).
@@ -1841,6 +1848,17 @@ export class LlmClient {
 
   private getMainSessionSystemInstruction(): string {
     const base = getMainSessionBaseSystemPrompt(this.config);
+    if (this.projectContextInHistory) {
+      // The project's layers start the first user message instead (see
+      // getProjectContext), so the system turn is the same in every project.
+      return assembleSystemPrompt({
+        base,
+        contextFiles: '',
+        appendPrompt: this.config.getAppendSystemPrompt(),
+        gitStatus: undefined,
+        autoMemory: '',
+      });
+    }
     const stableLayers = {
       base,
       contextFiles: this.config.getUserMemory(),
@@ -1851,6 +1869,32 @@ export class LlmClient {
       gitStatus: this.getCachedGitStatus(),
       autoMemory: this.config.getAutoMemoryPrompt(),
     });
+  }
+
+  /**
+   * The project's layers of the system prompt (context files, git status,
+   * memory), when they start the first user message instead: a local model's
+   * engine then shares the processed system turn across projects, and the
+   * project's own part begins where llama-server keeps a checkpoint.
+   */
+  private getProjectContext(): string | null {
+    if (!this.projectContextInHistory) return null;
+    const text = assembleSystemPrompt({
+      base: '',
+      contextFiles: this.config.getUserMemory(),
+      appendPrompt: '',
+      gitStatus: this.getCachedGitStatus(),
+      autoMemory: this.config.getAutoMemoryPrompt(),
+    }).trim();
+    return text ? `Context of this project:\n\n${text}` : null;
+  }
+
+  /** The session runs on a model qwen runs itself (localModels). */
+  private isLocalModelSession(): boolean {
+    return (
+      this.config.getContentGeneratorConfig?.()?.baseUrl ===
+      LOCAL_MODEL_BASE_URL
+    );
   }
 
   /**
@@ -1880,6 +1924,8 @@ export class LlmClient {
 
     const [[startupContext], snapshotEntries] = await getInitialChatHistory(
       this.config,
+      undefined,
+      { projectContext: this.getProjectContext() },
     );
     this.seedSkillReminderDedupFromSnapshot(snapshotEntries);
     await this.seedAgentReminderDedupFromCurrent();
@@ -2464,6 +2510,9 @@ export class LlmClient {
     signal?: AbortSignal,
   ): Promise<LlmChat> {
     signal?.throwIfAborted();
+    // Decided once per chat, so a model switch mid-session keeps the
+    // project's context in one place.
+    this.projectContextInHistory = this.isLocalModelSession();
     this.lastDeliveredMemoryTreeRevision = undefined;
     this.trustedUserAnswers.clear();
     this.lastInjectedDate = undefined;
@@ -2550,7 +2599,10 @@ export class LlmClient {
       deferredReminderCount = deferredTools?.length ?? 0;
       [history, snapshotEntries] = await profiler.time(
         'initial_chat_history',
-        () => getInitialChatHistory(this.config, extraHistory),
+        () =>
+          getInitialChatHistory(this.config, extraHistory, {
+            projectContext: this.getProjectContext(),
+          }),
       );
       this.config
         .getMemoryManager()
