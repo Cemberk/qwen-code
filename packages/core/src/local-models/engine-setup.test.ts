@@ -5,7 +5,11 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { engineSetup, recommendedBackend } from './engine-setup.js';
+import {
+  engineCmakeArgs,
+  engineSetup,
+  recommendedBackend,
+} from './engine-setup.js';
 import type { GpuDevice, HardwareProfile } from './hardware.js';
 
 const GIB = 1024 ** 3;
@@ -90,5 +94,23 @@ describe('engineSetup', () => {
       'cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DLLAMA_OPENSSL=OFF',
     );
     expect(setup.lines).toContain('xcode-select --install');
+  });
+});
+
+describe('engineCmakeArgs', () => {
+  it('lists the configure options /models setup prints, for scripts', () => {
+    expect(engineCmakeArgs(machine('win32', [gpu('amd')]))).toEqual([
+      '-DCMAKE_BUILD_TYPE=Release',
+      '-DBUILD_SHARED_LIBS=OFF',
+      '-DLLAMA_OPENSSL=OFF',
+      '-DGGML_VULKAN=ON',
+    ]);
+    expect(engineCmakeArgs(machine('darwin', [gpu('apple')], 'arm64'))).toEqual(
+      [
+        '-DCMAKE_BUILD_TYPE=Release',
+        '-DBUILD_SHARED_LIBS=OFF',
+        '-DLLAMA_OPENSSL=OFF',
+      ],
+    );
   });
 });

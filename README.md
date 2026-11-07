@@ -23,36 +23,28 @@ network connections:
 
 ## Install
 
-On a Mac with Apple silicon, [Homebrew](https://brew.sh) and
-[nvm](https://github.com/nvm-sh/nvm):
+On Windows, macOS or Linux, with Node.js 22 or later, git, CMake and a C++
+compiler (the [Quickstart](./docs/users/quickstart.md) lists the commands for
+each system and GPU):
 
 ```bash
-# Node.js 22 builds and runs Qwen Code, llama.cpp runs the models, hf downloads them
-nvm install 22
-brew install llama.cpp hf
-
-# Build
-git clone <your fork of this repository> qwen-code
+# Qwen Code and the llama.cpp fork that runs its models, side by side
+git clone -b adaptive-local-inference https://github.com/Cemberk/qwen-code
+git clone -b adaptive-moe https://github.com/Cemberk/llama.cpp
 cd qwen-code
-nvm use 22
-corepack pnpm install --frozen-lockfile
-npm run build && npm run bundle
 
-# Add a `qwen` command that runs this build with Node.js 22 from any directory
-mkdir -p ~/.local/bin
-cat > ~/.local/bin/qwen <<EOF
-#!/bin/sh
-exec "$(command -v node)" "$PWD/dist/cli.js" "\$@"
-EOF
-chmod +x ~/.local/bin/qwen
+# Builds both (llama.cpp for this machine's GPU), adds a `qwen` command and
+# points it at the engine
+sh scripts/install-local.sh                                   # macOS, Linux
+powershell -ExecutionPolicy Bypass -File scripts\install-local.ps1   # Windows
 
-# Download the default model, Qwen3.6 35B A3B (13.7 GB, for Macs with 24 GB)
+# Download the default model, Qwen3.6 35B A3B (13.7 GB)
 hf download unsloth/Qwen3.6-35B-A3B-GGUF Qwen3.6-35B-A3B-UD-IQ3_S.gguf
 ```
 
-`~/.local/bin` must be on your `PATH`. Node.js 22 does not have to be your
-default Node.js version. See the [Quickstart](./docs/users/quickstart.md) for
-each step, smaller models and updating.
+Then run `qwen` in a project and `/models setup` to see what it found. The
+[Quickstart](./docs/users/quickstart.md) has each step by hand, smaller
+models and updating.
 
 ## Start Qwen Code
 

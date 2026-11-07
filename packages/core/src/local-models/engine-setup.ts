@@ -52,6 +52,17 @@ const CMAKE_FLAGS: Record<EngineBackend, string> = {
   cpu: '',
 };
 
+/**
+ * The cmake configure options for this machine's backend, as a list for
+ * scripts (scripts/local-setup.mjs): the same as /models setup prints.
+ */
+export function engineCmakeArgs(
+  profile: HardwareProfile,
+  backend: EngineBackend = recommendedBackend(profile),
+): string[] {
+  return `${BASE_FLAGS}${CMAKE_FLAGS[backend]}`.trim().split(/\s+/);
+}
+
 function prerequisites(
   platform: NodeJS.Platform,
   backend: EngineBackend,
