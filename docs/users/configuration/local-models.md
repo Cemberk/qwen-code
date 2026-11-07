@@ -275,9 +275,25 @@ To compare policies offline, record a trace with
 
 ## How the engine runs
 
-- One engine per Qwen Code session, listening on `127.0.0.1` on a free port.
-  In an interactive session it stays loaded, with its prompt cache, until you
-  quit.
+- Every Qwen Code on the machine shares one background process, the local
+  model pool, which runs the engines (`localModelPool`, on by default). Two
+  or more sessions, and their subagents, use one copy of the model instead of
+  one each: the engine reads their requests together, each conversation in a
+  slot of its own (three conversations side by side plus one for side
+  queries; a fourth conversation takes the slot idle the longest, and gets
+  its prompt back from the [saved prompts](#saved-prompts) when it returns).
+  One model runs at a time: a session asking for another waits until no
+  request is running, then the engine restarts with it.
+- The pool starts with the first Qwen Code that needs a local model and
+  stops, with its engines, 30 seconds after the last one exits, however it
+  exits. It talks to Qwen Code over a named pipe (Windows) or a Unix socket
+  in your user cache folder, with a key only your user can read. `qwen pool
+status` shows what it runs, `qwen pool stop` stops it; its log is
+  `qwen-code/pool/daemon.log` in the user cache folder (`%LOCALAPPDATA%` on
+  Windows, `~/Library/Caches` on macOS, `~/.cache` on Linux).
+- With `localModelPool` off, or when the pool cannot start, each Qwen Code
+  session runs its own engine, listening on `127.0.0.1` on a free port. In an
+  interactive session it stays loaded, with its prompt cache, until you quit.
 - The engine gets a minimal environment: no credentials, and none of the
   variables that make llama.cpp download models or enable its built-in tools.
   It keeps what Windows programs need (`SystemRoot`, `TEMP`, ...), the GPU
@@ -304,8 +320,12 @@ To compare policies offline, record a trace with
   On Windows it listens on loopback only and runs with `--offline`. A build
   without OpenSSL cannot reach HTTPS anywhere. `/models setup` says which
   applies.
-- The engine stops when Qwen Code exits. If Qwen Code is killed with
-  `kill -9`, the engine keeps running until you stop it.
+- An engine never outlives the process that started it (the pool, or Qwen
+  Code itself): the fork's `llama-server` runs with `--exit-with-parent` and
+  stops when that process ends, even after `kill -9`; on Windows the system
+  ends it too. A `llama-server` without that option still stops on Windows
+  and, with bwrap, on Linux, but elsewhere keeps running after `kill -9`
+  until you stop it.
 
 ## Saved prompts
 

@@ -306,6 +306,17 @@ const SETTINGS_SCHEMA = {
     showInDialog: false,
   },
 
+  localModelPool: {
+    type: 'boolean',
+    label: 'Local Model Pool',
+    category: 'Model',
+    requiresRestart: true,
+    default: true,
+    description:
+      'Run local models in one background process that every qwen on this machine shares: several sessions use one copy of a model, each conversation in its own slot. It stops 30 seconds after the last qwen exits. When off, or when it cannot start, each qwen runs its own engine.',
+    showInDialog: false,
+  },
+
   localModelEngine: {
     type: 'string',
     label: 'Local Model Engine',

@@ -45,7 +45,19 @@ export {
   getLocalBaseUrlError,
 } from './utils/local-base-url.js';
 export * from './local-models/local-models.js';
-export { getLocalModelServer } from './local-models/local-model-server.js';
+export {
+  getLocalModelServer,
+  LocalModelServer,
+  setLocalModelHost,
+} from './local-models/local-model-server.js';
+export { PoolClient } from './local-models/pool/client.js';
+export { startPoolDaemon } from './local-models/pool/daemon.js';
+export {
+  poolAddress,
+  poolDir,
+  poolKey,
+  poolLogFile,
+} from './local-models/pool/paths.js';
 export { promptCacheDir } from './local-models/prompt-cache.js';
 export { validateEngineArgs } from './local-models/planner.js';
 

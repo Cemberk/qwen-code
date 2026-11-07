@@ -44,6 +44,9 @@ import {
   type OutputStyleDefinition,
   validateModelProvidersConfig,
   getLocalModelServer,
+  LocalModelServer,
+  PoolClient,
+  setLocalModelHost,
   promptCacheDir,
   LOCAL_MODEL_KEY_ENV,
   LOCAL_MODEL_KEY_PLACEHOLDER,
@@ -97,6 +100,7 @@ import { mcpCommand } from '../commands/mcp.js';
 import { sessionsCommand } from '../commands/sessions.js';
 import { boardCommand } from '../commands/board.js';
 import { sandboxCommand } from '../commands/sandbox.js';
+import { poolCommand } from '../commands/pool.js';
 import { isValidSessionId, normalizeSessionIdForLookup } from './session-id.js';
 
 export { isValidSessionId } from './session-id.js';
@@ -121,6 +125,9 @@ import { parseApprovalModeValue } from './approval-mode-value.js';
 export { parseApprovalModeValue };
 
 const debugLogger = createDebugLogger('CONFIG');
+
+/** The pool client is installed at most once per process. */
+let poolClientInstalled = false;
 
 function resolveLocaleForExtensions(settings: Settings): string {
   const envLang = process.env['QWEN_CODE_LANG'];
@@ -813,7 +820,9 @@ export async function parseArguments(): Promise<CliArgs> {
     // Register sessions subcommands
     .command(sessionsCommand)
     // Register `qwen sandbox` (inspect / prove the resolved sandbox backend)
-    .command(sandboxCommand);
+    .command(sandboxCommand)
+    // Register `qwen pool` (the local model pool daemon)
+    .command(poolCommand);
 
   for (const [option, message] of Object.entries(
     TOP_LEVEL_DEPRECATED_OPTIONS,
@@ -1854,6 +1863,20 @@ export async function loadCliConfig(
   } catch (err) {
     throw new FatalConfigError(
       err instanceof Error ? err.message : String(err),
+    );
+  }
+  // Every qwen on the machine shares one engine per model through the pool
+  // daemon; settings are read once per process, so install the client once.
+  if (settings.localModelPool !== false && !poolClientInstalled) {
+    poolClientInstalled = true;
+    setLocalModelHost(
+      new PoolClient({
+        fallback: new LocalModelServer(),
+        onFallback: (reason) =>
+          debugLogger.warn(
+            `Local model pool unavailable (${reason}): running models in this process.`,
+          ),
+      }),
     );
   }
   getLocalModelServer().setModels(localModels);
