@@ -11,6 +11,7 @@ import {
   gfxTargetName,
   isIntegratedGpuName,
   probeHardware,
+  sharedGpuMemoryInUse,
   type CommandRunner,
   type ProbeSources,
 } from './hardware.js';
@@ -308,5 +309,54 @@ describe('describeHardware', () => {
         gpus: [],
       })[1],
     ).toBe('No GPU found: models run on the CPU.');
+  });
+});
+
+describe('sharedGpuMemoryInUse', () => {
+  it('sums the per-program shared GPU memory counters on Windows', () => {
+    const run: CommandRunner = (command, args) =>
+      command === 'ps' && args.join(' ').includes('Shared Usage')
+        ? '7950712832\r\n'
+        : undefined;
+    expect(
+      sharedGpuMemoryInUse(
+        sources('win32', { run, tools: { powershell: 'ps' } }),
+      ),
+    ).toBe(7950712832);
+  });
+
+  it('is unknown when the counters cannot be read (localized Windows)', () => {
+    expect(
+      sharedGpuMemoryInUse(sources('win32', { tools: { powershell: 'ps' } })),
+    ).toBeUndefined();
+  });
+
+  it('reads the GTT in use of an integrated amdgpu on Linux', () => {
+    const card = '/sys/class/drm/card1/device';
+    expect(
+      sharedGpuMemoryInUse(
+        sources('linux', {
+          files: {
+            [`${card}/mem_info_vram_total`]: String(512 * 1024 ** 2),
+            [`${card}/mem_info_gtt_used`]: String(3 * GIB),
+          },
+        }),
+      ),
+    ).toBe(3 * GIB);
+  });
+
+  it('ignores discrete cards, and macOS', () => {
+    const card = '/sys/class/drm/card0/device';
+    expect(
+      sharedGpuMemoryInUse(
+        sources('linux', {
+          files: {
+            [`${card}/mem_info_vram_total`]: String(16 * GIB),
+            [`${card}/mem_info_gtt_used`]: String(GIB),
+          },
+        }),
+      ),
+    ).toBeUndefined();
+    expect(sharedGpuMemoryInUse(sources('darwin'))).toBeUndefined();
   });
 });

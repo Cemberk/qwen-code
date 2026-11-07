@@ -25,6 +25,27 @@ export interface GpuBudget {
    * whole model also has to fit in RAM.
    */
   unified: boolean;
+  /**
+   * Shared GPU memory other programs held at planning time, already taken
+   * off `limit` (Windows and Linux integrated GPUs).
+   */
+  othersBytes?: number;
+}
+
+/**
+ * The budget left to the engine on a GPU that shares system memory, once
+ * other programs' use of it (`othersBytes`) is taken off.
+ */
+export function withOthersUse(
+  gpu: GpuBudget | undefined,
+  othersBytes: number | undefined,
+): GpuBudget | undefined {
+  if (!gpu?.unified || othersBytes === undefined) return gpu;
+  return {
+    ...gpu,
+    limit: Math.max(0, gpu.limit - othersBytes),
+    othersBytes,
+  };
 }
 
 /**

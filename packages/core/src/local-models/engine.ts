@@ -23,6 +23,7 @@ import {
   describeHardware,
   getHardwareProfile,
   isIntegratedGpuName,
+  sharedGpuMemoryInUse,
 } from './hardware.js';
 import {
   confinedCommand,
@@ -37,6 +38,7 @@ import {
   localModelBytes,
   localModelExpertBytes,
   systemMemoryBytes,
+  withOthersUse,
 } from './gpu-memory.js';
 
 const READY_TIMEOUT_MS = 5 * 60_000;
@@ -116,6 +118,11 @@ export interface EngineLaunch {
   promptCacheDir?: string;
   /** Layers whose experts stay in system memory (`--n-cpu-moe`). */
   cpuMoeLayers?: number;
+  /**
+   * The GPU shares system memory: experts moved to the CPU stay mapped from
+   * the model file.
+   */
+  sharedMemory?: boolean;
   /** Listen on this Unix socket instead of loopback TCP. */
   socketPath?: string;
   /** Run the engine without network access (Linux). */
@@ -345,8 +352,16 @@ export function engineCommand(
     // A mixture-of-experts model too big for the GPU runs the experts of
     // its first layers on the CPU. Read into memory rather than mapped from
     // the file, they read prompts faster and more steadily.
+    // On a GPU that shares system memory, a read-in copy would sit in
+    // GPU-visible memory and count against the GPU's own budget; mapped from
+    // the file, the system can drop and re-read pages under pressure.
     ...(launch.cpuMoeLayers
-      ? ['--n-cpu-moe', String(launch.cpuMoeLayers), '--load-mode', 'none']
+      ? [
+          '--n-cpu-moe',
+          String(launch.cpuMoeLayers),
+          '--load-mode',
+          launch.sharedMemory ? 'mmap' : 'none',
+        ]
       : []),
     // Slot 0 holds the conversation, so its state can be saved and restored
     // whole; side queries run beside it in slot 1. Both share one cache, so
@@ -539,6 +554,8 @@ export interface LocalModelPlan {
    * build without a GPU backend, undefined when it could not be asked.
    */
   devices?: EngineDevice[];
+  /** The GPU memory the model was fitted to. */
+  gpu?: GpuBudget;
   plan: EnginePlan;
 }
 
@@ -593,7 +610,12 @@ export function planLocalModel(
   const devices = binary
     ? engineDevices(binary, engineEnv('', process.env, process.platform))
     : undefined;
-  const gpu = engineGpuBudget(devices, machine);
+  const budget = engineGpuBudget(devices, machine);
+  // On a GPU that shares system memory, what other programs hold of it is
+  // not free, whatever the GPU driver tells the engine.
+  const gpu = budget?.unified
+    ? withOthersUse(budget, sharedGpuMemoryInUse())
+    : budget;
   const fit = fitModel(
     model,
     bytes,
@@ -628,6 +650,7 @@ export function planLocalModel(
     fit,
     ...(capabilities ? { capabilities } : {}),
     ...(devices ? { devices } : {}),
+    ...(gpu ? { gpu } : {}),
     plan,
   };
 }
@@ -641,7 +664,10 @@ export async function startLocalModelEngine(
 ): Promise<LocalModelEngine> {
   // Past the GPU limit a model runs at a fraction of its speed, or fails
   // mid-request.
-  const { modelPath, draftPath, fit, plan } = planLocalModel(model, options);
+  const { modelPath, draftPath, fit, gpu, plan } = planLocalModel(
+    model,
+    options,
+  );
   if ('problem' in fit) {
     throw new Error(fit.problem);
   }
@@ -670,8 +696,13 @@ export async function startLocalModelEngine(
       draftPath,
       promptCacheDir,
       // Elsewhere llama.cpp's --fit (on by default) measures each device's
-      // free memory and places what does not fit itself.
-      cpuMoeLayers: process.platform === 'darwin' ? fit.cpuMoeLayers : 0,
+      // free memory and places what does not fit itself, except where the
+      // driver reports shared memory other programs hold as free.
+      cpuMoeLayers:
+        process.platform === 'darwin' || gpu?.othersBytes !== undefined
+          ? fit.cpuMoeLayers
+          : 0,
+      ...(gpu?.othersBytes !== undefined ? { sharedMemory: true } : {}),
       ...(socketPath ? { socketPath, confinement } : {}),
       planArgs: plan.args,
       ...(moeProfile ? { moeProfile } : {}),

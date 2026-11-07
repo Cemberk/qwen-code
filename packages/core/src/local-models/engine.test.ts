@@ -30,6 +30,7 @@ const gpu = vi.hoisted(() => ({
   limit: undefined as number | undefined,
   bytes: undefined as number | undefined,
   experts: [] as number[],
+  others: undefined as number | undefined,
 }));
 // The stand-ins below are Node scripts with a shebang line, which Windows
 // cannot run: there, start them with Node. Other platforms run them as is.
@@ -50,6 +51,11 @@ vi.mock('node:child_process', async (importActual) => {
         ? actual.spawn(process.execPath, [command, ...args], options)
         : actual.spawn(command, args, options)) as typeof actual.spawn,
   };
+});
+
+vi.mock('./hardware.js', async (importActual) => {
+  const actual = await importActual<typeof import('./hardware.js')>();
+  return { ...actual, sharedGpuMemoryInUse: () => gpu.others };
 });
 
 vi.mock('./gpu-memory.js', async (importActual) => {
@@ -499,6 +505,27 @@ describe('startLocalModelEngine', () => {
         }
       } finally {
         await engine.stop();
+      }
+    });
+
+    it('leaves room for what other programs hold of shared GPU memory', async () => {
+      download(model.file);
+      gpu.experts = Array<number>(40).fill(0.4 * GIB);
+      gpu.others = 2 * GIB;
+      try {
+        const engine = await startLocalModelEngine(model, 'k');
+        try {
+          const args = (await (
+            await fetch(engine.baseUrl.replace('/v1', '/args'))
+          ).json()) as string[];
+          // 16 GiB of a 16 GiB budget less 2 GiB, 1.5 GiB headroom: 9 of
+          // the 0.4 GiB expert layers move, and stay mapped from the file.
+          expect(args.join(' ')).toContain('--n-cpu-moe 9 --load-mode mmap');
+        } finally {
+          await engine.stop();
+        }
+      } finally {
+        gpu.others = undefined;
       }
     });
 

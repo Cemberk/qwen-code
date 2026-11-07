@@ -420,6 +420,58 @@ export function probeHardware(
   return { ...base, gpus: [] };
 }
 
+/**
+ * Bytes of shared GPU memory that other programs hold now, on a GPU that
+ * shares system memory; `undefined` where it cannot be measured.
+ *
+ * Windows gives all programs one shared GPU budget (half the RAM), but
+ * Vulkan reports it to each program as if it were free: on a Radeon 780M
+ * with the desktop holding 5.6 GB of it, the engine was told 15.6 GB free
+ * and failed to allocate past about 13 GB. The per-program counters can
+ * count a surface for more than one program, so the sum errs high, which
+ * leaves more of the model on the CPU but always lets it start. The counter
+ * names are English: on a localized Windows the call fails and gives
+ * `undefined`. On Linux, amdgpu reports the GTT in use for the whole system.
+ */
+export function sharedGpuMemoryInUse(
+  sources: ProbeSources = defaultSources(),
+): number | undefined {
+  if (sources.platform === 'win32') {
+    const powershell = sources.findTool('powershell');
+    const output =
+      powershell &&
+      sources.run(powershell, [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        "$s = (Get-Counter '\\GPU Process Memory(*)\\Shared Usage' -ErrorAction Stop).CounterSamples; [int64](($s | Measure-Object CookedValue -Sum).Sum)",
+      ]);
+    const bytes = Number(output?.trim());
+    return output && Number.isFinite(bytes) && bytes >= 0 ? bytes : undefined;
+  }
+  if (sources.platform === 'linux') {
+    const drm = '/sys/class/drm';
+    let used: number | undefined;
+    for (const card of sources.files
+      .list(drm)
+      .filter((c) => /^card\d+$/.test(c))) {
+      const device = path.posix.join(drm, card, 'device');
+      const vram = Number(
+        sources.files.read(path.posix.join(device, 'mem_info_vram_total')),
+      );
+      const gtt = Number(
+        sources.files.read(path.posix.join(device, 'mem_info_gtt_used')),
+      );
+      // Integrated: the carve-out is small (512 MiB to a few GiB).
+      if (Number.isFinite(gtt) && vram > 0 && vram <= 4 * 1024 ** 3) {
+        used = Math.max(used ?? 0, gtt);
+      }
+    }
+    return used;
+  }
+  return undefined;
+}
+
 let cached: HardwareProfile | undefined;
 
 /** This machine's profile, probed once per process. */

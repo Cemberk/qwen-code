@@ -205,6 +205,16 @@ describe('planEngine and measured speculation', () => {
     hasDraft: false,
   };
 
+  it('says how much shared GPU memory other programs hold', () => {
+    const plan = planEngine({
+      ...base,
+      gpu: { limit: 9 * GIB, unified: true, othersBytes: 8 * GIB },
+    });
+    expect(plan.notes.join('\n')).toMatch(
+      /Other programs hold 8\.6 GB of the GPU's shared memory now, leaving 9\.7 GB/,
+    );
+  });
+
   it('says to turn speculation off where it was measured to cost', () => {
     const plan = planEngine({
       ...base,

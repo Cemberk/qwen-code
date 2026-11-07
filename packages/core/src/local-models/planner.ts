@@ -66,6 +66,14 @@ export function planEngine(input: PlanInput): EnginePlan {
     );
   } else if ('problem' in fit) {
     notes.push(fit.problem);
+  }
+  if (gpu?.othersBytes !== undefined && gpu.othersBytes > GIB) {
+    notes.push(
+      `Other programs hold ${(gpu.othersBytes / 1e9).toFixed(1)} GB of the GPU's shared memory now, leaving ${(gpu.limit / 1e9).toFixed(1)} GB for the model; close some to run more of it on the GPU.`,
+    );
+  }
+  if (gpu === undefined || 'problem' in fit) {
+    // said above
   } else if (fit.partial) {
     notes.push(
       gpu.unified
