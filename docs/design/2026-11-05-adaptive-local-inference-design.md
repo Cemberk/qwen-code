@@ -365,6 +365,10 @@ prediction of each expert's next use could still win.
 
 ## Still open
 
+The compute pool (several agents per machine, models across machines,
+models larger than RAM) has its own design:
+[compute pool](./2026-11-07-compute-pool-design.md).
+
 - Overlap in hybrid mode, after JITEngine: keep a device copy of the slot
   map, refreshed from the host map after each lookup, so the device reads
   its cached experts without waiting; read the selected experts back
