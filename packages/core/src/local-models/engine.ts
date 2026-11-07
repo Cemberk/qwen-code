@@ -16,7 +16,11 @@ import { resolveLocalModelPath } from './hf-cache.js';
 import { engineStateKey } from './prompt-cache.js';
 import { findExecutable, isExecutableFile } from './executables.js';
 import { inspectModel, type ModelCapabilities } from './model-inspector.js';
-import { engineDevices, type EngineDevice } from './engine-devices.js';
+import {
+  engineDevices,
+  engineSupports,
+  type EngineDevice,
+} from './engine-devices.js';
 import { planEngine, type EnginePlan } from './planner.js';
 import { readBenchLog, speculationAdviceFromLog } from './bench.js';
 import {
@@ -101,11 +105,16 @@ export interface LocalModelEngine {
    */
   readonly stateKey: string;
   /**
-   * Save the processed prompt to, or restore it from, `filename` in the
-   * prompt cache folder. Only available when the engine was started with
-   * one; resolves to whether it worked.
+   * Save the processed prompt of slot `slot` (CONVERSATION_SLOT when
+   * unset) to, or restore it from, `filename` in the prompt cache folder.
+   * Only available when the engine was started with one; resolves to
+   * whether it worked.
    */
-  slot(action: 'save' | 'restore', filename: string): Promise<boolean>;
+  slot(
+    action: 'save' | 'restore',
+    filename: string,
+    slot?: number,
+  ): Promise<boolean>;
   /** Stop the engine: SIGTERM, then SIGKILL after a grace period. */
   stop(): Promise<void>;
 }
@@ -131,6 +140,12 @@ export interface EngineLaunch {
   planArgs?: string[];
   /** The project's MoE cache profile (--moe-cache-profile). */
   moeProfile?: string;
+  /**
+   * The engine exits when its stdin, a pipe from this process, closes
+   * (`--exit-with-parent`, the fork's): it cannot outlive qwen however qwen
+   * ends.
+   */
+  exitWithParent?: boolean;
 }
 
 /** Where the engine listens: a loopback port, or a Unix socket. */
@@ -161,6 +176,12 @@ export interface LocalModelEngineOptions {
   enginePath?: string;
   /** `localModelEngineArgs`: the user's own llama-server options. */
   extraArgs?: string[];
+  /**
+   * Conversations the engine serves side by side (`--parallel`), with a
+   * prompt cache folder; 2 (one conversation and its side queries) when
+   * unset. They share one context cache.
+   */
+  slots?: number;
 }
 
 export const DEFAULT_ENGINE_OPTIONS: LocalModelEngineOptions = {
@@ -366,11 +387,12 @@ export function engineCommand(
     // Slot 0 holds the conversation, so its state can be saved and restored
     // whole; side queries run beside it in slot 1. Both share one cache, so
     // either can use the whole context.
+    ...(launch.exitWithParent ? ['--exit-with-parent'] : []),
+    ...(launch.promptCacheDir || options.slots
+      ? ['--parallel', String(options.slots ?? 2), '--kv-unified']
+      : []),
     ...(launch.promptCacheDir
       ? [
-          '--parallel',
-          '2',
-          '--kv-unified',
           '--slot-save-path',
           launch.promptCacheDir.endsWith(path.sep)
             ? launch.promptCacheDir
@@ -476,13 +498,14 @@ function slotAction(
   apiKey: string,
   action: 'save' | 'restore',
   filename: string,
+  slot: number,
 ): Promise<boolean> {
   const body = JSON.stringify({ filename });
   return new Promise((resolve) => {
     const request = http.request(
       {
         ...connectOptions(address),
-        path: `/slots/${CONVERSATION_SLOT}?action=${action}`,
+        path: `/slots/${slot}?action=${action}`,
         method: 'POST',
         timeout: SLOT_TIMEOUT_MS,
         headers: {
@@ -683,6 +706,12 @@ export async function startLocalModelEngine(
   };
   // A socket ignores the port, but llama-server wants one.
   const port = socketPath ? SOCKET_PORT : await freeLoopbackPort();
+  const binary = engineBinary(model, options, process.env, process.platform);
+  const exitWithParent = engineSupports(
+    binary,
+    '--exit-with-parent',
+    engineEnv('', process.env, process.platform),
+  );
   const address: EngineAddress = socketPath ? { socketPath } : { port };
   const command = engineCommand(
     model,
@@ -706,18 +735,25 @@ export async function startLocalModelEngine(
       ...(socketPath ? { socketPath, confinement } : {}),
       planArgs: plan.args,
       ...(moeProfile ? { moeProfile } : {}),
+      ...(exitWithParent ? { exitWithParent } : {}),
     },
   );
   const child = spawn(command.command, command.args, {
-    stdio: ['ignore', 'pipe', 'pipe'],
+    // With --exit-with-parent, stdin is a pipe this process holds open and
+    // never writes to: the OS closes it when this process ends, by any means.
+    stdio: [exitWithParent ? 'pipe' : 'ignore', 'pipe', 'pipe'],
     env: command.env,
+    windowsHide: true,
   });
   let output = '';
   const collect = (chunk: Buffer) => {
     output = (output + chunk.toString('utf8')).slice(-MAX_OUTPUT_CHARS);
   };
-  child.stdout.on('data', collect);
-  child.stderr.on('data', collect);
+  child.stdout?.on('data', collect);
+  child.stderr?.on('data', collect);
+  // The engine may exit first; a write never happens, but an EPIPE on close
+  // must not become an uncaught error.
+  child.stdin?.on('error', () => {});
 
   let exitDetail: string | undefined;
   const exited = new Promise<void>((resolve) => {
@@ -790,9 +826,9 @@ export async function startLocalModelEngine(
     get alive() {
       return exitDetail === undefined;
     },
-    slot: (action, filename) =>
+    slot: (action, filename, slot = CONVERSATION_SLOT) =>
       promptCacheDir && exitDetail === undefined
-        ? slotAction(address, apiKey, action, filename)
+        ? slotAction(address, apiKey, action, filename, slot)
         : Promise.resolve(false),
     async stop() {
       if (exitDetail !== undefined) return;

@@ -216,6 +216,7 @@ function engineRequest(
         method,
         timeout: timeoutMs,
         headers: {
+          ...lease.headers,
           authorization: `Bearer ${lease.apiKey}`,
           ...(body === undefined
             ? {}

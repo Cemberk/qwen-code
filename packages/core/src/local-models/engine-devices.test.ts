@@ -12,6 +12,7 @@ import {
   clearEngineDevicesForTesting,
   describeEngineDevices,
   engineDevices,
+  engineSupports,
   parseDeviceList,
 } from './engine-devices.js';
 import { engineGpuBudget } from './engine.js';
@@ -156,6 +157,39 @@ describe('engineGpuBudget without the hardware probe', () => {
         [device('Vulkan0', 'AMD Radeon RX 7900 XTX', 'vulkan')],
         undefined,
       )?.unified,
+    ).toBe(false);
+  });
+});
+
+describe('engineSupports', () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(os.tmpdir(), 'engine-help-'));
+    clearEngineDevicesForTesting();
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it('finds an option in --help, once per build', () => {
+    const binary = path.join(dir, 'llama-server');
+    writeFileSync(binary, 'x');
+    const run = vi.fn(
+      () =>
+        '--exit-with-parent                     exit when stdin reaches end of file\n--slots, --no-slots   expose slots',
+    );
+    expect(engineSupports(binary, '--exit-with-parent', {}, run)).toBe(true);
+    expect(engineSupports(binary, '--no-slots', {}, run)).toBe(true);
+    expect(engineSupports(binary, '--exit', {}, run)).toBe(false);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it('is false for a build that does not answer', () => {
+    const binary = path.join(dir, 'llama-server');
+    writeFileSync(binary, 'x');
+    expect(
+      engineSupports(binary, '--exit-with-parent', {}, () => undefined),
+    ).toBe(false);
+    expect(
+      engineSupports(path.join(dir, 'missing'), '--x', {}, () => '--x'),
     ).toBe(false);
   });
 });

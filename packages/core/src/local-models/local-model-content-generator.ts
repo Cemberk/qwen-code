@@ -12,10 +12,7 @@ import type {
   ContentGenerator,
   ContentGeneratorConfig,
 } from '../core/contentGenerator.js';
-import type {
-  LocalModelLease,
-  LocalModelServer,
-} from './local-model-server.js';
+import type { LocalModelHost, LocalModelLease } from './local-model-server.js';
 import { CONVERSATION_SLOT, SIDE_QUERY_SLOT } from './engine.js';
 
 /** Main-session prompt ids are `<session>########<n>`; side queries differ. */
@@ -34,7 +31,7 @@ export class LocalModelContentGenerator implements ContentGenerator {
 
   constructor(
     private readonly generatorConfig: ContentGeneratorConfig,
-    private readonly server: LocalModelServer,
+    private readonly server: LocalModelHost,
     private readonly create: (
       config: ContentGeneratorConfig,
     ) => ContentGenerator,
@@ -45,14 +42,15 @@ export class LocalModelContentGenerator implements ContentGenerator {
     lease: LocalModelLease,
     userPromptId: string,
   ): ContentGenerator {
-    const { baseUrl, socketPath, apiKey } = lease;
+    const { baseUrl, socketPath, apiKey, headers } = lease;
     const slot = lease.pinSlots
       ? isMainTurn(userPromptId)
         ? CONVERSATION_SLOT
         : SIDE_QUERY_SLOT
       : undefined;
     const engineKey = `${socketPath ?? baseUrl}\0${apiKey}`;
-    const key = `${engineKey}\0${slot ?? ''}`;
+    // A pool lease's headers name the lease: one generator per lease.
+    const key = `${engineKey}\0${slot ?? ''}\0${headers ? JSON.stringify(headers) : ''}`;
     let generator = this.generators.get(key);
     if (!generator) {
       for (const existing of this.generators.keys()) {
@@ -64,6 +62,14 @@ export class LocalModelContentGenerator implements ContentGenerator {
         baseUrl,
         ...(socketPath ? { socketPath } : {}),
         apiKey,
+        ...(headers
+          ? {
+              customHeaders: {
+                ...this.generatorConfig.customHeaders,
+                ...headers,
+              },
+            }
+          : {}),
         ...(slot === undefined
           ? {}
           : {
@@ -75,10 +81,11 @@ export class LocalModelContentGenerator implements ContentGenerator {
     return generator;
   }
 
-  private acquire(request: GenerateContentParameters) {
+  private acquire(request: GenerateContentParameters, userPromptId: string) {
     return this.server.acquire(
       request.model || this.generatorConfig.model,
       request.config?.abortSignal,
+      isMainTurn(userPromptId) ? 'main' : 'side',
     );
   }
 
@@ -86,7 +93,7 @@ export class LocalModelContentGenerator implements ContentGenerator {
     request: GenerateContentParameters,
     userPromptId: string,
   ): Promise<GenerateContentResponse> {
-    const lease = await this.acquire(request);
+    const lease = await this.acquire(request, userPromptId);
     try {
       return await this.generatorFor(lease, userPromptId).generateContent(
         request,
@@ -101,7 +108,7 @@ export class LocalModelContentGenerator implements ContentGenerator {
     request: GenerateContentParameters,
     userPromptId: string,
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
-    const lease = await this.acquire(request);
+    const lease = await this.acquire(request, userPromptId);
     let stream: AsyncGenerator<GenerateContentResponse>;
     try {
       stream = await this.generatorFor(

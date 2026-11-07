@@ -42,6 +42,33 @@ export interface LocalModelLease {
    * engine's prompt is saved before the next request runs.
    */
   release(options?: { saveState?: boolean }): void;
+  /** Headers every request under this lease carries (the pool's lease id). */
+  readonly headers?: Readonly<Record<string, string>>;
+}
+
+/** A conversation turn, or a side query (memory, summary, subagent). */
+export type LeaseKind = 'main' | 'side';
+
+/**
+ * Runs local models for this process: in the process itself
+ * (LocalModelServer), or through the machine's shared pool daemon
+ * (PoolClient).
+ */
+export interface LocalModelHost {
+  setModels(models: readonly LocalModelConfig[]): void;
+  setSpeculation(enabled: boolean): void;
+  isSpeculationEnabled(): boolean;
+  setEnginePath(enginePath: string | undefined): void;
+  getEnginePath(): string | undefined;
+  setEngineArgs(args: readonly string[] | undefined): void;
+  getEngineOptions(): LocalModelEngineOptions;
+  setPromptCache(cache: PromptCacheConfig | undefined): void;
+  acquire(
+    modelId: string,
+    signal?: AbortSignal,
+    kind?: LeaseKind,
+  ): Promise<LocalModelLease>;
+  stop(): Promise<void>;
 }
 
 /** Where saved prompt states go, and which project and session is running. */
@@ -76,7 +103,7 @@ export type StartEngine = (
  * prompt (or the project's latest one), and the prompt is saved again at the
  * end of each conversation turn, before any other request runs.
  */
-export class LocalModelServer {
+export class LocalModelServer implements LocalModelHost {
   /** Engines started by this server accept only this key. */
   readonly apiKey = randomBytes(24).toString('hex');
   private models: readonly LocalModelConfig[] = [];
@@ -359,10 +386,18 @@ export class LocalModelServer {
 /** A shared prefix older than this is saved again from a fresh session. */
 const SHARED_PREFIX_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
-let server: LocalModelServer | undefined;
+let server: LocalModelHost | undefined;
 
-/** The process's local model server. */
-export function getLocalModelServer(): LocalModelServer {
+/**
+ * The process's local model host: the in-process server unless
+ * `setLocalModelHost` installed another (the pool client).
+ */
+export function getLocalModelServer(): LocalModelHost {
   server ??= new LocalModelServer();
   return server;
+}
+
+/** Install the process's local model host, before any request uses it. */
+export function setLocalModelHost(host: LocalModelHost | undefined): void {
+  server = host;
 }

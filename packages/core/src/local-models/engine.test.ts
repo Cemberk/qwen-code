@@ -316,6 +316,28 @@ describe('engineCommand', () => {
     ]);
   });
 
+  it('serves as many conversations as asked, and exits with its parent when told to', () => {
+    const bin = installFakeEngine();
+    const command = engineCommand(
+      model,
+      '/m.gguf',
+      1,
+      'k',
+      { ...DEFAULT_ENGINE_OPTIONS, slots: 6 },
+      env(bin),
+      'linux',
+      { promptCacheDir: '/cache/prompts', exitWithParent: true },
+    );
+    expect(command.args.slice(-6)).toEqual([
+      '--exit-with-parent',
+      '--parallel',
+      '6',
+      '--kv-unified',
+      '--slot-save-path',
+      `/cache/prompts${path.sep}`,
+    ]);
+  });
+
   it('keeps the experts of the first layers in memory when asked to', () => {
     const bin = installFakeEngine();
     const args = (cpuMoeLayers?: number) =>

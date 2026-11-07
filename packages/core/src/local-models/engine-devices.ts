@@ -113,9 +113,37 @@ export function engineDevices(
   return cache.get(key);
 }
 
-/** For tests: forget the devices of every binary. */
+const helpCache = new Map<string, string | undefined>();
+
+/**
+ * Whether the llama-server at `binary` accepts `flag`, from its `--help`,
+ * asked once per build. False when the binary does not answer.
+ */
+export function engineSupports(
+  binary: string,
+  flag: string,
+  env: NodeJS.ProcessEnv,
+  run: EngineRunner = runEngine,
+): boolean {
+  let key = binary;
+  try {
+    const stat = statSync(binary);
+    key = `${binary}\0${stat.size}\0${stat.mtimeMs}`;
+  } catch {
+    return false;
+  }
+  if (!helpCache.has(key)) helpCache.set(key, run(binary, ['--help'], env));
+  const help = helpCache.get(key);
+  return (
+    help !== undefined &&
+    new RegExp(`(^|[\\s,])${flag}(?=[\\s,]|$)`, 'm').test(help)
+  );
+}
+
+/** For tests: forget the devices and options of every binary. */
 export function clearEngineDevicesForTesting(): void {
   cache.clear();
+  helpCache.clear();
 }
 
 const gb = (bytes: number) => `${(bytes / 1e9).toFixed(1)} GB`;
