@@ -120,7 +120,7 @@ each `qwen` process into one long-lived process. TypeScript, in
 language or dependency.
 
 - **Lifetime.** The first `qwen` that needs a local model connects to
-  `\.\pipe\qwen-pool-<user>` (Windows) or `$XDG_RUNTIME_DIR/qwen-pool.sock`
+  `\\.\pipe\qwen-pool-<user>` (Windows) or `$XDG_RUNTIME_DIR/qwen-pool.sock`
   / `~/Library/Caches/qwen/pool.sock`; if nothing answers it starts
   `qwen pool serve` detached and retries. A lock file prevents two daemons.
   The daemon lives exactly as long as some `qwen` process on the machine
