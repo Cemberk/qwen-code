@@ -362,6 +362,9 @@ qwen pool share on      # if it should serve its models too
   has the model downloaded and room for it. Members run others' requests
   with their own engine and settings. `qwen pool status` shows the members
   and where each model runs.
+- `/models download` copies a model from a sharing member that has it
+  before downloading it from Hugging Face: over the LAN, resumed if cut off,
+  each file checked against the member's SHA-256.
 - A member sees everything it computes for the others, prompts included:
   the pool is for your own devices.
 - Members of different Qwen Code versions are listed, not used: update them.

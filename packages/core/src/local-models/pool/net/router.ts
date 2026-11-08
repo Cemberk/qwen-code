@@ -116,6 +116,13 @@ export class Router {
     }
   }
 
+  /** Links to the members of this version, for copying model files. */
+  compatiblePeers(): Array<{ name: string; link: PeerLink }> {
+    return [...this.peers.values()]
+      .filter((peer) => peer.wire === POOL_WIRE_VERSION)
+      .map((peer) => ({ name: peer.name, link: peer.link }));
+  }
+
   /** The members this one knows, for `qwen pool peers`. */
   peerList(): Array<{
     nodeId: string;

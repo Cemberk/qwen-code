@@ -27,6 +27,7 @@ import {
   engineDevices,
 } from '@qwen-code/qwen-code-core/local-models/engine-devices.js';
 import { describeCapabilities } from '@qwen-code/qwen-code-core/local-models/model-inspector.js';
+import { fetchModelFromPool } from '@qwen-code/qwen-code-core/local-models/pool/client.js';
 import {
   getConfinement,
   type Confinement,
@@ -173,6 +174,40 @@ const downloadCommand: SlashCommand = {
       return error(
         'Usage: /models download <id>, or /models download <repo> <file.gguf>',
       );
+    }
+
+    // A member of this machine's pool may have it: copy it over the LAN
+    // instead of downloading it again (checked file by file).
+    let lastShown = 0;
+    let fromPool: 'done' | 'none' = 'none';
+    try {
+      fromPool = await fetchModelFromPool(model, (done, total, from) => {
+        if (done === total || done - lastShown >= total / 10) {
+          lastShown = done;
+          context.ui.addItem(
+            {
+              type: MessageType.INFO,
+              text: `Copying ${model.id} from ${from}: ${Math.floor((100 * done) / total)}%`,
+            },
+            Date.now(),
+          );
+        }
+      });
+    } catch (err) {
+      context.ui.addItem(
+        {
+          type: MessageType.WARNING,
+          text: `Copying from the pool failed (${err instanceof Error ? err.message : String(err)}); downloading instead.`,
+        },
+        Date.now(),
+      );
+    }
+    if (fromPool === 'done') {
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `Copied ${model.name ?? model.id} from a member of your pool.`,
+      };
     }
 
     // Refuse a file too big for this machine's memory before downloading

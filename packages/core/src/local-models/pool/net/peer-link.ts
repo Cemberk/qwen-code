@@ -207,6 +207,11 @@ export class PeerLink {
     upstream.end(body);
   }
 
+  /** The link's TLS agent, for long transfers such as model files. */
+  agentForTransfers(): https.Agent {
+    return this.agent;
+  }
+
   close(): void {
     this.agent.destroy();
   }

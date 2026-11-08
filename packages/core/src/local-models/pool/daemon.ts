@@ -39,6 +39,13 @@ import {
 import { peerOf, peerServerOptions } from './net/peer-link.js';
 import { Router, type CanRun } from './net/router.js';
 import {
+  fetchModelFromMember,
+  localModelInfo,
+  serveModelFile,
+} from './net/model-transfer.js';
+import { huggingFaceHubCacheDir } from '../hf-cache.js';
+import path from 'node:path';
+import {
   ensurePoolDir,
   poolAddress,
   poolDir,
@@ -75,6 +82,8 @@ export interface PoolDaemonOptions {
   peerHost?: string;
   /** Find members by multicast on the LAN (default); tests turn it off. */
   discovery?: boolean;
+  /** The Hugging Face cache models are read from and copied into (tests). */
+  hfCacheDir?: string;
   /** Whether this machine can run a model (the planner's verdict by default). */
   canRun?: (host: HostPool, request: PoolRequest) => CanRun;
   /**
@@ -242,6 +251,7 @@ export async function startPoolDaemon(
     : undefined;
   const router = new Router(host, membership, () => ownOptions, options.canRun);
   const sharing = membership?.share === true;
+  const hfCacheDir = options.hfCacheDir ?? huggingFaceHubCacheDir();
   const idleExitMs = options.idleExitMs ?? POOL_IDLE_EXIT_MS;
   /** Attached clients: id -> their connections (a client may reconnect). */
   const clients = new Map<string, Set<http.ServerResponse>>();
@@ -482,6 +492,49 @@ export async function startPoolDaemon(
             router.release(lease, saveState === true);
             return sendJson(res, 200, {});
           }
+          if (
+            fromPeers &&
+            url.pathname === '/pool/model-info' &&
+            req.method === 'POST'
+          ) {
+            const { model } = JSON.parse(
+              (await readBody(req)).toString('utf8'),
+            ) as { model: LocalModelConfig };
+            const info = await localModelInfo(
+              model,
+              path.join(dir, 'model-hashes.json'),
+              hfCacheDir,
+            );
+            return info
+              ? sendJson(res, 200, info)
+              : sendJson(res, 404, { error: 'not downloaded here' });
+          }
+          if (
+            fromPeers &&
+            url.pathname === '/pool/model-file' &&
+            req.method === 'GET'
+          ) {
+            const model = JSON.parse(
+              url.searchParams.get('model') ?? '{}',
+            ) as LocalModelConfig;
+            return serveModelFile(
+              model,
+              url.searchParams.get('name') ?? '',
+              req,
+              res,
+              hfCacheDir,
+            );
+          }
+          if (
+            !fromPeers &&
+            url.pathname === '/pool/fetch' &&
+            req.method === 'POST'
+          ) {
+            const { model } = JSON.parse(
+              (await readBody(req)).toString('utf8'),
+            ) as { model: LocalModelConfig };
+            return await fetchFromMembers(model, res);
+          }
           if (url.pathname === '/pool/can-run' && req.method === 'POST') {
             const { model } = JSON.parse(
               (await readBody(req)).toString('utf8'),
@@ -531,6 +584,47 @@ export async function startPoolDaemon(
         }
       })();
     };
+
+  /**
+   * Copy a model from the first member that has it, telling the client how
+   * far it got, one line at a time: `progress <done> <total>`, then `done`,
+   * `none` (no member has it) or `error <message>`.
+   */
+  const fetchFromMembers = async (
+    model: LocalModelConfig,
+    res: http.ServerResponse,
+  ) => {
+    res.writeHead(200, { 'content-type': 'text/plain' });
+    for (const { name, link } of router.compatiblePeers()) {
+      const has = await link
+        .call('POST', '/pool/model-info', { model }, { timeoutMs: 600_000 })
+        .catch(() => undefined);
+      if (has?.status !== 200) continue;
+      res.write(`from ${name}\n`);
+      let last = 0;
+      try {
+        await fetchModelFromMember(
+          link,
+          model,
+          (done, total) => {
+            // A line per 1% at most.
+            if (done - last >= total / 100 || done === total) {
+              last = done;
+              res.write(`progress ${done} ${total}\n`);
+            }
+          },
+          hfCacheDir,
+        );
+        res.end('done\n');
+      } catch (error) {
+        res.end(
+          `error ${error instanceof Error ? error.message : String(error)}\n`,
+        );
+      }
+      return;
+    }
+    res.end('none\n');
+  };
 
   const server = http.createServer(handle(false));
 

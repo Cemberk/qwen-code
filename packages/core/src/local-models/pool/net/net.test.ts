@@ -4,7 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { mkdtempSync, rmSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
@@ -14,6 +20,7 @@ import type { LocalModelConfig } from '../../local-models.js';
 import { LocalModelServer } from '../../local-model-server.js';
 import { PoolClient } from '../client.js';
 import { startPoolDaemon, type PoolDaemon } from '../daemon.js';
+import { poolKey } from '../paths.js';
 import {
   createPool,
   inviteToken,
@@ -182,6 +189,7 @@ describe('pool members on the LAN', () => {
       startEngine: engines.b.start,
       contextsFor: () => 4,
       canRun: () => ({ running: false, downloaded: true, fits: true }),
+      hfCacheDir: path.join(dir, 'hf-b'),
     }))!;
     daemons.push(b);
     const a = (await startPoolDaemon({
@@ -191,6 +199,7 @@ describe('pool members on the LAN', () => {
       startEngine: engines.a.start,
       contextsFor: () => 4,
       canRun: () => ({ running: false, downloaded: false, fits: false }),
+      hfCacheDir: path.join(dir, 'hf-a'),
     }))!;
     daemons.push(a);
     await a.addPeer(b.peerAddress!);
@@ -217,6 +226,56 @@ describe('pool members on the LAN', () => {
     expect(typeof engines.b.seen[0]['id_slot']).toBe('number');
     lease.release();
     await client.stop();
+  });
+
+  it("copies a model from a member's cache into this one's, checked", async () => {
+    // B has the model, as hf download leaves it.
+    const commit = 'a'.repeat(40);
+    const repoB = path.join(dir, 'hf-b', 'models--o--m');
+    mkdirSync(path.join(repoB, 'refs'), { recursive: true });
+    mkdirSync(path.join(repoB, 'snapshots', commit), { recursive: true });
+    writeFileSync(path.join(repoB, 'refs', 'main'), commit);
+    const content = Buffer.alloc(3 * 1024 * 1024, 7);
+    writeFileSync(path.join(repoB, 'snapshots', commit, 'm.gguf'), content);
+    const { a } = await twoMembers();
+
+    const fetch = () =>
+      new Promise<string>((resolve, reject) => {
+        const body = JSON.stringify({ model });
+        const request = http.request(
+          {
+            socketPath: a.address,
+            path: '/pool/fetch',
+            method: 'POST',
+            headers: {
+              authorization: `Bearer ${poolKey(path.join(dir, 'a'))}`,
+              'content-type': 'application/json',
+              'content-length': Buffer.byteLength(body),
+            },
+          },
+          (response) => {
+            let text = '';
+            response.on('data', (chunk) => (text += chunk));
+            response.on('end', () => resolve(text));
+          },
+        );
+        request.on('error', reject);
+        request.end(body);
+      });
+
+    const lines = (await fetch()).trim().split('\n');
+    expect(lines[0]).toMatch(/^from /);
+    expect(lines.at(-1)).toBe('done');
+    expect(lines).toContain(`progress ${content.length} ${content.length}`);
+    const repoA = path.join(dir, 'hf-a', 'models--o--m');
+    expect(readFileSync(path.join(repoA, 'refs', 'main'), 'utf8')).toBe(commit);
+    expect(
+      readFileSync(path.join(repoA, 'snapshots', commit, 'm.gguf')).equals(
+        content,
+      ),
+    ).toBe(true);
+    // Already here: nothing to copy again.
+    expect((await fetch()).trim().split('\n').at(-1)).toBe('done');
   });
 
   it('turns away a device without the pool key', async () => {

@@ -302,3 +302,59 @@ export class PoolClient implements LocalModelHost {
     });
   }
 }
+
+/**
+ * Copy `model` from a member of this machine's pool into the local Hugging
+ * Face cache, through the running pool daemon. Resolves to `done`, or `none`
+ * when no member has it (or no daemon runs); rejects with the reason a copy
+ * failed. `onProgress` gets the bytes copied so far and the total.
+ */
+export async function fetchModelFromPool(
+  model: LocalModelConfig,
+  onProgress: (done: number, total: number, from: string) => void = () => {},
+  dir: string = poolDir(),
+): Promise<'done' | 'none'> {
+  const address = poolAddress(dir);
+  if (!(await poolAnswers(address))) return 'none';
+  const body = JSON.stringify({ model });
+  return new Promise((resolve, reject) => {
+    const request = http.request(
+      {
+        socketPath: address,
+        path: '/pool/fetch',
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${poolKey(dir)}`,
+          'content-type': 'application/json',
+          'content-length': Buffer.byteLength(body),
+        },
+      },
+      (response) => {
+        let pending = '';
+        let from = '';
+        let outcome: 'done' | 'none' | undefined;
+        let failure: string | undefined;
+        response.setEncoding('utf8');
+        response.on('data', (chunk: string) => {
+          pending += chunk;
+          const lines = pending.split('\n');
+          pending = lines.pop() ?? '';
+          for (const line of lines) {
+            if (line.startsWith('from ')) from = line.slice(5);
+            else if (line.startsWith('progress ')) {
+              const [, done, total] = line.split(' ');
+              onProgress(Number(done), Number(total), from);
+            } else if (line === 'done' || line === 'none') outcome = line;
+            else if (line.startsWith('error ')) failure = line.slice(6);
+          }
+        });
+        response.on('end', () => {
+          if (failure) reject(new Error(failure));
+          else resolve(outcome ?? 'none');
+        });
+      },
+    );
+    request.on('error', () => resolve('none'));
+    request.end(body);
+  });
+}
