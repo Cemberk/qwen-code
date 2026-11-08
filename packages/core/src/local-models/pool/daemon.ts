@@ -19,9 +19,16 @@ import https from 'node:https';
 import net from 'node:net';
 import {
   DEFAULT_ENGINE_OPTIONS,
+  locateEngine,
   startLocalModelEngine,
   type LocalModelEngineOptions,
 } from '../engine.js';
+import {
+  RPC_UPGRADE,
+  rpcServerBinary,
+  serveRpcTunnel,
+} from './net/rpc-tunnel.js';
+import type { Duplex } from 'node:stream';
 import type { LocalModelConfig } from '../local-models.js';
 import type { StartEngine } from '../local-model-server.js';
 import { promptCacheDir } from '../prompt-cache.js';
@@ -84,6 +91,8 @@ export interface PoolDaemonOptions {
   discovery?: boolean;
   /** The Hugging Face cache models are read from and copied into (tests). */
   hfCacheDir?: string;
+  /** Devices this member lends to split models (`rpc-server -d`); its GPUs by default. */
+  rpcDevices?: string;
   /** Whether this machine can run a model (the planner's verdict by default). */
   canRun?: (host: HostPool, request: PoolRequest) => CanRun;
   /**
@@ -683,6 +692,37 @@ export async function startPoolDaemon(
       listener.on('tlsClientError', () => {
         // A wrong key or a scanner: nothing to do.
       });
+      // Part of a model split across members: an rpc-server here, for this
+      // connection alone, reached only through the members' link.
+      listener.on(
+        'upgrade',
+        (req: http.IncomingMessage, socket: Duplex, head: Buffer) => {
+          // Hold what the head sends (its first RPC command) until rpc-server
+          // is up to receive it.
+          socket.pause();
+          const url = new URL(req.url ?? '/', 'http://pool');
+          const binary = rpcServerBinary(
+            locateEngine(ownOptions ?? DEFAULT_ENGINE_OPTIONS),
+          );
+          if (
+            closing ||
+            peerOf(req) === undefined ||
+            url.pathname !== '/pool/rpc' ||
+            String(req.headers['upgrade']).toLowerCase() !== RPC_UPGRADE ||
+            !binary
+          ) {
+            socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+            return;
+          }
+          socket.write(
+            `HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: ${RPC_UPGRADE}\r\n\r\n`,
+          );
+          log(`member ${peerOf(req)} opened an rpc tunnel`);
+          serveRpcTunnel(socket, binary, log, head, options.rpcDevices).catch(
+            () => {},
+          );
+        },
+      );
       await new Promise<void>((resolve, reject) => {
         listener.once('error', reject);
         listener.listen(membership.port, options.peerHost, () => {

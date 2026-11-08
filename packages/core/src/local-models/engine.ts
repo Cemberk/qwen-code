@@ -195,6 +195,11 @@ export interface LocalModelEngineOptions {
    * context times this); 1 when unset. Requests beyond it must wait.
    */
   contexts?: number;
+  /**
+   * Run part of the model's layers on other pool members (`--rpc`), through
+   * tunnels to their rpc-servers; `remoteBytes` is the GPU memory they add.
+   */
+  rpc?: { servers: string[]; remoteBytes: number };
 }
 
 export const DEFAULT_ENGINE_OPTIONS: LocalModelEngineOptions = {
@@ -385,6 +390,11 @@ export function engineCommand(
     '--metrics',
     ...SAMPLING_ARGS,
     ...speculationArgs(options, launch.draftPath),
+    // Layers on other members: llama.cpp places them by each device's free
+    // memory (--fit), the remote ones first.
+    ...(options.rpc && options.rpc.servers.length > 0
+      ? ['--rpc', options.rpc.servers.join(',')]
+      : []),
     ...(launch.planArgs ?? []),
     ...(launch.moeProfile ? ['--moe-cache-profile', launch.moeProfile] : []),
     // A mixture-of-experts model too big for the GPU runs the experts of
@@ -654,7 +664,15 @@ export function planLocalModel(
   const devices = binary
     ? engineDevices(binary, engineEnv('', process.env, process.platform))
     : undefined;
-  const budget = engineGpuBudget(devices, machine);
+  const local = engineGpuBudget(devices, machine);
+  // Other members' GPUs add to this one's when the model is split.
+  const budget =
+    options.rpc && options.rpc.remoteBytes > 0
+      ? {
+          limit: (local?.limit ?? 0) + options.rpc.remoteBytes,
+          unified: false,
+        }
+      : local;
   // On a GPU that shares system memory, what other programs hold of it is
   // not free, whatever the GPU driver tells the engine.
   const gpu = budget?.unified

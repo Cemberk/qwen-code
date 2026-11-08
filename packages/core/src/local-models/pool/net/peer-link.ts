@@ -207,6 +207,20 @@ export class PeerLink {
     upstream.end(body);
   }
 
+  /**
+   * A TLS agent of its own, for a connection that leaves HTTP (an RPC
+   * tunnel): upgraded sockets must not come from the shared pool, whose
+   * next request would then wait for them.
+   */
+  freshAgent(): https.Agent {
+    return new https.Agent({
+      ciphers: CIPHERS,
+      maxVersion: 'TLSv1.2',
+      checkServerIdentity: () => undefined,
+      pskCallback: this.agent.options.pskCallback,
+    });
+  }
+
   /** The link's TLS agent, for long transfers such as model files. */
   agentForTransfers(): https.Agent {
     return this.agent;
