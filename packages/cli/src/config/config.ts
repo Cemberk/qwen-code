@@ -2306,6 +2306,8 @@ export async function loadCliConfig(
         : (settings.memory?.autoSkillConfirm ?? true),
     memoryAgentTimeoutMinutes: settings.memory?.agentTimeoutMinutes,
     memoryAgentMaxTurns: settings.memory?.agentMaxTurns,
+    memoryExtractEveryTurns: settings.memory?.extractEveryTurns,
+    memoryMaxEntries: settings.memory?.maxEntries,
     fastModel: settings.fastModel || undefined,
     advisorModel,
     advisorMaxUses: settings.advisorMaxUses,

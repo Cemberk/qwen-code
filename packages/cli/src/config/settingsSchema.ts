@@ -1847,6 +1847,28 @@ const SETTINGS_SCHEMA = {
           "Max turns for background memory agents (extraction, dream, remember, skill review). Unset uses each agent's built-in default (5–8); 0 disables the turn limit.",
         showInDialog: false,
       },
+      extractEveryTurns: {
+        type: 'number',
+        label: 'Memory Extraction Interval (turns)',
+        category: 'Memory',
+        requiresRestart: true,
+        default: undefined as number | undefined,
+        minimum: 0,
+        description:
+          'Look for new memories after every N of your prompts; each run reads everything since the last one, so nothing is skipped (only the last turns of a session may go unread). Unset: every prompt with a hosted model, every 5 with a local model, where a run costs about as much as a turn. 0 turns automatic extraction off.',
+        showInDialog: false,
+      },
+      maxEntries: {
+        type: 'number',
+        label: 'Memory Entry Limit',
+        category: 'Memory',
+        requiresRestart: true,
+        default: undefined as number | undefined,
+        minimum: 0,
+        description:
+          'Most memory files a project keeps. Past it, consolidation (dream) runs at the next prompt instead of waiting a day and five sessions, and merges or removes the least useful until the project is back under the limit. Unset: 100. 0: no limit.',
+        showInDialog: false,
+      },
       enableTeamMemory: {
         type: 'boolean',
         label: 'Enable Team Memory',

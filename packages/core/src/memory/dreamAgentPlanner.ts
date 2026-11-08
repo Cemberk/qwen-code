@@ -73,6 +73,9 @@ export function buildConsolidationTaskPrompt(
   options: {
     runtimeManagedOperations?: boolean;
     keywordVocabularySnapshot?: string;
+    /** Memory files now, and the most the project keeps (memory.maxEntries). */
+    entryCount?: number;
+    maxEntries?: number;
   } = {},
 ): string {
   const quotedTranscriptDir =
@@ -145,6 +148,14 @@ export function buildConsolidationTaskPrompt(
     '- Strongly compress or split memories over 2,400 characters',
     '- Split only at semantic retrieval boundaries, never at a fixed character position',
     '- Preserve the complete rule or fact, including `Why:` and `How to apply:` when present',
+    ...(options.maxEntries &&
+    options.entryCount !== undefined &&
+    options.entryCount > options.maxEntries
+      ? [
+          '',
+          `There are ${options.entryCount} memory files, more than the limit of ${options.maxEntries}. Merge related memories and delete the least useful ones (stale, rarely relevant, or derivable from the code) until at most ${options.maxEntries} remain. Never delete pinned files.`,
+        ]
+      : []),
     '',
     options.keywordVocabularySnapshot?.trim() ?? '',
     '',
@@ -176,6 +187,8 @@ export async function planManagedAutoMemoryDreamByAgent(
     config: scopedConfig,
     taskPrompt: buildConsolidationTaskPrompt(memoryRoot, transcriptDir, {
       runtimeManagedOperations: true,
+      entryCount: docs.length,
+      maxEntries: config.getMemoryMaxEntries(),
       keywordVocabularySnapshot: renderWriterKeywordVocabularySnapshot(docs, {
         scopes: ['project'],
       }),

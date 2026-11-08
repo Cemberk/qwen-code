@@ -104,6 +104,7 @@ import {
 } from './pending-skills.js';
 import type { AutoMemoryMetadata } from './types.js';
 import type { AutoMemoryDocumentCache } from './scan.js';
+import { scanAutoMemoryTopicDocuments } from './scan.js';
 import type { MemoryBodyCoverage } from './search-memory.js';
 import {
   runMemoryMetadataMigration,
@@ -1487,6 +1488,21 @@ export class MemoryManager {
    * Returns immediately if preconditions aren't met (time gate, session count,
    * lock, or duplicate).
    */
+  /** Whether the project keeps more memory files than `maxEntries` (0: no limit). */
+  private async isOverMemoryEntryLimit(
+    projectRoot: string,
+    maxEntries: number,
+  ): Promise<boolean> {
+    if (maxEntries <= 0) return false;
+    try {
+      return (
+        (await scanAutoMemoryTopicDocuments(projectRoot)).length > maxEntries
+      );
+    } catch {
+      return false;
+    }
+  }
+
   async scheduleDream(
     params: ScheduleDreamParams,
   ): Promise<DreamScheduleResult> {
@@ -1558,8 +1574,17 @@ export class MemoryManager {
       return { status: 'skipped', skippedReason: 'same_session' };
     }
 
+    // Past memory.maxEntries, consolidate now rather than after a day and
+    // five sessions, so memories cannot pile up without bound. Once per
+    // session at most (above): a dream that could not get under the limit
+    // does not run again at every prompt.
+    const overLimit = await this.isOverMemoryEntryLimit(
+      params.projectRoot,
+      params.config.getMemoryMaxEntries(),
+    );
+
     const elapsedHours = hoursSince(metadata.lastDreamAt, now);
-    if (elapsedHours !== null && elapsedHours < minHours) {
+    if (!overLimit && elapsedHours !== null && elapsedHours < minHours) {
       return { status: 'skipped', skippedReason: 'min_hours' };
     }
 
@@ -1567,22 +1592,26 @@ export class MemoryManager {
     // Return a distinct reason so callers can tell the difference between
     // "we know there aren't enough sessions" and "we haven't checked yet".
     const lastScan = this.dreamLastSessionScanAt.get(params.projectRoot) ?? 0;
-    if (now.getTime() - lastScan < SESSION_SCAN_INTERVAL_MS) {
+    if (!overLimit && now.getTime() - lastScan < SESSION_SCAN_INTERVAL_MS) {
       return { status: 'skipped', skippedReason: 'scan_throttled' };
     }
 
-    const lastDreamMs = metadata.lastDreamAt
-      ? Date.parse(metadata.lastDreamAt)
-      : 0;
-    const sessionIds = await this.sessionScanner(
-      params.projectRoot,
-      lastDreamMs,
-      params.sessionId,
-    );
-    // Record scan time only after we actually performed the filesystem scan.
-    this.dreamLastSessionScanAt.set(params.projectRoot, now.getTime());
-    if (sessionIds.length < minSessions) {
-      return { status: 'skipped', skippedReason: 'min_sessions' };
+    let sessionCount: number | undefined;
+    if (!overLimit) {
+      const lastDreamMs = metadata.lastDreamAt
+        ? Date.parse(metadata.lastDreamAt)
+        : 0;
+      const sessionIds = await this.sessionScanner(
+        params.projectRoot,
+        lastDreamMs,
+        params.sessionId,
+      );
+      // Record scan time only after we actually performed the filesystem scan.
+      this.dreamLastSessionScanAt.set(params.projectRoot, now.getTime());
+      if (sessionIds.length < minSessions) {
+        return { status: 'skipped', skippedReason: 'min_sessions' };
+      }
+      sessionCount = sessionIds.length;
     }
 
     // If the previous dream's release failed (lockReleaseError surfaced
@@ -1638,7 +1667,7 @@ export class MemoryManager {
       // execution exposes no per-turn callback today, so without this
       // the section stays empty until completion.
       progressText: 'Scheduled managed auto-memory dream.',
-      metadata: { sessionCount: sessionIds.length },
+      metadata: overLimit ? { overMemoryEntryLimit: true } : { sessionCount },
     });
 
     const promise = this.track(

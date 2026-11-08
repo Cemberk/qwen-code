@@ -679,6 +679,8 @@ describe('Gemini Client (client.ts)', () => {
       getFileHistoryService: vi.fn().mockReturnValue(mockFileHistoryService),
       getResumedSessionData: vi.fn().mockReturnValue(undefined),
       getManagedAutoMemoryEnabled: vi.fn().mockReturnValue(true),
+      getMemoryExtractEveryTurns: vi.fn().mockReturnValue(undefined),
+      getMemoryMaxEntries: vi.fn().mockReturnValue(100),
       isManagedMemoryAvailable: vi.fn().mockReturnValue(true),
       getMemoryRecallMode: vi.fn().mockReturnValue('structured'),
       prepareMemoryRecallTransition: vi.fn().mockResolvedValue(undefined),
@@ -10164,6 +10166,47 @@ describe('Gemini Client (client.ts)', () => {
       );
     });
 
+    it('runs managed auto-memory extraction every memory.extractEveryTurns prompts, 0 for never', async () => {
+      const mockChat: Partial<LlmChat> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([
+          { role: 'user', parts: [{ text: 'hello' }] },
+          { role: 'model', parts: [{ text: 'Done' }] },
+        ]),
+      };
+      client['chat'] = mockChat as LlmChat;
+      const prompt = async (id: string) => {
+        mockTurnRunFn.mockReturnValue(
+          (async function* () {
+            yield { type: LlmEventType.Content, value: 'Done' };
+          })(),
+        );
+        await fromAsync(
+          client.sendMessageStream(
+            [{ text: 'hello' }],
+            new AbortController().signal,
+            id,
+          ),
+        );
+      };
+
+      vi.mocked(mockConfig.getMemoryExtractEveryTurns).mockReturnValue(3);
+      mockMemoryManager.scheduleExtract.mockClear();
+      await prompt('p1');
+      await prompt('p2');
+      expect(mockMemoryManager.scheduleExtract).not.toHaveBeenCalled();
+      await prompt('p3');
+      expect(mockMemoryManager.scheduleExtract).toHaveBeenCalledOnce();
+
+      vi.mocked(mockConfig.getMemoryExtractEveryTurns).mockReturnValue(0);
+      mockMemoryManager.scheduleExtract.mockClear();
+      for (const id of ['p4', 'p5', 'p6', 'p7']) await prompt(id);
+      expect(mockMemoryManager.scheduleExtract).not.toHaveBeenCalled();
+      vi.mocked(mockConfig.getMemoryExtractEveryTurns).mockReturnValue(
+        undefined,
+      );
+    });
+
     it('should run managed auto-memory extraction after a completed user query', async () => {
       mockMemoryManager.scheduleExtract.mockResolvedValue({
         touchedTopics: ['user'],
@@ -16269,6 +16312,8 @@ function makeMockConfigForShutdown(
     getSessionId: vi.fn().mockReturnValue('session-1'),
     getMemoryManager: vi.fn().mockReturnValue(mgr),
     getManagedAutoMemoryEnabled: vi.fn().mockReturnValue(true),
+    getMemoryExtractEveryTurns: vi.fn().mockReturnValue(undefined),
+    getMemoryMaxEntries: vi.fn().mockReturnValue(100),
     getBareMode: vi.fn().mockReturnValue(false),
     getManagedAutoDreamEnabled: vi.fn().mockReturnValue(true),
     getAutoSkillEnabled: vi.fn().mockReturnValue(false),

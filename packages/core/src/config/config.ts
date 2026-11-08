@@ -310,6 +310,9 @@ const memoryPressureConfigLogger = createDebugLogger('MEMORY_PRESSURE');
 
 const MEMORY_CONTEXT_WARNING_RATIO = 0.15;
 
+/** Most memory files a project keeps before consolidation runs early. */
+export const DEFAULT_MEMORY_MAX_ENTRIES = 100;
+
 export type MemoryRecallMode = 'legacy' | 'structured';
 
 export interface PreparedMemoryRecallTransition {
@@ -1142,6 +1145,13 @@ export interface ConfigParameters {
    * disables the turn limit.
    */
   memoryAgentMaxTurns?: number;
+  /**
+   * Run memory extraction after every N user prompts. Unset: every prompt
+   * with a hosted model, every 5 with a local model; 0: never.
+   */
+  memoryExtractEveryTurns?: number;
+  /** Most memory files a project keeps before consolidation runs early. Unset: 100; 0: no limit. */
+  memoryMaxEntries?: number;
   /**
    * Lightweight model for background tasks (memory extraction, dream, /btw side questions).
    * When set and valid for the current auth type, forked agents use this model instead of
@@ -2492,6 +2502,8 @@ export class Config {
   private readonly autoSkillConfirm: boolean;
   private readonly memoryAgentTimeoutMinutes: number | undefined;
   private readonly memoryAgentMaxTurns: number | undefined;
+  private readonly memoryExtractEveryTurns: number | undefined;
+  private readonly memoryMaxEntries: number;
   private fastModel?: string;
   private advisorModel?: string;
   private readonly advisorMaxUses: number;
@@ -2956,6 +2968,18 @@ export class Config {
       params.memoryAgentMaxTurns >= 0
         ? params.memoryAgentMaxTurns
         : undefined;
+    this.memoryExtractEveryTurns =
+      params.memoryExtractEveryTurns !== undefined &&
+      Number.isInteger(params.memoryExtractEveryTurns) &&
+      params.memoryExtractEveryTurns >= 0
+        ? params.memoryExtractEveryTurns
+        : undefined;
+    this.memoryMaxEntries =
+      params.memoryMaxEntries !== undefined &&
+      Number.isInteger(params.memoryMaxEntries) &&
+      params.memoryMaxEntries >= 0
+        ? params.memoryMaxEntries
+        : DEFAULT_MEMORY_MAX_ENTRIES;
     this.fastModel = params.fastModel || undefined;
     this.advisorModel = normalizeAdvisorModel(params.advisorModel);
     this.webFetchEnabled = params.webFetch === true;
@@ -7994,6 +8018,19 @@ export class Config {
    */
   getMemoryAgentMaxTurns(): number | undefined {
     return this.memoryAgentMaxTurns;
+  }
+
+  /**
+   * `memory.extractEveryTurns`: extraction runs after every N user prompts.
+   * Undefined when unset (the caller picks by model); 0 turns it off.
+   */
+  getMemoryExtractEveryTurns(): number | undefined {
+    return this.memoryExtractEveryTurns;
+  }
+
+  /** `memory.maxEntries`: most memory files a project keeps; 0 for no limit. */
+  getMemoryMaxEntries(): number {
+    return this.memoryMaxEntries;
   }
 
   getPreventSystemSleepEnabled(): boolean {

@@ -183,6 +183,12 @@ import type { StopHookOutput } from '../hooks/types.js';
 import { approvalModeToPermissionMode } from '../hooks/permission-mode.js';
 
 const MAX_TURNS = 100;
+/**
+ * With a local model, memory extraction runs after every this many user
+ * prompts unless memory.extractEveryTurns says otherwise: on a Radeon 780M a
+ * run read about 5,700 tokens, as much as the turn it followed.
+ */
+const LOCAL_MEMORY_EXTRACT_EVERY_TURNS = 5;
 const MAX_RECENT_TOOL_NAMES_FOR_MEMORY = 20;
 const INITIAL_MEMORY_RECALL_WAIT_MS = 100;
 const MEMORY_RECALL_ABORT_WAIT_MS = 100;
@@ -442,6 +448,8 @@ export class LlmClient {
    */
   private readonly stopHookChains = new Map<string, StopHookChain>();
   private toolCallCount = 0;
+  /** User prompts since memory extraction last ran (memory.extractEveryTurns). */
+  private promptsSinceMemoryExtract = 0;
   private skillsModifiedInSession = false;
   private cachedGitStatus: string | null | undefined;
   private readonly surfacedRelevantAutoMemoryPaths = new Set<string>();
@@ -2804,22 +2812,32 @@ export class LlmClient {
 
     const sessionId = this.config.getSessionId();
     const history = this.getHistoryShallow();
-    const extractPromise = mgr
-      .scheduleExtract({
-        projectRoot,
-        sessionId,
-        history,
-        config: this.config,
-      })
-      .then((result) => result.touchedTopics.length)
-      .catch((error: unknown) => {
-        debugLogger.warn(
-          'Failed to schedule managed auto-memory extraction.',
-          error,
-        );
-        return 0;
-      });
-    this.pendingMemoryTaskPromises.push(extractPromise);
+    // Extraction reads everything since its last run, so running it every
+    // few prompts loses nothing; on a local model a run costs about as much
+    // as a turn, so it runs every LOCAL_MEMORY_EXTRACT_EVERY_TURNS there.
+    const extractEvery =
+      this.config.getMemoryExtractEveryTurns() ??
+      (this.isLocalModelSession() ? LOCAL_MEMORY_EXTRACT_EVERY_TURNS : 1);
+    this.promptsSinceMemoryExtract++;
+    if (extractEvery > 0 && this.promptsSinceMemoryExtract >= extractEvery) {
+      this.promptsSinceMemoryExtract = 0;
+      const extractPromise = mgr
+        .scheduleExtract({
+          projectRoot,
+          sessionId,
+          history,
+          config: this.config,
+        })
+        .then((result) => result.touchedTopics.length)
+        .catch((error: unknown) => {
+          debugLogger.warn(
+            'Failed to schedule managed auto-memory extraction.',
+            error,
+          );
+          return 0;
+        });
+      this.pendingMemoryTaskPromises.push(extractPromise);
+    }
 
     const dreamPromise = mgr
       .scheduleDream({

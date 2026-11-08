@@ -55,6 +55,7 @@ describe('dreamAgentPlanner', () => {
       getApprovalMode: vi.fn(),
       getMemoryAgentTimeoutMinutes: vi.fn().mockReturnValue(undefined),
       getMemoryAgentMaxTurns: vi.fn().mockReturnValue(undefined),
+      getMemoryMaxEntries: vi.fn().mockReturnValue(100),
       getAutoMemoryPrompt: vi.fn().mockReturnValue('session routing contract'),
     } as unknown as Config;
     vi.mocked(runForkedAgent).mockReset();
@@ -114,6 +115,20 @@ describe('dreamAgentPlanner', () => {
     expect(prompt).not.toContain(
       `grep -rn "<narrow term>" ${transcriptDir}${path.sep} --include="*.jsonl" | tail -50`,
     );
+  });
+
+  it('asks to get back under memory.maxEntries only when over it', () => {
+    const prompt = (entryCount: number, maxEntries: number) =>
+      buildConsolidationTaskPrompt(
+        path.join(tempDir, 'memory'),
+        path.join(tempDir, 'transcripts'),
+        { entryCount, maxEntries },
+      );
+    expect(prompt(120, 100)).toContain(
+      'There are 120 memory files, more than the limit of 100.',
+    );
+    expect(prompt(80, 100)).not.toContain('more than the limit');
+    expect(prompt(120, 0)).not.toContain('more than the limit');
   });
 
   it('excludes pinned memories from consolidation', () => {

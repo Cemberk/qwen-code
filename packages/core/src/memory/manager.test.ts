@@ -68,6 +68,7 @@ import { runSkillReviewByAgent } from './skillReviewAgentPlanner.js';
 function makeMockConfig(overrides: Partial<Config> = {}): Config {
   return {
     getManagedAutoMemoryEnabled: vi.fn().mockReturnValue(true),
+    getMemoryMaxEntries: vi.fn().mockReturnValue(100),
     getManagedAutoDreamEnabled: vi.fn().mockReturnValue(true),
     getMemoryRecallMode: vi.fn().mockReturnValue('legacy'),
     // On by default here: these suites exercise the migration/dream machinery
@@ -2746,6 +2747,69 @@ describe('MemoryManager', () => {
       });
 
       expect(result).toEqual({ status: 'skipped', skippedReason: 'min_hours' });
+    });
+
+    it('consolidates early when the project keeps more memories than memory.maxEntries', async () => {
+      for (const name of ['a', 'b', 'c']) {
+        const file = path.join(
+          getAutoMemoryRoot(projectRoot),
+          'project',
+          `${name}.md`,
+        );
+        await fs.mkdir(path.dirname(file), { recursive: true });
+        await fs.writeFile(
+          file,
+          [
+            '---',
+            `name: Note ${name}`,
+            `description: Project note ${name}`,
+            'type: project',
+            'category: project_introduction',
+            'keywords:',
+            `  - fact ${name}`,
+            'usage_scenarios:',
+            '  - Working on the project',
+            '---',
+            '',
+            `- Fact ${name}`,
+            '',
+          ].join('\n'),
+        );
+      }
+      const metaPath = getAutoMemoryMetadataPath(projectRoot);
+      const metadata = JSON.parse(
+        await fs.readFile(metaPath, 'utf-8'),
+      ) as Record<string, unknown>;
+      metadata['lastDreamAt'] = new Date(
+        '2026-04-01T09:00:00.000Z',
+      ).toISOString();
+      await fs.writeFile(metaPath, JSON.stringify(metadata, null, 2), 'utf-8');
+      const schedule = (maxEntries: number) =>
+        new MemoryManager(async () => []).scheduleDream({
+          projectRoot,
+          sessionId: 'sess-new',
+          config: makeMockConfig({
+            getMemoryMaxEntries: vi.fn().mockReturnValue(maxEntries),
+            getStructuredMemoryRecallEnabled: vi.fn().mockReturnValue(false),
+          } as Partial<Config>),
+          now: new Date('2026-04-01T10:00:00.000Z'),
+          minHoursBetweenDreams: 24,
+          minSessionsBetweenDreams: 5,
+        });
+
+      // Under the limit, or no limit: the usual day and five sessions apply.
+      expect(await schedule(3)).toEqual({
+        status: 'skipped',
+        skippedReason: 'min_hours',
+      });
+      expect(await schedule(0)).toEqual({
+        status: 'skipped',
+        skippedReason: 'min_hours',
+      });
+      // Over it: neither gate holds the dream back.
+      const result = await schedule(2);
+      expect(result.status).toBe('scheduled');
+      if (result.status === 'scheduled') await result.promise;
     });
 
     it('skips when session count is below threshold (via session scanner)', async () => {
