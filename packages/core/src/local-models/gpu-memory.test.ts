@@ -13,6 +13,7 @@ import {
   contextHeadroomBytes,
   contextsThatFit,
   downloadSizeProblem,
+  withOthersUse,
   expertBytesByLayer,
   fitModel,
   gpuBudget,
@@ -140,6 +141,29 @@ describe('contextHeadroomBytes', () => {
         5 * GIB + GIB,
       ),
     ).toMatchObject({ partial: true });
+  });
+});
+
+describe('withOthersUse', () => {
+  const GIB = 1024 ** 3;
+  it('takes other programs and the RAM in use off a shared-memory budget', () => {
+    const gpu = { limit: 16 * GIB, unified: true };
+    expect(withOthersUse(gpu, 2 * GIB)).toEqual({
+      limit: 14 * GIB,
+      unified: true,
+      othersBytes: 2 * GIB,
+    });
+    expect(withOthersUse(gpu, 2 * GIB, 64 * GIB)?.limit).toBe(14 * GIB);
+    expect(withOthersUse(gpu, 2 * GIB, 9.5 * GIB)).toEqual({
+      limit: 5.5 * GIB,
+      unified: true,
+      othersBytes: 2 * GIB,
+      ramLimited: true,
+    });
+    // Unknown use, or a discrete GPU: as is.
+    expect(withOthersUse(gpu, undefined, 4 * GIB)).toBe(gpu);
+    const discrete = { limit: 16 * GIB, unified: false };
+    expect(withOthersUse(discrete, 2 * GIB, 4 * GIB)).toBe(discrete);
   });
 });
 

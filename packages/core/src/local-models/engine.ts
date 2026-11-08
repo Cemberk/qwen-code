@@ -649,7 +649,7 @@ export function planLocalModel(
   // On a GPU that shares system memory, what other programs hold of it is
   // not free, whatever the GPU driver tells the engine.
   const gpu = budget?.unified
-    ? withOthersUse(budget, sharedGpuMemoryInUse())
+    ? withOthersUse(budget, sharedGpuMemoryInUse(), os.freemem())
     : budget;
   const capabilities = inspectModel(modelPath);
   // The context cache, sized from the model at its context length: it can

@@ -534,6 +534,7 @@ describe('startLocalModelEngine', () => {
       download(model.file);
       gpu.experts = Array<number>(40).fill(0.4 * GIB);
       gpu.others = 2 * GIB;
+      const freemem = vi.spyOn(os, 'freemem').mockReturnValue(64 * GIB);
       try {
         const engine = await startLocalModelEngine(model, 'k');
         try {
@@ -546,8 +547,22 @@ describe('startLocalModelEngine', () => {
         } finally {
           await engine.stop();
         }
+        // RAM the rest of the system uses is not there for the GPU either:
+        // 16 GiB available less the 4 GiB reserve leaves 12 GiB, so 14
+        // layers move.
+        freemem.mockReturnValue(16 * GIB);
+        const limited = await startLocalModelEngine(model, 'k');
+        try {
+          const args = (await (
+            await fetch(limited.baseUrl.replace('/v1', '/args'))
+          ).json()) as string[];
+          expect(args.join(' ')).toContain('--n-cpu-moe 14 --load-mode mmap');
+        } finally {
+          await limited.stop();
+        }
       } finally {
         gpu.others = undefined;
+        freemem.mockRestore();
       }
     });
 

@@ -67,6 +67,8 @@ export interface GpuBudget {
    * off `limit` (Windows and Linux integrated GPUs).
    */
   othersBytes?: number;
+  /** The RAM available now, less a reserve, is what limits the budget. */
+  ramLimited?: boolean;
 }
 
 /**
@@ -76,12 +78,23 @@ export interface GpuBudget {
 export function withOthersUse(
   gpu: GpuBudget | undefined,
   othersBytes: number | undefined,
+  availableRam?: number,
 ): GpuBudget | undefined {
   if (!gpu?.unified || othersBytes === undefined) return gpu;
+  const shared = Math.max(0, gpu.limit - othersBytes);
+  // The GPU's memory is system RAM: what other programs use of it is not
+  // there either, whatever the GPU budget says. Loading past it pushes
+  // everything else to the page file (seen on a Radeon 780M laptop with
+  // 9.5 GiB available and a 16 GiB GPU budget).
+  const ram =
+    availableRam === undefined
+      ? undefined
+      : Math.max(0, availableRam - SYSTEM_RESERVE_BYTES);
   return {
     ...gpu,
-    limit: Math.max(0, gpu.limit - othersBytes),
+    limit: ram === undefined ? shared : Math.min(shared, ram),
     othersBytes,
+    ...(ram !== undefined && ram < shared ? { ramLimited: true } : {}),
   };
 }
 

@@ -69,7 +69,11 @@ export function planEngine(input: PlanInput): EnginePlan {
   } else if ('problem' in fit) {
     notes.push(fit.problem);
   }
-  if (gpu?.othersBytes !== undefined && gpu.othersBytes > GIB) {
+  if (gpu?.ramLimited) {
+    notes.push(
+      `Only ${(gpu.limit / 1e9).toFixed(1)} GB of RAM is free for the model now (the GPU shares it, and other programs use the rest); close some to run more of it on the GPU.`,
+    );
+  } else if (gpu?.othersBytes !== undefined && gpu.othersBytes > GIB) {
     notes.push(
       `Other programs hold ${(gpu.othersBytes / 1e9).toFixed(1)} GB of the GPU's shared memory now, leaving ${(gpu.limit / 1e9).toFixed(1)} GB for the model; close some to run more of it on the GPU.`,
     );
