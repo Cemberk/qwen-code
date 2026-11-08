@@ -282,8 +282,10 @@ To compare policies offline, record a trace with
   slot of its own (three conversations side by side plus one for side
   queries; a fourth conversation takes the slot idle the longest, and gets
   its prompt back from the [saved prompts](#saved-prompts) when it returns).
-  One model runs at a time: a session asking for another waits until no
-  request is running, then the engine restarts with it.
+  Sessions using different models get an engine each, up to three side by
+  side, as long as the planner finds room in GPU memory for all of them;
+  otherwise the engine idle the longest stops to make room, and if every
+  engine is busy, the new request waits until one is free.
 - The pool starts with the first Qwen Code that needs a local model and
   stops, with its engines, 30 seconds after the last one exits, however it
   exits. It talks to Qwen Code over a named pipe (Windows) or a Unix socket
