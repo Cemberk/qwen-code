@@ -10,6 +10,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   GPU_HEADROOM_BYTES,
+  contextHeadroomBytes,
   downloadSizeProblem,
   expertBytesByLayer,
   fitModel,
@@ -104,6 +105,40 @@ describe('expertBytesByLayer', () => {
     expect(expertBytesByLayer(new Map([['blk.0.ffn_up.weight', 100]]))).toEqual(
       [],
     );
+  });
+});
+
+describe('contextHeadroomBytes', () => {
+  it('is the context cache at its length plus compute buffers, 1 GiB at least', () => {
+    const GIB = 1024 ** 3;
+    expect(contextHeadroomBytes(147456, 32768)).toBe(4.5 * GIB + GIB / 2);
+    expect(contextHeadroomBytes(20480, 32768)).toBe(640 * 2 ** 20 + GIB / 2);
+    expect(contextHeadroomBytes(20480, 4096)).toBe(GPU_HEADROOM_BYTES);
+    expect(contextHeadroomBytes(undefined, 32768)).toBe(GPU_HEADROOM_BYTES);
+  });
+
+  it('moves a model whose context does not fit off the GPU', () => {
+    const GIB = 1024 ** 3;
+    const model = { id: 'q', repo: 'o/q', file: 'q.gguf' };
+    const gpu = { limit: 8 * GIB, unified: true };
+    const experts = () => Array<number>(36).fill(0.1 * GIB);
+    // 2.5 GiB of weights fit with 1 GiB of room, not with 5 GiB.
+    expect(fitModel(model, 2.5 * GIB, experts, gpu, 32 * GIB, 'linux')).toEqual(
+      {
+        cpuMoeLayers: 0,
+      },
+    );
+    expect(
+      fitModel(
+        model,
+        2.5 * GIB,
+        experts,
+        gpu,
+        32 * GIB,
+        'linux',
+        5 * GIB + GIB,
+      ),
+    ).toMatchObject({ partial: true });
   });
 });
 

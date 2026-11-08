@@ -43,6 +43,7 @@ import {
   localModelExpertBytes,
   systemMemoryBytes,
   withOthersUse,
+  contextHeadroomBytes,
 } from './gpu-memory.js';
 
 const READY_TIMEOUT_MS = 5 * 60_000;
@@ -579,6 +580,8 @@ export interface LocalModelPlan {
   devices?: EngineDevice[];
   /** The GPU memory the model was fitted to. */
   gpu?: GpuBudget;
+  /** Room the model needs beside its weights: its context cache and compute buffers. */
+  headroomBytes: number;
   plan: EnginePlan;
 }
 
@@ -639,16 +642,25 @@ export function planLocalModel(
   const gpu = budget?.unified
     ? withOthersUse(budget, sharedGpuMemoryInUse())
     : budget;
+  const capabilities = inspectModel(modelPath);
+  // The context cache, sized from the model at its context length: it can
+  // outweigh a small model's weights (Qwen3 4B: 4.5 GiB at 32K tokens).
+  const headroomBytes = contextHeadroomBytes(
+    capabilities?.contextBytesPerToken,
+    model.contextSize ?? DEFAULT_LOCAL_MODEL_CONTEXT_SIZE,
+  );
   const fit = fitModel(
     model,
     bytes,
     () => localModelExpertBytes(model),
     gpu,
     systemMemoryBytes(),
+    process.platform,
+    headroomBytes,
   );
-  const capabilities = inspectModel(modelPath);
   const plan = planEngine({
     bytes,
+    headroomBytes,
     gpu,
     fit,
     speculation: {
@@ -674,6 +686,7 @@ export function planLocalModel(
     ...(capabilities ? { capabilities } : {}),
     ...(devices ? { devices } : {}),
     ...(gpu ? { gpu } : {}),
+    headroomBytes,
     plan,
   };
 }

@@ -30,6 +30,48 @@ export interface ModelCapabilities {
    * before its end is read again from the last saved state.
    */
   recurrent: boolean;
+  /**
+   * Bytes the context cache takes per token of context at f16 (keys and
+   * values of every attention layer), when the file says enough to tell.
+   */
+  contextBytesPerToken?: number;
+}
+
+/** Bytes of an f16 cache entry. */
+const F16_BYTES = 2;
+
+/**
+ * Context cache bytes per token: for each attention layer, keys and values
+ * of every KV head. Recurrent hybrids (`full_attention_interval`) have
+ * attention in one layer of every few only.
+ */
+function contextBytesPerToken(
+  key: (name: string) => GgufValue | undefined,
+  layers: number,
+): number | undefined {
+  const heads = key('attention.head_count');
+  const kvHeads = key('attention.head_count_kv') ?? heads;
+  const embedding = number(key('embedding_length'));
+  const maxHeads = number(heads);
+  const keyLength =
+    number(key('attention.key_length')) ??
+    (embedding && maxHeads ? embedding / maxHeads : undefined);
+  const valueLength = number(key('attention.value_length')) ?? keyLength;
+  if (!layers || !keyLength || !valueLength || kvHeads === undefined) {
+    return undefined;
+  }
+  const interval = number(key('full_attention_interval'));
+  const isAttention = (layer: number) =>
+    !interval || interval <= 1 || (layer + 1) % interval === 0;
+  const perLayer = Array.isArray(kvHeads) ? kvHeads : undefined;
+  const uniform = typeof kvHeads === 'number' ? kvHeads : undefined;
+  let total = 0;
+  for (let layer = 0; layer < layers; layer++) {
+    if (!isAttention(layer)) continue;
+    const count = perLayer ? (perLayer[layer] ?? 0) : (uniform ?? 0);
+    total += count * (keyLength + valueLength) * F16_BYTES;
+  }
+  return total > 0 ? total : undefined;
 }
 
 function number(value: GgufValue | undefined): number | undefined {
@@ -52,15 +94,18 @@ export function modelCapabilities(
   );
   const slidingWindow = number(key('attention.sliding_window'));
   const trainedContext = number(key('context_length'));
+  const layers = number(key('block_count')) ?? 0;
+  const perToken = contextBytesPerToken(key, layers);
   return {
     architecture,
-    layers: number(key('block_count')) ?? 0,
+    layers,
     experts: number(key('expert_count')) ?? 0,
     expertsUsed: number(key('expert_used_count')) ?? 0,
     nextnLayers: number(key('nextn_predict_layers')) ?? 0,
     recurrent,
     ...(trainedContext ? { trainedContext } : {}),
     ...(slidingWindow ? { slidingWindow } : {}),
+    ...(perToken ? { contextBytesPerToken: perToken } : {}),
   };
 }
 

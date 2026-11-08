@@ -34,6 +34,8 @@ export interface EnginePlan {
 export interface PlanInput {
   /** Bytes of the model's files (and its draft). */
   bytes: number;
+  /** Room the model needs beside its weights; GPU_HEADROOM_BYTES when unset. */
+  headroomBytes?: number;
   gpu: GpuBudget | undefined;
   fit: ModelFit;
   /** Undefined when the file could not be read. */
@@ -81,7 +83,8 @@ export function planEngine(input: PlanInput): EnginePlan {
         : 'Too big for VRAM: llama.cpp places what does not fit in RAM (--fit).',
     );
   } else {
-    const spare = gpu.limit - input.bytes - GPU_HEADROOM_BYTES;
+    const spare =
+      gpu.limit - input.bytes - (input.headroomBytes ?? GPU_HEADROOM_BYTES);
     // Larger batches sped prompts up on discrete GPUs (Strata, Radeon R9700);
     // on a Radeon 780M, which shares RAM, they read prompts no faster than
     // the default 512 and generated a little slower.

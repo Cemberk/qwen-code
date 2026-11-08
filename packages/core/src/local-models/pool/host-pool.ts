@@ -5,7 +5,6 @@
  */
 
 import { isDeepStrictEqual } from 'node:util';
-import { GPU_HEADROOM_BYTES } from '../gpu-memory.js';
 import { planLocalModel } from '../engine.js';
 import type { StartEngine } from '../local-model-server.js';
 import { EngineHost, type PoolLease, type PoolRequest } from './engine-host.js';
@@ -44,10 +43,10 @@ export const plannerFitsBeside: FitsBeside = (request, running) => {
     if (gpu.othersBytes !== undefined) return !planned.fit.partial;
     let used = 0;
     for (const other of running) {
-      used +=
-        planLocalModel(other.model, other.options).bytes + GPU_HEADROOM_BYTES;
+      const plan = planLocalModel(other.model, other.options);
+      used += plan.bytes + plan.headroomBytes;
     }
-    return planned.bytes + GPU_HEADROOM_BYTES + used <= gpu.limit;
+    return planned.bytes + planned.headroomBytes + used <= gpu.limit;
   } catch {
     return false;
   }

@@ -16,6 +16,26 @@ const GIB = 1024 ** 3;
 /** Room a model needs beside its weights: context cache and compute buffers. */
 export const GPU_HEADROOM_BYTES = GIB;
 
+/** Compute buffers beside the context cache. */
+const COMPUTE_BUFFER_BYTES = GIB / 2;
+
+/**
+ * The room a model needs beside its weights, from its context cache at
+ * `contextSize` tokens: GPU_HEADROOM_BYTES at least, which is also the
+ * answer when the model file does not say how big its cache is. Qwen3 4B
+ * at 32K tokens needs 4.5 GiB of cache alone, not the 1 GiB assumed before.
+ */
+export function contextHeadroomBytes(
+  contextBytesPerToken: number | undefined,
+  contextSize: number,
+): number {
+  if (!contextBytesPerToken) return GPU_HEADROOM_BYTES;
+  return Math.max(
+    GPU_HEADROOM_BYTES,
+    contextBytesPerToken * contextSize + COMPUTE_BUFFER_BYTES,
+  );
+}
+
 /** The GPU memory a model may use on this machine. */
 export interface GpuBudget {
   /** Bytes the GPU (or all discrete GPUs together) may hold. */
@@ -194,6 +214,8 @@ function gpuLimitProblem(
  *
  * @param expertBytes the model's expert bytes per layer; only read when the
  *   model does not fit the GPU.
+ * @param headroom room the model needs beside its weights (context cache,
+ *   compute buffers): see contextHeadroomBytes.
  */
 export function fitModel(
   model: LocalModelConfig,
@@ -202,24 +224,25 @@ export function fitModel(
   gpu: GpuBudget | undefined,
   totalMemory: number,
   platform: NodeJS.Platform = process.platform,
+  headroom: number = GPU_HEADROOM_BYTES,
 ): ModelFit {
   if (gpu === undefined) {
-    return bytes + GPU_HEADROOM_BYTES + SYSTEM_RESERVE_BYTES > totalMemory
+    return bytes + headroom + SYSTEM_RESERVE_BYTES > totalMemory
       ? { problem: ramProblem(model, bytes, totalMemory, platform) }
       : { cpuMoeLayers: 0, partial: true };
   }
-  if (bytes + GPU_HEADROOM_BYTES <= gpu.limit) {
+  if (bytes + headroom <= gpu.limit) {
     return { cpuMoeLayers: 0 };
   }
   const ram = gpu.unified ? totalMemory : gpu.limit + totalMemory;
-  if (bytes + GPU_HEADROOM_BYTES + SYSTEM_RESERVE_BYTES > ram) {
+  if (bytes + headroom + SYSTEM_RESERVE_BYTES > ram) {
     return { problem: ramProblem(model, bytes, ram, platform) };
   }
   let onGpu = bytes;
   const layers = expertBytes();
   for (let count = 1; count <= layers.length; count++) {
     onGpu -= layers[count - 1];
-    if (onGpu + GPU_HEADROOM_BYTES + CPU_LAYERS_MARGIN_BYTES <= gpu.limit) {
+    if (onGpu + headroom + CPU_LAYERS_MARGIN_BYTES <= gpu.limit) {
       return { cpuMoeLayers: count, partial: true };
     }
   }
