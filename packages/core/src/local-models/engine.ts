@@ -618,6 +618,23 @@ export interface LocalModelPlan {
  * share system memory when this machine's GPU does. Without the build's
  * answer, the machine's own GPUs.
  */
+/**
+ * GPU memory this machine could give a model now, without a model in mind:
+ * what a member lends to another one's split model. On a GPU that shares
+ * system memory, the measurement already counts our own running engines.
+ */
+export function lendableGpuBytes(options: LocalModelEngineOptions): number {
+  const binary = locateEngine(options);
+  const devices = binary
+    ? engineDevices(binary, engineEnv('', process.env, process.platform))
+    : undefined;
+  const budget = engineGpuBudget(devices, gpuBudget());
+  const gpu = budget?.unified
+    ? withOthersUse(budget, sharedGpuMemoryInUse(), os.freemem())
+    : budget;
+  return gpu?.limit ?? 0;
+}
+
 export function engineGpuBudget(
   devices: readonly EngineDevice[] | undefined,
   machine: GpuBudget | undefined,

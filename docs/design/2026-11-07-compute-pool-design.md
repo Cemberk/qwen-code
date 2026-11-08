@@ -510,6 +510,29 @@ member runs faster split across two machines than streamed from SSD on the
 faster of them, and the per-token overhead matches the model (round trips x
 RTT + transfer).
 
+P4 status (2026-11-07):
+
+- Done: RPC tunnels over the members' TLS link (an upgrade per connection,
+  an `ggml-rpc-server` per tunnel on the member's loopback, with
+  `--exit-with-parent` and its weight cache); the `rpc` engine option (other
+  members' GPU memory added to the plan, `--rpc` to the tunnels); routing
+  splits a model that fits on no member alone across this one (which has
+  the file) and lending members, largest first; `qwen pool status` shows
+  splits. The fork builds `ggml-rpc-server` with `-DGGML_RPC=ON`.
+- Checked on one machine (`scripts/local-split-e2e.mjs`, Qwen3 4B, 8K):
+  the handshake through a tunnel is byte-identical to a direct one
+  (`scripts/local-rpc-tunnel-check.mjs`); with the member's part on its GPU
+  too, prose ran at 6.5 vs 5.8 tok/s whole, but edits fell from 17.2 to 6.5
+  tok/s (speculation's verify batches pay per RPC round trip, likely new
+  graph sizes each time); a second Vulkan process on the 780M at times lost
+  the device, so the clean run put the member's part on the CPU (prose 5.3,
+  edit 8.0 vs 6.7 / 15.7 whole).
+- Not done: placement by measured ms/layer and link RTT (llama.cpp places by
+  free memory, RPC devices first); rpc-server loading weights from the
+  member's own copy of the GGUF (the first load sends them over the link,
+  then `--cache` keeps them); measurements between two real machines; why
+  speculation loses its gain across RPC.
+
 **P5, native stages (step B)**, decided from P4's numbers: `llama-stage`,
 frame protocol, multi-sequence frames, micro-batch interleaving, loss
 recovery; then expert parallelism.

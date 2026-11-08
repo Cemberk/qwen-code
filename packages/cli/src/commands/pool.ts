@@ -165,6 +165,19 @@ export const poolCommand: CommandModule = {
           );
           writeStdoutLine(`  ${model} runs on "${peer?.name ?? nodeId}"`);
         }
+        const splits = (status['splits'] ?? {}) as Record<string, string[]>;
+        for (const [model, nodeIds] of Object.entries(splits)) {
+          const names = nodeIds.map(
+            (nodeId) =>
+              peers.find(
+                (candidate) =>
+                  (candidate as { nodeId?: string }).nodeId === nodeId,
+              )?.name ?? nodeId,
+          );
+          writeStdoutLine(
+            `  ${model} runs here, with layers on ${names.map((name) => `"${name}"`).join(', ')}`,
+          );
+        }
       }
       return;
     }

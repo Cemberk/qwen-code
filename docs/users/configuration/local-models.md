@@ -362,6 +362,14 @@ qwen pool share on      # if it should serve its models too
   has the model downloaded and room for it. Members run others' requests
   with their own engine and settings. `qwen pool status` shows the members
   and where each model runs.
+- A model too big for any one member, downloaded on this one, is split:
+  it runs here, with as many of its layers on members that lend their GPU
+  as it needs (the ones with the most memory first). Those members run
+  `ggml-rpc-server` from their llama.cpp build (build it with
+  `-DGGML_RPC=ON`); it listens only on their loopback and is reached
+  through the encrypted link. Every token crosses the network once per
+  member, so this pays on Ethernet more than on Wi-Fi, and speculative
+  decoding gains less there.
 - `/models download` copies a model from a sharing member that has it
   before downloading it from Hugging Face: over the LAN, resumed if cut off,
   each file checked against the member's SHA-256.

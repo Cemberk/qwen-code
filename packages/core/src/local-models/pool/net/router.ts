@@ -6,7 +6,13 @@
 
 import { randomBytes } from 'node:crypto';
 import type http from 'node:http';
-import { planLocalModel, type LocalModelEngineOptions } from '../../engine.js';
+import {
+  lendableGpuBytes,
+  locateEngine,
+  planLocalModel,
+  type LocalModelEngineOptions,
+} from '../../engine.js';
+import { RpcTunnel, rpcServerBinary } from './rpc-tunnel.js';
 import { resolveLocalModelPath } from '../../hf-cache.js';
 import type { LocalModelConfig } from '../../local-models.js';
 import type { PoolLease, PoolRequest } from '../engine-host.js';
@@ -22,6 +28,12 @@ export interface CanRun {
   downloaded: boolean;
   /** It would fit in that member's memory now. */
   fits: boolean;
+  /** GPU memory the member can give (to its own engine, or a split one). */
+  gpuBytes?: number;
+  /** What the model needs with its context, where it was planned. */
+  needBytes?: number;
+  /** It can lend its GPU to a split model (an rpc-server next to its engine). */
+  rpc?: boolean;
 }
 
 /** Can this machine run `model` (with its own engine options)? */
@@ -29,15 +41,32 @@ export function localCanRun(host: HostPool, request: PoolRequest): CanRun {
   const running = host.serves(request);
   let downloaded = false;
   let fits = false;
+  let needBytes: number | undefined;
+  let gpuBytes: number | undefined;
   try {
     resolveLocalModelPath(request.model);
     downloaded = true;
     const planned = planLocalModel(request.model, request.options);
     fits = !('problem' in planned.fit);
+    needBytes = planned.bytes + planned.headroomBytes;
+    gpuBytes = planned.gpu?.limit;
   } catch {
     // Not downloaded, or not readable.
   }
-  return { running, downloaded, fits };
+  try {
+    gpuBytes ??= lendableGpuBytes(request.options);
+  } catch {
+    // No GPU to lend.
+  }
+  const rpc = rpcServerBinary(locateEngine(request.options)) !== undefined;
+  return {
+    running,
+    downloaded,
+    fits,
+    ...(gpuBytes !== undefined ? { gpuBytes } : {}),
+    ...(needBytes !== undefined ? { needBytes } : {}),
+    rpc,
+  };
 }
 
 interface Peer {
@@ -69,6 +98,16 @@ export class Router {
   private readonly peerLeases = new Map<string, PeerLease>();
   /** Where each model was last sent: kept until it fails. */
   private readonly routes = new Map<string, string>();
+  /** Tunnels to the members a split model runs on, per model. */
+  private readonly splits = new Map<
+    string,
+    {
+      tunnels: RpcTunnel[];
+      servers: string[];
+      remoteBytes: number;
+      peers: string[];
+    }
+  >();
 
   constructor(
     private readonly local: HostPool,
@@ -167,6 +206,21 @@ export class Router {
       return { id: lease.id, slot: lease.slot, where: 'local' };
     }
     const target = await this.route(request);
+    const split = this.splits.get(request.model.id);
+    if (!target && split) {
+      // Part of the model runs on other members, through tunnels.
+      const lease = await this.local.acquire(
+        {
+          ...request,
+          options: {
+            ...request.options,
+            rpc: { servers: split.servers, remoteBytes: split.remoteBytes },
+          },
+        },
+        signal,
+      );
+      return { id: lease.id, slot: lease.slot, where: 'split' };
+    }
     if (target) {
       try {
         return await this.acquireOn(target, request, signal);
@@ -222,10 +276,17 @@ export class Router {
       engines: this.local.status(),
       peers: this.peerList(),
       routes: Object.fromEntries(this.routes),
+      splits: Object.fromEntries(
+        [...this.splits].map(([model, split]) => [model, split.peers]),
+      ),
     };
   }
 
   async stop(): Promise<void> {
+    for (const split of this.splits.values()) {
+      for (const tunnel of split.tunnels) tunnel.close();
+    }
+    this.splits.clear();
     for (const id of [...this.peerLeases.keys()]) this.release(id, false);
     for (const peer of this.peers.values()) peer.link.close();
     this.peers.clear();
@@ -264,12 +325,59 @@ export class Router {
     const running = usable.find((answer) => answer.can.running);
     if (running) return this.remember(request, running.peer);
     // 3. It fits here.
-    if (this.canRunHere(this.local, request).fits) return undefined;
+    const here = this.canRunHere(this.local, request);
+    if (here.fits) return undefined;
     // 4. It fits on another member.
     const fits = usable.find((answer) => answer.can.fits);
     if (fits) return this.remember(request, fits.peer);
-    // 5. Here, where it waits for room or says why it cannot run.
+    // 5. It fits nowhere alone: split it, here (where the file is) and on
+    // the members that lend the most GPU memory, until it fits.
+    if (
+      here.downloaded &&
+      here.needBytes &&
+      !this.splits.has(request.model.id)
+    ) {
+      await this.planSplit(request, here, usable);
+    }
+    // 6. Here, where it waits for room or says why it cannot run.
     return undefined;
+  }
+
+  /** Open tunnels to enough lending members for `request`'s model to fit. */
+  private async planSplit(
+    request: PoolRequest,
+    here: CanRun,
+    answers: Array<{ peer: Peer; can: CanRun }>,
+  ): Promise<void> {
+    const lenders = answers
+      .filter((answer) => answer.can.rpc && (answer.can.gpuBytes ?? 0) > 0)
+      .sort((a, b) => (b.can.gpuBytes ?? 0) - (a.can.gpuBytes ?? 0));
+    let total = here.gpuBytes ?? 0;
+    const chosen: Array<{ peer: Peer; bytes: number }> = [];
+    for (const lender of lenders) {
+      if (total >= here.needBytes!) break;
+      chosen.push({ peer: lender.peer, bytes: lender.can.gpuBytes! });
+      total += lender.can.gpuBytes!;
+    }
+    if (chosen.length === 0 || total < here.needBytes!) return;
+    const tunnels: RpcTunnel[] = [];
+    const servers: string[] = [];
+    try {
+      for (const { peer } of chosen) {
+        const tunnel = new RpcTunnel(peer.link);
+        servers.push(await tunnel.open());
+        tunnels.push(tunnel);
+      }
+    } catch {
+      for (const tunnel of tunnels) tunnel.close();
+      return;
+    }
+    this.splits.set(request.model.id, {
+      tunnels,
+      servers,
+      remoteBytes: chosen.reduce((sum, lender) => sum + lender.bytes, 0),
+      peers: chosen.map(({ peer }) => peer.nodeId),
+    });
   }
 
   private remember(request: PoolRequest, peer: Peer): Peer {

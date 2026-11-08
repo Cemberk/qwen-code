@@ -15,7 +15,10 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { LocalModelEngine } from '../../engine.js';
+import type {
+  LocalModelEngine,
+  LocalModelEngineOptions,
+} from '../../engine.js';
 import type { LocalModelConfig } from '../../local-models.js';
 import { LocalModelServer } from '../../local-model-server.js';
 import { PoolClient } from '../client.js';
@@ -30,6 +33,7 @@ import {
   type PoolMembership,
 } from './membership.js';
 import { PeerLink } from './peer-link.js';
+import type { CanRun } from './router.js';
 
 const model: LocalModelConfig = { id: 'm', repo: 'o/m', file: 'm.gguf' };
 
@@ -84,9 +88,15 @@ describe('membership', () => {
 /** Stand-in engines that record what reaches them. */
 function fakeEngines() {
   const seen: Array<Record<string, unknown>> = [];
+  const options: LocalModelEngineOptions[] = [];
   let starts = 0;
-  const start = async (m: LocalModelConfig): Promise<LocalModelEngine> => {
+  const start = async (
+    m: LocalModelConfig,
+    _key: string,
+    engineOptions: LocalModelEngineOptions,
+  ): Promise<LocalModelEngine> => {
     starts++;
+    options.push(engineOptions);
     const server = http.createServer((req, res) => {
       let data = '';
       req.on('data', (chunk) => (data += chunk));
@@ -118,6 +128,7 @@ function fakeEngines() {
   };
   return {
     seen,
+    options,
     start,
     get starts() {
       return starts;
@@ -172,7 +183,12 @@ describe('pool members on the LAN', () => {
   });
 
   /** Two members of one pool: B shares and can run the model, A cannot. */
-  async function twoMembers() {
+  async function twoMembers(
+    canRun: {
+      a?: () => CanRun;
+      b?: () => CanRun;
+    } = {},
+  ) {
     const first = createPool(path.join(dir, 'b'));
     const sharing: PoolMembership = { ...first, share: true, port: 0 };
     const second: PoolMembership = {
@@ -188,7 +204,8 @@ describe('pool members on the LAN', () => {
       discovery: false,
       startEngine: engines.b.start,
       contextsFor: () => 4,
-      canRun: () => ({ running: false, downloaded: true, fits: true }),
+      canRun:
+        canRun.b ?? (() => ({ running: false, downloaded: true, fits: true })),
       hfCacheDir: path.join(dir, 'hf-b'),
     }))!;
     daemons.push(b);
@@ -198,7 +215,9 @@ describe('pool members on the LAN', () => {
       discovery: false,
       startEngine: engines.a.start,
       contextsFor: () => 4,
-      canRun: () => ({ running: false, downloaded: false, fits: false }),
+      canRun:
+        canRun.a ??
+        (() => ({ running: false, downloaded: false, fits: false })),
       hfCacheDir: path.join(dir, 'hf-a'),
     }))!;
     daemons.push(a);
@@ -276,6 +295,46 @@ describe('pool members on the LAN', () => {
     ).toBe(true);
     // Already here: nothing to copy again.
     expect((await fetch()).trim().split('\n').at(-1)).toBe('done');
+  });
+
+  it('splits a model that fits nowhere alone across this member and one that lends its GPU', async () => {
+    const GIB = 1024 ** 3;
+    const { engines } = await twoMembers({
+      // A has the file but only 4 GiB of the 10 it needs; B lends 8.
+      a: () => ({
+        running: false,
+        downloaded: true,
+        fits: false,
+        needBytes: 10 * GIB,
+        gpuBytes: 4 * GIB,
+        rpc: true,
+      }),
+      b: () => ({
+        running: false,
+        downloaded: false,
+        fits: false,
+        gpuBytes: 8 * GIB,
+        rpc: true,
+      }),
+    });
+    const client = new PoolClient({
+      dir: path.join(dir, 'a'),
+      spawnDaemon: () => {},
+      fallback: new LocalModelServer(async () => {
+        throw new Error('the fallback must not run');
+      }),
+    });
+    client.setModels([model]);
+    const lease = await client.acquire('m');
+    // It runs here, with B's GPU behind a tunnel on this machine's loopback.
+    expect(engines.a.starts).toBe(1);
+    expect(engines.b.starts).toBe(0);
+    const rpc = engines.a.options[0].rpc!;
+    expect(rpc.remoteBytes).toBe(8 * GIB);
+    expect(rpc.servers).toHaveLength(1);
+    expect(rpc.servers[0]).toMatch(/^127\.0\.0\.1:\d+$/);
+    lease.release();
+    await client.stop();
   });
 
   it('turns away a device without the pool key', async () => {
