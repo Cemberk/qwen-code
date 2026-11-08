@@ -30,6 +30,31 @@ $ProgressPreference = 'SilentlyContinue'
 
 function Step($text) { Write-Host "`n== $text" }
 function Fail($text) { Write-Host "ERROR: $text" -ForegroundColor Red; exit 1 }
+
+# Run a native command, its output and errors discarded, and give its exit
+# code. Windows PowerShell 5.1 turns a native command's redirected stderr
+# into error records, which $ErrorActionPreference = 'Stop' makes fatal.
+function Quiet([string]$exe, [string[]]$arguments) {
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $exe @arguments *> $null
+        return $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+}
+
+# Run a native command and give its standard output, errors discarded.
+function Output([string]$exe, [string[]]$arguments) {
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        return ((& $exe @arguments 2>$null) | Out-String)
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+}
 function Run($exe, [string[]]$arguments) {
     & $exe @arguments
     if ($LASTEXITCODE -ne 0) { Fail "$exe $($arguments -join ' ') failed ($LASTEXITCODE)." }
@@ -108,11 +133,9 @@ if ($backend -eq 'cuda') {
 
 Step "Building llama-server in $LlamaDir (backend: $backend, $Jobs jobs)\"
 Push-Location $LlamaDir
-& git show-ref --verify --quiet refs/heads/adaptive-moe
-$hasBranch = $LASTEXITCODE -eq 0
+$hasBranch = (Quiet 'git' @('show-ref', '--verify', '--quiet', 'refs/heads/adaptive-moe')) -eq 0
 if (-not $hasBranch) {
-    & git ls-remote --exit-code --heads origin adaptive-moe *> $null
-    $hasBranch = $LASTEXITCODE -eq 0
+    $hasBranch = (Quiet 'git' @('ls-remote', '--exit-code', '--heads', 'origin', 'adaptive-moe')) -eq 0
 }
 if ($hasBranch) { Run 'git' @('checkout', 'adaptive-moe') }
 Run $cmake (@('-B', 'build') + $cmakeArgs)

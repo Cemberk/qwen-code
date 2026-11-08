@@ -23,6 +23,31 @@ $ErrorActionPreference = 'Stop'
 function Step($text) { Write-Host "`n== $text" }
 function Fail($text) { Write-Host "ERROR: $text" -ForegroundColor Red; exit 1 }
 
+# Run a native command, its output and errors discarded, and give its exit
+# code. Windows PowerShell 5.1 turns a native command's redirected stderr
+# into error records, which $ErrorActionPreference = 'Stop' makes fatal.
+function Quiet([string]$exe, [string[]]$arguments) {
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $exe @arguments *> $null
+        return $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+}
+
+# Run a native command and give its standard output, errors discarded.
+function Output([string]$exe, [string[]]$arguments) {
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        return ((& $exe @arguments 2>$null) | Out-String)
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+}
+
 $QwenDir = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 if (-not $LlamaDir) { $LlamaDir = Join-Path (Split-Path $QwenDir -Parent) 'llama.cpp' }
 
@@ -46,13 +71,15 @@ Update $LlamaDir 'adaptive-moe'
 
 $cli = Join-Path $QwenDir 'dist\cli.js'
 if (Test-Path $cli) {
-    $status = (& node $cli pool status 2>$null) -join "`n"
+    $status = Output 'node' @($cli, 'pool', 'status')
     if (-not $Force -and $status -match 'qwen sessions attached: ([1-9]\d*)') {
         Fail "$($Matches[1]) qwen session(s) use the local model pool: close them first (or add -Force; their next request then starts it again)."
     }
-    Step 'Stopping the local model pool, if it runs'
-    & node $cli pool stop 2>$null | Out-Null
-    Start-Sleep -Seconds 2
+    if ($status -match 'pool runs') {
+        Step 'Stopping the local model pool'
+        Quiet 'node' @($cli, 'pool', 'stop') | Out-Null
+        Start-Sleep -Seconds 2
+    }
 }
 
 $install = Join-Path $QwenDir 'scripts\install-local.ps1'
