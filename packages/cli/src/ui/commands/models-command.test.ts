@@ -536,7 +536,9 @@ describe('/models setup', () => {
     expect(content).toContain(
       'Engine: C:\\llama.cpp\\llama-server.exe is not a program qwen can run',
     );
-    expect(content).toContain('-DLLAMA_OPENSSL=OFF -DGGML_VULKAN=ON');
+    expect(content).toContain(
+      '-DLLAMA_OPENSSL=OFF -DGGML_RPC=ON -DGGML_VULKAN=ON',
+    );
   });
 });
 

@@ -9,6 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  huggingFaceDownloadArgs,
   huggingFaceDownloadCommand,
   huggingFaceHubCacheDir,
   resolveLocalModelPath,
@@ -33,6 +34,27 @@ describe('huggingFaceHubCacheDir', () => {
     [{ HF_HUB_CACHE: '/new', HUGGINGFACE_HUB_CACHE: '/legacy' }, '/new'],
   ])('resolves %o like huggingface_hub', (env, expected) => {
     expect(huggingFaceHubCacheDir(env)).toBe(expected);
+  });
+});
+
+describe('huggingFaceDownloadArgs', () => {
+  it('downloads every part of a split model, in its folder', () => {
+    expect(
+      huggingFaceDownloadArgs({
+        repo: 'unsloth/DeepSeek-V4-Flash-GGUF',
+        file: 'UD-IQ2_XXS/DeepSeek-V4-Flash-UD-IQ2_XXS-00001-of-00003.gguf',
+      }),
+    ).toEqual([
+      'download',
+      'unsloth/DeepSeek-V4-Flash-GGUF',
+      '--include',
+      'UD-IQ2_XXS/DeepSeek-V4-Flash-UD-IQ2_XXS-*-of-00003.gguf',
+    ]);
+    expect(huggingFaceDownloadArgs({ repo: 'o/m', file: 'm.gguf' })).toEqual([
+      'download',
+      'o/m',
+      'm.gguf',
+    ]);
   });
 });
 

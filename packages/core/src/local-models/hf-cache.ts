@@ -36,6 +36,21 @@ export function huggingFaceHubCacheDir(
   return path.join(hfHome, 'hub');
 }
 
+/**
+ * The `hf` arguments that download `model` (`model.repo`, `model.file`), or
+ * every part of it when the file is split (`name-00001-of-00003.gguf`): naming
+ * only the first part would fetch a few megabytes of a 90 GB model.
+ */
+export function huggingFaceDownloadArgs(model: {
+  repo: string;
+  file: string;
+}): string[] {
+  const split = SPLIT_GGUF_PATTERN.exec(model.file);
+  return split
+    ? ['download', model.repo, '--include', `${split[1]}-*-of-${split[3]}.gguf`]
+    : ['download', model.repo, model.file];
+}
+
 /** The command that downloads `model` into the cache. The user runs it; qwen never downloads. */
 export function huggingFaceDownloadCommand(model: LocalModelConfig): string {
   const split = SPLIT_GGUF_PATTERN.exec(model.file);

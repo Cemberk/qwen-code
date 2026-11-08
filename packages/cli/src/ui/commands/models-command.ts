@@ -46,7 +46,10 @@ import {
   describeHardware,
   getHardwareProfile,
 } from '@qwen-code/qwen-code-core/local-models/hardware.js';
-import { resolveLocalModelPath } from '@qwen-code/qwen-code-core/local-models/hf-cache.js';
+import {
+  huggingFaceDownloadArgs,
+  resolveLocalModelPath,
+} from '@qwen-code/qwen-code-core/local-models/hf-cache.js';
 import { getLocalModelServer } from '@qwen-code/qwen-code-core/local-models/local-model-server.js';
 import {
   BUILT_IN_LOCAL_MODELS,
@@ -219,14 +222,12 @@ const downloadCommand: SlashCommand = {
     context.ui.addItem(
       {
         type: MessageType.INFO,
-        text: `Checking the size: hf download ${model.repo} ${model.file} --dry-run`,
+        text: `Checking the size: hf ${huggingFaceDownloadArgs(model).join(' ')} --dry-run`,
       },
       Date.now(),
     );
     const dryRun = await runHf([
-      'download',
-      model.repo,
-      model.file,
+      ...huggingFaceDownloadArgs(model),
       '--dry-run',
     ]);
     const bytes = dryRun.ok ? dryRunBytes(dryRun.output) : undefined;
@@ -251,11 +252,11 @@ const downloadCommand: SlashCommand = {
     context.ui.addItem(
       {
         type: MessageType.INFO,
-        text: `Running: hf download ${model.repo} ${model.file}`,
+        text: `Running: hf ${huggingFaceDownloadArgs(model).join(' ')}`,
       },
       Date.now(),
     );
-    const { ok, output } = await runHf(['download', model.repo, model.file]);
+    const { ok, output } = await runHf(huggingFaceDownloadArgs(model));
     if (!ok) {
       return error(`hf download failed:\n${output.trim()}`);
     }
@@ -263,15 +264,11 @@ const downloadCommand: SlashCommand = {
       context.ui.addItem(
         {
           type: MessageType.INFO,
-          text: `Running: hf download ${model.draft.repo} ${model.draft.file}`,
+          text: `Running: hf ${huggingFaceDownloadArgs(model.draft).join(' ')}`,
         },
         Date.now(),
       );
-      const draft = await runHf([
-        'download',
-        model.draft.repo,
-        model.draft.file,
-      ]);
+      const draft = await runHf(huggingFaceDownloadArgs(model.draft));
       if (!draft.ok) {
         return error(
           `Downloaded ${model.name ?? model.id}, but its draft model failed; it runs without it:\n${draft.output.trim()}`,
