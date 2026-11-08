@@ -458,12 +458,49 @@ in `/models bench`, speed floor. Done when: a model 2x larger than RAM runs
 exactly (same tokens as fully loaded) at the predicted speed +-20% on the
 780M laptop and one NVMe desktop.
 
+P2 status (2026-11-07):
+
+- Done (qwen-code): a mixture-of-experts model larger than memory runs
+  when everything but its experts fits; the experts that do not fit stay
+  in the file, mapped, and are read as tokens use them. The plan measures the
+  drive's random-read rate once per file, estimates the share of expert
+  reads memory serves (Pooled's curve until our traces), says how fast the
+  drive lets it go at most, and refuses under 1 tok/s.
+  `scripts/local-plan.mjs` prints a plan without starting it.
+- Measured: Qwen3.6 35B A3B at 16K on the 780M laptop with 8.5 GB free:
+  35 layers of experts on the CPU, 9.5 GB of them left in the file (drive
+  1.8 GB/s, planned ceiling 12.2 tok/s): prose 3.1, edit 6.6 tok/s, as with
+  more memory (3.9 / 7.3): there the CPU sets the pace, not the drive. The
+  file was likely still in the page cache.
+- Deferred: the fork's own RAM tier (direct reads, `next` policy, async
+  admission). It only pays when reads really reach the drive: a model well
+  beyond RAM. Test it on a machine where that holds (for example Qwen3.6
+  35B A3B on 16 GB, or a 120B MoE on 32-64 GB), comparing mmap streaming
+  with the tier at the same plan.
+
 **P3, pool membership and routing (goal 2).** Identity, pairing, mTLS,
 discovery, health, published state, version gate, request proxying, session
 affinity across machines, peer model transfer, `qwen pool
 create|join|status|leave|share`. Done when: a session on machine A uses a
 model running on machine B with < 5 ms added per request on Ethernet, and
 nothing connects without pairing.
+
+P3 status (2026-11-07):
+
+- Done: `qwen pool create|invite|join|share|add-peer|leave|status`; links
+  over TLS 1.2 with the pool key as a pre-shared key plus ECDHE (pairing
+  is a token from `qwen pool invite` instead of a 6-digit code: a PAKE is not
+  in Node, a copied token is as safe); LAN-only listener; multicast
+  discovery (hash of the pool id only) and configured peers; version gate;
+  routing (an engine already serving the model, else this machine if it
+  fits, else a member with room) with requests from members only run
+  locally; members serve with their own engine settings; model files copied
+  between members (resumable, SHA-256 checked) before downloading.
+- Tested in-process on one machine (two daemons over loopback TLS): a
+  request answered on the other member, strangers refused at the
+  handshake, members cannot read status or stop one another, model copy.
+- Not done: health states beyond "link dropped"; latency measured between
+  two real machines (needs the second device).
 
 **P4, split over ggml-rpc (goal 4, step A).** Tunnel, per-assignment
 rpc-server, link probe (RTT, throughput), measured ms/layer per device,
