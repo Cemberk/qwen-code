@@ -154,13 +154,22 @@ read.
 
 ### Update Qwen Code
 
-Pull both checkouts and run the installer again; it rebuilds both, and
-llama.cpp only recompiles what changed:
+One script brings both checkouts up to date and rebuilds them (llama.cpp
+only recompiles what changed). It stops if either checkout has changes of
+your own, and stops the local model pool before rebuilding its engine:
 
 ```bash
-cd qwen-code && git pull && cd ../llama.cpp && git pull && cd ../qwen-code
-sh scripts/install-local.sh            # Windows: powershell -ExecutionPolicy Bypass -File scripts\install-local.ps1
+# macOS, Linux
+cd qwen-code
+sh scripts/update-local.sh
+
+# Windows (PowerShell)
+cd qwen-code
+powershell -ExecutionPolicy Bypass -File scripts\update-local.ps1
 ```
+
+It takes the installer's options (`JOBS=2 sh scripts/update-local.sh`,
+`-Jobs 2`).
 
 ## Step 2: Pick a model
 
