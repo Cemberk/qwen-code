@@ -38,8 +38,10 @@ export function recommendedBackend(profile: HardwareProfile): EngineBackend {
  * Every build: one self-contained program (no ggml libraries beside it), and
  * no HTTPS, so the engine cannot download anything.
  */
+// GGML_RPC: ggml-rpc-server lends this machine's GPU to models split
+// across the user's devices (it only ever listens on loopback).
 const BASE_FLAGS =
-  ' -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DLLAMA_OPENSSL=OFF';
+  ' -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DLLAMA_OPENSSL=OFF -DGGML_RPC=ON';
 
 /** Parallel compile jobs for the engine build. */
 const BUILD_JOBS = 4;
@@ -104,7 +106,7 @@ export function engineSetup(profile: HardwareProfile): EngineSetup {
     `cmake -B build${BASE_FLAGS}${CMAKE_FLAGS[backend]}`,
     // A compiler process per core runs a 32 GB machine out of memory on the
     // Vulkan shaders.
-    `cmake --build build --config Release --target llama-server -j ${BUILD_JOBS}`,
+    `cmake --build build --config Release --target llama-server ggml-rpc-server -j ${BUILD_JOBS}`,
   ];
   if (windows && backend === 'vulkan') {
     lines.push(

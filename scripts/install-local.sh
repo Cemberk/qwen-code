@@ -53,7 +53,7 @@ if git show-ref --verify --quiet refs/heads/adaptive-moe ||
 fi
 # shellcheck disable=SC2086 # the options are split on purpose
 cmake -B build $CMAKE_ARGS
-cmake --build build --config Release --target llama-server -j "$JOBS"
+cmake --build build --config Release --target llama-server ggml-rpc-server -j "$JOBS"
 ENGINE="$LLAMA_DIR/build/bin/llama-server"
 [ -x "$ENGINE" ] || fail "The build did not produce $ENGINE."
 

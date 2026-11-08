@@ -57,14 +57,14 @@ describe('engineSetup', () => {
     expect(setup.binary).toBe('build\\bin\\Release\\llama-server.exe');
     expect(setup.lines).toContain('winget install KhronosGroup.VulkanSDK');
     expect(setup.lines).toContain(
-      'cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DLLAMA_OPENSSL=OFF -DGGML_VULKAN=ON',
+      'cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DLLAMA_OPENSSL=OFF -DGGML_RPC=ON -DGGML_VULKAN=ON',
     );
     expect(setup.lines).toContain(
       'git clone https://github.com/Cemberk/llama.cpp',
     );
     expect(setup.lines.at(-1)).toMatch(/localModelEngine/);
     expect(setup.lines).toContain(
-      'cmake --build build --config Release --target llama-server -j 4',
+      'cmake --build build --config Release --target llama-server ggml-rpc-server -j 4',
     );
     expect(setup.lines.join('\n')).toMatch(/windows-vulkan-noadmin\.ps1/);
   });
@@ -72,7 +72,7 @@ describe('engineSetup', () => {
   it('builds CUDA on Linux and names no Vulkan packages', () => {
     const setup = engineSetup(machine('linux', [gpu('nvidia')]));
     expect(setup.lines).toContain(
-      'cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DLLAMA_OPENSSL=OFF -DGGML_CUDA=ON',
+      'cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DLLAMA_OPENSSL=OFF -DGGML_RPC=ON -DGGML_CUDA=ON',
     );
     expect(setup.lines.join('\n')).toMatch(/nvidia-cuda-toolkit/);
     expect(setup.lines.join('\n')).not.toMatch(/libvulkan-dev/);
@@ -91,7 +91,7 @@ describe('engineSetup', () => {
   it('builds Metal by default on Apple silicon', () => {
     const setup = engineSetup(machine('darwin', [gpu('apple')], 'arm64'));
     expect(setup.lines).toContain(
-      'cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DLLAMA_OPENSSL=OFF',
+      'cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DLLAMA_OPENSSL=OFF -DGGML_RPC=ON',
     );
     expect(setup.lines).toContain('xcode-select --install');
   });
@@ -103,6 +103,7 @@ describe('engineCmakeArgs', () => {
       '-DCMAKE_BUILD_TYPE=Release',
       '-DBUILD_SHARED_LIBS=OFF',
       '-DLLAMA_OPENSSL=OFF',
+      '-DGGML_RPC=ON',
       '-DGGML_VULKAN=ON',
     ]);
     expect(engineCmakeArgs(machine('darwin', [gpu('apple')], 'arm64'))).toEqual(
@@ -110,6 +111,7 @@ describe('engineCmakeArgs', () => {
         '-DCMAKE_BUILD_TYPE=Release',
         '-DBUILD_SHARED_LIBS=OFF',
         '-DLLAMA_OPENSSL=OFF',
+        '-DGGML_RPC=ON',
       ],
     );
   });

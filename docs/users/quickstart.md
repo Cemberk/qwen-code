@@ -105,7 +105,7 @@ node scripts/local-setup.mjs backend
 node scripts/local-setup.mjs cmake-args
 cd ../llama.cpp
 cmake -B build <the options above>
-cmake --build build --config Release --target llama-server -j 4
+cmake --build build --config Release --target llama-server ggml-rpc-server -j 4
 
 # the engine Qwen Code runs (Windows: build\bin\Release\llama-server.exe)
 cd ../qwen-code

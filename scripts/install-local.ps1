@@ -83,7 +83,7 @@ if (-not $hasBranch) {
 }
 if ($hasBranch) { Run 'git' @('checkout', 'adaptive-moe') }
 Run $cmake (@('-B', 'build') + $cmakeArgs)
-Run $cmake @('--build', 'build', '--config', 'Release', '--target', 'llama-server', '-j', "$Jobs")
+Run $cmake @('--build', 'build', '--config', 'Release', '--target', 'llama-server', 'ggml-rpc-server', '-j', "$Jobs")
 Pop-Location
 $engine = Join-Path $LlamaDir 'build\bin\Release\llama-server.exe'
 if (-not (Test-Path $engine)) { Fail "The build did not produce $engine." }
