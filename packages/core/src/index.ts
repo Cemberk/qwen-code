@@ -58,6 +58,14 @@ export {
   poolKey,
   poolLogFile,
 } from './local-models/pool/paths.js';
+export {
+  createPool,
+  inviteToken,
+  joinPool,
+  readMembership,
+  writeMembership,
+  type PoolMembership,
+} from './local-models/pool/net/membership.js';
 export { promptCacheDir } from './local-models/prompt-cache.js';
 export { validateEngineArgs } from './local-models/planner.js';
 

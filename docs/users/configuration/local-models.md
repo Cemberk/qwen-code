@@ -329,6 +329,44 @@ status` shows what it runs, `qwen pool stop` stops it; its log is
   and, with bwrap, on Linux, but elsewhere keeps running after `kill -9`
   until you stop it.
 
+## Your devices in one pool
+
+The local model pools of your computers can join into one: a session on
+your laptop can then use a model running on your desktop, and the other way
+round.
+
+```bash
+# On the first device
+qwen pool create
+qwen pool share on      # serve this device's models to the others
+qwen pool invite        # prints: qwen pool join qwen-pool:...
+
+# On each other device: the command invite printed
+qwen pool join qwen-pool:...
+qwen pool share on      # if it should serve its models too
+```
+
+- The token holds the pool's secret key: pass it only over a channel you
+  trust. Every link between members is encrypted and authenticated with it
+  (TLS with the key, plus a fresh key exchange per connection); a device
+  without it cannot connect.
+- Members find each other on the local network by themselves (UDP port
+  52451; only a hash of the pool's id is announced). Where that does not work
+  (another subnet, a VPN), name a member: `qwen pool add-peer 192.168.1.20:52450`.
+- A sharing member listens on TCP port 52450, and only answers devices on
+  private addresses (192.168._, 10._, ...). Allow that port in its firewall.
+  It stays running for the others while `qwen pool serve`, or any Qwen Code,
+  runs on it.
+- A request goes to an engine already serving its model (this device
+  first), else to this device if the model fits here, else to a member that
+  has the model downloaded and room for it. Members run others' requests
+  with their own engine and settings. `qwen pool status` shows the members
+  and where each model runs.
+- A member sees everything it computes for the others, prompts included:
+  the pool is for your own devices.
+- Members of different Qwen Code versions are listed, not used: update them.
+- `qwen pool leave` leaves the pool; `qwen pool share off` stops serving.
+
 ## Saved prompts
 
 At the end of each turn, Qwen Code saves the engine's processed prompt for

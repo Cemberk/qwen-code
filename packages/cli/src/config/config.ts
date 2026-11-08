@@ -852,7 +852,8 @@ export async function parseArguments(): Promise<CliArgs> {
       result._[0] === 'hooks' ||
       result._[0] === 'sessions' ||
       result._[0] === 'board' ||
-      result._[0] === 'sandbox')
+      result._[0] === 'sandbox' ||
+      result._[0] === 'pool')
   ) {
     // MCP/Extensions/Hooks/Sessions/Board/Sandbox commands handle their own
     // execution and exit. Returning here would let the main interactive flow

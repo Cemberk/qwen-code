@@ -71,6 +71,10 @@ export interface PoolDaemonOptions {
   /** Full contexts each engine's shared cache holds (the planner's by default). */
   contextsFor?: ContextsFor;
   idleExitMs?: number;
+  /** Where the listener for other members binds: every interface by default (tests: loopback). */
+  peerHost?: string;
+  /** Find members by multicast on the LAN (default); tests turn it off. */
+  discovery?: boolean;
   /** Whether this machine can run a model (the planner's verdict by default). */
   canRun?: (host: HostPool, request: PoolRequest) => CanRun;
   /**
@@ -587,7 +591,7 @@ export async function startPoolDaemon(
       });
       await new Promise<void>((resolve, reject) => {
         listener.once('error', reject);
-        listener.listen(membership.port, () => {
+        listener.listen(membership.port, options.peerHost, () => {
           listener.off('error', reject);
           resolve();
         });
@@ -604,10 +608,14 @@ export async function startPoolDaemon(
     throw error;
   }
   if (membership) {
-    discovery = new Discovery(membership, sharing, (found) => {
-      if (found.wire === POOL_WIRE_VERSION) void router.addPeer(found.address);
-    });
-    discovery.start();
+    if (options.discovery !== false) {
+      discovery = new Discovery(membership, sharing, (found) => {
+        if (found.wire === POOL_WIRE_VERSION) {
+          void router.addPeer(found.address);
+        }
+      });
+      discovery.start();
+    }
     const refresh = () => {
       for (const peer of membership.peers) void router.addPeer(peer);
     };

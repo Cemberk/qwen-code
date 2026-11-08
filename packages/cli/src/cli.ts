@@ -43,6 +43,10 @@ export const TOP_LEVEL_COMMANDS = [
   ['hooks', 'Manage Qwen Code hooks (use /hooks in interactive mode).'],
   ['mcp', 'Manage MCP servers'],
   [
+    'pool <action> [value]',
+    'Run local models for every qwen on this machine, and share them with your devices',
+  ],
+  [
     'sandbox [cmd...]',
     'Inspect the sandbox backend, or run a command inside it',
   ],

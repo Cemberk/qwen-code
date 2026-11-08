@@ -176,6 +176,9 @@ describe('pool members on the LAN', () => {
     const b = (await startPoolDaemon({
       dir: path.join(dir, 'b'),
       membership: sharing,
+      // Loopback only: no firewall prompt for a test.
+      peerHost: '127.0.0.1',
+      discovery: false,
       startEngine: engines.b.start,
       contextsFor: () => 4,
       canRun: () => ({ running: false, downloaded: true, fits: true }),
@@ -184,6 +187,7 @@ describe('pool members on the LAN', () => {
     const a = (await startPoolDaemon({
       dir: path.join(dir, 'a'),
       membership: second,
+      discovery: false,
       startEngine: engines.a.start,
       contextsFor: () => 4,
       canRun: () => ({ running: false, downloaded: false, fits: false }),
