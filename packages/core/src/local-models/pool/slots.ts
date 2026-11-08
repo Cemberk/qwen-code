@@ -56,6 +56,17 @@ export class SlotTable {
   }
 
   /**
+   * Requests that may run at once: the shared context cache holds this many
+   * full conversations. Defaults to every slot.
+   */
+  maxRunning = Number.POSITIVE_INFINITY;
+
+  /** Whether one more request may start now. */
+  get canRun(): boolean {
+    return this.busy < this.maxRunning;
+  }
+
+  /**
    * The slot for a turn of `conversation`, or undefined when every
    * conversation slot is running a request: wait for one to end.
    */

@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   GPU_HEADROOM_BYTES,
   contextHeadroomBytes,
+  contextsThatFit,
   downloadSizeProblem,
   expertBytesByLayer,
   fitModel,
@@ -139,6 +140,24 @@ describe('contextHeadroomBytes', () => {
         5 * GIB + GIB,
       ),
     ).toMatchObject({ partial: true });
+  });
+});
+
+describe('contextsThatFit', () => {
+  const GIB = 1024 ** 3;
+  it('counts the whole contexts that fit in the GPU memory left over', () => {
+    // Qwen3.6 35B A3B on a 16 GiB budget: 13 GiB of weights, 1.1 GiB of
+    // room for one context of 0.625 GiB: 2 more fit.
+    expect(contextsThatFit(16 * GIB, 13 * GIB, 1.1 * GIB, 0.625 * GIB, 4)).toBe(
+      4,
+    );
+    expect(contextsThatFit(15 * GIB, 13 * GIB, 1.1 * GIB, 0.625 * GIB, 4)).toBe(
+      2,
+    );
+    // Qwen3 4B on 9 GiB: 4.5 GiB per context leaves room for no second one.
+    expect(contextsThatFit(9 * GIB, 2.5 * GIB, 5 * GIB, 4.5 * GIB, 4)).toBe(1);
+    expect(contextsThatFit(undefined, GIB, GIB, GIB, 4)).toBe(1);
+    expect(contextsThatFit(16 * GIB, GIB, GIB, undefined, 4)).toBe(1);
   });
 });
 

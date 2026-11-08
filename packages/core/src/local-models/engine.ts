@@ -183,6 +183,11 @@ export interface LocalModelEngineOptions {
    * unset. They share one context cache.
    */
   slots?: number;
+  /**
+   * Full contexts the shared cache holds (`--ctx-size` is the model's
+   * context times this); 1 when unset. Requests beyond it must wait.
+   */
+  contexts?: number;
 }
 
 export const DEFAULT_ENGINE_OPTIONS: LocalModelEngineOptions = {
@@ -358,7 +363,11 @@ export function engineCommand(
     '--port',
     String(port),
     '--ctx-size',
-    String(model.contextSize ?? DEFAULT_LOCAL_MODEL_CONTEXT_SIZE),
+    // The slots share one cache: room for `contexts` full conversations.
+    String(
+      (model.contextSize ?? DEFAULT_LOCAL_MODEL_CONTEXT_SIZE) *
+        (options.contexts ?? 1),
+    ),
     '--alias',
     model.id,
     '--jinja',

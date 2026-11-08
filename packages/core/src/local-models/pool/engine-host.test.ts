@@ -78,7 +78,7 @@ describe('EngineHost', () => {
 
   it('serves two clients from one engine, each conversation in its own slot', async () => {
     const fake = fakeEngines();
-    const host = new EngineHost(fake.start, 'k');
+    const host = new EngineHost(fake.start, 'k', () => 4);
     const [one, two] = await Promise.all([
       host.acquire(request('c1', 's1')),
       host.acquire(request('c2', 's2')),
@@ -98,7 +98,7 @@ describe('EngineHost', () => {
 
   it('saves a turn in its slot, and the first one of a fresh session as the shared prefix', async () => {
     const fake = fakeEngines();
-    const host = new EngineHost(fake.start, 'k');
+    const host = new EngineHost(fake.start, 'k', () => 4);
     const lease = await host.acquire(request('c1', 's1'));
     host.release(lease.id, true);
     await tick();
@@ -117,7 +117,7 @@ describe('EngineHost', () => {
 
   it('gives the idle-longest slot to a new conversation, saving and restoring', async () => {
     const fake = fakeEngines();
-    const host = new EngineHost(fake.start, 'k');
+    const host = new EngineHost(fake.start, 'k', () => 4);
     const leases = [];
     for (let i = 0; i < POOL_CONVERSATION_SLOTS; i++) {
       const lease = await host.acquire(request(`c${i}`, `s${i}`));
@@ -140,7 +140,7 @@ describe('EngineHost', () => {
 
   it('makes a turn wait while every conversation slot is running', async () => {
     const fake = fakeEngines();
-    const host = new EngineHost(fake.start, 'k');
+    const host = new EngineHost(fake.start, 'k', () => 4);
     const running = [];
     for (let i = 0; i < POOL_CONVERSATION_SLOTS; i++) {
       running.push(await host.acquire(request(`c${i}`, `s${i}`)));
@@ -160,9 +160,27 @@ describe('EngineHost', () => {
     await host.stop();
   });
 
+  it('runs no more requests at once than the shared cache holds contexts', async () => {
+    const fake = fakeEngines();
+    const host = new EngineHost(fake.start, 'k', () => 2);
+    const one = await host.acquire(request('c1', 's1'));
+    await host.acquire(request('c2', 's2', 'side'));
+    expect(fake.options[0].contexts).toBe(2);
+    let granted = false;
+    const third = host.acquire(request('c3', 's3')).then((lease) => {
+      granted = true;
+      return lease;
+    });
+    await tick();
+    expect(granted).toBe(false);
+    host.release(one.id);
+    expect((await third).slot).not.toBe(undefined);
+    await host.stop();
+  });
+
   it('restarts for another model only when no request runs', async () => {
     const fake = fakeEngines();
-    const host = new EngineHost(fake.start, 'k');
+    const host = new EngineHost(fake.start, 'k', () => 4);
     const first = await host.acquire(request('c1', 's1'));
     let switched = false;
     const other = host.acquire(request('c2', 's2', 'main', b)).then((lease) => {
@@ -180,7 +198,7 @@ describe('EngineHost', () => {
 
   it('frees what a client that went away held', async () => {
     const fake = fakeEngines();
-    const host = new EngineHost(fake.start, 'k');
+    const host = new EngineHost(fake.start, 'k', () => 4);
     const lease = await host.acquire(request('c1', 's1'));
     const waiting = host.acquire(request('c1', 's2', 'main', b));
     host.forgetClient('c1');

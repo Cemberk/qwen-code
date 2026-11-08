@@ -52,7 +52,13 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
 describe('HostPool', () => {
   it('runs two models side by side when they fit', async () => {
     const fake = fakeEngines();
-    const pool = new HostPool(fake.start, 'k', () => true);
+    const pool = new HostPool(
+      fake.start,
+      'k',
+      () => true,
+      3,
+      () => 4,
+    );
     const a = await pool.acquire(request('c1', 'a'));
     const b = await pool.acquire(request('c2', 'b'));
     expect(a.engine.model.id).toBe('a');
@@ -68,7 +74,13 @@ describe('HostPool', () => {
 
   it('stops the engine idle the longest when a model does not fit beside it', async () => {
     const fake = fakeEngines();
-    const pool = new HostPool(fake.start, 'k', () => false);
+    const pool = new HostPool(
+      fake.start,
+      'k',
+      () => false,
+      3,
+      () => 4,
+    );
     const a = await pool.acquire(request('c1', 'a'));
     pool.release(a.id);
     await tick();
@@ -80,7 +92,13 @@ describe('HostPool', () => {
 
   it('waits while the engine in the way is serving a request', async () => {
     const fake = fakeEngines();
-    const pool = new HostPool(fake.start, 'k', () => false);
+    const pool = new HostPool(
+      fake.start,
+      'k',
+      () => false,
+      3,
+      () => 4,
+    );
     const a = await pool.acquire(request('c1', 'a'));
     let granted = false;
     const waiting = pool.acquire(request('c2', 'b')).then((lease) => {
@@ -96,7 +114,13 @@ describe('HostPool', () => {
 
   it('keeps to the most engines it may run', async () => {
     const fake = fakeEngines();
-    const pool = new HostPool(fake.start, 'k', () => true, 2);
+    const pool = new HostPool(
+      fake.start,
+      'k',
+      () => true,
+      2,
+      () => 4,
+    );
     const a = await pool.acquire(request('c1', 'a'));
     await pool.acquire(request('c2', 'b'));
     pool.release(a.id);
@@ -108,7 +132,13 @@ describe('HostPool', () => {
 
   it('drops what a departed client was waiting for', async () => {
     const fake = fakeEngines();
-    const pool = new HostPool(fake.start, 'k', () => false);
+    const pool = new HostPool(
+      fake.start,
+      'k',
+      () => false,
+      3,
+      () => 4,
+    );
     await pool.acquire(request('c1', 'a'));
     const waiting = pool.acquire(request('c2', 'b'));
     pool.forgetClient('c2');

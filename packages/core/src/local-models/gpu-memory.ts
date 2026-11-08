@@ -20,6 +20,23 @@ export const GPU_HEADROOM_BYTES = GIB;
 const COMPUTE_BUFFER_BYTES = GIB / 2;
 
 /**
+ * How many full contexts of `contextBytes` fit beside a model that already
+ * has room for one: the GPU memory left over, in whole contexts, plus that
+ * one, at most `most`. 1 when nothing is known.
+ */
+export function contextsThatFit(
+  limit: number | undefined,
+  bytes: number,
+  headroom: number,
+  contextBytes: number | undefined,
+  most: number,
+): number {
+  if (limit === undefined || !contextBytes) return 1;
+  const spare = limit - bytes - headroom;
+  return Math.max(1, Math.min(most, 1 + Math.floor(spare / contextBytes)));
+}
+
+/**
  * The room a model needs beside its weights, from its context cache at
  * `contextSize` tokens: GPU_HEADROOM_BYTES at least, which is also the
  * answer when the model file does not say how big its cache is. Qwen3 4B

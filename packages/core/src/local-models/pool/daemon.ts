@@ -19,7 +19,8 @@ import net from 'node:net';
 import { startLocalModelEngine } from '../engine.js';
 import type { StartEngine } from '../local-model-server.js';
 import type { PoolRequest } from './engine-host.js';
-import { HostPool, type FitsBeside } from './host-pool.js';
+import { HostPool, POOL_MAX_ENGINES, type FitsBeside } from './host-pool.js';
+import type { ContextsFor } from './engine-host.js';
 import {
   ensurePoolDir,
   poolAddress,
@@ -50,6 +51,8 @@ export interface PoolDaemonOptions {
   startEngine?: StartEngine;
   /** Whether an engine may start beside the running ones (the planner's verdict by default). */
   fitsBeside?: FitsBeside;
+  /** Full contexts each engine's shared cache holds (the planner's by default). */
+  contextsFor?: ContextsFor;
   idleExitMs?: number;
   /** Called once everything is stopped; the CLI exits the process. */
   onExit?: () => void;
@@ -189,6 +192,8 @@ export async function startPoolDaemon(
     options.startEngine ?? startLocalModelEngine,
     randomBytes(24).toString('hex'),
     options.fitsBeside,
+    POOL_MAX_ENGINES,
+    options.contextsFor,
   );
   const idleExitMs = options.idleExitMs ?? POOL_IDLE_EXIT_MS;
   /** Attached clients: id -> their connections (a client may reconnect). */

@@ -145,9 +145,11 @@ describe('local model pool', () => {
   it('serves two qwens from one engine, each conversation in its own slot', async () => {
     const engines = fakeEngines();
     const start = () => {
-      void startPoolDaemon({ dir, startEngine: engines.start }).then(
-        (started) => (daemon ??= started),
-      );
+      void startPoolDaemon({
+        dir,
+        startEngine: engines.start,
+        contextsFor: () => 4,
+      }).then((started) => (daemon ??= started));
     };
     const one = client(start);
     const two = client(start);
@@ -178,11 +180,19 @@ describe('local model pool', () => {
 
   it('refuses requests without the key, and a second daemon', async () => {
     const engines = fakeEngines();
-    daemon = await startPoolDaemon({ dir, startEngine: engines.start });
+    daemon = await startPoolDaemon({
+      dir,
+      startEngine: engines.start,
+      contextsFor: () => 4,
+    });
     expect(daemon).toBeDefined();
-    expect(await startPoolDaemon({ dir, startEngine: engines.start })).toBe(
-      undefined,
-    );
+    expect(
+      await startPoolDaemon({
+        dir,
+        startEngine: engines.start,
+        contextsFor: () => 4,
+      }),
+    ).toBe(undefined);
     const response = await post(
       { socketPath: poolAddress(dir), apiKey: 'wrong' },
       {},
@@ -196,6 +206,7 @@ describe('local model pool', () => {
       void startPoolDaemon({
         dir,
         startEngine: engines.start,
+        contextsFor: () => 4,
         idleExitMs: 100,
       }).then((started) => (daemon ??= started));
     };

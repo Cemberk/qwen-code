@@ -10,6 +10,9 @@ import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import type { LocalModelConfig } from '../local-models.js';
 import type { LocalModelEngine, LocalModelEngineOptions } from '../engine.js';
+import { planLocalModel } from '../engine.js';
+import { contextsThatFit } from '../gpu-memory.js';
+import { DEFAULT_LOCAL_MODEL_CONTEXT_SIZE } from '../local-models.js';
 import type { StartEngine } from '../local-model-server.js';
 import {
   ensurePromptCacheDir,
@@ -66,6 +69,36 @@ export const POOL_SIDE_SLOTS = 1;
 /** A shared prefix older than this is saved again from a fresh session. */
 const SHARED_PREFIX_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
+/** Decides how many full contexts an engine's shared cache holds. */
+export type ContextsFor = (request: PoolRequest, most: number) => number;
+
+/**
+ * As many full contexts as fit in GPU memory beside the model, from the
+ * planner: Qwen3.6 35B A3B (640 MiB per 32K context) gets several on a 16 GB
+ * GPU, Qwen3 4B (4.5 GiB) one.
+ */
+export const plannerContextsFor: ContextsFor = (request, most) => {
+  try {
+    const planned = planLocalModel(request.model, request.options);
+    const perToken = planned.capabilities?.contextBytesPerToken;
+    const contextBytes = perToken
+      ? perToken *
+        (request.model.contextSize ?? DEFAULT_LOCAL_MODEL_CONTEXT_SIZE)
+      : undefined;
+    return 'problem' in planned.fit || planned.fit.partial
+      ? 1
+      : contextsThatFit(
+          planned.gpu?.limit,
+          planned.bytes,
+          planned.headroomBytes,
+          contextBytes,
+          most,
+        );
+  } catch {
+    return 1;
+  }
+};
+
 const conversationKey = (request: PoolRequest) =>
   `${request.client}\0${request.context?.session ?? ''}`;
 
@@ -103,6 +136,7 @@ export class EngineHost {
     private readonly startEngine: StartEngine,
     /** The key the pool's engines accept; only the daemon holds it. */
     readonly engineKey: string,
+    private readonly contextsFor: ContextsFor = plannerContextsFor,
   ) {}
 
   /** Wait for a lease on an engine serving `request.model`. */
@@ -220,6 +254,7 @@ export class EngineHost {
         if (!head) break;
         const setup = setupOf(head.request);
         if (this.engine?.alive && isDeepStrictEqual(this.setup, setup)) {
+          if (!this.slots!.canRun) break; // the shared cache is full
           const granted = this.grant(head.request);
           if (!granted) break; // every conversation slot runs a request
           this.queue.shift();
@@ -261,10 +296,14 @@ export class EngineHost {
             }
           }
           const slots = new SlotTable(POOL_CONVERSATION_SLOTS, POOL_SIDE_SLOTS);
+          // The slots share one cache: run at most as many requests at once
+          // as it holds full contexts, so none runs out of room.
+          const contexts = this.contextsFor(head.request, slots.size);
+          slots.maxRunning = contexts;
           this.engine = await this.startEngine(
             setup.model,
             this.engineKey,
-            { ...setup.options, slots: slots.size },
+            { ...setup.options, slots: slots.size, contexts },
             setup.promptCacheDir,
           );
           this.setup = setupOf(head.request);

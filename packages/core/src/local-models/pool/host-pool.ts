@@ -7,7 +7,12 @@
 import { isDeepStrictEqual } from 'node:util';
 import { planLocalModel } from '../engine.js';
 import type { StartEngine } from '../local-model-server.js';
-import { EngineHost, type PoolLease, type PoolRequest } from './engine-host.js';
+import {
+  EngineHost,
+  type ContextsFor,
+  type PoolLease,
+  type PoolRequest,
+} from './engine-host.js';
 
 /** Engines the pool runs side by side at most, memory permitting. */
 export const POOL_MAX_ENGINES = 3;
@@ -75,6 +80,7 @@ export class HostPool {
     readonly engineKey: string,
     private readonly fitsBeside: FitsBeside = plannerFitsBeside,
     private readonly maxEngines = POOL_MAX_ENGINES,
+    private readonly contextsFor?: ContextsFor,
   ) {}
 
   acquire(request: PoolRequest, signal?: AbortSignal): Promise<PoolLease> {
@@ -194,7 +200,11 @@ export class HostPool {
           await idle.host.stop();
         }
         this.pending.shift();
-        const host = new EngineHost(this.startEngine, this.engineKey);
+        const host = new EngineHost(
+          this.startEngine,
+          this.engineKey,
+          this.contextsFor,
+        );
         const entry = { request: next.request, host };
         this.hosts.push(entry);
         host.acquire(next.request, next.signal).then(next.resolve, (error) => {
