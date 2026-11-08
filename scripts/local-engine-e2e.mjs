@@ -10,7 +10,7 @@
 // model, start llama-server, run both /models bench workloads, stop.
 //
 //   npm run build
-//   node scripts/local-engine-e2e.mjs [--engine PATH] [--model ID] [--no-spec] [--args OPTION...]
+//   node scripts/local-engine-e2e.mjs [--engine PATH] [--model ID] [--ctx TOKENS] [--no-spec] [--args OPTION...]
 //
 // --engine   the llama-server to run (default: the first on PATH)
 // --model    a built-in local model id (default: qwen3-4b); it must be
@@ -56,7 +56,12 @@ try {
 }
 
 const id = option('model') ?? 'qwen3-4b';
-const model = core.BUILT_IN_LOCAL_MODELS.find((m) => m.id === id);
+const builtIn = core.BUILT_IN_LOCAL_MODELS.find((m) => m.id === id);
+// --ctx TOKENS: the model's context size, instead of its default.
+const model =
+  builtIn && option('ctx')
+    ? { ...builtIn, contextSize: Number(option('ctx')) }
+    : builtIn;
 if (!model) {
   console.error(
     `${id} is not a built-in local model: ${core.BUILT_IN_LOCAL_MODELS.map((m) => m.id).join(', ')}`,

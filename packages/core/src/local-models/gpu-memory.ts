@@ -196,7 +196,15 @@ export function localModelExpertBytes(
  * this machine.
  */
 export type ModelFit =
-  | { cpuMoeLayers: number; partial?: boolean }
+  | {
+      cpuMoeLayers: number;
+      partial?: boolean;
+      /**
+       * Too big for memory: the experts of the CPU layers stay in the model
+       * file, mapped into memory, and are read from the drive as needed.
+       */
+      streams?: boolean;
+    }
   | { problem: string };
 
 function ramProblem(
@@ -265,20 +273,38 @@ export function fitModel(
     return { cpuMoeLayers: 0 };
   }
   const ram = gpu.unified ? totalMemory : gpu.limit + totalMemory;
+  const layers = expertBytes();
+  let streams = false;
   if (bytes + headroom + SYSTEM_RESERVE_BYTES > ram) {
-    return { problem: ramProblem(model, bytes, ram, platform) };
+    // A mixture-of-experts model can still run when everything but its
+    // experts fits: the experts are read from the drive as tokens use them.
+    const experts = layers.reduce((sum, layer) => sum + layer, 0);
+    if (
+      experts === 0 ||
+      bytes - experts + headroom + SYSTEM_RESERVE_BYTES > ram
+    ) {
+      return { problem: ramProblem(model, bytes, ram, platform) };
+    }
+    streams = true;
   }
   let onGpu = bytes;
-  const layers = expertBytes();
   for (let count = 1; count <= layers.length; count++) {
     onGpu -= layers[count - 1];
     if (onGpu + headroom + CPU_LAYERS_MARGIN_BYTES <= gpu.limit) {
-      return { cpuMoeLayers: count, partial: true };
+      return {
+        cpuMoeLayers: count,
+        partial: true,
+        ...(streams ? { streams } : {}),
+      };
     }
   }
   return gpu.unified
     ? { problem: gpuLimitProblem(model, bytes, gpu.limit, platform) }
-    : { cpuMoeLayers: layers.length, partial: true };
+    : {
+        cpuMoeLayers: layers.length,
+        partial: true,
+        ...(streams ? { streams } : {}),
+      };
 }
 
 /**

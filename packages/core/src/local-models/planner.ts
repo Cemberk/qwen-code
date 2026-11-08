@@ -11,6 +11,7 @@ import {
 } from './gpu-memory.js';
 import type { ModelCapabilities } from './model-inspector.js';
 import type { SpeculationAdvice } from './bench.js';
+import type { StreamingEstimate } from './streaming.js';
 
 const GIB = 1024 ** 3;
 
@@ -34,6 +35,8 @@ export interface EnginePlan {
 export interface PlanInput {
   /** Bytes of the model's files (and its draft). */
   bytes: number;
+  /** The drive's limit, when experts stream from it. */
+  streaming?: StreamingEstimate;
   /** Room the model needs beside its weights; GPU_HEADROOM_BYTES when unset. */
   headroomBytes?: number;
   gpu: GpuBudget | undefined;
@@ -107,6 +110,13 @@ export function planEngine(input: PlanInput): EnginePlan {
         'Fits the GPU with little to spare: prompts are read in default batches.',
       );
     }
+  }
+
+  if (input.streaming) {
+    const s = input.streaming;
+    notes.push(
+      `Does not fit in the memory free now: ${(s.onDriveBytes / 1e9).toFixed(1)} GB of experts stay in the file and are read from the drive as needed (${(s.driveBytesPerSecond / 1e9).toFixed(1)} GB/s). Memory should serve about ${Math.round(s.hitRate * 100)}% of expert reads, so the drive allows at most about ${s.maxTokensPerSecond.toFixed(1)} tokens per second (the CPU may be slower still).`,
+    );
   }
 
   if (model?.recurrent) {

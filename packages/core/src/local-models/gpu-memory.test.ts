@@ -259,12 +259,12 @@ describe('fitModel', () => {
     ).toEqual({ problem });
   });
 
-  it("cannot run a model that leaves too little of the Mac's memory, without reading its layers", () => {
+  it("cannot run a dense model that leaves too little of the Mac's memory", () => {
     expect(
       fitModel(
         model,
         21_166_758_496,
-        unread,
+        () => [],
         mac(16 * GIB),
         24 * GIB,
         'darwin',
@@ -303,9 +303,35 @@ describe('fitModel', () => {
     ).toMatchObject({ partial: true });
   });
 
-  it('cannot run a model too big for VRAM and RAM together', () => {
+  it('streams the experts of a mixture-of-experts model too big for memory', () => {
+    // 50 GiB, 44 of them experts in 40 layers: the rest fits RAM.
+    const experts = () => Array<number>(40).fill(1.1 * GIB);
     expect(
-      fitModel(model, 50 * GIB, unread, discrete(16 * GIB), 32 * GIB, 'linux'),
+      fitModel(model, 50 * GIB, experts, discrete(16 * GIB), 32 * GIB, 'linux'),
+    ).toMatchObject({ partial: true, streams: true });
+    // Without experts to leave on the drive it cannot run.
+    expect(
+      fitModel(
+        model,
+        50 * GIB,
+        () => [],
+        discrete(16 * GIB),
+        32 * GIB,
+        'linux',
+      ),
+    ).toHaveProperty('problem');
+  });
+
+  it('cannot run a dense model too big for VRAM and RAM together', () => {
+    expect(
+      fitModel(
+        model,
+        50 * GIB,
+        () => [],
+        discrete(16 * GIB),
+        32 * GIB,
+        'linux',
+      ),
     ).toEqual({
       problem:
         "Big (Q4_K_M) is 53.7 GB, more than this computer's 48 GB of memory can hold beside the system and other apps. Pick a smaller quantization of the model.",

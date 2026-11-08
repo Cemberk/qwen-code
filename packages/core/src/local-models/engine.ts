@@ -13,7 +13,7 @@ import path from 'node:path';
 import type { LocalModelConfig } from './local-models.js';
 import { DEFAULT_LOCAL_MODEL_CONTEXT_SIZE } from './local-models.js';
 import { resolveLocalModelPath } from './hf-cache.js';
-import { engineStateKey } from './prompt-cache.js';
+import { engineStateKey, promptCacheDir } from './prompt-cache.js';
 import { findExecutable, isExecutableFile } from './executables.js';
 import { inspectModel, type ModelCapabilities } from './model-inspector.js';
 import {
@@ -44,7 +44,14 @@ import {
   systemMemoryBytes,
   withOthersUse,
   contextHeadroomBytes,
+  SYSTEM_RESERVE_BYTES,
 } from './gpu-memory.js';
+import {
+  driveReadRate,
+  MIN_STREAMING_TOKENS_PER_SECOND,
+  streamingEstimate,
+  type StreamingEstimate,
+} from './streaming.js';
 
 const READY_TIMEOUT_MS = 5 * 60_000;
 const READY_POLL_MS = 250;
@@ -591,6 +598,8 @@ export interface LocalModelPlan {
   gpu?: GpuBudget;
   /** Room the model needs beside its weights: its context cache and compute buffers. */
   headroomBytes: number;
+  /** The drive's limit, when experts do not fit in memory and stream from it. */
+  streaming?: StreamingEstimate;
   plan: EnginePlan;
 }
 
@@ -658,15 +667,49 @@ export function planLocalModel(
     capabilities?.contextBytesPerToken,
     model.contextSize ?? DEFAULT_LOCAL_MODEL_CONTEXT_SIZE,
   );
+  let expertLayers: readonly number[] | undefined;
+  const expertBytes = () => (expertLayers ??= localModelExpertBytes(model));
   const fit = fitModel(
     model,
     bytes,
-    () => localModelExpertBytes(model),
+    expertBytes,
     gpu,
     systemMemoryBytes(),
     process.platform,
     headroomBytes,
   );
+  // Experts on the CPU that do not fit in the memory free now are read from
+  // the drive as tokens use them: how fast can that go?
+  const streaming =
+    'cpuMoeLayers' in fit && fit.cpuMoeLayers > 0 && capabilities
+      ? streamingFor(
+          modelPath,
+          fit.cpuMoeLayers,
+          expertBytes(),
+          bytes,
+          headroomBytes,
+          gpu,
+          capabilities,
+        )
+      : undefined;
+  if (
+    streaming &&
+    'cpuMoeLayers' in fit &&
+    streaming.maxTokensPerSecond < MIN_STREAMING_TOKENS_PER_SECOND
+  ) {
+    const name = model.name ?? model.id;
+    return {
+      modelPath,
+      ...(draftPath ? { draftPath } : {}),
+      bytes,
+      fit: {
+        problem: `${name} does not fit in memory, and reading the rest of its experts from the drive (${(streaming.driveBytesPerSecond / 1e9).toFixed(1)} GB/s) would limit it to ${streaming.maxTokensPerSecond.toFixed(1)} tokens per second. Free memory, or pick a smaller model.`,
+      },
+      capabilities,
+      headroomBytes,
+      plan: { args: [], notes: [] },
+    };
+  }
   const plan = planEngine({
     bytes,
     headroomBytes,
@@ -681,6 +724,7 @@ export function planLocalModel(
       }),
     },
     hasDraft: draftPath !== undefined,
+    ...(streaming ? { streaming } : {}),
     ...(capabilities ? { model: capabilities } : {}),
     ...(options.extraArgs ? { userArgs: options.extraArgs } : {}),
     ...(devices !== undefined && devices.length === 0 && machine
@@ -696,9 +740,45 @@ export function planLocalModel(
     ...(devices ? { devices } : {}),
     ...(gpu ? { gpu } : {}),
     headroomBytes,
+    ...(streaming ? { streaming } : {}),
     plan,
   };
 }
+
+/**
+ * The drive's limit on a model whose CPU experts do not all fit in the
+ * memory free now; undefined when they fit.
+ */
+function streamingFor(
+  modelPath: string,
+  cpuMoeLayers: number,
+  expertLayers: readonly number[],
+  bytes: number,
+  headroomBytes: number,
+  gpu: GpuBudget | undefined,
+  capabilities: ModelCapabilities,
+): StreamingEstimate | undefined {
+  const cpuExpertBytes = expertLayers
+    .slice(0, cpuMoeLayers)
+    .reduce((sum, layer) => sum + layer, 0);
+  // What runs on a shared-memory GPU takes RAM too.
+  const onGpu = gpu?.unified ? bytes - cpuExpertBytes + headroomBytes : 0;
+  const ramForExperts = os.freemem() - SYSTEM_RESERVE_BYTES - onGpu;
+  if (cpuExpertBytes <= ramForExperts) return undefined;
+  const rate =
+    driveReadRate(modelPath, promptCacheDir()) ??
+    UNMEASURED_DRIVE_BYTES_PER_SECOND;
+  return streamingEstimate({
+    cpuExpertBytes,
+    ramForExperts,
+    expertsUsed: capabilities.expertsUsed,
+    experts: capabilities.experts,
+    driveBytesPerSecond: rate,
+  });
+}
+
+/** Assumed when the drive cannot be measured: a slow SATA SSD. */
+const UNMEASURED_DRIVE_BYTES_PER_SECOND = 300e6;
 
 export async function startLocalModelEngine(
   model: LocalModelConfig,
@@ -709,7 +789,7 @@ export async function startLocalModelEngine(
 ): Promise<LocalModelEngine> {
   // Past the GPU limit a model runs at a fraction of its speed, or fails
   // mid-request.
-  const { modelPath, draftPath, fit, gpu, plan } = planLocalModel(
+  const { modelPath, draftPath, fit, gpu, plan, streaming } = planLocalModel(
     model,
     options,
   );
@@ -749,11 +829,17 @@ export async function startLocalModelEngine(
       // Elsewhere llama.cpp's --fit (on by default) measures each device's
       // free memory and places what does not fit itself, except where the
       // driver reports shared memory other programs hold as free.
+      // Streaming experts must stay mapped from the file, never read in.
       cpuMoeLayers:
-        process.platform === 'darwin' || gpu?.othersBytes !== undefined
+        process.platform === 'darwin' ||
+        gpu?.othersBytes !== undefined ||
+        streaming !== undefined ||
+        fit.streams
           ? fit.cpuMoeLayers
           : 0,
-      ...(gpu?.othersBytes !== undefined ? { sharedMemory: true } : {}),
+      ...(gpu?.othersBytes !== undefined || streaming || fit.streams
+        ? { sharedMemory: true }
+        : {}),
       ...(socketPath ? { socketPath, confinement } : {}),
       planArgs: plan.args,
       ...(moeProfile ? { moeProfile } : {}),
