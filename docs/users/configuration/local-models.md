@@ -71,12 +71,20 @@ run.
 
 ## The built-in list
 
-| `id`                        | Repository and file                                             | Size    | Context |
-| --------------------------- | --------------------------------------------------------------- | ------- | ------- |
-| `qwen3.6-35b-a3b` (default) | `unsloth/Qwen3.6-35B-A3B-GGUF`, `Qwen3.6-35B-A3B-UD-IQ3_S.gguf` | 13.7 GB | 64K     |
-| `qwen3-14b`                 | `Qwen/Qwen3-14B-GGUF`, `Qwen3-14B-Q4_K_M.gguf`                  | ~9.0 GB | 32K     |
-| `qwen3-8b`                  | `Qwen/Qwen3-8B-GGUF`, `Qwen3-8B-Q4_K_M.gguf`                    | ~5.0 GB | 32K     |
-| `qwen3-4b`                  | `Qwen/Qwen3-4B-GGUF`, `Qwen3-4B-Q4_K_M.gguf`                    | 2.5 GB  | 32K     |
+| `id`                        | Repository and file                                                              | Size    | Context |
+| --------------------------- | -------------------------------------------------------------------------------- | ------- | ------- |
+| `qwen3.6-35b-a3b` (default) | `unsloth/Qwen3.6-35B-A3B-GGUF`, `Qwen3.6-35B-A3B-UD-IQ3_S.gguf`                  | 13.7 GB | 64K     |
+| `qwen3-14b`                 | `Qwen/Qwen3-14B-GGUF`, `Qwen3-14B-Q4_K_M.gguf`                                   | ~9.0 GB | 32K     |
+| `qwen3-8b`                  | `Qwen/Qwen3-8B-GGUF`, `Qwen3-8B-Q4_K_M.gguf`                                     | ~5.0 GB | 32K     |
+| `qwen3-4b`                  | `Qwen/Qwen3-4B-GGUF`, `Qwen3-4B-Q4_K_M.gguf`                                     | 2.5 GB  | 32K     |
+| `deepseek-v4-flash`         | `unsloth/DeepSeek-V4-Flash-GGUF`, `UD-IQ2_XXS/...-00001-of-00003.gguf` (3 parts) | 90.9 GB | 128K    |
+
+DeepSeek V4 Flash (284B parameters, 13B active) is larger than most
+machines' memory: it runs with the experts that do not fit read from the
+drive, so it generates more slowly than Qwen3.6 and reads long prompts much
+more slowly (minutes for a new session's first prompt). It needs a fast
+NVMe drive and as much RAM as possible; `/models plan` says how fast it can
+go here.
 
 The default, Qwen3.6 35B A3B, is a mixture-of-experts model: 35B parameters,
 of which 3B are used per token, so it generates about as fast as a 4B model.
