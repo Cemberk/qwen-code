@@ -15,12 +15,29 @@ import {
   writeFileSync,
 } from 'node:fs';
 import http from 'node:http';
+import https from 'node:https';
 import net from 'node:net';
-import { startLocalModelEngine } from '../engine.js';
+import {
+  DEFAULT_ENGINE_OPTIONS,
+  startLocalModelEngine,
+  type LocalModelEngineOptions,
+} from '../engine.js';
+import type { LocalModelConfig } from '../local-models.js';
 import type { StartEngine } from '../local-model-server.js';
+import { promptCacheDir } from '../prompt-cache.js';
 import type { PoolRequest } from './engine-host.js';
 import { HostPool, POOL_MAX_ENGINES, type FitsBeside } from './host-pool.js';
 import type { ContextsFor } from './engine-host.js';
+import { Discovery } from './net/discovery.js';
+import {
+  isPrivateAddress,
+  POOL_WIRE_VERSION,
+  readMembership,
+  writeMembership,
+  type PoolMembership,
+} from './net/membership.js';
+import { peerOf, peerServerOptions } from './net/peer-link.js';
+import { Router, type CanRun } from './net/router.js';
 import {
   ensurePoolDir,
   poolAddress,
@@ -54,12 +71,23 @@ export interface PoolDaemonOptions {
   /** Full contexts each engine's shared cache holds (the planner's by default). */
   contextsFor?: ContextsFor;
   idleExitMs?: number;
+  /** Whether this machine can run a model (the planner's verdict by default). */
+  canRun?: (host: HostPool, request: PoolRequest) => CanRun;
+  /**
+   * This machine's pool membership; read from the pool folder by default.
+   * `null` for none.
+   */
+  membership?: PoolMembership | null;
   /** Called once everything is stopped; the CLI exits the process. */
   onExit?: () => void;
 }
 
 export interface PoolDaemon {
   readonly address: string;
+  /** host:port of the listener for other pool members, when sharing. */
+  readonly peerAddress?: string;
+  /** Tell the daemon about a member to reach (tests; discovery does it on a LAN). */
+  addPeer(address: string): Promise<void>;
   /** Stop engines, close the address, remove the lock. Idempotent. */
   close(): Promise<void>;
   /** Resolves when the daemon has stopped. */
@@ -168,7 +196,12 @@ function sendJson(res: http.ServerResponse, status: number, body: unknown) {
  * the last one closes (however its process ended), the daemon waits
  * `idleExitMs`, then stops its engines, removes its lock and address, and
  * exits. Engines it starts exit with it (`--exit-with-parent`, and Node's
- * job object on Windows).
+ * job object on Windows). A machine that shares its models with the other
+ * members of its pool (`qwen pool share on`) stays up for them.
+ *
+ * Pool members: when this machine belongs to a pool, requests go to whichever
+ * member should serve them (see Router), and, when it shares, a TLS listener
+ * on the LAN serves the other members.
  */
 export async function startPoolDaemon(
   options: PoolDaemonOptions = {},
@@ -187,6 +220,10 @@ export async function startPoolDaemon(
     }
   };
 
+  const membership =
+    options.membership === null
+      ? undefined
+      : (options.membership ?? readMembership(dir));
   const key = Buffer.from(poolKey(dir));
   const host = new HostPool(
     options.startEngine ?? startLocalModelEngine,
@@ -195,6 +232,12 @@ export async function startPoolDaemon(
     POOL_MAX_ENGINES,
     options.contextsFor,
   );
+  /** The engine options of this machine's own qwens, last seen. */
+  let ownOptions: LocalModelEngineOptions | undefined = membership?.engine
+    ? { ...DEFAULT_ENGINE_OPTIONS, ...membership.engine }
+    : undefined;
+  const router = new Router(host, membership, () => ownOptions, options.canRun);
+  const sharing = membership?.share === true;
   const idleExitMs = options.idleExitMs ?? POOL_IDLE_EXIT_MS;
   /** Attached clients: id -> their connections (a client may reconnect). */
   const clients = new Map<string, Set<http.ServerResponse>>();
@@ -212,7 +255,8 @@ export async function startPoolDaemon(
   };
 
   const scheduleIdleExit = (delayMs = idleExitMs) => {
-    if (idleTimer || closing) return;
+    // A sharing member stays up for the others.
+    if (idleTimer || closing || sharing) return;
     if (clients.size > 0) return;
     log(`no clients: stopping in ${delayMs} ms unless one attaches`);
     idleTimer = setTimeout(() => {
@@ -227,11 +271,7 @@ export async function startPoolDaemon(
     idleTimer = undefined;
   };
 
-  const attach = (
-    req: http.IncomingMessage,
-    res: http.ServerResponse,
-    client: string,
-  ) => {
+  const attach = (res: http.ServerResponse, client: string) => {
     cancelIdleExit();
     let connections = clients.get(client);
     if (!connections) {
@@ -251,7 +291,7 @@ export async function startPoolDaemon(
       connections.delete(res);
       if (connections.size > 0) return;
       clients.delete(client);
-      host.forgetClient(client);
+      router.forgetClient(client);
       log(`client ${client} detached (${clients.size} left)`);
       scheduleIdleExit();
     });
@@ -260,6 +300,7 @@ export async function startPoolDaemon(
   const acquire = async (
     req: http.IncomingMessage,
     res: http.ServerResponse,
+    peer: string | undefined,
   ) => {
     const request = JSON.parse(
       (await readBody(req)).toString('utf8'),
@@ -268,17 +309,32 @@ export async function startPoolDaemon(
       sendJson(res, 409, { error: 'attach first' });
       return;
     }
+    if (peer !== undefined) {
+      // Another member's request: this machine's own engine and cache.
+      request.options = ownOptions ?? DEFAULT_ENGINE_OPTIONS;
+      request.promptCacheDir = promptCacheDir();
+    } else if (request.options) {
+      rememberOwnOptions(request.options);
+    }
     const abort = new AbortController();
     res.on('close', () => {
       if (!res.writableFinished) abort.abort(new Error('client gone'));
     });
     try {
-      const lease = await host.acquire(request, abort.signal);
+      const lease = await router.acquire(
+        request,
+        abort.signal,
+        peer !== undefined,
+      );
       if (abort.signal.aborted) {
-        host.release(lease.id);
+        router.release(lease.id, false);
         return;
       }
-      sendJson(res, 200, { lease: lease.id, slot: lease.slot });
+      sendJson(res, 200, {
+        lease: lease.id,
+        slot: lease.slot,
+        where: lease.where,
+      });
     } catch (error) {
       if (!abort.signal.aborted) {
         sendJson(res, 500, {
@@ -288,15 +344,45 @@ export async function startPoolDaemon(
     }
   };
 
+  /** What this machine serves other members with: its own qwens' settings. */
+  const rememberOwnOptions = (seen: LocalModelEngineOptions) => {
+    const { slots: _slots, contexts: _contexts, ...rest } = seen;
+    if (JSON.stringify(rest) === JSON.stringify(ownOptions)) return;
+    ownOptions = rest;
+    if (membership && sharing) {
+      try {
+        writeMembership(
+          {
+            ...membership,
+            engine: {
+              ...(rest.enginePath ? { enginePath: rest.enginePath } : {}),
+              ...(rest.extraArgs ? { extraArgs: rest.extraArgs } : {}),
+              speculation: rest.speculation,
+            },
+          },
+          dir,
+        );
+      } catch {
+        // Remembered for this run.
+      }
+    }
+  };
+
   /** Forward an engine request (`/v1/...`, `/metrics`) to the lease's engine, in its slot. */
   const proxy = async (req: http.IncomingMessage, res: http.ServerResponse) => {
     const id = req.headers[LEASE_HEADER];
-    const lease = typeof id === 'string' ? host.lease(id) : undefined;
-    if (!lease || !lease.engine.alive) {
+    if (typeof id !== 'string') {
       sendJson(res, 409, { error: 'no such lease' });
       return;
     }
     let body = await readBody(req);
+    // A lease on another member: it fills in the slot itself.
+    if (router.forward(id, req, body, res, LEASE_HEADER)) return;
+    const lease = router.localLease(id);
+    if (!lease || !lease.engine.alive) {
+      sendJson(res, 409, { error: 'no such lease' });
+      return;
+    }
     if (
       body.length > 0 &&
       (req.headers['content-type'] ?? '').includes('json')
@@ -346,69 +432,128 @@ export async function startPoolDaemon(
     upstream.end(body);
   };
 
-  const server = http.createServer((req, res) => {
-    void (async () => {
-      try {
-        if (!authorized(req)) {
-          sendJson(res, 401, { error: 'unauthorized' });
-          return;
+  /**
+   * One handler for both listeners: `peer` is the member a request came
+   * from over TLS (its handshake proved it holds the pool's key), or
+   * undefined for this machine's own qwens (who show the user's key).
+   */
+  const handle =
+    (fromPeers: boolean) =>
+    (req: http.IncomingMessage, res: http.ServerResponse) => {
+      void (async () => {
+        try {
+          const peer = fromPeers ? peerOf(req) : undefined;
+          if (fromPeers ? peer === undefined : !authorized(req)) {
+            sendJson(res, 401, { error: 'unauthorized' });
+            return;
+          }
+          const url = new URL(req.url ?? '/', 'http://pool');
+          if (closing) {
+            sendJson(res, 503, { error: 'stopping' });
+            return;
+          }
+          if (url.pathname === '/pool/hello' && req.method === 'GET') {
+            return sendJson(res, 200, {
+              nodeId: membership?.nodeId,
+              name: membership?.name,
+              wire: POOL_WIRE_VERSION,
+            });
+          }
+          if (url.pathname === '/pool/attach' && req.method === 'GET') {
+            const client = url.searchParams.get('client');
+            if (!client) return sendJson(res, 400, { error: 'client missing' });
+            // A member attaches as itself only.
+            if (peer !== undefined && client !== `peer:${peer}`) {
+              return sendJson(res, 403, { error: 'not that member' });
+            }
+            return attach(res, client);
+          }
+          if (url.pathname === '/pool/acquire' && req.method === 'POST') {
+            return await acquire(req, res, peer);
+          }
+          if (url.pathname === '/pool/release' && req.method === 'POST') {
+            const { lease, saveState } = JSON.parse(
+              (await readBody(req)).toString('utf8'),
+            ) as { lease: string; saveState?: boolean };
+            router.release(lease, saveState === true);
+            return sendJson(res, 200, {});
+          }
+          if (url.pathname === '/pool/can-run' && req.method === 'POST') {
+            const { model } = JSON.parse(
+              (await readBody(req)).toString('utf8'),
+            ) as { model: LocalModelConfig };
+            return sendJson(res, 200, router.canRun(model));
+          }
+          if (fromPeers) {
+            // Only this machine's own qwens may see its status or stop it.
+            if (url.pathname.startsWith('/pool/')) {
+              return sendJson(res, 403, { error: 'members cannot do that' });
+            }
+            return await proxy(req, res);
+          }
+          if (url.pathname === '/pool/status' && req.method === 'GET') {
+            return sendJson(res, 200, {
+              pid: process.pid,
+              clients: clients.size,
+              ...(membership
+                ? {
+                    pool: {
+                      name: membership.name,
+                      nodeId: membership.nodeId,
+                      sharing,
+                      ...(peerServerAddress
+                        ? { listening: peerServerAddress }
+                        : {}),
+                    },
+                  }
+                : {}),
+              ...router.status(),
+            });
+          }
+          if (url.pathname === '/pool/stop' && req.method === 'POST') {
+            sendJson(res, 200, {});
+            void close('asked to stop');
+            return;
+          }
+          return await proxy(req, res);
+        } catch (error) {
+          if (!res.headersSent) {
+            sendJson(res, 500, {
+              error: error instanceof Error ? error.message : String(error),
+            });
+          } else {
+            res.destroy();
+          }
         }
-        const url = new URL(req.url ?? '/', 'http://pool');
-        if (closing) {
-          sendJson(res, 503, { error: 'stopping' });
-          return;
-        }
-        if (url.pathname === '/pool/attach' && req.method === 'GET') {
-          const client = url.searchParams.get('client');
-          if (!client) return sendJson(res, 400, { error: 'client missing' });
-          return attach(req, res, client);
-        }
-        if (url.pathname === '/pool/acquire' && req.method === 'POST') {
-          return await acquire(req, res);
-        }
-        if (url.pathname === '/pool/release' && req.method === 'POST') {
-          const { lease, saveState } = JSON.parse(
-            (await readBody(req)).toString('utf8'),
-          ) as { lease: string; saveState?: boolean };
-          host.release(lease, saveState === true);
-          return sendJson(res, 200, {});
-        }
-        if (url.pathname === '/pool/status' && req.method === 'GET') {
-          return sendJson(res, 200, {
-            pid: process.pid,
-            clients: clients.size,
-            engines: host.status(),
-          });
-        }
-        if (url.pathname === '/pool/stop' && req.method === 'POST') {
-          sendJson(res, 200, {});
-          void close('asked to stop');
-          return;
-        }
-        return await proxy(req, res);
-      } catch (error) {
-        if (!res.headersSent) {
-          sendJson(res, 500, {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        } else {
-          res.destroy();
-        }
-      }
-    })();
-  });
+      })();
+    };
+
+  const server = http.createServer(handle(false));
+
+  // The listener for other members: TLS with the pool's key, on the LAN only.
+  let peerServer: https.Server | undefined;
+  let peerServerAddress: string | undefined;
+  let discovery: Discovery | undefined;
+  let peerRefresh: NodeJS.Timeout | undefined;
 
   const close = (reason: string): Promise<void> => {
     closing ??= (async () => {
       log(`stopping: ${reason}`);
       cancelIdleExit();
-      await host.stop().catch(() => {});
+      discovery?.stop();
+      if (peerRefresh) clearInterval(peerRefresh);
+      await router.stop().catch(() => {});
       for (const connections of clients.values()) {
         for (const res of connections) res.destroy();
       }
       clients.clear();
       await new Promise<void>((resolve) => server.close(() => resolve()));
       server.closeAllConnections?.();
+      if (peerServer) {
+        const listener = peerServer;
+        await new Promise<void>((resolve) => listener.close(() => resolve()));
+        listener.closeAllConnections?.();
+      }
       if (process.platform !== 'win32') rmSync(address, { force: true });
       rmSync(poolLockFile(dir), { force: true });
       log('stopped');
@@ -428,9 +573,47 @@ export async function startPoolDaemon(
         resolve();
       });
     });
+    if (membership && sharing) {
+      const listener = https.createServer(
+        peerServerOptions(membership),
+        handle(true),
+      );
+      // Members are on the LAN: anything else is turned away at once.
+      listener.on('connection', (socket: net.Socket) => {
+        if (!isPrivateAddress(socket.remoteAddress ?? '')) socket.destroy();
+      });
+      listener.on('tlsClientError', () => {
+        // A wrong key or a scanner: nothing to do.
+      });
+      await new Promise<void>((resolve, reject) => {
+        listener.once('error', reject);
+        listener.listen(membership.port, () => {
+          listener.off('error', reject);
+          resolve();
+        });
+      });
+      peerServer = listener;
+      peerServerAddress = `127.0.0.1:${(listener.address() as net.AddressInfo).port}`;
+      log(
+        `serving pool members on port ${(listener.address() as net.AddressInfo).port}`,
+      );
+    }
   } catch (error) {
+    server.close();
     rmSync(poolLockFile(dir), { force: true });
     throw error;
+  }
+  if (membership) {
+    discovery = new Discovery(membership, sharing, (found) => {
+      if (found.wire === POOL_WIRE_VERSION) void router.addPeer(found.address);
+    });
+    discovery.start();
+    const refresh = () => {
+      for (const peer of membership.peers) void router.addPeer(peer);
+    };
+    refresh();
+    peerRefresh = setInterval(refresh, 60_000);
+    peerRefresh.unref?.();
   }
   log(`listening on ${address}, pid ${process.pid}`);
   // Started for a client that attaches next (it polls until we listen);
@@ -439,6 +622,8 @@ export async function startPoolDaemon(
 
   return {
     address,
+    ...(peerServerAddress ? { peerAddress: peerServerAddress } : {}),
+    addPeer: (peer) => router.addPeer(peer),
     close: () => close('closed'),
     closed,
   };

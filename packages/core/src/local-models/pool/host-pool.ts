@@ -149,6 +149,18 @@ export class HostPool {
     await Promise.all(hosts.map(({ host }) => host.stop()));
   }
 
+  /** Whether an engine here serves `request`'s model with its options. */
+  serves(request: PoolRequest): boolean {
+    return this.hostFor(request)?.running === true;
+  }
+
+  /** Models with a running engine here. */
+  runningModels(): string[] {
+    return this.hosts
+      .filter(({ host }) => host.running)
+      .map(({ request }) => request.model.id);
+  }
+
   private hostFor(request: PoolRequest): EngineHost | undefined {
     const setup = setupOf(request);
     return this.hosts.find((entry) =>
