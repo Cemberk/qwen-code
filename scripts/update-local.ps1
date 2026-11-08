@@ -13,7 +13,9 @@
 param(
     [string]$LlamaDir = '',
     [int]$Jobs = 4,
-    [switch]$DownloadModel
+    [switch]$DownloadModel,
+    # Stop the local model pool even while qwen sessions use it.
+    [switch]$Force
 )
 
 $ErrorActionPreference = 'Stop'
@@ -44,6 +46,10 @@ Update $LlamaDir 'adaptive-moe'
 
 $cli = Join-Path $QwenDir 'dist\cli.js'
 if (Test-Path $cli) {
+    $status = (& node $cli pool status 2>$null) -join "`n"
+    if (-not $Force -and $status -match 'qwen sessions attached: ([1-9]\d*)') {
+        Fail "$($Matches[1]) qwen session(s) use the local model pool: close them first (or add -Force; their next request then starts it again)."
+    }
     Step 'Stopping the local model pool, if it runs'
     & node $cli pool stop 2>$null | Out-Null
     Start-Sleep -Seconds 2

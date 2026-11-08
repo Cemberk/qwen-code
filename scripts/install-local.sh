@@ -51,6 +51,17 @@ if git show-ref --verify --quiet refs/heads/adaptive-moe ||
    git ls-remote --exit-code --heads origin adaptive-moe >/dev/null 2>&1; then
   git checkout adaptive-moe
 fi
+# A build configured with another CUDA toolkit (since upgraded or removed)
+# keeps its paths: configure it again from scratch.
+if [ "$BACKEND" = cuda ] && [ -f build/CMakeCache.txt ]; then
+  CACHED=$(sed -n 's/^CMAKE_CUDA_COMPILER:[A-Z]*=//p' build/CMakeCache.txt)
+  CURRENT=$(command -v nvcc || true)
+  if [ -n "$CACHED" ] && { [ ! -x "$CACHED" ] ||
+     { [ -n "$CURRENT" ] && [ "$(readlink -f "$CACHED")" != "$(readlink -f "$CURRENT")" ]; }; }; then
+    echo 'The llama.cpp build was configured with another CUDA toolkit: configuring it again.'
+    rm -rf build/CMakeCache.txt build/CMakeFiles
+  fi
+fi
 # shellcheck disable=SC2086 # the options are split on purpose
 cmake -B build $CMAKE_ARGS
 cmake --build build --config Release --target llama-server ggml-rpc-server -j "$JOBS"

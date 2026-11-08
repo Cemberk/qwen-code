@@ -73,7 +73,40 @@ if ($backend -eq 'vulkan' -and -not $env:VULKAN_SDK) {
     )
 }
 
-Step "Building llama-server in $LlamaDir (backend: $backend, $Jobs jobs)"
+if ($backend -eq 'cuda') {
+    # Build with one CUDA toolkit throughout: the newest installed, which is
+    # the one Visual Studio's CUDA integration uses. With two installed (say
+    # 13.1 and 13.5), a build configured earlier keeps the older one's
+    # headers, which reject a newer Visual Studio.
+    $toolkits = Join-Path $env:ProgramFiles 'NVIDIA GPU Computing Toolkit\CUDA'
+    $cudaRoot = $null
+    if (Test-Path $toolkits) {
+        $cudaRoot = Get-ChildItem $toolkits -Directory |
+            Where-Object { $_.Name -match '^v(\d+)\.(\d+)$' -and (Test-Path (Join-Path $_.FullName 'bin\nvcc.exe')) } |
+            Sort-Object { [version]($_.Name.Substring(1)) } -Descending |
+            Select-Object -First 1 -ExpandProperty FullName
+    }
+    if (-not $cudaRoot -and $env:CUDA_PATH) { $cudaRoot = $env:CUDA_PATH.TrimEnd('\') }
+    if (-not $cudaRoot) { Fail 'No CUDA toolkit found: winget install Nvidia.CUDA' }
+    Write-Host "CUDA toolkit: $cudaRoot"
+    $env:CUDA_PATH = $cudaRoot
+    $cmakeArgs += @('-T', "cuda=$cudaRoot", "-DCUDAToolkit_ROOT=$($cudaRoot -replace '\\', '/')")
+    # A build configured with another toolkit keeps its paths: configure it
+    # again from scratch (only the CUDA settings are lost; nothing to keep).
+    $cache = Join-Path $LlamaDir 'build\CMakeCache.txt'
+    if (Test-Path $cache) {
+        $text = Get-Content $cache -Raw
+        $compiler = if ($text -match '(?m)^CMAKE_CUDA_COMPILER:[A-Z]+=(.*)$') { $Matches[1].Trim() -replace '/', '\' } else { '' }
+        $toolset = if ($text -match '(?m)^CMAKE_GENERATOR_TOOLSET:[A-Z]+=(.*)$') { $Matches[1].Trim() } else { '' }
+        if (-not $compiler.StartsWith($cudaRoot, [StringComparison]::OrdinalIgnoreCase) -or $toolset -ne "cuda=$cudaRoot") {
+            Write-Host 'The llama.cpp build was configured with another CUDA toolkit: configuring it again.'
+            Remove-Item -Force $cache
+            Remove-Item -Recurse -Force (Join-Path $LlamaDir 'build\CMakeFiles') -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+Step "Building llama-server in $LlamaDir (backend: $backend, $Jobs jobs)\"
 Push-Location $LlamaDir
 & git show-ref --verify --quiet refs/heads/adaptive-moe
 $hasBranch = $LASTEXITCODE -eq 0

@@ -22,6 +22,9 @@ import { LEASE_HEADER, poolAnswers } from './daemon.js';
 import type { PoolRequest } from './engine-host.js';
 import { poolAddress, poolDir, poolKey } from './paths.js';
 
+/** How long a stopping daemon may take to go before a new one is started. */
+const POOL_GONE_WAIT_MS = 15_000;
+
 /** How long a newly started daemon may take to listen. */
 const DAEMON_START_MS = 15_000;
 
@@ -127,6 +130,34 @@ export class PoolClient implements LocalModelHost {
     modelId: string,
     signal?: AbortSignal,
     kind: LeaseKind = 'main',
+  ): Promise<LocalModelLease> {
+    try {
+      return await this.acquireOnce(modelId, signal, kind);
+    } catch (error) {
+      // The pool was stopping (`qwen pool stop`, an update): wait for it to
+      // go, then start a new one and ask again, once.
+      if (
+        !(error instanceof Error) ||
+        !/stopping|ECONNRESET|EPIPE/.test(error.message) ||
+        signal?.aborted
+      ) {
+        throw error;
+      }
+      this.attachRequest?.destroy();
+      this.attachRequest = undefined;
+      this.attachment = undefined;
+      const deadline = Date.now() + POOL_GONE_WAIT_MS;
+      while (Date.now() < deadline && (await poolAnswers(this.address))) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+      return this.acquireOnce(modelId, signal, kind);
+    }
+  }
+
+  private async acquireOnce(
+    modelId: string,
+    signal: AbortSignal | undefined,
+    kind: LeaseKind,
   ): Promise<LocalModelLease> {
     const model = this.models.find((candidate) => candidate.id === modelId);
     if (!model) {

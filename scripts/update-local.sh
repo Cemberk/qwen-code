@@ -7,8 +7,9 @@
 # It refuses to run when either checkout has local changes, fast-forwards
 # qwen-code to adaptive-local-inference and llama.cpp to adaptive-moe,
 # stops the local model pool (its engines must not run while they are
-# rebuilt), then runs scripts/install-local.sh, which takes the same
-# environment (LLAMA_DIR, JOBS, DOWNLOAD_MODEL).
+# rebuilt; it refuses while qwen sessions use it, unless FORCE=1), then runs
+# scripts/install-local.sh, which takes the same environment (LLAMA_DIR,
+# JOBS, DOWNLOAD_MODEL).
 
 set -eu
 
@@ -36,6 +37,11 @@ update "$QWEN_DIR" adaptive-local-inference
 update "$LLAMA_DIR" adaptive-moe
 
 if [ -f "$QWEN_DIR/dist/cli.js" ]; then
+  SESSIONS=$(node "$QWEN_DIR/dist/cli.js" pool status 2>/dev/null |
+    sed -n 's/.*qwen sessions attached: \([0-9]*\).*/\1/p')
+  if [ "${FORCE:-0}" != 1 ] && [ "${SESSIONS:-0}" -gt 0 ]; then
+    fail "$SESSIONS qwen session(s) use the local model pool: close them first (or FORCE=1; their next request then starts it again)."
+  fi
   step 'Stopping the local model pool, if it runs'
   node "$QWEN_DIR/dist/cli.js" pool stop 2>/dev/null || true
   sleep 2

@@ -200,6 +200,32 @@ describe('local model pool', () => {
     expect(response.status).toBe(401);
   });
 
+  it('starts a new pool when the one it asks is stopping', async () => {
+    const engines = fakeEngines();
+    let started = 0;
+    const start = () => {
+      started++;
+      void startPoolDaemon({
+        dir,
+        startEngine: engines.start,
+        contextsFor: () => 4,
+      }).then((next) => (daemon = next ?? daemon));
+    };
+    const one = client(start);
+    const first = await one.acquire('m');
+    first.release();
+    const stopping = daemon!;
+    // An update stops the pool while this qwen still uses it.
+    const closed = stopping.close();
+    const second = await one.acquire('m');
+    await closed;
+    expect(started).toBe(2);
+    expect(daemon).not.toBe(stopping);
+    expect((await post(second, {})).status).toBe(200);
+    second.release();
+    await one.stop();
+  });
+
   it('stops its engine and cleans up once the last qwen is gone', async () => {
     const engines = fakeEngines();
     const start = () => {
