@@ -540,6 +540,34 @@ recovery; then expert parallelism.
 **P6, every device in a machine**: integrated + discrete GPU by measured
 speed.
 
+P5 and P6 status (2026-11-07): not started, on purpose. P5 is to be decided
+from P4's numbers between two real machines, and P6 needs a machine with
+both kinds of GPU; the 780M laptop has neither. Building them blind would
+break the rule that a change lands with before/after numbers.
+
+### Next, on the other machines
+
+Install both branches with `scripts/install-local.sh` or `.ps1` (they now
+build `ggml-rpc-server` too). Then, in order:
+
+1. One machine, several agents (P1): `node scripts/local-pool-bench.mjs
+--engine <llama-server> --model qwen3.6-35b-a3b --agents 1,2,4` (add
+   `--separate` where memory allows), on a machine with 16 GB+ free. Done
+   when 4 agents together beat 1 agent's tok/s.
+2. Larger than memory (P2): `node scripts/local-plan.mjs --model <id>` then
+   `scripts/local-engine-e2e.mjs` with a model 1.5-2x the machine's RAM;
+   compare the planned ceiling with the measured speed. If the drive, not
+   the CPU, sets the pace, start the fork's RAM tier.
+3. Two machines (P3): `qwen pool create` and `share on` on one, `qwen pool
+join` on the other; `qwen pool status` must list the member; a session on
+   the second using a model only the first can run; `/models download` of a
+   model the first has.
+4. Split (P4): the same pair, a model neither fits alone; note prompt and
+   generation tok/s split vs streamed on the faster machine, on Ethernet and
+   Wi-Fi, with `/models speculation off` and on. These numbers decide P5.
+5. Kill tests: on macOS and Linux, `kill -9` a qwen and the pool daemon in
+   turn; no `llama-server` or `ggml-rpc-server` may remain.
+
 ## Security summary
 
 - Nothing joins without pairing at an existing member; every link is mutual
