@@ -18,7 +18,8 @@ import http from 'node:http';
 import net from 'node:net';
 import { startLocalModelEngine } from '../engine.js';
 import type { StartEngine } from '../local-model-server.js';
-import { EngineHost, type PoolRequest } from './engine-host.js';
+import type { PoolRequest } from './engine-host.js';
+import { HostPool, type FitsBeside } from './host-pool.js';
 import {
   ensurePoolDir,
   poolAddress,
@@ -47,6 +48,8 @@ export interface PoolDaemonOptions {
   dir?: string;
   address?: string;
   startEngine?: StartEngine;
+  /** Whether an engine may start beside the running ones (the planner's verdict by default). */
+  fitsBeside?: FitsBeside;
   idleExitMs?: number;
   /** Called once everything is stopped; the CLI exits the process. */
   onExit?: () => void;
@@ -182,9 +185,10 @@ export async function startPoolDaemon(
   };
 
   const key = Buffer.from(poolKey(dir));
-  const host = new EngineHost(
+  const host = new HostPool(
     options.startEngine ?? startLocalModelEngine,
     randomBytes(24).toString('hex'),
+    options.fitsBeside,
   );
   const idleExitMs = options.idleExitMs ?? POOL_IDLE_EXIT_MS;
   /** Attached clients: id -> their connections (a client may reconnect). */
@@ -368,7 +372,7 @@ export async function startPoolDaemon(
           return sendJson(res, 200, {
             pid: process.pid,
             clients: clients.size,
-            engine: host.status(),
+            engines: host.status(),
           });
         }
         if (url.pathname === '/pool/stop' && req.method === 'POST') {

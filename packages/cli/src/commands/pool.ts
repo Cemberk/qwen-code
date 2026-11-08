@@ -87,19 +87,20 @@ export const poolCommand: CommandModule = {
         writeStdoutLine('The local model pool is not running.');
         return;
       }
-      const engine = status['engine'] as {
+      const engines = (status['engines'] ?? []) as Array<{
         model?: string;
         leases: number;
         waiting: number;
         conversations: number;
-      };
+      }>;
       writeStdoutLine(`The local model pool runs (pid ${status['pid']}).`);
       writeStdoutLine(`  qwen sessions attached: ${status['clients']}`);
-      writeStdoutLine(
-        engine.model
-          ? `  engine: ${engine.model}, ${engine.conversations} conversation(s) in slots, ${engine.leases} request(s) running, ${engine.waiting} waiting`
-          : '  engine: none running',
-      );
+      if (engines.length === 0) writeStdoutLine('  engines: none running');
+      for (const engine of engines) {
+        writeStdoutLine(
+          `  engine: ${engine.model ?? '(starting)'}, ${engine.conversations} conversation(s) in slots, ${engine.leases} request(s) running, ${engine.waiting} waiting`,
+        );
+      }
       return;
     }
     const answer = await ask('POST', '/pool/stop');
