@@ -254,7 +254,7 @@ describe('/models', () => {
     });
 
     it('refuses a file too big for the memory of the Mac before downloading or listing it', async () => {
-      vi.stubEnv('FAKE_HF_SIZE', '22.0G');
+      vi.stubEnv('FAKE_HF_SIZE', '120.0G');
       const setValue = vi.fn();
       const result = await sub('download').action!(
         context(setValue),
@@ -264,8 +264,8 @@ describe('/models', () => {
         messageType: 'error',
         content: expect.stringContaining(
           mac
-            ? 'Not downloaded. qwen3.6-35b-a3b-heretic-q4_k_s is 22.0 GB, more than a 24 GB Mac can hold beside macOS and other apps.'
-            : "Not downloaded. qwen3.6-35b-a3b-heretic-q4_k_s is 22.0 GB, more than this computer's 24 GB of memory can hold beside the system and other apps.",
+            ? 'Not downloaded. qwen3.6-35b-a3b-heretic-q4_k_s is 120.0 GB, more than a 24 GB Mac can hold beside macOS and other apps.'
+            : "Not downloaded. qwen3.6-35b-a3b-heretic-q4_k_s is 120.0 GB, more than this computer's 24 GB of memory can hold beside the system and other apps.",
         ),
       });
       expect(recorded().map((call) => call.args)).toEqual([

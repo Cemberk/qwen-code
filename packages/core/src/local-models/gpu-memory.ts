@@ -323,7 +323,29 @@ export function downloadSizeProblem(
   }
   const ram =
     gpu === undefined || gpu.unified ? totalMemory : gpu.limit + totalMemory;
-  return bytes + GPU_HEADROOM_BYTES + SYSTEM_RESERVE_BYTES > ram
+  // A mixture-of-experts model larger than memory can still run, its experts
+  // read from the drive (which the layers, known after the download, decide);
+  // only a file far beyond memory is refused before it is downloaded.
+  return bytes > ram * MAX_STREAMED_MODEL_FACTOR
     ? ramProblem(model, bytes, ram, platform)
+    : undefined;
+}
+
+/** A file this many times the memory is too big even with streamed experts. */
+export const MAX_STREAMED_MODEL_FACTOR = 4;
+
+/**
+ * Said before downloading a file larger than this machine's memory: it can
+ * only run as a mixture-of-experts model with its experts read from the drive.
+ */
+export function downloadSizeNote(
+  bytes: number,
+  gpu: GpuBudget | undefined,
+  totalMemory: number,
+): string | undefined {
+  const ram =
+    gpu === undefined || gpu.unified ? totalMemory : gpu.limit + totalMemory;
+  return bytes + GPU_HEADROOM_BYTES + SYSTEM_RESERVE_BYTES > ram
+    ? `It is ${(bytes / 1e9).toFixed(1)} GB, more than this machine's memory (${(ram / 1e9).toFixed(0)} GB with the GPU's): it runs only if it is a mixture-of-experts model, with the experts that do not fit read from the drive (much slower to read prompts). A dense model this size cannot run here.`
     : undefined;
 }

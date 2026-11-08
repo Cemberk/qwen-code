@@ -34,6 +34,7 @@ import {
 } from '@qwen-code/qwen-code-core/local-models/confinement.js';
 import { engineSetup } from '@qwen-code/qwen-code-core/local-models/engine-setup.js';
 import {
+  downloadSizeNote,
   downloadSizeProblem,
   type ModelFit,
   fitModel,
@@ -236,6 +237,12 @@ const downloadCommand: SlashCommand = {
       : undefined;
     if (problem) {
       return error(`Not downloaded. ${problem}`);
+    }
+    const note = bytes
+      ? downloadSizeNote(bytes, gpu, systemMemoryBytes())
+      : undefined;
+    if (note) {
+      context.ui.addItem({ type: MessageType.WARNING, text: note }, Date.now());
     }
 
     if (added) {

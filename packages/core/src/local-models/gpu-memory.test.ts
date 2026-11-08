@@ -12,6 +12,7 @@ import {
   GPU_HEADROOM_BYTES,
   contextHeadroomBytes,
   contextsThatFit,
+  downloadSizeNote,
   downloadSizeProblem,
   withOthersUse,
   expertBytesByLayer,
@@ -339,22 +340,34 @@ describe('fitModel', () => {
   });
 });
 
+describe('downloadSizeNote', () => {
+  it('warns about a file larger than memory, which only a mixture-of-experts model can run', () => {
+    expect(downloadSizeNote(90 * GIB, discrete(8 * GIB), 64 * GIB)).toMatch(
+      /runs only if it is a mixture-of-experts model/,
+    );
+    expect(downloadSizeNote(14 * GIB, discrete(8 * GIB), 64 * GIB)).toBe(
+      undefined,
+    );
+  });
+});
+
 describe('downloadSizeProblem', () => {
-  it('refuses only a file too big for the memory of the Mac', () => {
+  it('refuses only a file too big for the memory of the Mac even with streamed experts', () => {
+    // Past memory, a mixture-of-experts model can still stream its experts.
     expect(
-      downloadSizeProblem(model, 19 * GIB, mac(16 * GIB), 24 * GIB, 'darwin'),
+      downloadSizeProblem(model, 60 * GIB, mac(16 * GIB), 24 * GIB, 'darwin'),
     ).toBeUndefined();
     expect(
-      downloadSizeProblem(model, 20 * GIB, mac(16 * GIB), 24 * GIB, 'darwin'),
-    ).toMatch(/^Big \(Q4_K_M\) is 21\.5 GB, more than a 24 GB Mac can hold/);
+      downloadSizeProblem(model, 100 * GIB, mac(16 * GIB), 24 * GIB, 'darwin'),
+    ).toMatch(/^Big \(Q4_K_M\) is 107\.4 GB, more than a 24 GB Mac can hold/);
   });
 
   it('counts VRAM and RAM together beside discrete GPUs', () => {
     expect(
-      downloadSizeProblem(model, 40 * GIB, discrete(24 * GIB), 32 * GIB),
+      downloadSizeProblem(model, 200 * GIB, discrete(24 * GIB), 32 * GIB),
     ).toBeUndefined();
     expect(
-      downloadSizeProblem(model, 60 * GIB, discrete(24 * GIB), 32 * GIB),
+      downloadSizeProblem(model, 230 * GIB, discrete(24 * GIB), 32 * GIB),
     ).toBeDefined();
   });
 
