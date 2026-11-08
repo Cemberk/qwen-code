@@ -81,6 +81,17 @@ export const BUILT_IN_LOCAL_MODELS: readonly LocalModelConfig[] = [
     repo: 'Qwen/Qwen3-4B-GGUF',
     file: 'Qwen3-4B-Q4_K_M.gguf',
   },
+  // 284B parameters, 13B active (6 of 256 routed experts and a shared one),
+  // 1M context natively. Larger than most machines' memory: its experts are
+  // read from the drive as tokens use them, so prompts read slowly. Last,
+  // so it is never the default unless it is the only one downloaded.
+  {
+    id: 'deepseek-v4-flash',
+    name: 'DeepSeek V4 Flash (UD-IQ2_XXS, 90.9 GB)',
+    repo: 'unsloth/DeepSeek-V4-Flash-GGUF',
+    file: 'UD-IQ2_XXS/DeepSeek-V4-Flash-UD-IQ2_XXS-00001-of-00003.gguf',
+    contextSize: 131072,
+  },
 ];
 
 const REPO_PATTERN = /^[A-Za-z0-9][\w.-]*\/[A-Za-z0-9][\w.-]*$/;
