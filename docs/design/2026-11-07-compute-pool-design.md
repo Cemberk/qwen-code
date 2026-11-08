@@ -422,6 +422,35 @@ and admission under unions. Done when: 4 `qwen` processes on one model use
 one engine, and aggregate tok/s with 4 agents beats 4 separate engines (and
 one agent loses < 10%).
 
+P1 status (2026-11-07):
+
+- Done: the pool daemon (`pool/`: slots, engine host, host pool, daemon,
+  client), `qwen pool serve|status|stop`, `localModelPool` (on by default,
+  in-process fallback), slot per conversation with save/restore on
+  eviction, several models side by side with LRU unload, `--exit-with-parent`
+  in the fork (on Windows Node's job object already ends children). The
+  teardown worked in a real run: the last client left, the daemon stopped 30
+  s later, no engine or lock remained.
+- Found and fixed on the way: the plan counted 1 GiB for the context cache
+  (Qwen3 4B at 32K needs 4.5 GiB; now sized from the model file); the
+  engine's slots share one cache, so the pool sizes it to the contexts that
+  fit and runs no more requests at once (two 4.7K prompts on one 8K cache
+  failed); on an integrated GPU the budget is capped at the RAM available
+  now (a 16 GiB GPU budget on a laptop with 9.5 GiB free overcommitted).
+- Memory extraction: `memory.extractEveryTurns` (every 5 prompts on local
+  models, every prompt otherwise) and `memory.maxEntries` (100; past it,
+  dream runs early and trims).
+- Not measured: the 4-agent benchmark (`scripts/local-pool-bench.mjs`).
+  On the 780M laptop, with about 9 GB free, every run was stopped for low
+  memory. One agent alone: 11.3 tok/s generation (Qwen3 4B, 8K context).
+  Run it on a machine with more free memory.
+- Deferred to a discrete GPU: the fork's MoE cache with several sequences
+  per step (its limits of 32 tokens, 16 in hybrid mode, are reached by 3-4
+  agents drafting); the cache is slower than none on shared-memory GPUs, so
+  it cannot be measured here.
+- Not done: priority of interactive turns over side queries; kill tests on
+  macOS and Linux.
+
 **P2, SSD tier (goal 3).** Fork: RAM tier, direct reads, ready hook,
 prefetch behind an A/B; simulator tiers. qwen-code: storage probe, cost
 model, predicted speed in `/models` and `/models plan`, predicted vs measured
