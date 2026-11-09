@@ -801,7 +801,7 @@ function streamingFor(
   const ramForExperts = os.freemem() - SYSTEM_RESERVE_BYTES - onGpu;
   if (cpuExpertBytes <= ramForExperts) return undefined;
   const rate =
-    driveReadRate(modelPath, promptCacheDir()) ??
+    driveReadRate(largestPart(modelPath), promptCacheDir()) ??
     UNMEASURED_DRIVE_BYTES_PER_SECOND;
   return streamingEstimate({
     cpuExpertBytes,
@@ -810,6 +810,31 @@ function streamingFor(
     experts: capabilities.experts,
     driveBytesPerSecond: rate,
   });
+}
+
+/**
+ * The biggest file of a model, given its first: the drive is measured on it.
+ * The first part of a split GGUF can be a few megabytes (DeepSeek V4 Flash:
+ * 5 MB of 90.9 GB), too small to measure anything.
+ */
+export function largestPart(modelPath: string): string {
+  const split = /^(.*)-(\d{5})-of-(\d{5})\.gguf$/.exec(modelPath);
+  if (!split) return modelPath;
+  let best = modelPath;
+  let bestSize = -1;
+  for (let part = 1; part <= Number(split[3]); part++) {
+    const file = `${split[1]}-${String(part).padStart(5, '0')}-of-${split[3]}.gguf`;
+    try {
+      const size = statSync(file).size;
+      if (size > bestSize) {
+        best = file;
+        bestSize = size;
+      }
+    } catch {
+      // A missing part: the plan fails elsewhere.
+    }
+  }
+  return best;
 }
 
 /** Assumed when the drive cannot be measured: a slow SATA SSD. */

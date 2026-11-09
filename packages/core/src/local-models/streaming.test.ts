@@ -106,3 +106,22 @@ describe('drive read rate', () => {
     ).toBeUndefined();
   });
 });
+
+describe('largestPart', () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(os.tmpdir(), 'largest-part-'));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it('measures the drive on the biggest file of a split model', async () => {
+    const { largestPart } = await import('./engine.js');
+    const part = (n: number) => path.join(dir, `M-0000${n}-of-00003.gguf`);
+    writeFileSync(part(1), Buffer.alloc(10));
+    writeFileSync(part(2), Buffer.alloc(3000));
+    writeFileSync(part(3), Buffer.alloc(2000));
+    expect(largestPart(part(1))).toBe(part(2));
+    const whole = path.join(dir, 'whole.gguf');
+    expect(largestPart(whole)).toBe(whole);
+  });
+});
