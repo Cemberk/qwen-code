@@ -73,11 +73,17 @@ run.
 
 | `id`                        | Repository and file                                                              | Size    | Context |
 | --------------------------- | -------------------------------------------------------------------------------- | ------- | ------- |
-| `qwen3.6-35b-a3b` (default) | `unsloth/Qwen3.6-35B-A3B-GGUF`, `Qwen3.6-35B-A3B-UD-IQ3_S.gguf`                  | 13.7 GB | 64K     |
+| `qwen3.6-35b-a3b` (default) | `unsloth/Qwen3.6-35B-A3B-GGUF`, `Qwen3.6-35B-A3B-UD-IQ3_S.gguf`                  | 13.7 GB | 128K    |
 | `qwen3-14b`                 | `Qwen/Qwen3-14B-GGUF`, `Qwen3-14B-Q4_K_M.gguf`                                   | ~9.0 GB | 32K     |
 | `qwen3-8b`                  | `Qwen/Qwen3-8B-GGUF`, `Qwen3-8B-Q4_K_M.gguf`                                     | ~5.0 GB | 32K     |
 | `qwen3-4b`                  | `Qwen/Qwen3-4B-GGUF`, `Qwen3-4B-Q4_K_M.gguf`                                     | 2.5 GB  | 32K     |
 | `deepseek-v4-flash`         | `unsloth/DeepSeek-V4-Flash-GGUF`, `UD-IQ2_XXS/...-00001-of-00003.gguf` (3 parts) | 90.9 GB | 128K    |
+
+The engine keeps the context cache at 8 bits (`-ctk q8_0 -ctv q8_0`): half
+the memory of 16 bits, so Qwen3.6 gets the 128K context Qwen recommends for
+the memory 64K took, and more of the model fits on the GPU (on an RTX 3070
+Ti it read prompts 5% and generated 3-4% faster). Choose another type with
+`-ctk`/`-ctv` in `localModelEngineArgs`.
 
 DeepSeek V4 Flash (284B parameters, 13B active) is larger than most
 machines' memory: it runs with the experts that do not fit read from the
