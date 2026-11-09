@@ -152,7 +152,7 @@ describe('planEngine and the MoE cache', () => {
     expect(plan.notes.join('\n')).toMatch(/only adds copies/);
   });
 
-  it('suggests the cache when experts spill from VRAM to RAM', () => {
+  it('does not suggest the cache when experts spill from VRAM to RAM: it measured slower', () => {
     const plan = planEngine({
       bytes: 30 * GIB,
       gpu: { limit: 16 * GIB, unified: false },
@@ -160,7 +160,7 @@ describe('planEngine and the MoE cache', () => {
       model: moe,
       hasDraft: false,
     });
-    expect(plan.notes.join('\n')).toMatch(/--moe-cache-hybrid/);
+    expect(plan.notes.join('\n')).not.toMatch(/--moe-cache/);
   });
 
   it('says nothing about it for a dense model or a model that fits', () => {

@@ -61,7 +61,9 @@ export const BUILT_IN_LOCAL_MODELS: readonly LocalModelConfig[] = [
     name: 'Qwen3.6 35B A3B (UD-IQ3_S, 13.7 GB)',
     repo: 'unsloth/Qwen3.6-35B-A3B-GGUF',
     file: 'Qwen3.6-35B-A3B-UD-IQ3_S.gguf',
-    contextSize: 65536,
+    // Qwen's card: keep at least 128K to preserve its thinking. With the
+    // q8_0 context cache that costs what 64K did at f16 (1.3 GiB).
+    contextSize: 131072,
   },
   {
     id: 'qwen3-14b',

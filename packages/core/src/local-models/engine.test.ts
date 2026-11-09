@@ -173,6 +173,10 @@ describe('engineCommand', () => {
         '20',
         '--min-p',
         '0',
+        '-ctk',
+        'q8_0',
+        '-ctv',
+        'q8_0',
         '--spec-type',
         'ngram-simple',
       ],
@@ -314,6 +318,23 @@ describe('engineCommand', () => {
       '--slot-save-path',
       `/cache/prompts${path.sep}`,
     ]);
+  });
+
+  it('stores the context cache at 8 bits, unless the user chose a cache type', () => {
+    const bin = installFakeEngine();
+    const args = (extraArgs?: string[]) =>
+      engineCommand(
+        model,
+        '/m.gguf',
+        1,
+        'k',
+        { ...DEFAULT_ENGINE_OPTIONS, ...(extraArgs ? { extraArgs } : {}) },
+        env(bin),
+        'linux',
+      ).args.join(' ');
+    expect(args()).toContain('-ctk q8_0 -ctv q8_0');
+    expect(args(['-ctk', 'f16'])).not.toContain('q8_0');
+    expect(args(['--cache-type-v', 'q4_0'])).not.toContain('-ctk q8_0');
   });
 
   it('serves as many conversations as asked, and exits with its parent when told to', () => {

@@ -139,11 +139,10 @@ export function planEngine(input: PlanInput): EnginePlan {
       notes.push(
         'The MoE cache (--moe-cache-mib) only adds copies on a GPU that shares system memory, and measured slower than none there: consider removing it from localModelEngineArgs.',
       );
-    } else if (!gpu.unified && fit.partial && !moeCacheOn) {
-      notes.push(
-        'Experts run from RAM: the MoE cache can keep the ones this session uses in VRAM. Try localModelEngineArgs ["--moe-cache-mib", "<MiB of spare VRAM>", "--moe-cache-hybrid"] and compare with /models bench.',
-      );
     }
+    // No advice to turn the MoE cache on: with hybrid misses it generated
+    // slower than none on a discrete RTX 3070 Ti too (24.0 vs 29.5 tok/s,
+    // Qwen3.6 35B A3B), as on a shared-memory Radeon 780M.
   }
 
   const advice = input.speculation?.advice;
